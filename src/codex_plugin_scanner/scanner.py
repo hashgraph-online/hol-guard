@@ -6,12 +6,12 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .models import CategoryResult, CheckResult, ScanResult, get_grade
-from .checks.manifest import run_manifest_checks
-from .checks.security import run_security_checks
 from .checks.best_practices import run_best_practice_checks
-from .checks.marketplace import run_marketplace_checks
 from .checks.code_quality import run_code_quality_checks
+from .checks.manifest import run_manifest_checks
+from .checks.marketplace import run_marketplace_checks
+from .checks.security import run_security_checks
+from .models import CategoryResult, ScanResult, get_grade
 
 
 def scan_plugin(plugin_dir: str | Path) -> ScanResult:
