@@ -26,14 +26,38 @@ def check_skills_directory(plugin_dir: Path) -> CheckResult:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception:
-        return CheckResult(name="Skills directory exists if declared", passed=True, points=5, max_points=5, message="Cannot parse manifest, skipping check")
+        return CheckResult(
+            name="Skills directory exists if declared",
+            passed=True,
+            points=5,
+            max_points=5,
+            message="Cannot parse manifest, skipping check",
+        )
     skills = manifest.get("skills")
     if not skills:
-        return CheckResult(name="Skills directory exists if declared", passed=True, points=5, max_points=5, message="No skills field declared, check not applicable")
+        return CheckResult(
+            name="Skills directory exists if declared",
+            passed=True,
+            points=5,
+            max_points=5,
+            message="No skills field declared, check not applicable",
+        )
     skills_path = plugin_dir / skills
     if skills_path.is_dir():
-        return CheckResult(name="Skills directory exists if declared", passed=True, points=5, max_points=5, message=f'Skills directory "{skills}" exists')
-    return CheckResult(name="Skills directory exists if declared", passed=False, points=0, max_points=5, message=f'Skills directory "{skills}" declared but not found')
+        return CheckResult(
+            name="Skills directory exists if declared",
+            passed=True,
+            points=5,
+            max_points=5,
+            message=f'Skills directory "{skills}" exists',
+        )
+    return CheckResult(
+        name="Skills directory exists if declared",
+        passed=False,
+        points=0,
+        max_points=5,
+        message=f'Skills directory "{skills}" declared but not found',
+    )
 
 
 def check_skill_frontmatter(plugin_dir: Path) -> CheckResult:
@@ -41,17 +65,41 @@ def check_skill_frontmatter(plugin_dir: Path) -> CheckResult:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception:
-        return CheckResult(name="SKILL.md frontmatter", passed=True, points=5, max_points=5, message="Cannot parse manifest, skipping check")
+        return CheckResult(
+            name="SKILL.md frontmatter",
+            passed=True,
+            points=5,
+            max_points=5,
+            message="Cannot parse manifest, skipping check",
+        )
     skills = manifest.get("skills")
     if not skills:
-        return CheckResult(name="SKILL.md frontmatter", passed=True, points=5, max_points=5, message="No skills field declared, check not applicable")
+        return CheckResult(
+            name="SKILL.md frontmatter",
+            passed=True,
+            points=5,
+            max_points=5,
+            message="No skills field declared, check not applicable",
+        )
     skills_path = plugin_dir / skills
     if not skills_path.is_dir():
-        return CheckResult(name="SKILL.md frontmatter", passed=True, points=5, max_points=5, message="Skills directory not found, skipping check")
+        return CheckResult(
+            name="SKILL.md frontmatter",
+            passed=True,
+            points=5,
+            max_points=5,
+            message="Skills directory not found, skipping check",
+        )
 
     skill_files = list(skills_path.glob("*/SKILL.md"))
     if not skill_files:
-        return CheckResult(name="SKILL.md frontmatter", passed=True, points=5, max_points=5, message="No SKILL.md files found, nothing to check")
+        return CheckResult(
+            name="SKILL.md frontmatter",
+            passed=True,
+            points=5,
+            max_points=5,
+            message="No SKILL.md files found, nothing to check",
+        )
 
     issues: list[str] = []
     for sf in skill_files:
@@ -72,7 +120,13 @@ def check_skill_frontmatter(plugin_dir: Path) -> CheckResult:
             issues.append(str(sf.relative_to(plugin_dir)))
 
     if not issues:
-        return CheckResult(name="SKILL.md frontmatter", passed=True, points=5, max_points=5, message="All SKILL.md files have valid frontmatter")
+        return CheckResult(
+            name="SKILL.md frontmatter",
+            passed=True,
+            points=5,
+            max_points=5,
+            message="All SKILL.md files have valid frontmatter",
+        )
     return CheckResult(
         name="SKILL.md frontmatter",
         passed=False,
@@ -85,8 +139,16 @@ def check_skill_frontmatter(plugin_dir: Path) -> CheckResult:
 def check_no_env_files(plugin_dir: Path) -> CheckResult:
     found = [f for f in ENV_FILES if (plugin_dir / f).exists()]
     if not found:
-        return CheckResult(name="No .env files committed", passed=True, points=5, max_points=5, message="No .env files found")
-    return CheckResult(name="No .env files committed", passed=False, points=0, max_points=5, message=f".env files found: {', '.join(found)}")
+        return CheckResult(
+            name="No .env files committed", passed=True, points=5, max_points=5, message="No .env files found"
+        )
+    return CheckResult(
+        name="No .env files committed",
+        passed=False,
+        points=0,
+        max_points=5,
+        message=f".env files found: {', '.join(found)}",
+    )
 
 
 def check_codexignore(plugin_dir: Path) -> CheckResult:

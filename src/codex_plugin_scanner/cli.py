@@ -7,8 +7,8 @@ import json
 import sys
 from pathlib import Path
 
-from .scanner import scan_plugin
 from .models import GRADE_LABELS
+from .scanner import scan_plugin
 
 VERSION = "1.0.0"
 
@@ -17,7 +17,6 @@ def format_text(result) -> str:
     """Format scan result as terminal output. Uses rich if available, falls back to plain text."""
     try:
         from rich.console import Console
-        from rich.panel import Panel
 
         console = Console()
         console.print(f"[bold cyan]🔗 Codex Plugin Scanner v{VERSION}[/bold cyan]")
@@ -108,7 +107,7 @@ def main(argv: list[str] | None = None) -> None:
 
     resolved = Path(args.plugin_dir).resolve()
     if not resolved.is_dir():
-        print(f"Error: \"{resolved}\" is not a directory.", file=sys.stderr)
+        print(f'Error: "{resolved}" is not a directory.', file=sys.stderr)
         sys.exit(1)
 
     result = scan_plugin(args.plugin_dir)
