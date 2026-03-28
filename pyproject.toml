@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "codex-plugin-scanner"
+version = "1.0.0"
+description = "Security and best-practices scanner for Codex CLI plugins. Scores plugins 0-100."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    { name = "Hashgraph Online", email = "dev@hol.org" },
+]
+keywords = ["codex", "plugin", "scanner", "security", "mcp", "cli"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+codex-plugin-scanner = "codex_plugin_scanner.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/hashgraph-online/codex-plugin-scanner"
+Repository = "https://github.com/hashgraph-online/codex-plugin-scanner"
+Issues = "https://github.com/hashgraph-online/codex-plugin-scanner/issues"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
