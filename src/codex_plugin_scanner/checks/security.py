@@ -145,9 +145,7 @@ def check_license(plugin_dir: Path) -> CheckResult:
             )
         if "MIT" in content and "Permission is hereby granted" in content:
             return CheckResult(name="LICENSE found", passed=True, points=3, max_points=3, message="LICENSE found (MIT)")
-        return CheckResult(
-            name="LICENSE found", passed=True, points=3, max_points=3, message="LICENSE found"
-        )
+        return CheckResult(name="LICENSE found", passed=True, points=3, max_points=3, message="LICENSE found")
     except OSError:
         return CheckResult(
             name="LICENSE found", passed=False, points=0, max_points=3, message="LICENSE exists but could not be read"

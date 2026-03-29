@@ -326,16 +326,20 @@ def check_interface_metadata(plugin_dir: Path) -> CheckResult:
     ]
 
     capabilities = interface.get("capabilities")
-    if not isinstance(capabilities, list) or not capabilities or not all(
-        isinstance(item, str) and item.strip() for item in capabilities
+    if (
+        not isinstance(capabilities, list)
+        or not capabilities
+        or not all(isinstance(item, str) and item.strip() for item in capabilities)
     ):
         missing.append("capabilities")
 
     default_prompt = interface.get("defaultPrompt")
     if default_prompt is not None:
         valid_string_prompt = isinstance(default_prompt, str) and default_prompt.strip()
-        valid_list_prompt = isinstance(default_prompt, list) and default_prompt and all(
-            isinstance(item, str) and item.strip() for item in default_prompt
+        valid_list_prompt = (
+            isinstance(default_prompt, list)
+            and default_prompt
+            and all(isinstance(item, str) and item.strip() for item in default_prompt)
         )
         if not valid_string_prompt and not valid_list_prompt:
             missing.append("defaultPrompt")

@@ -50,11 +50,7 @@ def _not_applicable_results(message: str) -> tuple[CheckResult, ...]:
 
 
 def _elevated_findings(findings: tuple[Finding, ...]) -> tuple[Finding, ...]:
-    return tuple(
-        finding
-        for finding in findings
-        if SEVERITY_ORDER[finding.severity] >= SEVERITY_ORDER[Severity.MEDIUM]
-    )
+    return tuple(finding for finding in findings if SEVERITY_ORDER[finding.severity] >= SEVERITY_ORDER[Severity.MEDIUM])
 
 
 def _availability_check(summary: CiscoSkillScanSummary, mode: str) -> CheckResult:
