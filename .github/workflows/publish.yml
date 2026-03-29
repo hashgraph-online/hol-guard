@@ -115,7 +115,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    if: needs.detect-version.outputs.tag_exists == 'false' && needs.detect-version.outputs.changed == 'true'
+    if: needs.detect-version.outputs.tag_exists == 'false'
     needs: [detect-version, publish-pypi]
     runs-on: ubuntu-latest
     permissions:
@@ -128,7 +128,7 @@ jobs:
         id: changelog
         run: |
           # Get the range of commits since last tag
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          LAST_TAG=$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || echo "")
           VERSION="${{ needs.detect-version.outputs.version }}"
 
           if [ -n "$LAST_TAG" ]; then
@@ -158,8 +158,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ needs.detect-version.outputs.version }}"
-          git tag "v${VERSION}"
-          git push origin "v${VERSION}"
+          # Tag may not exist yet if triggered by main push
+          if ! git ls-remote --tags origin "refs/tags/v${VERSION}" | grep -q .; then
+            git tag "v${VERSION}"
+            git push origin "v${VERSION}"
+          fi
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
             --notes-file ${{ steps.changelog.outputs.notes_path }}
