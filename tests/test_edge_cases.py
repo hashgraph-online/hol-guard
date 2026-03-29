@@ -21,7 +21,7 @@ class TestRichOutputBranch:
 
         with patch.dict("sys.modules", {"rich": MagicMock(), "rich.console": MagicMock(Console=mock_console_class)}):
             output = format_text(result)
-            assert output == ""
+            assert "100/100" in output
             assert mock_console.print.call_count > 0
 
     def test_format_text_fallback(self):
