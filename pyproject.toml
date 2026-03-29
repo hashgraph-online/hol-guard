@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "codex-plugin-scanner"
-version = "1.0.1"
-description = "Security and best-practices scanner for Codex CLI plugins. Scores plugins 0-100."
+version = "1.1.0"
+description = "Security and security-ops scanner for Codex plugins with Cisco-backed skill analysis."
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
@@ -31,6 +31,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+cisco = [
+    "cisco-ai-skill-scanner>=2.0.6,<3",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

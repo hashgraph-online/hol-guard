@@ -15,7 +15,8 @@ FIXTURES = Path(__file__).parent / "fixtures"
 class TestCheckMarketplaceJson:
     def test_passes_when_no_file(self):
         r = check_marketplace_json(FIXTURES / "good-plugin")
-        assert r.passed and r.points == 5
+        assert r.passed and r.points == 0
+        assert not r.applicable
 
     def test_passes_for_valid_marketplace(self):
         r = check_marketplace_json(FIXTURES / "with-marketplace")
@@ -60,7 +61,8 @@ class TestCheckMarketplaceJson:
 class TestCheckPolicyFields:
     def test_passes_when_no_file(self):
         r = check_policy_fields(FIXTURES / "good-plugin")
-        assert r.passed and r.points == 5
+        assert r.passed and r.points == 0
+        assert not r.applicable
 
     def test_passes_when_all_fields_present(self):
         r = check_policy_fields(FIXTURES / "with-marketplace")
@@ -96,15 +98,28 @@ class TestCheckPolicyFields:
 
 
 class TestRunMarketplaceChecks:
-    def test_good_plugin_gets_10(self):
+    def test_good_plugin_gets_0(self):
         results = run_marketplace_checks(FIXTURES / "good-plugin")
-        assert sum(c.points for c in results) == 10
+        assert sum(c.points for c in results) == 0
+        assert sum(c.max_points for c in results) == 0
 
-    def test_with_marketplace_gets_10(self):
+    def test_with_marketplace_gets_15(self):
         results = run_marketplace_checks(FIXTURES / "with-marketplace")
-        assert sum(c.points for c in results) == 10
+        assert sum(c.points for c in results) == 15
 
     def test_returns_tuple_of_correct_length(self):
         results = run_marketplace_checks(FIXTURES / "good-plugin")
         assert isinstance(results, tuple)
-        assert len(results) == 2
+        assert len(results) == 3
+
+    def test_http_marketplace_source_is_unsafe(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp = Path(tmpdir) / "marketplace.json"
+            mp.write_text(
+                '{"name": "test", "plugins": [{"source": "http://example.com/plugin", '
+                '"policy": {"installation": "manual", "authentication": "none"}}]}'
+            )
+            results = run_marketplace_checks(Path(tmpdir))
+            source_check = next(check for check in results if check.name == "Marketplace sources are safe")
+            assert source_check.passed is False
+            assert "http://example.com/plugin" in source_check.message

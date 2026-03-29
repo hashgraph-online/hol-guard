@@ -6,12 +6,18 @@
 [![CI](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/codex-plugin-scanner/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/codex-plugin-scanner)
 
-A security and best-practices scanner for [Codex CLI plugins](https://developers.openai.com/codex/plugins). Scans plugin directories and outputs a score from 0-100.
+A security and security-ops scanner for [Codex plugins](https://developers.openai.com/codex/plugins). It scores the applicable plugin surface from 0-100, emits structured findings, and can run Cisco's `skill-scanner` against plugin skills for deeper analysis.
 
 ## Installation
 
 ```bash
 pip install codex-plugin-scanner
+```
+
+To enable Cisco-backed skill scanning:
+
+```bash
+pip install "codex-plugin-scanner[cisco]"
 ```
 
 Or run directly without installing:
@@ -29,57 +35,61 @@ codex-plugin-scanner ./my-plugin
 # Output as JSON
 codex-plugin-scanner ./my-plugin --json
 
-# Write report to file
-codex-plugin-scanner ./my-plugin --output report.json
+# Write a SARIF report for GitHub code scanning
+codex-plugin-scanner ./my-plugin --format sarif --output report.sarif
+
+# Fail CI on high-severity findings
+codex-plugin-scanner ./my-plugin --fail-on-severity high
+
+# Require Cisco skill scanning with a strict policy
+codex-plugin-scanner ./my-plugin --cisco-skill-scan on --cisco-policy strict
 ```
 
 ### Example Output
 
 ```
-🔗 Codex Plugin Scanner v1.0.0
+🔗 Codex Plugin Scanner v1.1.0
 Scanning: ./my-plugin
 
 ── Manifest Validation (25/25) ──
-  ✅ plugin.json exists                          +5
-  ✅ Valid JSON                                   +5
-  ✅ Required fields present                      +8
-  ✅ Version follows semver                       +4
-  ✅ Name is kebab-case                           +3
+  ✅ plugin.json exists                          +4
+  ✅ Valid JSON                                  +4
+  ✅ Required fields present                     +5
+  ✅ Version follows semver                      +3
+  ✅ Name is kebab-case                          +2
+  ✅ Recommended metadata present                +4
+  ✅ Declared paths are safe                     +3
 
-── Security (30/30) ──
-  ✅ SECURITY.md found                           +5
-  ✅ LICENSE found (Apache-2.0)                  +5
-  ✅ No hardcoded secrets detected               +10
-  ✅ No dangerous MCP commands                   +10
+── Security (16/16) ──
+  ✅ SECURITY.md found                           +3
+  ✅ LICENSE found                               +3
+  ✅ No hardcoded secrets                        +7
+  ✅ No dangerous MCP commands                   +0
+  ✅ No approval bypass defaults                 +3
 
-── Best Practices (25/25) ──
-  ✅ README.md found                             +5
-  ✅ Skills directory exists if declared          +5
-  ✅ SKILL.md frontmatter                        +5
-  ✅ No .env files committed                     +5
-  ✅ .codexignore found                          +5
+── Skill Security (15/15) ──
+  ✅ Cisco skill scan completed                  +3
+  ✅ No elevated Cisco skill findings            +8
+  ✅ Skills analyzable                           +4
 
-── Marketplace (10/10) ──
-  ✅ marketplace.json valid                      +5
-  ✅ Policy fields present                       +5
-
-── Code Quality (10/10) ──
-  ✅ No eval or Function constructor             +5
-  ✅ No shell injection patterns                 +5
+Findings: critical:0, high:0, medium:0, low:0, info:0
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Final Score: 100/100 (A - Excellent)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-## Scoring Breakdown
+Optional surfaces such as `marketplace.json`, `.mcp.json`, and plugin skills are treated as not-applicable when they are not present. The final score is normalized over the applicable maximum so plugins are not rewarded or penalized for surfaces they do not expose.
+
+## Checks
 
 | Category | Max Points | Checks |
 |----------|-----------|--------|
-| Manifest Validation | 25 | plugin.json exists, valid JSON, required fields, semver version, kebab-case name |
-| Security | 30 | SECURITY.md, LICENSE, no hardcoded secrets, no dangerous MCP commands |
-| Best Practices | 25 | README.md, skills directory, SKILL.md frontmatter, no .env files, .codexignore |
-| Marketplace | 10 | marketplace.json valid, policy fields present |
+| Manifest Validation | 25 | plugin.json, required fields, semver, kebab-case, recommended metadata, safe declared paths |
+| Security | 20 | SECURITY.md, LICENSE, no hardcoded secrets, no dangerous MCP commands, no approval bypass defaults |
+| Best Practices | 15 | README.md, skills directory, SKILL.md frontmatter, no committed `.env`, `.codexignore` |
+| Marketplace | 15 | marketplace.json validity, policy fields, safe source paths |
+| Skill Security | 15 | Cisco scan availability, elevated skill findings, analyzability |
 | Code Quality | 10 | no eval/Function, no shell injection |
 
 ### Grade Scale
@@ -98,8 +108,17 @@ The scanner detects:
 
 - **Hardcoded secrets**: AWS keys, GitHub tokens, OpenAI keys, Slack tokens, GitLab tokens, generic password/secret/token patterns
 - **Dangerous MCP commands**: `rm -rf`, `sudo`, `curl|sh`, `wget|sh`, `eval`, `exec`, `powershell -c`
+- **Risky Codex defaults**: approval bypass and unrestricted sandbox defaults in plugin-shipped config/docs
 - **Shell injection**: template literals with unsanitized interpolation in exec/spawn calls
 - **Unsafe code**: `eval()` and `new Function()` usage
+- **Cisco skill threats**: policy violations and risky behaviors detected by Cisco `skill-scanner`
+
+## Report Formats
+
+- `text`: human-readable terminal summary with findings and category scores
+- `json`: structured findings, integration status, and per-check details
+- `markdown`: review-ready report for issues and pull requests
+- `sarif`: GitHub code scanning compatible output
 
 ## Use as a GitHub Action
 
@@ -109,7 +128,7 @@ Add to your plugin's CI:
 - name: Install scanner
   run: pip install codex-plugin-scanner
 - name: Scan plugin
-  run: codex-plugin-scanner ./my-plugin
+  run: codex-plugin-scanner ./my-plugin --fail-on-severity high --format sarif --output codex-plugin-scanner.sarif
 ```
 
 ## Use as a pre-commit hook

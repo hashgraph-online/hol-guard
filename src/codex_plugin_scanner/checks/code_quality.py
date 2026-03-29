@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ..models import CheckResult
+from ..models import CheckResult, Finding, Severity
 
 CODE_EXTS = {".py", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"}
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", "__pycache__", ".venv", "venv"}
@@ -55,6 +55,18 @@ def check_no_eval(plugin_dir: Path) -> CheckResult:
         points=0,
         max_points=5,
         message=f"Found: {', '.join(findings[:3])}",
+        findings=tuple(
+            Finding(
+                rule_id="DANGEROUS_DYNAMIC_EXECUTION",
+                severity=Severity.HIGH,
+                category="code-quality",
+                title="Dynamic code execution detected",
+                description=f"{entry} uses eval() or new Function().",
+                remediation="Remove dynamic code evaluation and replace it with explicit control flow.",
+                file_path=entry.split(":")[0],
+            )
+            for entry in findings
+        ),
     )
 
 
@@ -81,6 +93,18 @@ def check_no_shell_injection(plugin_dir: Path) -> CheckResult:
         points=0,
         max_points=5,
         message=f"Shell injection patterns in: {', '.join(findings)}",
+        findings=tuple(
+            Finding(
+                rule_id="SHELL_INJECTION_PATTERN",
+                severity=Severity.HIGH,
+                category="code-quality",
+                title="Potential shell injection pattern detected",
+                description=f"{path} interpolates untrusted values into a shell execution call.",
+                remediation="Pass arguments as structured arrays and validate user-controlled input before execution.",
+                file_path=path,
+            )
+            for path in findings
+        ),
     )
 
 

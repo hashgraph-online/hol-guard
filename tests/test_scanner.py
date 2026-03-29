@@ -75,16 +75,15 @@ class TestScanPlugin:
         assert result.score < 60
         assert result.grade == "F"
 
-    def test_minimal_plugin_scores_80(self):
+    def test_minimal_plugin_scores_73(self):
         result = scan_plugin(FIXTURES / "minimal-plugin")
-        assert result.score == 80
-        assert result.grade == "B"
+        assert result.score == 73
+        assert result.grade == "C"
 
-    def test_empty_dir_scores_55(self):
-        # security(20) + best practices(15) + marketplace(10) + code quality(10) = 55
+    def test_empty_dir_scores_38(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             result = scan_plugin(tmpdir)
-            assert result.score == 55
+            assert result.score == 38
 
     def test_mit_license_detected(self):
         result = scan_plugin(FIXTURES / "mit-license")
@@ -97,17 +96,18 @@ class TestScanPlugin:
         r2 = scan_plugin(FIXTURES / "good-plugin")
         assert r1.score == r2.score
 
-    def test_returns_5_categories(self):
+    def test_returns_6_categories(self):
         result = scan_plugin(FIXTURES / "good-plugin")
-        assert len(result.categories) == 5
+        assert len(result.categories) == 6
         names = [c.name for c in result.categories]
         assert "Manifest Validation" in names
         assert "Security" in names
         assert "Best Practices" in names
         assert "Marketplace" in names
+        assert "Skill Security" in names
         assert "Code Quality" in names
 
     def test_with_marketplace_plugin(self):
         result = scan_plugin(FIXTURES / "with-marketplace")
         mp_cat = next(c for c in result.categories if c.name == "Marketplace")
-        assert sum(c.points for c in mp_cat.checks) == 10
+        assert sum(c.points for c in mp_cat.checks) == 15
