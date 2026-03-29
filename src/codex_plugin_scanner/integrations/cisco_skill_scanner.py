@@ -37,6 +37,24 @@ def _empty_counts() -> dict[str, int]:
     return {severity.value: 0 for severity in Severity}
 
 
+def _normalize_string_items(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list | tuple):
+        return ()
+
+    items: list[str] = []
+    for entry in value:
+        if isinstance(entry, str) and entry.strip():
+            items.append(entry.strip())
+            continue
+        if isinstance(entry, dict):
+            for key in ("skill_path", "path", "name", "skill_name"):
+                candidate = entry.get(key)
+                if isinstance(candidate, str) and candidate.strip():
+                    items.append(candidate.strip())
+                    break
+    return tuple(items)
+
+
 def _build_unavailable_summary(message: str, *, status: CiscoIntegrationStatus) -> CiscoSkillScanSummary:
     return CiscoSkillScanSummary(
         status=status,
@@ -75,6 +93,42 @@ def _to_local_finding(plugin_dir: Path, skill_result: dict[str, object], finding
         line_number=int(line_number) if isinstance(line_number, int) else None,
         source="cisco-skill-scanner",
     )
+
+
+def _extract_analyzers_used(results: object) -> tuple[str, ...]:
+    if not isinstance(results, list):
+        return ()
+
+    analyzers: list[str] = []
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        result_analyzers = result.get("analyzers_used", [])
+        if isinstance(result_analyzers, list):
+            analyzers.extend(str(analyzer) for analyzer in result_analyzers if str(analyzer).strip())
+    return tuple(dict.fromkeys(analyzers))
+
+
+def _extract_skipped_skills(summary: object, results: object) -> tuple[str, ...]:
+    skipped: list[str] = []
+
+    if isinstance(summary, dict):
+        for key in ("skills_skipped", "skipped_skills", "skipped_skill_paths"):
+            skipped.extend(_normalize_string_items(summary.get(key)))
+
+    if isinstance(results, list):
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+            result_status = str(result.get("status") or "").strip().lower()
+            if result_status == "skipped" or result.get("skipped") is True:
+                skipped.extend(
+                    _normalize_string_items(
+                        [result.get("skill_path") or result.get("path") or result.get("skill_name")]
+                    )
+                )
+
+    return tuple(dict.fromkeys(skipped))
 
 
 def run_cisco_skill_scan(skills_dir: Path, mode: str = "auto", policy_name: str = "balanced") -> CiscoSkillScanSummary:
@@ -130,12 +184,8 @@ def run_cisco_skill_scan(skills_dir: Path, mode: str = "auto", policy_name: str 
             if key in counts and isinstance(value, int):
                 counts[key] = value
 
-    analyzers_used = []
-    skills_skipped: tuple[str, ...] = ()
-    if results and isinstance(results[0], dict):
-        analyzers = results[0].get("analyzers_used", [])
-        if isinstance(analyzers, list):
-            analyzers_used = [str(analyzer) for analyzer in analyzers]
+    analyzers_used = _extract_analyzers_used(results)
+    skills_skipped = _extract_skipped_skills(summary, results)
 
     return CiscoSkillScanSummary(
         status=CiscoIntegrationStatus.ENABLED,
@@ -143,7 +193,7 @@ def run_cisco_skill_scan(skills_dir: Path, mode: str = "auto", policy_name: str 
         findings=tuple(findings),
         skills_scanned=int(summary.get("total_skills_scanned", 0)),
         skills_skipped=skills_skipped,
-        analyzers_used=tuple(analyzers_used),
+        analyzers_used=analyzers_used,
         policy_name=policy_name,
         total_findings=int(summary.get("total_findings", len(findings))),
         findings_by_severity=counts,

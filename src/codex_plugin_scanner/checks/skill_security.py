@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..integrations.cisco_skill_scanner import (
@@ -11,6 +12,12 @@ from ..integrations.cisco_skill_scanner import (
 )
 from ..models import SEVERITY_ORDER, CheckResult, Finding, ScanOptions, Severity, max_severity
 from .manifest import load_manifest
+
+
+@dataclass(frozen=True, slots=True)
+class SkillSecurityContext:
+    summary: CiscoSkillScanSummary | None
+    skip_message: str | None = None
 
 
 def _not_applicable_results(message: str) -> tuple[CheckResult, ...]:
@@ -51,14 +58,23 @@ def _elevated_findings(findings: tuple[Finding, ...]) -> tuple[Finding, ...]:
 
 
 def _availability_check(summary: CiscoSkillScanSummary, mode: str) -> CheckResult:
-    if summary.status in {CiscoIntegrationStatus.ENABLED, CiscoIntegrationStatus.SKIPPED}:
+    if summary.status == CiscoIntegrationStatus.ENABLED:
         return CheckResult(
             name="Cisco skill scan completed",
             passed=True,
-            points=3 if summary.status == CiscoIntegrationStatus.ENABLED else 0,
-            max_points=3 if summary.status == CiscoIntegrationStatus.ENABLED else 0,
+            points=3,
+            max_points=3,
             message=summary.message,
-            applicable=summary.status == CiscoIntegrationStatus.ENABLED,
+        )
+
+    if summary.status == CiscoIntegrationStatus.SKIPPED:
+        return CheckResult(
+            name="Cisco skill scan completed",
+            passed=True,
+            points=0,
+            max_points=0,
+            message=summary.message,
+            applicable=False,
         )
 
     findings = ()
@@ -86,9 +102,10 @@ def _availability_check(summary: CiscoSkillScanSummary, mode: str) -> CheckResul
     return CheckResult(
         name="Cisco skill scan completed",
         passed=True,
-        points=3,
-        max_points=3,
+        points=0,
+        max_points=0,
         message=summary.message,
+        applicable=False,
     )
 
 
@@ -174,28 +191,53 @@ def _analyzability_check(summary: CiscoSkillScanSummary) -> CheckResult:
     )
 
 
-def run_skill_security_checks(plugin_dir: Path, options: ScanOptions | None = None) -> tuple[CheckResult, ...]:
-    """Run Cisco-backed skill security checks when the plugin declares skills."""
+def resolve_skill_security_context(plugin_dir: Path, options: ScanOptions | None = None) -> SkillSecurityContext:
+    """Resolve Cisco skill scanning context for a plugin directory."""
 
     scan_options = options or ScanOptions()
     manifest = load_manifest(plugin_dir)
     if manifest is None:
-        return _not_applicable_results("plugin.json is unavailable; skill security checks skipped.")
+        return SkillSecurityContext(
+            summary=None,
+            skip_message="plugin.json is unavailable; skill security checks skipped.",
+        )
 
     skills_path_value = manifest.get("skills")
     if not isinstance(skills_path_value, str) or not skills_path_value.strip():
-        return _not_applicable_results("No skills declared in plugin.json.")
+        return SkillSecurityContext(summary=None, skip_message="No skills declared in plugin.json.")
 
     skills_dir = (plugin_dir / skills_path_value).resolve()
     if not skills_dir.is_dir():
-        return _not_applicable_results(f'Skills directory "{skills_path_value}" is missing; see best-practice checks.')
+        return SkillSecurityContext(
+            summary=None,
+            skip_message=f'Skills directory "{skills_path_value}" is missing; see best-practice checks.',
+        )
 
-    summary = run_cisco_skill_scan(
-        skills_dir=skills_dir,
-        mode=scan_options.cisco_skill_scan,
-        policy_name=scan_options.cisco_policy,
+    return SkillSecurityContext(
+        summary=run_cisco_skill_scan(
+            skills_dir=skills_dir,
+            mode=scan_options.cisco_skill_scan,
+            policy_name=scan_options.cisco_policy,
+        )
     )
 
+
+def run_skill_security_checks(
+    plugin_dir: Path,
+    options: ScanOptions | None = None,
+    context: SkillSecurityContext | None = None,
+) -> tuple[CheckResult, ...]:
+    """Run Cisco-backed skill security checks when the plugin declares skills."""
+
+    resolved_context = context or resolve_skill_security_context(plugin_dir, options)
+    if resolved_context.skip_message:
+        return _not_applicable_results(resolved_context.skip_message)
+
+    summary = resolved_context.summary
+    if summary is None:
+        return _not_applicable_results("Cisco scan context unavailable.")
+
+    scan_options = options or ScanOptions()
     return (
         _availability_check(summary, scan_options.cisco_skill_scan),
         _findings_check(summary),
