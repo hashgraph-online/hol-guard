@@ -12,7 +12,22 @@
   "keywords": ["codex", "plugin", "security"],
   "interface": {
     "type": "cli",
-    "displayName": "Example Good Plugin"
+    "displayName": "Example Good Plugin",
+    "shortDescription": "Reusable security-first plugin fixture",
+    "longDescription": "A well-structured example plugin that exercises publishable interface metadata.",
+    "developerName": "Hashgraph Online",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/hashgraph-online/codex-plugin-scanner",
+    "privacyPolicyURL": "https://example.com/privacy",
+    "termsOfServiceURL": "https://example.com/terms",
+    "defaultPrompt": [
+      "Use Example Good Plugin to scan a plugin before publishing."
+    ],
+    "brandColor": "#10A37F",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/logo.svg",
+    "screenshots": ["./assets/screenshot.svg"]
   },
   "skills": "skills"
 }

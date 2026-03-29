@@ -6,7 +6,13 @@
 [![CI](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/codex-plugin-scanner/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/codex-plugin-scanner)
 
-A security and security-ops scanner for [Codex plugins](https://developers.openai.com/codex/plugins). It scores the applicable plugin surface from 0-100, emits structured findings, and can run Cisco's `skill-scanner` against plugin skills for deeper analysis.
+A security, publishability, and security-ops scanner for [Codex plugins](https://developers.openai.com/codex/plugins). It scores the applicable plugin surface from 0-100, emits structured findings, validates install-surface metadata, hardens MCP transport expectations, and can run Cisco's `skill-scanner` against plugin skills for deeper analysis.
+
+## What's New in v1.2.0
+
+- Publishability checks for Codex `interface` metadata, assets, and HTTPS links.
+- MCP transport hardening for remote `.mcp.json` endpoints.
+- A new `Operational Security` category for GitHub Actions pinning, privileged workflow patterns, Dependabot, and lockfile hygiene.
 
 ## Installation
 
@@ -48,16 +54,18 @@ codex-plugin-scanner ./my-plugin --cisco-skill-scan on --cisco-policy strict
 ### Example Output
 
 ```
-🔗 Codex Plugin Scanner v1.1.0
+🔗 Codex Plugin Scanner v1.2.0
 Scanning: ./my-plugin
 
-── Manifest Validation (25/25) ──
+── Manifest Validation (31/31) ──
   ✅ plugin.json exists                          +4
   ✅ Valid JSON                                  +4
   ✅ Required fields present                     +5
   ✅ Version follows semver                      +3
   ✅ Name is kebab-case                          +2
   ✅ Recommended metadata present                +4
+  ✅ Interface metadata complete if declared     +3
+  ✅ Interface links and assets valid if declared +3
   ✅ Declared paths are safe                     +3
 
 ── Security (16/16) ──
@@ -65,7 +73,15 @@ Scanning: ./my-plugin
   ✅ LICENSE found                               +3
   ✅ No hardcoded secrets                        +7
   ✅ No dangerous MCP commands                   +0
+  ✅ MCP remote transports are hardened          +0
   ✅ No approval bypass defaults                 +3
+
+── Operational Security (0/0) ──
+  ✅ Third-party GitHub Actions pinned to SHAs   +0
+  ✅ No write-all GitHub Actions permissions     +0
+  ✅ No privileged untrusted checkout patterns   +0
+  ✅ Dependabot configured for automation surfaces +0
+  ✅ Dependency manifests have lockfiles         +0
 
 ── Skill Security (15/15) ──
   ✅ Cisco skill scan completed                  +3
@@ -85,8 +101,9 @@ Optional surfaces such as `marketplace.json`, `.mcp.json`, and plugin skills are
 
 | Category | Max Points | Checks |
 |----------|-----------|--------|
-| Manifest Validation | 25 | plugin.json, required fields, semver, kebab-case, recommended metadata, safe declared paths |
-| Security | 20 | SECURITY.md, LICENSE, no hardcoded secrets, no dangerous MCP commands, no approval bypass defaults |
+| Manifest Validation | 31 | plugin.json, required fields, semver, kebab-case, recommended metadata, interface metadata, interface assets, safe declared paths |
+| Security | 24 | SECURITY.md, LICENSE, no hardcoded secrets, no dangerous MCP commands, MCP remote transport hardening, no approval bypass defaults |
+| Operational Security | 20 | GitHub Actions SHA pinning, no `write-all`, no privileged untrusted checkout, Dependabot, dependency lockfiles |
 | Best Practices | 15 | README.md, skills directory, SKILL.md frontmatter, no committed `.env`, `.codexignore` |
 | Marketplace | 15 | marketplace.json validity, policy fields, safe source paths |
 | Skill Security | 15 | Cisco scan availability, elevated skill findings, analyzability |
@@ -108,10 +125,12 @@ The scanner detects:
 
 - **Hardcoded secrets**: AWS keys, GitHub tokens, OpenAI keys, Slack tokens, GitLab tokens, generic password/secret/token patterns
 - **Dangerous MCP commands**: `rm -rf`, `sudo`, `curl|sh`, `wget|sh`, `eval`, `exec`, `powershell -c`
+- **Insecure MCP remotes**: non-HTTPS remote endpoints and non-loopback HTTP MCP transports
 - **Risky Codex defaults**: approval bypass and unrestricted sandbox defaults in plugin-shipped config/docs
 - **Shell injection**: template literals with unsanitized interpolation in exec/spawn calls
 - **Unsafe code**: `eval()` and `new Function()` usage
 - **Cisco skill threats**: policy violations and risky behaviors detected by Cisco `skill-scanner`
+- **Workflow hardening gaps**: unpinned third-party actions, `write-all`, privileged untrusted checkouts, missing Dependabot, missing lockfiles
 
 ## Report Formats
 
