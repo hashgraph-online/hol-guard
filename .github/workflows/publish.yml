@@ -50,7 +50,7 @@ jobs:
 
   publish-testpypi:
     name: Publish to TestPyPI
-    if: github.event.inputs.publish_target == 'testpypi'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi'
     needs: build
     runs-on: ubuntu-latest
     environment: testpypi
@@ -67,7 +67,7 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI
-    if: github.event.inputs.publish_target != 'testpypi'
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish_target != 'testpypi'
     needs: build
     runs-on: ubuntu-latest
     environment: pypi
