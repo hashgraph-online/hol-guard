@@ -111,3 +111,15 @@ class TestRunMarketplaceChecks:
         results = run_marketplace_checks(FIXTURES / "good-plugin")
         assert isinstance(results, tuple)
         assert len(results) == 3
+
+    def test_http_marketplace_source_is_unsafe(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp = Path(tmpdir) / "marketplace.json"
+            mp.write_text(
+                '{"name": "test", "plugins": [{"source": "http://example.com/plugin", '
+                '"policy": {"installation": "manual", "authentication": "none"}}]}'
+            )
+            results = run_marketplace_checks(Path(tmpdir))
+            source_check = next(check for check in results if check.name == "Marketplace sources are safe")
+            assert source_check.passed is False
+            assert "http://example.com/plugin" in source_check.message

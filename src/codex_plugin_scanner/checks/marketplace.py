@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 
 from ..models import CheckResult, Finding, Severity
 
 
 def _is_safe_source(plugin_dir: Path, source: str) -> bool:
-    if source.startswith(("http://", "https://", "git+", "github://")):
+    if source.startswith(("https://", "git+", "github://")):
         return True
+    if urlparse(source).scheme:
+        return False
     candidate = Path(source)
     if candidate.is_absolute():
         return False

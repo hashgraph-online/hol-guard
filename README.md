@@ -128,9 +128,7 @@ Add to your plugin's CI:
 - name: Install scanner
   run: pip install codex-plugin-scanner
 - name: Scan plugin
-  run: codex-plugin-scanner ./my-plugin --fail-on-severity high
-- name: Upload SARIF
-  run: codex-plugin-scanner ./my-plugin --format sarif --output codex-plugin-scanner.sarif
+  run: codex-plugin-scanner ./my-plugin --fail-on-severity high --format sarif --output codex-plugin-scanner.sarif
 ```
 
 ## Use as a pre-commit hook
