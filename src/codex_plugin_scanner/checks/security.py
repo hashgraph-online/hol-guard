@@ -1,11 +1,11 @@
-"""Security checks (30 points)."""
+"""Security checks (20 points)."""
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
-from ..models import CheckResult
+from ..models import CheckResult, Finding, Severity
 
 # Patterns for hardcoded secrets
 SECRET_PATTERNS: list[re.Pattern[str]] = [
@@ -66,6 +66,12 @@ DANGEROUS_MCP_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"cmd\s*/c", re.I),
 ]
 
+RISKY_APPROVAL_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"danger-full-access"),
+    re.compile(r'approval[_ -]?policy["\']?\s*[:=]\s*["\']never["\']', re.I),
+    re.compile(r'approvalMode["\']?\s*[:=]\s*["\']bypass["\']', re.I),
+]
+
 
 def _scan_all_files(plugin_dir: Path) -> list[Path]:
     """Recursively find all files, skipping excluded dirs."""
@@ -86,30 +92,62 @@ def check_security_md(plugin_dir: Path) -> CheckResult:
     return CheckResult(
         name="SECURITY.md found",
         passed=exists,
-        points=5 if exists else 0,
-        max_points=5,
+        points=3 if exists else 0,
+        max_points=3,
         message="SECURITY.md found" if exists else "SECURITY.md not found",
+        findings=()
+        if exists
+        else (
+            Finding(
+                rule_id="SECURITY_MD_MISSING",
+                severity=Severity.LOW,
+                category="security",
+                title="SECURITY.md is missing",
+                description=(
+                    "Plugins should publish a SECURITY.md file for responsible disclosure and support guidance."
+                ),
+                remediation="Add a SECURITY.md file with reporting guidance and supported versions.",
+                file_path="SECURITY.md",
+            ),
+        ),
     )
 
 
 def check_license(plugin_dir: Path) -> CheckResult:
     lp = plugin_dir / "LICENSE"
     if not lp.exists():
-        return CheckResult(name="LICENSE found", passed=False, points=0, max_points=5, message="LICENSE file not found")
+        return CheckResult(
+            name="LICENSE found",
+            passed=False,
+            points=0,
+            max_points=3,
+            message="LICENSE file not found",
+            findings=(
+                Finding(
+                    rule_id="LICENSE_MISSING",
+                    severity=Severity.LOW,
+                    category="security",
+                    title="LICENSE file is missing",
+                    description="Plugins should ship a LICENSE file so consumers can review usage rights.",
+                    remediation="Add a LICENSE file that matches the manifest license metadata.",
+                    file_path="LICENSE",
+                ),
+            ),
+        )
     try:
         content = lp.read_text(encoding="utf-8", errors="ignore")
         if "Apache" in content and ("2.0" in content or "www.apache.org" in content):
             return CheckResult(
-                name="LICENSE found", passed=True, points=5, max_points=5, message="LICENSE found (Apache-2.0)"
+                name="LICENSE found", passed=True, points=3, max_points=3, message="LICENSE found (Apache-2.0)"
             )
         if "MIT" in content and "Permission is hereby granted" in content:
-            return CheckResult(name="LICENSE found", passed=True, points=5, max_points=5, message="LICENSE found (MIT)")
+            return CheckResult(name="LICENSE found", passed=True, points=3, max_points=3, message="LICENSE found (MIT)")
         return CheckResult(
-            name="LICENSE found", passed=True, points=5, max_points=5, message="LICENSE found (not Apache-2.0 or MIT)"
+            name="LICENSE found", passed=True, points=3, max_points=3, message="LICENSE found"
         )
     except OSError:
         return CheckResult(
-            name="LICENSE found", passed=False, points=0, max_points=5, message="LICENSE exists but could not be read"
+            name="LICENSE found", passed=False, points=0, max_points=3, message="LICENSE exists but could not be read"
         )
 
 
@@ -126,7 +164,7 @@ def check_no_hardcoded_secrets(plugin_dir: Path) -> CheckResult:
                 break
     if not findings:
         return CheckResult(
-            name="No hardcoded secrets", passed=True, points=10, max_points=10, message="No hardcoded secrets detected"
+            name="No hardcoded secrets", passed=True, points=7, max_points=7, message="No hardcoded secrets detected"
         )
     shown = findings[:5]
     suffix = f" and {len(findings) - 5} more" if len(findings) > 5 else ""
@@ -134,8 +172,20 @@ def check_no_hardcoded_secrets(plugin_dir: Path) -> CheckResult:
         name="No hardcoded secrets",
         passed=False,
         points=0,
-        max_points=10,
+        max_points=7,
         message=f"Hardcoded secrets found in: {', '.join(shown)}{suffix}",
+        findings=tuple(
+            Finding(
+                rule_id="HARDCODED_SECRET",
+                severity=Severity.HIGH,
+                category="security",
+                title="Hardcoded secret detected",
+                description=f"Potential secret material was detected in {path}.",
+                remediation="Remove the secret from source control and load it securely at runtime.",
+                file_path=path,
+            )
+            for path in findings
+        ),
     )
 
 
@@ -145,15 +195,21 @@ def check_no_dangerous_mcp(plugin_dir: Path) -> CheckResult:
         return CheckResult(
             name="No dangerous MCP commands",
             passed=True,
-            points=10,
-            max_points=10,
+            points=0,
+            max_points=0,
             message="No .mcp.json found, skipping check",
+            applicable=False,
         )
     try:
         content = mcp_path.read_text(encoding="utf-8")
     except OSError:
         return CheckResult(
-            name="No dangerous MCP commands", passed=True, points=10, max_points=10, message="Could not read .mcp.json"
+            name="No dangerous MCP commands",
+            passed=True,
+            points=0,
+            max_points=0,
+            message="Could not read .mcp.json",
+            applicable=False,
         )
     found: list[str] = []
     for pattern in DANGEROUS_MCP_PATTERNS:
@@ -163,16 +219,72 @@ def check_no_dangerous_mcp(plugin_dir: Path) -> CheckResult:
         return CheckResult(
             name="No dangerous MCP commands",
             passed=True,
-            points=10,
-            max_points=10,
+            points=4,
+            max_points=4,
             message="No dangerous commands found in .mcp.json",
         )
     return CheckResult(
         name="No dangerous MCP commands",
         passed=False,
         points=0,
-        max_points=10,
+        max_points=4,
         message=f"Dangerous patterns in .mcp.json: {', '.join(found)}",
+        findings=tuple(
+            Finding(
+                rule_id="DANGEROUS_MCP_COMMAND",
+                severity=Severity.HIGH,
+                category="security",
+                title="Dangerous MCP command pattern detected",
+                description=f'The MCP configuration matches the risky pattern "{pattern}".',
+                remediation="Remove destructive commands and require explicit user approval before high-risk actions.",
+                file_path=".mcp.json",
+            )
+            for pattern in found
+        ),
+    )
+
+
+def check_no_approval_bypass_defaults(plugin_dir: Path) -> CheckResult:
+    findings: list[str] = []
+    for file_path in _scan_all_files(plugin_dir):
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if not file_path.name.endswith((".json", ".md", ".yaml", ".yml", ".toml")):
+            continue
+        if any(pattern.search(content) for pattern in RISKY_APPROVAL_PATTERNS):
+            findings.append(str(file_path.relative_to(plugin_dir)))
+
+    if not findings:
+        return CheckResult(
+            name="No approval bypass defaults",
+            passed=True,
+            points=3,
+            max_points=3,
+            message="No risky approval or sandbox defaults detected.",
+        )
+
+    return CheckResult(
+        name="No approval bypass defaults",
+        passed=False,
+        points=0,
+        max_points=3,
+        message=f"Risky approval defaults found in: {', '.join(findings)}",
+        findings=tuple(
+            Finding(
+                rule_id="RISKY_APPROVAL_DEFAULT",
+                severity=Severity.MEDIUM,
+                category="security",
+                title="Risky approval or sandbox default detected",
+                description=f"{path} contains a dangerous approval or sandbox default.",
+                remediation=(
+                    "Avoid shipping configurations that default to bypassed approvals or unrestricted sandboxes."
+                ),
+                file_path=path,
+            )
+            for path in findings
+        ),
     )
 
 
@@ -182,4 +294,5 @@ def run_security_checks(plugin_dir: Path) -> tuple[CheckResult, ...]:
         check_license(plugin_dir),
         check_no_hardcoded_secrets(plugin_dir),
         check_no_dangerous_mcp(plugin_dir),
+        check_no_approval_bypass_defaults(plugin_dir),
     )

@@ -17,9 +17,11 @@ class TestFormatJson:
         parsed = json.loads(output)
         assert parsed["score"] == 100
         assert parsed["grade"] == "A"
-        assert len(parsed["categories"]) == 5
+        assert len(parsed["categories"]) == 6
         assert "timestamp" in parsed
         assert "pluginDir" in parsed
+        assert "summary" in parsed
+        assert "findings" in parsed
 
     def test_categories_have_correct_structure(self):
         result = scan_plugin(FIXTURES / "good-plugin")
@@ -36,14 +38,14 @@ class TestFormatJson:
         assert "points" in check
         assert "maxPoints" in check
         assert "message" in check
+        assert "findings" in check
 
     def test_bad_plugin_json(self):
         result = scan_plugin(FIXTURES / "bad-plugin")
         output = format_json(result)
         parsed = json.loads(output)
         assert parsed["score"] < 60
-        security = next(c for c in parsed["categories"] if c["name"] == "Security")
-        assert security["score"] < security["max"]
+        assert parsed["summary"]["findings"]["high"] >= 1
 
 
 class TestFormatText:
@@ -68,7 +70,7 @@ class TestFormatText:
     def test_bad_plugin_output(self):
         result = scan_plugin(FIXTURES / "bad-plugin")
         output = format_text(result)
-        assert "40/100" in output
+        assert "38/100" in output
         assert "Failing" in output
 
 
@@ -112,12 +114,11 @@ class TestMain:
             assert parsed["score"] == 100
 
     def test_min_score_boundary(self):
-        # bad-plugin scores 40, so min-score=40 should pass
-        rc = main([str(FIXTURES / "bad-plugin"), "--min-score", "40"])
+        rc = main([str(FIXTURES / "bad-plugin"), "--min-score", "38"])
         assert rc == 0
 
     def test_min_score_just_above(self):
-        rc = main([str(FIXTURES / "bad-plugin"), "--min-score", "41"])
+        rc = main([str(FIXTURES / "bad-plugin"), "--min-score", "39"])
         assert rc == 1
 
     def test_version_flag(self, capsys):
@@ -130,7 +131,7 @@ class TestMain:
         main([str(FIXTURES / "bad-plugin"), "--min-score", "50"])
         captured = capsys.readouterr()
         # Should still produce text output
-        assert "40/100" in captured.out
+        assert "38/100" in captured.out
 
     def test_min_score_exact_boundary(self):
         # At exact boundary should pass (>=)

@@ -39,7 +39,7 @@ class TestLoadManifest:
 class TestCheckPluginJsonExists:
     def test_passes_when_exists(self):
         r = check_plugin_json_exists(FIXTURES / "good-plugin")
-        assert r.passed and r.points == 5
+        assert r.passed and r.points == 4
 
     def test_fails_when_missing(self):
         r = check_plugin_json_exists(FIXTURES / "empty-dir")
@@ -49,7 +49,7 @@ class TestCheckPluginJsonExists:
 class TestCheckValidJson:
     def test_passes_for_valid_json(self):
         r = check_valid_json(FIXTURES / "good-plugin")
-        assert r.passed and r.points == 5
+        assert r.passed and r.points == 4
 
     def test_fails_for_malformed(self):
         r = check_valid_json(FIXTURES / "malformed-json")
@@ -63,7 +63,7 @@ class TestCheckValidJson:
 class TestCheckRequiredFields:
     def test_passes_when_all_present(self):
         r = check_required_fields(FIXTURES / "good-plugin")
-        assert r.passed and r.points == 8
+        assert r.passed and r.points == 5
 
     def test_fails_for_missing_description(self):
         r = check_required_fields(FIXTURES / "missing-fields")
@@ -78,7 +78,7 @@ class TestCheckRequiredFields:
 class TestCheckSemver:
     def test_passes_for_valid_semver(self):
         r = check_semver(FIXTURES / "good-plugin")
-        assert r.passed and r.points == 4
+        assert r.passed and r.points == 3
 
     def test_fails_for_non_semver(self):
         r = check_semver(FIXTURES / "bad-plugin")
@@ -92,7 +92,7 @@ class TestCheckSemver:
 class TestCheckKebabCase:
     def test_passes_for_kebab_case(self):
         r = check_kebab_case(FIXTURES / "good-plugin")
-        assert r.passed and r.points == 3
+        assert r.passed and r.points == 2
 
     def test_fails_for_bad_name(self):
         r = check_kebab_case(FIXTURES / "bad-plugin")
@@ -111,13 +111,13 @@ class TestRunManifestChecks:
         assert names["Version follows semver"] is False
         assert names["Name is kebab-case"] is False
 
-    def test_minimal_plugin_gets_25(self):
+    def test_minimal_plugin_gets_21(self):
         results = run_manifest_checks(FIXTURES / "minimal-plugin")
-        assert sum(c.points for c in results) == 25
+        assert sum(c.points for c in results) == 21
 
-    def test_malformed_json_gets_5(self):
+    def test_malformed_json_gets_4(self):
         results = run_manifest_checks(FIXTURES / "malformed-json")
-        assert sum(c.points for c in results) == 5  # exists(5), everything else fails
+        assert sum(c.points for c in results) == 4
 
     def test_empty_dir_gets_0(self):
         results = run_manifest_checks(FIXTURES / "empty-dir")
@@ -126,4 +126,4 @@ class TestRunManifestChecks:
     def test_returns_tuple_of_correct_length(self):
         results = run_manifest_checks(FIXTURES / "good-plugin")
         assert isinstance(results, tuple)
-        assert len(results) == 5
+        assert len(results) == 7
