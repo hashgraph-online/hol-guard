@@ -17,7 +17,7 @@ class TestFormatJson:
         parsed = json.loads(output)
         assert parsed["score"] == 100
         assert parsed["grade"] == "A"
-        assert len(parsed["categories"]) == 6
+        assert len(parsed["categories"]) == 7
         assert "timestamp" in parsed
         assert "pluginDir" in parsed
         assert "summary" in parsed

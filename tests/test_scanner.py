@@ -98,10 +98,11 @@ class TestScanPlugin:
 
     def test_returns_6_categories(self):
         result = scan_plugin(FIXTURES / "good-plugin")
-        assert len(result.categories) == 6
+        assert len(result.categories) == 7
         names = [c.name for c in result.categories]
         assert "Manifest Validation" in names
         assert "Security" in names
+        assert "Operational Security" in names
         assert "Best Practices" in names
         assert "Marketplace" in names
         assert "Skill Security" in names
