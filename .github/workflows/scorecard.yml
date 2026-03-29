@@ -6,11 +6,12 @@ on:
     branches: [main]
 permissions:
   contents: read
-  id-token: write
-  security-events: write
 jobs:
   scorecard:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      security-events: write
     steps:
       - uses: actions/checkout@v4
         with:
