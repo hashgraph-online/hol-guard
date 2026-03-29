@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from codex_plugin_scanner.cli import format_text
 from codex_plugin_scanner.scanner import scan_plugin
@@ -11,21 +11,16 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class TestRichOutputBranch:
-    """Test that the rich import path works when available."""
+    """Test plain text formatting output."""
 
-    def test_format_text_with_rich(self):
-        """Test rich Console path via mock."""
-        mock_console = MagicMock()
-        mock_console_class = MagicMock(return_value=mock_console)
+    def test_format_text_returns_string(self):
         result = scan_plugin(FIXTURES / "good-plugin")
-
-        with patch.dict("sys.modules", {"rich": MagicMock(), "rich.console": MagicMock(Console=mock_console_class)}):
-            output = format_text(result)
-            assert "100/100" in output
-            assert mock_console.print.call_count > 0
+        output = format_text(result)
+        assert isinstance(output, str)
+        assert "100/100" in output
 
     def test_format_text_fallback(self):
-        """Test fallback path when rich is not available."""
+        """Formatting remains stable even if rich is unavailable."""
         result = scan_plugin(FIXTURES / "good-plugin")
         with patch.dict("sys.modules", {"rich": None}):
             output = format_text(result)
@@ -94,6 +89,7 @@ class TestOSErrorBranches:
             with patch("pathlib.Path.read_text", side_effect=OSError("Permission denied")):
                 r = check_no_dangerous_mcp(d)
                 assert r.passed
+                assert not r.applicable
 
 
 class TestSecurityEdgeCases:
@@ -116,7 +112,7 @@ class TestSecurityEdgeCases:
             (d / "LICENSE").write_text("Custom license text here.")
             r = check_license(d)
             assert r.passed
-            assert "not Apache-2.0 or MIT" in r.message
+            assert r.message == "LICENSE found"
 
     def test_safe_mcp(self):
         from codex_plugin_scanner.checks.security import check_no_dangerous_mcp

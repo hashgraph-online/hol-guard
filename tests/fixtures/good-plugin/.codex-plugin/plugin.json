@@ -1,1 +1,18 @@
-{"name": "example-good-plugin", "version": "1.0.0", "description": "A well-structured example plugin", "skills": "skills"}
+{
+  "name": "example-good-plugin",
+  "version": "1.0.0",
+  "description": "A well-structured example plugin",
+  "author": {
+    "name": "Hashgraph Online",
+    "email": "dev@hol.org"
+  },
+  "homepage": "https://github.com/hashgraph-online/codex-plugin-scanner",
+  "repository": "https://github.com/hashgraph-online/codex-plugin-scanner",
+  "license": "Apache-2.0",
+  "keywords": ["codex", "plugin", "security"],
+  "interface": {
+    "type": "cli",
+    "displayName": "Example Good Plugin"
+  },
+  "skills": "skills"
+}
