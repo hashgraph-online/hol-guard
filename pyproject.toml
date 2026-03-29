@@ -7,7 +7,7 @@ name = "codex-plugin-scanner"
 version = "1.0.0"
 description = "Security and best-practices scanner for Codex CLI plugins. Scores plugins 0-100."
 readme = "README.md"
-license = "Apache-2.0"
+license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 authors = [
     { name = "Hashgraph Online", email = "dev@hol.org" },
