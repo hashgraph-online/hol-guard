@@ -18,7 +18,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 class TestSecurityMd:
     def test_passes_when_found(self):
         r = check_security_md(FIXTURES / "good-plugin")
-        assert r.passed and r.points == 5
+        assert r.passed and r.points == 3
 
     def test_fails_when_missing(self):
         r = check_security_md(FIXTURES / "minimal-plugin")
@@ -28,11 +28,11 @@ class TestSecurityMd:
 class TestLicense:
     def test_passes_for_apache(self):
         r = check_license(FIXTURES / "good-plugin")
-        assert r.passed and r.points == 5
+        assert r.passed and r.points == 3
 
     def test_passes_for_mit(self):
         r = check_license(FIXTURES / "mit-license")
-        assert r.passed and r.points == 5
+        assert r.passed and r.points == 3
         assert "MIT" in r.message
 
     def test_fails_when_missing(self):
@@ -43,7 +43,7 @@ class TestLicense:
 class TestNoHardcodedSecrets:
     def test_passes_clean_dir(self):
         r = check_no_hardcoded_secrets(FIXTURES / "good-plugin")
-        assert r.passed and r.points == 10
+        assert r.passed and r.points == 7
 
     def test_fails_with_secrets(self):
         r = check_no_hardcoded_secrets(FIXTURES / "bad-plugin")
@@ -57,13 +57,14 @@ class TestNoHardcodedSecrets:
     def test_handles_empty_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             r = check_no_hardcoded_secrets(Path(tmpdir))
-            assert r.passed and r.points == 10
+            assert r.passed and r.points == 7
 
 
 class TestNoDangerousMcp:
     def test_passes_when_no_mcp(self):
         r = check_no_dangerous_mcp(FIXTURES / "good-plugin")
-        assert r.passed and r.points == 10
+        assert r.passed and r.points == 0
+        assert not r.applicable
 
     def test_fails_with_dangerous_commands(self):
         r = check_no_dangerous_mcp(FIXTURES / "bad-plugin")
@@ -74,7 +75,7 @@ class TestNoDangerousMcp:
             mcp = Path(tmpdir) / ".mcp.json"
             mcp.write_text('{"mcpServers":{"safe":{"command":"echo","args":["hello"]}}}')
             r = check_no_dangerous_mcp(Path(tmpdir))
-            assert r.passed and r.points == 10
+            assert r.passed and r.points == 4
 
 
 class TestScanAllFiles:
@@ -100,9 +101,10 @@ class TestScanAllFiles:
 
 
 class TestRunSecurityChecks:
-    def test_good_plugin_gets_30(self):
+    def test_good_plugin_gets_16(self):
         results = run_security_checks(FIXTURES / "good-plugin")
-        assert sum(c.points for c in results) == 30
+        assert sum(c.points for c in results) == 16
+        assert sum(c.max_points for c in results) == 16
 
     def test_bad_plugin_detects_issues(self):
         results = run_security_checks(FIXTURES / "bad-plugin")
@@ -113,9 +115,9 @@ class TestRunSecurityChecks:
     def test_minimal_plugin_partial(self):
         results = run_security_checks(FIXTURES / "minimal-plugin")
         total = sum(c.points for c in results)
-        assert 0 < total < 30
+        assert 0 < total < 16
 
     def test_returns_tuple_of_correct_length(self):
         results = run_security_checks(FIXTURES / "good-plugin")
         assert isinstance(results, tuple)
-        assert len(results) == 4
+        assert len(results) == 5
