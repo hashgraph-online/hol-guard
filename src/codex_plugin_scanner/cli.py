@@ -10,7 +10,7 @@ from pathlib import Path
 from .models import GRADE_LABELS
 from .scanner import scan_plugin
 
-VERSION = "1.0.0"
+__version__ = "1.0.0"
 
 
 def format_text(result) -> str:
@@ -19,7 +19,7 @@ def format_text(result) -> str:
         from rich.console import Console
 
         console = Console()
-        console.print(f"[bold cyan]🔗 Codex Plugin Scanner v{VERSION}[/bold cyan]")
+        console.print(f"[bold cyan]🔗 Codex Plugin Scanner v{__version__}[/bold cyan]")
         console.print(f"Scanning: {result.plugin_dir}")
         console.print()
 
@@ -49,7 +49,7 @@ def format_text(result) -> str:
         pass
 
     # Fallback: plain text output
-    lines = [f"🔗 Codex Plugin Scanner v{VERSION}", f"Scanning: {result.plugin_dir}", ""]
+    lines = [f"🔗 Codex Plugin Scanner v{__version__}", f"Scanning: {result.plugin_dir}", ""]
     for category in result.categories:
         cat_score = sum(c.points for c in category.checks)
         cat_max = sum(c.max_points for c in category.checks)
@@ -94,7 +94,8 @@ def format_json(result) -> str:
     return json.dumps(data, indent=2)
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int:
+    """Run the CLI. Returns exit code."""
     parser = argparse.ArgumentParser(
         prog="codex-plugin-scanner",
         description="Scan a Codex plugin directory for best practices and security",
@@ -102,13 +103,19 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("plugin_dir", help="Path to the plugin directory to scan")
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
     parser.add_argument("--output", "-o", help="Write JSON report to file")
-    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    parser.add_argument(
+        "--min-score",
+        type=int,
+        default=0,
+        help="Exit with code 1 if score is below this threshold (default: 0)",
+    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     args = parser.parse_args(argv)
 
     resolved = Path(args.plugin_dir).resolve()
     if not resolved.is_dir():
         print(f'Error: "{resolved}" is not a directory.', file=sys.stderr)
-        sys.exit(1)
+        return 1
 
     result = scan_plugin(args.plugin_dir)
 
@@ -125,6 +132,15 @@ def main(argv: list[str] | None = None) -> None:
         if text:
             print(text)
 
+    if result.score < args.min_score:
+        print(
+            f"Score {result.score} is below minimum threshold {args.min_score}",
+            file=sys.stderr,
+        )
+        return 1
+
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())  # pragma: no cover

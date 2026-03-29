@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CheckResult:
+    """Result of an individual check."""
+
     name: str
     passed: bool
     points: int
@@ -14,14 +16,18 @@ class CheckResult:
     message: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class CategoryResult:
+    """A category containing multiple checks."""
+
     name: str
     checks: tuple[CheckResult, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ScanResult:
+    """Full result of scanning a plugin directory."""
+
     score: int
     grade: str
     categories: tuple[CategoryResult, ...]
@@ -30,6 +36,7 @@ class ScanResult:
 
 
 def get_grade(score: int) -> str:
+    """Convert a numeric score to a letter grade."""
     if score >= 90:
         return "A"
     if score >= 80:
@@ -41,7 +48,7 @@ def get_grade(score: int) -> str:
     return "F"
 
 
-GRADE_LABELS = {
+GRADE_LABELS: dict[str, str] = {
     "A": "Excellent",
     "B": "Good",
     "C": "Acceptable",

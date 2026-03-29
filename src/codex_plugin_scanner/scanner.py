@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,7 +14,14 @@ from .models import CategoryResult, ScanResult, get_grade
 
 
 def scan_plugin(plugin_dir: str | Path) -> ScanResult:
-    """Scan a Codex plugin directory and return a scored result."""
+    """Scan a Codex plugin directory and return a scored result.
+
+    Args:
+        plugin_dir: Path to the plugin directory to scan.
+
+    Returns:
+        ScanResult with score 0-100, grade A-F, and per-category breakdowns.
+    """
     resolved = Path(plugin_dir).resolve()
 
     categories: list[CategoryResult] = [
@@ -36,14 +42,3 @@ def scan_plugin(plugin_dir: str | Path) -> ScanResult:
         timestamp=datetime.now(timezone.utc).isoformat(),
         plugin_dir=str(resolved),
     )
-
-
-def load_manifest(plugin_dir: Path) -> dict | None:
-    """Load plugin.json from .codex-plugin/ directory."""
-    manifest_path = plugin_dir / ".codex-plugin" / "plugin.json"
-    if not manifest_path.exists():
-        return None
-    try:
-        return json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None

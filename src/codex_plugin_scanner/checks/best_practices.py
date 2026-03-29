@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from ..models import CheckResult
+from .manifest import load_manifest
 
 ENV_FILES = {".env", ".env.local", ".env.production"}
 
@@ -22,10 +22,8 @@ def check_readme(plugin_dir: Path) -> CheckResult:
 
 
 def check_skills_directory(plugin_dir: Path) -> CheckResult:
-    manifest_path = plugin_dir / ".codex-plugin" / "plugin.json"
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except Exception:
+    manifest = load_manifest(plugin_dir)
+    if manifest is None:
         return CheckResult(
             name="Skills directory exists if declared",
             passed=True,
@@ -61,10 +59,8 @@ def check_skills_directory(plugin_dir: Path) -> CheckResult:
 
 
 def check_skill_frontmatter(plugin_dir: Path) -> CheckResult:
-    manifest_path = plugin_dir / ".codex-plugin" / "plugin.json"
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except Exception:
+    manifest = load_manifest(plugin_dir)
+    if manifest is None:
         return CheckResult(
             name="SKILL.md frontmatter",
             passed=True,
@@ -105,12 +101,11 @@ def check_skill_frontmatter(plugin_dir: Path) -> CheckResult:
     for sf in skill_files:
         try:
             content = sf.read_text(encoding="utf-8")
-        except OSError:
+        except OSError:  # pragma: no cover
             continue
         if "---" not in content:
             issues.append(str(sf.relative_to(plugin_dir)))
             continue
-        # Extract frontmatter between first two ---
         parts = content.split("---", 2)
         if len(parts) < 3:
             issues.append(str(sf.relative_to(plugin_dir)))
@@ -140,7 +135,11 @@ def check_no_env_files(plugin_dir: Path) -> CheckResult:
     found = [f for f in ENV_FILES if (plugin_dir / f).exists()]
     if not found:
         return CheckResult(
-            name="No .env files committed", passed=True, points=5, max_points=5, message="No .env files found"
+            name="No .env files committed",
+            passed=True,
+            points=5,
+            max_points=5,
+            message="No .env files found",
         )
     return CheckResult(
         name="No .env files committed",

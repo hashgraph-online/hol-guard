@@ -12,7 +12,7 @@ SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+")
 KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
-def _load_manifest(plugin_dir: Path) -> dict | None:
+def load_manifest(plugin_dir: Path) -> dict | None:
     p = plugin_dir / ".codex-plugin" / "plugin.json"
     if not p.exists():
         return None
@@ -47,7 +47,7 @@ def check_valid_json(plugin_dir: Path) -> CheckResult:
 
 
 def check_required_fields(plugin_dir: Path) -> CheckResult:
-    manifest = _load_manifest(plugin_dir)
+    manifest = load_manifest(plugin_dir)
     if manifest is None:
         return CheckResult(
             name="Required fields present", passed=False, points=0, max_points=8, message="Cannot parse plugin.json"
@@ -72,7 +72,7 @@ def check_required_fields(plugin_dir: Path) -> CheckResult:
 
 
 def check_semver(plugin_dir: Path) -> CheckResult:
-    manifest = _load_manifest(plugin_dir)
+    manifest = load_manifest(plugin_dir)
     if manifest is None:
         return CheckResult(
             name="Version follows semver", passed=False, points=0, max_points=4, message="Cannot parse plugin.json"
@@ -96,7 +96,7 @@ def check_semver(plugin_dir: Path) -> CheckResult:
 
 
 def check_kebab_case(plugin_dir: Path) -> CheckResult:
-    manifest = _load_manifest(plugin_dir)
+    manifest = load_manifest(plugin_dir)
     if manifest is None:
         return CheckResult(
             name="Name is kebab-case", passed=False, points=0, max_points=3, message="Cannot parse plugin.json"

@@ -1,0 +1,12 @@
+{
+  "name": "test-marketplace",
+  "plugins": [
+    {
+      "source": "https://github.com/example/plugin",
+      "policy": {
+        "installation": "auto",
+        "authentication": "none"
+      }
+    }
+  ]
+}
