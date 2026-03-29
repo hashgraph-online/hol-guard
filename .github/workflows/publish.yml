@@ -6,14 +6,14 @@ on:
       publish_target:
         description: "Target repository"
         required: true
-        default: testpypi
+        default: pypi
         type: choice
         options:
           - testpypi
           - pypi
   push:
-    tags:
-      - "v*"
+    branches: [main]
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -24,8 +24,41 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  detect-version:
+    name: Detect version change
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changed: ${{ steps.version.outputs.changed }}
+      tag_exists: ${{ steps.tag.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: version
+        run: |
+          CURRENT=$(python3 -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print(p['project']['version'])")
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+          if git diff HEAD~1 -- pyproject.toml | grep -q "version = \"$CURRENT\""; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+          echo "Detected version: $CURRENT"
+      - id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git ls-remote --tags origin "refs/tags/v${{ steps.version.outputs.version }}" | grep -q .; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
   build:
     name: Build + Verify
+    needs: detect-version
+    if: needs.detect-version.outputs.changed == 'true' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +100,7 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish_target != 'testpypi'
+    if: needs.detect-version.outputs.changed == 'true' || startsWith(github.ref, 'refs/tags/')
     needs: build
     runs-on: ubuntu-latest
     environment: pypi
@@ -79,3 +112,54 @@ jobs:
           name: distributions
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  release:
+    name: Create GitHub Release
+    if: needs.detect-version.outputs.tag_exists == 'false' && needs.detect-version.outputs.changed == 'true'
+    needs: [detect-version, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the range of commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          VERSION="${{ needs.detect-version.outputs.version }}"
+
+          if [ -n "$LAST_TAG" ]; then
+            LOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          else
+            LOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+
+          # Build release notes
+          cat > release-notes.md << EOF
+          ## v${VERSION}
+
+          ### What's Changed
+          ${LOG}
+
+          ### Installation
+          \`\`\`bash
+          pip install codex-plugin-scanner==${VERSION}
+          \`\`\`
+
+          **Full Changelog**: https://github.com/hashgraph-online/codex-plugin-scanner/compare/${LAST_TAG}...v${VERSION}
+          EOF
+
+          echo "notes_path=release-notes.md" >> $GITHUB_OUTPUT
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.detect-version.outputs.version }}"
+          git tag "v${VERSION}"
+          git push origin "v${VERSION}"
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --notes-file ${{ steps.changelog.outputs.notes_path }}
