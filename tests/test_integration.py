@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from codex_plugin_scanner.cli import format_json, format_text
+from codex_plugin_scanner.models import ScanOptions
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -70,9 +71,9 @@ def test_all_check_names_unique():
 
 
 def test_max_points_total_100():
-    result = scan_plugin(FIXTURES / "good-plugin")
+    result = scan_plugin(FIXTURES / "good-plugin", ScanOptions(cisco_skill_scan="off"))
     total_max = sum(c.max_points for cat in result.categories for c in cat.checks)
-    assert total_max == 87
+    assert total_max == 72
 
 
 def test_mit_license_plugin():
