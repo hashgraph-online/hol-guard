@@ -13,7 +13,9 @@ EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", "__pycache
 EVAL_RE = re.compile(r"\beval\s*\(")
 FUNCTION_RE = re.compile(r"new\s+Function\s*\(")
 SHELL_INJECT_RE = re.compile(
-    r"`[^`]*\$\{[^}]+\}[^`]*`\s*[.;\s]*\b(exec|spawn|execSync|spawnSync|os\.system|subprocess)"
+    r"`[^`]*\$\{[^}]+\}[^`]*`"
+    r"[\s\S]{0,30}"
+    r"\b(exec|spawn|execSync|spawnSync|os\.system|subprocess)\b"
 )
 
 

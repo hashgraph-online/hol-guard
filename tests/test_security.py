@@ -1,26 +1,121 @@
 """Tests for security checks."""
 
+import tempfile
 from pathlib import Path
 
-from codex_plugin_scanner.checks.security import run_security_checks
+from codex_plugin_scanner.checks.security import (
+    _scan_all_files,
+    check_license,
+    check_no_dangerous_mcp,
+    check_no_hardcoded_secrets,
+    check_security_md,
+    run_security_checks,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def test_good_plugin_security_30():
-    results = run_security_checks(FIXTURES / "good-plugin")
-    total = sum(c.points for c in results)
-    assert total == 30
+class TestSecurityMd:
+    def test_passes_when_found(self):
+        r = check_security_md(FIXTURES / "good-plugin")
+        assert r.passed and r.points == 5
+
+    def test_fails_when_missing(self):
+        r = check_security_md(FIXTURES / "minimal-plugin")
+        assert not r.passed and r.points == 0
 
 
-def test_bad_plugin_security():
-    results = run_security_checks(FIXTURES / "bad-plugin")
-    names = {c.name: c.passed for c in results}
-    assert names["No hardcoded secrets"] is False
-    assert names["No dangerous MCP commands"] is False
+class TestLicense:
+    def test_passes_for_apache(self):
+        r = check_license(FIXTURES / "good-plugin")
+        assert r.passed and r.points == 5
+
+    def test_passes_for_mit(self):
+        r = check_license(FIXTURES / "mit-license")
+        assert r.passed and r.points == 5
+        assert "MIT" in r.message
+
+    def test_fails_when_missing(self):
+        r = check_license(FIXTURES / "minimal-plugin")
+        assert not r.passed and r.points == 0
 
 
-def test_minimal_plugin_partial_security():
-    results = run_security_checks(FIXTURES / "minimal-plugin")
-    total = sum(c.points for c in results)
-    assert 0 < total < 30
+class TestNoHardcodedSecrets:
+    def test_passes_clean_dir(self):
+        r = check_no_hardcoded_secrets(FIXTURES / "good-plugin")
+        assert r.passed and r.points == 10
+
+    def test_fails_with_secrets(self):
+        r = check_no_hardcoded_secrets(FIXTURES / "bad-plugin")
+        assert not r.passed and r.points == 0
+        assert "secrets.js" in r.message
+
+    def test_message_lists_file(self):
+        r = check_no_hardcoded_secrets(FIXTURES / "bad-plugin")
+        assert "secrets.js" in r.message
+
+    def test_handles_empty_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            r = check_no_hardcoded_secrets(Path(tmpdir))
+            assert r.passed and r.points == 10
+
+
+class TestNoDangerousMcp:
+    def test_passes_when_no_mcp(self):
+        r = check_no_dangerous_mcp(FIXTURES / "good-plugin")
+        assert r.passed and r.points == 10
+
+    def test_fails_with_dangerous_commands(self):
+        r = check_no_dangerous_mcp(FIXTURES / "bad-plugin")
+        assert not r.passed and r.points == 0
+
+    def test_passes_when_mcp_is_safe(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text('{"mcpServers":{"safe":{"command":"echo","args":["hello"]}}}')
+            r = check_no_dangerous_mcp(Path(tmpdir))
+            assert r.passed and r.points == 10
+
+
+class TestScanAllFiles:
+    def test_skips_excluded_dirs(self):
+        files = _scan_all_files(FIXTURES / "good-plugin")
+        paths = [str(f) for f in files]
+        for p in paths:
+            assert "node_modules" not in p
+            assert ".git" not in p
+
+    def test_skips_binary_files(self):
+        files = _scan_all_files(FIXTURES / "good-plugin")
+        binary_exts = {".png", ".jpg", ".wasm", ".lock"}
+        for f in files:
+            assert f.suffix.lower() not in binary_exts
+
+    def test_returns_list_of_paths(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "test.txt").write_text("hello")
+            files = _scan_all_files(Path(tmpdir))
+            assert len(files) == 1
+            assert files[0].name == "test.txt"
+
+
+class TestRunSecurityChecks:
+    def test_good_plugin_gets_30(self):
+        results = run_security_checks(FIXTURES / "good-plugin")
+        assert sum(c.points for c in results) == 30
+
+    def test_bad_plugin_detects_issues(self):
+        results = run_security_checks(FIXTURES / "bad-plugin")
+        names = {c.name: c.passed for c in results}
+        assert names["No hardcoded secrets"] is False
+        assert names["No dangerous MCP commands"] is False
+
+    def test_minimal_plugin_partial(self):
+        results = run_security_checks(FIXTURES / "minimal-plugin")
+        total = sum(c.points for c in results)
+        assert 0 < total < 30
+
+    def test_returns_tuple_of_correct_length(self):
+        results = run_security_checks(FIXTURES / "good-plugin")
+        assert isinstance(results, tuple)
+        assert len(results) == 4
