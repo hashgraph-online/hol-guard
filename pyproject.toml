@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "codex-plugin-scanner"
-version = "1.0.0"
+version = "1.0.1"
 description = "Security and best-practices scanner for Codex CLI plugins. Scores plugins 0-100."
 readme = "README.md"
 license = {text = "Apache-2.0"}

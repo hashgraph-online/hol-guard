@@ -3,7 +3,7 @@
 from .models import GRADE_LABELS, CategoryResult, CheckResult, ScanResult, get_grade
 from .scanner import scan_plugin
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __all__ = [
     "GRADE_LABELS",
     "CategoryResult",
