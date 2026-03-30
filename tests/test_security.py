@@ -6,6 +6,7 @@ from pathlib import Path
 from codex_plugin_scanner.checks.security import (
     _scan_all_files,
     check_license,
+    check_mcp_transport_security,
     check_no_dangerous_mcp,
     check_no_hardcoded_secrets,
     check_security_md,
@@ -78,6 +79,59 @@ class TestNoDangerousMcp:
             assert r.passed and r.points == 4
 
 
+class TestMcpTransportSecurity:
+    def test_not_applicable_for_stdio_only_configs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text('{"mcpServers":{"safe":{"command":"echo","args":["hello"]}}}', encoding="utf-8")
+            r = check_mcp_transport_security(Path(tmpdir))
+            assert r.passed and r.points == 0
+            assert not r.applicable
+
+    def test_passes_for_https_remote_transport(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text('{"mcpServers":{"safe":{"url":"https://example.com/mcp"}}}', encoding="utf-8")
+            r = check_mcp_transport_security(Path(tmpdir))
+            assert r.passed and r.points == 4
+
+    def test_fails_for_insecure_remote_transport(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text('{"mcpServers":{"unsafe":{"url":"http://0.0.0.0:8080/mcp"}}}', encoding="utf-8")
+            r = check_mcp_transport_security(Path(tmpdir))
+            assert not r.passed and r.points == 0
+
+    def test_passes_for_loopback_remote_transport(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text('{"mcpServers":{"safe":{"url":"http://127.0.0.2:8080/mcp"}}}', encoding="utf-8")
+            r = check_mcp_transport_security(Path(tmpdir))
+            assert r.passed and r.points == 4
+
+    def test_ignores_metadata_urls_when_collecting_transport_endpoints(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text(
+                (
+                    '{"mcpServers":{"safe":{"command":"echo","metadata":{"homepage":{"url":"http://example.com"}}}}}'
+                ),
+                encoding="utf-8",
+            )
+            r = check_mcp_transport_security(Path(tmpdir))
+            assert r.passed and r.points == 0
+            assert not r.applicable
+
+    def test_fails_for_invalid_mcp_json(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mcp = Path(tmpdir) / ".mcp.json"
+            mcp.write_text("{invalid", encoding="utf-8")
+            r = check_mcp_transport_security(Path(tmpdir))
+            assert not r.passed and r.points == 0
+            assert r.max_points == 4
+            assert r.findings[0].rule_id == "MCP_CONFIG_INVALID_JSON"
+
+
 class TestScanAllFiles:
     def test_skips_excluded_dirs(self):
         files = _scan_all_files(FIXTURES / "good-plugin")
@@ -120,4 +174,4 @@ class TestRunSecurityChecks:
     def test_returns_tuple_of_correct_length(self):
         results = run_security_checks(FIXTURES / "good-plugin")
         assert isinstance(results, tuple)
-        assert len(results) == 5
+        assert len(results) == 6

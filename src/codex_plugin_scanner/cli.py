@@ -11,7 +11,7 @@ from .reporting import format_json as render_json
 from .reporting import format_markdown, format_sarif, should_fail_for_severity
 from .scanner import scan_plugin
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 
 def format_text(result) -> str:
@@ -38,48 +38,6 @@ def format_text(result) -> str:
     label = GRADE_LABELS.get(result.grade, "Unknown")
     lines += [separator, f"Final Score: {result.score}/100 ({result.grade} - {label})", separator]
     return "\n".join(lines)
-
-
-def _build_rich_text(result) -> str:
-    """Build rich markup text from a scan result."""
-    lines = [f"[bold cyan]🔗 Codex Plugin Scanner v{__version__}[/bold cyan]"]
-    lines.append(f"Scanning: {result.plugin_dir}")
-    lines.append("")
-    for category in result.categories:
-        cat_score = sum(c.points for c in category.checks)
-        cat_max = sum(c.max_points for c in category.checks)
-        lines.append(f"[bold yellow]── {category.name} ({cat_score}/{cat_max}) ──[/bold yellow]")
-        for check in category.checks:
-            icon = "✅" if check.passed else "⚠️"
-            style = "[green]" if check.passed else "[red]"
-            pts = f"[green]+{check.points}[/green]" if check.passed else "[red]+0[/red]"
-            lines.append(f"  {icon} {style}{check.name:<42}[/]{pts}")
-        lines.append("")
-    separator = "━" * 37
-    grade = result.grade
-    gc = {"A": "bold green", "B": "green", "C": "yellow", "D": "red", "F": "bold red"}.get(grade, "red")
-    label = GRADE_LABELS.get(grade, "Unknown")
-    lines += [
-        f"[bold]{separator}[/bold]",
-        f"Final Score: [bold]{result.score}[/bold]/100 ([{gc}]{grade} - {label}[/{gc}])",
-        f"[bold]{separator}[/bold]",
-    ]
-    return "\n".join(lines)
-
-
-def format_text(result) -> str:
-    """Format scan result as terminal output. Returns plain text string."""
-    plain = _build_plain_text(result)
-
-    try:
-        from rich.console import Console
-
-        console = Console()
-        console.print(_build_rich_text(result))
-    except ImportError:
-        print(plain)
-
-    return plain
 
 
 def format_json(result) -> str:

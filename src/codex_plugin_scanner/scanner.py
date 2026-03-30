@@ -9,6 +9,7 @@ from .checks.best_practices import run_best_practice_checks
 from .checks.code_quality import run_code_quality_checks
 from .checks.manifest import run_manifest_checks
 from .checks.marketplace import run_marketplace_checks
+from .checks.operational_security import run_operational_security_checks
 from .checks.security import run_security_checks
 from .checks.skill_security import resolve_skill_security_context, run_skill_security_checks
 from .integrations.cisco_skill_scanner import CiscoIntegrationStatus
@@ -74,6 +75,7 @@ def scan_plugin(plugin_dir: str | Path, options: ScanOptions | None = None) -> S
     categories: list[CategoryResult] = [
         CategoryResult(name="Manifest Validation", checks=run_manifest_checks(resolved)),
         CategoryResult(name="Security", checks=run_security_checks(resolved)),
+        CategoryResult(name="Operational Security", checks=run_operational_security_checks(resolved)),
         CategoryResult(name="Best Practices", checks=run_best_practice_checks(resolved)),
         CategoryResult(name="Marketplace", checks=run_marketplace_checks(resolved)),
         CategoryResult(

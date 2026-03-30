@@ -1,4 +1,4 @@
-"""Manifest validation checks (25 points)."""
+"""Manifest validation checks (31 points)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,10 @@ from ..models import CheckResult, Finding, Severity
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 RECOMMENDED_FIELDS = ("author", "homepage", "repository", "license", "keywords")
+INTERFACE_METADATA_FIELDS = ("type", "displayName", "shortDescription", "longDescription", "developerName", "category")
+INTERFACE_URL_FIELDS = ("websiteURL", "privacyPolicyURL", "termsOfServiceURL")
+INTERFACE_ASSET_FIELDS = ("composerIcon", "logo")
+HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
 def load_manifest(plugin_dir: Path) -> dict | None:
@@ -52,6 +56,17 @@ def _is_safe_relative_path(plugin_dir: Path, value: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _load_interface(manifest: dict | None) -> dict | None:
+    if manifest is None:
+        return None
+    interface = manifest.get("interface")
+    if interface is None:
+        return None
+    if isinstance(interface, dict):
+        return interface
+    return {}
 
 
 def check_plugin_json_exists(plugin_dir: Path) -> CheckResult:
@@ -274,6 +289,188 @@ def check_recommended_metadata(plugin_dir: Path) -> CheckResult:
     )
 
 
+def check_interface_metadata(plugin_dir: Path) -> CheckResult:
+    manifest = load_manifest(plugin_dir)
+    interface = _load_interface(manifest)
+    if interface is None:
+        return CheckResult(
+            name="Interface metadata complete if declared",
+            passed=True,
+            points=0,
+            max_points=0,
+            message="No interface metadata declared, check not applicable.",
+            applicable=False,
+        )
+
+    if not interface:
+        return CheckResult(
+            name="Interface metadata complete if declared",
+            passed=False,
+            points=0,
+            max_points=3,
+            message="Manifest interface must be a JSON object.",
+            findings=(
+                _manifest_finding(
+                    "PLUGIN_JSON_INTERFACE_INVALID",
+                    "Manifest interface is not a JSON object",
+                    'The "interface" field must be an object when it is declared.',
+                    'Replace "interface" with a JSON object that contains the documented publishable metadata.',
+                ),
+            ),
+        )
+
+    missing = [
+        field
+        for field in INTERFACE_METADATA_FIELDS
+        if not isinstance(interface.get(field), str) or not interface.get(field, "").strip()
+    ]
+
+    capabilities = interface.get("capabilities")
+    if (
+        not isinstance(capabilities, list)
+        or not capabilities
+        or not all(isinstance(item, str) and item.strip() for item in capabilities)
+    ):
+        missing.append("capabilities")
+
+    default_prompt = interface.get("defaultPrompt")
+    if default_prompt is not None:
+        valid_string_prompt = isinstance(default_prompt, str) and default_prompt.strip()
+        valid_list_prompt = (
+            isinstance(default_prompt, list)
+            and default_prompt
+            and all(isinstance(item, str) and item.strip() for item in default_prompt)
+        )
+        if not valid_string_prompt and not valid_list_prompt:
+            missing.append("defaultPrompt")
+
+    brand_color = interface.get("brandColor")
+    if brand_color is not None and (not isinstance(brand_color, str) or not HEX_COLOR_RE.match(brand_color)):
+        missing.append("brandColor")
+
+    if not missing:
+        return CheckResult(
+            name="Interface metadata complete if declared",
+            passed=True,
+            points=3,
+            max_points=3,
+            message="Interface metadata contains the expected publishable fields.",
+        )
+
+    findings = tuple(
+        _manifest_finding(
+            f"PLUGIN_JSON_INTERFACE_{field.upper()}",
+            f'Interface field "{field}" is missing or invalid',
+            f'The interface object is missing a valid "{field}" value.',
+            f'Add a valid "{field}" field to the interface metadata.',
+            severity=Severity.INFO,
+        )
+        for field in missing
+    )
+    return CheckResult(
+        name="Interface metadata complete if declared",
+        passed=False,
+        points=0,
+        max_points=3,
+        message=f"Interface metadata is missing or invalid: {', '.join(missing)}",
+        findings=findings,
+    )
+
+
+def _is_https_url(value: object) -> bool:
+    return isinstance(value, str) and value.startswith("https://")
+
+
+def _interface_asset_paths(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str)]
+    return []
+
+
+def check_interface_assets(plugin_dir: Path) -> CheckResult:
+    manifest = load_manifest(plugin_dir)
+    interface = _load_interface(manifest)
+    if interface is None:
+        return CheckResult(
+            name="Interface links and assets valid if declared",
+            passed=True,
+            points=0,
+            max_points=0,
+            message="No interface metadata declared, check not applicable.",
+            applicable=False,
+        )
+
+    if not interface:
+        return CheckResult(
+            name="Interface links and assets valid if declared",
+            passed=False,
+            points=0,
+            max_points=3,
+            message="Manifest interface must be a JSON object.",
+            findings=(
+                _manifest_finding(
+                    "PLUGIN_JSON_INTERFACE_INVALID",
+                    "Manifest interface is not a JSON object",
+                    'The "interface" field must be an object when it is declared.',
+                    'Replace "interface" with a JSON object that contains valid URLs and asset paths.',
+                ),
+            ),
+        )
+
+    issues: list[str] = []
+    for field in INTERFACE_URL_FIELDS:
+        if not _is_https_url(interface.get(field)):
+            issues.append(field)
+
+    for field in INTERFACE_ASSET_FIELDS:
+        value = interface.get(field)
+        if (
+            not isinstance(value, str)
+            or not _is_safe_relative_path(plugin_dir, value)
+            or not (plugin_dir / value).exists()
+        ):
+            issues.append(field)
+
+    screenshots = _interface_asset_paths(interface.get("screenshots"))
+    if not screenshots:
+        issues.append("screenshots")
+    else:
+        for screenshot in screenshots:
+            if not _is_safe_relative_path(plugin_dir, screenshot) or not (plugin_dir / screenshot).exists():
+                issues.append("screenshots")
+                break
+
+    if not issues:
+        return CheckResult(
+            name="Interface links and assets valid if declared",
+            passed=True,
+            points=3,
+            max_points=3,
+            message="Interface URLs use HTTPS and referenced assets exist within the plugin directory.",
+        )
+
+    findings = tuple(
+        _manifest_finding(
+            f"PLUGIN_JSON_INTERFACE_ASSET_{field.upper()}",
+            f'Interface asset or URL "{field}" is invalid',
+            f'The interface field "{field}" must use HTTPS or point to a safe in-repo asset.',
+            f'Update "{field}" to use HTTPS or an existing relative asset path.',
+            severity=Severity.INFO,
+        )
+        for field in issues
+    )
+    return CheckResult(
+        name="Interface links and assets valid if declared",
+        passed=False,
+        points=0,
+        max_points=3,
+        message=f"Interface links or assets are invalid: {', '.join(issues)}",
+        findings=findings,
+    )
+
+
 def check_declared_paths_safe(plugin_dir: Path) -> CheckResult:
     manifest = load_manifest(plugin_dir)
     if manifest is None:
@@ -332,5 +529,7 @@ def run_manifest_checks(plugin_dir: Path) -> tuple[CheckResult, ...]:
         check_semver(plugin_dir),
         check_kebab_case(plugin_dir),
         check_recommended_metadata(plugin_dir),
+        check_interface_metadata(plugin_dir),
+        check_interface_assets(plugin_dir),
         check_declared_paths_safe(plugin_dir),
     )
