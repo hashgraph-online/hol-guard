@@ -71,9 +71,8 @@ runs:
         CISCO_SCAN: ${{ inputs.cisco_skill_scan }}
         CISCO_POLICY: ${{ inputs.cisco_policy }}
       run: |
-        # Run scanner once in text mode for score/grade extraction
+        # Run scanner in text mode first for score/grade extraction (silent)
         TEXT_REPORT=$(codex-plugin-scanner "$PLUGIN_DIR" --format text 2>&1 || true)
-        echo "$TEXT_REPORT"
 
         SCORE=$(echo "$TEXT_REPORT" | python3 -c "
         import re, sys
@@ -92,26 +91,23 @@ runs:
         echo "score=${SCORE_VAL}" >> "$GITHUB_OUTPUT"
         echo "grade=${GRADE_VAL}" >> "$GITHUB_OUTPUT"
 
-        # If requested format is text, we already have the output above.
-        # For other formats, run again with the requested format.
-        if [ "$FORMAT" != "text" ]; then
-          ARGS=("$PLUGIN_DIR" --format "$FORMAT")
+        # Run with requested format for output and exit code
+        ARGS=("$PLUGIN_DIR" --format "$FORMAT")
 
-          if [ -n "$OUTPUT" ]; then
-            ARGS+=(--output "$OUTPUT")
-          fi
-
-          if [ "$MIN_SCORE" -gt 0 ] 2>/dev/null; then
-            ARGS+=(--min-score "$MIN_SCORE")
-          fi
-
-          if [ "$FAIL_ON" != "none" ]; then
-            ARGS+=(--fail-on-severity "$FAIL_ON")
-          fi
-
-          if [ "$CISCO_SCAN" != "auto" ]; then
-            ARGS+=(--cisco-skill-scan "$CISCO_SCAN" --cisco-policy "$CISCO_POLICY")
-          fi
-
-          codex-plugin-scanner "${ARGS[@]}"
+        if [ -n "$OUTPUT" ]; then
+          ARGS+=(--output "$OUTPUT")
         fi
+
+        if [ "$MIN_SCORE" -gt 0 ] 2>/dev/null; then
+          ARGS+=(--min-score "$MIN_SCORE")
+        fi
+
+        if [ "$FAIL_ON" != "none" ]; then
+          ARGS+=(--fail-on-severity "$FAIL_ON")
+        fi
+
+        if [ "$CISCO_SCAN" != "auto" ]; then
+          ARGS+=(--cisco-skill-scan "$CISCO_SCAN" --cisco-policy "$CISCO_POLICY")
+        fi
+
+        codex-plugin-scanner "${ARGS[@]}"
