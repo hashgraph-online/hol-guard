@@ -11,11 +11,11 @@ from .reporting import format_json as render_json
 from .reporting import format_markdown, format_sarif, should_fail_for_severity
 from .scanner import scan_plugin
 
-__version__ = "1.2.0"
+__version__ = "1.1.0"
 
 
-def format_text(result) -> str:
-    """Format scan result as plain terminal output."""
+def _build_plain_text(result) -> str:
+    """Build plain text output from a scan result."""
     lines = [f"🔗 Codex Plugin Scanner v{__version__}", f"Scanning: {result.plugin_dir}", ""]
     for category in result.categories:
         cat_score = sum(c.points for c in category.checks)
@@ -38,6 +38,38 @@ def format_text(result) -> str:
     label = GRADE_LABELS.get(result.grade, "Unknown")
     lines += [separator, f"Final Score: {result.score}/100 ({result.grade} - {label})", separator]
     return "\n".join(lines)
+
+
+def _build_rich_text(result) -> str:
+    """Build rich markup text from a scan result."""
+    lines = [f"[bold cyan]🔗 Codex Plugin Scanner v{__version__}[/bold cyan]"]
+    lines.append(f"Scanning: {result.plugin_dir}")
+    lines.append("")
+    for category in result.categories:
+        cat_score = sum(c.points for c in category.checks)
+        cat_max = sum(c.max_points for c in category.checks)
+        lines.append(f"[bold yellow]── {category.name} ({cat_score}/{cat_max}) ──[/bold yellow]")
+        for check in category.checks:
+            icon = "✅" if check.passed else "⚠️"
+            style = "[green]" if check.passed else "[red]"
+            pts = f"[green]+{check.points}[/green]" if check.passed else "[red]+0[/red]"
+            lines.append(f"  {icon} {style}{check.name:<42}[/]{pts}")
+        lines.append("")
+    separator = "━" * 37
+    grade = result.grade
+    gc = {"A": "bold green", "B": "green", "C": "yellow", "D": "red", "F": "bold red"}.get(grade, "red")
+    label = GRADE_LABELS.get(grade, "Unknown")
+    lines += [
+        f"[bold]{separator}[/bold]",
+        f"Final Score: [bold]{result.score}[/bold]/100 ([{gc}]{grade} - {label}[/{gc}])",
+        f"[bold]{separator}[/bold]",
+    ]
+    return "\n".join(lines)
+
+
+def format_text(result) -> str:
+    """Format scan result as terminal output. Returns plain text string."""
+    return _build_plain_text(result)
 
 
 def format_json(result) -> str:
@@ -107,13 +139,22 @@ def main(argv: list[str] | None = None) -> int:
     elif output_format == "sarif":
         output = format_sarif(result)
     else:
-        output = format_text(result)
+        # Use rich for terminal display, plain text for file output / return
+        plain = _build_plain_text(result)
+        try:
+            from rich.console import Console
+
+            Console().print(_build_rich_text(result))
+        except ImportError:
+            print(plain)
+        output = plain
 
     if args.output:
         out_path = Path(args.output)
         out_path.write_text(output, encoding="utf-8")
         print(f"Report written to {out_path}")
-    elif output:
+    elif output_format != "text":
+        # text format already printed via rich above
         print(output)
 
     if result.score < args.min_score:

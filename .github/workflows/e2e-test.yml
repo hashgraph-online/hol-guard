@@ -1,0 +1,109 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/*]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scanner-text:
+    name: Scanner (text format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./action
+        id: scan
+        with:
+          plugin_dir: tests/fixtures/good-plugin
+          min_score: 80
+
+  scanner-json:
+    name: Scanner (JSON format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./action
+        id: scan
+        with:
+          plugin_dir: tests/fixtures/good-plugin
+          format: json
+          output: report.json
+      - name: Validate JSON
+        run: |
+          python3 -c "
+          import json
+          d = json.load(open('report.json'))
+          assert 'score' in d
+          assert 'grade' in d
+          assert d['score'] >= 80, f'Expected score >= 80, got {d[\"score\"]}'
+          print(f'JSON output valid: score={d[\"score\"]}, grade={d[\"grade\"]}')
+          "
+
+  scanner-sarif:
+    name: Scanner (SARIF format)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./action
+        id: scan
+        with:
+          plugin_dir: tests/fixtures/good-plugin
+          format: sarif
+          output: report.sarif
+      - name: Validate SARIF
+        run: |
+          python3 -c "
+          import json
+          d = json.load(open('report.sarif'))
+          assert d['version'] == '2.1.0'
+          assert d['\$schema'].startswith('https://')
+          print('SARIF output valid')
+          "
+    # Skip SARIF upload - CodeQL upload-sarif requires code scanning to be enabled on the repo
+
+  scanner-fail:
+    name: Scanner (fail on low score)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./action
+        id: scan
+        continue-on-error: true
+        with:
+          plugin_dir: tests/fixtures/bad-plugin
+          min_score: 99
+      - name: Verify failure
+        if: always() && steps.scan.outcome == 'failure'
+        run: echo "Correctly failed for low score"
+      - name: Should have failed
+        if: always() && steps.scan.outcome != 'failure'
+        run: |
+          echo "Expected failure but scanner passed"
+          exit 1
+
+  scanner-markdown:
+    name: Scanner (Markdown format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./action
+        id: scan
+        with:
+          plugin_dir: tests/fixtures/good-plugin
+          format: markdown
+          output: report.md
+      - name: Validate Markdown
+        run: |
+          python3 -c "
+          content = open('report.md').read()
+          assert '/100' in content
+          assert 'Excellent' in content or 'Good' in content or 'Fair' in content
+          print('Markdown output valid')
+          "
