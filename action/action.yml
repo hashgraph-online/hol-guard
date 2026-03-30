@@ -71,13 +71,10 @@ runs:
         CISCO_SCAN: ${{ inputs.cisco_skill_scan }}
         CISCO_POLICY: ${{ inputs.cisco_policy }}
       run: |
-        # Run scanner in text mode first for score/grade extraction (silent)
-        TEXT_REPORT=$(codex-plugin-scanner "$PLUGIN_DIR" --format text 2>&1 || true)
-
-        SCORE=$(echo "$TEXT_REPORT" | python3 -c "
+        # Extract score/grade via a silent text-mode run (needed for all formats)
+        SCORE=$(codex-plugin-scanner "$PLUGIN_DIR" --format text 2>/dev/null | python3 -c "
         import re, sys
-        text = sys.stdin.read()
-        m = re.search(r'Final Score: (\d+)/\d+ \(([A-F])', text)
+        m = re.search(r'Final Score: (\d+)/\d+ \(([A-F])', sys.stdin.read())
         if m:
             print(m.group(1))
             print(m.group(2))
@@ -91,7 +88,7 @@ runs:
         echo "score=${SCORE_VAL}" >> "$GITHUB_OUTPUT"
         echo "grade=${GRADE_VAL}" >> "$GITHUB_OUTPUT"
 
-        # Run with requested format for output and exit code
+        # Build args for the actual requested run
         ARGS=("$PLUGIN_DIR" --format "$FORMAT")
 
         if [ -n "$OUTPUT" ]; then
