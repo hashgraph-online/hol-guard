@@ -131,9 +131,7 @@ class TestMcpTransportSecurity:
         with tempfile.TemporaryDirectory() as tmpdir:
             mcp = Path(tmpdir) / ".mcp.json"
             mcp.write_text(
-                (
-                    '{"mcpServers":{"safe":{"command":"echo","metadata":{"homepage":{"url":"http://example.com"}}}}}'
-                ),
+                ('{"mcpServers":{"safe":{"command":"echo","metadata":{"homepage":{"url":"http://example.com"}}}}}'),
                 encoding="utf-8",
             )
             r = check_mcp_transport_security(Path(tmpdir))

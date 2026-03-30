@@ -79,16 +79,22 @@ inputs:
 outputs:
   score:
     description: "The numeric score (0-100)"
+    value: ${{ steps.scan.outputs.score }}
   grade:
     description: "The letter grade (A-F)"
+    value: ${{ steps.scan.outputs.grade }}
   submission_eligible:
     description: "Whether the plugin met the submission threshold and passed the configured severity gate"
+    value: ${{ steps.scan.outputs.submission_eligible }}
   submission_performed:
     description: "Whether a submission issue was created or reused"
+    value: ${{ steps.scan.outputs.submission_performed }}
   submission_issue_urls:
     description: "Comma-separated URLs for submission issues created or reused"
+    value: ${{ steps.scan.outputs.submission_issue_urls }}
   submission_issue_numbers:
     description: "Comma-separated issue numbers for submission issues created or reused"
+    value: ${{ steps.scan.outputs.submission_issue_numbers }}
 
 branding:
   icon: "check-circle"
