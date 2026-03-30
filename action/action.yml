@@ -73,8 +73,6 @@ runs:
         CISCO_SCAN: ${{ inputs.cisco_skill_scan }}
         CISCO_POLICY: ${{ inputs.cisco_policy }}
       run: |
-        set -euo pipefail
-
         ARGS=("$PLUGIN_DIR" --format "$FORMAT")
 
         if [ -n "$OUTPUT" ]; then
@@ -93,23 +91,37 @@ runs:
           ARGS+=(--cisco-skill-scan "$CISCO_SCAN" --cisco-policy "$CISCO_POLICY")
         fi
 
-        # Capture output for the action output
-        REPORT=$(codex-plugin-scanner "${ARGS[@]}" 2>&1 || true)
+        # Run scanner and capture output + exit code
+        set +e
+        REPORT=$(codex-plugin-scanner "${ARGS[@]}" 2>&1)
+        EXIT_CODE=$?
+        set -e
 
-        # Extract score and grade from the report text
-        SCORE=$(echo "$REPORT" | grep -oP 'Final Score: \K[0-9]+' || echo "0")
-        GRADE=$(echo "$REPORT" | grep -oP 'Final Score: [0-9]+/[0-9]+ \(\K[A-F]' || echo "F")
+        # Print the report for visibility
+        echo "$REPORT"
 
+        # Extract score and grade using python for reliability
+        META=$(python3 -c "
+        import re, sys
+        text = sys.stdin.read()
+        m = re.search(r'Final Score: (\d+)/\d+ \(([A-F])', text)
+        if m:
+            print(f'score={m.group(1)}')
+            print(f'grade={m.group(2)}')
+        else:
+            print('score=0')
+            print('grade=F')
+        " <<< "$REPORT")
+
+        # Write outputs
+        echo "$META" >> "$GITHUB_OUTPUT"
         {
-          echo "score=$SCORE"
-          echo "grade=$GRADE"
-          echo "report<<EOF"
+          echo "report<<REPORT_EOF"
           echo "$REPORT"
-          echo "EOF"
+          echo "REPORT_EOF"
         } >> "$GITHUB_OUTPUT"
 
-        # Now run for real to get the correct exit code
-        codex-plugin-scanner "${ARGS[@]}"
+        exit $EXIT_CODE
 
     - name: Upload SARIF
       if: inputs.format == 'sarif' && inputs.output != ''
