@@ -1,0 +1,143 @@
+name: "Codex Plugin Scanner"
+description: "Scan a Codex plugin directory for security and best practices. Scores from 0-100."
+author: "Hashgraph Online"
+
+inputs:
+  plugin_dir:
+    description: "Path to the plugin directory to scan (default: repository root)"
+    required: false
+    default: "."
+  format:
+    description: "Output format: text, json, markdown, or sarif"
+    required: false
+    default: "text"
+  output:
+    description: "Write report to this file path"
+    required: false
+    default: ""
+  min_score:
+    description: "Fail the job if the score is below this threshold (0-100)"
+    required: false
+    default: "0"
+  fail_on_severity:
+    description: "Fail if any finding meets or exceeds this severity (none, critical, high, medium, low, info)"
+    required: false
+    default: "none"
+  cisco_skill_scan:
+    description: "Cisco skill-scanner mode: auto, on, or off"
+    required: false
+    default: "auto"
+  cisco_policy:
+    description: "Cisco skill-scanner policy preset: permissive, balanced, or strict"
+    required: false
+    default: "balanced"
+  install_cisco:
+    description: "Install the cisco extra for skill scanning"
+    required: false
+    default: "false"
+
+outputs:
+  score:
+    description: "The numeric score (0-100)"
+  grade:
+    description: "The letter grade (A-F)"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install scanner
+      shell: bash
+      env:
+        ACTION_ROOT: ${{ github.action_path }}/..
+      run: |
+        pip install "$ACTION_ROOT"
+        if [ "${{ inputs.install_cisco }}" = "true" ]; then
+          pip install "cisco-ai-skill-scanner>=2.0.6,<3"
+        fi
+
+    - name: Run scanner
+      id: scan
+      shell: bash
+      env:
+        PLUGIN_DIR: ${{ inputs.plugin_dir }}
+        FORMAT: ${{ inputs.format }}
+        OUTPUT: ${{ inputs.output }}
+        MIN_SCORE: ${{ inputs.min_score }}
+        FAIL_ON: ${{ inputs.fail_on_severity }}
+        CISCO_SCAN: ${{ inputs.cisco_skill_scan }}
+        CISCO_POLICY: ${{ inputs.cisco_policy }}
+      run: |
+        python3 - <<'PY'
+        from __future__ import annotations
+
+        import os
+        import sys
+        from pathlib import Path
+
+        from codex_plugin_scanner.cli import format_text
+        from codex_plugin_scanner.models import ScanOptions
+        from codex_plugin_scanner.reporting import (
+            format_json,
+            format_markdown,
+            format_sarif,
+            should_fail_for_severity,
+        )
+        from codex_plugin_scanner.scanner import scan_plugin
+
+        plugin_dir = os.environ["PLUGIN_DIR"]
+        output_format = os.environ["FORMAT"]
+        output_path = os.environ["OUTPUT"]
+        min_score = int(os.environ["MIN_SCORE"])
+        fail_on = os.environ["FAIL_ON"]
+        cisco_scan = os.environ["CISCO_SCAN"]
+        cisco_policy = os.environ["CISCO_POLICY"]
+
+        result = scan_plugin(
+            plugin_dir,
+            ScanOptions(
+                cisco_skill_scan=cisco_scan,
+                cisco_policy=cisco_policy,
+            ),
+        )
+
+        if output_format == "json":
+            rendered = format_json(result)
+        elif output_format == "markdown":
+            rendered = format_markdown(result)
+        elif output_format == "sarif":
+            rendered = format_sarif(result)
+        else:
+            rendered = format_text(result)
+
+        if output_path:
+            target = Path(output_path)
+            target.write_text(rendered, encoding="utf-8")
+            print(f"Report written to {target}")
+        else:
+            print(rendered)
+
+        github_output = os.environ.get("GITHUB_OUTPUT")
+        if github_output:
+            with Path(github_output).open("a", encoding="utf-8") as handle:
+                handle.write(f"score={result.score}\n")
+                handle.write(f"grade={result.grade}\n")
+
+        if result.score < min_score:
+            print(
+                f"Score {result.score} is below minimum threshold {min_score}",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+
+        if should_fail_for_severity(result, fail_on):
+            print(
+                f'Findings met or exceeded the "{fail_on}" severity threshold.',
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        PY
