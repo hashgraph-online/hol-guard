@@ -181,6 +181,48 @@ Because the scanner repository itself contains CI and release workflows, the Mar
 
 The source README for that dedicated action repository lives in [action/README.md](action/README.md), and the full publication guide lives in [docs/github-action-marketplace.md](docs/github-action-marketplace.md).
 
+### Plugin Author Submission Flow
+
+The action can also handle submission intake. A plugin repository can wire the scanner into CI so a passing scan opens or reuses a submission issue in [awesome-codex-plugins](https://github.com/hashgraph-online/awesome-codex-plugins).
+
+The intended path is:
+
+1. Add the scanner action to plugin CI.
+2. Require `min_score: 80` and a severity gate such as `fail_on_severity: high`.
+3. Enable submission mode with a token that has `issues:write` on `hashgraph-online/awesome-codex-plugins`.
+4. When the plugin clears the threshold, the action opens or reuses a submission issue.
+5. The issue body includes machine-readable registry payload data, so registry automation can ingest the same submission event.
+
+Example:
+
+```yaml
+permissions:
+  contents: read
+
+jobs:
+  scan-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Scan and submit if eligible
+        id: scan
+        uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
+        with:
+          plugin_dir: "."
+          min_score: 80
+          fail_on_severity: high
+          submission_enabled: true
+          submission_score_threshold: 80
+          submission_token: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
+
+      - name: Print submission issue
+        if: steps.scan.outputs.submission_performed == 'true'
+        run: echo "${{ steps.scan.outputs.submission_issue_urls }}"
+```
+
+`submission_token` is required when `submission_enabled: true`. This flow is idempotent. If the plugin repository was already submitted, the action reuses the existing open issue instead of opening duplicates by matching an exact hidden plugin URL marker in the existing issue body.
+
 ## Development
 
 ```bash

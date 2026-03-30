@@ -35,12 +35,64 @@ inputs:
     description: "Install the Cisco skill-scanner dependency for live skill scanning"
     required: false
     default: "false"
+  submission_enabled:
+    description: "Open submission issues for awesome-list and registry automation when the plugin clears the submission threshold"
+    required: false
+    default: "false"
+  submission_score_threshold:
+    description: "Minimum score required before a submission issue is created"
+    required: false
+    default: "80"
+  submission_repos:
+    description: "Comma-separated GitHub repositories that should receive the submission issue"
+    required: false
+    default: "hashgraph-online/awesome-codex-plugins"
+  submission_token:
+    description: "Token with issues:write access to the submission repositories"
+    required: false
+    default: ""
+  submission_labels:
+    description: "Comma-separated labels to apply when creating submission issues"
+    required: false
+    default: "plugin-submission"
+  submission_category:
+    description: "Listing category to include in the submission issue body"
+    required: false
+    default: "Community Plugins"
+  submission_plugin_name:
+    description: "Override the plugin name used in the submission issue"
+    required: false
+    default: ""
+  submission_plugin_url:
+    description: "Override the plugin repository URL used in the submission issue"
+    required: false
+    default: ""
+  submission_plugin_description:
+    description: "Override the plugin description used in the submission issue"
+    required: false
+    default: ""
+  submission_author:
+    description: "Override the plugin author used in the submission issue"
+    required: false
+    default: ""
 
 outputs:
   score:
     description: "The numeric score (0-100)"
   grade:
     description: "The letter grade (A-F)"
+  submission_eligible:
+    description: "Whether the plugin met the submission threshold and passed the configured severity gate"
+  submission_performed:
+    description: "Whether a submission issue was created or reused"
+  submission_issue_urls:
+    description: "Comma-separated URLs for submission issues created or reused"
+  submission_issue_numbers:
+    description: "Comma-separated issue numbers for submission issues created or reused"
+
+branding:
+  icon: "check-circle"
+  color: "blue"
 
 branding:
   icon: "check-circle"
@@ -86,6 +138,16 @@ runs:
         FAIL_ON: ${{ inputs.fail_on_severity }}
         CISCO_SCAN: ${{ inputs.cisco_skill_scan }}
         CISCO_POLICY: ${{ inputs.cisco_policy }}
+        SUBMISSION_ENABLED: ${{ inputs.submission_enabled }}
+        SUBMISSION_SCORE_THRESHOLD: ${{ inputs.submission_score_threshold }}
+        SUBMISSION_REPOS: ${{ inputs.submission_repos }}
+        SUBMISSION_TOKEN: ${{ inputs.submission_token }}
+        SUBMISSION_LABELS: ${{ inputs.submission_labels }}
+        SUBMISSION_CATEGORY: ${{ inputs.submission_category }}
+        SUBMISSION_PLUGIN_NAME: ${{ inputs.submission_plugin_name }}
+        SUBMISSION_PLUGIN_URL: ${{ inputs.submission_plugin_url }}
+        SUBMISSION_PLUGIN_DESCRIPTION: ${{ inputs.submission_plugin_description }}
+        SUBMISSION_AUTHOR: ${{ inputs.submission_author }}
       run: |
         python3 - <<'PY'
         from __future__ import annotations
@@ -94,6 +156,7 @@ runs:
         import sys
         from pathlib import Path
 
+        from codex_plugin_scanner import __version__
         from codex_plugin_scanner.cli import format_text
         from codex_plugin_scanner.models import ScanOptions
         from codex_plugin_scanner.reporting import (
@@ -103,6 +166,14 @@ runs:
             should_fail_for_severity,
         )
         from codex_plugin_scanner.scanner import scan_plugin
+        from codex_plugin_scanner.submission import (
+            build_submission_issue_body,
+            build_submission_issue_title,
+            build_submission_payload,
+            create_submission_issue,
+            find_existing_submission_issue,
+            resolve_submission_metadata,
+        )
 
         plugin_dir = os.environ["PLUGIN_DIR"]
         output_format = os.environ["FORMAT"]
@@ -111,6 +182,29 @@ runs:
         fail_on = os.environ["FAIL_ON"]
         cisco_scan = os.environ["CISCO_SCAN"]
         cisco_policy = os.environ["CISCO_POLICY"]
+        submission_enabled = os.environ["SUBMISSION_ENABLED"].strip().lower() == "true"
+        submission_threshold = int(os.environ["SUBMISSION_SCORE_THRESHOLD"])
+        submission_repos = tuple(
+            repo.strip() for repo in os.environ["SUBMISSION_REPOS"].split(",") if repo.strip()
+        )
+        submission_token = os.environ["SUBMISSION_TOKEN"].strip() or os.environ.get("GITHUB_TOKEN", "").strip()
+        submission_labels = tuple(
+            label.strip() for label in os.environ["SUBMISSION_LABELS"].split(",") if label.strip()
+        )
+        submission_category = os.environ["SUBMISSION_CATEGORY"]
+        submission_plugin_name = os.environ["SUBMISSION_PLUGIN_NAME"]
+        submission_plugin_url = os.environ["SUBMISSION_PLUGIN_URL"]
+        submission_plugin_description = os.environ["SUBMISSION_PLUGIN_DESCRIPTION"]
+        submission_author = os.environ["SUBMISSION_AUTHOR"]
+        github_repository = os.environ.get("GITHUB_REPOSITORY", "")
+        github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+        github_sha = os.environ.get("GITHUB_SHA", "")
+        github_run_id = os.environ.get("GITHUB_RUN_ID", "")
+        github_api_url = os.environ.get("GITHUB_API_URL", "https://api.github.com")
+
+        workflow_url = ""
+        if github_repository and github_run_id:
+            workflow_url = f"{github_server_url.rstrip('/')}/{github_repository}/actions/runs/{github_run_id}"
 
         result = scan_plugin(
             plugin_dir,
@@ -136,11 +230,83 @@ runs:
         else:
             print(rendered)
 
+        severity_failed = should_fail_for_severity(result, fail_on)
+        submission_eligible = submission_enabled and result.score >= submission_threshold and not severity_failed
+        submission_issues = []
+
+        if submission_eligible:
+            if not submission_repos:
+                print("Submission is enabled but no submission repositories were configured.", file=sys.stderr)
+                raise SystemExit(1)
+            if not submission_token:
+                print("Submission is enabled but no submission token was provided.", file=sys.stderr)
+                raise SystemExit(1)
+
+            metadata = resolve_submission_metadata(
+                Path(plugin_dir).resolve(),
+                result,
+                plugin_name=submission_plugin_name,
+                plugin_url=submission_plugin_url,
+                description=submission_plugin_description,
+                author=submission_author,
+                category=submission_category,
+                github_repository=github_repository or None,
+                github_server_url=github_server_url,
+            )
+            if not metadata.plugin_url:
+                print("Submission metadata is missing a plugin repository URL.", file=sys.stderr)
+                raise SystemExit(1)
+
+            payload = build_submission_payload(
+                metadata,
+                result,
+                source_repository=github_repository,
+                source_sha=github_sha,
+                workflow_url=workflow_url,
+                scanner_version=__version__,
+            )
+            title = build_submission_issue_title(metadata)
+            body = build_submission_issue_body(
+                metadata,
+                result,
+                payload=payload,
+                workflow_url=workflow_url,
+            )
+
+            for submission_repo in submission_repos:
+                existing = find_existing_submission_issue(
+                    submission_repo,
+                    metadata.plugin_url,
+                    submission_token,
+                    api_base_url=github_api_url,
+                )
+                if existing is not None:
+                    submission_issues.append(existing)
+                    continue
+                submission_issues.append(
+                    create_submission_issue(
+                        submission_repo,
+                        title,
+                        body,
+                        submission_token,
+                        labels=submission_labels,
+                        api_base_url=github_api_url,
+                    )
+                )
+
         github_output = os.environ.get("GITHUB_OUTPUT")
         if github_output:
             with Path(github_output).open("a", encoding="utf-8") as handle:
                 handle.write(f"score={result.score}\n")
                 handle.write(f"grade={result.grade}\n")
+                handle.write(f"submission_eligible={'true' if submission_eligible else 'false'}\n")
+                handle.write(f"submission_performed={'true' if submission_issues else 'false'}\n")
+                handle.write("submission_issue_urls=" + ",".join(issue.url for issue in submission_issues) + "\n")
+                handle.write(
+                    "submission_issue_numbers="
+                    + ",".join(str(issue.number) for issue in submission_issues)
+                    + "\n"
+                )
 
         if result.score < min_score:
             print(
@@ -149,7 +315,7 @@ runs:
             )
             raise SystemExit(1)
 
-        if should_fail_for_severity(result, fail_on):
+        if severity_failed:
             print(
                 f'Findings met or exceeded the "{fail_on}" severity threshold.',
                 file=sys.stderr,

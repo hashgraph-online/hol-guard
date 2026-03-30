@@ -89,3 +89,14 @@ The action supports both source-repo and Marketplace-repo installs:
 - otherwise, it installs `codex-plugin-scanner` from PyPI
 
 That lets the source repository test the action in CI while keeping the same `action.yml` portable to the dedicated Marketplace repository.
+
+## Plugin Author Submission Workflow
+
+The Marketplace action also supports a plugin-author submission flow:
+
+- the plugin repository runs the scanner action in CI
+- the action enforces a score threshold such as `80`
+- if the plugin clears the threshold, passes the configured severity gate, and provides an explicit `submission_token`, the action opens or reuses a submission issue in `hashgraph-online/awesome-codex-plugins`
+- the issue body includes a machine-readable registry payload so registry automation can ingest the same submission signal
+
+This keeps the plugin-author path compact: scan, qualify, and submit from one workflow.
