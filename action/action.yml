@@ -1,6 +1,6 @@
-name: "Codex Plugin Scanner"
-description: "Scan a Codex plugin directory for security and best practices. Scores from 0-100."
-author: "Hashgraph Online"
+name: "HOL Codex Plugin Scanner"
+description: "Scan a Codex plugin directory for security, publishability, and best practices. Scores from 0-100."
+author: "HOL"
 
 inputs:
   plugin_dir:
@@ -32,7 +32,7 @@ inputs:
     required: false
     default: "balanced"
   install_cisco:
-    description: "Install the cisco extra for skill scanning"
+    description: "Install the Cisco skill-scanner dependency for live skill scanning"
     required: false
     default: "false"
 
@@ -41,6 +41,10 @@ outputs:
     description: "The numeric score (0-100)"
   grade:
     description: "The letter grade (A-F)"
+
+branding:
+  icon: "check-circle"
+  color: "blue"
 
 runs:
   using: "composite"
@@ -52,10 +56,21 @@ runs:
 
     - name: Install scanner
       shell: bash
-      env:
-        ACTION_ROOT: ${{ github.action_path }}/..
       run: |
-        pip install "$ACTION_ROOT"
+        LOCAL_SOURCE=""
+        for candidate in "$GITHUB_ACTION_PATH" "$GITHUB_ACTION_PATH/.."; do
+          if [ -f "$candidate/pyproject.toml" ] && [ -d "$candidate/src/codex_plugin_scanner" ]; then
+            LOCAL_SOURCE="$candidate"
+            break
+          fi
+        done
+
+        if [ -n "$LOCAL_SOURCE" ]; then
+          pip install "$LOCAL_SOURCE"
+        else
+          pip install codex-plugin-scanner
+        fi
+
         if [ "${{ inputs.install_cisco }}" = "true" ]; then
           pip install "cisco-ai-skill-scanner>=2.0.6,<3"
         fi

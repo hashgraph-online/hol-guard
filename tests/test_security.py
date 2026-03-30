@@ -31,6 +31,24 @@ class TestLicense:
         r = check_license(FIXTURES / "good-plugin")
         assert r.passed and r.points == 3
 
+    def test_passes_for_apache_canonical_url(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            d = Path(tmpdir)
+            (d / "LICENSE").write_text(
+                "Apache License\nSee https://www.apache.org/licenses/LICENSE-2.0 for the full text.\n"
+            )
+            r = check_license(d)
+            assert r.passed and r.points == 3
+            assert r.message == "LICENSE found (Apache-2.0)"
+
+    def test_does_not_treat_arbitrary_apache_hostname_text_as_canonical_license(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            d = Path(tmpdir)
+            (d / "LICENSE").write_text("Apache project notes mentioning www.apache.org are included here.")
+            r = check_license(d)
+            assert r.passed and r.points == 3
+            assert r.message == "LICENSE found"
+
     def test_passes_for_mit(self):
         r = check_license(FIXTURES / "mit-license")
         assert r.passed and r.points == 3
