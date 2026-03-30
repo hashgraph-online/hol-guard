@@ -35,6 +35,7 @@ cisco = [
     "cisco-ai-skill-scanner>=2.0.6,<3",
 ]
 dev = [
+    "build>=1.2.2",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "ruff>=0.4.0",
