@@ -168,6 +168,19 @@ repos:
         args: ["./"]
 ```
 
+## GitHub Action
+
+The scanner ships with a composite GitHub Action source bundle in [action/action.yml](action/action.yml).
+
+GitHub Marketplace has two important constraints for actions:
+
+- the published action must live in a dedicated public repository with a single root `action.yml`
+- that repository cannot contain workflow files
+
+Because the scanner repository itself contains CI and release workflows, the Marketplace listing should be published from a separate action-only repository. The scanner release workflow now emits a root-ready bundle zip for that repository on every tagged release.
+
+The source README for that dedicated action repository lives in [action/README.md](action/README.md), and the full publication guide lives in [docs/github-action-marketplace.md](docs/github-action-marketplace.md).
+
 ## Development
 
 ```bash
