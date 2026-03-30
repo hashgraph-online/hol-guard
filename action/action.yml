@@ -94,10 +94,6 @@ branding:
   icon: "check-circle"
   color: "blue"
 
-branding:
-  icon: "check-circle"
-  color: "blue"
-
 runs:
   using: "composite"
   steps:
