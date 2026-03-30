@@ -107,9 +107,7 @@ def format_markdown(result: ScanResult) -> str:
     for category in result.categories:
         category_score = sum(check.points for check in category.checks)
         category_max = sum(check.max_points for check in category.checks)
-        lines.append(
-            f"- **{category.name}**: {category_score}/{category_max}"
-        )
+        lines.append(f"- **{category.name}**: {category_score}/{category_max}")
 
     top_findings = _sorted_findings(result.findings)[:10]
     lines += ["", "## Top Findings", ""]
@@ -209,7 +207,4 @@ def should_fail_for_severity(result: ScanResult, threshold: str | None) -> bool:
     if not threshold or threshold.lower() == "none":
         return False
     threshold_severity = severity_from_value(threshold)
-    return any(
-        SEVERITY_ORDER[finding.severity] >= SEVERITY_ORDER[threshold_severity]
-        for finding in result.findings
-    )
+    return any(SEVERITY_ORDER[finding.severity] >= SEVERITY_ORDER[threshold_severity] for finding in result.findings)

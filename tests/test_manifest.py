@@ -4,6 +4,8 @@ import tempfile
 from pathlib import Path
 
 from codex_plugin_scanner.checks.manifest import (
+    check_interface_assets,
+    check_interface_metadata,
     check_kebab_case,
     check_plugin_json_exists,
     check_required_fields,
@@ -99,10 +101,56 @@ class TestCheckKebabCase:
         assert not r.passed and r.points == 0
 
 
+class TestInterfaceChecks:
+    def test_interface_metadata_passes_for_good_plugin(self):
+        r = check_interface_metadata(FIXTURES / "good-plugin")
+        assert r.passed and r.points == 3
+
+    def test_interface_metadata_not_applicable_when_missing(self):
+        r = check_interface_metadata(FIXTURES / "minimal-plugin")
+        assert r.passed and r.points == 0
+        assert not r.applicable
+
+    def test_interface_assets_pass_for_good_plugin(self):
+        r = check_interface_assets(FIXTURES / "good-plugin")
+        assert r.passed and r.points == 3
+
+    def test_interface_assets_fail_for_unsafe_values(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plugin_dir = Path(tmpdir)
+            manifest_dir = plugin_dir / ".codex-plugin"
+            manifest_dir.mkdir(parents=True)
+            (manifest_dir / "plugin.json").write_text(
+                """
+                {
+                  "name": "interface-bad",
+                  "version": "1.0.0",
+                  "description": "bad interface metadata",
+                  "interface": {
+                    "type": "cli",
+                    "displayName": "Bad",
+                    "shortDescription": "Bad",
+                    "longDescription": "Bad",
+                    "developerName": "Bad",
+                    "category": "Security",
+                    "capabilities": ["Read"],
+                    "websiteURL": "http://example.com",
+                    "privacyPolicyURL": "https://example.com/privacy",
+                    "termsOfServiceURL": "https://example.com/terms",
+                    "composerIcon": "../icon.svg"
+                  }
+                }
+                """,
+                encoding="utf-8",
+            )
+            r = check_interface_assets(plugin_dir)
+            assert not r.passed and r.points == 0
+
+
 class TestRunManifestChecks:
-    def test_good_plugin_gets_25(self):
+    def test_good_plugin_gets_31(self):
         results = run_manifest_checks(FIXTURES / "good-plugin")
-        assert sum(c.points for c in results) == 25
+        assert sum(c.points for c in results) == 31
         assert all(c.passed for c in results)
 
     def test_bad_plugin_fails_version_and_name(self):
@@ -126,4 +174,4 @@ class TestRunManifestChecks:
     def test_returns_tuple_of_correct_length(self):
         results = run_manifest_checks(FIXTURES / "good-plugin")
         assert isinstance(results, tuple)
-        assert len(results) == 7
+        assert len(results) == 9

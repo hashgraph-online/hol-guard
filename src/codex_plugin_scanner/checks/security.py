@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import ipaddress
+import json
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 from ..models import CheckResult, Finding, Severity
 
@@ -142,9 +145,7 @@ def check_license(plugin_dir: Path) -> CheckResult:
             )
         if "MIT" in content and "Permission is hereby granted" in content:
             return CheckResult(name="LICENSE found", passed=True, points=3, max_points=3, message="LICENSE found (MIT)")
-        return CheckResult(
-            name="LICENSE found", passed=True, points=3, max_points=3, message="LICENSE found"
-        )
+        return CheckResult(name="LICENSE found", passed=True, points=3, max_points=3, message="LICENSE found")
     except OSError:
         return CheckResult(
             name="LICENSE found", passed=False, points=0, max_points=3, message="LICENSE exists but could not be read"
@@ -244,6 +245,138 @@ def check_no_dangerous_mcp(plugin_dir: Path) -> CheckResult:
     )
 
 
+IGNORED_MCP_URL_CONTEXT = {"metadata", "description", "homepage", "website", "docs", "documentation"}
+MCP_URL_KEYS = {"url", "endpoint", "server_url"}
+
+
+def _collect_mcp_urls(node: object, urls: list[str], path: tuple[str, ...] = ()) -> None:
+    if isinstance(node, dict):
+        for key, value in node.items():
+            lowered_key = key.lower()
+            next_path = (*path, lowered_key)
+            if lowered_key in IGNORED_MCP_URL_CONTEXT:
+                continue
+            if isinstance(value, str) and lowered_key in MCP_URL_KEYS:
+                urls.append(value)
+                continue
+            if isinstance(value, (dict, list)):
+                _collect_mcp_urls(value, urls, next_path)
+        return
+    if isinstance(node, list):
+        for item in node:
+            _collect_mcp_urls(item, urls, path)
+
+
+def _extract_mcp_urls(payload: object) -> list[str]:
+    urls: list[str] = []
+    if isinstance(payload, dict):
+        targeted = False
+        for key in ("mcpServers", "servers"):
+            value = payload.get(key)
+            if isinstance(value, (dict, list)):
+                targeted = True
+                _collect_mcp_urls(value, urls, (key.lower(),))
+        if targeted:
+            return urls
+    _collect_mcp_urls(payload, urls)
+    return urls
+
+
+def _is_loopback_host(hostname: str | None) -> bool:
+    if hostname is None:
+        return False
+    if hostname == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
+def check_mcp_transport_security(plugin_dir: Path) -> CheckResult:
+    mcp_path = plugin_dir / ".mcp.json"
+    if not mcp_path.exists():
+        return CheckResult(
+            name="MCP remote transports are hardened",
+            passed=True,
+            points=0,
+            max_points=0,
+            message="No .mcp.json found, skipping transport hardening checks.",
+            applicable=False,
+        )
+
+    try:
+        payload = json.loads(mcp_path.read_text(encoding="utf-8"))
+    except Exception:
+        return CheckResult(
+            name="MCP remote transports are hardened",
+            passed=False,
+            points=0,
+            max_points=4,
+            message="Could not parse .mcp.json for transport URLs.",
+            findings=(
+                Finding(
+                    rule_id="MCP_CONFIG_INVALID_JSON",
+                    severity=Severity.MEDIUM,
+                    category="security",
+                    title="MCP configuration is not valid JSON",
+                    description="The .mcp.json file exists but could not be parsed.",
+                    remediation="Fix the .mcp.json syntax so transport settings can be validated.",
+                    file_path=".mcp.json",
+                ),
+            ),
+        )
+
+    urls = _extract_mcp_urls(payload)
+    if not urls:
+        return CheckResult(
+            name="MCP remote transports are hardened",
+            passed=True,
+            points=0,
+            max_points=0,
+            message="No remote MCP URLs declared; stdio-only configuration is not applicable here.",
+            applicable=False,
+        )
+
+    issues = []
+    for url in urls:
+        parsed = urlparse(url)
+        if parsed.scheme == "https":
+            continue
+        if parsed.scheme == "http" and _is_loopback_host(parsed.hostname):
+            continue
+        issues.append(url)
+
+    if not issues:
+        return CheckResult(
+            name="MCP remote transports are hardened",
+            passed=True,
+            points=4,
+            max_points=4,
+            message="Remote MCP URLs use hardened transports or stay on loopback for local development.",
+        )
+
+    return CheckResult(
+        name="MCP remote transports are hardened",
+        passed=False,
+        points=0,
+        max_points=4,
+        message=f"Insecure MCP remote URLs detected: {', '.join(issues)}",
+        findings=tuple(
+            Finding(
+                rule_id="MCP_REMOTE_URL_INSECURE",
+                severity=Severity.HIGH,
+                category="security",
+                title="MCP remote transport uses an insecure URL",
+                description=f'The remote MCP endpoint "{url}" is not HTTPS or loopback-only HTTP.',
+                remediation="Use HTTPS for remote MCP servers and reserve plain HTTP for localhost development only.",
+                file_path=".mcp.json",
+            )
+            for url in issues
+        ),
+    )
+
+
 def check_no_approval_bypass_defaults(plugin_dir: Path) -> CheckResult:
     findings: list[str] = []
     for file_path in _scan_all_files(plugin_dir):
@@ -294,5 +427,6 @@ def run_security_checks(plugin_dir: Path) -> tuple[CheckResult, ...]:
         check_license(plugin_dir),
         check_no_hardcoded_secrets(plugin_dir),
         check_no_dangerous_mcp(plugin_dir),
+        check_mcp_transport_security(plugin_dir),
         check_no_approval_bypass_defaults(plugin_dir),
     )
