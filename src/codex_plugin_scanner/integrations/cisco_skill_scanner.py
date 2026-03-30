@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 from pathlib import Path
 
 from ..models import Finding, Severity, severity_from_value
 
 
-class CiscoIntegrationStatus(StrEnum):
+class CiscoIntegrationStatus(str, Enum):
     """State of the Cisco skill-scanner integration."""
 
     ENABLED = "enabled"
