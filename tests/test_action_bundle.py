@@ -12,6 +12,7 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "branding:" in action_text
     assert 'icon: "check-circle"' in action_text
     assert 'color: "blue"' in action_text
+    assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in action_text
     assert 'pip install codex-plugin-scanner' in action_text
     assert 'pip install "$LOCAL_SOURCE"' in action_text
     assert "submission_enabled:" in action_text

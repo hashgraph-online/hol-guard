@@ -48,7 +48,7 @@ inputs:
     required: false
     default: "hashgraph-online/awesome-codex-plugins"
   submission_token:
-    description: "Token with issues:write access to the submission repositories"
+    description: "Required when submission_enabled is true; use a token with issues:write access to the submission repositories"
     required: false
     default: ""
   submission_labels:
@@ -102,7 +102,7 @@ runs:
   using: "composite"
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
       with:
         python-version: "3.12"
 
@@ -149,176 +149,4 @@ runs:
         SUBMISSION_PLUGIN_DESCRIPTION: ${{ inputs.submission_plugin_description }}
         SUBMISSION_AUTHOR: ${{ inputs.submission_author }}
       run: |
-        python3 - <<'PY'
-        from __future__ import annotations
-
-        import os
-        import sys
-        from pathlib import Path
-
-        from codex_plugin_scanner import __version__
-        from codex_plugin_scanner.cli import format_text
-        from codex_plugin_scanner.models import ScanOptions
-        from codex_plugin_scanner.reporting import (
-            format_json,
-            format_markdown,
-            format_sarif,
-            should_fail_for_severity,
-        )
-        from codex_plugin_scanner.scanner import scan_plugin
-        from codex_plugin_scanner.submission import (
-            build_submission_issue_body,
-            build_submission_issue_title,
-            build_submission_payload,
-            create_submission_issue,
-            find_existing_submission_issue,
-            resolve_submission_metadata,
-        )
-
-        plugin_dir = os.environ["PLUGIN_DIR"]
-        output_format = os.environ["FORMAT"]
-        output_path = os.environ["OUTPUT"]
-        min_score = int(os.environ["MIN_SCORE"])
-        fail_on = os.environ["FAIL_ON"]
-        cisco_scan = os.environ["CISCO_SCAN"]
-        cisco_policy = os.environ["CISCO_POLICY"]
-        submission_enabled = os.environ["SUBMISSION_ENABLED"].strip().lower() == "true"
-        submission_threshold = int(os.environ["SUBMISSION_SCORE_THRESHOLD"])
-        submission_repos = tuple(
-            repo.strip() for repo in os.environ["SUBMISSION_REPOS"].split(",") if repo.strip()
-        )
-        submission_token = os.environ["SUBMISSION_TOKEN"].strip() or os.environ.get("GITHUB_TOKEN", "").strip()
-        submission_labels = tuple(
-            label.strip() for label in os.environ["SUBMISSION_LABELS"].split(",") if label.strip()
-        )
-        submission_category = os.environ["SUBMISSION_CATEGORY"]
-        submission_plugin_name = os.environ["SUBMISSION_PLUGIN_NAME"]
-        submission_plugin_url = os.environ["SUBMISSION_PLUGIN_URL"]
-        submission_plugin_description = os.environ["SUBMISSION_PLUGIN_DESCRIPTION"]
-        submission_author = os.environ["SUBMISSION_AUTHOR"]
-        github_repository = os.environ.get("GITHUB_REPOSITORY", "")
-        github_server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
-        github_sha = os.environ.get("GITHUB_SHA", "")
-        github_run_id = os.environ.get("GITHUB_RUN_ID", "")
-        github_api_url = os.environ.get("GITHUB_API_URL", "https://api.github.com")
-
-        workflow_url = ""
-        if github_repository and github_run_id:
-            workflow_url = f"{github_server_url.rstrip('/')}/{github_repository}/actions/runs/{github_run_id}"
-
-        result = scan_plugin(
-            plugin_dir,
-            ScanOptions(
-                cisco_skill_scan=cisco_scan,
-                cisco_policy=cisco_policy,
-            ),
-        )
-
-        if output_format == "json":
-            rendered = format_json(result)
-        elif output_format == "markdown":
-            rendered = format_markdown(result)
-        elif output_format == "sarif":
-            rendered = format_sarif(result)
-        else:
-            rendered = format_text(result)
-
-        if output_path:
-            target = Path(output_path)
-            target.write_text(rendered, encoding="utf-8")
-            print(f"Report written to {target}")
-        else:
-            print(rendered)
-
-        severity_failed = should_fail_for_severity(result, fail_on)
-        submission_eligible = submission_enabled and result.score >= submission_threshold and not severity_failed
-        submission_issues = []
-
-        if submission_eligible:
-            if not submission_repos:
-                print("Submission is enabled but no submission repositories were configured.", file=sys.stderr)
-                raise SystemExit(1)
-            if not submission_token:
-                print("Submission is enabled but no submission token was provided.", file=sys.stderr)
-                raise SystemExit(1)
-
-            metadata = resolve_submission_metadata(
-                Path(plugin_dir).resolve(),
-                result,
-                plugin_name=submission_plugin_name,
-                plugin_url=submission_plugin_url,
-                description=submission_plugin_description,
-                author=submission_author,
-                category=submission_category,
-                github_repository=github_repository or None,
-                github_server_url=github_server_url,
-            )
-            if not metadata.plugin_url:
-                print("Submission metadata is missing a plugin repository URL.", file=sys.stderr)
-                raise SystemExit(1)
-
-            payload = build_submission_payload(
-                metadata,
-                result,
-                source_repository=github_repository,
-                source_sha=github_sha,
-                workflow_url=workflow_url,
-                scanner_version=__version__,
-            )
-            title = build_submission_issue_title(metadata)
-            body = build_submission_issue_body(
-                metadata,
-                result,
-                payload=payload,
-                workflow_url=workflow_url,
-            )
-
-            for submission_repo in submission_repos:
-                existing = find_existing_submission_issue(
-                    submission_repo,
-                    metadata.plugin_url,
-                    submission_token,
-                    api_base_url=github_api_url,
-                )
-                if existing is not None:
-                    submission_issues.append(existing)
-                    continue
-                submission_issues.append(
-                    create_submission_issue(
-                        submission_repo,
-                        title,
-                        body,
-                        submission_token,
-                        labels=submission_labels,
-                        api_base_url=github_api_url,
-                    )
-                )
-
-        github_output = os.environ.get("GITHUB_OUTPUT")
-        if github_output:
-            with Path(github_output).open("a", encoding="utf-8") as handle:
-                handle.write(f"score={result.score}\n")
-                handle.write(f"grade={result.grade}\n")
-                handle.write(f"submission_eligible={'true' if submission_eligible else 'false'}\n")
-                handle.write(f"submission_performed={'true' if submission_issues else 'false'}\n")
-                handle.write("submission_issue_urls=" + ",".join(issue.url for issue in submission_issues) + "\n")
-                handle.write(
-                    "submission_issue_numbers="
-                    + ",".join(str(issue.number) for issue in submission_issues)
-                    + "\n"
-                )
-
-        if result.score < min_score:
-            print(
-                f"Score {result.score} is below minimum threshold {min_score}",
-                file=sys.stderr,
-            )
-            raise SystemExit(1)
-
-        if severity_failed:
-            print(
-                f'Findings met or exceeded the "{fail_on}" severity threshold.',
-                file=sys.stderr,
-            )
-            raise SystemExit(1)
-        PY
+        python3 -m codex_plugin_scanner.action_runner

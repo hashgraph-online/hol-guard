@@ -6,11 +6,15 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from .checks.manifest import load_manifest
 from .models import GRADE_LABELS, ScanResult
+
+REQUEST_TIMEOUT_SECONDS = 30
+SUBMISSION_URL_MARKER_PREFIX = "<!-- codex-plugin-scanner-plugin-url: "
+SUBMISSION_URL_MARKER_SUFFIX = " -->"
 
 
 def _repo_api_path(repo: str) -> str:
@@ -39,6 +43,28 @@ class SubmissionIssue:
     created: bool
 
 
+def _submission_url_marker(plugin_url: str) -> str:
+    return f"{SUBMISSION_URL_MARKER_PREFIX}{plugin_url}{SUBMISSION_URL_MARKER_SUFFIX}"
+
+
+def _parse_submission_issue(
+    issue: dict[str, object],
+    *,
+    repo: str,
+    created: bool,
+) -> SubmissionIssue:
+    number = issue.get("number")
+    url = issue.get("html_url")
+    if not isinstance(number, int) or not isinstance(url, str) or not url:
+        raise RuntimeError("GitHub issue response is missing required fields.")
+    return SubmissionIssue(
+        repo=repo,
+        number=number,
+        url=url,
+        created=created,
+    )
+
+
 def _request_json(
     method: str,
     url: str,
@@ -52,7 +78,7 @@ def _request_json(
     request.add_header("User-Agent", "codex-plugin-scanner")
     if data is not None:
         request.add_header("Content-Type", "application/json")
-    with urlopen(request) as response:
+    with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -156,6 +182,8 @@ def build_submission_issue_body(
     lines = [
         "## Plugin Submission",
         "",
+        _submission_url_marker(metadata.plugin_url),
+        "",
         f"- Plugin Name: {metadata.plugin_name}",
         f"- GitHub Repository URL: {metadata.plugin_url}",
         f"- Description: {metadata.description}",
@@ -196,25 +224,32 @@ def find_existing_submission_issue(
 ) -> SubmissionIssue | None:
     """Find an existing open submission issue for the same plugin URL."""
 
-    encoded_repo = _repo_api_path(repo)
+    marker = _submission_url_marker(plugin_url)
+    query = urlencode(
+        {
+            "q": f'repo:{repo} is:issue is:open "{marker}" in:body',
+            "per_page": "10",
+        }
+    )
     issues = _request_json(
         "GET",
-        f"{api_base_url.rstrip('/')}/repos/{encoded_repo}/issues?state=open&per_page=100",
+        f"{api_base_url.rstrip('/')}/search/issues?{query}",
         token,
     )
-    if not isinstance(issues, list):
+    if not isinstance(issues, dict):
         return None
 
-    for issue in issues:
-        body = str(issue.get("body") or "")
-        if issue.get("pull_request") or plugin_url not in body:
+    items = issues.get("items")
+    if not isinstance(items, list):
+        return None
+
+    for issue in items:
+        if not isinstance(issue, dict):
             continue
-        return SubmissionIssue(
-            repo=repo,
-            number=int(issue["number"]),
-            url=str(issue["html_url"]),
-            created=False,
-        )
+        body = str(issue.get("body") or "")
+        if issue.get("pull_request") or marker not in body:
+            continue
+        return _parse_submission_issue(issue, repo=repo, created=False)
     return None
 
 
@@ -246,9 +281,4 @@ def create_submission_issue(
     if not isinstance(issue, dict):
         raise RuntimeError("GitHub issue creation returned an unexpected response.")
 
-    return SubmissionIssue(
-        repo=repo,
-        number=int(issue["number"]),
-        url=str(issue["html_url"]),
-        created=True,
-    )
+    return _parse_submission_issue(issue, repo=repo, created=True)
