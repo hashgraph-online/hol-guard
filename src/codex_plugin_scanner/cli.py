@@ -14,8 +14,8 @@ from .scanner import scan_plugin
 __version__ = "1.1.0"
 
 
-def format_text(result) -> str:
-    """Format scan result as plain terminal output."""
+def _build_plain_text(result) -> str:
+    """Build plain text output from a scan result."""
     lines = [f"🔗 Codex Plugin Scanner v{__version__}", f"Scanning: {result.plugin_dir}", ""]
     for category in result.categories:
         cat_score = sum(c.points for c in category.checks)
@@ -64,32 +64,6 @@ def _build_rich_text(result) -> str:
         f"Final Score: [bold]{result.score}[/bold]/100 ([{gc}]{grade} - {label}[/{gc}])",
         f"[bold]{separator}[/bold]",
     ]
-    return "\n".join(lines)
-
-
-def _build_plain_text(result) -> str:
-    """Build plain text output from a scan result."""
-    lines = [f"🔗 Codex Plugin Scanner v{__version__}", f"Scanning: {result.plugin_dir}", ""]
-    for category in result.categories:
-        cat_score = sum(c.points for c in category.checks)
-        cat_max = sum(c.max_points for c in category.checks)
-        lines.append(f"── {category.name} ({cat_score}/{cat_max}) ──")
-        for check in category.checks:
-            icon = "✅" if check.passed else "⚠️"
-            pts = f"+{check.points}" if check.passed else "+0"
-            lines.append(f"  {icon} {check.name:<42} {pts}")
-        lines.append("")
-    counts = ", ".join(f"{severity.value}:{result.severity_counts.get(severity.value, 0)}" for severity in Severity)
-    lines += [f"Findings: {counts}", ""]
-    if result.findings:
-        lines.append("Top Findings:")
-        for finding in result.findings[:5]:
-            location = f" ({finding.file_path})" if finding.file_path else ""
-            lines.append(f"  - {finding.severity.value.upper()} {finding.title}{location}")
-        lines.append("")
-    separator = "━" * 37
-    label = GRADE_LABELS.get(result.grade, "Unknown")
-    lines += [separator, f"Final Score: {result.score}/100 ({result.grade} - {label})", separator]
     return "\n".join(lines)
 
 

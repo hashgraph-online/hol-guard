@@ -7,6 +7,9 @@ on:
     branches: [feat/*]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   scanner-text:
     name: Scanner (text format)
@@ -75,15 +78,14 @@ jobs:
         with:
           plugin_dir: tests/fixtures/bad-plugin
           min_score: 99
-        continue-on-error: true
-      - name: Should have failed
-        if: steps.scan.outcome == 'success'
+      - name: Verify failure
+        if: always() && steps.scan.outcome == 'failure'
+        run: echo "Correctly failed for low score"
+      - name: Should have passed
+        if: always() && steps.scan.outcome == 'success'
         run: |
           echo "Expected failure but scanner passed"
           exit 1
-      - name: Verify failure
-        if: steps.scan.outcome == 'failure'
-        run: echo "Correctly failed for low score"
 
   scanner-markdown:
     name: Scanner (Markdown format)

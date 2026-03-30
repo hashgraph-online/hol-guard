@@ -71,8 +71,7 @@ runs:
         CISCO_SCAN: ${{ inputs.cisco_skill_scan }}
         CISCO_POLICY: ${{ inputs.cisco_policy }}
       run: |
-        # Always run scanner in text mode first for score/grade extraction
-        # (text mode includes the "Final Score: N/M (G" line)
+        # Run scanner once in text mode for score/grade extraction
         TEXT_REPORT=$(codex-plugin-scanner "$PLUGIN_DIR" --format text 2>&1 || true)
         echo "$TEXT_REPORT"
 
@@ -93,23 +92,26 @@ runs:
         echo "score=${SCORE_VAL}" >> "$GITHUB_OUTPUT"
         echo "grade=${GRADE_VAL}" >> "$GITHUB_OUTPUT"
 
-        # Now run with the requested format for the actual output/exit-code check
-        ARGS=("$PLUGIN_DIR" --format "$FORMAT")
+        # If requested format is text, we already have the output above.
+        # For other formats, run again with the requested format.
+        if [ "$FORMAT" != "text" ]; then
+          ARGS=("$PLUGIN_DIR" --format "$FORMAT")
 
-        if [ -n "$OUTPUT" ]; then
-          ARGS+=(--output "$OUTPUT")
+          if [ -n "$OUTPUT" ]; then
+            ARGS+=(--output "$OUTPUT")
+          fi
+
+          if [ "$MIN_SCORE" -gt 0 ] 2>/dev/null; then
+            ARGS+=(--min-score "$MIN_SCORE")
+          fi
+
+          if [ "$FAIL_ON" != "none" ]; then
+            ARGS+=(--fail-on-severity "$FAIL_ON")
+          fi
+
+          if [ "$CISCO_SCAN" != "auto" ]; then
+            ARGS+=(--cisco-skill-scan "$CISCO_SCAN" --cisco-policy "$CISCO_POLICY")
+          fi
+
+          codex-plugin-scanner "${ARGS[@]}"
         fi
-
-        if [ "$MIN_SCORE" -gt 0 ] 2>/dev/null; then
-          ARGS+=(--min-score "$MIN_SCORE")
-        fi
-
-        if [ "$FAIL_ON" != "none" ]; then
-          ARGS+=(--fail-on-severity "$FAIL_ON")
-        fi
-
-        if [ "$CISCO_SCAN" != "auto" ]; then
-          ARGS+=(--cisco-skill-scan "$CISCO_SCAN" --cisco-policy "$CISCO_POLICY")
-        fi
-
-        codex-plugin-scanner "${ARGS[@]}"
