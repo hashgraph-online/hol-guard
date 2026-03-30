@@ -150,6 +150,7 @@ Add the scanner to a plugin repository CI job:
 
 - name: Scan plugin
   run: codex-plugin-scanner ./my-plugin --fail-on-severity high --format sarif --output codex-plugin-scanner.sarif
+  continue-on-error: true
 ```
 
 Local pre-commit style hook:
