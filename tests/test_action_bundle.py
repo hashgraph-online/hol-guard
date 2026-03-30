@@ -36,10 +36,13 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "hashgraph-online/hol-codex-plugin-scanner-action" in workflow_text
     assert "Validate publication credentials" in workflow_text
     assert 'if: secrets.ACTION_REPO_TOKEN != \'\'' not in workflow_text
+    assert "inputs.create_repository && 'true' || 'false'" in workflow_text
+    assert "SOURCE_REF" in workflow_text
     assert 'gh repo create "${ACTION_REPOSITORY}"' in workflow_text
     assert 'cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml' in workflow_text
     assert 'git push origin refs/tags/v1 --force' in workflow_text
     assert 'gh release create "${TAG}"' in workflow_text
+    assert 'Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/tree/${SOURCE_REF}' in workflow_text
 
 
 def test_action_bundle_docs_live_in_action_readme() -> None:
