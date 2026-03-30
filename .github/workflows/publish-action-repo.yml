@@ -29,7 +29,6 @@ concurrency:
 jobs:
   publish-action-repo:
     name: Publish GitHub Action Repository
-    if: secrets.ACTION_REPO_TOKEN != ''
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
@@ -43,6 +42,13 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name || inputs.release_tag || github.ref }}
           fetch-depth: 0
+
+      - name: Validate publication credentials
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "ACTION_REPO_TOKEN is required to publish the GitHub Action repository." >&2
+            exit 1
+          fi
 
       - name: Resolve version
         id: version
