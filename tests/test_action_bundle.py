@@ -34,6 +34,8 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "Publish GitHub Action Repository" in workflow_text
     assert "ACTION_REPO_TOKEN" in workflow_text
     assert "hashgraph-online/hol-codex-plugin-scanner-action" in workflow_text
+    assert "Validate publication credentials" in workflow_text
+    assert 'if: secrets.ACTION_REPO_TOKEN != \'\'' not in workflow_text
     assert 'gh repo create "${ACTION_REPOSITORY}"' in workflow_text
     assert 'cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml' in workflow_text
     assert 'git push origin refs/tags/v1 --force' in workflow_text
