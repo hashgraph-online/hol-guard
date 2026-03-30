@@ -34,7 +34,8 @@ jobs:
       GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
       ACTION_REPOSITORY: ${{ inputs.action_repository != '' && inputs.action_repository || vars.ACTION_REPOSITORY != '' && vars.ACTION_REPOSITORY || 'hashgraph-online/hol-codex-plugin-scanner-action' }}
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
-      CREATE_REPOSITORY: ${{ github.event_name == 'workflow_dispatch' && inputs.create_repository || 'true' }}
+      CREATE_REPOSITORY: ${{ github.event_name == 'workflow_dispatch' && (inputs.create_repository && 'true' || 'false') || 'true' }}
+      SOURCE_REF: ${{ github.event.release.tag_name || inputs.release_tag || github.ref_name }}
       SOURCE_REPOSITORY: ${{ github.repository }}
       SOURCE_SERVER_URL: ${{ github.server_url }}
     steps:
@@ -121,7 +122,11 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG="${{ steps.version.outputs.tag }}"
-          NOTES="Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/releases/tag/${TAG}"
+          if [ -n "${RELEASE_TAG}" ]; then
+            NOTES="Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/releases/tag/${TAG}"
+          else
+            NOTES="Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/tree/${SOURCE_REF}"
+          fi
 
           if gh release view "${TAG}" --repo "${ACTION_REPOSITORY}" >/dev/null 2>&1; then
             gh release edit "${TAG}" \
