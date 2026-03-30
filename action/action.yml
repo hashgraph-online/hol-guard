@@ -71,6 +71,29 @@ runs:
         CISCO_SCAN: ${{ inputs.cisco_skill_scan }}
         CISCO_POLICY: ${{ inputs.cisco_policy }}
       run: |
+        # Always run scanner in text mode first for score/grade extraction
+        # (text mode includes the "Final Score: N/M (G" line)
+        TEXT_REPORT=$(codex-plugin-scanner "$PLUGIN_DIR" --format text 2>&1 || true)
+        echo "$TEXT_REPORT"
+
+        SCORE=$(echo "$TEXT_REPORT" | python3 -c "
+        import re, sys
+        text = sys.stdin.read()
+        m = re.search(r'Final Score: (\d+)/\d+ \(([A-F])', text)
+        if m:
+            print(m.group(1))
+            print(m.group(2))
+        else:
+            print('0')
+            print('F')
+        ")
+        SCORE_VAL=$(echo "$SCORE" | head -1)
+        GRADE_VAL=$(echo "$SCORE" | tail -1)
+
+        echo "score=${SCORE_VAL}" >> "$GITHUB_OUTPUT"
+        echo "grade=${GRADE_VAL}" >> "$GITHUB_OUTPUT"
+
+        # Now run with the requested format for the actual output/exit-code check
         ARGS=("$PLUGIN_DIR" --format "$FORMAT")
 
         if [ -n "$OUTPUT" ]; then
@@ -89,35 +112,7 @@ runs:
           ARGS+=(--cisco-skill-scan "$CISCO_SCAN" --cisco-policy "$CISCO_POLICY")
         fi
 
-        # Run scanner and capture output + exit code
-        set +e
-        REPORT=$(codex-plugin-scanner "${ARGS[@]}" 2>&1)
-        EXIT_CODE=$?
-        set -e
-
-        # Print the report for job visibility
-        echo "$REPORT"
-
-        # Extract score and grade via python
-        RESULT=$(echo "$REPORT" | python3 -c "
-        import re, sys
-        text = sys.stdin.read()
-        m = re.search(r'Final Score: (\d+)/\d+ \(([A-F])', text)
-        if m:
-            print(m.group(1))
-            print(m.group(2))
-        else:
-            print('0')
-            print('F')
-        ")
-
-        SCORE=$(echo "$RESULT" | head -1)
-        GRADE=$(echo "$RESULT" | tail -1)
-
-        echo "score=${SCORE}" >> "$GITHUB_OUTPUT"
-        echo "grade=${GRADE}" >> "$GITHUB_OUTPUT"
-
-        exit $EXIT_CODE
+        codex-plugin-scanner "${ARGS[@]}"
 
     - name: Upload SARIF
       if: inputs.format == 'sarif' && inputs.output != ''
