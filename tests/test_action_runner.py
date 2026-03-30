@@ -9,7 +9,7 @@ from codex_plugin_scanner.action_runner import main
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def test_action_runner_writes_score_and_grade_outputs(monkeypatch, tmp_path, capsys) -> None:
+def test_action_runner_writes_all_outputs(monkeypatch, tmp_path, capsys) -> None:
     output_path = tmp_path / "github-output.txt"
 
     monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
@@ -39,6 +39,8 @@ def test_action_runner_writes_score_and_grade_outputs(monkeypatch, tmp_path, cap
     assert "grade=A" in output_lines
     assert "submission_eligible=false" in output_lines
     assert "submission_performed=false" in output_lines
+    assert "submission_issue_urls=" in output_lines
+    assert "submission_issue_numbers=" in output_lines
 
     stdout = capsys.readouterr().out
     assert '"score": 100' in stdout

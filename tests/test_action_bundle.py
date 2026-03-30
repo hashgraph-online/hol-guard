@@ -20,6 +20,10 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "python3 -m codex_plugin_scanner.action_runner" in action_text
     assert "value: ${{ steps.scan.outputs.score }}" in action_text
     assert "value: ${{ steps.scan.outputs.grade }}" in action_text
+    assert "value: ${{ steps.scan.outputs.submission_eligible }}" in action_text
+    assert "value: ${{ steps.scan.outputs.submission_performed }}" in action_text
+    assert "value: ${{ steps.scan.outputs.submission_issue_urls }}" in action_text
+    assert "value: ${{ steps.scan.outputs.submission_issue_numbers }}" in action_text
 
 
 def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
