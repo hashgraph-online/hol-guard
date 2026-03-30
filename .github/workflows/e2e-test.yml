@@ -75,14 +75,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./action
         id: scan
+        continue-on-error: true
         with:
           plugin_dir: tests/fixtures/bad-plugin
           min_score: 99
       - name: Verify failure
         if: always() && steps.scan.outcome == 'failure'
         run: echo "Correctly failed for low score"
-      - name: Should have passed
-        if: always() && steps.scan.outcome == 'success'
+      - name: Should have failed
+        if: always() && steps.scan.outcome != 'failure'
         run: |
           echo "Expected failure but scanner passed"
           exit 1
