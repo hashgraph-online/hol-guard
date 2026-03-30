@@ -27,6 +27,16 @@ This README is intentionally root-ready for a dedicated GitHub Marketplace actio
 | `cisco_skill_scan` | Cisco skill-scanner mode: `auto`, `on`, `off` | `auto` |
 | `cisco_policy` | Cisco policy preset: `permissive`, `balanced`, `strict` | `balanced` |
 | `install_cisco` | Install the Cisco skill-scanner dependency for live skill scanning | `false` |
+| `submission_enabled` | Open submission issues for awesome-list and registry automation when the plugin clears the submission threshold | `false` |
+| `submission_score_threshold` | Minimum score required before a submission issue is created | `80` |
+| `submission_repos` | Comma-separated GitHub repositories that should receive the submission issue | `hashgraph-online/awesome-codex-plugins` |
+| `submission_token` | Required when `submission_enabled` is `true`; use a token with `issues:write` access to the submission repositories | `""` |
+| `submission_labels` | Comma-separated labels to apply when creating submission issues | `plugin-submission` |
+| `submission_category` | Listing category included in the submission issue body | `Community Plugins` |
+| `submission_plugin_name` | Override the plugin name used in the submission issue | `""` |
+| `submission_plugin_url` | Override the plugin repository URL used in the submission issue | `""` |
+| `submission_plugin_description` | Override the plugin description used in the submission issue | `""` |
+| `submission_author` | Override the plugin author used in the submission issue | `""` |
 
 ## Outputs
 
@@ -34,6 +44,10 @@ This README is intentionally root-ready for a dedicated GitHub Marketplace actio
 |--------|-------------|
 | `score` | Numeric score (0-100) |
 | `grade` | Letter grade (A-F) |
+| `submission_eligible` | `true` when the plugin met the submission threshold and passed the configured severity gate |
+| `submission_performed` | `true` when a submission issue was created or an existing one was reused |
+| `submission_issue_urls` | Comma-separated submission issue URLs |
+| `submission_issue_numbers` | Comma-separated submission issue numbers |
 
 The report itself is written to the job log for `text` output, or to the file you pass through `output` for `json`, `markdown`, or `sarif`.
 
@@ -69,6 +83,38 @@ The report itself is written to the job log for `text` output, or to the file yo
     cisco_policy: strict
     install_cisco: true
 ```
+
+### Score 80+ and auto-file an awesome-list submission issue
+
+When the scan reaches `80+` and does not trip the configured severity gate, the action opens or reuses a submission issue in `hashgraph-online/awesome-codex-plugins`. The issue body includes a machine-readable registry payload so downstream registry automation can ingest the same submission event.
+
+```yaml
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Scan plugin and submit if eligible
+        id: scan
+        uses: your-org/hol-codex-plugin-scanner-action@v1
+        with:
+          plugin_dir: "."
+          min_score: 80
+          fail_on_severity: high
+          submission_enabled: true
+          submission_score_threshold: 80
+          submission_token: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
+
+      - name: Show submission issue
+        if: steps.scan.outputs.submission_performed == 'true'
+        run: echo "${{ steps.scan.outputs.submission_issue_urls }}"
+```
+
+Use a fine-grained token with `issues:write` on `hashgraph-online/awesome-codex-plugins`. `submission_token` is required when `submission_enabled: true`. The action deduplicates by an exact hidden plugin URL marker in the issue body, so repeated pushes reuse the open submission issue instead of opening duplicates.
 
 ### Markdown report as PR comment
 

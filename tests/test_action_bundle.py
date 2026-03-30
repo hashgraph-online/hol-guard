@@ -12,8 +12,13 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "branding:" in action_text
     assert 'icon: "check-circle"' in action_text
     assert 'color: "blue"' in action_text
+    assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in action_text
     assert 'pip install codex-plugin-scanner' in action_text
     assert 'pip install "$LOCAL_SOURCE"' in action_text
+    assert "submission_enabled:" in action_text
+    assert "submission_issue_urls:" in action_text
+    assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in action_text
+    assert "python3 -m codex_plugin_scanner.action_runner" in action_text
 
 
 def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
@@ -31,3 +36,5 @@ def test_action_bundle_has_root_ready_readme_and_marketplace_guide() -> None:
     assert "single root `action.yml`" in action_readme
     assert "must not contain any workflow files" in guide
     assert "dedicated public action repository" in guide
+    assert "submission issue" in action_readme
+    assert "awesome-codex-plugins" in guide

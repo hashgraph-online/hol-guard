@@ -35,12 +35,60 @@ inputs:
     description: "Install the Cisco skill-scanner dependency for live skill scanning"
     required: false
     default: "false"
+  submission_enabled:
+    description: "Open submission issues for awesome-list and registry automation when the plugin clears the submission threshold"
+    required: false
+    default: "false"
+  submission_score_threshold:
+    description: "Minimum score required before a submission issue is created"
+    required: false
+    default: "80"
+  submission_repos:
+    description: "Comma-separated GitHub repositories that should receive the submission issue"
+    required: false
+    default: "hashgraph-online/awesome-codex-plugins"
+  submission_token:
+    description: "Required when submission_enabled is true; use a token with issues:write access to the submission repositories"
+    required: false
+    default: ""
+  submission_labels:
+    description: "Comma-separated labels to apply when creating submission issues"
+    required: false
+    default: "plugin-submission"
+  submission_category:
+    description: "Listing category to include in the submission issue body"
+    required: false
+    default: "Community Plugins"
+  submission_plugin_name:
+    description: "Override the plugin name used in the submission issue"
+    required: false
+    default: ""
+  submission_plugin_url:
+    description: "Override the plugin repository URL used in the submission issue"
+    required: false
+    default: ""
+  submission_plugin_description:
+    description: "Override the plugin description used in the submission issue"
+    required: false
+    default: ""
+  submission_author:
+    description: "Override the plugin author used in the submission issue"
+    required: false
+    default: ""
 
 outputs:
   score:
     description: "The numeric score (0-100)"
   grade:
     description: "The letter grade (A-F)"
+  submission_eligible:
+    description: "Whether the plugin met the submission threshold and passed the configured severity gate"
+  submission_performed:
+    description: "Whether a submission issue was created or reused"
+  submission_issue_urls:
+    description: "Comma-separated URLs for submission issues created or reused"
+  submission_issue_numbers:
+    description: "Comma-separated issue numbers for submission issues created or reused"
 
 branding:
   icon: "check-circle"
@@ -50,7 +98,7 @@ runs:
   using: "composite"
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
       with:
         python-version: "3.12"
 
@@ -86,73 +134,15 @@ runs:
         FAIL_ON: ${{ inputs.fail_on_severity }}
         CISCO_SCAN: ${{ inputs.cisco_skill_scan }}
         CISCO_POLICY: ${{ inputs.cisco_policy }}
+        SUBMISSION_ENABLED: ${{ inputs.submission_enabled }}
+        SUBMISSION_SCORE_THRESHOLD: ${{ inputs.submission_score_threshold }}
+        SUBMISSION_REPOS: ${{ inputs.submission_repos }}
+        SUBMISSION_TOKEN: ${{ inputs.submission_token }}
+        SUBMISSION_LABELS: ${{ inputs.submission_labels }}
+        SUBMISSION_CATEGORY: ${{ inputs.submission_category }}
+        SUBMISSION_PLUGIN_NAME: ${{ inputs.submission_plugin_name }}
+        SUBMISSION_PLUGIN_URL: ${{ inputs.submission_plugin_url }}
+        SUBMISSION_PLUGIN_DESCRIPTION: ${{ inputs.submission_plugin_description }}
+        SUBMISSION_AUTHOR: ${{ inputs.submission_author }}
       run: |
-        python3 - <<'PY'
-        from __future__ import annotations
-
-        import os
-        import sys
-        from pathlib import Path
-
-        from codex_plugin_scanner.cli import format_text
-        from codex_plugin_scanner.models import ScanOptions
-        from codex_plugin_scanner.reporting import (
-            format_json,
-            format_markdown,
-            format_sarif,
-            should_fail_for_severity,
-        )
-        from codex_plugin_scanner.scanner import scan_plugin
-
-        plugin_dir = os.environ["PLUGIN_DIR"]
-        output_format = os.environ["FORMAT"]
-        output_path = os.environ["OUTPUT"]
-        min_score = int(os.environ["MIN_SCORE"])
-        fail_on = os.environ["FAIL_ON"]
-        cisco_scan = os.environ["CISCO_SCAN"]
-        cisco_policy = os.environ["CISCO_POLICY"]
-
-        result = scan_plugin(
-            plugin_dir,
-            ScanOptions(
-                cisco_skill_scan=cisco_scan,
-                cisco_policy=cisco_policy,
-            ),
-        )
-
-        if output_format == "json":
-            rendered = format_json(result)
-        elif output_format == "markdown":
-            rendered = format_markdown(result)
-        elif output_format == "sarif":
-            rendered = format_sarif(result)
-        else:
-            rendered = format_text(result)
-
-        if output_path:
-            target = Path(output_path)
-            target.write_text(rendered, encoding="utf-8")
-            print(f"Report written to {target}")
-        else:
-            print(rendered)
-
-        github_output = os.environ.get("GITHUB_OUTPUT")
-        if github_output:
-            with Path(github_output).open("a", encoding="utf-8") as handle:
-                handle.write(f"score={result.score}\n")
-                handle.write(f"grade={result.grade}\n")
-
-        if result.score < min_score:
-            print(
-                f"Score {result.score} is below minimum threshold {min_score}",
-                file=sys.stderr,
-            )
-            raise SystemExit(1)
-
-        if should_fail_for_severity(result, fail_on):
-            print(
-                f'Findings met or exceeded the "{fail_on}" severity threshold.',
-                file=sys.stderr,
-            )
-            raise SystemExit(1)
-        PY
+        python3 -m codex_plugin_scanner.action_runner
