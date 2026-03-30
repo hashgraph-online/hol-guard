@@ -28,6 +28,18 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     assert 'cp action/action.yml "${BUNDLE_ROOT}/action.yml"' in workflow_text
 
 
+def test_publish_action_repo_workflow_syncs_action_repository() -> None:
+    workflow_text = (ROOT / ".github" / "workflows" / "publish-action-repo.yml").read_text(encoding="utf-8")
+
+    assert "Publish GitHub Action Repository" in workflow_text
+    assert "ACTION_REPO_TOKEN" in workflow_text
+    assert "hashgraph-online/hol-codex-plugin-scanner-action" in workflow_text
+    assert 'gh repo create "${ACTION_REPOSITORY}"' in workflow_text
+    assert 'cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml' in workflow_text
+    assert 'git push origin refs/tags/v1 --force' in workflow_text
+    assert 'gh release create "${TAG}"' in workflow_text
+
+
 def test_action_bundle_docs_live_in_action_readme() -> None:
     action_readme = (ROOT / "action" / "README.md").read_text(encoding="utf-8")
 
@@ -37,6 +49,7 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "Source Of Truth" in action_readme
     assert "submission issue" in action_readme
     assert "awesome-codex-plugins" in action_readme
+    assert "publish-action-repo.yml" in action_readme
 
 
 def test_readme_uses_stable_apache_license_badge() -> None:
@@ -44,3 +57,5 @@ def test_readme_uses_stable_apache_license_badge() -> None:
 
     assert "https://img.shields.io/badge/license-Apache--2.0-blue.svg" in readme
     assert "https://img.shields.io/github/license/hashgraph-online/codex-plugin-scanner" not in readme
+    assert "publish-action-repo.yml" in readme
+    assert "docs/github-action-marketplace.md" not in readme

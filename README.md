@@ -177,9 +177,30 @@ GitHub Marketplace has two important constraints for actions:
 - the published action must live in a dedicated public repository with a single root `action.yml`
 - that repository cannot contain workflow files
 
-Because the scanner repository itself contains CI and release workflows, the Marketplace listing should be published from a separate action-only repository. The scanner release workflow now emits a root-ready bundle zip for that repository on every tagged release.
+Because the scanner repository itself contains CI and release workflows, the Marketplace listing should be published from a separate action-only repository.
 
-The source README for that dedicated action repository lives in [action/README.md](action/README.md), and the full publication guide lives in [docs/github-action-marketplace.md](docs/github-action-marketplace.md).
+The source README for that dedicated action repository lives in [action/README.md](action/README.md).
+
+### Automated Action Publication
+
+The source repository can publish the GitHub Action automatically into a dedicated public action repository.
+
+Configure:
+
+- repository secret `ACTION_REPO_TOKEN`
+  It should be a token that can create or update repositories and releases in the target repository.
+- optional repository variable `ACTION_REPOSITORY`
+  Defaults to `hashgraph-online/hol-codex-plugin-scanner-action`.
+
+When a tagged release is published, [publish-action-repo.yml](./.github/workflows/publish-action-repo.yml) will:
+
+- create the dedicated action repository if it does not already exist
+- sync the root-ready `action.yml`, `README.md`, `LICENSE`, and `SECURITY.md`
+- push the immutable release tag such as `v1.2.0`
+- move the floating `v1` tag
+- create or update the corresponding release in the action repository
+
+GitHub Marketplace still requires the one-time listing publication step in the dedicated action repository UI, but after that this repository can keep the action repository current automatically.
 
 ### Plugin Author Submission Flow
 

@@ -1,0 +1,130 @@
+name: Publish GitHub Action Repository
+
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to publish from the source repository"
+        required: false
+        default: ""
+      action_repository:
+        description: "Dedicated public repository that hosts the Marketplace action"
+        required: false
+        default: "hashgraph-online/hol-codex-plugin-scanner-action"
+      create_repository:
+        description: "Create the dedicated action repository if it does not exist"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-plugin-scanner-action-publish-${{ github.event.release.tag_name || inputs.release_tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-action-repo:
+    name: Publish GitHub Action Repository
+    if: secrets.ACTION_REPO_TOKEN != ''
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+      ACTION_REPOSITORY: ${{ inputs.action_repository != '' && inputs.action_repository || vars.ACTION_REPOSITORY != '' && vars.ACTION_REPOSITORY || 'hashgraph-online/hol-codex-plugin-scanner-action' }}
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+      CREATE_REPOSITORY: ${{ github.event_name == 'workflow_dispatch' && inputs.create_repository || 'true' }}
+      SOURCE_REPOSITORY: ${{ github.repository }}
+      SOURCE_SERVER_URL: ${{ github.server_url }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.release_tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        run: |
+          TAG="${RELEASE_TAG}"
+          if [ -z "${TAG}" ]; then
+            TAG=$(python3 -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print('v' + p['project']['version'])")
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Ensure action repository exists
+        run: |
+          if gh repo view "${ACTION_REPOSITORY}" >/dev/null 2>&1; then
+            exit 0
+          fi
+          if [ "${CREATE_REPOSITORY}" != "true" ]; then
+            echo "Action repository ${ACTION_REPOSITORY} does not exist and automatic creation is disabled." >&2
+            exit 1
+          fi
+          gh repo create "${ACTION_REPOSITORY}" \
+            --public \
+            --description "HOL Codex Plugin Scanner GitHub Action" \
+            --homepage "${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}" \
+            --disable-wiki
+
+      - name: Sync action repository contents
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          WORKDIR="${RUNNER_TEMP}/action-repository"
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${ACTION_REPOSITORY}.git" "${WORKDIR}"
+          cd "${WORKDIR}"
+
+          if git ls-remote --exit-code origin refs/heads/main >/dev/null 2>&1; then
+            git fetch origin main
+            git switch -C main origin/main
+          else
+            git switch --orphan main
+          fi
+
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+
+          cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml
+          cp "${GITHUB_WORKSPACE}/action/README.md" README.md
+          cp "${GITHUB_WORKSPACE}/LICENSE" LICENSE
+          cp "${GITHUB_WORKSPACE}/SECURITY.md" SECURITY.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add action.yml README.md LICENSE SECURITY.md
+
+          HAS_HEAD=true
+          git rev-parse --verify HEAD >/dev/null 2>&1 || HAS_HEAD=false
+
+          if [ "${HAS_HEAD}" = "true" ] && git diff --cached --quiet; then
+            echo "No action repository content changes detected."
+          else
+            git commit -m "chore: publish action bundle ${TAG}"
+            git push origin HEAD:main
+          fi
+
+          git tag -f "${TAG}"
+          git push origin "refs/tags/${TAG}" --force
+          git tag -f v1
+          git push origin refs/tags/v1 --force
+
+      - name: Create or update action repository release
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          NOTES="Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/releases/tag/${TAG}"
+
+          if gh release view "${TAG}" --repo "${ACTION_REPOSITORY}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" \
+              --repo "${ACTION_REPOSITORY}" \
+              --title "${TAG}" \
+              --notes "${NOTES}"
+          else
+            gh release create "${TAG}" \
+              --repo "${ACTION_REPOSITORY}" \
+              --title "${TAG}" \
+              --notes "${NOTES}"
+          fi
