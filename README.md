@@ -179,7 +179,7 @@ GitHub Marketplace has two important constraints for actions:
 
 Because the scanner repository itself contains CI and release workflows, the Marketplace listing should be published from a separate action-only repository.
 
-The source README for that dedicated action repository lives in [action/README.md](action/README.md).
+The dedicated action-repository guide now lives directly in [action/README.md](action/README.md).
 
 ### Automated Action Publication
 
