@@ -1,92 +1,116 @@
-# 🔗 Codex Plugin Scanner
+# HOL Codex Plugin Scanner
 
-[![PyPI version](https://img.shields.io/pypi/v/codex-plugin-scanner.svg)](https://pypi.org/project/codex-plugin-scanner/)
-[![Python versions](https://img.shields.io/pypi/pyversions/codex-plugin-scanner.svg)](https://pypi.org/project/codex-plugin-scanner/)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![PyPI Version](https://img.shields.io/pypi/v/codex-plugin-scanner?logo=pypi&logoColor=white)](https://pypi.org/project/codex-plugin-scanner/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/codex-plugin-scanner)](https://pypi.org/project/codex-plugin-scanner/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/codex-plugin-scanner)](https://pypistats.org/packages/codex-plugin-scanner)
 [![CI](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml)
+[![Publish](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/publish.yml/badge.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/publish.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/codex-plugin-scanner/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/codex-plugin-scanner)
+[![License](https://img.shields.io/github/license/hashgraph-online/codex-plugin-scanner)](./LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/codex-plugin-scanner?style=social)](https://github.com/hashgraph-online/codex-plugin-scanner/stargazers)
+[![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
 
-A security, publishability, and security-ops scanner for [Codex plugins](https://developers.openai.com/codex/plugins). It scores the applicable plugin surface from 0-100, emits structured findings, validates install-surface metadata, hardens MCP transport expectations, and can run Cisco's `skill-scanner` against plugin skills for deeper analysis.
+| ![](https://raw.githubusercontent.com/hashgraph-online/standards-sdk-py/main/Hashgraph-Online.png) | Security, publishability, and security-ops scanner for [Codex plugins](https://developers.openai.com/codex/plugins). It scores the applicable plugin surface from `0-100`, emits structured findings, validates install-surface metadata, hardens MCP transport expectations, and can run Cisco-backed skill analysis for plugin skills.<br><br>[PyPI Package](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL GitHub Repository](https://github.com/hashgraph-online/codex-plugin-scanner)<br>[Report an Issue](https://github.com/hashgraph-online/codex-plugin-scanner/issues) |
+| :--- | :--- |
 
-## What's New in v1.2.0
+## Quick Start
 
-- Publishability checks for Codex `interface` metadata, assets, and HTTPS links.
-- MCP transport hardening for remote `.mcp.json` endpoints.
-- A new `Operational Security` category for GitHub Actions pinning, privileged workflow patterns, Dependabot, and lockfile hygiene.
+```bash
+git clone https://github.com/hashgraph-online/codex-plugin-scanner.git
+cd codex-plugin-scanner
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+pytest -q
+```
 
-## Installation
+## Install
 
 ```bash
 pip install codex-plugin-scanner
 ```
 
-To enable Cisco-backed skill scanning:
+Cisco-backed skill scanning is optional:
 
 ```bash
 pip install "codex-plugin-scanner[cisco]"
 ```
 
-Or run directly without installing:
+You can also run the scanner without a local install:
 
 ```bash
 pipx run codex-plugin-scanner ./my-plugin
 ```
 
-## Usage
+## What The Scanner Covers
+
+The scanner evaluates only the surfaces a plugin actually exposes, then normalizes the final score across applicable checks. A plugin is not rewarded or penalized for optional surfaces it does not ship.
+
+| Category | Max Points | Coverage |
+| :--- | :--- | :--- |
+| Manifest Validation | 31 | `plugin.json`, required fields, semver, kebab-case, recommended metadata, interface metadata, interface links and assets, safe declared paths |
+| Security | 24 | `SECURITY.md`, `LICENSE`, hardcoded secret detection, dangerous MCP commands, MCP transport hardening, risky approval defaults |
+| Operational Security | 20 | SHA-pinned GitHub Actions, `write-all`, privileged untrusted checkout patterns, Dependabot, dependency lockfiles |
+| Best Practices | 15 | `README.md`, skills directory, `SKILL.md` frontmatter, committed `.env`, `.codexignore` |
+| Marketplace | 15 | `marketplace.json` validity, policy fields, safe source paths |
+| Skill Security | 15 | Cisco integration status, elevated skill findings, analyzability |
+| Code Quality | 10 | `eval`, `new Function`, shell-injection patterns |
+
+## CLI Usage
 
 ```bash
 # Scan a plugin directory
 codex-plugin-scanner ./my-plugin
 
-# Output as JSON
+# Output JSON
 codex-plugin-scanner ./my-plugin --json
 
 # Write a SARIF report for GitHub code scanning
-codex-plugin-scanner ./my-plugin --format sarif --output report.sarif
+codex-plugin-scanner ./my-plugin --format sarif --output codex-plugin-scanner.sarif
 
-# Fail CI on high-severity findings
+# Fail CI on findings at or above high severity
 codex-plugin-scanner ./my-plugin --fail-on-severity high
 
 # Require Cisco skill scanning with a strict policy
 codex-plugin-scanner ./my-plugin --cisco-skill-scan on --cisco-policy strict
 ```
 
-### Example Output
+## Example Output
 
-```
+```text
 🔗 Codex Plugin Scanner v1.2.0
 Scanning: ./my-plugin
 
 ── Manifest Validation (31/31) ──
-  ✅ plugin.json exists                          +4
-  ✅ Valid JSON                                  +4
-  ✅ Required fields present                     +5
-  ✅ Version follows semver                      +3
-  ✅ Name is kebab-case                          +2
-  ✅ Recommended metadata present                +4
-  ✅ Interface metadata complete if declared     +3
+  ✅ plugin.json exists                           +4
+  ✅ Valid JSON                                   +4
+  ✅ Required fields present                      +5
+  ✅ Version follows semver                       +3
+  ✅ Name is kebab-case                           +2
+  ✅ Recommended metadata present                 +4
+  ✅ Interface metadata complete if declared      +3
   ✅ Interface links and assets valid if declared +3
-  ✅ Declared paths are safe                     +3
+  ✅ Declared paths are safe                      +3
 
 ── Security (16/16) ──
-  ✅ SECURITY.md found                           +3
-  ✅ LICENSE found                               +3
-  ✅ No hardcoded secrets                        +7
-  ✅ No dangerous MCP commands                   +0
-  ✅ MCP remote transports are hardened          +0
-  ✅ No approval bypass defaults                 +3
+  ✅ SECURITY.md found                            +3
+  ✅ LICENSE found                                +3
+  ✅ No hardcoded secrets                         +7
+  ✅ No dangerous MCP commands                    +0
+  ✅ MCP remote transports are hardened           +0
+  ✅ No approval bypass defaults                  +3
 
 ── Operational Security (0/0) ──
-  ✅ Third-party GitHub Actions pinned to SHAs   +0
-  ✅ No write-all GitHub Actions permissions     +0
-  ✅ No privileged untrusted checkout patterns   +0
+  ✅ Third-party GitHub Actions pinned to SHAs    +0
+  ✅ No write-all GitHub Actions permissions      +0
+  ✅ No privileged untrusted checkout patterns    +0
   ✅ Dependabot configured for automation surfaces +0
-  ✅ Dependency manifests have lockfiles         +0
+  ✅ Dependency manifests have lockfiles          +0
 
 ── Skill Security (15/15) ──
-  ✅ Cisco skill scan completed                  +3
-  ✅ No elevated Cisco skill findings            +8
-  ✅ Skills analyzable                           +4
+  ✅ Cisco skill scan completed                   +3
+  ✅ No elevated Cisco skill findings             +8
+  ✅ Skills analyzable                            +4
 
 Findings: critical:0, high:0, medium:0, low:0, info:0
 
@@ -95,62 +119,41 @@ Final Score: 100/100 (A - Excellent)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-Optional surfaces such as `marketplace.json`, `.mcp.json`, and plugin skills are treated as not-applicable when they are not present. The final score is normalized over the applicable maximum so plugins are not rewarded or penalized for surfaces they do not expose.
-
-## Checks
-
-| Category | Max Points | Checks |
-|----------|-----------|--------|
-| Manifest Validation | 31 | plugin.json, required fields, semver, kebab-case, recommended metadata, interface metadata, interface assets, safe declared paths |
-| Security | 24 | SECURITY.md, LICENSE, no hardcoded secrets, no dangerous MCP commands, MCP remote transport hardening, no approval bypass defaults |
-| Operational Security | 20 | GitHub Actions SHA pinning, no `write-all`, no privileged untrusted checkout, Dependabot, dependency lockfiles |
-| Best Practices | 15 | README.md, skills directory, SKILL.md frontmatter, no committed `.env`, `.codexignore` |
-| Marketplace | 15 | marketplace.json validity, policy fields, safe source paths |
-| Skill Security | 15 | Cisco scan availability, elevated skill findings, analyzability |
-| Code Quality | 10 | no eval/Function, no shell injection |
-
-### Grade Scale
-
-| Score | Grade | Meaning |
-|-------|-------|---------|
-| 90-100 | A | Excellent |
-| 80-89 | B | Good |
-| 70-79 | C | Acceptable |
-| 60-69 | D | Needs Improvement |
-| 0-59 | F | Failing |
-
-## Security Checks
-
-The scanner detects:
-
-- **Hardcoded secrets**: AWS keys, GitHub tokens, OpenAI keys, Slack tokens, GitLab tokens, generic password/secret/token patterns
-- **Dangerous MCP commands**: `rm -rf`, `sudo`, `curl|sh`, `wget|sh`, `eval`, `exec`, `powershell -c`
-- **Insecure MCP remotes**: non-HTTPS remote endpoints and non-loopback HTTP MCP transports
-- **Risky Codex defaults**: approval bypass and unrestricted sandbox defaults in plugin-shipped config/docs
-- **Shell injection**: template literals with unsanitized interpolation in exec/spawn calls
-- **Unsafe code**: `eval()` and `new Function()` usage
-- **Cisco skill threats**: policy violations and risky behaviors detected by Cisco `skill-scanner`
-- **Workflow hardening gaps**: unpinned third-party actions, `write-all`, privileged untrusted checkouts, missing Dependabot, missing lockfiles
-
 ## Report Formats
 
-- `text`: human-readable terminal summary with findings and category scores
-- `json`: structured findings, integration status, and per-check details
-- `markdown`: review-ready report for issues and pull requests
-- `sarif`: GitHub code scanning compatible output
+| Format | Use Case |
+| :--- | :--- |
+| `text` | Human-readable terminal summary with category totals and findings |
+| `json` | Structured integrations and findings for tooling and dashboards |
+| `markdown` | Pull request, issue, or review-ready summaries |
+| `sarif` | GitHub code scanning uploads and security automation |
 
-## Use as a GitHub Action
+## Scanner Signals
 
-Add to your plugin's CI:
+The scanner currently detects or validates:
+
+- Hardcoded secrets such as AWS keys, GitHub tokens, OpenAI keys, Slack tokens, GitLab tokens, and generic password or token patterns
+- Dangerous MCP command patterns such as `rm -rf`, `sudo`, `curl|sh`, `wget|sh`, `eval`, `exec`, and PowerShell or `cmd /c` shells
+- Insecure MCP remotes, including non-HTTPS endpoints and non-loopback HTTP transports
+- Risky Codex defaults such as approval bypass and unrestricted sandbox defaults inside shipped plugin config or docs
+- Publishability issues in `interface` metadata, HTTPS links, and declared asset paths
+- Workflow hardening gaps including unpinned third-party actions, `write-all`, privileged checkout patterns, missing Dependabot, and missing lockfiles
+- Skill-level issues surfaced by Cisco `skill-scanner` when the optional integration is installed
+
+## CI And Automation
+
+Add the scanner to a plugin repository CI job:
 
 ```yaml
 - name: Install scanner
   run: pip install codex-plugin-scanner
+
 - name: Scan plugin
   run: codex-plugin-scanner ./my-plugin --fail-on-severity high --format sarif --output codex-plugin-scanner.sarif
+  continue-on-error: true
 ```
 
-## Use as a pre-commit hook
+Local pre-commit style hook:
 
 ```yaml
 repos:
@@ -169,14 +172,37 @@ repos:
 
 ```bash
 pip install -e ".[dev]"
-pytest
-ruff check src/
+ruff check src tests
+ruff format --check src
+pytest -q
+python -m build
 ```
+
+## Repository Workflows
+
+- Matrix CI for Python `3.10` through `3.13`
+- Package publishing via the `publish.yml` workflow
+- OpenSSF Scorecard automation for repository hardening visibility
+
+## Security
+
+For disclosure and response policy, see [SECURITY.md](./SECURITY.md).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+Contribution guidance lives in [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## Maintainers
+
+Maintained by HOL.
+
+## Resources
+
+- [OpenAI Codex Plugin Documentation](https://developers.openai.com/codex/plugins)
+- [Model Context Protocol Documentation](https://modelcontextprotocol.io)
+- [Cisco AI Skill Scanner](https://pypi.org/project/cisco-ai-skill-scanner/)
+- [HOL GitHub Organization](https://github.com/hashgraph-online)
 
 ## License
 
-[Apache-2.0](LICENSE) - Hashgraph Online
+Apache-2.0
