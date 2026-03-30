@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 
 
-class Severity(StrEnum):
+class Severity(str, Enum):
     """Severity levels for actionable findings."""
 
     CRITICAL = "critical"
