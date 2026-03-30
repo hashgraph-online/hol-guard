@@ -6,7 +6,7 @@
 [![CI](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml)
 [![Publish](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/publish.yml/badge.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/publish.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/codex-plugin-scanner/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/codex-plugin-scanner)
-[![License](https://img.shields.io/github/license/hashgraph-online/codex-plugin-scanner)](./LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/codex-plugin-scanner?style=social)](https://github.com/hashgraph-online/codex-plugin-scanner/stargazers)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
 
