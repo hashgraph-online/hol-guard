@@ -113,10 +113,3 @@ runs:
         fi
 
         codex-plugin-scanner "${ARGS[@]}"
-
-    - name: Upload SARIF
-      if: inputs.format == 'sarif' && inputs.output != ''
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: ${{ inputs.output }}
-      continue-on-error: true

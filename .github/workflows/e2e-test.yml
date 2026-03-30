@@ -44,6 +44,8 @@ jobs:
   scanner-sarif:
     name: Scanner (SARIF format)
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
     steps:
       - uses: actions/checkout@v4
       - uses: ./action
@@ -58,9 +60,10 @@ jobs:
           import json
           d = json.load(open('report.sarif'))
           assert d['version'] == '2.1.0'
-          assert d['$schema'].startswith('https://')
+          assert d['\$schema'].startswith('https://')
           print('SARIF output valid')
           "
+    # Skip SARIF upload - CodeQL upload-sarif requires code scanning to be enabled on the repo
 
   scanner-fail:
     name: Scanner (fail on low score)
