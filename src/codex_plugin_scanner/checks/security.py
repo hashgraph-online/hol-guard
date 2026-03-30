@@ -75,6 +75,9 @@ RISKY_APPROVAL_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r'approvalMode["\']?\s*[:=]\s*["\']bypass["\']', re.I),
 ]
 
+APACHE_LICENSE_VERSION_RE = re.compile(r"apache\s+license\s*,?\s*version\s+2\.0", re.I)
+LICENSE_URL_RE = re.compile(r"https?://[^\s<>()\"']+")
+
 
 def _scan_all_files(plugin_dir: Path) -> list[Path]:
     """Recursively find all files, skipping excluded dirs."""
@@ -88,6 +91,16 @@ def _scan_all_files(plugin_dir: Path) -> list[Path]:
             continue
         files.append(p)
     return files
+
+
+def _has_canonical_apache_license_reference(content: str) -> bool:
+    for candidate in LICENSE_URL_RE.findall(content):
+        parsed = urlparse(candidate.rstrip(".,;:"))
+        hostname = (parsed.hostname or "").lower()
+        path = parsed.path.rstrip("/")
+        if hostname == "www.apache.org" and path == "/licenses/LICENSE-2.0":
+            return True
+    return False
 
 
 def check_security_md(plugin_dir: Path) -> CheckResult:
@@ -139,7 +152,9 @@ def check_license(plugin_dir: Path) -> CheckResult:
         )
     try:
         content = lp.read_text(encoding="utf-8", errors="ignore")
-        if "Apache" in content and ("2.0" in content or "www.apache.org" in content):
+        if "apache" in content.lower() and (
+            APACHE_LICENSE_VERSION_RE.search(content) or _has_canonical_apache_license_reference(content)
+        ):
             return CheckResult(
                 name="LICENSE found", passed=True, points=3, max_points=3, message="LICENSE found (Apache-2.0)"
             )
