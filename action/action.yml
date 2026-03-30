@@ -41,8 +41,6 @@ outputs:
     description: "The numeric score (0-100)"
   grade:
     description: "The letter grade (A-F)"
-  report:
-    description: "The full report output"
 
 runs:
   using: "composite"
@@ -97,29 +95,27 @@ runs:
         EXIT_CODE=$?
         set -e
 
-        # Print the report for visibility
+        # Print the report for job visibility
         echo "$REPORT"
 
-        # Extract score and grade using python for reliability
-        META=$(python3 -c "
+        # Extract score and grade via python
+        RESULT=$(echo "$REPORT" | python3 -c "
         import re, sys
         text = sys.stdin.read()
         m = re.search(r'Final Score: (\d+)/\d+ \(([A-F])', text)
         if m:
-            print(f'score={m.group(1)}')
-            print(f'grade={m.group(2)}')
+            print(m.group(1))
+            print(m.group(2))
         else:
-            print('score=0')
-            print('grade=F')
-        " <<< "$REPORT")
+            print('0')
+            print('F')
+        ")
 
-        # Write outputs
-        echo "$META" >> "$GITHUB_OUTPUT"
-        {
-          echo "report<<REPORT_EOF"
-          echo "$REPORT"
-          echo "REPORT_EOF"
-        } >> "$GITHUB_OUTPUT"
+        SCORE=$(echo "$RESULT" | head -1)
+        GRADE=$(echo "$RESULT" | tail -1)
+
+        echo "score=${SCORE}" >> "$GITHUB_OUTPUT"
+        echo "grade=${GRADE}" >> "$GITHUB_OUTPUT"
 
         exit $EXIT_CODE
 
