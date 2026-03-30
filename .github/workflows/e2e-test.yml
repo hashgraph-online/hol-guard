@@ -1,0 +1,109 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/*]
+  workflow_dispatch:
+
+jobs:
+  scanner-text:
+    name: Scanner (text format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./action
+        id: scan
+        with:
+          plugin_dir: tests/fixtures/good-plugin
+          min_score: 80
+        continue-on-error: false
+      - name: Check outputs
+        run: |
+          echo "Score: ${{ steps.scan.outputs.score }}"
+          echo "Grade: ${{ steps.scan.outputs.grade }}"
+          [[ "${{ steps.scan.outputs.score }}" -ge 80 ]] || { echo "Score too low"; exit 1; }
+          [[ "${{ steps.scan.outputs.grade }}" == "A" ]] || { echo "Wrong grade"; exit 1; }
+
+  scanner-json:
+    name: Scanner (JSON format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./action
+        id: scan
+        with:
+          plugin_dir: tests/fixtures/good-plugin
+          format: json
+          output: report.json
+      - name: Validate JSON
+        run: |
+          python3 -c "
+          import json
+          d = json.load(open('report.json'))
+          assert d['score'] == 100
+          assert d['grade'] == 'A'
+          print('JSON output valid')
+          "
+
+  scanner-sarif:
+    name: Scanner (SARIF format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./action
+        id: scan
+        with:
+          plugin_dir: tests/fixtures/good-plugin
+          format: sarif
+          output: report.sarif
+      - name: Validate SARIF
+        run: |
+          python3 -c "
+          import json
+          d = json.load(open('report.sarif'))
+          assert d['version'] == '2.1.0'
+          assert d['\$schema'].startswith('https://')
+          print('SARIF output valid')
+          "
+
+  scanner-fail:
+    name: Scanner (fail on low score)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./action
+        id: scan
+        with:
+          plugin_dir: tests/fixtures/bad-plugin
+          min_score: 99
+        continue-on-error: true
+      - name: Should have failed
+        if: steps.scan.outcome == 'success'
+        run: |
+          echo "Expected failure but scanner passed"
+          exit 1
+      - name: Verify failure
+        if: steps.scan.outcome == 'failure'
+        run: echo "Correctly failed for low score"
+
+  scanner-markdown:
+    name: Scanner (Markdown format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./action
+        id: scan
+        with:
+          plugin_dir: tests/fixtures/good-plugin
+          format: markdown
+          output: report.md
+      - name: Validate Markdown
+        run: |
+          python3 -c "
+          content = open('report.md').read()
+          assert '100/100' in content
+          assert 'A - Excellent' in content
+          print('Markdown output valid')
+          "

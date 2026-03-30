@@ -1,0 +1,119 @@
+name: "Codex Plugin Scanner"
+description: "Scan a Codex plugin directory for security and best practices. Scores from 0-100."
+author: "Hashgraph Online"
+
+inputs:
+  plugin_dir:
+    description: "Path to the plugin directory to scan (default: repository root)"
+    required: false
+    default: "."
+  format:
+    description: "Output format: text, json, markdown, or sarif"
+    required: false
+    default: "text"
+  output:
+    description: "Write report to this file path"
+    required: false
+    default: ""
+  min_score:
+    description: "Fail the job if the score is below this threshold (0-100)"
+    required: false
+    default: "0"
+  fail_on_severity:
+    description: "Fail if any finding meets or exceeds this severity (none, critical, high, medium, low, info)"
+    required: false
+    default: "none"
+  cisco_skill_scan:
+    description: "Cisco skill-scanner mode: auto, on, or off"
+    required: false
+    default: "auto"
+  cisco_policy:
+    description: "Cisco skill-scanner policy preset: permissive, balanced, or strict"
+    required: false
+    default: "balanced"
+  install_cisco:
+    description: "Install the cisco extra for skill scanning"
+    required: false
+    default: "false"
+
+outputs:
+  score:
+    description: "The numeric score (0-100)"
+  grade:
+    description: "The letter grade (A-F)"
+  report:
+    description: "The full report output"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install scanner
+      shell: bash
+      run: |
+        if [ "${{ inputs.install_cisco }}" = "true" ]; then
+          pip install "codex-plugin-scanner[cisco]"
+        else
+          pip install codex-plugin-scanner
+        fi
+
+    - name: Run scanner
+      id: scan
+      shell: bash
+      env:
+        PLUGIN_DIR: ${{ inputs.plugin_dir }}
+        FORMAT: ${{ inputs.format }}
+        OUTPUT: ${{ inputs.output }}
+        MIN_SCORE: ${{ inputs.min_score }}
+        FAIL_ON: ${{ inputs.fail_on_severity }}
+        CISCO_SCAN: ${{ inputs.cisco_skill_scan }}
+        CISCO_POLICY: ${{ inputs.cisco_policy }}
+      run: |
+        set -euo pipefail
+
+        ARGS=("$PLUGIN_DIR" --format "$FORMAT")
+
+        if [ -n "$OUTPUT" ]; then
+          ARGS+=(--output "$OUTPUT")
+        fi
+
+        if [ "$MIN_SCORE" -gt 0 ] 2>/dev/null; then
+          ARGS+=(--min-score "$MIN_SCORE")
+        fi
+
+        if [ "$FAIL_ON" != "none" ]; then
+          ARGS+=(--fail-on-severity "$FAIL_ON")
+        fi
+
+        if [ "$CISCO_SCAN" != "auto" ]; then
+          ARGS+=(--cisco-skill-scan "$CISCO_SCAN" --cisco-policy "$CISCO_POLICY")
+        fi
+
+        # Capture output for the action output
+        REPORT=$(codex-plugin-scanner "${ARGS[@]}" 2>&1 || true)
+
+        # Extract score and grade from the report text
+        SCORE=$(echo "$REPORT" | grep -oP 'Final Score: \K[0-9]+' || echo "0")
+        GRADE=$(echo "$REPORT" | grep -oP 'Final Score: [0-9]+/[0-9]+ \(\K[A-F]' || echo "F")
+
+        {
+          echo "score=$SCORE"
+          echo "grade=$GRADE"
+          echo "report<<EOF"
+          echo "$REPORT"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        # Now run for real to get the correct exit code
+        codex-plugin-scanner "${ARGS[@]}"
+
+    - name: Upload SARIF
+      if: inputs.format == 'sarif' && inputs.output != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.output }}
+      continue-on-error: true

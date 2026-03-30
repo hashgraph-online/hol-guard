@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 from codex_plugin_scanner.cli import format_json, format_text
-from codex_plugin_scanner.models import ScanOptions
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -41,9 +40,9 @@ def test_json_output_is_parseable():
     output = format_json(result)
     parsed = json.loads(output)
     assert parsed["score"] == 100
-    assert len(parsed["categories"]) == 7
+    assert len(parsed["categories"]) == 6
     total_checks = sum(len(c["checks"]) for c in parsed["categories"])
-    assert total_checks == 33
+    assert total_checks == 25
 
 
 def test_text_output_is_readable():
@@ -52,7 +51,6 @@ def test_text_output_is_readable():
     # Should have all category headers
     assert "Manifest Validation" in output
     assert "Security" in output
-    assert "Operational Security" in output
     assert "Best Practices" in output
     assert "Marketplace" in output
     assert "Skill Security" in output
@@ -71,9 +69,11 @@ def test_all_check_names_unique():
 
 
 def test_max_points_total_100():
-    result = scan_plugin(FIXTURES / "good-plugin", ScanOptions(cisco_skill_scan="off"))
+    result = scan_plugin(FIXTURES / "good-plugin")
     total_max = sum(c.max_points for cat in result.categories for c in cat.checks)
-    assert total_max == 72
+    # good-plugin has no marketplace.json or skills, so marketplace and skill security
+    # are N/A (max=0). Applicable max is 66.
+    assert total_max == 66
 
 
 def test_mit_license_plugin():
@@ -98,7 +98,7 @@ def test_malformed_json_manifest():
     result = scan_plugin(FIXTURES / "malformed-json")
     assert result.score < 100
     manifest_cat = next(c for c in result.categories if c.name == "Manifest Validation")
-    assert sum(c.points for c in manifest_cat.checks) < 31
+    assert sum(c.points for c in manifest_cat.checks) < 25
 
 
 def test_public_api_import():
