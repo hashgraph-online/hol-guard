@@ -206,6 +206,12 @@ GitHub Marketplace still requires the one-time listing publication step in the d
 
 The action can also handle submission intake. A plugin repository can wire the scanner into CI so a passing scan opens or reuses a submission issue in [awesome-codex-plugins](https://github.com/hashgraph-online/awesome-codex-plugins).
 
+It also emits Codex-friendly machine outputs:
+
+- `score`, `grade`, `grade_label`, `max_severity`, and `findings_total` as GitHub Action outputs
+- a concise markdown summary in the job summary by default
+- an optional machine-readable registry payload file for downstream registry, badge, or awesome-list automation
+
 The intended path is:
 
 1. Add the scanner action to plugin CI.
@@ -243,6 +249,44 @@ jobs:
 ```
 
 `submission_token` is required when `submission_enabled: true`. This flow is idempotent. If the plugin repository was already submitted, the action reuses the existing open issue instead of opening duplicates by matching an exact hidden plugin URL marker in the existing issue body.
+
+### Registry Payload For Codex Ecosystem Automation
+
+If you want to feed the same scan into a registry, badge pipeline, or another Codex automation step, request a registry payload file directly from the action:
+
+```yaml
+permissions:
+  contents: read
+
+jobs:
+  scan-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Scan plugin
+        id: scan
+        uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
+        with:
+          plugin_dir: "."
+          format: sarif
+          output: codex-plugin-scanner.sarif
+          registry_payload_output: codex-plugin-registry-payload.json
+
+      - name: Show trust signals
+        run: |
+          echo "Score: ${{ steps.scan.outputs.score }}"
+          echo "Grade: ${{ steps.scan.outputs.grade_label }}"
+          echo "Max severity: ${{ steps.scan.outputs.max_severity }}"
+
+      - name: Upload registry payload
+        uses: actions/upload-artifact@v6
+        with:
+          name: codex-plugin-registry-payload
+          path: ${{ steps.scan.outputs.registry_payload_path }}
+```
+
+The registry payload mirrors the submission data used by HOL ecosystem automation, so one scan can drive code scanning, review summaries, awesome-list intake, and registry trust ingestion.
 
 ## Development
 
