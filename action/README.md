@@ -22,6 +22,8 @@ This README is intentionally root-ready for a dedicated GitHub Marketplace actio
 | `plugin_dir` | Path to the plugin directory to scan | `.` |
 | `format` | Output format: `text`, `json`, `markdown`, `sarif` | `text` |
 | `output` | Write report to this file path | `""` |
+| `write_step_summary` | Write a concise markdown summary to the GitHub Actions job summary | `true` |
+| `registry_payload_output` | Write a machine-readable Codex ecosystem payload JSON file for registry or awesome-list automation | `""` |
 | `min_score` | Fail if score is below this threshold (0-100) | `0` |
 | `fail_on_severity` | Fail on findings at or above this severity: `none`, `critical`, `high`, `medium`, `low`, `info` | `none` |
 | `cisco_skill_scan` | Cisco skill-scanner mode: `auto`, `on`, `off` | `auto` |
@@ -44,12 +46,17 @@ This README is intentionally root-ready for a dedicated GitHub Marketplace actio
 |--------|-------------|
 | `score` | Numeric score (0-100) |
 | `grade` | Letter grade (A-F) |
+| `grade_label` | Human-readable grade label |
+| `max_severity` | Highest finding severity, or `none` |
+| `findings_total` | Total number of findings across all severities |
+| `report_path` | Path to the rendered report file, if `output` was set |
+| `registry_payload_path` | Path to the machine-readable Codex ecosystem payload file, if requested |
 | `submission_eligible` | `true` when the plugin met the submission threshold and passed the configured severity gate |
 | `submission_performed` | `true` when a submission issue was created or an existing one was reused |
 | `submission_issue_urls` | Comma-separated submission issue URLs |
 | `submission_issue_numbers` | Comma-separated submission issue numbers |
 
-The report itself is written to the job log for `text` output, or to the file you pass through `output` for `json`, `markdown`, or `sarif`.
+The action also writes a concise summary to `GITHUB_STEP_SUMMARY` by default. The full report is written to the job log for `text` output, or to the file you pass through `output` for `json`, `markdown`, or `sarif`.
 
 ## Examples
 
@@ -83,6 +90,26 @@ The report itself is written to the job log for `text` output, or to the file yo
     cisco_policy: strict
     install_cisco: true
 ```
+
+### Export registry payload for Codex ecosystem automation
+
+```yaml
+- uses: your-org/hol-codex-plugin-scanner-action@v1
+  id: scan
+  with:
+    plugin_dir: "."
+    format: sarif
+    output: codex-plugin-scanner.sarif
+    registry_payload_output: codex-plugin-registry-payload.json
+
+- name: Show trust signals
+  run: |
+    echo "Score: ${{ steps.scan.outputs.score }}"
+    echo "Grade: ${{ steps.scan.outputs.grade_label }}"
+    echo "Max severity: ${{ steps.scan.outputs.max_severity }}"
+```
+
+The registry payload mirrors the submission metadata used by HOL ecosystem automation, so the same scan can feed trust scoring, registry ingestion, badges, or awesome-list processing without reparsing the terminal output.
 
 ### Score 80+ and auto-file an awesome-list submission issue
 
@@ -127,7 +154,7 @@ Use a fine-grained token with `issues:write` on `hashgraph-online/awesome-codex-
     output: scan-report.md
 
 - name: Comment PR
-  uses: actions/github-script@v7
+  uses: actions/github-script@v8
   with:
     script: |
       const fs = require('fs');

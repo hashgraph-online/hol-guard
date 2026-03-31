@@ -35,6 +35,7 @@ jobs:
       ACTION_REPOSITORY: ${{ inputs.action_repository != '' && inputs.action_repository || vars.ACTION_REPOSITORY != '' && vars.ACTION_REPOSITORY || 'hashgraph-online/hol-codex-plugin-scanner-action' }}
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
       CREATE_REPOSITORY: ${{ github.event_name == 'workflow_dispatch' && (inputs.create_repository && 'true' || 'false') || 'true' }}
+      PUBLISH_IMMUTABLE_RELEASE: ${{ github.event_name == 'release' || inputs.release_tag != '' }}
       SOURCE_REF: ${{ github.event.release.tag_name || inputs.release_tag || github.ref_name }}
       SOURCE_REPOSITORY: ${{ github.repository }}
       SOURCE_SERVER_URL: ${{ github.server_url }}
@@ -113,12 +114,16 @@ jobs:
             git push origin HEAD:main
           fi
 
-          git tag -f "${TAG}"
-          git push origin "refs/tags/${TAG}" --force
           git tag -f v1
           git push origin refs/tags/v1 --force
 
+          if [ "${PUBLISH_IMMUTABLE_RELEASE}" = "true" ]; then
+            git tag -f "${TAG}"
+            git push origin "refs/tags/${TAG}" --force
+          fi
+
       - name: Create or update action repository release
+        if: env.PUBLISH_IMMUTABLE_RELEASE == 'true'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG="${{ steps.version.outputs.tag }}"
