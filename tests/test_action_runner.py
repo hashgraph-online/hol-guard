@@ -101,3 +101,41 @@ def test_action_runner_writes_step_summary_and_registry_payload(monkeypatch, tmp
     assert "- Score: 100/100" in summary_text
     assert "- Grade: A - Excellent" in summary_text
     assert f"- Registry payload: `{registry_payload_path}`" in summary_text
+
+
+def test_action_runner_verify_mode_writes_human_report(monkeypatch, tmp_path, capsys) -> None:
+    output_path = tmp_path / "verify-report.txt"
+    github_output = tmp_path / "github-output.txt"
+
+    monkeypatch.setenv("MODE", "verify")
+    monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
+    monkeypatch.setenv("FORMAT", "text")
+    monkeypatch.setenv("OUTPUT", str(output_path))
+    monkeypatch.setenv("PROFILE", "default")
+    monkeypatch.setenv("CONFIG", "")
+    monkeypatch.setenv("BASELINE", "")
+    monkeypatch.setenv("ONLINE", "false")
+    monkeypatch.setenv("MIN_SCORE", "0")
+    monkeypatch.setenv("FAIL_ON", "none")
+    monkeypatch.setenv("CISCO_SCAN", "off")
+    monkeypatch.setenv("CISCO_POLICY", "balanced")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "false")
+    monkeypatch.setenv("SUBMISSION_SCORE_THRESHOLD", "80")
+    monkeypatch.setenv("SUBMISSION_REPOS", "hashgraph-online/awesome-codex-plugins")
+    monkeypatch.setenv("SUBMISSION_TOKEN", "")
+    monkeypatch.setenv("SUBMISSION_LABELS", "plugin-submission")
+    monkeypatch.setenv("SUBMISSION_CATEGORY", "Community Plugins")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_NAME", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_URL", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_DESCRIPTION", "")
+    monkeypatch.setenv("SUBMISSION_AUTHOR", "")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+    monkeypatch.setenv("REGISTRY_PAYLOAD_OUTPUT", "")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
+
+    exit_code = main()
+
+    assert exit_code == 0
+    assert "Verification: PASS" in output_path.read_text(encoding="utf-8")
+    assert "mode=verify" in github_output.read_text(encoding="utf-8")
+    assert "Report written to" in capsys.readouterr().out

@@ -24,3 +24,18 @@ jobs:
       - run: ruff check src/
       - run: ruff format --check src/
       - run: pytest --tb=short
+
+  cross-platform:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py --tb=short
