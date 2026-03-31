@@ -203,6 +203,32 @@ class TestMain:
         parsed = json.loads(output)
         assert parsed["verify_pass"] is True
 
+    def test_verify_text_outputs_human_readable_summary(self, capsys):
+        rc = main(["verify", str(FIXTURES / "good-plugin"), "--format", "text"])
+        output = capsys.readouterr().out
+        assert rc == 0
+        assert "Verification: PASS" in output
+        assert "manifest:" in output
+        assert '"verify_pass"' not in output
+
+    def test_scan_reports_severity_gate_failures(self, capsys):
+        rc = main(["scan", str(FIXTURES / "bad-plugin"), "--fail-on-severity", "high"])
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert 'Findings met or exceeded the "high" severity threshold.' in captured.err
+
+    def test_scan_reports_strict_failures(self, capsys):
+        rc = main(["scan", str(FIXTURES / "bad-plugin"), "--strict"])
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "Strict mode failed because findings were present." in captured.err
+
+    def test_scan_reports_policy_failures(self, capsys):
+        rc = main(["scan", str(FIXTURES / "bad-plugin"), "--profile", "strict-security"])
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert 'Policy profile "strict-security" failed.' in captured.err
+
     def test_doctor_bundle(self, tmp_path):
         bundle = tmp_path / "doctor.json"
         rc = main(["doctor", str(FIXTURES / "good-plugin"), "--bundle", str(bundle)])

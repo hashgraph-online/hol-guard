@@ -47,6 +47,24 @@ def format_text(result) -> str:
     return _build_plain_text(result)
 
 
+def _build_verification_text(payload: dict[str, object]) -> str:
+    verify_pass = bool(payload.get("verify_pass"))
+    status = "PASS" if verify_pass else "FAIL"
+    lines = [f"Verification: {status}", ""]
+    cases = payload.get("cases", [])
+    if not isinstance(cases, list):
+        return "\n".join(lines)
+    for case in cases:
+        if not isinstance(case, dict):
+            continue
+        icon = "✅" if case.get("passed") else "⚠️"
+        component = case.get("component", "unknown")
+        name = case.get("name", "unnamed")
+        message = case.get("message", "")
+        lines.append(f"{icon} {component}: {name} - {message}")
+    return "\n".join(lines)
+
+
 def format_json(
     result,
     *,
@@ -238,10 +256,16 @@ def _run_scan(args: argparse.Namespace) -> int:
         print(f"Score {raw_result.score} is below threshold {min_score}", file=sys.stderr)
         return 1
     if should_fail_for_severity(result, args.fail_on_severity):
+        print(
+            f'Findings met or exceeded the "{args.fail_on_severity}" severity threshold.',
+            file=sys.stderr,
+        )
         return 1
     if args.strict and result.findings:
+        print("Strict mode failed because findings were present.", file=sys.stderr)
         return 1
     if not policy_eval.policy_pass:
+        print(f'Policy profile "{profile}" failed.', file=sys.stderr)
         return 1
     return 0
 
@@ -301,7 +325,7 @@ def _run_verify(args: argparse.Namespace) -> int:
     if args.format == "json":
         print(json.dumps(payload, indent=2))
     else:
-        print(json.dumps(payload, indent=2))
+        print(_build_verification_text(payload))
     return 0 if verification.verify_pass else 1
 
 

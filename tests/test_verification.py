@@ -1,7 +1,9 @@
 """Tests for runtime verification engine."""
 
+import os
 from pathlib import Path
 
+from codex_plugin_scanner import verification as verification_module
 from codex_plugin_scanner.verification import build_doctor_report, verify_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -23,6 +25,35 @@ def test_verify_plugin_handles_non_object_marketplace_payload(tmp_path: Path):
     result = verify_plugin(tmp_path)
     assert result.verify_pass is False
     assert any(case.component == "marketplace" and case.classification == "schema" for case in result.cases)
+
+
+def test_verify_plugin_stdio_inherits_process_environment(tmp_path: Path, monkeypatch):
+    captured_env: dict[str, str] = {}
+
+    class StubProcess:
+        returncode = 0
+
+        def __init__(self):
+            self.stdin = None
+
+        def communicate(self, timeout: int):
+            return "{}", ""
+
+    def fake_popen(*args, **kwargs):
+        nonlocal captured_env
+        captured_env = kwargs["env"]
+        return StubProcess()
+
+    monkeypatch.setattr(verification_module.subprocess, "Popen", fake_popen)
+    (tmp_path / ".mcp.json").write_text(
+        '{"mcpServers":{"demo":{"command":"python","args":["-c","print(1)"]}}}',
+        encoding="utf-8",
+    )
+
+    verify_plugin(tmp_path)
+
+    assert captured_env
+    assert captured_env["PATH"] == os.environ["PATH"]
 
 
 def test_doctor_report_filters_component():

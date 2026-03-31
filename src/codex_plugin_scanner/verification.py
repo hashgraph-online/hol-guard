@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import urllib.error
@@ -48,7 +49,13 @@ def _check_marketplace(plugin_dir: Path) -> VerificationCase:
     try:
         payload = json.loads(marketplace.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        return VerificationCase("marketplace", "marketplace.json parses", False, f"Invalid marketplace.json: {exc}", "invalid-json")
+        return VerificationCase(
+            "marketplace",
+            "marketplace.json parses",
+            False,
+            f"Invalid marketplace.json: {exc}",
+            "invalid-json",
+        )
     plugins = payload.get("plugins", []) if isinstance(payload, dict) else []
     if not plugins:
         return VerificationCase("marketplace", "plugins listed", False, "plugins array missing/empty", "schema")
@@ -63,27 +70,90 @@ def _check_mcp_http(remotes: list[dict], *, online: bool) -> list[VerificationCa
             continue
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme and parsed.scheme != "https":
-            cases.append(VerificationCase("mcp", "remote scheme", False, f"Insecure scheme in {url}", "insecure-scheme"))
+            cases.append(
+                VerificationCase(
+                    "mcp",
+                    "remote scheme",
+                    False,
+                    f"Insecure scheme in {url}",
+                    "insecure-scheme",
+                )
+            )
             continue
         if online:
             try:
                 req = urllib.request.Request(url, method="GET")
                 with urllib.request.urlopen(req, timeout=3) as resp:
                     if resp.status in (401, 403):
-                        cases.append(VerificationCase("mcp", "remote auth", True, f"Auth required for {url}", "auth-required"))
+                        cases.append(
+                            VerificationCase(
+                                "mcp",
+                                "remote auth",
+                                True,
+                                f"Auth required for {url}",
+                                "auth-required",
+                            )
+                        )
                     elif 200 <= resp.status < 400:
-                        cases.append(VerificationCase("mcp", "remote reachability", True, f"Reachable: {url}"))
+                        cases.append(
+                            VerificationCase(
+                                "mcp",
+                                "remote reachability",
+                                True,
+                                f"Reachable: {url}",
+                            )
+                        )
                     else:
-                        cases.append(VerificationCase("mcp", "remote reachability", False, f"HTTP {resp.status} for {url}", "transport"))
+                        cases.append(
+                            VerificationCase(
+                                "mcp",
+                                "remote reachability",
+                                False,
+                                f"HTTP {resp.status} for {url}",
+                                "transport",
+                            )
+                        )
             except urllib.error.HTTPError as exc:
                 if exc.code in (401, 403):
-                    cases.append(VerificationCase("mcp", "remote auth", True, f"Auth required for {url}", "auth-required"))
+                    cases.append(
+                        VerificationCase(
+                            "mcp",
+                            "remote auth",
+                            True,
+                            f"Auth required for {url}",
+                            "auth-required",
+                        )
+                    )
                 else:
-                    cases.append(VerificationCase("mcp", "remote reachability", False, f"HTTP error for {url}: {exc.code}", "transport"))
-            except Exception as exc:  # noqa: BLE001
-                cases.append(VerificationCase("mcp", "remote reachability", False, f"Transport failure for {url}: {exc}", "transport"))
+                    cases.append(
+                        VerificationCase(
+                            "mcp",
+                            "remote reachability",
+                            False,
+                            f"HTTP error for {url}: {exc.code}",
+                            "transport",
+                        )
+                    )
+            except Exception as exc:
+                cases.append(
+                    VerificationCase(
+                        "mcp",
+                        "remote reachability",
+                        False,
+                        f"Transport failure for {url}: {exc}",
+                        "transport",
+                    )
+                )
         else:
-            cases.append(VerificationCase("mcp", "remote reachability", True, f"Offline mode skipped: {url}", "offline-skip"))
+            cases.append(
+                VerificationCase(
+                    "mcp",
+                    "remote reachability",
+                    True,
+                    f"Offline mode skipped: {url}",
+                    "offline-skip",
+                )
+            )
     return cases
 
 
@@ -101,10 +171,18 @@ def _check_mcp_stdio(servers: dict) -> list[VerificationCase]:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                env={},
+                env=os.environ.copy(),
             )
-        except Exception as exc:  # noqa: BLE001
-            cases.append(VerificationCase("mcp", f"stdio spawn:{name}", False, str(exc), "spawn-failure"))
+        except Exception as exc:
+            cases.append(
+                VerificationCase(
+                    "mcp",
+                    f"stdio spawn:{name}",
+                    False,
+                    str(exc),
+                    "spawn-failure",
+                )
+            )
             continue
         try:
             if proc.stdin:
@@ -112,11 +190,34 @@ def _check_mcp_stdio(servers: dict) -> list[VerificationCase]:
                 proc.stdin.flush()
             stdout, stderr = proc.communicate(timeout=2)
             if proc.returncode not in (0, None):
-                cases.append(VerificationCase("mcp", f"stdio run:{name}", False, stderr or "non-zero exit", "spawn-failure"))
+                cases.append(
+                    VerificationCase(
+                        "mcp",
+                        f"stdio run:{name}",
+                        False,
+                        stderr or "non-zero exit",
+                        "spawn-failure",
+                    )
+                )
             elif "error" in stdout.lower():
-                cases.append(VerificationCase("mcp", f"stdio handshake:{name}", False, stdout.strip(), "protocol-failure"))
+                cases.append(
+                    VerificationCase(
+                        "mcp",
+                        f"stdio handshake:{name}",
+                        False,
+                        stdout.strip(),
+                        "protocol-failure",
+                    )
+                )
             else:
-                cases.append(VerificationCase("mcp", f"stdio handshake:{name}", True, "initialize attempted"))
+                cases.append(
+                    VerificationCase(
+                        "mcp",
+                        f"stdio handshake:{name}",
+                        True,
+                        "initialize attempted",
+                    )
+                )
         except subprocess.TimeoutExpired:
             proc.kill()
             cases.append(VerificationCase("mcp", f"stdio timeout:{name}", False, "process timed out", "timeout"))
@@ -146,7 +247,13 @@ def _check_skills(plugin_dir: Path) -> VerificationCase:
     if not skills_dir.exists():
         return VerificationCase("skills", "skills optional", True, "skills directory not present")
     has_skill = any(path.name == "SKILL.md" for path in skills_dir.rglob("SKILL.md"))
-    return VerificationCase("skills", "skill manifests", has_skill, "SKILL.md files found" if has_skill else "No SKILL.md found", "missing-skill" if not has_skill else "pass")
+    return VerificationCase(
+        "skills",
+        "skill manifests",
+        has_skill,
+        "SKILL.md files found" if has_skill else "No SKILL.md found",
+        "missing-skill" if not has_skill else "pass",
+    )
 
 
 def _check_apps(plugin_dir: Path) -> VerificationCase:
