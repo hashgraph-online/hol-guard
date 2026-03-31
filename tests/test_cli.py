@@ -13,6 +13,7 @@ from codex_plugin_scanner.rules import get_rule_spec as original_get_rule_spec
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
+NONEXISTENT_PLUGIN_DIR = Path("/nonexistent/plugin-dir").resolve()
 
 
 class TestFormatJson:
@@ -146,7 +147,6 @@ class TestMain:
         rc = main([str(FIXTURES / "good-plugin"), "--min-score", "100"])
         assert rc == 0
 
-
     def test_lint_list_rules(self, capsys):
         rc = main(["lint", "--list-rules"])
         output = capsys.readouterr().out
@@ -162,7 +162,6 @@ class TestMain:
     def test_lint_fails_for_strict_profile(self):
         rc = main(["lint", str(FIXTURES / "bad-plugin"), "--profile", "strict-security"])
         assert rc == 1
-
 
     def test_lint_fix_generates_templates(self, tmp_path):
         (tmp_path / "plugin.json").write_text('{"name":"demo","path":"./skills"}', encoding="utf-8")
@@ -207,10 +206,10 @@ class TestMain:
         assert parsed["verify_pass"] is True
 
     def test_verify_rejects_nonexistent_directory(self, capsys):
-        rc = main(["verify", "/nonexistent/plugin-dir", "--format", "json"])
+        rc = main(["verify", str(NONEXISTENT_PLUGIN_DIR), "--format", "json"])
         captured = capsys.readouterr()
         assert rc == 1
-        assert 'Error: "/nonexistent/plugin-dir" is not a directory.' in captured.err
+        assert f'Error: "{NONEXISTENT_PLUGIN_DIR}" is not a directory.' in captured.err
 
     def test_verify_text_outputs_human_readable_summary(self, capsys):
         rc = main(["verify", str(FIXTURES / "good-plugin"), "--format", "text"])
@@ -245,10 +244,10 @@ class TestMain:
         assert bundle.exists()
 
     def test_doctor_rejects_nonexistent_directory(self, capsys):
-        rc = main(["doctor", "/nonexistent/plugin-dir"])
+        rc = main(["doctor", str(NONEXISTENT_PLUGIN_DIR)])
         captured = capsys.readouterr()
         assert rc == 1
-        assert 'Error: "/nonexistent/plugin-dir" is not a directory.' in captured.err
+        assert f'Error: "{NONEXISTENT_PLUGIN_DIR}" is not a directory.' in captured.err
 
     def test_doctor_bundle_captures_stdio_artifacts(self, tmp_path):
         plugin_dir = tmp_path / "plugin"
@@ -258,12 +257,12 @@ class TestMain:
                 {
                     "mcpServers": {
                         "echo": {
-                        "command": sys.executable,
-                        "args": [
-                            "-u",
-                            "-c",
-                            "import sys; print('doctor-out'); print('doctor-err', file=sys.stderr)",
-                        ],
+                            "command": sys.executable,
+                            "args": [
+                                "-u",
+                                "-c",
+                                "import sys; print('doctor-out'); print('doctor-err', file=sys.stderr)",
+                            ],
                         }
                     }
                 }
@@ -297,10 +296,10 @@ class TestMain:
 
     def test_submit_rejects_nonexistent_directory(self, tmp_path, capsys):
         artifact = tmp_path / "plugin-quality.json"
-        rc = main(["submit", "/nonexistent/plugin-dir", "--attest", str(artifact)])
+        rc = main(["submit", str(NONEXISTENT_PLUGIN_DIR), "--attest", str(artifact)])
         captured = capsys.readouterr()
         assert rc == 1
-        assert 'Error: "/nonexistent/plugin-dir" is not a directory.' in captured.err
+        assert f'Error: "{NONEXISTENT_PLUGIN_DIR}" is not a directory.' in captured.err
 
     def test_scan_json_uses_effective_score_as_primary_score(self, tmp_path, capsys):
         plugin_dir = tmp_path / "plugin"
