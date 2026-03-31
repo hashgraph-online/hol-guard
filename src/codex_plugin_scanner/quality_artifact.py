@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import asdict
 from datetime import datetime, timezone
 from fnmatch import fnmatch
@@ -14,8 +15,8 @@ from codex_plugin_scanner.policy import PolicyEvaluation
 from codex_plugin_scanner.verification import VerificationResult
 from codex_plugin_scanner.version import __version__
 
-
 DEFAULT_EXCLUSIONS = (".git/*", "*.pyc", "__pycache__/*", ".venv/*", "dist/*", "build/*")
+DEFAULT_EXCLUDED_DIRECTORIES = frozenset({".git", "__pycache__", ".venv", "build", "dist"})
 
 
 def _is_excluded(relative_path: str, exclusions: tuple[str, ...]) -> bool:
@@ -25,18 +26,25 @@ def _is_excluded(relative_path: str, exclusions: tuple[str, ...]) -> bool:
 def _digest_plugin(plugin_dir: Path, exclusions: tuple[str, ...] = DEFAULT_EXCLUSIONS) -> dict[str, object]:
     hasher = hashlib.sha256()
     included = 0
-    for path in sorted(plugin_dir.rglob("*")):
-        if not path.is_file():
-            continue
-        relative = path.relative_to(plugin_dir).as_posix()
-        if _is_excluded(relative, exclusions):
-            continue
-        included += 1
-        hasher.update(relative.encode("utf-8"))
-        with path.open("rb") as handle:
-            while chunk := handle.read(1024 * 1024):
-                hasher.update(chunk)
-    return {"algorithm": "sha256", "value": hasher.hexdigest(), "included_files": included, "exclusions": list(exclusions)}
+    for root, dir_names, file_names in os.walk(plugin_dir):
+        current_root = Path(root)
+        dir_names[:] = sorted(name for name in dir_names if name not in DEFAULT_EXCLUDED_DIRECTORIES)
+        for file_name in sorted(file_names):
+            path = current_root / file_name
+            relative = path.relative_to(plugin_dir).as_posix()
+            if _is_excluded(relative, exclusions):
+                continue
+            included += 1
+            hasher.update(relative.encode("utf-8"))
+            with path.open("rb") as handle:
+                while chunk := handle.read(1024 * 1024):
+                    hasher.update(chunk)
+    return {
+        "algorithm": "sha256",
+        "value": hasher.hexdigest(),
+        "included_files": included,
+        "exclusions": list(exclusions),
+    }
 
 
 def build_quality_artifact(

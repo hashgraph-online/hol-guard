@@ -4,7 +4,9 @@ import json
 import tempfile
 from pathlib import Path
 
+from codex_plugin_scanner import cli as cli_module
 from codex_plugin_scanner.cli import format_json, format_text, main
+from codex_plugin_scanner.rules import get_rule_spec as original_get_rule_spec
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -178,6 +180,21 @@ class TestMain:
         assert rc in (0, 1)
         assert "README_MISSING" not in output
 
+    def test_lint_json_only_looks_up_rule_spec_once_per_finding(self, monkeypatch, capsys):
+        lookup_count = 0
+
+        def counting_get_rule_spec(rule_id: str):
+            nonlocal lookup_count
+            lookup_count += 1
+            return original_get_rule_spec(rule_id)
+
+        monkeypatch.setattr(cli_module, "get_rule_spec", counting_get_rule_spec)
+
+        rc = main(["lint", str(FIXTURES / "bad-plugin"), "--format", "json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc in (0, 1)
+        assert lookup_count == len(output["findings"])
 
     def test_verify_json(self, capsys):
         rc = main(["verify", str(FIXTURES / "good-plugin"), "--format", "json"])

@@ -18,6 +18,13 @@ def test_verify_plugin_fails_for_insecure_remote(tmp_path: Path):
     assert result.verify_pass is False
 
 
+def test_verify_plugin_handles_non_object_marketplace_payload(tmp_path: Path):
+    (tmp_path / "marketplace.json").write_text('["not-an-object"]', encoding="utf-8")
+    result = verify_plugin(tmp_path)
+    assert result.verify_pass is False
+    assert any(case.component == "marketplace" and case.classification == "schema" for case in result.cases)
+
+
 def test_doctor_report_filters_component():
     report = build_doctor_report(FIXTURES / "good-plugin", "manifest")
     assert report["component"] == "manifest"

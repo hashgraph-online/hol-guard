@@ -86,7 +86,11 @@ def _build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument("--output", "-o")
     _add_common_policy_args(scan_parser)
     scan_parser.add_argument("--min-score", type=int, default=0)
-    scan_parser.add_argument("--fail-on-severity", choices=("none", "critical", "high", "medium", "low", "info"), default="none")
+    scan_parser.add_argument(
+        "--fail-on-severity",
+        choices=("none", "critical", "high", "medium", "low", "info"),
+        default="none",
+    )
     scan_parser.add_argument("--cisco-skill-scan", choices=("auto", "on", "off"), default="auto")
     scan_parser.add_argument("--cisco-policy", choices=("permissive", "balanced", "strict"), default="balanced")
 
@@ -110,11 +114,20 @@ def _build_parser() -> argparse.ArgumentParser:
     submit_parser.add_argument("--baseline")
     submit_parser.add_argument("--attest", required=True)
     submit_parser.add_argument("--online", action="store_true")
-    submit_parser.add_argument("--min-score", type=int, default=None)
+    submit_parser.add_argument(
+        "--min-score",
+        type=int,
+        default=None,
+        help="Override the minimum score gate. Defaults to the selected policy profile minimum.",
+    )
 
     doctor_parser = subparsers.add_parser("doctor", help="Emit component diagnostics")
     doctor_parser.add_argument("plugin_dir", nargs="?", default=".")
-    doctor_parser.add_argument("--component", choices=("all", "manifest", "marketplace", "mcp", "skills", "apps", "assets"), default="all")
+    doctor_parser.add_argument(
+        "--component",
+        choices=("all", "manifest", "marketplace", "mcp", "skills", "apps", "assets"),
+        default="all",
+    )
     doctor_parser.add_argument("--bundle")
 
     return parser
@@ -159,7 +172,10 @@ def _scan_with_policy(args: argparse.Namespace, plugin_dir: Path):
     profile, config, baseline_ids = _resolve_policy_profile(args, plugin_dir)
     raw_result = scan_plugin(
         plugin_dir,
-        ScanOptions(cisco_skill_scan=getattr(args, "cisco_skill_scan", "auto"), cisco_policy=getattr(args, "cisco_policy", "balanced")),
+        ScanOptions(
+            cisco_skill_scan=getattr(args, "cisco_skill_scan", "auto"),
+            cisco_policy=getattr(args, "cisco_policy", "balanced"),
+        ),
     )
     result = apply_suppressions(
         raw_result,
@@ -169,7 +185,11 @@ def _scan_with_policy(args: argparse.Namespace, plugin_dir: Path):
         ignore_paths=config.ignore_paths,
     )
     result = apply_severity_overrides(result, config.severity_overrides)
-    executed_rules = {spec.rule_id for spec in list_rule_specs() if not config.enabled_rules or spec.rule_id in config.enabled_rules}
+    executed_rules = {
+        spec.rule_id
+        for spec in list_rule_specs()
+        if not config.enabled_rules or spec.rule_id in config.enabled_rules
+    }
     executed_rules -= set(config.disabled_rules)
     inventory = build_rule_inventory(result.findings, executed_rules)
     policy_eval = evaluate_policy(result.findings, profile, rule_inventory=inventory)
@@ -257,7 +277,7 @@ def _run_lint(args: argparse.Namespace) -> int:
                 "category": finding.category,
                 "title": finding.title,
                 "description": finding.description,
-                "fixable": bool(get_rule_spec(finding.rule_id).fixable) if get_rule_spec(finding.rule_id) else False,
+                "fixable": bool((spec := get_rule_spec(finding.rule_id)) and spec.fixable),
             }
             for finding in result.findings
         ],
@@ -314,8 +334,14 @@ def _run_doctor(args: argparse.Namespace) -> int:
         with zipfile.ZipFile(bundle_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("doctor-report.json", rendered)
             zf.writestr("environment.txt", f"cwd={resolved}\npython={sys.version}\nos={os.name}\n")
-            zf.writestr("workspace-manifest.txt", f"workspace={report.get('workspace','')}\ncomponent={args.component}\n")
-            zf.writestr("command-metadata.json", json.dumps({"command": "doctor", "component": args.component}, indent=2))
+            zf.writestr(
+                "workspace-manifest.txt",
+                f"workspace={report.get('workspace', '')}\ncomponent={args.component}\n",
+            )
+            zf.writestr(
+                "command-metadata.json",
+                json.dumps({"command": "doctor", "component": args.component}, indent=2),
+            )
             zf.writestr("stdout.log", "")
             zf.writestr("stderr.log", "")
             zf.writestr("timeout-markers.txt", "none\n")
