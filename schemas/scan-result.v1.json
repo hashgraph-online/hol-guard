@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ScanResultV1",
   "type": "object",
-  "required": ["schema_version", "tool_version", "profile", "policy_pass", "verify_pass", "score", "findings"],
+  "required": ["schema_version", "tool_version", "profile", "policy_pass", "verify_pass", "score", "raw_score", "effective_score", "summary", "categories", "findings", "timestamp", "pluginDir"],
   "properties": {
     "schema_version": {"const": "scan-result.v1"},
     "tool_version": {"type": "string"},
@@ -12,6 +12,10 @@
     "score": {"type": "integer"},
     "raw_score": {"type": "integer"},
     "effective_score": {"type": "integer"},
-    "findings": {"type": "array"}
+    "summary": {"type": "object"},
+    "categories": {"type": "array"},
+    "findings": {"type": "array"},
+    "timestamp": {"type": "string"},
+    "pluginDir": {"type": "string"}
   }
 }

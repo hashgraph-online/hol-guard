@@ -179,3 +179,12 @@ runs:
           echo "Unsupported mode: $MODE" >&2
           exit 1
         fi
+        if [ -n "$GITHUB_OUTPUT" ]; then
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          if [ -n "${{ inputs.output }}" ]; then
+            echo "report_path=${{ inputs.output }}" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$MODE" = "submit" ]; then
+            echo "registry_payload_path=$ATTEST_PATH" >> "$GITHUB_OUTPUT"
+          fi
+        fi

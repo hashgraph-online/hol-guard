@@ -30,7 +30,18 @@ def apply_suppressions(
         checks = []
         for check in category.checks:
             filtered = tuple(finding for finding in check.findings if include_finding(finding))
-            checks.append(replace(check, findings=filtered))
+            if check.findings and not filtered:
+                checks.append(
+                    replace(
+                        check,
+                        findings=filtered,
+                        passed=True,
+                        points=check.max_points,
+                        message=f"{check.message} (all findings suppressed)",
+                    )
+                )
+            else:
+                checks.append(replace(check, findings=filtered))
         categories.append(replace(category, checks=tuple(checks)))
 
     findings = tuple(finding for finding in result.findings if include_finding(finding))
@@ -42,6 +53,32 @@ def apply_suppressions(
     )
 
 
-def compute_effective_score(raw_score: int, findings_count: int) -> int:
-    penalty = min(findings_count, 50)
-    return max(0, raw_score - penalty)
+def compute_effective_score(result: ScanResult) -> int:
+    earned = sum(check.points for category in result.categories for check in category.checks)
+    maximum = sum(check.max_points for category in result.categories for check in category.checks)
+    if maximum == 0:
+        return 100
+    return round((earned / maximum) * 100)
+
+
+def apply_severity_overrides(result: ScanResult, overrides: dict[str, str] | None) -> ScanResult:
+    if not overrides:
+        return result
+
+    from codex_plugin_scanner.models import severity_from_value
+
+    def adjust(finding):
+        override = overrides.get(finding.rule_id)
+        if not override:
+            return finding
+        return replace(finding, severity=severity_from_value(override))
+
+    categories = []
+    for category in result.categories:
+        checks = []
+        for check in category.checks:
+            checks.append(replace(check, findings=tuple(adjust(f) for f in check.findings)))
+        categories.append(replace(category, checks=tuple(checks)))
+
+    findings = tuple(adjust(f) for f in result.findings)
+    return replace(result, categories=tuple(categories), findings=findings, severity_counts=build_severity_counts(findings))

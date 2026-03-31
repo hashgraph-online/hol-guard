@@ -35,7 +35,7 @@ class PolicyEvaluation:
 
 
 POLICY_PROFILES: dict[str, PolicyProfile] = {
-    "default": PolicyProfile(name="default", max_severity=Severity.CRITICAL, min_score=0),
+    "default": PolicyProfile(name="default", max_severity=Severity.CRITICAL, min_score=60),
     "public-marketplace": PolicyProfile(name="public-marketplace", max_severity=Severity.MEDIUM, min_score=60),
     "strict-security": PolicyProfile(name="strict-security", max_severity=Severity.LOW, min_score=80),
 }

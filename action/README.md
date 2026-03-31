@@ -182,3 +182,16 @@ The source bundle for this action lives in the main scanner repository under `ac
 ## License
 
 [Apache-2.0](https://github.com/hashgraph-online/codex-plugin-scanner/blob/main/LICENSE)
+
+## Mode-based workflow
+
+Set `mode` to one of `scan`, `lint`, `verify`, or `submit`.
+
+```yaml
+- uses: your-org/hol-codex-plugin-scanner-action@v1
+  with:
+    mode: verify
+    plugin_dir: "."
+```
+
+For `submit` mode, use `registry_payload_output` to control artifact path.

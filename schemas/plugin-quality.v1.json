@@ -8,9 +8,21 @@
     "tool_version": {"type": "string"},
     "timestamp": {"type": "string"},
     "profile": {"type": "string"},
-    "digest": {"type": "object"},
-    "scan": {"type": "object"},
-    "verify": {"type": "object"},
-    "policy": {"type": "object"}
+    "digest": {
+      "type": "object",
+      "required": ["algorithm", "value", "included_files", "exclusions"]
+    },
+    "scan": {
+      "type": "object",
+      "required": ["score", "grade", "findings_total", "severity_counts", "raw_score", "effective_score"]
+    },
+    "verify": {
+      "type": "object",
+      "required": ["verify_pass", "cases"]
+    },
+    "policy": {
+      "type": "object",
+      "required": ["policy_pass", "severity_failures", "missing_required_rules", "failed_required_pass_rules"]
+    }
   }
 }

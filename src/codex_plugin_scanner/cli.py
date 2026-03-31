@@ -19,7 +19,7 @@ from .reporting import format_json as render_json
 from .reporting import format_markdown, format_sarif, should_fail_for_severity
 from .rules import get_rule_spec, list_rule_specs
 from .scanner import scan_plugin
-from .suppressions import apply_suppressions, compute_effective_score
+from .suppressions import apply_severity_overrides, apply_suppressions, compute_effective_score
 from .verification import build_doctor_report, verify_plugin
 from .version import __version__
 
@@ -110,6 +110,7 @@ def _build_parser() -> argparse.ArgumentParser:
     submit_parser.add_argument("--baseline")
     submit_parser.add_argument("--attest", required=True)
     submit_parser.add_argument("--online", action="store_true")
+    submit_parser.add_argument("--min-score", type=int, default=None)
 
     doctor_parser = subparsers.add_parser("doctor", help="Emit component diagnostics")
     doctor_parser.add_argument("plugin_dir", nargs="?", default=".")
@@ -167,11 +168,12 @@ def _scan_with_policy(args: argparse.Namespace, plugin_dir: Path):
         baseline_ids=baseline_ids,
         ignore_paths=config.ignore_paths,
     )
+    result = apply_severity_overrides(result, config.severity_overrides)
     executed_rules = {spec.rule_id for spec in list_rule_specs() if not config.enabled_rules or spec.rule_id in config.enabled_rules}
     executed_rules -= set(config.disabled_rules)
     inventory = build_rule_inventory(result.findings, executed_rules)
     policy_eval = evaluate_policy(result.findings, profile, rule_inventory=inventory)
-    effective_score = compute_effective_score(raw_result.score, len(result.findings))
+    effective_score = compute_effective_score(result)
     return raw_result, result, profile, policy_eval, effective_score
 
 
@@ -211,7 +213,7 @@ def _run_scan(args: argparse.Namespace) -> int:
     elif output_format != "text":
         print(output)
 
-    min_score = max(args.min_score, POLICY_PROFILES[profile].min_score)
+    min_score = args.min_score
     if raw_result.score < min_score:
         print(f"Score {raw_result.score} is below threshold {min_score}", file=sys.stderr)
         return 1
@@ -290,7 +292,7 @@ def _run_submit(args: argparse.Namespace) -> int:
     except ConfigError:
         return 1
     verification = verify_plugin(resolved, online=args.online)
-    min_score = max(60, POLICY_PROFILES[profile].min_score)
+    min_score = args.min_score if args.min_score is not None else POLICY_PROFILES[profile].min_score
     if raw_result.score < min_score or not policy_eval.policy_pass or not verification.verify_pass:
         print("Submission blocked: scan/policy/verify gates did not all pass.", file=sys.stderr)
         return 1
@@ -312,6 +314,11 @@ def _run_doctor(args: argparse.Namespace) -> int:
         with zipfile.ZipFile(bundle_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("doctor-report.json", rendered)
             zf.writestr("environment.txt", f"cwd={resolved}\npython={sys.version}\nos={os.name}\n")
+            zf.writestr("workspace-manifest.txt", f"workspace={report.get('workspace','')}\ncomponent={args.component}\n")
+            zf.writestr("command-metadata.json", json.dumps({"command": "doctor", "component": args.component}, indent=2))
+            zf.writestr("stdout.log", "")
+            zf.writestr("stderr.log", "")
+            zf.writestr("timeout-markers.txt", "none\n")
         print(f"Doctor bundle written to {bundle_path}")
     else:
         print(rendered)
