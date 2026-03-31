@@ -482,6 +482,19 @@ def _check_mcp_stdio(servers: dict) -> tuple[list[VerificationCase], list[Runtim
                 )
             )
             cases.append(VerificationCase("mcp", f"stdio timeout:{name}", False, "process timed out", "timeout"))
+        except Exception as exc:
+            proc.kill()
+            traces.append(
+                RuntimeTrace(
+                    component="mcp",
+                    name=f"stdio run:{name}",
+                    command=tuple(command),
+                    returncode=proc.returncode,
+                    stdout="",
+                    stderr=str(exc),
+                )
+            )
+            cases.append(VerificationCase("mcp", f"stdio run:{name}", False, str(exc), "spawn-failure"))
     return cases, traces
 
 

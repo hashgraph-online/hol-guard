@@ -206,6 +206,12 @@ class TestMain:
         parsed = json.loads(output)
         assert parsed["verify_pass"] is True
 
+    def test_verify_rejects_nonexistent_directory(self, capsys):
+        rc = main(["verify", "/nonexistent/plugin-dir", "--format", "json"])
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert 'Error: "/nonexistent/plugin-dir" is not a directory.' in captured.err
+
     def test_verify_text_outputs_human_readable_summary(self, capsys):
         rc = main(["verify", str(FIXTURES / "good-plugin"), "--format", "text"])
         output = capsys.readouterr().out
@@ -237,6 +243,12 @@ class TestMain:
         rc = main(["doctor", str(FIXTURES / "good-plugin"), "--bundle", str(bundle)])
         assert rc == 0
         assert bundle.exists()
+
+    def test_doctor_rejects_nonexistent_directory(self, capsys):
+        rc = main(["doctor", "/nonexistent/plugin-dir"])
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert 'Error: "/nonexistent/plugin-dir" is not a directory.' in captured.err
 
     def test_doctor_bundle_captures_stdio_artifacts(self, tmp_path):
         plugin_dir = tmp_path / "plugin"
@@ -282,6 +294,13 @@ class TestMain:
         artifact = tmp_path / "plugin-quality.json"
         rc = main(["submit", str(FIXTURES / "bad-plugin"), "--attest", str(artifact)])
         assert rc == 1
+
+    def test_submit_rejects_nonexistent_directory(self, tmp_path, capsys):
+        artifact = tmp_path / "plugin-quality.json"
+        rc = main(["submit", "/nonexistent/plugin-dir", "--attest", str(artifact)])
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert 'Error: "/nonexistent/plugin-dir" is not a directory.' in captured.err
 
     def test_scan_json_uses_effective_score_as_primary_score(self, tmp_path, capsys):
         plugin_dir = tmp_path / "plugin"

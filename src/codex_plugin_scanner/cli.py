@@ -321,6 +321,9 @@ def _run_lint(args: argparse.Namespace) -> int:
 
 def _run_verify(args: argparse.Namespace) -> int:
     resolved = Path(args.plugin_dir).resolve()
+    if not resolved.is_dir():
+        print(f'Error: "{resolved}" is not a directory.', file=sys.stderr)
+        return 1
     verification = verify_plugin(resolved, online=args.online)
     payload = {
         "verify_pass": verification.verify_pass,
@@ -336,6 +339,9 @@ def _run_verify(args: argparse.Namespace) -> int:
 
 def _run_submit(args: argparse.Namespace) -> int:
     resolved = Path(args.plugin_dir).resolve()
+    if not resolved.is_dir():
+        print(f'Error: "{resolved}" is not a directory.', file=sys.stderr)
+        return 1
     try:
         raw_result, result, profile, policy_eval, _effective_score = _scan_with_policy(args, resolved)
     except ConfigError:
@@ -360,6 +366,9 @@ def _run_submit(args: argparse.Namespace) -> int:
 
 def _run_doctor(args: argparse.Namespace) -> int:
     resolved = Path(args.plugin_dir).resolve()
+    if not resolved.is_dir():
+        print(f'Error: "{resolved}" is not a directory.', file=sys.stderr)
+        return 1
     report = build_doctor_report(resolved, args.component)
     rendered = json.dumps(report, indent=2)
     if args.bundle:

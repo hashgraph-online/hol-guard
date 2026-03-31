@@ -77,6 +77,39 @@ def test_verify_plugin_stdio_inherits_process_environment(tmp_path: Path, monkey
     assert captured_env["PATH"] == os.environ["PATH"]
 
 
+def test_verify_plugin_kills_stdio_process_on_runtime_exception(tmp_path: Path, monkeypatch):
+    killed = False
+
+    class StubStdin:
+        def write(self, payload: str):
+            return len(payload)
+
+        def flush(self):
+            raise BrokenPipeError("broken pipe")
+
+    class StubProcess:
+        returncode = None
+
+        def __init__(self):
+            self.stdin = StubStdin()
+
+        def kill(self):
+            nonlocal killed
+            killed = True
+
+    monkeypatch.setattr(verification_module.subprocess, "Popen", lambda *args, **kwargs: StubProcess())
+    (tmp_path / ".mcp.json").write_text(
+        '{"mcpServers":{"demo":{"command":"python","args":["-c","print(1)"]}}}',
+        encoding="utf-8",
+    )
+
+    result = verify_plugin(tmp_path)
+
+    assert killed is True
+    assert result.verify_pass is False
+    assert any(case.classification == "spawn-failure" for case in result.cases)
+
+
 def test_doctor_report_filters_component():
     report = build_doctor_report(FIXTURES / "good-plugin", "manifest")
     assert report["component"] == "manifest"
