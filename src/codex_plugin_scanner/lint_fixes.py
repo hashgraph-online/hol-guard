@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 _TEMPLATE_FILES: dict[str, str] = {
     ".codexignore": "# Local Codex scanner ignore list\n",
     "README.md": "# Plugin\n\nDescribe your Codex plugin here.\n",

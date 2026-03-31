@@ -204,9 +204,7 @@ def _scan_with_policy(args: argparse.Namespace, plugin_dir: Path):
     )
     result = apply_severity_overrides(result, config.severity_overrides)
     executed_rules = {
-        spec.rule_id
-        for spec in list_rule_specs()
-        if not config.enabled_rules or spec.rule_id in config.enabled_rules
+        spec.rule_id for spec in list_rule_specs() if not config.enabled_rules or spec.rule_id in config.enabled_rules
     }
     executed_rules -= set(config.disabled_rules)
     inventory = build_rule_inventory(result.findings, executed_rules)

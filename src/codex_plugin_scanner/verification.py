@@ -170,8 +170,10 @@ def _check_manifest(plugin_dir: Path) -> list[VerificationCase]:
     )
 
     capabilities = interface.get("capabilities")
-    capabilities_valid = isinstance(capabilities, list) and bool(capabilities) and all(
-        isinstance(item, str) and item for item in capabilities
+    capabilities_valid = (
+        isinstance(capabilities, list)
+        and bool(capabilities)
+        and all(isinstance(item, str) and item for item in capabilities)
     )
     cases.append(
         VerificationCase(
@@ -296,9 +298,7 @@ def _check_marketplace(plugin_dir: Path) -> list[VerificationCase]:
             "marketplace",
             "discovery simulation",
             not discovery_issues,
-            "Marketplace entries are discoverable"
-            if not discovery_issues
-            else "; ".join(discovery_issues),
+            "Marketplace entries are discoverable" if not discovery_issues else "; ".join(discovery_issues),
             "schema" if discovery_issues else "pass",
         )
     )
@@ -307,9 +307,7 @@ def _check_marketplace(plugin_dir: Path) -> list[VerificationCase]:
             "marketplace",
             "policy metadata",
             not policy_issues,
-            "Marketplace policy metadata is complete"
-            if not policy_issues
-            else "; ".join(policy_issues),
+            "Marketplace policy metadata is complete" if not policy_issues else "; ".join(policy_issues),
             "schema" if policy_issues else "pass",
         )
     )
@@ -597,18 +595,14 @@ def _check_skills(plugin_dir: Path) -> list[VerificationCase]:
             "skills",
             "skill frontmatter",
             not frontmatter_issues,
-            "All skill manifests contain frontmatter"
-            if not frontmatter_issues
-            else "; ".join(frontmatter_issues),
+            "All skill manifests contain frontmatter" if not frontmatter_issues else "; ".join(frontmatter_issues),
             "frontmatter" if frontmatter_issues else "pass",
         ),
         VerificationCase(
             "skills",
             "skill references",
             not reference_issues,
-            "Skill references resolve within the plugin"
-            if not reference_issues
-            else "; ".join(reference_issues),
+            "Skill references resolve within the plugin" if not reference_issues else "; ".join(reference_issues),
             "reference" if reference_issues else "pass",
         ),
     ]
@@ -643,9 +637,7 @@ def _check_apps(plugin_dir: Path) -> list[VerificationCase]:
             "apps",
             "apps registry",
             not invalid_entries,
-            "App entries are valid"
-            if not invalid_entries
-            else f"Invalid app entries: {', '.join(invalid_entries)}",
+            "App entries are valid" if not invalid_entries else f"Invalid app entries: {', '.join(invalid_entries)}",
             "schema" if invalid_entries else "pass",
         ),
     ]

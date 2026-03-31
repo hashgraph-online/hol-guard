@@ -21,9 +21,7 @@ def apply_suppressions(
             return False
         if enabled_rules and finding.rule_id not in enabled_rules:
             return False
-        if finding.file_path and any(fnmatch(finding.file_path, pattern) for pattern in ignore_paths):
-            return False
-        return True
+        return not (finding.file_path and any(fnmatch(finding.file_path, pattern) for pattern in ignore_paths))
 
     categories = []
     for category in result.categories:
@@ -81,4 +79,9 @@ def apply_severity_overrides(result: ScanResult, overrides: dict[str, str] | Non
         categories.append(replace(category, checks=tuple(checks)))
 
     findings = tuple(adjust(f) for f in result.findings)
-    return replace(result, categories=tuple(categories), findings=findings, severity_counts=build_severity_counts(findings))
+    return replace(
+        result,
+        categories=tuple(categories),
+        findings=findings,
+        severity_counts=build_severity_counts(findings),
+    )
