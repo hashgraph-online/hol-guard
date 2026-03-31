@@ -1,0 +1,60 @@
+"""Submission artifact generation for plugin quality results."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import asdict
+from datetime import datetime, timezone
+from pathlib import Path
+
+from codex_plugin_scanner.models import ScanResult
+from codex_plugin_scanner.policy import PolicyEvaluation
+from codex_plugin_scanner.verification import VerificationResult
+from codex_plugin_scanner.version import __version__
+
+
+def _digest_plugin(plugin_dir: Path) -> str:
+    hasher = hashlib.sha256()
+    for path in sorted(plugin_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        hasher.update(path.relative_to(plugin_dir).as_posix().encode("utf-8"))
+        hasher.update(path.read_bytes())
+    return hasher.hexdigest()
+
+
+def build_quality_artifact(
+    plugin_dir: Path,
+    scan_result: ScanResult,
+    verification: VerificationResult,
+    policy: PolicyEvaluation,
+    profile: str,
+) -> dict[str, object]:
+    return {
+        "schema_version": "plugin-quality.v1",
+        "tool_version": __version__,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "profile": profile,
+        "digest": _digest_plugin(plugin_dir),
+        "scan": {
+            "score": scan_result.score,
+            "grade": scan_result.grade,
+            "findings_total": len(scan_result.findings),
+            "severity_counts": scan_result.severity_counts,
+        },
+        "verify": {
+            "verify_pass": verification.verify_pass,
+            "cases": [asdict(case) for case in verification.cases],
+        },
+        "policy": {
+            "policy_pass": policy.policy_pass,
+            "severity_failures": list(policy.severity_failures),
+            "missing_required_rules": list(policy.missing_required_rules),
+        },
+    }
+
+
+def write_quality_artifact(path: Path, artifact: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(artifact, indent=2), encoding="utf-8")

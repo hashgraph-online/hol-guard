@@ -15,6 +15,9 @@ class TestFormatJson:
         result = scan_plugin(FIXTURES / "good-plugin")
         output = format_json(result)
         parsed = json.loads(output)
+        assert parsed["schema_version"] == "scan-result.v1"
+        assert parsed["tool_version"]
+        assert parsed["profile"] == "default"
         assert parsed["score"] == 100
         assert parsed["grade"] == "A"
         assert len(parsed["categories"]) == 7
@@ -137,3 +140,66 @@ class TestMain:
         # At exact boundary should pass (>=)
         rc = main([str(FIXTURES / "good-plugin"), "--min-score", "100"])
         assert rc == 0
+
+
+    def test_lint_list_rules(self, capsys):
+        rc = main(["lint", "--list-rules"])
+        output = capsys.readouterr().out
+        assert rc == 0
+        assert "HARDCODED_SECRET" in output
+
+    def test_lint_explain(self, capsys):
+        rc = main(["lint", "--explain", "CODEXIGNORE_MISSING"])
+        output = capsys.readouterr().out
+        assert rc == 0
+        assert '"rule_id": "CODEXIGNORE_MISSING"' in output
+
+    def test_lint_fails_for_strict_profile(self):
+        rc = main(["lint", str(FIXTURES / "bad-plugin"), "--profile", "strict-security"])
+        assert rc == 1
+
+
+    def test_lint_fix_generates_templates(self, tmp_path):
+        (tmp_path / "plugin.json").write_text('{"name":"demo","path":"./skills"}', encoding="utf-8")
+        rc = main(["lint", str(tmp_path), "--fix"])
+        assert rc == 0
+        assert (tmp_path / ".codexignore").exists()
+        assert (tmp_path / "README.md").exists()
+
+    def test_scan_with_strict_fails_when_findings_present(self):
+        rc = main(["scan", str(FIXTURES / "bad-plugin"), "--strict"])
+        assert rc == 1
+
+    def test_lint_with_baseline_suppresses_rule(self, tmp_path, capsys):
+        baseline = tmp_path / "baseline.txt"
+        baseline.write_text("README_MISSING\n", encoding="utf-8")
+        rc = main(["lint", str(FIXTURES / "minimal-plugin"), "--baseline", str(baseline), "--format", "json"])
+        output = capsys.readouterr().out
+        assert rc in (0, 1)
+        assert "README_MISSING" not in output
+
+
+    def test_verify_json(self, capsys):
+        rc = main(["verify", str(FIXTURES / "good-plugin"), "--format", "json"])
+        output = capsys.readouterr().out
+        assert rc == 0
+        parsed = json.loads(output)
+        assert parsed["verify_pass"] is True
+
+    def test_doctor_bundle(self, tmp_path):
+        bundle = tmp_path / "doctor.json"
+        rc = main(["doctor", str(FIXTURES / "good-plugin"), "--bundle", str(bundle)])
+        assert rc == 0
+        assert bundle.exists()
+
+    def test_submit_writes_artifact(self, tmp_path):
+        artifact = tmp_path / "plugin-quality.json"
+        rc = main(["submit", str(FIXTURES / "good-plugin"), "--attest", str(artifact)])
+        assert rc == 0
+        parsed = json.loads(artifact.read_text(encoding="utf-8"))
+        assert parsed["schema_version"] == "plugin-quality.v1"
+
+    def test_submit_blocks_on_verify_fail(self, tmp_path):
+        artifact = tmp_path / "plugin-quality.json"
+        rc = main(["submit", str(FIXTURES / "bad-plugin"), "--attest", str(artifact)])
+        assert rc == 1

@@ -5,16 +5,28 @@ from __future__ import annotations
 import json
 
 from .models import GRADE_LABELS, SEVERITY_ORDER, Finding, ScanResult, Severity, severity_from_value
+from .version import __version__
 
 
 def _sorted_findings(findings: tuple[Finding, ...]) -> list[Finding]:
     return sorted(findings, key=lambda finding: SEVERITY_ORDER[finding.severity], reverse=True)
 
 
-def build_json_payload(result: ScanResult) -> dict[str, object]:
+def build_json_payload(
+    result: ScanResult,
+    *,
+    profile: str = "default",
+    policy_pass: bool = True,
+    verify_pass: bool = True,
+) -> dict[str, object]:
     """Convert a scan result into a JSON-serializable payload."""
 
     return {
+        "schema_version": "scan-result.v1",
+        "tool_version": __version__,
+        "profile": profile,
+        "policy_pass": policy_pass,
+        "verify_pass": verify_pass,
         "score": result.score,
         "grade": result.grade,
         "summary": {
@@ -81,10 +93,19 @@ def build_json_payload(result: ScanResult) -> dict[str, object]:
     }
 
 
-def format_json(result: ScanResult) -> str:
+def format_json(
+    result: ScanResult,
+    *,
+    profile: str = "default",
+    policy_pass: bool = True,
+    verify_pass: bool = True,
+) -> str:
     """Render a scan result as indented JSON."""
 
-    return json.dumps(build_json_payload(result), indent=2)
+    return json.dumps(
+        build_json_payload(result, profile=profile, policy_pass=policy_pass, verify_pass=verify_pass),
+        indent=2,
+    )
 
 
 def format_markdown(result: ScanResult) -> str:
