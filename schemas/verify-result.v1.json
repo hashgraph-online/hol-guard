@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VerifyResultV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verify_pass", "workspace", "cases"],
+  "properties": {
+    "verify_pass": {
+      "type": "boolean"
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 1
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["component", "name", "passed", "message", "classification"],
+        "properties": {
+          "component": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "passed": {"type": "boolean"},
+          "message": {"type": "string"},
+          "classification": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

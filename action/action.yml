@@ -3,6 +3,10 @@ description: "Scan a Codex plugin directory for security, publishability, and be
 author: "HOL"
 
 inputs:
+  mode:
+    description: "Execution mode: scan, lint, verify, or submit"
+    required: false
+    default: "scan"
   plugin_dir:
     description: "Path to the plugin directory to scan (default: repository root)"
     required: false
@@ -15,6 +19,22 @@ inputs:
     description: "Write report to this file path"
     required: false
     default: ""
+  profile:
+    description: "Policy profile to apply: default, public-marketplace, or strict-security"
+    required: false
+    default: "default"
+  config:
+    description: "Optional path to .codex-plugin-scanner.toml"
+    required: false
+    default: ""
+  baseline:
+    description: "Optional path to a baseline suppression file"
+    required: false
+    default: ""
+  online:
+    description: "Enable live network probing for verify mode"
+    required: false
+    default: "false"
   write_step_summary:
     description: "Write a concise markdown summary to the GitHub Actions job summary"
     required: false
@@ -156,9 +176,14 @@ runs:
       id: scan
       shell: bash
       env:
+        MODE: ${{ inputs.mode }}
         PLUGIN_DIR: ${{ inputs.plugin_dir }}
         FORMAT: ${{ inputs.format }}
         OUTPUT: ${{ inputs.output }}
+        PROFILE: ${{ inputs.profile }}
+        CONFIG: ${{ inputs.config }}
+        BASELINE: ${{ inputs.baseline }}
+        ONLINE: ${{ inputs.online }}
         WRITE_STEP_SUMMARY: ${{ inputs.write_step_summary }}
         REGISTRY_PAYLOAD_OUTPUT: ${{ inputs.registry_payload_output }}
         MIN_SCORE: ${{ inputs.min_score }}
@@ -176,5 +201,4 @@ runs:
         SUBMISSION_PLUGIN_DESCRIPTION: ${{ inputs.submission_plugin_description }}
         SUBMISSION_AUTHOR: ${{ inputs.submission_author }}
         GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
-      run: |
-        python3 -m codex_plugin_scanner.action_runner
+      run: python3 -m codex_plugin_scanner.action_runner

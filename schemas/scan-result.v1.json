@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScanResultV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tool_version",
+    "profile",
+    "policy_pass",
+    "verify_pass",
+    "score",
+    "raw_score",
+    "effective_score",
+    "grade",
+    "summary",
+    "categories",
+    "findings",
+    "timestamp",
+    "pluginDir"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "scan-result.v1"
+    },
+    "tool_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "policy_pass": {
+      "type": "boolean"
+    },
+    "verify_pass": {
+      "type": "boolean"
+    },
+    "score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "raw_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "effective_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "grade": {
+      "type": "string",
+      "enum": ["A", "B", "C", "D", "F"]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gradeLabel", "findings", "integrations"],
+      "properties": {
+        "gradeLabel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "findings": {
+          "$ref": "#/$defs/severityCounts"
+        },
+        "integrations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/integration"
+          }
+        }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/category"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pluginDir": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low", "info"]
+    },
+    "severityCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["critical", "high", "medium", "low", "info"],
+      "properties": {
+        "critical": {"type": "integer", "minimum": 0},
+        "high": {"type": "integer", "minimum": 0},
+        "medium": {"type": "integer", "minimum": 0},
+        "low": {"type": "integer", "minimum": 0},
+        "info": {"type": "integer", "minimum": 0}
+      }
+    },
+    "integration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "message", "findingsCount", "metadata"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "status": {"type": "string", "minLength": 1},
+        "message": {"type": "string"},
+        "findingsCount": {"type": "integer", "minimum": 0},
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
+    "findingRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "severity", "title", "description", "source"],
+      "properties": {
+        "ruleId": {"type": "string", "minLength": 1},
+        "severity": {"$ref": "#/$defs/severity"},
+        "title": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1},
+        "remediation": {"type": ["string", "null"]},
+        "filePath": {"type": ["string", "null"]},
+        "lineNumber": {"type": ["integer", "null"], "minimum": 1},
+        "source": {"type": "string", "minLength": 1}
+      }
+    },
+    "finding": {
+      "allOf": [
+        {"$ref": "#/$defs/findingRef"},
+        {
+          "type": "object",
+          "required": ["category"],
+          "properties": {
+            "category": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed", "points", "maxPoints", "message", "findings"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "passed": {"type": "boolean"},
+        "points": {"type": "integer", "minimum": 0},
+        "maxPoints": {"type": "integer", "minimum": 0},
+        "message": {"type": "string"},
+        "findings": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/findingRef"}
+        }
+      }
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "score", "max", "checks"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "score": {"type": "integer", "minimum": 0},
+        "max": {"type": "integer", "minimum": 0},
+        "checks": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/check"}
+        }
+      }
+    }
+  }
+}

@@ -22,6 +22,10 @@ This README is intentionally root-ready for a dedicated GitHub Marketplace actio
 | `plugin_dir` | Path to the plugin directory to scan | `.` |
 | `format` | Output format: `text`, `json`, `markdown`, `sarif` | `text` |
 | `output` | Write report to this file path | `""` |
+| `profile` | Policy profile: `default`, `public-marketplace`, or `strict-security` | `default` |
+| `config` | Optional path to `.codex-plugin-scanner.toml` | `""` |
+| `baseline` | Optional path to a baseline suppression file | `""` |
+| `online` | Enable live network probing for `verify` mode | `false` |
 | `write_step_summary` | Write a concise markdown summary to the GitHub Actions job summary | `true` |
 | `registry_payload_output` | Write a machine-readable Codex ecosystem payload JSON file for registry or awesome-list automation | `""` |
 | `min_score` | Fail if score is below this threshold (0-100) | `0` |
@@ -57,6 +61,12 @@ This README is intentionally root-ready for a dedicated GitHub Marketplace actio
 | `submission_issue_numbers` | Comma-separated submission issue numbers |
 
 The action also writes a concise summary to `GITHUB_STEP_SUMMARY` by default. The full report is written to the job log for `text` output, or to the file you pass through `output` for `json`, `markdown`, or `sarif`.
+
+Mode notes:
+
+- `scan` and `lint` respect `profile`, `config`, and `baseline`.
+- `verify` respects `online` and writes a human-readable report for `format: text`.
+- `submit` writes the plugin-quality artifact to `output` when provided, otherwise `plugin-quality.json`. `registry_payload_output` remains dedicated to the separate HOL registry payload.
 
 ## Examples
 
@@ -182,3 +192,16 @@ The source bundle for this action lives in the main scanner repository under `ac
 ## License
 
 [Apache-2.0](https://github.com/hashgraph-online/codex-plugin-scanner/blob/main/LICENSE)
+
+## Mode-based workflow
+
+Set `mode` to one of `scan`, `lint`, `verify`, or `submit`.
+
+```yaml
+- uses: your-org/hol-codex-plugin-scanner-action@v1
+  with:
+    mode: verify
+    plugin_dir: "."
+```
+
+For `submit` mode, use `registry_payload_output` to control artifact path.
