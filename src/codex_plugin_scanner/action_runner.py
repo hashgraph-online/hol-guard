@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
 from . import __version__
 from .cli import format_text
-from .models import ScanOptions
+from .models import GRADE_LABELS, ScanOptions, ScanResult, Severity, max_severity
 from .reporting import format_json, format_markdown, format_sarif, should_fail_for_severity
 from .scanner import scan_plugin
 from .submission import (
+    SubmissionIssue,
     build_submission_issue_body,
     build_submission_issue_title,
     build_submission_payload,
@@ -35,10 +37,46 @@ def _write_outputs(path: str, values: dict[str, str]) -> None:
             handle.write(f"{key}={value}\n")
 
 
+def _write_step_summary(path: str, lines: tuple[str, ...]) -> None:
+    with Path(path).open("a", encoding="utf-8") as handle:
+        handle.write("\n".join(lines))
+        handle.write("\n")
+
+
+def _build_step_summary_lines(
+    *,
+    result: ScanResult,
+    highest_severity: Severity | None,
+    report_path: str,
+    registry_payload_path: str,
+    submission_issues: list[SubmissionIssue],
+    submission_eligible: bool,
+) -> tuple[str, ...]:
+    lines = [
+        "## HOL Codex Plugin Scanner",
+        "",
+        f"- Score: {result.score}/100",
+        f"- Grade: {result.grade} - {GRADE_LABELS.get(result.grade, 'Unknown')}",
+        f"- Max severity: {(highest_severity.value if highest_severity else 'none')}",
+        f"- Findings: {sum(result.severity_counts.values())}",
+        f"- Submission eligible: {'yes' if submission_eligible else 'no'}",
+    ]
+    if report_path:
+        lines.append(f"- Report: `{report_path}`")
+    if registry_payload_path:
+        lines.append(f"- Registry payload: `{registry_payload_path}`")
+    if submission_issues:
+        issue_urls = ", ".join(issue.url for issue in submission_issues)
+        lines.append(f"- Submission issues: {issue_urls}")
+    return tuple(lines)
+
+
 def main() -> int:
     plugin_dir = os.environ["PLUGIN_DIR"]
     output_format = os.environ["FORMAT"]
     output_path = os.environ["OUTPUT"]
+    write_step_summary = _read_bool_env("WRITE_STEP_SUMMARY")
+    registry_payload_output = os.environ["REGISTRY_PAYLOAD_OUTPUT"]
     min_score = int(os.environ["MIN_SCORE"])
     fail_on = os.environ["FAIL_ON"]
     cisco_scan = os.environ["CISCO_SCAN"]
@@ -87,18 +125,19 @@ def main() -> int:
     else:
         print(rendered)
 
+    highest_severity = max_severity(result.findings)
     severity_failed = should_fail_for_severity(result, fail_on)
     submission_eligible = submission_enabled and result.score >= submission_threshold and not severity_failed
     submission_issues = []
+    registry_payload = None
+    metadata = None
+    report_path_value = ""
+    registry_payload_path_value = ""
 
-    if submission_eligible:
-        if not submission_repos:
-            print("Submission is enabled but no submission repositories were configured.", file=sys.stderr)
-            return 1
-        if not submission_token:
-            print("Submission is enabled but no submission token was provided.", file=sys.stderr)
-            return 1
+    if output_path:
+        report_path_value = str(Path(output_path))
 
+    if submission_enabled or registry_payload_output:
         metadata = resolve_submission_metadata(
             Path(plugin_dir).resolve(),
             result,
@@ -110,11 +149,7 @@ def main() -> int:
             github_repository=github_repository or None,
             github_server_url=github_server_url,
         )
-        if not metadata.plugin_url:
-            print("Submission metadata is missing a plugin repository URL.", file=sys.stderr)
-            return 1
-
-        payload = build_submission_payload(
+        registry_payload = build_submission_payload(
             metadata,
             result,
             source_repository=github_repository,
@@ -122,11 +157,32 @@ def main() -> int:
             workflow_url=workflow_url,
             scanner_version=__version__,
         )
+        if registry_payload_output:
+            registry_payload_path = Path(registry_payload_output)
+            registry_payload_path.write_text(
+                json.dumps(registry_payload, indent=2),
+                encoding="utf-8",
+            )
+            registry_payload_path_value = str(registry_payload_path)
+
+    if submission_eligible:
+        if not submission_repos:
+            print("Submission is enabled but no submission repositories were configured.", file=sys.stderr)
+            return 1
+        if not submission_token:
+            print("Submission is enabled but no submission token was provided.", file=sys.stderr)
+            return 1
+        if metadata is None or registry_payload is None:
+            print("Submission metadata could not be resolved.", file=sys.stderr)
+            return 1
+        if not metadata.plugin_url:
+            print("Submission metadata is missing a plugin repository URL.", file=sys.stderr)
+            return 1
         title = build_submission_issue_title(metadata)
         body = build_submission_issue_body(
             metadata,
             result,
-            payload=payload,
+            payload=registry_payload,
             workflow_url=workflow_url,
         )
 
@@ -151,6 +207,20 @@ def main() -> int:
                 )
             )
 
+    step_summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "")
+    if write_step_summary and step_summary_path:
+        _write_step_summary(
+            step_summary_path,
+            _build_step_summary_lines(
+                result=result,
+                highest_severity=highest_severity,
+                report_path=report_path_value,
+                registry_payload_path=registry_payload_path_value,
+                submission_issues=submission_issues,
+                submission_eligible=submission_eligible,
+            ),
+        )
+
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
         _write_outputs(
@@ -158,6 +228,11 @@ def main() -> int:
             {
                 "score": str(result.score),
                 "grade": result.grade,
+                "grade_label": GRADE_LABELS.get(result.grade, "Unknown"),
+                "max_severity": highest_severity.value if highest_severity else "none",
+                "findings_total": str(sum(result.severity_counts.values())),
+                "report_path": report_path_value,
+                "registry_payload_path": registry_payload_path_value,
                 "submission_eligible": "true" if submission_eligible else "false",
                 "submission_performed": "true" if submission_issues else "false",
                 "submission_issue_urls": ",".join(issue.url for issue in submission_issues),
