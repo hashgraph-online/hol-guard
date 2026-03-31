@@ -35,9 +35,50 @@ class PolicyEvaluation:
 
 
 POLICY_PROFILES: dict[str, PolicyProfile] = {
-    "default": PolicyProfile(name="default", max_severity=Severity.CRITICAL, min_score=60),
-    "public-marketplace": PolicyProfile(name="public-marketplace", max_severity=Severity.MEDIUM, min_score=60),
-    "strict-security": PolicyProfile(name="strict-security", max_severity=Severity.LOW, min_score=80),
+    "default": PolicyProfile(
+        name="default",
+        max_severity=Severity.CRITICAL,
+        required_executed_rules=("PLUGIN_JSON_MISSING", "HARDCODED_SECRET", "DANGEROUS_MCP_COMMAND"),
+        min_score=60,
+    ),
+    "public-marketplace": PolicyProfile(
+        name="public-marketplace",
+        max_severity=Severity.MEDIUM,
+        required_executed_rules=("PLUGIN_JSON_MISSING", "MARKETPLACE_JSON_INVALID", "SKILL_FRONTMATTER_INVALID"),
+        required_pass_rules=(
+            "PLUGIN_JSON_MISSING",
+            "PLUGIN_JSON_INVALID",
+            "MARKETPLACE_JSON_INVALID",
+            "MARKETPLACE_PLUGINS_MISSING",
+            "MARKETPLACE_UNSAFE_SOURCE",
+            "SKILL_FRONTMATTER_INVALID",
+            "LICENSE_MISSING",
+            "SECURITY_MD_MISSING",
+        ),
+        min_score=60,
+    ),
+    "strict-security": PolicyProfile(
+        name="strict-security",
+        max_severity=Severity.LOW,
+        required_executed_rules=(
+            "PLUGIN_JSON_MISSING",
+            "HARDCODED_SECRET",
+            "DANGEROUS_MCP_COMMAND",
+            "GITHUB_ACTION_UNPINNED",
+        ),
+        required_pass_rules=(
+            "PLUGIN_JSON_MISSING",
+            "PLUGIN_JSON_INVALID",
+            "HARDCODED_SECRET",
+            "DANGEROUS_MCP_COMMAND",
+            "MCP_REMOTE_URL_INSECURE",
+            "GITHUB_ACTION_UNPINNED",
+            "GITHUB_ACTIONS_WRITE_ALL",
+            "GITHUB_ACTIONS_UNTRUSTED_CHECKOUT",
+            "DEPENDENCY_LOCKFILE_MISSING",
+        ),
+        min_score=80,
+    ),
 }
 
 
@@ -71,8 +112,16 @@ def evaluate_policy(
     )
 
     inventory = rule_inventory or build_rule_inventory(findings, set())
-    missing_required = tuple(rule_id for rule_id in profile.required_executed_rules if not inventory.get(rule_id, RuleEvaluation(rule_id, False, False, True)).executed)
-    failed_required_pass = tuple(rule_id for rule_id in profile.required_pass_rules if not inventory.get(rule_id, RuleEvaluation(rule_id, False, False, True)).passed)
+    missing_required = tuple(
+        rule_id
+        for rule_id in profile.required_executed_rules
+        if not inventory.get(rule_id, RuleEvaluation(rule_id, False, False, True)).executed
+    )
+    failed_required_pass = tuple(
+        rule_id
+        for rule_id in profile.required_pass_rules
+        if not inventory.get(rule_id, RuleEvaluation(rule_id, False, False, True)).passed
+    )
 
     return PolicyEvaluation(
         profile=profile.name,

@@ -27,6 +27,27 @@ def test_verify_plugin_handles_non_object_marketplace_payload(tmp_path: Path):
     assert any(case.component == "marketplace" and case.classification == "schema" for case in result.cases)
 
 
+def test_verify_plugin_reports_real_workspace_path() -> None:
+    result = verify_plugin(FIXTURES / "good-plugin")
+    assert Path(result.workspace).exists()
+    assert Path(result.workspace) == (FIXTURES / "good-plugin").resolve()
+
+
+def test_verify_plugin_checks_skill_frontmatter_from_manifest(tmp_path: Path):
+    (tmp_path / ".codex-plugin").mkdir()
+    (tmp_path / ".codex-plugin" / "plugin.json").write_text(
+        '{"name":"demo","version":"1.0.0","description":"demo","skills":"skills"}',
+        encoding="utf-8",
+    )
+    (tmp_path / "skills" / "broken").mkdir(parents=True)
+    (tmp_path / "skills" / "broken" / "SKILL.md").write_text("no frontmatter", encoding="utf-8")
+
+    result = verify_plugin(tmp_path)
+
+    assert result.verify_pass is False
+    assert any(case.component == "skills" and case.classification == "frontmatter" for case in result.cases)
+
+
 def test_verify_plugin_stdio_inherits_process_environment(tmp_path: Path, monkeypatch):
     captured_env: dict[str, str] = {}
 

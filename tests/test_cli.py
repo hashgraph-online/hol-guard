@@ -1,7 +1,10 @@
 """Tests for CLI output formatting and argument parsing."""
 
 import json
+import shutil
+import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 from codex_plugin_scanner import cli as cli_module
@@ -235,6 +238,39 @@ class TestMain:
         assert rc == 0
         assert bundle.exists()
 
+    def test_doctor_bundle_captures_stdio_artifacts(self, tmp_path):
+        plugin_dir = tmp_path / "plugin"
+        shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
+        (plugin_dir / ".mcp.json").write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "echo": {
+                        "command": sys.executable,
+                        "args": [
+                            "-u",
+                            "-c",
+                            "import sys; print('doctor-out'); print('doctor-err', file=sys.stderr)",
+                        ],
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        bundle = tmp_path / "doctor-bundle.zip"
+
+        rc = main(["doctor", str(plugin_dir), "--bundle", str(bundle)])
+
+        assert rc == 0
+        with zipfile.ZipFile(bundle) as archive:
+            stderr_log = archive.read("stderr.log").decode("utf-8")
+            stdout_log = archive.read("stdout.log").decode("utf-8")
+            timeout_markers = archive.read("timeout-markers.txt").decode("utf-8")
+        assert "doctor-err" in stderr_log
+        assert "doctor-out" in stdout_log
+        assert "none" in timeout_markers
+
     def test_submit_writes_artifact(self, tmp_path):
         artifact = tmp_path / "plugin-quality.json"
         rc = main(["submit", str(FIXTURES / "good-plugin"), "--attest", str(artifact)])
@@ -246,3 +282,52 @@ class TestMain:
         artifact = tmp_path / "plugin-quality.json"
         rc = main(["submit", str(FIXTURES / "bad-plugin"), "--attest", str(artifact)])
         assert rc == 1
+
+    def test_scan_json_uses_effective_score_as_primary_score(self, tmp_path, capsys):
+        plugin_dir = tmp_path / "plugin"
+        shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
+        (plugin_dir / "README.md").unlink()
+        baseline = tmp_path / "baseline.txt"
+        baseline.write_text("README_MISSING\n", encoding="utf-8")
+
+        rc = main(
+            [
+                "scan",
+                str(plugin_dir),
+                "--format",
+                "json",
+                "--baseline",
+                str(baseline),
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert payload["score"] == payload["effective_score"]
+        assert payload["raw_score"] < payload["effective_score"]
+
+    def test_submit_artifact_uses_effective_score_as_primary_score(self, tmp_path):
+        plugin_dir = tmp_path / "plugin"
+        shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
+        (plugin_dir / "README.md").unlink()
+        baseline = tmp_path / "baseline.txt"
+        baseline.write_text("README_MISSING\n", encoding="utf-8")
+        artifact = tmp_path / "plugin-quality.json"
+
+        rc = main(
+            [
+                "submit",
+                str(plugin_dir),
+                "--baseline",
+                str(baseline),
+                "--min-score",
+                "0",
+                "--attest",
+                str(artifact),
+            ]
+        )
+        payload = json.loads(artifact.read_text(encoding="utf-8"))
+
+        assert rc == 0
+        assert payload["scan"]["score"] == payload["scan"]["effective_score"]
+        assert payload["scan"]["raw_score"] < payload["scan"]["effective_score"]

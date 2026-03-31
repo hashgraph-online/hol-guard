@@ -18,7 +18,15 @@ CATEGORY_WEIGHTS: dict[str, int] = {
 _DOC_ROOT = "https://github.com/hashgraph-online/codex-plugin-scanner/blob/main/docs/rules"
 
 
-def _rule(rule_id: str, category: str, severity: Severity, weight: int, docs_slug: str, *, fixable: bool = False) -> RuleSpec:
+def _rule(
+    rule_id: str,
+    category: str,
+    severity: Severity,
+    weight: int,
+    docs_slug: str,
+    *,
+    fixable: bool = False,
+) -> RuleSpec:
     title = rule_id.replace("_", " ").replace("-", " ").title()
     return RuleSpec(
         rule_id=rule_id,
@@ -34,6 +42,8 @@ def _rule(rule_id: str, category: str, severity: Severity, weight: int, docs_slu
 
 
 RULE_SPECS: tuple[RuleSpec, ...] = (
+    _rule("PLUGIN_JSON_MISSING", "manifest", Severity.HIGH, 5, "plugin-json-missing"),
+    _rule("PLUGIN_JSON_INVALID", "manifest", Severity.HIGH, 5, "plugin-json-invalid"),
     _rule("README_MISSING", "best-practices", Severity.LOW, 3, "readme-missing", fixable=True),
     _rule("SKILLS_DIR_MISSING", "best-practices", Severity.MEDIUM, 4, "skills-dir-missing"),
     _rule("SKILL_FRONTMATTER_INVALID", "best-practices", Severity.MEDIUM, 4, "skill-frontmatter-invalid"),
@@ -57,9 +67,21 @@ RULE_SPECS: tuple[RuleSpec, ...] = (
     _rule("SHELL_INJECTION_PATTERN", "code-quality", Severity.HIGH, 5, "shell-injection-pattern"),
     _rule("GITHUB_ACTION_UNPINNED", "operational-security", Severity.HIGH, 5, "github-action-unpinned"),
     _rule("GITHUB_ACTIONS_WRITE_ALL", "operational-security", Severity.HIGH, 5, "github-actions-write-all"),
-    _rule("GITHUB_ACTIONS_UNTRUSTED_CHECKOUT", "operational-security", Severity.HIGH, 4, "github-actions-untrusted-checkout"),
+    _rule(
+        "GITHUB_ACTIONS_UNTRUSTED_CHECKOUT",
+        "operational-security",
+        Severity.HIGH,
+        4,
+        "github-actions-untrusted-checkout",
+    ),
     _rule("DEPENDABOT_MISSING", "operational-security", Severity.LOW, 2, "dependabot-missing"),
-    _rule("DEPENDABOT_GITHUB_ACTIONS_MISSING", "operational-security", Severity.LOW, 2, "dependabot-github-actions-missing"),
+    _rule(
+        "DEPENDABOT_GITHUB_ACTIONS_MISSING",
+        "operational-security",
+        Severity.LOW,
+        2,
+        "dependabot-github-actions-missing",
+    ),
     _rule("DEPENDENCY_LOCKFILE_MISSING", "operational-security", Severity.MEDIUM, 2, "dependency-lockfile-missing"),
     _rule("CISCO-SCANNER-UNAVAILABLE", "skill-security", Severity.LOW, 3, "cisco-scanner-unavailable"),
 )

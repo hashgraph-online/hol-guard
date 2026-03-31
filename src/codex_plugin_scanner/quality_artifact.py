@@ -53,6 +53,8 @@ def build_quality_artifact(
     verification: VerificationResult,
     policy: PolicyEvaluation,
     profile: str,
+    *,
+    raw_score: int | None = None,
 ) -> dict[str, object]:
     return {
         "schema_version": "plugin-quality.v1",
@@ -62,12 +64,15 @@ def build_quality_artifact(
         "digest": _digest_plugin(plugin_dir),
         "scan": {
             "score": scan_result.score,
+            "raw_score": scan_result.score if raw_score is None else raw_score,
+            "effective_score": scan_result.score,
             "grade": scan_result.grade,
             "findings_total": len(scan_result.findings),
             "severity_counts": scan_result.severity_counts,
         },
         "verify": {
             "verify_pass": verification.verify_pass,
+            "workspace": verification.workspace,
             "cases": [asdict(case) for case in verification.cases],
         },
         "policy": {

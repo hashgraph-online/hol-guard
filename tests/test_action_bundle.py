@@ -16,6 +16,10 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "pip install codex-plugin-scanner" in action_text
     assert 'pip install "$LOCAL_SOURCE"' in action_text
     assert "write_step_summary:" in action_text
+    assert "profile:" in action_text
+    assert "config:" in action_text
+    assert "baseline:" in action_text
+    assert "online:" in action_text
     assert "registry_payload_output:" in action_text
     assert "submission_enabled:" in action_text
     assert "grade_label:" in action_text
@@ -25,6 +29,11 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "registry_payload_path:" in action_text
     assert "submission_issue_urls:" in action_text
     assert "python3 -m codex_plugin_scanner.action_runner" in action_text
+    assert 'MODE: ${{ inputs.mode }}' in action_text
+    assert 'PROFILE: ${{ inputs.profile }}' in action_text
+    assert 'CONFIG: ${{ inputs.config }}' in action_text
+    assert 'BASELINE: ${{ inputs.baseline }}' in action_text
+    assert 'ONLINE: ${{ inputs.online }}' in action_text
     assert "value: ${{ steps.scan.outputs.score }}" in action_text
     assert "value: ${{ steps.scan.outputs.grade }}" in action_text
     assert "value: ${{ steps.scan.outputs.grade_label }}" in action_text
@@ -45,6 +54,13 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     assert "Build GitHub Action bundle" in workflow_text
     assert "hol-codex-plugin-scanner-action-v${VERSION}.zip" in workflow_text
     assert 'cp action/action.yml "${BUNDLE_ROOT}/action.yml"' in workflow_text
+
+
+def test_ci_workflow_covers_cross_platform_runtime() -> None:
+    workflow_text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "windows-latest" in workflow_text
+    assert "macos-latest" in workflow_text
 
 
 def test_publish_action_repo_workflow_syncs_action_repository() -> None:

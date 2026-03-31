@@ -7,12 +7,12 @@ import json
 import os
 import sys
 import zipfile
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from .config import ConfigError, load_baseline_rule_ids, load_scanner_config
 from .lint_fixes import apply_safe_autofixes
-from .models import GRADE_LABELS, ScanOptions, Severity
+from .models import GRADE_LABELS, ScanOptions, Severity, get_grade
 from .policy import POLICY_PROFILES, build_rule_inventory, evaluate_policy, resolve_profile
 from .quality_artifact import build_quality_artifact, write_quality_artifact
 from .reporting import format_json as render_json
@@ -212,6 +212,7 @@ def _scan_with_policy(args: argparse.Namespace, plugin_dir: Path):
     inventory = build_rule_inventory(result.findings, executed_rules)
     policy_eval = evaluate_policy(result.findings, profile, rule_inventory=inventory)
     effective_score = compute_effective_score(result)
+    result = replace(result, score=effective_score, grade=get_grade(effective_score))
     return raw_result, result, profile, policy_eval, effective_score
 
 
@@ -252,8 +253,8 @@ def _run_scan(args: argparse.Namespace) -> int:
         print(output)
 
     min_score = args.min_score
-    if raw_result.score < min_score:
-        print(f"Score {raw_result.score} is below threshold {min_score}", file=sys.stderr)
+    if result.score < min_score:
+        print(f"Score {result.score} is below threshold {min_score}", file=sys.stderr)
         return 1
     if should_fail_for_severity(result, args.fail_on_severity):
         print(
@@ -321,7 +322,11 @@ def _run_lint(args: argparse.Namespace) -> int:
 def _run_verify(args: argparse.Namespace) -> int:
     resolved = Path(args.plugin_dir).resolve()
     verification = verify_plugin(resolved, online=args.online)
-    payload = {"verify_pass": verification.verify_pass, "cases": [asdict(case) for case in verification.cases]}
+    payload = {
+        "verify_pass": verification.verify_pass,
+        "workspace": verification.workspace,
+        "cases": [asdict(case) for case in verification.cases],
+    }
     if args.format == "json":
         print(json.dumps(payload, indent=2))
     else:
@@ -332,17 +337,22 @@ def _run_verify(args: argparse.Namespace) -> int:
 def _run_submit(args: argparse.Namespace) -> int:
     resolved = Path(args.plugin_dir).resolve()
     try:
-        raw_result, result, profile, policy_eval, effective_score = _scan_with_policy(args, resolved)
+        raw_result, result, profile, policy_eval, _effective_score = _scan_with_policy(args, resolved)
     except ConfigError:
         return 1
     verification = verify_plugin(resolved, online=args.online)
     min_score = args.min_score if args.min_score is not None else POLICY_PROFILES[profile].min_score
-    if raw_result.score < min_score or not policy_eval.policy_pass or not verification.verify_pass:
+    if result.score < min_score or not policy_eval.policy_pass or not verification.verify_pass:
         print("Submission blocked: scan/policy/verify gates did not all pass.", file=sys.stderr)
         return 1
-    artifact = build_quality_artifact(resolved, result, verification, policy_eval, profile)
-    artifact["scan"]["raw_score"] = raw_result.score
-    artifact["scan"]["effective_score"] = effective_score
+    artifact = build_quality_artifact(
+        resolved,
+        result,
+        verification,
+        policy_eval,
+        profile,
+        raw_score=raw_result.score,
+    )
     write_quality_artifact(Path(args.attest), artifact)
     print(f"Submission artifact written to {args.attest}")
     return 0
@@ -366,9 +376,9 @@ def _run_doctor(args: argparse.Namespace) -> int:
                 "command-metadata.json",
                 json.dumps({"command": "doctor", "component": args.component}, indent=2),
             )
-            zf.writestr("stdout.log", "")
-            zf.writestr("stderr.log", "")
-            zf.writestr("timeout-markers.txt", "none\n")
+            zf.writestr("stdout.log", str(report.get("stdout_log", "")))
+            zf.writestr("stderr.log", str(report.get("stderr_log", "")))
+            zf.writestr("timeout-markers.txt", str(report.get("timeout_markers", "none\n")))
         print(f"Doctor bundle written to {bundle_path}")
     else:
         print(rendered)
