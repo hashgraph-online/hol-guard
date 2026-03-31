@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginQualityV1",
+  "type": "object",
+  "required": ["schema_version", "tool_version", "timestamp", "profile", "digest", "scan", "verify", "policy"],
+  "properties": {
+    "schema_version": {"const": "plugin-quality.v1"},
+    "tool_version": {"type": "string"},
+    "timestamp": {"type": "string"},
+    "profile": {"type": "string"},
+    "digest": {"type": "object"},
+    "scan": {"type": "object"},
+    "verify": {"type": "object"},
+    "policy": {"type": "object"}
+  }
+}

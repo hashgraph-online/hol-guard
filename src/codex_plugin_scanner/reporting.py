@@ -18,6 +18,8 @@ def build_json_payload(
     profile: str = "default",
     policy_pass: bool = True,
     verify_pass: bool = True,
+    raw_score: int | None = None,
+    effective_score: int | None = None,
 ) -> dict[str, object]:
     """Convert a scan result into a JSON-serializable payload."""
 
@@ -28,6 +30,8 @@ def build_json_payload(
         "policy_pass": policy_pass,
         "verify_pass": verify_pass,
         "score": result.score,
+        "raw_score": result.score if raw_score is None else raw_score,
+        "effective_score": result.score if effective_score is None else effective_score,
         "grade": result.grade,
         "summary": {
             "gradeLabel": GRADE_LABELS.get(result.grade, "Unknown"),
@@ -99,11 +103,20 @@ def format_json(
     profile: str = "default",
     policy_pass: bool = True,
     verify_pass: bool = True,
+    raw_score: int | None = None,
+    effective_score: int | None = None,
 ) -> str:
     """Render a scan result as indented JSON."""
 
     return json.dumps(
-        build_json_payload(result, profile=profile, policy_pass=policy_pass, verify_pass=verify_pass),
+        build_json_payload(
+            result,
+            profile=profile,
+            policy_pass=policy_pass,
+            verify_pass=verify_pass,
+            raw_score=raw_score,
+            effective_score=effective_score,
+        ),
         indent=2,
     )
 

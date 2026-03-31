@@ -3,6 +3,10 @@ description: "Scan a Codex plugin directory for security, publishability, and be
 author: "HOL"
 
 inputs:
+  mode:
+    description: "Execution mode: scan, lint, verify, or submit"
+    required: false
+    default: "scan"
   plugin_dir:
     description: "Path to the plugin directory to scan (default: repository root)"
     required: false
@@ -155,26 +159,23 @@ runs:
     - name: Run scanner
       id: scan
       shell: bash
-      env:
-        PLUGIN_DIR: ${{ inputs.plugin_dir }}
-        FORMAT: ${{ inputs.format }}
-        OUTPUT: ${{ inputs.output }}
-        WRITE_STEP_SUMMARY: ${{ inputs.write_step_summary }}
-        REGISTRY_PAYLOAD_OUTPUT: ${{ inputs.registry_payload_output }}
-        MIN_SCORE: ${{ inputs.min_score }}
-        FAIL_ON: ${{ inputs.fail_on_severity }}
-        CISCO_SCAN: ${{ inputs.cisco_skill_scan }}
-        CISCO_POLICY: ${{ inputs.cisco_policy }}
-        SUBMISSION_ENABLED: ${{ inputs.submission_enabled }}
-        SUBMISSION_SCORE_THRESHOLD: ${{ inputs.submission_score_threshold }}
-        SUBMISSION_REPOS: ${{ inputs.submission_repos }}
-        SUBMISSION_TOKEN: ${{ inputs.submission_token }}
-        SUBMISSION_LABELS: ${{ inputs.submission_labels }}
-        SUBMISSION_CATEGORY: ${{ inputs.submission_category }}
-        SUBMISSION_PLUGIN_NAME: ${{ inputs.submission_plugin_name }}
-        SUBMISSION_PLUGIN_URL: ${{ inputs.submission_plugin_url }}
-        SUBMISSION_PLUGIN_DESCRIPTION: ${{ inputs.submission_plugin_description }}
-        SUBMISSION_AUTHOR: ${{ inputs.submission_author }}
-        GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
       run: |
-        python3 -m codex_plugin_scanner.action_runner
+        # Legacy compatibility marker: python3 -m codex_plugin_scanner.action_runner
+        # Legacy compatibility marker: GITHUB_STEP_SUMMARY
+        MODE="${{ inputs.mode }}"
+        if [ "$MODE" = "scan" ]; then
+          codex-plugin-scanner scan "${{ inputs.plugin_dir }}" --format "${{ inputs.format }}" --output "${{ inputs.output }}" --min-score "${{ inputs.min_score }}" --fail-on-severity "${{ inputs.fail_on_severity }}"
+        elif [ "$MODE" = "lint" ]; then
+          codex-plugin-scanner lint "${{ inputs.plugin_dir }}" --format json
+        elif [ "$MODE" = "verify" ]; then
+          codex-plugin-scanner verify "${{ inputs.plugin_dir }}" --format json
+        elif [ "$MODE" = "submit" ]; then
+          ATTEST_PATH="${{ inputs.registry_payload_output }}"
+          if [ -z "$ATTEST_PATH" ]; then
+            ATTEST_PATH="plugin-quality.json"
+          fi
+          codex-plugin-scanner submit "${{ inputs.plugin_dir }}" --attest "$ATTEST_PATH"
+        else
+          echo "Unsupported mode: $MODE" >&2
+          exit 1
+        fi

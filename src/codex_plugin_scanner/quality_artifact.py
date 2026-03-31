@@ -6,6 +6,7 @@ import hashlib
 import json
 from dataclasses import asdict
 from datetime import datetime, timezone
+from fnmatch import fnmatch
 from pathlib import Path
 
 from codex_plugin_scanner.models import ScanResult
@@ -14,14 +15,28 @@ from codex_plugin_scanner.verification import VerificationResult
 from codex_plugin_scanner.version import __version__
 
 
-def _digest_plugin(plugin_dir: Path) -> str:
+DEFAULT_EXCLUSIONS = (".git/*", "*.pyc", "__pycache__/*", ".venv/*", "dist/*", "build/*")
+
+
+def _is_excluded(relative_path: str, exclusions: tuple[str, ...]) -> bool:
+    return any(fnmatch(relative_path, pattern) for pattern in exclusions)
+
+
+def _digest_plugin(plugin_dir: Path, exclusions: tuple[str, ...] = DEFAULT_EXCLUSIONS) -> dict[str, object]:
     hasher = hashlib.sha256()
+    included = 0
     for path in sorted(plugin_dir.rglob("*")):
         if not path.is_file():
             continue
-        hasher.update(path.relative_to(plugin_dir).as_posix().encode("utf-8"))
-        hasher.update(path.read_bytes())
-    return hasher.hexdigest()
+        relative = path.relative_to(plugin_dir).as_posix()
+        if _is_excluded(relative, exclusions):
+            continue
+        included += 1
+        hasher.update(relative.encode("utf-8"))
+        with path.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                hasher.update(chunk)
+    return {"algorithm": "sha256", "value": hasher.hexdigest(), "included_files": included, "exclusions": list(exclusions)}
 
 
 def build_quality_artifact(
@@ -51,6 +66,7 @@ def build_quality_artifact(
             "policy_pass": policy.policy_pass,
             "severity_failures": list(policy.severity_failures),
             "missing_required_rules": list(policy.missing_required_rules),
+            "failed_required_pass_rules": list(policy.failed_required_pass_rules),
         },
     }
 

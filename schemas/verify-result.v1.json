@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VerifyResultV1",
+  "type": "object",
+  "required": ["verify_pass", "cases"],
+  "properties": {
+    "verify_pass": {"type": "boolean"},
+    "cases": {"type": "array"}
+  }
+}

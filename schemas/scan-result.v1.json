@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ScanResultV1",
+  "type": "object",
+  "required": ["schema_version", "tool_version", "profile", "policy_pass", "verify_pass", "score", "findings"],
+  "properties": {
+    "schema_version": {"const": "scan-result.v1"},
+    "tool_version": {"type": "string"},
+    "profile": {"type": "string"},
+    "policy_pass": {"type": "boolean"},
+    "verify_pass": {"type": "boolean"},
+    "score": {"type": "integer"},
+    "raw_score": {"type": "integer"},
+    "effective_score": {"type": "integer"},
+    "findings": {"type": "array"}
+  }
+}

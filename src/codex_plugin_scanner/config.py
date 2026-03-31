@@ -17,9 +17,15 @@ class ScannerConfig:
     enabled_rules: frozenset[str] = frozenset()
     disabled_rules: frozenset[str] = frozenset()
     baseline_file: str | None = None
+    severity_overrides: dict[str, str] | None = None
+    ignore_paths: tuple[str, ...] = ()
 
 
 DEFAULT_CONFIG_FILE = ".codex-plugin-scanner.toml"
+
+
+class ConfigError(ValueError):
+    """Raised when config or baseline parsing fails."""
 
 
 def load_scanner_config(plugin_dir: Path, config_path: str | None = None) -> ScannerConfig:
@@ -27,7 +33,11 @@ def load_scanner_config(plugin_dir: Path, config_path: str | None = None) -> Sca
     if not candidate.exists():
         return ScannerConfig()
 
-    payload = tomllib.loads(candidate.read_text(encoding="utf-8"))
+    try:
+        payload = tomllib.loads(candidate.read_text(encoding="utf-8"))
+    except Exception as exc:  # pragma: no cover - parser-specific errors
+        raise ConfigError(f"Failed to parse config '{candidate}': {exc}") from exc
+
     scanner = payload.get("scanner", {})
     rules = payload.get("rules", {})
 
@@ -36,6 +46,8 @@ def load_scanner_config(plugin_dir: Path, config_path: str | None = None) -> Sca
         enabled_rules=frozenset(str(rule_id) for rule_id in rules.get("enabled", [])),
         disabled_rules=frozenset(str(rule_id) for rule_id in rules.get("disabled", [])),
         baseline_file=scanner.get("baseline_file"),
+        severity_overrides={str(k): str(v) for k, v in rules.get("severity_overrides", {}).items()},
+        ignore_paths=tuple(str(path) for path in scanner.get("ignore_paths", [])),
     )
 
 
@@ -55,7 +67,10 @@ def load_baseline_rule_ids(plugin_dir: Path, baseline_path: str | None) -> froze
     if content.startswith("["):
         import json
 
-        parsed = json.loads(content)
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise ConfigError(f"Failed to parse baseline '{path}': {exc}") from exc
         return frozenset(str(rule_id) for rule_id in parsed)
 
     return frozenset(line.strip() for line in content.splitlines() if line.strip())

@@ -16,6 +16,9 @@ class RuleSpec:
     default_severity: Severity
     weight: int
     docs_slug: str
+    description: str
+    remediation: str
+    docs_url: str
     fixable: bool = False
     profiles: tuple[str, ...] = ("default", "public-marketplace", "strict-security")
 
