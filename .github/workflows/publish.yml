@@ -58,29 +58,11 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Computed version: $VERSION"
       - name: Stamp package version
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          python3 - <<'PY'
-          from pathlib import Path
-          import os
-          import re
-
-          version = os.environ["VERSION"]
-
-          pyproject = Path("pyproject.toml")
-          pyproject.write_text(
-              re.sub(r'^version = ".*"$', f'version = "{version}"', pyproject.read_text(), count=1, flags=re.MULTILINE),
-              encoding="utf-8",
-          )
-
-          version_py = Path("src/codex_plugin_scanner/version.py")
-          version_py.write_text(
-              re.sub(r'^__version__ = ".*"$', f'__version__ = "{version}"', version_py.read_text(), count=1, flags=re.MULTILINE),
-              encoding="utf-8",
-          )
-          PY
         env:
           VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          sed -i "1,/version = \".*\"/{s/version = \".*\"/version = \"$VERSION\"/}" pyproject.toml
+          sed -i "1,/__version__ = \".*\"/{s/__version__ = \".*\"/__version__ = \"$VERSION\"/}" src/codex_plugin_scanner/version.py
       - name: Build package
         run: python -m build
       - name: Verify distributions
