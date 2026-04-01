@@ -30,7 +30,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       changed: ${{ steps.version.outputs.changed }}
-      tag_exists: ${{ steps.tag.outputs.exists }}
+      release_exists: ${{ steps.release.outputs.exists }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -39,23 +39,35 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           GITHUB_REF: ${{ github.ref }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
         run: |
-          CURRENT=$(python3 -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print(p['project']['version'])")
-          echo "version=$CURRENT" >> $GITHUB_OUTPUT
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$GITHUB_REF" = "refs/heads/main" ] || [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
+          BASE=$(python3 -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print(p['project']['version'])")
+
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            VERSION="${BASE}.post${GITHUB_RUN_NUMBER}"
           else
-            echo "changed=false" >> $GITHUB_OUTPUT
+            VERSION="$BASE"
           fi
-          echo "Detected version: $CURRENT"
-      - id: tag
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$GITHUB_REF" = "refs/heads/main" ] || [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "Detected version: $VERSION"
+      - id: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if git ls-remote --tags origin "refs/tags/v${{ steps.version.outputs.version }}" | grep -q .; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+          if gh release view "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
   build:
@@ -74,6 +86,30 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install build twine
+      - name: Stamp computed version
+        run: |
+          VERSION="${{ needs.detect-version.outputs.version }}"
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          version = os.environ["VERSION"]
+
+          pyproject = Path("pyproject.toml")
+          pyproject.write_text(
+              re.sub(r'^version = ".*"$', f'version = "{version}"', pyproject.read_text(), flags=re.MULTILINE),
+              encoding="utf-8",
+          )
+
+          version_py = Path("src/codex_plugin_scanner/version.py")
+          version_py.write_text(
+              re.sub(r'^VERSION = ".*"$', f'VERSION = "{version}"', version_py.read_text(), flags=re.MULTILINE),
+              encoding="utf-8",
+          )
+          PY
+        env:
+          VERSION: ${{ needs.detect-version.outputs.version }}
       - name: Build package
         run: python -m build
       - name: Verify distributions
@@ -120,7 +156,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    if: (needs.detect-version.outputs.changed == 'true' || startsWith(github.ref, 'refs/tags/')) && needs.detect-version.outputs.tag_exists == 'false'
+    if: startsWith(github.ref, 'refs/tags/') && needs.detect-version.outputs.release_exists == 'false'
     needs: [detect-version, publish-pypi]
     runs-on: ubuntu-latest
     permissions:
@@ -132,32 +168,32 @@ jobs:
       - name: Generate changelog
         id: changelog
         run: |
-          # Get the range of commits since last tag
-          LAST_TAG=$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || echo "")
           VERSION="${{ needs.detect-version.outputs.version }}"
+          LAST_TAG=$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || echo "")
 
           if [ -n "$LAST_TAG" ]; then
             LOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+            COMPARE_URL="https://github.com/hashgraph-online/codex-plugin-scanner/compare/${LAST_TAG}...v${VERSION}"
           else
             LOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+            COMPARE_URL="https://github.com/hashgraph-online/codex-plugin-scanner/releases/tag/v${VERSION}"
           fi
 
-          # Build release notes
-          cat > release-notes.md << EOF
-          ## v${VERSION}
+          cat > release-notes.md <<EOF
+## v${VERSION}
 
-          ### What's Changed
-          ${LOG}
+### What's Changed
+${LOG}
 
-          ### Installation
-          \`\`\`bash
-          pip install codex-plugin-scanner==${VERSION}
-          \`\`\`
+### Installation
+\`\`\`bash
+pip install codex-plugin-scanner==${VERSION}
+\`\`\`
 
-          **Full Changelog**: https://github.com/hashgraph-online/codex-plugin-scanner/compare/${LAST_TAG}...v${VERSION}
-          EOF
+**Full Changelog**: ${COMPARE_URL}
+EOF
 
-          echo "notes_path=release-notes.md" >> $GITHUB_OUTPUT
+          echo "notes_path=release-notes.md" >> "$GITHUB_OUTPUT"
       - name: Build GitHub Action bundle
         id: action_bundle
         run: |
@@ -176,18 +212,13 @@ jobs:
             zip -rq "../$(basename "${BUNDLE_PATH}")" .
           )
 
-          echo "bundle_path=${BUNDLE_PATH}" >> $GITHUB_OUTPUT
-      - name: Create tag and release
+          echo "bundle_path=${BUNDLE_PATH}" >> "$GITHUB_OUTPUT"
+      - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ needs.detect-version.outputs.version }}"
-          # Tag may not exist yet if triggered by main push
-          if ! git ls-remote --tags origin "refs/tags/v${VERSION}" | grep -q .; then
-            git tag "v${VERSION}"
-            git push origin "v${VERSION}"
-          fi
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
-            --notes-file ${{ steps.changelog.outputs.notes_path }} \
+            --notes-file "${{ steps.changelog.outputs.notes_path }}" \
             "${{ steps.action_bundle.outputs.bundle_path }}#hol-codex-plugin-scanner-action-v${VERSION}.zip"
