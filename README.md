@@ -10,7 +10,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/codex-plugin-scanner?style=social)](https://github.com/hashgraph-online/codex-plugin-scanner/stargazers)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
 
-| ![](https://raw.githubusercontent.com/hashgraph-online/standards-sdk-py/main/Hashgraph-Online.png) | **The default CI gate for Codex plugins**. Lint locally, verify in CI, and ship publish-ready bundles for manifests, skills, MCP, and marketplace metadata.<br><br>Use this after [`$plugin-creator`](https://developers.openai.com/codex/plugins) and before publishing, review, or distribution.<br><br>[PyPI Package](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL GitHub Repository](https://github.com/hashgraph-online/codex-plugin-scanner)<br>[Report an Issue](https://github.com/hashgraph-online/codex-plugin-scanner/issues) |
+| ![](https://raw.githubusercontent.com/hashgraph-online/standards-sdk-py/main/Hashgraph-Online.png) | **The default CI gate for Codex plugins**. Lint locally, verify in CI, and ship publish-ready bundles for manifests, skills, MCP, and marketplace metadata.<br><br>Use this after [`$plugin-creator`](https://developers.openai.com/codex/plugins) and before publishing, review, or distribution.<br><br>[PyPI Package](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/codex-plugin-scanner/issues) |
 | :--- | :--- |
 
 ## Start In 30 Seconds
@@ -150,7 +150,7 @@ severity_overrides = { CODEXIGNORE_MISSING = "low" }
 ## Example Output
 
 ```text
-🔗 Codex Plugin Scanner v1.2.0
+🔗 Codex Plugin Scanner v1.4.0
 Scanning: ./my-plugin
 
 ── Manifest Validation (31/31) ──
@@ -388,8 +388,74 @@ Contribution guidance lives in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 Maintained by HOL.
 
+## Example: HOL Registry Broker Plugin
+
+The [HOL Registry Broker Codex Plugin](https://github.com/hashgraph-online/registry-broker-codex-plugin) bridges Codex plugins with the [HOL Universal Registry](https://hol.org/registry/plugins), providing agent discovery, trust signals, and verified identity on Hedera.
+
+```text
+🔗 Codex Plugin Scanner v1.4.0
+Scanning: ./registry-broker-codex-plugin
+
+── Manifest Validation (31/31) ──
+  ✅ plugin.json exists                           +4
+  ✅ Valid JSON                                   +4
+  ✅ Required fields present                      +5
+  ✅ Version follows semver                       +3
+  ✅ Name is kebab-case                           +2
+  ✅ Recommended metadata present                 +4
+  ✅ Interface metadata complete if declared      +3
+  ✅ Interface links and assets valid if declared +3
+  ✅ Declared paths are safe                      +3
+
+── Security (24/24) ──
+  ✅ SECURITY.md found                            +3
+  ✅ LICENSE found                                +3
+  ✅ No hardcoded secrets                         +7
+  ✅ No dangerous MCP commands                    +3
+  ✅ MCP remote transports are hardened           +3
+  ✅ No approval bypass defaults                  +5
+
+── Operational Security (20/20) ──
+  ✅ Third-party GitHub Actions pinned to SHAs    +5
+  ✅ No write-all GitHub Actions permissions      +5
+  ✅ No privileged untrusted checkout patterns    +3
+  ✅ Dependabot configured for automation surfaces +4
+  ✅ Dependency manifests have lockfiles          +3
+
+── Best Practices (15/15) ──
+  ✅ README.md found                             +5
+  ✅ Skills directory present                    +3
+  ✅ SKILL.md frontmatter valid                  +4
+  ✅ No committed .env                           +2
+  ✅ .codexignore found                          +1
+
+── Marketplace (15/15) ──
+  ✅ marketplace.json valid                      +5
+  ✅ Policy fields present                       +5
+  ✅ Marketplace sources are safe                +5
+
+── Skill Security (15/15) ──
+  ✅ Cisco skill scan completed                  +3
+  ✅ No elevated Cisco skill findings            +8
+  ✅ Skills analyzable                           +4
+
+── Code Quality (10/10) ──
+  ✅ No eval or Function constructor             +5
+  ✅ No shell injection patterns                 +5
+
+Findings: critical:0, high:0, medium:0, low:0, info:0
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Final Score: 130/130 (A+ - Perfect)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+Plugins that pass the scanner with a high score are candidates for listing in the [HOL Plugin Registry](https://hol.org/registry/plugins).
+
 ## Resources
 
+- [HOL Plugin Registry](https://hol.org/registry/plugins)
+- [HOL Standards Documentation](https://hol.org/docs/standards)
 - [OpenAI Codex Plugin Documentation](https://developers.openai.com/codex/plugins)
 - [Model Context Protocol Documentation](https://modelcontextprotocol.io)
 - [Cisco AI Skill Scanner](https://pypi.org/project/cisco-ai-skill-scanner/)
