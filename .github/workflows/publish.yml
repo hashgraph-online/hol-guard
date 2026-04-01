@@ -48,21 +48,19 @@ jobs:
         run: |
           BASE_VERSION=$(python3 -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print(p['project']['version'])")
           VERSION="$BASE_VERSION"
-
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           elif [ "$GITHUB_REF" = "refs/heads/main" ]; then
             VERSION="${BASE_VERSION}.dev${GITHUB_RUN_NUMBER}"
           fi
-
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Computed version: $VERSION"
       - name: Stamp package version
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          sed -i "1,/version = \".*\"/{s/version = \".*\"/version = \"$VERSION\"/}" pyproject.toml
-          sed -i "1,/__version__ = \".*\"/{s/__version__ = \".*\"/__version__ = \"$VERSION\"/}" src/codex_plugin_scanner/version.py
+          sed -i "1,/^version = /{s/^version = .*/version = \"$VERSION\"/}" pyproject.toml
+          sed -i "1,/^__version__ = /{s/^__version__ = .*/__version__ = \"$VERSION\"/}" src/codex_plugin_scanner/version.py
       - name: Build package
         run: python -m build
       - name: Verify distributions
@@ -82,7 +80,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions
           path: dist/
@@ -152,32 +150,32 @@ jobs:
         if: steps.release_exists.outputs.exists == 'false'
         id: changelog
         run: |
-          VERSION="${{ needs.build.outputs.version }}"
+          # Get the range of commits since last tag
           LAST_TAG=$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || echo "")
+          VERSION="${{ needs.build.outputs.version }}"
 
           if [ -n "$LAST_TAG" ]; then
             LOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
-            COMPARE_URL="https://github.com/hashgraph-online/codex-plugin-scanner/compare/${LAST_TAG}...v${VERSION}"
           else
             LOG=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
-            COMPARE_URL="https://github.com/hashgraph-online/codex-plugin-scanner/releases/tag/v${VERSION}"
           fi
 
-          cat > release-notes.md <<EOF
-## v${VERSION}
+          # Build release notes
+          cat > release-notes.md << EOF
+          ## v${VERSION}
 
-### What's Changed
-${LOG}
+          ### What's Changed
+          ${LOG}
 
-### Installation
-\`\`\`bash
-pip install codex-plugin-scanner==${VERSION}
-\`\`\`
+          ### Installation
+          \`\`\`bash
+          pip install codex-plugin-scanner==${VERSION}
+          \`\`\`
 
-**Full Changelog**: ${COMPARE_URL}
-EOF
+          **Full Changelog**: https://github.com/hashgraph-online/codex-plugin-scanner/compare/${LAST_TAG}...v${VERSION}
+          EOF
 
-          echo "notes_path=release-notes.md" >> "$GITHUB_OUTPUT"
+          echo "notes_path=release-notes.md" >> $GITHUB_OUTPUT
       - name: Build GitHub Action bundle
         if: steps.release_exists.outputs.exists == 'false'
         id: action_bundle
@@ -197,7 +195,7 @@ EOF
             zip -rq "../$(basename "${BUNDLE_PATH}")" .
           )
 
-          echo "bundle_path=${BUNDLE_PATH}" >> "$GITHUB_OUTPUT"
+          echo "bundle_path=${BUNDLE_PATH}" >> $GITHUB_OUTPUT
       - name: Create release
         if: steps.release_exists.outputs.exists == 'false'
         env:
@@ -206,5 +204,5 @@ EOF
           VERSION="${{ needs.build.outputs.version }}"
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
-            --notes-file "${{ steps.changelog.outputs.notes_path }}" \
+            --notes-file ${{ steps.changelog.outputs.notes_path }} \
             "${{ steps.action_bundle.outputs.bundle_path }}#hol-codex-plugin-scanner-action-v${VERSION}.zip"
