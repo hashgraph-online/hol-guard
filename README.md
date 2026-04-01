@@ -112,6 +112,41 @@ codex-plugin-scanner ./my-plugin --fail-on-severity high
 codex-plugin-scanner ./my-plugin --cisco-skill-scan on --cisco-policy strict
 ```
 
+## Quality Suite Commands
+
+```bash
+# Summary scan (legacy form still works)
+codex-plugin-scanner scan ./my-plugin --format json --profile public-marketplace
+
+# Rule-oriented lint (with optional mechanical fixes)
+codex-plugin-scanner lint ./my-plugin --list-rules
+codex-plugin-scanner lint ./my-plugin --explain README_MISSING
+codex-plugin-scanner lint ./my-plugin --fix --profile strict-security
+
+# Runtime readiness verification
+codex-plugin-scanner verify ./my-plugin --format json
+
+# Artifact-backed submission gate
+codex-plugin-scanner submit ./my-plugin --profile public-marketplace --attest dist/plugin-quality.json
+
+# Diagnostic bundle
+codex-plugin-scanner doctor ./my-plugin --component mcp --bundle dist/doctor.zip
+```
+
+## Config + Baseline Example
+
+```toml
+# .codex-plugin-scanner.toml
+[scanner]
+profile = "public-marketplace"
+baseline_file = "baseline.txt"
+ignore_paths = ["tests/*", "fixtures/*"]
+
+[rules]
+disabled = ["README_MISSING"]
+severity_overrides = { CODEXIGNORE_MISSING = "low" }
+```
+
 ## Example Output
 
 ```text
@@ -363,38 +398,3 @@ Maintained by HOL.
 ## License
 
 Apache-2.0
-
-## Quality Suite Commands
-
-```bash
-# Summary scan (legacy form still works)
-codex-plugin-scanner scan ./my-plugin --format json --profile public-marketplace
-
-# Rule-oriented lint (with optional mechanical fixes)
-codex-plugin-scanner lint ./my-plugin --list-rules
-codex-plugin-scanner lint ./my-plugin --explain README_MISSING
-codex-plugin-scanner lint ./my-plugin --fix --profile strict-security
-
-# Runtime readiness verification
-codex-plugin-scanner verify ./my-plugin --format json
-
-# Artifact-backed submission gate
-codex-plugin-scanner submit ./my-plugin --profile public-marketplace --attest dist/plugin-quality.json
-
-# Diagnostic bundle
-codex-plugin-scanner doctor ./my-plugin --component mcp --bundle dist/doctor.zip
-```
-
-## Config + Baseline Example
-
-```toml
-# .codex-plugin-scanner.toml
-[scanner]
-profile = "public-marketplace"
-baseline_file = "baseline.txt"
-ignore_paths = ["tests/*", "fixtures/*"]
-
-[rules]
-disabled = ["README_MISSING"]
-severity_overrides = { CODEXIGNORE_MISSING = "low" }
-```
