@@ -50,8 +50,6 @@ jobs:
           VERSION="$BASE_VERSION"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
-          elif [ "$GITHUB_REF" = "refs/heads/main" ]; then
-            VERSION="${BASE_VERSION}.post${GITHUB_RUN_NUMBER}"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Computed version: $VERSION"
