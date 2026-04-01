@@ -64,7 +64,7 @@ def test_submission_payload_and_issue_body_include_registry_data() -> None:
         source_repository="hashgraph-online/example-good-plugin",
         source_sha="abc123",
         workflow_url="https://github.com/hashgraph-online/example-good-plugin/actions/runs/1",
-        scanner_version="1.2.0",
+        scanner_version="1.4.0",
     )
     body = build_submission_issue_body(
         metadata,
