@@ -10,10 +10,39 @@
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/codex-plugin-scanner?style=social)](https://github.com/hashgraph-online/codex-plugin-scanner/stargazers)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
 
-| ![](https://raw.githubusercontent.com/hashgraph-online/standards-sdk-py/main/Hashgraph-Online.png) | Security, publishability, and security-ops scanner for [Codex plugins](https://developers.openai.com/codex/plugins). It scores the applicable plugin surface from `0-100`, emits structured findings, validates install-surface metadata, hardens MCP transport expectations, and can run Cisco-backed skill analysis for plugin skills.<br><br>[PyPI Package](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL GitHub Repository](https://github.com/hashgraph-online/codex-plugin-scanner)<br>[Report an Issue](https://github.com/hashgraph-online/codex-plugin-scanner/issues) |
+| ![](https://raw.githubusercontent.com/hashgraph-online/standards-sdk-py/main/Hashgraph-Online.png) | **The default CI gate for Codex plugins**. Lint locally, verify in CI, and ship publish-ready bundles for manifests, skills, MCP, and marketplace metadata.<br><br>Use this after [`$plugin-creator`](https://developers.openai.com/codex/plugins) and before publishing, review, or distribution.<br><br>[PyPI Package](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL GitHub Repository](https://github.com/hashgraph-online/codex-plugin-scanner)<br>[Report an Issue](https://github.com/hashgraph-online/codex-plugin-scanner/issues) |
 | :--- | :--- |
 
-## Quick Start
+## Start In 30 Seconds
+
+```bash
+# Local preflight after scaffolding with $plugin-creator
+pipx run codex-plugin-scanner lint .
+pipx run codex-plugin-scanner verify .
+```
+
+```yaml
+# GitHub Actions PR gate
+- name: Codex plugin quality gate
+  uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
+  with:
+    plugin_dir: "."
+    fail_on_severity: high
+    min_score: 80
+```
+
+## Use After `$plugin-creator`
+
+`codex-plugin-scanner` is designed as the quality gate between plugin creation and distribution:
+
+1. Scaffold with `$plugin-creator`.
+2. Run `lint` locally to catch structure, metadata, and security issues early.
+3. Run `verify` in CI to block regressions and enforce quality policy.
+4. Ship or submit with confidence, backed by scanner artifacts and trust signals.
+
+The score remains available as a trust and triage signal, but the primary workflow is **preflight + CI gating + publish readiness**.
+
+## Quick Start For Contributors
 
 ```bash
 git clone https://github.com/hashgraph-online/codex-plugin-scanner.git
@@ -44,6 +73,14 @@ pipx run codex-plugin-scanner ./my-plugin
 
 ## What The Scanner Covers
 
+`codex-plugin-scanner` supports a full quality suite:
+
+- `scan` for full-surface security and publishability analysis
+- `lint` for rule-oriented authoring feedback
+- `verify` for runtime and install-surface readiness checks
+- `submit` for artifact-backed submission gating
+- `doctor` for targeted diagnostics and troubleshooting bundles
+
 The scanner evaluates only the surfaces a plugin actually exposes, then normalizes the final score across applicable checks. A plugin is not rewarded or penalized for optional surfaces it does not ship.
 
 | Category | Max Points | Coverage |
@@ -73,6 +110,41 @@ codex-plugin-scanner ./my-plugin --fail-on-severity high
 
 # Require Cisco skill scanning with a strict policy
 codex-plugin-scanner ./my-plugin --cisco-skill-scan on --cisco-policy strict
+```
+
+## Quality Suite Commands
+
+```bash
+# Summary scan (legacy form still works)
+codex-plugin-scanner scan ./my-plugin --format json --profile public-marketplace
+
+# Rule-oriented lint (with optional mechanical fixes)
+codex-plugin-scanner lint ./my-plugin --list-rules
+codex-plugin-scanner lint ./my-plugin --explain README_MISSING
+codex-plugin-scanner lint ./my-plugin --fix --profile strict-security
+
+# Runtime readiness verification
+codex-plugin-scanner verify ./my-plugin --format json
+
+# Artifact-backed submission gate
+codex-plugin-scanner submit ./my-plugin --profile public-marketplace --attest dist/plugin-quality.json
+
+# Diagnostic bundle
+codex-plugin-scanner doctor ./my-plugin --component mcp --bundle dist/doctor.zip
+```
+
+## Config + Baseline Example
+
+```toml
+# .codex-plugin-scanner.toml
+[scanner]
+profile = "public-marketplace"
+baseline_file = "baseline.txt"
+ignore_paths = ["tests/*", "fixtures/*"]
+
+[rules]
+disabled = ["README_MISSING"]
+severity_overrides = { CODEXIGNORE_MISSING = "low" }
 ```
 
 ## Example Output
@@ -326,38 +398,3 @@ Maintained by HOL.
 ## License
 
 Apache-2.0
-
-## Quality Suite Commands
-
-```bash
-# Summary scan (legacy form still works)
-codex-plugin-scanner scan ./my-plugin --format json --profile public-marketplace
-
-# Rule-oriented lint (with optional mechanical fixes)
-codex-plugin-scanner lint ./my-plugin --list-rules
-codex-plugin-scanner lint ./my-plugin --explain README_MISSING
-codex-plugin-scanner lint ./my-plugin --fix --profile strict-security
-
-# Runtime readiness verification
-codex-plugin-scanner verify ./my-plugin --format json
-
-# Artifact-backed submission gate
-codex-plugin-scanner submit ./my-plugin --profile public-marketplace --attest dist/plugin-quality.json
-
-# Diagnostic bundle
-codex-plugin-scanner doctor ./my-plugin --component mcp --bundle dist/doctor.zip
-```
-
-## Config + Baseline Example
-
-```toml
-# .codex-plugin-scanner.toml
-[scanner]
-profile = "public-marketplace"
-baseline_file = "baseline.txt"
-ignore_paths = ["tests/*", "fixtures/*"]
-
-[rules]
-disabled = ["README_MISSING"]
-severity_overrides = { CODEXIGNORE_MISSING = "low" }
-```
