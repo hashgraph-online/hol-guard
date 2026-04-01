@@ -122,7 +122,7 @@ jobs:
 
   publish-testpypi:
     name: Publish to TestPyPI
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi')
     needs: build
     runs-on: ubuntu-latest
     environment: testpypi
@@ -192,6 +192,7 @@ pip install codex-plugin-scanner==${VERSION}
 
 **Full Changelog**: ${COMPARE_URL}
 EOF
+
 
           echo "notes_path=release-notes.md" >> "$GITHUB_OUTPUT"
       - name: Build GitHub Action bundle
