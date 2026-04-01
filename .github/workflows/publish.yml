@@ -69,13 +69,13 @@ jobs:
 
           pyproject = Path("pyproject.toml")
           pyproject.write_text(
-              re.sub(r'^version = ".*"$', f'version = "{version}"', pyproject.read_text(), flags=re.MULTILINE),
+              re.sub(r'^version = ".*"$', f'version = "{version}"', pyproject.read_text(), count=1, flags=re.MULTILINE),
               encoding="utf-8",
           )
 
           version_py = Path("src/codex_plugin_scanner/version.py")
           version_py.write_text(
-              re.sub(r'^__version__ = ".*"$', f'__version__ = "{version}"', version_py.read_text(), flags=re.MULTILINE),
+              re.sub(r'^__version__ = ".*"$', f'__version__ = "{version}"', version_py.read_text(), count=1, flags=re.MULTILINE),
               encoding="utf-8",
           )
           PY
