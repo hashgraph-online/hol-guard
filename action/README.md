@@ -179,7 +179,7 @@ Use a fine-grained token with `issues:write` on `hashgraph-online/awesome-codex-
 
 ## Release Management
 
-- Publish immutable releases such as `v1.2.0`.
+- Publish immutable releases such as `v1.4.0`.
 - Move the floating major tag `v1` to the latest compatible release.
 - Keep this action in its own public repository for GitHub Marketplace publication.
 - Configure `ACTION_REPO_TOKEN` in the source repository so `publish-action-repo.yml` can sync this root-ready bundle automatically.

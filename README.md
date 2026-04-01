@@ -1,6 +1,6 @@
 # HOL Codex Plugin Scanner
 
-[![PyPI Version](https://img.shields.io/pypi/v/codex-plugin-scanner?logo=pypi&logoColor=white)](https://pypi.org/project/codex-plugin-scanner/)
+[![PyPI Version](https://img.shields.io/pypi/v/codex-plugin-scanner.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/codex-plugin-scanner/)
 [![Python Versions](https://img.shields.io/pypi/pyversions/codex-plugin-scanner)](https://pypi.org/project/codex-plugin-scanner/)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/codex-plugin-scanner)](https://pypistats.org/packages/codex-plugin-scanner)
 [![CI](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml)
@@ -268,7 +268,7 @@ When a tagged release is published, [publish-action-repo.yml](./.github/workflow
 
 - create the dedicated action repository if it does not already exist
 - sync the root-ready `action.yml`, `README.md`, `LICENSE`, and `SECURITY.md`
-- push the immutable release tag such as `v1.2.0`
+- push the immutable release tag such as `v1.4.0`
 - move the floating `v1` tag
 - create or update the corresponding release in the action repository
 
@@ -468,4 +468,3 @@ Plugins that pass the scanner with a high score are candidates for listing in th
 ## License
 
 Apache-2.0
-
