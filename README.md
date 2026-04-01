@@ -392,6 +392,10 @@ Maintained by HOL.
 
 The [HOL Registry Broker Codex Plugin](https://github.com/hashgraph-online/registry-broker-codex-plugin) bridges Codex plugins with the [HOL Universal Registry](https://hol.org/registry/plugins), providing agent discovery, trust signals, and verified identity on Hedera.
 
+[![Registry Broker trust badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fhol.org%2Fapi%2Fregistry%2Fbadges%2Fplugin%3Fslug%3Dhol%252Fregistry-broker-codex-plugin%26metric%3Dtrust%26style%3Dflat)](https://hol.org/registry/plugins/hol%2Fregistry-broker-codex-plugin)
+
+HOL Registry scores: **Trust 80** / **Review 83** / **Enforce 74**
+
 ```text
 🔗 Codex Plugin Scanner v1.4.0
 Scanning: ./registry-broker-codex-plugin
@@ -446,7 +450,7 @@ Scanning: ./registry-broker-codex-plugin
 Findings: critical:0, high:0, medium:0, low:0, info:0
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Final Score: 130/130 (A+ - Perfect)
+Final Score: 130/130
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
