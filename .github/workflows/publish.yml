@@ -24,57 +24,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  detect-version:
-    name: Detect version change
+  build:
+    name: Build + Verify
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
-      changed: ${{ steps.version.outputs.changed }}
-      release_exists: ${{ steps.release.outputs.exists }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          fetch-depth: 0
-      - id: version
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          GITHUB_REF: ${{ github.ref }}
-          GITHUB_RUN_NUMBER: ${{ github.run_number }}
-        run: |
-          BASE=$(python3 -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print(p['project']['version'])")
-
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
-          elif [ "$GITHUB_REF" = "refs/heads/main" ]; then
-            VERSION="${BASE}.post${GITHUB_RUN_NUMBER}"
-          else
-            VERSION="$BASE"
-          fi
-
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$GITHUB_REF" = "refs/heads/main" ] || [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          echo "Detected version: $VERSION"
-      - id: release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if gh release view "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  build:
-    name: Build + Verify
-    needs: detect-version
-    if: needs.detect-version.outputs.changed == 'true' || startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
@@ -86,10 +40,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install build twine
-      - name: Stamp computed version
+      - name: Compute publish version
+        id: version
+        env:
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
         run: |
-          VERSION="${{ needs.detect-version.outputs.version }}"
-          python - <<'PY'
+          BASE_VERSION=$(python3 -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print(p['project']['version'])")
+          VERSION="$BASE_VERSION"
+
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            VERSION="${BASE_VERSION}.dev${GITHUB_RUN_NUMBER}"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Computed version: $VERSION"
+      - name: Stamp package version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          python3 - <<'PY'
           from pathlib import Path
           import os
           import re
@@ -98,18 +69,18 @@ jobs:
 
           pyproject = Path("pyproject.toml")
           pyproject.write_text(
-              re.sub(r'^version = ".*"$', f'version = "{version}"', pyproject.read_text(), flags=re.MULTILINE),
+              re.sub(r'^version = ".*"$', f'version = "{version}"', pyproject.read_text(), count=1, flags=re.MULTILINE),
               encoding="utf-8",
           )
 
           version_py = Path("src/codex_plugin_scanner/version.py")
           version_py.write_text(
-              re.sub(r'^VERSION = ".*"$', f'VERSION = "{version}"', version_py.read_text(), flags=re.MULTILINE),
+              re.sub(r'^__version__ = ".*"$', f'__version__ = "{version}"', version_py.read_text(), count=1, flags=re.MULTILINE),
               encoding="utf-8",
           )
           PY
         env:
-          VERSION: ${{ needs.detect-version.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
       - name: Build package
         run: python -m build
       - name: Verify distributions
@@ -120,8 +91,26 @@ jobs:
           name: distributions
           path: dist/
 
+  publish-canary:
+    name: Publish Canary to TestPyPI
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a4087a40e8e0b5a5461e7c
+        with:
+          name: distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
   publish-testpypi:
-    name: Publish to TestPyPI
+    name: Publish to TestPyPI (Manual)
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'testpypi'
     needs: build
     runs-on: ubuntu-latest
@@ -136,10 +125,11 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:
           repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
 
   publish-pypi:
     name: Publish to PyPI
-    if: needs.detect-version.outputs.changed == 'true' || startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_target == 'pypi')
     needs: build
     runs-on: ubuntu-latest
     environment: pypi
@@ -156,8 +146,8 @@ jobs:
 
   release:
     name: Create GitHub Release
-    if: startsWith(github.ref, 'refs/tags/') && needs.detect-version.outputs.release_exists == 'false'
-    needs: [detect-version, publish-pypi]
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build, publish-pypi]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -165,10 +155,22 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
+      - name: Skip if release already exists
+        id: release_exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Generate changelog
+        if: steps.release_exists.outputs.exists == 'false'
         id: changelog
         run: |
-          VERSION="${{ needs.detect-version.outputs.version }}"
+          VERSION="${{ needs.build.outputs.version }}"
           LAST_TAG=$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || echo "")
 
           if [ -n "$LAST_TAG" ]; then
@@ -195,9 +197,10 @@ EOF
 
           echo "notes_path=release-notes.md" >> "$GITHUB_OUTPUT"
       - name: Build GitHub Action bundle
+        if: steps.release_exists.outputs.exists == 'false'
         id: action_bundle
         run: |
-          VERSION="${{ needs.detect-version.outputs.version }}"
+          VERSION="${{ needs.build.outputs.version }}"
           BUNDLE_ROOT="dist/github-action-bundle"
           BUNDLE_PATH="dist/hol-codex-plugin-scanner-action-v${VERSION}.zip"
 
@@ -214,10 +217,11 @@ EOF
 
           echo "bundle_path=${BUNDLE_PATH}" >> "$GITHUB_OUTPUT"
       - name: Create release
+        if: steps.release_exists.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ needs.detect-version.outputs.version }}"
+          VERSION="${{ needs.build.outputs.version }}"
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
             --notes-file "${{ steps.changelog.outputs.notes_path }}" \
