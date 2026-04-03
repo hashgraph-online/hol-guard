@@ -44,6 +44,8 @@ def test_action_runner_writes_all_outputs(monkeypatch, tmp_path, capsys) -> None
     assert "findings_total=0" in output_lines
     assert "report_path=" in output_lines
     assert "registry_payload_path=" in output_lines
+    assert "policy_pass=true" in output_lines
+    assert "verify_pass=" in output_lines
     assert "submission_eligible=false" in output_lines
     assert "submission_performed=false" in output_lines
     assert "submission_issue_urls=" in output_lines
@@ -138,4 +140,5 @@ def test_action_runner_verify_mode_writes_human_report(monkeypatch, tmp_path, ca
     assert exit_code == 0
     assert "Verification: PASS" in output_path.read_text(encoding="utf-8")
     assert "mode=verify" in github_output.read_text(encoding="utf-8")
+    assert "verify_pass=true" in github_output.read_text(encoding="utf-8")
     assert "Report written to" in capsys.readouterr().out

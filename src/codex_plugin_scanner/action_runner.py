@@ -183,6 +183,7 @@ def main() -> int:
     output_path = _read_env("OUTPUT")
     write_step_summary = _read_bool_env("WRITE_STEP_SUMMARY", default=True)
     registry_payload_output = _read_env("REGISTRY_PAYLOAD_OUTPUT")
+    upload_sarif = _read_bool_env("UPLOAD_SARIF")
     profile = _read_env("PROFILE", "default")
     config = _read_env("CONFIG")
     baseline = _read_env("BASELINE")
@@ -220,6 +221,8 @@ def main() -> int:
         "score": "",
         "grade": "",
         "grade_label": "",
+        "policy_pass": "",
+        "verify_pass": "",
         "max_severity": "",
         "findings_total": "",
         "report_path": "",
@@ -250,6 +253,12 @@ def main() -> int:
         artifact_path = ""
         verification = None
         if mode == "scan":
+            if upload_sarif:
+                if output_format != "sarif":
+                    print("upload_sarif requires format=sarif.", file=sys.stderr)
+                    return 1
+                if not output_path:
+                    output_path = "codex-plugin-scanner.sarif"
             rendered = _render_scan_output(
                 result,
                 output_format=output_format,
@@ -296,6 +305,8 @@ def main() -> int:
                 "score": str(result.score),
                 "grade": result.grade,
                 "grade_label": GRADE_LABELS.get(result.grade, "Unknown"),
+                "policy_pass": "true" if policy_eval.policy_pass else "false",
+                "verify_pass": "true" if verification is not None and verification.verify_pass else "",
                 "max_severity": max_severity(result.findings).value if result.findings else "none",
                 "findings_total": str(sum(result.severity_counts.values())),
             }
@@ -403,6 +414,7 @@ def main() -> int:
         else:
             print(rendered)
         return_code = 1 if not verification.verify_pass else 0
+        output_values["verify_pass"] = "true" if verification.verify_pass else "false"
     else:
         print(f"Unsupported mode: {mode}", file=sys.stderr)
         return 1

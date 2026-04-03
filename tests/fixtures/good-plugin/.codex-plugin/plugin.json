@@ -29,5 +29,5 @@
     "logo": "./assets/logo.svg",
     "screenshots": ["./assets/screenshot.svg"]
   },
-  "skills": "skills"
+  "skills": "./skills"
 }

@@ -89,7 +89,7 @@ The scanner evaluates only the surfaces a plugin actually exposes, then normaliz
 | Security | 24 | `SECURITY.md`, `LICENSE`, hardcoded secret detection, dangerous MCP commands, MCP transport hardening, risky approval defaults |
 | Operational Security | 20 | SHA-pinned GitHub Actions, `write-all`, privileged untrusted checkout patterns, Dependabot, dependency lockfiles |
 | Best Practices | 15 | `README.md`, skills directory, `SKILL.md` frontmatter, committed `.env`, `.codexignore` |
-| Marketplace | 15 | `marketplace.json` validity, policy fields, safe source paths |
+| Marketplace | 15 | `.agents/plugins/marketplace.json` validity, legacy `marketplace.json` compatibility, policy fields, safe source paths |
 | Skill Security | 15 | Cisco integration status, elevated skill findings, analyzability |
 | Code Quality | 10 | `eval`, `new Function`, shell-injection patterns |
 
@@ -125,6 +125,7 @@ codex-plugin-scanner lint ./my-plugin --fix --profile strict-security
 
 # Runtime readiness verification
 codex-plugin-scanner verify ./my-plugin --format json
+codex-plugin-scanner verify ./my-plugin --online --format text
 
 # Artifact-backed submission gate
 codex-plugin-scanner submit ./my-plugin --profile public-marketplace --attest dist/plugin-quality.json
@@ -132,6 +133,18 @@ codex-plugin-scanner submit ./my-plugin --profile public-marketplace --attest di
 # Diagnostic bundle
 codex-plugin-scanner doctor ./my-plugin --component mcp --bundle dist/doctor.zip
 ```
+
+## Codex Spec Alignment
+
+The scanner follows the current Codex plugin packaging conventions more closely:
+
+- local manifest paths should use `./` prefixes
+- `.agents/plugins/marketplace.json` is the preferred marketplace manifest location
+- root `marketplace.json` is still supported in compatibility mode
+- `interface` metadata no longer requires an undocumented `type` field
+- `verify` performs an MCP initialize handshake before probing declared capabilities
+
+`lint --fix` preserves or adds the documented `./` prefixes instead of stripping them away.
 
 ## Config + Baseline Example
 
@@ -217,12 +230,24 @@ The scanner currently detects or validates:
 Add the scanner to a plugin repository CI job:
 
 ```yaml
-- name: Install scanner
-  run: pip install codex-plugin-scanner
+permissions:
+  contents: read
+  security-events: write
 
-- name: Scan plugin
-  run: codex-plugin-scanner ./my-plugin --fail-on-severity high --format sarif --output codex-plugin-scanner.sarif
-  continue-on-error: true
+jobs:
+  scan-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
+        with:
+          plugin_dir: "."
+          mode: scan
+          profile: public-marketplace
+          min_score: 80
+          fail_on_severity: high
+          format: sarif
+          upload_sarif: true
 ```
 
 Local pre-commit style hook:

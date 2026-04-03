@@ -20,8 +20,12 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "config:" in action_text
     assert "baseline:" in action_text
     assert "online:" in action_text
+    assert "upload_sarif:" in action_text
+    assert "sarif_category:" in action_text
     assert "registry_payload_output:" in action_text
     assert "submission_enabled:" in action_text
+    assert "policy_pass:" in action_text
+    assert "verify_pass:" in action_text
     assert "grade_label:" in action_text
     assert "max_severity:" in action_text
     assert "findings_total:" in action_text
@@ -29,13 +33,15 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "registry_payload_path:" in action_text
     assert "submission_issue_urls:" in action_text
     assert "python3 -m codex_plugin_scanner.action_runner" in action_text
-    assert 'MODE: ${{ inputs.mode }}' in action_text
-    assert 'PROFILE: ${{ inputs.profile }}' in action_text
-    assert 'CONFIG: ${{ inputs.config }}' in action_text
-    assert 'BASELINE: ${{ inputs.baseline }}' in action_text
-    assert 'ONLINE: ${{ inputs.online }}' in action_text
+    assert "MODE: ${{ inputs.mode }}" in action_text
+    assert "PROFILE: ${{ inputs.profile }}" in action_text
+    assert "CONFIG: ${{ inputs.config }}" in action_text
+    assert "BASELINE: ${{ inputs.baseline }}" in action_text
+    assert "ONLINE: ${{ inputs.online }}" in action_text
     assert "value: ${{ steps.scan.outputs.score }}" in action_text
     assert "value: ${{ steps.scan.outputs.grade }}" in action_text
+    assert "value: ${{ steps.scan.outputs.policy_pass }}" in action_text
+    assert "value: ${{ steps.scan.outputs.verify_pass }}" in action_text
     assert "value: ${{ steps.scan.outputs.grade_label }}" in action_text
     assert "value: ${{ steps.scan.outputs.max_severity }}" in action_text
     assert "value: ${{ steps.scan.outputs.findings_total }}" in action_text
@@ -46,6 +52,7 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "value: ${{ steps.scan.outputs.submission_issue_urls }}" in action_text
     assert "value: ${{ steps.scan.outputs.submission_issue_numbers }}" in action_text
     assert "GITHUB_STEP_SUMMARY" in action_text
+    assert "github/codeql-action/upload-sarif@" in action_text
 
 
 def test_publish_workflow_attaches_marketplace_action_bundle() -> None:

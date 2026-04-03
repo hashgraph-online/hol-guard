@@ -115,6 +115,45 @@ class TestInterfaceChecks:
         r = check_interface_assets(FIXTURES / "good-plugin")
         assert r.passed and r.points == 3
 
+    def test_interface_metadata_does_not_require_type(self, tmp_path: Path):
+        plugin_dir = tmp_path
+        manifest_dir = plugin_dir / ".codex-plugin"
+        manifest_dir.mkdir(parents=True)
+        assets_dir = plugin_dir / "assets"
+        assets_dir.mkdir()
+        (assets_dir / "icon.svg").write_text("<svg />", encoding="utf-8")
+        (assets_dir / "logo.svg").write_text("<svg />", encoding="utf-8")
+        (assets_dir / "shot.svg").write_text("<svg />", encoding="utf-8")
+        (manifest_dir / "plugin.json").write_text(
+            """
+            {
+              "name": "interface-good",
+              "version": "1.0.0",
+              "description": "good interface metadata",
+              "interface": {
+                "displayName": "Good",
+                "shortDescription": "Good",
+                "longDescription": "Good",
+                "developerName": "HOL",
+                "category": "Security",
+                "capabilities": ["Read"],
+                "websiteURL": "https://example.com",
+                "privacyPolicyURL": "https://example.com/privacy",
+                "termsOfServiceURL": "https://example.com/terms",
+                "composerIcon": "./assets/icon.svg",
+                "logo": "./assets/logo.svg",
+                "screenshots": ["./assets/shot.svg"]
+              }
+            }
+            """,
+            encoding="utf-8",
+        )
+
+        result = check_interface_metadata(plugin_dir)
+
+        assert result.passed is True
+        assert result.points == 3
+
     def test_interface_assets_fail_for_unsafe_values(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             plugin_dir = Path(tmpdir)

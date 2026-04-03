@@ -3,6 +3,7 @@
   "plugins": [
     {
       "source": "https://github.com/example/plugin",
+      "category": "Developer Tools",
       "policy": {
         "installation": "auto",
         "authentication": "none"
