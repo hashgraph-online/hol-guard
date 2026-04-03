@@ -1,0 +1,53 @@
+name: Fuzzing
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  code-change:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: google/clusterfuzzlite/actions/build_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c
+        with:
+          language: python
+          sanitizer: address
+      - uses: google/clusterfuzzlite/actions/run_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          mode: code-change
+          sanitizer: address
+          fuzz-seconds: 600
+          output-sarif: true
+
+  batch:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: google/clusterfuzzlite/actions/build_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c
+        with:
+          language: python
+          sanitizer: address
+      - uses: google/clusterfuzzlite/actions/run_fuzzers@52ecc61cb587ee99c26825a112a21abf19c7448c
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          mode: batch
+          sanitizer: address
+          fuzz-seconds: 1800
+          output-sarif: true
