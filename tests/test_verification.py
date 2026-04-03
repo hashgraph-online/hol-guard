@@ -131,6 +131,12 @@ def test_verify_plugin_kills_stdio_process_on_runtime_exception(tmp_path: Path, 
             nonlocal killed
             killed = True
 
+        def poll(self):
+            return None
+
+        def wait(self, timeout=None):
+            return None
+
     monkeypatch.setattr(verification_module.subprocess, "Popen", lambda *args, **kwargs: StubProcess())
     (tmp_path / ".mcp.json").write_text(
         '{"mcpServers":{"demo":{"command":"python","args":["-c","print(1)"]}}}',

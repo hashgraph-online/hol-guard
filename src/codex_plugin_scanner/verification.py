@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import re
 import subprocess
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import __version__
 from .checks.manifest import load_manifest
 from .checks.manifest_support import safe_manifest_path
 from .marketplace_support import (
@@ -68,6 +72,26 @@ def _read_json(path: Path) -> dict | list | None:
 
 def _is_safe_relative_asset(plugin_dir: Path, value: str) -> bool:
     return is_safe_relative_path(plugin_dir, value, require_prefix=True, require_exists=True)
+
+
+def _readline_with_timeout(stream, *, timeout: float, command: list[str], transcript: list[str]) -> str:
+    result_queue: queue.Queue[str | BaseException] = queue.Queue(maxsize=1)
+
+    def _reader() -> None:
+        try:
+            result_queue.put(stream.readline())
+        except BaseException as exc:  # pragma: no cover - defensive worker handoff
+            result_queue.put(exc)
+
+    thread = threading.Thread(target=_reader, daemon=True)
+    thread.start()
+    try:
+        result = result_queue.get(timeout=timeout)
+    except queue.Empty as exc:
+        raise subprocess.TimeoutExpired(command, timeout, output="\n".join(transcript)) from exc
+    if isinstance(result, BaseException):
+        raise result
+    return result
 
 
 def _check_manifest(plugin_dir: Path) -> list[VerificationCase]:
@@ -449,14 +473,19 @@ def _check_mcp_stdio(servers: dict) -> tuple[list[VerificationCase], list[Runtim
                 "params": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
-                    "clientInfo": {"name": "codex-plugin-scanner", "version": "1.4.0"},
+                    "clientInfo": {"name": "codex-plugin-scanner", "version": __version__},
                 },
             }
             proc.stdin.write(json.dumps(initialize_request) + "\n")
             proc.stdin.flush()
             transcript.append("> " + json.dumps(initialize_request))
 
-            initialize_response_line = proc.stdout.readline()
+            initialize_response_line = _readline_with_timeout(
+                proc.stdout,
+                timeout=2,
+                command=command,
+                transcript=transcript,
+            )
             if not initialize_response_line:
                 raise RuntimeError("server did not respond to initialize")
             transcript.append("< " + initialize_response_line.strip())
@@ -486,7 +515,12 @@ def _check_mcp_stdio(servers: dict) -> tuple[list[VerificationCase], list[Runtim
                     proc.stdin.write(json.dumps(request) + "\n")
                     proc.stdin.flush()
                     transcript.append("> " + json.dumps(request))
-                    response_line = proc.stdout.readline()
+                    response_line = _readline_with_timeout(
+                        proc.stdout,
+                        timeout=2,
+                        command=command,
+                        transcript=transcript,
+                    )
                     if not response_line:
                         raise RuntimeError(f"server did not respond to {method}")
                     transcript.append("< " + response_line.strip())
@@ -548,12 +582,10 @@ def _check_mcp_stdio(servers: dict) -> tuple[list[VerificationCase], list[Runtim
             )
             cases.append(VerificationCase("mcp", f"stdio timeout:{name}", False, "process timed out", "timeout"))
         except Exception as exc:
-            poll = getattr(proc, "poll", None)
-            wait = getattr(proc, "wait", None)
-            if not callable(poll) or poll() is None:
+            if proc.poll() is None:
                 proc.kill()
-                if callable(wait):
-                    wait(timeout=1)
+                with suppress(Exception):
+                    proc.wait(timeout=1)
             stdout = proc.stdout.read() if proc.stdout is not None else ""
             stderr = proc.stderr.read() if proc.stderr is not None else ""
             transcript_output = "\n".join(transcript)
