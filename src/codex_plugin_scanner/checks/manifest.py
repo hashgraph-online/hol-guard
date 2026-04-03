@@ -38,7 +38,7 @@ def load_manifest(plugin_dir: Path) -> dict | None:
         return None
     try:
         return load_manifest_text(path.read_text(encoding="utf-8"))
-    except OSError:
+    except (OSError, ValueError):
         return None
 
 

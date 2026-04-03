@@ -47,6 +47,15 @@ class TestLoadManifest:
             result = load_manifest(Path(tmpdir) / "nonexistent")
             assert result is None
 
+    def test_returns_none_for_non_utf8_manifest(self, tmp_path: Path):
+        manifest_dir = tmp_path / ".codex-plugin"
+        manifest_dir.mkdir(parents=True)
+        (manifest_dir / "plugin.json").write_bytes(b"\xff\xfe\x00\x00")
+
+        result = load_manifest(tmp_path)
+
+        assert result is None
+
 
 class TestCheckPluginJsonExists:
     def test_passes_when_exists(self):
