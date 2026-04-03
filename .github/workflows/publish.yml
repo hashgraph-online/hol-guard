@@ -34,12 +34,11 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: pyproject.toml
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          enable-cache: true
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install build twine
+        run: uv sync --frozen --extra dev --group publish
       - name: Compute publish version
         id: version
         env:
@@ -60,9 +59,9 @@ jobs:
           sed -i "1,/^version = /{s/^version = .*/version = \"$VERSION\"/}" pyproject.toml
           sed -i "1,/^__version__ = /{s/^__version__ = .*/__version__ = \"$VERSION\"/}" src/codex_plugin_scanner/version.py
       - name: Build package
-        run: python -m build
+        run: uv run --no-sync python -m build
       - name: Verify distributions
-        run: twine check dist/*
+        run: uv run --no-sync twine check dist/*
       - name: Upload artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
@@ -149,7 +148,7 @@ jobs:
 
           ### Installation
           \`\`\`bash
-          pip install codex-plugin-scanner==${VERSION}
+          uv tool install codex-plugin-scanner==${VERSION}
           \`\`\`
 
           **Full Changelog**: https://github.com/hashgraph-online/codex-plugin-scanner/compare/${LAST_TAG}...v${VERSION}

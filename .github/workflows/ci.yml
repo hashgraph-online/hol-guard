@@ -19,11 +19,13 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-      - run: pip install -e ".[dev]"
-      - run: ruff check src/
-      - run: ruff format --check src/
-      - run: pytest --tb=short
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+      - run: uv run --no-sync ruff check src/
+      - run: uv run --no-sync ruff format --check src/
+      - run: uv run --no-sync pytest --tb=short
 
   cross-platform:
     runs-on: ${{ matrix.os }}
@@ -36,6 +38,8 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-      - run: pip install -e ".[dev]"
-      - run: pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py --tb=short
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+      - run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py --tb=short
