@@ -43,12 +43,22 @@ jobs:
         id: version
         env:
           GITHUB_REF: ${{ github.ref }}
-          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: |
           BASE_VERSION=$(python3 -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print(p['project']['version'])")
           VERSION="$BASE_VERSION"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+            LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n1)
+            if [[ -n "$LAST_TAG" ]]; then
+              IFS=. read -r MAJOR MINOR PATCH <<< "${LAST_TAG#v}"
+              if [[ -z "$MAJOR" || -z "$MINOR" || -z "$PATCH" ]]; then
+                echo "Unsupported release tag format: $LAST_TAG" >&2
+                exit 1
+              fi
+              VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+            fi
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Computed version: $VERSION"
