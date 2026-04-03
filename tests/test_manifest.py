@@ -12,6 +12,7 @@ from codex_plugin_scanner.checks.manifest import (
     check_semver,
     check_valid_json,
     load_manifest,
+    load_manifest_text,
     run_manifest_checks,
 )
 
@@ -19,6 +20,15 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class TestLoadManifest:
+    def test_load_manifest_text_returns_dict_for_valid_json_text(self):
+        result = load_manifest_text('{"name":"example-good-plugin","version":"1.0.0","description":"ok"}')
+        assert isinstance(result, dict)
+        assert result["name"] == "example-good-plugin"
+
+    def test_load_manifest_text_returns_none_for_invalid_json_text(self):
+        result = load_manifest_text("{invalid")
+        assert result is None
+
     def test_returns_dict_for_valid_json(self):
         result = load_manifest(FIXTURES / "good-plugin")
         assert isinstance(result, dict)
@@ -36,6 +46,15 @@ class TestLoadManifest:
         with tempfile.TemporaryDirectory() as tmpdir:
             result = load_manifest(Path(tmpdir) / "nonexistent")
             assert result is None
+
+    def test_returns_none_for_non_utf8_manifest(self, tmp_path: Path):
+        manifest_dir = tmp_path / ".codex-plugin"
+        manifest_dir.mkdir(parents=True)
+        (manifest_dir / "plugin.json").write_bytes(b"\xff\xfe\x00\x00")
+
+        result = load_manifest(tmp_path)
+
+        assert result is None
 
 
 class TestCheckPluginJsonExists:

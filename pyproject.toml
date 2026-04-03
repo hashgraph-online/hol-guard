@@ -42,6 +42,11 @@ dev = [
     "ruff>=0.4.0",
 ]
 
+[dependency-groups]
+publish = [
+    "twine>=6.1.0",
+]
+
 [project.scripts]
 codex-plugin-scanner = "codex_plugin_scanner.cli:main"
 

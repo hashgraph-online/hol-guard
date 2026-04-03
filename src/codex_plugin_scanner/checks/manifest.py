@@ -24,13 +24,21 @@ SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
+def load_manifest_text(raw_text: str) -> dict | None:
+    try:
+        parsed = json.loads(raw_text)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def load_manifest(plugin_dir: Path) -> dict | None:
     path = plugin_dir / ".codex-plugin" / "plugin.json"
     if not path.exists():
         return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+        return load_manifest_text(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
         return None
 
 
