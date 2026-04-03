@@ -35,6 +35,14 @@ inputs:
     description: "Enable live network probing for verify mode"
     required: false
     default: "false"
+  upload_sarif:
+    description: "Upload the generated SARIF report to GitHub code scanning. Requires security-events: write in the calling workflow."
+    required: false
+    default: "false"
+  sarif_category:
+    description: "SARIF category used when upload_sarif is enabled"
+    required: false
+    default: "codex-plugin-scanner"
   write_step_summary:
     description: "Write a concise markdown summary to the GitHub Actions job summary"
     required: false
@@ -114,6 +122,12 @@ outputs:
   grade_label:
     description: "The human-readable grade label"
     value: ${{ steps.scan.outputs.grade_label }}
+  policy_pass:
+    description: "Whether the selected policy profile passed"
+    value: ${{ steps.scan.outputs.policy_pass }}
+  verify_pass:
+    description: "Whether runtime verification passed"
+    value: ${{ steps.scan.outputs.verify_pass }}
   max_severity:
     description: "The most severe finding in the scan result, or none"
     value: ${{ steps.scan.outputs.max_severity }}
@@ -184,6 +198,7 @@ runs:
         CONFIG: ${{ inputs.config }}
         BASELINE: ${{ inputs.baseline }}
         ONLINE: ${{ inputs.online }}
+        UPLOAD_SARIF: ${{ inputs.upload_sarif }}
         WRITE_STEP_SUMMARY: ${{ inputs.write_step_summary }}
         REGISTRY_PAYLOAD_OUTPUT: ${{ inputs.registry_payload_output }}
         MIN_SCORE: ${{ inputs.min_score }}
@@ -202,3 +217,10 @@ runs:
         SUBMISSION_AUTHOR: ${{ inputs.submission_author }}
         GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
       run: python3 -m codex_plugin_scanner.action_runner
+
+    - name: Upload SARIF
+      if: ${{ inputs.upload_sarif == 'true' && inputs.mode == 'scan' && steps.scan.outputs.report_path != '' }}
+      uses: github/codeql-action/upload-sarif@51f77329afa6477de8c49fc9c7046c15b9a4e79d
+      with:
+        sarif_file: ${{ steps.scan.outputs.report_path }}
+        category: ${{ inputs.sarif_category }}

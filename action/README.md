@@ -20,12 +20,15 @@ This README is intentionally root-ready for a dedicated GitHub Marketplace actio
 | Input | Description | Default |
 |-------|-------------|---------|
 | `plugin_dir` | Path to the plugin directory to scan | `.` |
+| `mode` | Execution mode: `scan`, `lint`, `verify`, or `submit` | `scan` |
 | `format` | Output format: `text`, `json`, `markdown`, `sarif` | `text` |
 | `output` | Write report to this file path | `""` |
 | `profile` | Policy profile: `default`, `public-marketplace`, or `strict-security` | `default` |
 | `config` | Optional path to `.codex-plugin-scanner.toml` | `""` |
 | `baseline` | Optional path to a baseline suppression file | `""` |
 | `online` | Enable live network probing for `verify` mode | `false` |
+| `upload_sarif` | Upload the generated SARIF report to GitHub code scanning when `mode: scan` | `false` |
+| `sarif_category` | SARIF category used during GitHub code scanning upload | `codex-plugin-scanner` |
 | `write_step_summary` | Write a concise markdown summary to the GitHub Actions job summary | `true` |
 | `registry_payload_output` | Write a machine-readable Codex ecosystem payload JSON file for registry or awesome-list automation | `""` |
 | `min_score` | Fail if score is below this threshold (0-100) | `0` |
@@ -51,6 +54,8 @@ This README is intentionally root-ready for a dedicated GitHub Marketplace actio
 | `score` | Numeric score (0-100) |
 | `grade` | Letter grade (A-F) |
 | `grade_label` | Human-readable grade label |
+| `policy_pass` | `true` when the selected policy profile passed |
+| `verify_pass` | `true` when runtime verification passed |
 | `max_severity` | Highest finding severity, or `none` |
 | `findings_total` | Total number of findings across all severities |
 | `report_path` | Path to the rendered report file, if `output` was set |
@@ -82,12 +87,22 @@ Mode notes:
 ### SARIF output for GitHub Code Scanning
 
 ```yaml
-- uses: your-org/hol-codex-plugin-scanner-action@v1
-  with:
-    plugin_dir: "."
-    format: sarif
-    output: codex-plugin-scanner.sarif
-    fail_on_severity: high
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: your-org/hol-codex-plugin-scanner-action@v1
+        with:
+          plugin_dir: "."
+          mode: scan
+          format: sarif
+          fail_on_severity: high
+          upload_sarif: true
 ```
 
 ### With Cisco skill scanning
@@ -109,7 +124,7 @@ Mode notes:
   with:
     plugin_dir: "."
     format: sarif
-    output: codex-plugin-scanner.sarif
+    upload_sarif: true
     registry_payload_output: codex-plugin-registry-payload.json
 
 - name: Show trust signals
@@ -205,3 +220,5 @@ Set `mode` to one of `scan`, `lint`, `verify`, or `submit`.
 ```
 
 For `submit` mode, use `registry_payload_output` to control artifact path.
+
+For `scan` mode, set `upload_sarif: true` to emit and upload SARIF automatically instead of wiring a separate upload step by hand.

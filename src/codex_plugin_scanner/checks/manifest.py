@@ -6,15 +6,22 @@ import json
 import re
 from pathlib import Path
 
-from ..models import CheckResult, Finding, Severity
+from ..models import CheckResult, Severity
+from .manifest_support import (
+    HEX_COLOR_RE,
+    INTERFACE_ASSET_FIELDS,
+    INTERFACE_METADATA_FIELDS,
+    INTERFACE_URL_FIELDS,
+    RECOMMENDED_FIELDS,
+    interface_asset_paths,
+    is_https_url,
+    load_interface,
+    manifest_finding,
+    safe_manifest_path,
+)
 
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-RECOMMENDED_FIELDS = ("author", "homepage", "repository", "license", "keywords")
-INTERFACE_METADATA_FIELDS = ("type", "displayName", "shortDescription", "longDescription", "developerName", "category")
-INTERFACE_URL_FIELDS = ("websiteURL", "privacyPolicyURL", "termsOfServiceURL")
-INTERFACE_ASSET_FIELDS = ("composerIcon", "logo")
-HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
 def load_manifest(plugin_dir: Path) -> dict | None:
@@ -27,54 +34,12 @@ def load_manifest(plugin_dir: Path) -> dict | None:
         return None
 
 
-def _manifest_finding(
-    rule_id: str,
-    title: str,
-    description: str,
-    remediation: str,
-    *,
-    severity: Severity = Severity.MEDIUM,
-) -> Finding:
-    return Finding(
-        rule_id=rule_id,
-        severity=severity,
-        category="manifest-validation",
-        title=title,
-        description=description,
-        remediation=remediation,
-        file_path=".codex-plugin/plugin.json",
-    )
-
-
-def _is_safe_relative_path(plugin_dir: Path, value: str) -> bool:
-    candidate = Path(value)
-    if candidate.is_absolute():
-        return False
-    resolved = (plugin_dir / candidate).resolve()
-    try:
-        resolved.relative_to(plugin_dir.resolve())
-    except ValueError:
-        return False
-    return True
-
-
-def _load_interface(manifest: dict | None) -> dict | None:
-    if manifest is None:
-        return None
-    interface = manifest.get("interface")
-    if interface is None:
-        return None
-    if isinstance(interface, dict):
-        return interface
-    return {}
-
-
 def check_plugin_json_exists(plugin_dir: Path) -> CheckResult:
     exists = (plugin_dir / ".codex-plugin" / "plugin.json").exists()
     findings = ()
     if not exists:
         findings = (
-            _manifest_finding(
+            manifest_finding(
                 "PLUGIN_JSON_MISSING",
                 "plugin.json is missing",
                 "Codex plugins must declare .codex-plugin/plugin.json.",
@@ -104,7 +69,7 @@ def check_valid_json(plugin_dir: Path) -> CheckResult:
             max_points=4,
             message="plugin.json is not valid JSON",
             findings=(
-                _manifest_finding(
+                manifest_finding(
                     "PLUGIN_JSON_INVALID",
                     "plugin.json is invalid JSON",
                     "The plugin manifest could not be parsed.",
@@ -124,7 +89,7 @@ def check_required_fields(plugin_dir: Path) -> CheckResult:
             max_points=5,
             message="Cannot parse plugin.json",
             findings=(
-                _manifest_finding(
+                manifest_finding(
                     "PLUGIN_JSON_REQUIRED_FIELDS_UNCHECKED",
                     "Required fields could not be validated",
                     "Required manifest fields cannot be validated until plugin.json parses cleanly.",
@@ -143,7 +108,7 @@ def check_required_fields(plugin_dir: Path) -> CheckResult:
             message="All required fields (name, version, description) are present.",
         )
     findings = tuple(
-        _manifest_finding(
+        manifest_finding(
             f"PLUGIN_JSON_MISSING_{field.upper()}",
             f'Manifest field "{field}" is missing',
             f'The manifest does not define a valid string for "{field}".',
@@ -187,7 +152,7 @@ def check_semver(plugin_dir: Path) -> CheckResult:
         max_points=3,
         message=f'Version "{version}" does not follow semver (expected X.Y.Z).',
         findings=(
-            _manifest_finding(
+            manifest_finding(
                 "PLUGIN_JSON_BAD_SEMVER",
                 "Manifest version is not semver",
                 f'The version "{version}" does not match the documented semver format.',
@@ -224,7 +189,7 @@ def check_kebab_case(plugin_dir: Path) -> CheckResult:
         max_points=2,
         message=f'Name "{name}" should be kebab-case.',
         findings=(
-            _manifest_finding(
+            manifest_finding(
                 "PLUGIN_JSON_BAD_NAME",
                 "Manifest name is not kebab-case",
                 f'The plugin name "{name}" does not follow the recommended kebab-case style.',
@@ -270,7 +235,7 @@ def check_recommended_metadata(plugin_dir: Path) -> CheckResult:
         )
 
     findings = tuple(
-        _manifest_finding(
+        manifest_finding(
             f"PLUGIN_JSON_RECOMMENDED_{field.upper()}",
             f'Recommended field "{field}" is missing',
             f'The manifest is missing the documented recommended field "{field}".',
@@ -291,7 +256,7 @@ def check_recommended_metadata(plugin_dir: Path) -> CheckResult:
 
 def check_interface_metadata(plugin_dir: Path) -> CheckResult:
     manifest = load_manifest(plugin_dir)
-    interface = _load_interface(manifest)
+    interface = load_interface(manifest)
     if interface is None:
         return CheckResult(
             name="Interface metadata complete if declared",
@@ -310,7 +275,7 @@ def check_interface_metadata(plugin_dir: Path) -> CheckResult:
             max_points=3,
             message="Manifest interface must be a JSON object.",
             findings=(
-                _manifest_finding(
+                manifest_finding(
                     "PLUGIN_JSON_INTERFACE_INVALID",
                     "Manifest interface is not a JSON object",
                     'The "interface" field must be an object when it is declared.',
@@ -358,7 +323,7 @@ def check_interface_metadata(plugin_dir: Path) -> CheckResult:
         )
 
     findings = tuple(
-        _manifest_finding(
+        manifest_finding(
             f"PLUGIN_JSON_INTERFACE_{field.upper()}",
             f'Interface field "{field}" is missing or invalid',
             f'The interface object is missing a valid "{field}" value.',
@@ -377,21 +342,9 @@ def check_interface_metadata(plugin_dir: Path) -> CheckResult:
     )
 
 
-def _is_https_url(value: object) -> bool:
-    return isinstance(value, str) and value.startswith("https://")
-
-
-def _interface_asset_paths(value: object) -> list[str]:
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, list):
-        return [item for item in value if isinstance(item, str)]
-    return []
-
-
 def check_interface_assets(plugin_dir: Path) -> CheckResult:
     manifest = load_manifest(plugin_dir)
-    interface = _load_interface(manifest)
+    interface = load_interface(manifest)
     if interface is None:
         return CheckResult(
             name="Interface links and assets valid if declared",
@@ -410,7 +363,7 @@ def check_interface_assets(plugin_dir: Path) -> CheckResult:
             max_points=3,
             message="Manifest interface must be a JSON object.",
             findings=(
-                _manifest_finding(
+                manifest_finding(
                     "PLUGIN_JSON_INTERFACE_INVALID",
                     "Manifest interface is not a JSON object",
                     'The "interface" field must be an object when it is declared.',
@@ -421,24 +374,27 @@ def check_interface_assets(plugin_dir: Path) -> CheckResult:
 
     issues: list[str] = []
     for field in INTERFACE_URL_FIELDS:
-        if not _is_https_url(interface.get(field)):
+        if not is_https_url(interface.get(field)):
             issues.append(field)
 
     for field in INTERFACE_ASSET_FIELDS:
         value = interface.get(field)
         if (
             not isinstance(value, str)
-            or not _is_safe_relative_path(plugin_dir, value)
+            or not safe_manifest_path(plugin_dir, value, require_exists=True)
             or not (plugin_dir / value).exists()
         ):
             issues.append(field)
 
-    screenshots = _interface_asset_paths(interface.get("screenshots"))
+    screenshots = interface_asset_paths(interface.get("screenshots"))
     if not screenshots:
         issues.append("screenshots")
     else:
         for screenshot in screenshots:
-            if not _is_safe_relative_path(plugin_dir, screenshot) or not (plugin_dir / screenshot).exists():
+            if (
+                not safe_manifest_path(plugin_dir, screenshot, require_exists=True)
+                or not (plugin_dir / screenshot).exists()
+            ):
                 issues.append("screenshots")
                 break
 
@@ -452,7 +408,7 @@ def check_interface_assets(plugin_dir: Path) -> CheckResult:
         )
 
     findings = tuple(
-        _manifest_finding(
+        manifest_finding(
             f"PLUGIN_JSON_INTERFACE_ASSET_{field.upper()}",
             f'Interface asset or URL "{field}" is invalid',
             f'The interface field "{field}" must use HTTPS or point to a safe in-repo asset.',
@@ -484,13 +440,15 @@ def check_declared_paths_safe(plugin_dir: Path) -> CheckResult:
 
     unsafe: list[str] = []
     skills_path = manifest.get("skills")
-    if isinstance(skills_path, str) and not _is_safe_relative_path(plugin_dir, skills_path):
+    if isinstance(skills_path, str) and not safe_manifest_path(plugin_dir, skills_path):
         unsafe.append(f"skills={skills_path}")
 
     apps = manifest.get("apps")
+    if isinstance(apps, str):
+        apps = [apps]
     if isinstance(apps, list):
         for app in apps:
-            if isinstance(app, str) and not _is_safe_relative_path(plugin_dir, app):
+            if isinstance(app, str) and not safe_manifest_path(plugin_dir, app):
                 unsafe.append(f"apps={app}")
 
     if not unsafe:
@@ -503,7 +461,7 @@ def check_declared_paths_safe(plugin_dir: Path) -> CheckResult:
         )
 
     findings = tuple(
-        _manifest_finding(
+        manifest_finding(
             "PLUGIN_JSON_UNSAFE_PATH",
             "Manifest declares an unsafe path",
             f'The manifest path "{entry}" resolves outside the plugin directory or is absolute.',

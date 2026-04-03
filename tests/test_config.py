@@ -42,7 +42,7 @@ def test_load_scanner_config_bad_toml(tmp_path: Path):
     (tmp_path / ".codex-plugin-scanner.toml").write_text("[scanner\nprofile='x'", encoding="utf-8")
     try:
         load_scanner_config(tmp_path)
-        assert False, "expected ConfigError"
+        raise AssertionError("expected ConfigError")
     except ConfigError:
         assert True
 
@@ -51,6 +51,6 @@ def test_load_baseline_bad_json(tmp_path: Path):
     (tmp_path / "baseline.json").write_text("[not-valid-json", encoding="utf-8")
     try:
         load_baseline_rule_ids(tmp_path, "baseline.json")
-        assert False, "expected ConfigError"
+        raise AssertionError("expected ConfigError")
     except ConfigError:
         assert True

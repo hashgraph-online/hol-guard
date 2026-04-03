@@ -4,20 +4,30 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import re
 import subprocess
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import __version__
 from .checks.manifest import load_manifest
-from .checks.marketplace import _is_safe_source
+from .checks.manifest_support import safe_manifest_path
+from .marketplace_support import (
+    extract_marketplace_source,
+    load_marketplace_context,
+    marketplace_label,
+    validate_marketplace_path_requirements,
+)
+from .path_support import is_safe_relative_path
 
 MARKDOWN_LINK_RE = re.compile(r"\[[^]]+\]\(([^)]+)\)")
 INTERFACE_REQUIRED_FIELDS = (
-    "type",
     "displayName",
     "shortDescription",
     "developerName",
@@ -61,15 +71,27 @@ def _read_json(path: Path) -> dict | list | None:
 
 
 def _is_safe_relative_asset(plugin_dir: Path, value: str) -> bool:
-    candidate = Path(value)
-    if candidate.is_absolute():
-        return False
-    resolved = (plugin_dir / candidate).resolve()
+    return is_safe_relative_path(plugin_dir, value, require_prefix=True, require_exists=True)
+
+
+def _readline_with_timeout(stream, *, timeout: float, command: list[str], transcript: list[str]) -> str:
+    result_queue: queue.Queue[str | BaseException] = queue.Queue(maxsize=1)
+
+    def _reader() -> None:
+        try:
+            result_queue.put(stream.readline())
+        except BaseException as exc:  # pragma: no cover - defensive worker handoff
+            result_queue.put(exc)
+
+    thread = threading.Thread(target=_reader, daemon=True)
+    thread.start()
     try:
-        resolved.relative_to(plugin_dir.resolve())
-    except ValueError:
-        return False
-    return resolved.exists() and resolved.is_file()
+        result = result_queue.get(timeout=timeout)
+    except queue.Empty as exc:
+        raise subprocess.TimeoutExpired(command, timeout, output="\n".join(transcript)) from exc
+    if isinstance(result, BaseException):
+        raise result
+    return result
 
 
 def _check_manifest(plugin_dir: Path) -> list[VerificationCase]:
@@ -211,55 +233,63 @@ def _check_manifest(plugin_dir: Path) -> list[VerificationCase]:
 
 
 def _check_marketplace(plugin_dir: Path) -> list[VerificationCase]:
-    marketplace = plugin_dir / "marketplace.json"
-    if not marketplace.exists():
+    try:
+        context = load_marketplace_context(plugin_dir)
+    except json.JSONDecodeError:
+        return [
+            VerificationCase(
+                "marketplace",
+                "marketplace manifest parses",
+                False,
+                "Invalid marketplace manifest",
+                "invalid-json",
+            )
+        ]
+    except ValueError:
+        return [
+            VerificationCase(
+                "marketplace",
+                "marketplace manifest shape",
+                False,
+                "Marketplace manifest must be a JSON object",
+                "schema",
+            )
+        ]
+
+    if context is None:
         return [
             VerificationCase(
                 "marketplace",
                 "marketplace optional",
                 True,
-                "marketplace.json not present",
+                "No marketplace manifest present",
                 "optional",
             )
         ]
 
-    payload = _read_json(marketplace)
-    if payload is None:
-        return [
-            VerificationCase(
-                "marketplace",
-                "marketplace.json parses",
-                False,
-                "Invalid marketplace.json",
-                "invalid-json",
-            )
-        ]
-    if not isinstance(payload, dict):
-        return [
-            VerificationCase(
-                "marketplace",
-                "marketplace.json shape",
-                False,
-                "marketplace.json must be an object",
-                "schema",
-            )
-        ]
-
+    file_label = marketplace_label(context)
+    compatibility_message = " (legacy compatibility mode)" if context.legacy else ""
     cases = [
-        VerificationCase("marketplace", "marketplace.json parses", True, "marketplace.json is valid JSON"),
+        VerificationCase(
+            "marketplace",
+            "marketplace manifest parses",
+            True,
+            f"{file_label} is valid JSON{compatibility_message}",
+            "compatibility" if context.legacy else "pass",
+        )
     ]
-    has_name = isinstance(payload.get("name"), str) and bool(payload.get("name"))
+    has_name = isinstance(context.payload.get("name"), str) and bool(context.payload.get("name"))
     cases.append(
         VerificationCase(
             "marketplace",
             "marketplace name",
             has_name,
-            "Marketplace name is declared" if has_name else 'marketplace.json must declare a string "name"',
-            "schema" if not has_name else "pass",
+            "Marketplace name is declared" if has_name else f'{file_label} must declare a string "name"',
+            "schema" if not has_name else ("compatibility" if context.legacy else "pass"),
         )
     )
 
-    plugins = payload.get("plugins")
+    plugins = context.payload.get("plugins")
     if not isinstance(plugins, list) or not plugins:
         cases.append(
             VerificationCase(
@@ -279,11 +309,14 @@ def _check_marketplace(plugin_dir: Path) -> list[VerificationCase]:
         if not isinstance(plugin, dict):
             discovery_issues.append(f"plugin[{index}] must be an object")
             continue
-        source = plugin.get("source")
-        if not isinstance(source, str) or not source:
-            discovery_issues.append(f"plugin[{index}] missing source")
-        elif not _is_safe_source(plugin_dir, source):
-            discovery_issues.append(f"plugin[{index}] unsafe source {source}")
+        if context.legacy:
+            source_ref, _source_path = extract_marketplace_source(plugin)
+            if not source_ref:
+                discovery_issues.append(f"plugin[{index}] missing source")
+        else:
+            issue = validate_marketplace_path_requirements(context, plugin)
+            if issue is not None:
+                discovery_issues.append(f"plugin[{index}] {issue}")
         policy = plugin.get("policy")
         if not isinstance(policy, dict):
             policy_issues.append(f"plugin[{index}] missing policy object")
@@ -292,6 +325,8 @@ def _check_marketplace(plugin_dir: Path) -> list[VerificationCase]:
             policy_issues.append(f"plugin[{index}] missing policy.installation")
         if not isinstance(policy.get("authentication"), str) or not policy.get("authentication"):
             policy_issues.append(f"plugin[{index}] missing policy.authentication")
+        if not isinstance(plugin.get("category"), str) or not plugin.get("category"):
+            policy_issues.append(f"plugin[{index}] missing category")
 
     cases.append(
         VerificationCase(
@@ -299,7 +334,7 @@ def _check_marketplace(plugin_dir: Path) -> list[VerificationCase]:
             "discovery simulation",
             not discovery_issues,
             "Marketplace entries are discoverable" if not discovery_issues else "; ".join(discovery_issues),
-            "schema" if discovery_issues else "pass",
+            "schema" if discovery_issues else ("compatibility" if context.legacy else "pass"),
         )
     )
     cases.append(
@@ -308,7 +343,7 @@ def _check_marketplace(plugin_dir: Path) -> list[VerificationCase]:
             "policy metadata",
             not policy_issues,
             "Marketplace policy metadata is complete" if not policy_issues else "; ".join(policy_issues),
-            "schema" if policy_issues else "pass",
+            "schema" if policy_issues else ("compatibility" if context.legacy else "pass"),
         )
     )
     return cases
@@ -427,18 +462,84 @@ def _check_mcp_stdio(servers: dict) -> tuple[list[VerificationCase], list[Runtim
                 )
             )
             continue
+        transcript: list[str] = []
         try:
-            if proc.stdin:
-                proc.stdin.write('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n')
-                proc.stdin.flush()
-            stdout, stderr = proc.communicate(timeout=2)
+            if proc.stdin is None or proc.stdout is None or proc.stderr is None:
+                raise RuntimeError("stdio server did not expose all pipes")
+            initialize_request = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
+                    "clientInfo": {"name": "codex-plugin-scanner", "version": __version__},
+                },
+            }
+            proc.stdin.write(json.dumps(initialize_request) + "\n")
+            proc.stdin.flush()
+            transcript.append("> " + json.dumps(initialize_request))
+
+            initialize_response_line = _readline_with_timeout(
+                proc.stdout,
+                timeout=2,
+                command=command,
+                transcript=transcript,
+            )
+            if not initialize_response_line:
+                raise RuntimeError("server did not respond to initialize")
+            transcript.append("< " + initialize_response_line.strip())
+            initialize_response = json.loads(initialize_response_line)
+            result_payload = initialize_response.get("result")
+            if not isinstance(result_payload, dict):
+                raise RuntimeError("server returned an invalid initialize result")
+
+            initialized_notification = {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
+            proc.stdin.write(json.dumps(initialized_notification) + "\n")
+            proc.stdin.flush()
+            transcript.append("> " + json.dumps(initialized_notification))
+
+            capabilities = result_payload.get("capabilities")
+            probe_methods = (
+                ("tools/list", "tools"),
+                ("resources/list", "resources"),
+                ("prompts/list", "prompts"),
+            )
+            request_id = 2
+            if isinstance(capabilities, dict):
+                for method, key in probe_methods:
+                    if key not in capabilities:
+                        continue
+                    request = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": {}}
+                    request_id += 1
+                    proc.stdin.write(json.dumps(request) + "\n")
+                    proc.stdin.flush()
+                    transcript.append("> " + json.dumps(request))
+                    response_line = _readline_with_timeout(
+                        proc.stdout,
+                        timeout=2,
+                        command=command,
+                        transcript=transcript,
+                    )
+                    if not response_line:
+                        raise RuntimeError(f"server did not respond to {method}")
+                    transcript.append("< " + response_line.strip())
+                    json.loads(response_line)
+
+            proc.stdin.close()
+            proc.wait(timeout=2)
+            stdout = proc.stdout.read()
+            stderr = proc.stderr.read()
+            transcript_output = "\n".join(transcript)
+            if stdout:
+                transcript_output = f"{transcript_output}\n{stdout}".strip()
             traces.append(
                 RuntimeTrace(
                     component="mcp",
-                    name=f"stdio handshake:{name}",
+                    name=f"stdio lifecycle:{name}",
                     command=tuple(command),
                     returncode=proc.returncode,
-                    stdout=stdout,
+                    stdout=transcript_output,
                     stderr=stderr,
                 )
             )
@@ -446,24 +547,24 @@ def _check_mcp_stdio(servers: dict) -> tuple[list[VerificationCase], list[Runtim
                 cases.append(
                     VerificationCase(
                         "mcp",
-                        f"stdio run:{name}",
+                        f"stdio initialize:{name}",
                         False,
                         stderr or "non-zero exit",
                         "spawn-failure",
                     )
                 )
-            elif "error" in stdout.lower():
+            elif "error" in transcript_output.lower():
                 cases.append(
                     VerificationCase(
                         "mcp",
-                        f"stdio handshake:{name}",
+                        f"stdio initialize:{name}",
                         False,
-                        stdout.strip(),
+                        transcript_output.strip(),
                         "protocol-failure",
                     )
                 )
             else:
-                cases.append(VerificationCase("mcp", f"stdio handshake:{name}", True, "initialize attempted"))
+                cases.append(VerificationCase("mcp", f"stdio initialize:{name}", True, "initialize completed"))
         except subprocess.TimeoutExpired as exc:
             proc.kill()
             stdout = exc.stdout if isinstance(exc.stdout, str) else ""
@@ -481,15 +582,23 @@ def _check_mcp_stdio(servers: dict) -> tuple[list[VerificationCase], list[Runtim
             )
             cases.append(VerificationCase("mcp", f"stdio timeout:{name}", False, "process timed out", "timeout"))
         except Exception as exc:
-            proc.kill()
+            if proc.poll() is None:
+                proc.kill()
+                with suppress(Exception):
+                    proc.wait(timeout=1)
+            stdout = proc.stdout.read() if proc.stdout is not None else ""
+            stderr = proc.stderr.read() if proc.stderr is not None else ""
+            transcript_output = "\n".join(transcript)
+            if stdout:
+                transcript_output = f"{transcript_output}\n{stdout}".strip()
             traces.append(
                 RuntimeTrace(
                     component="mcp",
-                    name=f"stdio run:{name}",
+                    name=f"stdio lifecycle:{name}",
                     command=tuple(command),
                     returncode=proc.returncode,
-                    stdout="",
-                    stderr=str(exc),
+                    stdout=transcript_output,
+                    stderr=stderr or str(exc),
                 )
             )
             cases.append(VerificationCase("mcp", f"stdio run:{name}", False, str(exc), "spawn-failure"))
@@ -539,6 +648,16 @@ def _check_skills(plugin_dir: Path) -> list[VerificationCase]:
     skills_root = manifest.get("skills")
     if not isinstance(skills_root, str) or not skills_root:
         return [VerificationCase("skills", "skills optional", True, "No skills field declared", "optional")]
+    if not safe_manifest_path(plugin_dir, skills_root):
+        return [
+            VerificationCase(
+                "skills",
+                "skills directory",
+                False,
+                f'Skills path "{skills_root}" must stay within the plugin and start with "./"',
+                "schema",
+            )
+        ]
 
     skills_dir = plugin_dir / skills_root
     if not skills_dir.exists():

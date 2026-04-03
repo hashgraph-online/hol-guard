@@ -1,6 +1,8 @@
 """Tests for runtime verification engine."""
 
+import json
 import os
+import sys
 from pathlib import Path
 
 from codex_plugin_scanner import verification as verification_module
@@ -36,7 +38,7 @@ def test_verify_plugin_reports_real_workspace_path() -> None:
 def test_verify_plugin_checks_skill_frontmatter_from_manifest(tmp_path: Path):
     (tmp_path / ".codex-plugin").mkdir()
     (tmp_path / ".codex-plugin" / "plugin.json").write_text(
-        '{"name":"demo","version":"1.0.0","description":"demo","skills":"skills"}',
+        '{"name":"demo","version":"1.0.0","description":"demo","skills":"./skills"}',
         encoding="utf-8",
     )
     (tmp_path / "skills" / "broken").mkdir(parents=True)
@@ -51,14 +53,44 @@ def test_verify_plugin_checks_skill_frontmatter_from_manifest(tmp_path: Path):
 def test_verify_plugin_stdio_inherits_process_environment(tmp_path: Path, monkeypatch):
     captured_env: dict[str, str] = {}
 
+    class StubInput:
+        def __init__(self):
+            self.writes: list[str] = []
+
+        def write(self, payload: str):
+            self.writes.append(payload)
+            return len(payload)
+
+        def flush(self):
+            return None
+
+        def close(self):
+            return None
+
+    class StubOutput:
+        def __init__(self, lines: list[str]):
+            self._lines = lines
+
+        def readline(self):
+            return self._lines.pop(0) if self._lines else ""
+
+        def read(self):
+            return ""
+
     class StubProcess:
         returncode = 0
 
         def __init__(self):
-            self.stdin = None
+            self.stdin = StubInput()
+            self.stdout = StubOutput(
+                [
+                    '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"stub","version":"1.0.0"}}}\n'
+                ]
+            )
+            self.stderr = StubOutput([])
 
-        def communicate(self, timeout: int):
-            return "{}", ""
+        def wait(self, timeout: int):
+            return 0
 
     def fake_popen(*args, **kwargs):
         nonlocal captured_env
@@ -92,10 +124,18 @@ def test_verify_plugin_kills_stdio_process_on_runtime_exception(tmp_path: Path, 
 
         def __init__(self):
             self.stdin = StubStdin()
+            self.stdout = None
+            self.stderr = None
 
         def kill(self):
             nonlocal killed
             killed = True
+
+        def poll(self):
+            return None
+
+        def wait(self, timeout=None):
+            return None
 
     monkeypatch.setattr(verification_module.subprocess, "Popen", lambda *args, **kwargs: StubProcess())
     (tmp_path / ".mcp.json").write_text(
@@ -114,3 +154,60 @@ def test_doctor_report_filters_component():
     report = build_doctor_report(FIXTURES / "good-plugin", "manifest")
     assert report["component"] == "manifest"
     assert isinstance(report["cases"], list)
+
+
+def test_verify_plugin_performs_mcp_initialize_lifecycle(tmp_path: Path):
+    script = """
+import json
+import sys
+
+init = json.loads(sys.stdin.readline())
+assert init["method"] == "initialize"
+assert init["params"]["protocolVersion"]
+assert init["params"]["clientInfo"]["name"] == "codex-plugin-scanner"
+sys.stdout.write(json.dumps({
+    "jsonrpc": "2.0",
+    "id": init["id"],
+    "result": {
+        "protocolVersion": init["params"]["protocolVersion"],
+        "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
+        "serverInfo": {"name": "stub", "version": "1.0.0"}
+    }
+}) + "\\n")
+sys.stdout.flush()
+
+initialized = json.loads(sys.stdin.readline())
+assert initialized["method"] == "notifications/initialized"
+
+for method, key in (("tools/list", "tools"), ("resources/list", "resources"), ("prompts/list", "prompts")):
+    request = json.loads(sys.stdin.readline())
+    assert request["method"] == method
+    sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": request["id"], "result": {key: []}}) + "\\n")
+    sys.stdout.flush()
+"""
+    (tmp_path / ".codex-plugin").mkdir()
+    (tmp_path / ".codex-plugin" / "plugin.json").write_text(
+        '{"name":"mcp-demo","version":"1.0.0","description":"demo"}',
+        encoding="utf-8",
+    )
+    (tmp_path / ".mcp.json").write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "stub": {
+                        "command": sys.executable,
+                        "args": ["-u", "-c", script],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = verify_plugin(tmp_path)
+    report = build_doctor_report(tmp_path, "mcp")
+
+    assert result.verify_pass is True
+    assert any(case.name == "stdio initialize:stub" and case.passed for case in result.cases)
+    assert "notifications/initialized" in report["stdout_log"]
+    assert "tools/list" in report["stdout_log"]
