@@ -1,13 +1,20 @@
 {
   "name": "test-marketplace",
+  "interface": {
+    "displayName": "Test Marketplace"
+  },
   "plugins": [
     {
-      "source": "https://github.com/example/plugin",
-      "category": "Developer Tools",
+      "name": "example-plugin",
+      "source": {
+        "source": "local",
+        "path": "./plugins/example-plugin"
+      },
       "policy": {
-        "installation": "auto",
-        "authentication": "none"
-      }
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
     }
   ]
 }
