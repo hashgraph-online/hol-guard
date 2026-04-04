@@ -15,6 +15,11 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405" in action_text
     assert "pip install codex-plugin-scanner" in action_text
     assert 'pip install "$LOCAL_SOURCE"' in action_text
+    assert (
+        'pip install "cisco-ai-skill-scanner @ '
+        'git+https://github.com/hashgraph-online/skill-scanner.git@9b0ea08111f9129abfdf7aedc47322615cda1164"'
+        in action_text
+    )
     assert "write_step_summary:" in action_text
     assert "profile:" in action_text
     assert "config:" in action_text
@@ -103,6 +108,7 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "awesome-codex-plugins" in action_readme
     assert "publish-action-repo.yml" in action_readme
     assert "actions/github-script@v8" in action_readme
+    assert "pinned patched fork" in action_readme
 
 
 def test_readme_uses_stable_apache_license_badge() -> None:

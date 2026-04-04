@@ -68,7 +68,7 @@ inputs:
     required: false
     default: "balanced"
   install_cisco:
-    description: "Install the Cisco skill-scanner dependency for live skill scanning"
+    description: "Install the Cisco skill-scanner dependency from the pinned patched fork used by this repo"
     required: false
     default: "false"
   submission_enabled:
@@ -183,7 +183,8 @@ runs:
         fi
 
         if [ "${{ inputs.install_cisco }}" = "true" ]; then
-          pip install "cisco-ai-skill-scanner>=2.0.6,<3"
+          # Temporary fork pin until upstream cisco-ai-skill-scanner ships a LiteLLM fix.
+          pip install "cisco-ai-skill-scanner @ git+https://github.com/hashgraph-online/skill-scanner.git@9b0ea08111f9129abfdf7aedc47322615cda1164"
         fi
 
     - name: Run scanner
