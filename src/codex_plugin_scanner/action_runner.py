@@ -22,7 +22,7 @@ from .submission import (
     find_existing_submission_issue,
     resolve_submission_metadata,
 )
-from .verification import verify_plugin
+from .verification import build_verification_payload, verify_plugin
 
 
 def _parse_csv(value: str) -> tuple[str, ...]:
@@ -98,20 +98,7 @@ def _render_scan_output(result, *, output_format: str, profile: str, policy_pass
 
 
 def _render_verify_output(verification, *, output_format: str) -> str:
-    payload = {
-        "verify_pass": verification.verify_pass,
-        "workspace": verification.workspace,
-        "cases": [
-            {
-                "component": case.component,
-                "name": case.name,
-                "passed": case.passed,
-                "message": case.message,
-                "classification": case.classification,
-            }
-            for case in verification.cases
-        ],
-    }
+    payload = build_verification_payload(verification)
     if output_format == "json":
         return json.dumps(payload, indent=2)
     return _build_verification_text(payload)
@@ -154,8 +141,16 @@ def _build_step_summary_lines(
     submission_issues: list[SubmissionIssue],
     submission_eligible: bool,
     verify_pass: bool | None = None,
+    scope: str = "plugin",
+    local_plugin_count: int | None = None,
+    skipped_target_count: int | None = None,
 ) -> tuple[str, ...]:
     lines = ["## HOL Codex Plugin Scanner", "", f"- Mode: {mode}"]
+    lines.append(f"- Scope: {scope}")
+    if local_plugin_count is not None:
+        lines.append(f"- Local plugins scanned: {local_plugin_count}")
+    if skipped_target_count is not None:
+        lines.append(f"- Skipped marketplace entries: {skipped_target_count}")
     if score:
         lines.append(f"- Score: {score}/100")
     if grade:
@@ -233,6 +228,9 @@ def main() -> int:
         "submission_issue_numbers": "",
     }
     verify_pass_for_summary: bool | None = None
+    scan_scope = "plugin"
+    local_plugin_count: int | None = None
+    skipped_target_count: int | None = None
 
     if mode in {"scan", "lint", "submit"}:
         args = _build_scan_args(
@@ -249,6 +247,10 @@ def main() -> int:
             args,
             Path(plugin_dir).resolve(),
         )
+        scan_scope = getattr(result, "scope", "plugin")
+        if scan_scope == "repository":
+            local_plugin_count = len(result.plugin_results)
+            skipped_target_count = len(result.skipped_targets)
         rendered = ""
         artifact_path = ""
         verification = None
@@ -274,6 +276,13 @@ def main() -> int:
                 policy_pass=policy_eval.policy_pass,
             )
         else:
+            if scan_scope != "plugin":
+                print(
+                    "Submission mode requires a single plugin directory. "
+                    "Point plugin_dir at one plugin instead of a repo marketplace root.",
+                    file=sys.stderr,
+                )
+                return 1
             verification = verify_plugin(Path(plugin_dir).resolve(), online=online)
             artifact_path = output_path or "plugin-quality.json"
             artifact = build_quality_artifact(
@@ -404,6 +413,10 @@ def main() -> int:
 
     elif mode == "verify":
         verification = verify_plugin(Path(plugin_dir).resolve(), online=online)
+        scan_scope = getattr(verification, "scope", "plugin")
+        if scan_scope == "repository":
+            local_plugin_count = len(verification.plugin_results)
+            skipped_target_count = len(verification.skipped_targets)
         rendered = _render_verify_output(verification, output_format=output_format)
         verify_pass_for_summary = verification.verify_pass
         if output_path:
@@ -438,6 +451,9 @@ def main() -> int:
                 submission_issues=submission_issues,
                 submission_eligible=submission_eligible,
                 verify_pass=verify_pass_for_summary,
+                scope=scan_scope,
+                local_plugin_count=local_plugin_count,
+                skipped_target_count=skipped_target_count,
             ),
         )
 

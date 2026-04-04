@@ -12,7 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from . import __version__
@@ -24,7 +24,9 @@ from .marketplace_support import (
     marketplace_label,
     validate_marketplace_path_requirements,
 )
+from .models import ScanSkipTarget
 from .path_support import is_safe_relative_path
+from .repo_detect import discover_scan_targets
 
 MARKDOWN_LINK_RE = re.compile(r"\[[^]]+\]\(([^)]+)\)")
 INTERFACE_REQUIRED_FIELDS = (
@@ -61,6 +63,51 @@ class VerificationResult:
     cases: tuple[VerificationCase, ...]
     workspace: str
     traces: tuple[RuntimeTrace, ...] = ()
+    scope: str = "plugin"
+    plugin_name: str | None = None
+    plugin_results: tuple[VerificationResult, ...] = ()
+    skipped_targets: tuple[ScanSkipTarget, ...] = ()
+    marketplace_file: str | None = None
+
+
+def build_verification_payload(result: VerificationResult) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "verify_pass": result.verify_pass,
+        "workspace": result.workspace,
+        "scope": result.scope,
+        "cases": [
+            {
+                "component": case.component,
+                "name": case.name,
+                "passed": case.passed,
+                "message": case.message,
+                "classification": case.classification,
+            }
+            for case in result.cases
+        ],
+    }
+    if result.scope == "repository":
+        payload["repository"] = {
+            "marketplaceFile": result.marketplace_file,
+            "localPluginCount": len(result.plugin_results),
+        }
+        payload["plugins"] = [
+            {
+                "name": plugin.plugin_name,
+                "workspace": plugin.workspace,
+                "verify_pass": plugin.verify_pass,
+            }
+            for plugin in result.plugin_results
+        ]
+        payload["skippedTargets"] = [
+            {
+                "name": skipped.name,
+                "reason": skipped.reason,
+                "sourcePath": skipped.source_path,
+            }
+            for skipped in result.skipped_targets
+        ]
+    return payload
 
 
 def _read_json(path: Path) -> dict | list | None:
@@ -778,8 +825,8 @@ def _check_assets(plugin_dir: Path) -> list[VerificationCase]:
     ]
 
 
-def verify_plugin(plugin_dir: str | Path, *, online: bool = False) -> VerificationResult:
-    resolved = Path(plugin_dir).resolve()
+def _verify_single_plugin(plugin_dir: Path, *, online: bool) -> VerificationResult:
+    resolved = plugin_dir.resolve()
     mcp_cases, traces = _check_mcp(resolved, online=online)
     cases: list[VerificationCase] = [
         *_check_manifest(resolved),
@@ -794,7 +841,78 @@ def verify_plugin(plugin_dir: str | Path, *, online: bool = False) -> Verificati
         cases=tuple(cases),
         workspace=str(resolved),
         traces=tuple(traces),
+        scope="plugin",
     )
+
+
+def _prefixed_cases(plugin_name: str, cases: tuple[VerificationCase, ...]) -> tuple[VerificationCase, ...]:
+    return tuple(
+        VerificationCase(
+            component=case.component,
+            name=f"{plugin_name} · {case.name}",
+            passed=case.passed,
+            message=case.message,
+            classification=case.classification,
+        )
+        for case in cases
+    )
+
+
+def _prefixed_traces(plugin_name: str, traces: tuple[RuntimeTrace, ...]) -> tuple[RuntimeTrace, ...]:
+    return tuple(
+        RuntimeTrace(
+            component=trace.component,
+            name=f"{plugin_name} · {trace.name}",
+            command=trace.command,
+            returncode=trace.returncode,
+            stdout=trace.stdout,
+            stderr=trace.stderr,
+            timed_out=trace.timed_out,
+        )
+        for trace in traces
+    )
+
+
+def _verify_repository(repo_root: Path, *, online: bool) -> VerificationResult:
+    discovery = discover_scan_targets(repo_root)
+    marketplace_cases = tuple(_check_marketplace(repo_root))
+    plugin_results = tuple(
+        replace(
+            _verify_single_plugin(target.plugin_dir, online=online),
+            plugin_name=target.name,
+        )
+        for target in discovery.local_plugins
+    )
+    prefixed_plugin_cases = tuple(
+        case
+        for plugin_result in plugin_results
+        for case in _prefixed_cases(plugin_result.plugin_name or "plugin", plugin_result.cases)
+    )
+    prefixed_plugin_traces = tuple(
+        trace
+        for plugin_result in plugin_results
+        for trace in _prefixed_traces(plugin_result.plugin_name or "plugin", plugin_result.traces)
+    )
+    cases = marketplace_cases + prefixed_plugin_cases
+    verify_pass = all(case.passed for case in cases) and bool(plugin_results)
+    return VerificationResult(
+        verify_pass=verify_pass,
+        cases=cases,
+        workspace=str(repo_root),
+        traces=prefixed_plugin_traces,
+        scope="repository",
+        plugin_results=plugin_results,
+        skipped_targets=discovery.skipped_targets,
+        marketplace_file=str(discovery.marketplace_file) if discovery.marketplace_file else None,
+    )
+
+
+def verify_plugin(plugin_dir: str | Path, *, online: bool = False) -> VerificationResult:
+    resolved = Path(plugin_dir).resolve()
+    discovery = discover_scan_targets(resolved)
+    if discovery.scope == "repository":
+        return _verify_repository(resolved, online=online)
+    return _verify_single_plugin(resolved, online=online)
 
 
 def build_doctor_report(plugin_dir: str | Path, component: str) -> dict[str, object]:

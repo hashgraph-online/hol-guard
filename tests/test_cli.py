@@ -289,6 +289,15 @@ class TestMain:
         parsed = json.loads(artifact.read_text(encoding="utf-8"))
         assert parsed["schema_version"] == "plugin-quality.v1"
 
+    def test_scan_json_reports_repository_scope_for_marketplace_repo(self, capsys):
+        rc = main(["scan", str(FIXTURES / "multi-plugin-repo"), "--format", "json"])
+        assert rc == 0
+        parsed = json.loads(capsys.readouterr().out)
+        assert parsed["scope"] == "repository"
+        assert parsed["repository"]["localPluginCount"] == 2
+        assert len(parsed["plugins"]) == 2
+        assert parsed["skippedTargets"][0]["name"] == "remote-plugin"
+
     def test_submit_blocks_on_verify_fail(self, tmp_path):
         artifact = tmp_path / "plugin-quality.json"
         rc = main(["submit", str(FIXTURES / "bad-plugin"), "--attest", str(artifact)])

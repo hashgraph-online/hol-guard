@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,17 +16,18 @@ from .checks.skill_security import resolve_skill_security_context, run_skill_sec
 from .integrations.cisco_skill_scanner import CiscoIntegrationStatus
 from .models import (
     CategoryResult,
+    CheckResult,
+    Finding,
     IntegrationResult,
     ScanOptions,
     ScanResult,
     build_severity_counts,
     get_grade,
 )
+from .repo_detect import LocalPluginTarget, discover_scan_targets
 
 
-def _build_integration_results(
-    skill_security_context,
-) -> tuple[IntegrationResult, ...]:
+def _build_integration_results(skill_security_context) -> tuple[IntegrationResult, ...]:
     if skill_security_context.skip_message:
         return (
             IntegrationResult(
@@ -59,47 +61,133 @@ def _build_integration_results(
     )
 
 
-def scan_plugin(plugin_dir: str | Path, options: ScanOptions | None = None) -> ScanResult:
-    """Scan a Codex plugin directory and return a scored result.
-
-    Args:
-        plugin_dir: Path to the plugin directory to scan.
-
-    Returns:
-        ScanResult with score 0-100, grade A-F, and per-category breakdowns.
-    """
-    resolved = Path(plugin_dir).resolve()
-    scan_options = options or ScanOptions()
-    skill_security_context = resolve_skill_security_context(resolved, scan_options)
-
-    categories: list[CategoryResult] = [
-        CategoryResult(name="Manifest Validation", checks=run_manifest_checks(resolved)),
-        CategoryResult(name="Security", checks=run_security_checks(resolved)),
-        CategoryResult(name="Operational Security", checks=run_operational_security_checks(resolved)),
-        CategoryResult(name="Best Practices", checks=run_best_practice_checks(resolved)),
-        CategoryResult(name="Marketplace", checks=run_marketplace_checks(resolved)),
-        CategoryResult(
-            name="Skill Security",
-            checks=run_skill_security_checks(resolved, scan_options, skill_security_context),
-        ),
-        CategoryResult(name="Code Quality", checks=run_code_quality_checks(resolved)),
-    ]
-
+def _score_categories(categories: tuple[CategoryResult, ...]) -> int:
     earned_points = sum(check.points for category in categories for check in category.checks)
     max_points = sum(check.max_points for category in categories for check in category.checks)
-    score = 100 if max_points == 0 else round((earned_points / max_points) * 100)
-    grade = get_grade(score)
-    findings = tuple(finding for category in categories for check in category.checks for finding in check.findings)
-    severity_counts = build_severity_counts(findings)
-    integrations = _build_integration_results(skill_security_context)
+    return 100 if max_points == 0 else round((earned_points / max_points) * 100)
 
+
+def _rebase_finding(finding: Finding, plugin_dir: Path, repo_root: Path) -> Finding:
+    if not finding.file_path:
+        return finding
+    rebased_path = (plugin_dir / finding.file_path).resolve().relative_to(repo_root).as_posix()
+    return replace(finding, file_path=rebased_path)
+
+
+def _rebase_check_result(check: CheckResult, plugin_dir: Path, repo_root: Path) -> CheckResult:
+    return replace(
+        check,
+        findings=tuple(_rebase_finding(finding, plugin_dir, repo_root) for finding in check.findings),
+    )
+
+
+def _rebase_plugin_result(plugin_result: ScanResult, plugin_target: LocalPluginTarget, repo_root: Path) -> ScanResult:
+    rebased_categories = tuple(
+        CategoryResult(
+            name=category.name,
+            checks=tuple(_rebase_check_result(check, plugin_target.plugin_dir, repo_root) for check in category.checks),
+        )
+        for category in plugin_result.categories
+    )
+    rebased_integrations = tuple(
+        replace(integration, name=f"{plugin_target.name} / {integration.name}")
+        for integration in plugin_result.integrations
+    )
+    rebased_findings = tuple(
+        _rebase_finding(finding, plugin_target.plugin_dir, repo_root) for finding in plugin_result.findings
+    )
+    return replace(
+        plugin_result,
+        categories=rebased_categories,
+        findings=rebased_findings,
+        severity_counts=build_severity_counts(rebased_findings),
+        integrations=rebased_integrations,
+        plugin_name=plugin_target.name,
+    )
+
+
+def _scan_single_plugin(plugin_dir: Path, options: ScanOptions) -> ScanResult:
+    skill_security_context = resolve_skill_security_context(plugin_dir, options)
+    categories: list[CategoryResult] = [
+        CategoryResult(name="Manifest Validation", checks=run_manifest_checks(plugin_dir)),
+        CategoryResult(name="Security", checks=run_security_checks(plugin_dir)),
+        CategoryResult(name="Operational Security", checks=run_operational_security_checks(plugin_dir)),
+        CategoryResult(name="Best Practices", checks=run_best_practice_checks(plugin_dir)),
+        CategoryResult(name="Marketplace", checks=run_marketplace_checks(plugin_dir)),
+        CategoryResult(
+            name="Skill Security",
+            checks=run_skill_security_checks(plugin_dir, options, skill_security_context),
+        ),
+        CategoryResult(name="Code Quality", checks=run_code_quality_checks(plugin_dir)),
+    ]
+
+    score = _score_categories(tuple(categories))
+    findings = tuple(finding for category in categories for check in category.checks for finding in check.findings)
     return ScanResult(
         score=score,
-        grade=grade,
+        grade=get_grade(score),
         categories=tuple(categories),
         timestamp=datetime.now(timezone.utc).isoformat(),
-        plugin_dir=str(resolved),
+        plugin_dir=str(plugin_dir),
         findings=findings,
-        severity_counts=severity_counts,
-        integrations=integrations,
+        severity_counts=build_severity_counts(findings),
+        integrations=_build_integration_results(skill_security_context),
+        scope="plugin",
     )
+
+
+def _build_repository_categories(
+    repo_root: Path,
+    plugin_results: tuple[ScanResult, ...],
+) -> tuple[CategoryResult, ...]:
+    categories: list[CategoryResult] = [
+        CategoryResult(name="Repository Marketplace", checks=run_marketplace_checks(repo_root)),
+        CategoryResult(name="Repository Operational Security", checks=run_operational_security_checks(repo_root)),
+    ]
+    for plugin_result in plugin_results:
+        for category in plugin_result.categories:
+            if category.name in {"Marketplace", "Operational Security"}:
+                continue
+            plugin_name = plugin_result.plugin_name or Path(plugin_result.plugin_dir).name
+            categories.append(CategoryResult(name=f"{plugin_name} · {category.name}", checks=category.checks))
+    return tuple(categories)
+
+
+def _scan_repository(repo_root: Path, options: ScanOptions) -> ScanResult:
+    discovery = discover_scan_targets(repo_root)
+    plugin_results = tuple(
+        _rebase_plugin_result(_scan_single_plugin(target.plugin_dir, options), target, repo_root)
+        for target in discovery.local_plugins
+    )
+    categories = _build_repository_categories(repo_root, plugin_results)
+    findings = tuple(finding for category in categories for check in category.checks for finding in check.findings)
+    repo_scores = [plugin.score for plugin in plugin_results]
+    repo_category_score = _score_categories(categories[:2]) if categories[:2] else 100
+    if categories[:2]:
+        repo_scores.append(repo_category_score)
+    score = min(repo_scores) if repo_scores else 0
+    return ScanResult(
+        score=score,
+        grade=get_grade(score),
+        categories=categories,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        plugin_dir=str(repo_root),
+        findings=findings,
+        severity_counts=build_severity_counts(findings),
+        integrations=tuple(integration for plugin in plugin_results for integration in plugin.integrations),
+        scope="repository",
+        plugin_results=plugin_results,
+        skipped_targets=discovery.skipped_targets,
+        marketplace_file=str(discovery.marketplace_file) if discovery.marketplace_file else None,
+    )
+
+
+def scan_plugin(plugin_dir: str | Path, options: ScanOptions | None = None) -> ScanResult:
+    """Scan a Codex plugin directory or repo marketplace root."""
+
+    resolved = Path(plugin_dir).resolve()
+    scan_options = options or ScanOptions()
+    discovery = discover_scan_targets(resolved)
+    if discovery.scope == "repository":
+        return _scan_repository(resolved, scan_options)
+    return _scan_single_plugin(resolved, scan_options)

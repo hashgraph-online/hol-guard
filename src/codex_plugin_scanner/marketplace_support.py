@@ -69,10 +69,12 @@ def extract_marketplace_source(plugin: dict) -> tuple[str | None, str | None]:
 
 
 def source_path_is_safe(context: MarketplaceContext, source_path: str) -> bool:
-    return is_safe_relative_path(context.marketplace_root, source_path, require_prefix=True)
+    return is_safe_relative_path(context.repo_root, source_path, require_prefix=True)
 
 
 def source_reference_is_safe(context: MarketplaceContext, source_ref: str) -> bool:
+    if source_ref == "local":
+        return True
     if is_remote_reference(source_ref):
         return True
     if urlparse(source_ref).scheme:
@@ -84,12 +86,15 @@ def validate_marketplace_path_requirements(context: MarketplaceContext, plugin: 
     source_ref, source_path = extract_marketplace_source(plugin)
     if source_ref is None:
         return 'missing "source.source"'
-    if source_path is None:
-        return 'missing "source.path"'
-    if not is_dot_relative_path(source_path):
-        return f'"source.path" must start with "./": {source_path}'
-    if not source_path_is_safe(context, source_path):
-        return f'"source.path" escapes the marketplace root: {source_path}'
     if not source_reference_is_safe(context, source_ref):
         return f'"source.source" is unsafe: {source_ref}'
+    if is_remote_reference(source_ref):
+        if source_path is None:
+            return None
+    elif source_path is None:
+        return 'missing "source.path"'
+    if source_path is not None and not is_dot_relative_path(source_path):
+        return f'"source.path" must start with "./": {source_path}'
+    if source_path is not None and not source_path_is_safe(context, source_path):
+        return f'"source.path" escapes the repository root: {source_path}'
     return None

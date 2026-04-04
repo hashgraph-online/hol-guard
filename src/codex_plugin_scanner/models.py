@@ -81,6 +81,15 @@ class ScanOptions:
 
 
 @dataclass(frozen=True, slots=True)
+class ScanSkipTarget:
+    """A marketplace entry that was not scanned as a local plugin target."""
+
+    name: str
+    reason: str
+    source_path: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ScanResult:
     """Full result of scanning a plugin directory."""
 
@@ -92,6 +101,11 @@ class ScanResult:
     findings: tuple[Finding, ...] = ()
     severity_counts: dict[str, int] = field(default_factory=dict)
     integrations: tuple[IntegrationResult, ...] = ()
+    scope: str = "plugin"
+    plugin_name: str | None = None
+    plugin_results: tuple[ScanResult, ...] = ()
+    skipped_targets: tuple[ScanSkipTarget, ...] = ()
+    marketplace_file: str | None = None
 
 
 def get_grade(score: int) -> str:
