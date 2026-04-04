@@ -88,22 +88,22 @@ def discover_scan_targets(target_dir: str | Path) -> ScanDiscovery:
         if isinstance(name, str) and name:
             entry_name = name
 
-        issue = validate_marketplace_path_requirements(context, plugin)
-        if issue is not None:
-            source_ref, source_path = extract_marketplace_source(plugin)
-            if source_ref and source_ref != "local":
-                skipped_targets.append(
-                    ScanSkipTarget(
-                        name=entry_name,
-                        reason=f"non-local marketplace source: {source_ref}",
-                        source_path=source_path,
-                    )
+        source_ref, source_path = extract_marketplace_source(plugin)
+        if source_ref and source_ref != "local":
+            skipped_targets.append(
+                ScanSkipTarget(
+                    name=entry_name,
+                    reason=f"non-local marketplace source: {source_ref}",
+                    source_path=source_path,
                 )
-            else:
-                skipped_targets.append(ScanSkipTarget(name=entry_name, reason=issue, source_path=source_path))
+            )
             continue
 
-        _source_ref, source_path = extract_marketplace_source(plugin)
+        issue = validate_marketplace_path_requirements(context, plugin)
+        if issue is not None:
+            skipped_targets.append(ScanSkipTarget(name=entry_name, reason=issue, source_path=source_path))
+            continue
+
         if source_path is None:
             skipped_targets.append(ScanSkipTarget(name=entry_name, reason='missing "source.path"'))
             continue

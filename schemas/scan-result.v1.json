@@ -162,6 +162,7 @@
     },
     "findingRef": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["ruleId", "severity", "title", "description", "source"],
       "properties": {
         "ruleId": {"type": "string", "minLength": 1},
