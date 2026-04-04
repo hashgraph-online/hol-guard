@@ -112,3 +112,16 @@ class TestScanPlugin:
         result = scan_plugin(FIXTURES / "with-marketplace")
         mp_cat = next(c for c in result.categories if c.name == "Marketplace")
         assert sum(c.points for c in mp_cat.checks) == 15
+
+    def test_marketplace_repo_scans_all_local_plugins(self):
+        result = scan_plugin(FIXTURES / "multi-plugin-repo")
+
+        assert result.scope == "repository"
+        assert result.score < 100
+        assert result.grade in {"A", "B", "C", "D", "F"}
+        assert len(result.plugin_results) == 2
+        assert {plugin.plugin_name for plugin in result.plugin_results} == {"alpha-plugin", "beta-plugin"}
+        assert any(category.name.startswith("alpha-plugin · ") for category in result.categories)
+        assert any(category.name.startswith("beta-plugin · ") for category in result.categories)
+        assert any(category.name == "Repository Marketplace" for category in result.categories)
+        assert any(skip.name == "remote-plugin" for skip in result.skipped_targets)

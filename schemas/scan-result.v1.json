@@ -9,6 +9,7 @@
     "profile",
     "policy_pass",
     "verify_pass",
+    "scope",
     "score",
     "raw_score",
     "effective_score",
@@ -36,6 +37,10 @@
     },
     "verify_pass": {
       "type": "boolean"
+    },
+    "scope": {
+      "type": "string",
+      "enum": ["plugin", "repository"]
     },
     "score": {
       "type": "integer",
@@ -95,6 +100,32 @@
     "pluginDir": {
       "type": "string",
       "minLength": 1
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["marketplaceFile", "localPluginCount"],
+      "properties": {
+        "marketplaceFile": {
+          "type": ["string", "null"]
+        },
+        "localPluginCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pluginSummary"
+      }
+    },
+    "skippedTargets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/skippedTarget"
+      }
     }
   },
   "$defs": {
@@ -145,16 +176,20 @@
       }
     },
     "finding": {
-      "allOf": [
-        {"$ref": "#/$defs/findingRef"},
-        {
-          "type": "object",
-          "required": ["category"],
-          "properties": {
-            "category": {"type": "string", "minLength": 1}
-          }
-        }
-      ]
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "severity", "title", "description", "source", "category"],
+      "properties": {
+        "ruleId": {"type": "string", "minLength": 1},
+        "severity": {"$ref": "#/$defs/severity"},
+        "title": {"type": "string", "minLength": 1},
+        "description": {"type": "string", "minLength": 1},
+        "remediation": {"type": ["string", "null"]},
+        "filePath": {"type": ["string", "null"]},
+        "lineNumber": {"type": ["integer", "null"], "minimum": 1},
+        "source": {"type": "string", "minLength": 1},
+        "category": {"type": "string", "minLength": 1}
+      }
     },
     "check": {
       "type": "object",
@@ -184,6 +219,39 @@
           "type": "array",
           "items": {"$ref": "#/$defs/check"}
         }
+      }
+    },
+    "pluginSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "pluginDir", "score", "grade", "summary"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "pluginDir": {"type": "string", "minLength": 1},
+        "score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "grade": {"type": "string", "enum": ["A", "B", "C", "D", "F"]},
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["findings", "integrations"],
+          "properties": {
+            "findings": {"$ref": "#/$defs/severityCounts"},
+            "integrations": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/integration"}
+            }
+          }
+        }
+      }
+    },
+    "skippedTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "reason", "sourcePath"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "sourcePath": {"type": ["string", "null"]}
       }
     }
   }

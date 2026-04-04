@@ -1,0 +1,18 @@
+{
+  "name": "alpha-plugin",
+  "version": "1.0.0",
+  "description": "Alpha plugin for repository-mode scanning.",
+  "author": "HOL",
+  "repository": "https://github.com/hashgraph-online/alpha-plugin",
+  "license": "Apache-2.0",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Alpha Plugin",
+    "shortDescription": "Alpha plugin",
+    "developerName": "HOL",
+    "category": "Productivity",
+    "websiteURL": "https://hol.org",
+    "privacyPolicyURL": "https://hol.org/privacy",
+    "termsOfServiceURL": "https://hol.org/terms"
+  }
+}

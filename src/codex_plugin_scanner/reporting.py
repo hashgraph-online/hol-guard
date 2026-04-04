@@ -23,12 +23,13 @@ def build_json_payload(
 ) -> dict[str, object]:
     """Convert a scan result into a JSON-serializable payload."""
 
-    return {
+    payload = {
         "schema_version": "scan-result.v1",
         "tool_version": __version__,
         "profile": profile,
         "policy_pass": policy_pass,
         "verify_pass": verify_pass,
+        "scope": result.scope,
         "score": result.score,
         "raw_score": result.score if raw_score is None else raw_score,
         "effective_score": result.score if effective_score is None else effective_score,
@@ -95,6 +96,42 @@ def build_json_payload(
         "timestamp": result.timestamp,
         "pluginDir": result.plugin_dir,
     }
+    if result.scope == "repository":
+        payload["repository"] = {
+            "marketplaceFile": result.marketplace_file,
+            "localPluginCount": len(result.plugin_results),
+        }
+        payload["plugins"] = [
+            {
+                "name": plugin.plugin_name or plugin.plugin_dir.rsplit("/", 1)[-1],
+                "pluginDir": plugin.plugin_dir,
+                "score": plugin.score,
+                "grade": plugin.grade,
+                "summary": {
+                    "findings": plugin.severity_counts,
+                    "integrations": [
+                        {
+                            "name": integration.name,
+                            "status": integration.status,
+                            "message": integration.message,
+                            "findingsCount": integration.findings_count,
+                            "metadata": integration.metadata,
+                        }
+                        for integration in plugin.integrations
+                    ],
+                },
+            }
+            for plugin in result.plugin_results
+        ]
+        payload["skippedTargets"] = [
+            {
+                "name": skipped.name,
+                "reason": skipped.reason,
+                "sourcePath": skipped.source_path,
+            }
+            for skipped in result.skipped_targets
+        ]
+    return payload
 
 
 def format_json(
@@ -127,7 +164,7 @@ def format_markdown(result: ScanResult) -> str:
     lines = [
         "# Codex Plugin Scanner Report",
         "",
-        f"- Plugin: `{result.plugin_dir}`",
+        f"- {'Repository' if result.scope == 'repository' else 'Plugin'}: `{result.plugin_dir}`",
         f"- Score: **{result.score}/100**",
         f"- Grade: **{result.grade} - {GRADE_LABELS.get(result.grade, 'Unknown')}**",
         "",
@@ -136,6 +173,16 @@ def format_markdown(result: ScanResult) -> str:
     ]
     for severity in Severity:
         lines.append(f"- {severity.value.title()}: {result.severity_counts.get(severity.value, 0)}")
+
+    if result.scope == "repository":
+        lines += ["", "## Local Plugins", ""]
+        for plugin in result.plugin_results:
+            lines.append(f"- **{plugin.plugin_name or plugin.plugin_dir}**: {plugin.score}/100 ({plugin.grade})")
+        if result.skipped_targets:
+            lines += ["", "## Skipped Marketplace Entries", ""]
+            for skipped in result.skipped_targets:
+                source_path = f" (`{skipped.source_path}`)" if skipped.source_path else ""
+                lines.append(f"- **{skipped.name}**{source_path}: {skipped.reason}")
 
     lines += ["", "## Categories", ""]
     for category in result.categories:

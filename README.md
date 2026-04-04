@@ -31,6 +31,8 @@ pipx run codex-plugin-scanner verify .
     min_score: 80
 ```
 
+If your repository uses a Codex marketplace root like `.agents/plugins/marketplace.json`, keep `plugin_dir: "."`. The scanner will discover local `./plugins/...` entries automatically, scan each local plugin manifest, and skip remote marketplace entries instead of treating the repo root as a single plugin.
+
 ## Use After `$plugin-creator`
 
 `codex-plugin-scanner` is designed as the quality gate between plugin creation and distribution:
@@ -120,6 +122,9 @@ codex-plugin-scanner ./my-plugin --cisco-skill-scan on --cisco-policy strict
 # Summary scan (legacy form still works)
 codex-plugin-scanner scan ./my-plugin --format json --profile public-marketplace
 
+# Scan a multi-plugin repo from the marketplace root
+codex-plugin-scanner scan . --format json
+
 # Rule-oriented lint (with optional mechanical fixes)
 codex-plugin-scanner lint ./my-plugin --list-rules
 codex-plugin-scanner lint ./my-plugin --explain README_MISSING
@@ -127,6 +132,7 @@ codex-plugin-scanner lint ./my-plugin --fix --profile strict-security
 
 # Runtime readiness verification
 codex-plugin-scanner verify ./my-plugin --format json
+codex-plugin-scanner verify . --format json
 codex-plugin-scanner verify ./my-plugin --online --format text
 
 # Artifact-backed submission gate
@@ -147,6 +153,8 @@ The scanner follows the current Codex plugin packaging conventions more closely:
 - `verify` performs an MCP initialize handshake before probing declared capabilities
 
 `lint --fix` preserves or adds the documented `./` prefixes instead of stripping them away.
+
+For repo-scoped marketplaces, `scan`, `lint`, `verify`, and `doctor` can target the repository root directly. `submit` remains intentionally single-plugin so the emitted artifact points at one concrete plugin package.
 
 ## Config + Baseline Example
 
@@ -251,6 +259,8 @@ jobs:
           format: sarif
           upload_sarif: true
 ```
+
+For a multi-plugin repo, the same workflow can stay pointed at `plugin_dir: "."` as long as the repository has `.agents/plugins/marketplace.json` with local `./plugins/...` entries.
 
 Local pre-commit style hook:
 

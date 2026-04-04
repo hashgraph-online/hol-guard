@@ -8,18 +8,20 @@ This README is intentionally root-ready for a dedicated GitHub Marketplace actio
 
 ```yaml
 - name: Scan Codex Plugin
-  uses: your-org/hol-codex-plugin-scanner-action@v1
+  uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
   with:
     plugin_dir: "./my-plugin"
     min_score: 70
     fail_on_severity: high
 ```
 
+If your repository exposes multiple plugins from `.agents/plugins/marketplace.json`, keep `plugin_dir: "."`. The action will discover local `./plugins/...` entries automatically, scan each local plugin, and skip remote marketplace entries.
+
 ## Inputs
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `plugin_dir` | Path to the plugin directory to scan | `.` |
+| `plugin_dir` | Path to a single plugin directory or a repo marketplace root | `.` |
 | `mode` | Execution mode: `scan`, `lint`, `verify`, or `submit` | `scan` |
 | `format` | Output format: `text`, `json`, `markdown`, `sarif` | `text` |
 | `output` | Write report to this file path | `""` |
@@ -78,7 +80,7 @@ Mode notes:
 ### Basic scan with minimum score gate
 
 ```yaml
-- uses: your-org/hol-codex-plugin-scanner-action@v1
+- uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
   with:
     plugin_dir: "."
     min_score: 70
@@ -96,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: your-org/hol-codex-plugin-scanner-action@v1
+      - uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
         with:
           plugin_dir: "."
           mode: scan
@@ -105,10 +107,12 @@ jobs:
           upload_sarif: true
 ```
 
+This `plugin_dir: "."` pattern is correct for both single-plugin repositories and multi-plugin marketplace repositories. When `.agents/plugins/marketplace.json` exists, the action switches into repository mode and scans each local plugin entry declared under `./plugins/...`.
+
 ### With Cisco skill scanning
 
 ```yaml
-- uses: your-org/hol-codex-plugin-scanner-action@v1
+- uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
   with:
     plugin_dir: "."
     cisco_skill_scan: on
@@ -120,7 +124,7 @@ The action installs the scanner with its published `cisco` extra enabled, so the
 ### Export registry payload for Codex ecosystem automation
 
 ```yaml
-- uses: your-org/hol-codex-plugin-scanner-action@v1
+- uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
   id: scan
   with:
     plugin_dir: "."
@@ -153,7 +157,7 @@ jobs:
 
       - name: Scan plugin and submit if eligible
         id: scan
-        uses: your-org/hol-codex-plugin-scanner-action@v1
+        uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
         with:
           plugin_dir: "."
           min_score: 80
@@ -172,7 +176,7 @@ Use a fine-grained token with `issues:write` on `hashgraph-online/awesome-codex-
 ### Markdown report as PR comment
 
 ```yaml
-- uses: your-org/hol-codex-plugin-scanner-action@v1
+- uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
   id: scan
   with:
     plugin_dir: "."
@@ -214,12 +218,12 @@ The source bundle for this action lives in the main scanner repository under `ac
 Set `mode` to one of `scan`, `lint`, `verify`, or `submit`.
 
 ```yaml
-- uses: your-org/hol-codex-plugin-scanner-action@v1
+- uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
   with:
     mode: verify
     plugin_dir: "."
 ```
 
-For `submit` mode, use `registry_payload_output` to control artifact path.
+For `submit` mode, point `plugin_dir` at one concrete plugin directory. Repository-mode discovery is supported for `scan`, `lint`, and `verify`, but `submit` intentionally remains single-plugin.
 
 For `scan` mode, set `upload_sarif: true` to emit and upload SARIF automatically instead of wiring a separate upload step by hand.

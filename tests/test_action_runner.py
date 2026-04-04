@@ -142,3 +142,40 @@ def test_action_runner_verify_mode_writes_human_report(monkeypatch, tmp_path, ca
     assert "mode=verify" in github_output.read_text(encoding="utf-8")
     assert "verify_pass=true" in github_output.read_text(encoding="utf-8")
     assert "Report written to" in capsys.readouterr().out
+
+
+def test_action_runner_repository_scan_defaults_to_marketplace_root(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "github-output.txt"
+    summary_path = tmp_path / "step-summary.md"
+
+    monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "multi-plugin-repo"))
+    monkeypatch.setenv("FORMAT", "json")
+    monkeypatch.setenv("OUTPUT", "")
+    monkeypatch.setenv("MIN_SCORE", "0")
+    monkeypatch.setenv("FAIL_ON", "none")
+    monkeypatch.setenv("CISCO_SCAN", "off")
+    monkeypatch.setenv("CISCO_POLICY", "balanced")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "false")
+    monkeypatch.setenv("SUBMISSION_SCORE_THRESHOLD", "80")
+    monkeypatch.setenv("SUBMISSION_REPOS", "hashgraph-online/awesome-codex-plugins")
+    monkeypatch.setenv("SUBMISSION_TOKEN", "")
+    monkeypatch.setenv("SUBMISSION_LABELS", "plugin-submission")
+    monkeypatch.setenv("SUBMISSION_CATEGORY", "Community Plugins")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_NAME", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_URL", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_DESCRIPTION", "")
+    monkeypatch.setenv("SUBMISSION_AUTHOR", "")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "true")
+    monkeypatch.setenv("REGISTRY_PAYLOAD_OUTPUT", "")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary_path))
+
+    exit_code = main()
+
+    assert exit_code == 0
+    summary_text = summary_path.read_text(encoding="utf-8")
+    assert "- Scope: repository" in summary_text
+    assert "- Local plugins scanned: 2" in summary_text
+    assert "- Skipped marketplace entries: 1" in summary_text
+    output_lines = output_path.read_text(encoding="utf-8").splitlines()
+    assert any(line.startswith("score=") for line in output_lines)
