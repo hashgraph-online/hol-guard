@@ -68,7 +68,7 @@ inputs:
     required: false
     default: "balanced"
   install_cisco:
-    description: "Install the Cisco skill-scanner dependency from the pinned patched fork used by this repo"
+    description: "Install the published Cisco skill-scanner dependency used by this repo"
     required: false
     default: "false"
   submission_enabled:
@@ -177,14 +177,17 @@ runs:
         done
 
         if [ -n "$LOCAL_SOURCE" ]; then
-          pip install "$LOCAL_SOURCE"
+          if [ "${{ inputs.install_cisco }}" = "true" ]; then
+            pip install "$LOCAL_SOURCE[cisco]"
+          else
+            pip install "$LOCAL_SOURCE"
+          fi
         else
-          pip install codex-plugin-scanner
-        fi
-
-        if [ "${{ inputs.install_cisco }}" = "true" ]; then
-          # Temporary fork pin until upstream cisco-ai-skill-scanner ships a LiteLLM fix.
-          pip install "cisco-ai-skill-scanner @ git+https://github.com/hashgraph-online/skill-scanner.git@9b0ea08111f9129abfdf7aedc47322615cda1164"
+          if [ "${{ inputs.install_cisco }}" = "true" ]; then
+            pip install "codex-plugin-scanner[cisco]"
+          else
+            pip install codex-plugin-scanner
+          fi
         fi
 
     - name: Run scanner

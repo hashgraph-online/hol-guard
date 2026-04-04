@@ -32,8 +32,7 @@ dependencies = [
 
 [project.optional-dependencies]
 cisco = [
-    # Temporary fork pin until upstream cisco-ai-skill-scanner ships a LiteLLM fix.
-    "cisco-ai-skill-scanner @ git+https://github.com/hashgraph-online/skill-scanner.git@9b0ea08111f9129abfdf7aedc47322615cda1164",
+    "cisco-ai-skill-scanner==2.0.7",
 ]
 dev = [
     "build>=1.2.2",
@@ -55,9 +54,6 @@ codex-plugin-scanner = "codex_plugin_scanner.cli:main"
 Homepage = "https://github.com/hashgraph-online/codex-plugin-scanner"
 Repository = "https://github.com/hashgraph-online/codex-plugin-scanner"
 Issues = "https://github.com/hashgraph-online/codex-plugin-scanner/issues"
-
-[tool.hatch.metadata]
-allow-direct-references = true
 
 [tool.ruff]
 target-version = "py310"
