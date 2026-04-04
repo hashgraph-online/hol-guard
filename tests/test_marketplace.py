@@ -1,6 +1,5 @@
 """Tests for marketplace checks."""
 
-import json
 import tempfile
 from pathlib import Path
 
@@ -22,56 +21,6 @@ class TestCheckMarketplaceJson:
     def test_passes_for_valid_marketplace(self):
         r = check_marketplace_json(FIXTURES / "with-marketplace")
         assert r.passed and r.points == 5
-
-    def test_passes_for_codex_marketplace_layout(self, tmp_path: Path):
-        marketplace_dir = tmp_path / ".agents" / "plugins"
-        marketplace_dir.mkdir(parents=True)
-        (marketplace_dir / "plugins" / "demo").mkdir(parents=True)
-        (marketplace_dir / "marketplace.json").write_text(
-            json.dumps(
-                {
-                    "name": "demo-marketplace",
-                    "interface": {"displayName": "Demo Marketplace"},
-                    "plugins": [
-                        {
-                            "source": {
-                                "source": "https://github.com/hashgraph-online/example-plugin",
-                                "path": "./plugins/demo",
-                            },
-                            "policy": {"installation": "manual", "authentication": "none"},
-                            "category": "Developer Tools",
-                        }
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
-
-        result = check_marketplace_json(tmp_path)
-
-        assert result.passed is True
-        assert result.points == 5
-
-    def test_legacy_root_marketplace_runs_in_compatibility_mode(self, tmp_path: Path):
-        (tmp_path / "marketplace.json").write_text(
-            json.dumps(
-                {
-                    "name": "legacy-marketplace",
-                    "plugins": [
-                        {
-                            "source": "https://github.com/hashgraph-online/example-plugin",
-                            "policy": {"installation": "manual", "authentication": "none"},
-                        }
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
-
-        result = check_marketplace_json(tmp_path)
-
-        assert result.passed is True
-        assert "compatibility" in result.message.lower()
 
     def test_fails_for_invalid_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -101,10 +50,28 @@ class TestCheckMarketplaceJson:
             r = check_marketplace_json(Path(tmpdir))
             assert not r.passed and r.points == 0
 
+    def test_fails_for_non_object_plugin_entry(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp = Path(tmpdir) / "marketplace.json"
+            mp.write_text('{"name": "test", "plugins": ["invalid"]}')
+            r = check_marketplace_json(Path(tmpdir))
+            assert not r.passed and r.points == 0
+            assert r.message == "marketplace.json plugin[0] must be an object"
+
+    def test_fails_for_invalid_source_shape(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp = Path(tmpdir) / "marketplace.json"
+            mp.write_text(
+                '{"name": "test", "plugins": [{"source": {"source": "git", '
+                '"path": "./plugins/example"}, "policy": {}}]}'
+            )
+            r = check_marketplace_json(Path(tmpdir))
+            assert not r.passed and r.points == 0
+
     def test_fails_for_missing_plugin_policy(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             mp = Path(tmpdir) / "marketplace.json"
-            mp.write_text('{"name": "test", "plugins": [{"source": "https://example.com"}]}')
+            mp.write_text('{"name": "test", "plugins": [{"source": {"source": "local", "path": "./plugins/example"}}]}')
             r = check_marketplace_json(Path(tmpdir))
             assert not r.passed and r.points == 0
 
@@ -119,33 +86,6 @@ class TestCheckPolicyFields:
         r = check_policy_fields(FIXTURES / "with-marketplace")
         assert r.passed and r.points == 5
 
-    def test_fails_for_missing_category_in_codex_layout(self, tmp_path: Path):
-        marketplace_dir = tmp_path / ".agents" / "plugins"
-        marketplace_dir.mkdir(parents=True)
-        (marketplace_dir / "plugins" / "demo").mkdir(parents=True)
-        (marketplace_dir / "marketplace.json").write_text(
-            json.dumps(
-                {
-                    "name": "demo-marketplace",
-                    "plugins": [
-                        {
-                            "source": {
-                                "source": "https://github.com/hashgraph-online/example-plugin",
-                                "path": "./plugins/demo",
-                            },
-                            "policy": {"installation": "manual", "authentication": "none"},
-                        }
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
-
-        result = check_policy_fields(tmp_path)
-
-        assert result.passed is False
-        assert "category" in result.message
-
     def test_passes_when_empty_plugins(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             mp = Path(tmpdir) / "marketplace.json"
@@ -156,16 +96,48 @@ class TestCheckPolicyFields:
     def test_fails_for_missing_installation(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             mp = Path(tmpdir) / "marketplace.json"
-            mp.write_text('{"name": "test", "plugins": [{"source": "x", "policy": {"authentication": "none"}}]}')
+            mp.write_text(
+                '{"name": "test", "plugins": [{"source": {"source": "local", '
+                '"path": "./plugins/example"}, "policy": {"authentication": '
+                '"ON_INSTALL"}, "category": "Productivity"}]}'
+            )
             r = check_policy_fields(Path(tmpdir))
             assert not r.passed and r.points == 0
 
     def test_fails_for_missing_authentication(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             mp = Path(tmpdir) / "marketplace.json"
-            mp.write_text('{"name": "test", "plugins": [{"source": "x", "policy": {"installation": "auto"}}]}')
+            mp.write_text(
+                '{"name": "test", "plugins": [{"source": {"source": "local", '
+                '"path": "./plugins/example"}, "policy": {"installation": '
+                '"AVAILABLE"}, "category": "Productivity"}]}'
+            )
             r = check_policy_fields(Path(tmpdir))
             assert not r.passed and r.points == 0
+
+    def test_fails_for_missing_category(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp = Path(tmpdir) / "marketplace.json"
+            mp.write_text(
+                '{"name": "test", "plugins": [{"source": {"source": "local", '
+                '"path": "./plugins/example"}, "policy": {"installation": '
+                '"AVAILABLE", "authentication": "ON_INSTALL"}}]}'
+            )
+            r = check_policy_fields(Path(tmpdir))
+            assert not r.passed and r.points == 0
+
+    def test_fails_for_non_object_plugin_entry(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp = Path(tmpdir) / "marketplace.json"
+            mp.write_text('{"name": "test", "plugins": ["invalid"]}')
+            r = check_policy_fields(Path(tmpdir))
+            assert not r.passed and r.points == 0
+            assert "plugin[0]: not an object" in r.message
+            assert all(
+                finding.remediation
+                == "Add policy.installation, policy.authentication, and category for each marketplace entry."
+                for finding in r.findings
+            )
 
     def test_skips_invalid_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -194,39 +166,19 @@ class TestRunMarketplaceChecks:
         with tempfile.TemporaryDirectory() as tmpdir:
             mp = Path(tmpdir) / "marketplace.json"
             mp.write_text(
-                '{"name": "test", "plugins": [{"source": "http://example.com/plugin", '
-                '"policy": {"installation": "manual", "authentication": "none"}}]}'
+                '{"name": "test", "plugins": [{"source": {"source": "local", "path": "../outside"}, '
+                '"policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, "category": "Productivity"}]}'
             )
             results = run_marketplace_checks(Path(tmpdir))
             source_check = next(check for check in results if check.name == "Marketplace sources are safe")
             assert source_check.passed is False
-            assert "http://example.com/plugin" in source_check.message
+            assert "../outside" in source_check.message
 
-    def test_codex_marketplace_path_must_start_with_dot_slash(self, tmp_path: Path):
-        marketplace_dir = tmp_path / ".agents" / "plugins"
-        marketplace_dir.mkdir(parents=True)
-        (marketplace_dir / "plugins" / "demo").mkdir(parents=True)
-        (marketplace_dir / "marketplace.json").write_text(
-            json.dumps(
-                {
-                    "name": "demo-marketplace",
-                    "plugins": [
-                        {
-                            "source": {
-                                "source": "https://github.com/hashgraph-online/example-plugin",
-                                "path": "plugins/demo",
-                            },
-                            "policy": {"installation": "manual", "authentication": "none"},
-                            "category": "Developer Tools",
-                        }
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
-
-        results = run_marketplace_checks(tmp_path)
-        source_check = next(check for check in results if check.name == "Marketplace sources are safe")
-
-        assert source_check.passed is False
-        assert "./" in source_check.message
+    def test_invalid_marketplace_entry_is_unsafe(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp = Path(tmpdir) / "marketplace.json"
+            mp.write_text('{"name": "test", "plugins": ["invalid"]}')
+            results = run_marketplace_checks(Path(tmpdir))
+            source_check = next(check for check in results if check.name == "Marketplace sources are safe")
+            assert source_check.passed is False
+            assert source_check.message == "Unsafe marketplace sources detected: plugin[0]=invalid-entry"
