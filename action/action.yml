@@ -8,7 +8,7 @@ inputs:
     required: false
     default: "scan"
   plugin_dir:
-    description: "Path to the plugin directory to scan (default: repository root)"
+    description: "Path to a single plugin directory or a repo marketplace root (default: repository root)"
     required: false
     default: "."
   format:

@@ -3,7 +3,7 @@
   "title": "VerifyResultV1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["verify_pass", "workspace", "cases"],
+  "required": ["verify_pass", "workspace", "scope", "cases"],
   "properties": {
     "verify_pass": {
       "type": "boolean"
@@ -12,19 +12,69 @@
       "type": "string",
       "minLength": 1
     },
+    "scope": {
+      "type": "string",
+      "enum": ["plugin", "repository"]
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["marketplaceFile", "localPluginCount"],
+      "properties": {
+        "marketplaceFile": {"type": ["string", "null"]},
+        "localPluginCount": {"type": "integer", "minimum": 0}
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pluginVerifySummary"
+      }
+    },
+    "skippedTargets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/skippedTarget"
+      }
+    },
     "cases": {
       "type": "array",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["component", "name", "passed", "message", "classification"],
-        "properties": {
-          "component": {"type": "string", "minLength": 1},
-          "name": {"type": "string", "minLength": 1},
-          "passed": {"type": "boolean"},
-          "message": {"type": "string"},
-          "classification": {"type": "string", "minLength": 1}
-        }
+        "$ref": "#/$defs/case"
+      }
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component", "name", "passed", "message", "classification"],
+      "properties": {
+        "component": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "passed": {"type": "boolean"},
+        "message": {"type": "string"},
+        "classification": {"type": "string", "minLength": 1}
+      }
+    },
+    "pluginVerifySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "workspace", "verify_pass"],
+      "properties": {
+        "name": {"type": ["string", "null"]},
+        "workspace": {"type": "string", "minLength": 1},
+        "verify_pass": {"type": "boolean"}
+      }
+    },
+    "skippedTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "reason", "sourcePath"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "sourcePath": {"type": ["string", "null"]}
       }
     }
   }

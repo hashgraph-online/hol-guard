@@ -20,12 +20,32 @@ from .reporting import format_markdown, format_sarif, should_fail_for_severity
 from .rules import get_rule_spec, list_rule_specs
 from .scanner import scan_plugin
 from .suppressions import apply_severity_overrides, apply_suppressions, compute_effective_score
-from .verification import build_doctor_report, verify_plugin
+from .verification import build_doctor_report, build_verification_payload, verify_plugin
 from .version import __version__
 
 
 def _build_plain_text(result) -> str:
-    lines = [f"🔗 Codex Plugin Scanner v{__version__}", f"Scanning: {result.plugin_dir}", ""]
+    if getattr(result, "scope", "plugin") == "repository":
+        lines = [
+            f"🔗 Codex Plugin Scanner v{__version__}",
+            f"Scanning repository: {result.plugin_dir}",
+            f"Marketplace: {result.marketplace_file or 'not found'}",
+            f"Local plugins scanned: {len(result.plugin_results)}",
+            f"Skipped marketplace entries: {len(result.skipped_targets)}",
+            "",
+            "Per-plugin scores:",
+        ]
+        for plugin in result.plugin_results:
+            plugin_name = plugin.plugin_name or Path(plugin.plugin_dir).name
+            lines.append(f"  - {plugin_name}: {plugin.score}/100 ({plugin.grade})")
+        if result.skipped_targets:
+            lines += ["", "Skipped entries:"]
+            for skipped in result.skipped_targets:
+                source_path = f" [{skipped.source_path}]" if skipped.source_path else ""
+                lines.append(f"  - {skipped.name}{source_path}: {skipped.reason}")
+        lines.append("")
+    else:
+        lines = [f"🔗 Codex Plugin Scanner v{__version__}", f"Scanning: {result.plugin_dir}", ""]
     for category in result.categories:
         cat_score = sum(c.points for c in category.checks)
         cat_max = sum(c.max_points for c in category.checks)
@@ -323,11 +343,7 @@ def _run_verify(args: argparse.Namespace) -> int:
         print(f'Error: "{resolved}" is not a directory.', file=sys.stderr)
         return 1
     verification = verify_plugin(resolved, online=args.online)
-    payload = {
-        "verify_pass": verification.verify_pass,
-        "workspace": verification.workspace,
-        "cases": [asdict(case) for case in verification.cases],
-    }
+    payload = build_verification_payload(verification)
     if args.format == "json":
         print(json.dumps(payload, indent=2))
     else:
@@ -343,6 +359,12 @@ def _run_submit(args: argparse.Namespace) -> int:
     try:
         raw_result, result, profile, policy_eval, _effective_score = _scan_with_policy(args, resolved)
     except ConfigError:
+        return 1
+    if getattr(result, "scope", "plugin") != "plugin":
+        print(
+            "Submission requires a single plugin directory. Target one plugin path instead of a repo marketplace root.",
+            file=sys.stderr,
+        )
         return 1
     verification = verify_plugin(resolved, online=args.online)
     min_score = args.min_score if args.min_score is not None else POLICY_PROFILES[profile].min_score
