@@ -15,7 +15,8 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405" in action_text
     assert "pip install codex-plugin-scanner" in action_text
     assert 'pip install "$LOCAL_SOURCE"' in action_text
-    assert 'pip install "cisco-ai-skill-scanner==2.0.7"' in action_text
+    assert 'pip install "$LOCAL_SOURCE[cisco]"' in action_text
+    assert 'pip install "codex-plugin-scanner[cisco]"' in action_text
     assert "write_step_summary:" in action_text
     assert "profile:" in action_text
     assert "config:" in action_text
@@ -104,7 +105,7 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "awesome-codex-plugins" in action_readme
     assert "publish-action-repo.yml" in action_readme
     assert "actions/github-script@v8" in action_readme
-    assert "published `cisco-ai-skill-scanner` package from PyPI" in action_readme
+    assert "scanner with its published `cisco` extra enabled" in action_readme
 
 
 def test_readme_uses_stable_apache_license_badge() -> None:

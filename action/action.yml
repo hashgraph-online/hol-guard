@@ -177,13 +177,17 @@ runs:
         done
 
         if [ -n "$LOCAL_SOURCE" ]; then
-          pip install "$LOCAL_SOURCE"
+          if [ "${{ inputs.install_cisco }}" = "true" ]; then
+            pip install "$LOCAL_SOURCE[cisco]"
+          else
+            pip install "$LOCAL_SOURCE"
+          fi
         else
-          pip install codex-plugin-scanner
-        fi
-
-        if [ "${{ inputs.install_cisco }}" = "true" ]; then
-          pip install "cisco-ai-skill-scanner==2.0.7"
+          if [ "${{ inputs.install_cisco }}" = "true" ]; then
+            pip install "codex-plugin-scanner[cisco]"
+          else
+            pip install codex-plugin-scanner
+          fi
         fi
 
     - name: Run scanner
