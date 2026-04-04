@@ -183,6 +183,7 @@ runs:
         fi
 
         if [ "${{ inputs.install_cisco }}" = "true" ]; then
+          # Temporary fork pin until upstream cisco-ai-skill-scanner ships a LiteLLM fix.
           pip install "cisco-ai-skill-scanner @ git+https://github.com/hashgraph-online/skill-scanner.git@9b0ea08111f9129abfdf7aedc47322615cda1164"
         fi
 

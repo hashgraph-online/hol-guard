@@ -91,14 +91,9 @@ def test_skill_security_auto_mode_unavailable_is_not_applicable(monkeypatch):
 
 
 def test_run_cisco_skill_scan_on_mode_requires_cisco_dependency_when_missing(monkeypatch):
-    original_import = __import__
-
-    def fake_import(name, globalns=None, localns=None, fromlist=(), level=0):
-        if name == "skill_scanner" or name.startswith("skill_scanner."):
-            raise ImportError("skill_scanner unavailable")
-        return original_import(name, globalns, localns, fromlist, level)
-
-    monkeypatch.setattr("builtins.__import__", fake_import)
+    monkeypatch.setitem(sys.modules, "skill_scanner", ModuleType("skill_scanner"))
+    monkeypatch.delitem(sys.modules, "skill_scanner.core", raising=False)
+    monkeypatch.delitem(sys.modules, "skill_scanner.core.scan_policy", raising=False)
 
     summary = run_cisco_skill_scan(FIXTURES / "good-plugin" / "skills", mode="on", policy_name="balanced")
 
