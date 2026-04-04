@@ -1,244 +1,240 @@
-"""Marketplace validation checks."""
+"""Marketplace validation checks (15 points)."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 
-from ..marketplace_support import (
-    extract_marketplace_source,
-    find_marketplace_file,
-    load_marketplace_context,
-    marketplace_label,
-    source_path_is_safe,
-    source_reference_is_safe,
-    validate_marketplace_path_requirements,
-)
 from ..models import CheckResult, Finding, Severity
 
 
-def _marketplace_finding(rule_id: str, title: str, description: str, remediation: str, *, file_path: str) -> Finding:
-    return Finding(
-        rule_id=rule_id,
-        severity=Severity.MEDIUM,
-        category="marketplace",
-        title=title,
-        description=description,
-        remediation=remediation,
-        file_path=file_path,
-    )
-
-
-def _not_applicable_result(name: str, message: str) -> CheckResult:
-    return CheckResult(
-        name=name,
-        passed=True,
-        points=0,
-        max_points=0,
-        message=message,
-        applicable=False,
-    )
-
-
-def _load_context(plugin_dir: Path) -> tuple[object | None, str | None]:
-    marketplace_file = find_marketplace_file(plugin_dir)
-    if marketplace_file is None:
-        return None, None
-    path, _legacy = marketplace_file
+def _is_safe_source(plugin_dir: Path, source: str) -> bool:
+    if not source.startswith("./"):
+        return False
+    if urlparse(source).scheme:
+        return False
+    candidate = Path(source)
+    if candidate.is_absolute():
+        return False
+    resolved = (plugin_dir / candidate).resolve()
     try:
-        return load_marketplace_context(plugin_dir), str(path.relative_to(plugin_dir))
-    except json.JSONDecodeError:
-        return False, str(path.relative_to(plugin_dir))
+        resolved.relative_to(plugin_dir.resolve())
     except ValueError:
-        return False, str(path.relative_to(plugin_dir))
+        return False
+    return True
 
 
 def check_marketplace_json(plugin_dir: Path) -> CheckResult:
-    context, relative_path = _load_context(plugin_dir)
-    if context is None:
-        return _not_applicable_result("marketplace.json valid", "No marketplace manifest found, check not applicable")
-    if context is False:
-        file_path = relative_path or "marketplace.json"
+    mp = plugin_dir / "marketplace.json"
+    if not mp.exists():
+        return CheckResult(
+            name="marketplace.json valid",
+            passed=True,
+            points=0,
+            max_points=0,
+            message="No marketplace.json found, check not applicable",
+            applicable=False,
+        )
+    try:
+        data = json.loads(mp.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
         return CheckResult(
             name="marketplace.json valid",
             passed=False,
             points=0,
             max_points=5,
-            message=f"{file_path} is not valid JSON",
+            message="marketplace.json is not valid JSON",
             findings=(
-                _marketplace_finding(
-                    "MARKETPLACE_JSON_INVALID",
-                    "Marketplace manifest is invalid JSON",
-                    "The marketplace manifest could not be parsed.",
-                    "Fix the JSON syntax in the marketplace manifest.",
-                    file_path=file_path,
+                Finding(
+                    rule_id="MARKETPLACE_JSON_INVALID",
+                    severity=Severity.MEDIUM,
+                    category="marketplace",
+                    title="marketplace.json is invalid JSON",
+                    description="The marketplace manifest could not be parsed.",
+                    remediation="Fix the JSON syntax in marketplace.json.",
+                    file_path="marketplace.json",
                 ),
             ),
         )
 
-    file_path = marketplace_label(context)
-    payload = context.payload
-    if not payload.get("name") or not isinstance(payload.get("name"), str):
+    if not data.get("name") or not isinstance(data.get("name"), str):
         return CheckResult(
             name="marketplace.json valid",
             passed=False,
             points=0,
             max_points=5,
-            message=f'{file_path} missing "name" field',
+            message='marketplace.json missing "name" field',
             findings=(
-                _marketplace_finding(
-                    "MARKETPLACE_NAME_MISSING",
-                    "Marketplace name is missing",
-                    'The marketplace manifest must define a "name" field.',
-                    'Add a string "name" field to the marketplace manifest.',
-                    file_path=file_path,
+                Finding(
+                    rule_id="MARKETPLACE_NAME_MISSING",
+                    severity=Severity.LOW,
+                    category="marketplace",
+                    title='marketplace.json is missing "name"',
+                    description='The marketplace manifest must define a "name" field.',
+                    remediation='Add a string "name" field to marketplace.json.',
+                    file_path="marketplace.json",
                 ),
             ),
         )
-
-    plugins = payload.get("plugins")
-    if not isinstance(plugins, list):
+    if not isinstance(data.get("plugins"), list):
         return CheckResult(
             name="marketplace.json valid",
             passed=False,
             points=0,
             max_points=5,
-            message=f'{file_path} missing "plugins" array',
+            message='marketplace.json missing "plugins" array',
             findings=(
-                _marketplace_finding(
-                    "MARKETPLACE_PLUGINS_MISSING",
-                    "Marketplace plugins array is missing",
-                    'The marketplace manifest must declare its plugin list in a "plugins" array.',
-                    'Add a "plugins" array to the marketplace manifest.',
-                    file_path=file_path,
+                Finding(
+                    rule_id="MARKETPLACE_PLUGINS_MISSING",
+                    severity=Severity.MEDIUM,
+                    category="marketplace",
+                    title='marketplace.json is missing the "plugins" array',
+                    description='The marketplace manifest must declare its plugin list in a "plugins" array.',
+                    remediation='Add a "plugins" array to marketplace.json.',
+                    file_path="marketplace.json",
                 ),
             ),
         )
-
-    for index, plugin in enumerate(plugins):
+    for i, plugin in enumerate(data["plugins"]):
         if not isinstance(plugin, dict):
             return CheckResult(
                 name="marketplace.json valid",
                 passed=False,
                 points=0,
                 max_points=5,
-                message=f"{file_path} plugin[{index}] must be an object",
+                message=f"marketplace.json plugin[{i}] must be an object",
                 findings=(
-                    _marketplace_finding(
-                        "MARKETPLACE_SOURCE_MISSING",
-                        "Marketplace plugin entry is invalid",
-                        f"plugin[{index}] in the marketplace manifest must be an object.",
-                        "Replace the plugin entry with an object containing source, policy, and category fields.",
-                        file_path=file_path,
+                    Finding(
+                        rule_id="MARKETPLACE_ENTRY_INVALID",
+                        severity=Severity.MEDIUM,
+                        category="marketplace",
+                        title="Marketplace plugin entry is invalid",
+                        description=f"plugin[{i}] in marketplace.json must be an object.",
+                        remediation="Ensure all entries in the plugins array are objects.",
+                        file_path="marketplace.json",
                     ),
                 ),
             )
-        if context.legacy:
-            source_ref, _source_path = extract_marketplace_source(plugin)
-            if source_ref is None:
-                return CheckResult(
-                    name="marketplace.json valid",
-                    passed=False,
-                    points=0,
-                    max_points=5,
-                    message=f'{file_path} plugin[{index}] missing "source" field',
-                    findings=(
-                        _marketplace_finding(
-                            "MARKETPLACE_SOURCE_MISSING",
-                            "Marketplace plugin source is missing",
-                            f'plugin[{index}] in the marketplace manifest is missing a "source" field.',
-                            'Add a "source" field for each marketplace entry.',
-                            file_path=file_path,
-                        ),
+        source = plugin.get("source")
+        if not isinstance(source, dict):
+            return CheckResult(
+                name="marketplace.json valid",
+                passed=False,
+                points=0,
+                max_points=5,
+                message=f'marketplace.json plugin[{i}] missing "source" object',
+                findings=(
+                    Finding(
+                        rule_id="MARKETPLACE_SOURCE_MISSING",
+                        severity=Severity.MEDIUM,
+                        category="marketplace",
+                        title="Marketplace plugin source is missing",
+                        description=f'plugin[{i}] in marketplace.json is missing a "source" object.',
+                        remediation='Add a "source" object with "source" and "path" fields for each marketplace entry.',
+                        file_path="marketplace.json",
                     ),
-                )
-        else:
-            issue = validate_marketplace_path_requirements(context, plugin)
-            if issue is not None:
-                return CheckResult(
-                    name="marketplace.json valid",
-                    passed=False,
-                    points=0,
-                    max_points=5,
-                    message=f"{file_path} plugin[{index}] {issue}",
-                    findings=(
-                        _marketplace_finding(
-                            "MARKETPLACE_SOURCE_MISSING",
-                            "Marketplace source object is incomplete",
-                            f"plugin[{index}] in the marketplace manifest has an invalid source object: {issue}.",
-                            'Add a source object with both "source" and "./"-prefixed "path" fields.',
-                            file_path=file_path,
+                ),
+            )
+        if source.get("source") != "local" or not isinstance(source.get("path"), str):
+            return CheckResult(
+                name="marketplace.json valid",
+                passed=False,
+                points=0,
+                max_points=5,
+                message=f'marketplace.json plugin[{i}] must declare source.source="local" and source.path',
+                findings=(
+                    Finding(
+                        rule_id="MARKETPLACE_SOURCE_INVALID",
+                        severity=Severity.MEDIUM,
+                        category="marketplace",
+                        title="Marketplace source shape is invalid",
+                        description=(
+                            f"plugin[{i}] in marketplace.json must declare "
+                            '"source": {"source": "local", "path": "./plugins/..."}'
                         ),
+                        remediation="Use the official repo marketplace shape with a local source object.",
+                        file_path="marketplace.json",
                     ),
-                )
+                ),
+            )
         if not plugin.get("policy") or not isinstance(plugin.get("policy"), dict):
             return CheckResult(
                 name="marketplace.json valid",
                 passed=False,
                 points=0,
                 max_points=5,
-                message=f'{file_path} plugin[{index}] missing "policy" field',
+                message=f'marketplace.json plugin[{i}] missing "policy" field',
                 findings=(
-                    _marketplace_finding(
-                        "MARKETPLACE_POLICY_MISSING",
-                        "Marketplace policy is missing",
-                        f'plugin[{index}] in the marketplace manifest is missing a "policy" object.',
-                        'Add a "policy" object for each marketplace entry.',
-                        file_path=file_path,
+                    Finding(
+                        rule_id="MARKETPLACE_POLICY_MISSING",
+                        severity=Severity.MEDIUM,
+                        category="marketplace",
+                        title="Marketplace policy is missing",
+                        description=f'plugin[{i}] in marketplace.json is missing a "policy" object.',
+                        remediation='Add a "policy" object for each marketplace entry.',
+                        file_path="marketplace.json",
                     ),
                 ),
             )
-
-    compatibility = " in compatibility mode" if context.legacy else ""
     return CheckResult(
-        name="marketplace.json valid",
-        passed=True,
-        points=5,
-        max_points=5,
-        message=f"{file_path} is valid{compatibility}",
+        name="marketplace.json valid", passed=True, points=5, max_points=5, message="marketplace.json is valid"
     )
 
 
 def check_policy_fields(plugin_dir: Path) -> CheckResult:
-    context, relative_path = _load_context(plugin_dir)
-    if context is None:
-        return _not_applicable_result("Policy fields present", "No marketplace manifest found, check not applicable")
-    if context is False:
+    mp = plugin_dir / "marketplace.json"
+    if not mp.exists():
+        return CheckResult(
+            name="Policy fields present",
+            passed=True,
+            points=0,
+            max_points=0,
+            message="No marketplace.json found, check not applicable",
+            applicable=False,
+        )
+    try:
+        data = json.loads(mp.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
         return CheckResult(
             name="Policy fields present",
             passed=True,
             points=5,
             max_points=5,
-            message=f"Cannot parse {relative_path or 'marketplace.json'}, skipping check",
+            message="Cannot parse marketplace.json, skipping check",
+        )
+
+    plugins = data.get("plugins", [])
+    if not plugins:
+        return CheckResult(
+            name="Policy fields present",
+            passed=True,
+            points=5,
+            max_points=5,
+            message="No plugins in marketplace.json, nothing to check",
         )
 
     issues: list[str] = []
-    for index, plugin in enumerate(context.payload.get("plugins", [])):
+    for i, plugin in enumerate(plugins):
         if not isinstance(plugin, dict):
-            issues.append(f"plugin[{index}] must be an object")
+            issues.append(f"plugin[{i}]: not an object")
             continue
         policy = plugin.get("policy") or {}
-        if not isinstance(policy, dict):
-            issues.append(f"plugin[{index}] missing policy object")
-            continue
-        if not isinstance(policy.get("installation"), str) or not policy.get("installation"):
-            issues.append(f"plugin[{index}] missing policy.installation")
-        if not isinstance(policy.get("authentication"), str) or not policy.get("authentication"):
-            issues.append(f"plugin[{index}] missing policy.authentication")
-        if not isinstance(plugin.get("category"), str) or not plugin.get("category"):
-            issues.append(f"plugin[{index}] missing category")
+        if not policy.get("installation"):
+            issues.append(f"plugin[{i}]: missing policy.installation")
+        if not policy.get("authentication"):
+            issues.append(f"plugin[{i}]: missing policy.authentication")
+        if not plugin.get("category"):
+            issues.append(f"plugin[{i}]: missing category")
 
     if not issues:
-        compatibility = " in compatibility mode" if context.legacy else ""
         return CheckResult(
             name="Policy fields present",
             passed=True,
             points=5,
             max_points=5,
-            message=f"All marketplace policy fields are present{compatibility}",
+            message="All plugins have required policy fields",
         )
-
-    file_path = marketplace_label(context)
     return CheckResult(
         name="Policy fields present",
         passed=False,
@@ -246,12 +242,14 @@ def check_policy_fields(plugin_dir: Path) -> CheckResult:
         max_points=5,
         message=f"Policy issues: {', '.join(issues[:3])}",
         findings=tuple(
-            _marketplace_finding(
-                "MARKETPLACE_POLICY_FIELDS_MISSING",
-                "Marketplace policy fields are incomplete",
-                issue,
-                "Add policy.installation, policy.authentication, and category for each marketplace entry.",
-                file_path=file_path,
+            Finding(
+                rule_id="MARKETPLACE_POLICY_FIELDS_MISSING",
+                severity=Severity.MEDIUM,
+                category="marketplace",
+                title="Marketplace policy fields are incomplete",
+                description=issue,
+                remediation="Add policy.installation, policy.authentication, and category for each marketplace entry.",
+                file_path="marketplace.json",
             )
             for issue in issues
         ),
@@ -259,48 +257,54 @@ def check_policy_fields(plugin_dir: Path) -> CheckResult:
 
 
 def check_sources_safe(plugin_dir: Path) -> CheckResult:
-    context, _relative_path = _load_context(plugin_dir)
-    if context is None:
-        return _not_applicable_result(
-            "Marketplace sources are safe",
-            "No marketplace manifest found, check not applicable",
+    mp = plugin_dir / "marketplace.json"
+    if not mp.exists():
+        return CheckResult(
+            name="Marketplace sources are safe",
+            passed=True,
+            points=0,
+            max_points=0,
+            message="No marketplace.json found, check not applicable",
+            applicable=False,
         )
-    if context is False:
-        return _not_applicable_result(
-            "Marketplace sources are safe",
-            "Cannot parse marketplace manifest, skipping source safety checks",
+
+    try:
+        data = json.loads(mp.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return CheckResult(
+            name="Marketplace sources are safe",
+            passed=True,
+            points=0,
+            max_points=0,
+            message="Cannot parse marketplace.json, skipping source safety checks",
+            applicable=False,
         )
 
     unsafe: list[str] = []
-    for index, plugin in enumerate(context.payload.get("plugins", [])):
+    for index, plugin in enumerate(data.get("plugins", [])):
         if not isinstance(plugin, dict):
             unsafe.append(f"plugin[{index}]=invalid-entry")
             continue
-        source_ref, source_path = extract_marketplace_source(plugin)
-        if context.legacy:
-            if source_ref is not None and not source_reference_is_safe(context, source_ref):
-                unsafe.append(f"plugin[{index}]={source_ref}")
+        source = plugin.get("source")
+        if not isinstance(source, dict):
             continue
-        if source_ref is None or not source_reference_is_safe(context, source_ref):
-            unsafe.append(f"plugin[{index}].source.source={source_ref or 'missing'}")
-        if source_path is None:
-            unsafe.append(f"plugin[{index}].source.path=missing")
-        elif not source_path.startswith("./"):
-            unsafe.append(f'plugin[{index}].source.path must start with "./": {source_path}')
-        elif not source_path_is_safe(context, source_path):
-            unsafe.append(f"plugin[{index}].source.path escapes root: {source_path}")
+        source_mode = source.get("source")
+        source_path = source.get("path")
+        if source_mode != "local" or not isinstance(source_path, str):
+            unsafe.append(f"plugin[{index}]=invalid-source")
+            continue
+        if not _is_safe_source(plugin_dir, source_path):
+            unsafe.append(f"plugin[{index}]={source_path}")
 
     if not unsafe:
-        compatibility = " in compatibility mode" if context.legacy else ""
         return CheckResult(
             name="Marketplace sources are safe",
             passed=True,
             points=5,
             max_points=5,
-            message=f"Marketplace sources are safe{compatibility}.",
+            message="Marketplace sources are relative-safe local paths.",
         )
 
-    file_path = marketplace_label(context)
     return CheckResult(
         name="Marketplace sources are safe",
         passed=False,
@@ -308,12 +312,14 @@ def check_sources_safe(plugin_dir: Path) -> CheckResult:
         max_points=5,
         message=f"Unsafe marketplace sources detected: {', '.join(unsafe)}",
         findings=tuple(
-            _marketplace_finding(
-                "MARKETPLACE_UNSAFE_SOURCE",
-                "Marketplace source is unsafe",
-                entry,
-                'Use remote HTTPS sources or "./"-prefixed in-repo paths that stay within the marketplace root.',
-                file_path=file_path,
+            Finding(
+                rule_id="MARKETPLACE_UNSAFE_SOURCE",
+                severity=Severity.MEDIUM,
+                category="marketplace",
+                title="Marketplace source escapes the plugin directory",
+                description=f'The marketplace source "{entry}" is absolute or resolves outside the plugin directory.',
+                remediation="Use relative in-repo paths that stay within the plugin directory.",
+                file_path="marketplace.json",
             )
             for entry in unsafe
         ),
