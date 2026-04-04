@@ -65,6 +65,8 @@ Cisco-backed skill scanning is optional:
 pip install "codex-plugin-scanner[cisco]"
 ```
 
+The `cisco` extra is pinned to a patched `hashgraph-online/skill-scanner` fork while the upstream Cisco release still carries a vulnerable LiteLLM pin.
+
 You can also run the scanner without a local install:
 
 ```bash
