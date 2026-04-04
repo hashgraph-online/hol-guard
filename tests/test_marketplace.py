@@ -50,11 +50,20 @@ class TestCheckMarketplaceJson:
             r = check_marketplace_json(Path(tmpdir))
             assert not r.passed and r.points == 0
 
+    def test_fails_for_non_object_plugin_entry(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp = Path(tmpdir) / "marketplace.json"
+            mp.write_text('{"name": "test", "plugins": ["invalid"]}')
+            r = check_marketplace_json(Path(tmpdir))
+            assert not r.passed and r.points == 0
+            assert r.message == "marketplace.json plugin[0] must be an object"
+
     def test_fails_for_invalid_source_shape(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             mp = Path(tmpdir) / "marketplace.json"
             mp.write_text(
-                '{"name": "test", "plugins": [{"source": {"source": "git", "path": "./plugins/example"}, "policy": {}}]}'
+                '{"name": "test", "plugins": [{"source": {"source": "git", '
+                '"path": "./plugins/example"}, "policy": {}}]}'
             )
             r = check_marketplace_json(Path(tmpdir))
             assert not r.passed and r.points == 0
@@ -62,9 +71,7 @@ class TestCheckMarketplaceJson:
     def test_fails_for_missing_plugin_policy(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             mp = Path(tmpdir) / "marketplace.json"
-            mp.write_text(
-                '{"name": "test", "plugins": [{"source": {"source": "local", "path": "./plugins/example"}}]}'
-            )
+            mp.write_text('{"name": "test", "plugins": [{"source": {"source": "local", "path": "./plugins/example"}}]}')
             r = check_marketplace_json(Path(tmpdir))
             assert not r.passed and r.points == 0
 
@@ -90,7 +97,9 @@ class TestCheckPolicyFields:
         with tempfile.TemporaryDirectory() as tmpdir:
             mp = Path(tmpdir) / "marketplace.json"
             mp.write_text(
-                '{"name": "test", "plugins": [{"source": {"source": "local", "path": "./plugins/example"}, "policy": {"authentication": "ON_INSTALL"}, "category": "Productivity"}]}'
+                '{"name": "test", "plugins": [{"source": {"source": "local", '
+                '"path": "./plugins/example"}, "policy": {"authentication": '
+                '"ON_INSTALL"}, "category": "Productivity"}]}'
             )
             r = check_policy_fields(Path(tmpdir))
             assert not r.passed and r.points == 0
@@ -99,7 +108,9 @@ class TestCheckPolicyFields:
         with tempfile.TemporaryDirectory() as tmpdir:
             mp = Path(tmpdir) / "marketplace.json"
             mp.write_text(
-                '{"name": "test", "plugins": [{"source": {"source": "local", "path": "./plugins/example"}, "policy": {"installation": "AVAILABLE"}, "category": "Productivity"}]}'
+                '{"name": "test", "plugins": [{"source": {"source": "local", '
+                '"path": "./plugins/example"}, "policy": {"installation": '
+                '"AVAILABLE"}, "category": "Productivity"}]}'
             )
             r = check_policy_fields(Path(tmpdir))
             assert not r.passed and r.points == 0
@@ -108,10 +119,25 @@ class TestCheckPolicyFields:
         with tempfile.TemporaryDirectory() as tmpdir:
             mp = Path(tmpdir) / "marketplace.json"
             mp.write_text(
-                '{"name": "test", "plugins": [{"source": {"source": "local", "path": "./plugins/example"}, "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}}]}'
+                '{"name": "test", "plugins": [{"source": {"source": "local", '
+                '"path": "./plugins/example"}, "policy": {"installation": '
+                '"AVAILABLE", "authentication": "ON_INSTALL"}}]}'
             )
             r = check_policy_fields(Path(tmpdir))
             assert not r.passed and r.points == 0
+
+    def test_fails_for_non_object_plugin_entry(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp = Path(tmpdir) / "marketplace.json"
+            mp.write_text('{"name": "test", "plugins": ["invalid"]}')
+            r = check_policy_fields(Path(tmpdir))
+            assert not r.passed and r.points == 0
+            assert "plugin[0]: not an object" in r.message
+            assert all(
+                finding.remediation
+                == "Add policy.installation, policy.authentication, and category for each marketplace entry."
+                for finding in r.findings
+            )
 
     def test_skips_invalid_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -147,3 +173,12 @@ class TestRunMarketplaceChecks:
             source_check = next(check for check in results if check.name == "Marketplace sources are safe")
             assert source_check.passed is False
             assert "../outside" in source_check.message
+
+    def test_invalid_marketplace_entry_is_unsafe(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp = Path(tmpdir) / "marketplace.json"
+            mp.write_text('{"name": "test", "plugins": ["invalid"]}')
+            results = run_marketplace_checks(Path(tmpdir))
+            source_check = next(check for check in results if check.name == "Marketplace sources are safe")
+            assert source_check.passed is False
+            assert source_check.message == "Unsafe marketplace sources detected: plugin[0]=invalid-entry"

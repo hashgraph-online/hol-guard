@@ -97,6 +97,25 @@ def check_marketplace_json(plugin_dir: Path) -> CheckResult:
             ),
         )
     for i, plugin in enumerate(data["plugins"]):
+        if not isinstance(plugin, dict):
+            return CheckResult(
+                name="marketplace.json valid",
+                passed=False,
+                points=0,
+                max_points=5,
+                message=f"marketplace.json plugin[{i}] must be an object",
+                findings=(
+                    Finding(
+                        rule_id="MARKETPLACE_ENTRY_INVALID",
+                        severity=Severity.MEDIUM,
+                        category="marketplace",
+                        title="Marketplace plugin entry is invalid",
+                        description=f"plugin[{i}] in marketplace.json must be an object.",
+                        remediation="Ensure all entries in the plugins array are objects.",
+                        file_path="marketplace.json",
+                    ),
+                ),
+            )
         source = plugin.get("source")
         if not isinstance(source, dict):
             return CheckResult(
@@ -131,10 +150,10 @@ def check_marketplace_json(plugin_dir: Path) -> CheckResult:
                         category="marketplace",
                         title="Marketplace source shape is invalid",
                         description=(
-                            f'plugin[{i}] in marketplace.json must declare '
+                            f"plugin[{i}] in marketplace.json must declare "
                             '"source": {"source": "local", "path": "./plugins/..."}'
                         ),
-                        remediation='Use the official repo marketplace shape with a local source object.',
+                        remediation="Use the official repo marketplace shape with a local source object.",
                         file_path="marketplace.json",
                     ),
                 ),
@@ -197,6 +216,9 @@ def check_policy_fields(plugin_dir: Path) -> CheckResult:
 
     issues: list[str] = []
     for i, plugin in enumerate(plugins):
+        if not isinstance(plugin, dict):
+            issues.append(f"plugin[{i}]: not an object")
+            continue
         policy = plugin.get("policy") or {}
         if not policy.get("installation"):
             issues.append(f"plugin[{i}]: missing policy.installation")
@@ -226,7 +248,7 @@ def check_policy_fields(plugin_dir: Path) -> CheckResult:
                 category="marketplace",
                 title="Marketplace policy fields are incomplete",
                 description=issue,
-                remediation="Add both policy.installation and policy.authentication for each marketplace entry.",
+                remediation="Add policy.installation, policy.authentication, and category for each marketplace entry.",
                 file_path="marketplace.json",
             )
             for issue in issues
@@ -260,6 +282,9 @@ def check_sources_safe(plugin_dir: Path) -> CheckResult:
 
     unsafe: list[str] = []
     for index, plugin in enumerate(data.get("plugins", [])):
+        if not isinstance(plugin, dict):
+            unsafe.append(f"plugin[{index}]=invalid-entry")
+            continue
         source = plugin.get("source")
         if not isinstance(source, dict):
             continue
@@ -277,7 +302,7 @@ def check_sources_safe(plugin_dir: Path) -> CheckResult:
             passed=True,
             points=5,
             max_points=5,
-            message="Marketplace sources are relative-safe or remote URLs.",
+            message="Marketplace sources are relative-safe local paths.",
         )
 
     return CheckResult(
@@ -293,7 +318,7 @@ def check_sources_safe(plugin_dir: Path) -> CheckResult:
                 category="marketplace",
                 title="Marketplace source escapes the plugin directory",
                 description=f'The marketplace source "{entry}" is absolute or resolves outside the plugin directory.',
-                remediation="Use a relative in-repo path or an explicit remote URL for marketplace sources.",
+                remediation="Use relative in-repo paths that stay within the plugin directory.",
                 file_path="marketplace.json",
             )
             for entry in unsafe
