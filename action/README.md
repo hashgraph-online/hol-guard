@@ -35,7 +35,7 @@ This README is intentionally root-ready for a dedicated GitHub Marketplace actio
 | `fail_on_severity` | Fail on findings at or above this severity: `none`, `critical`, `high`, `medium`, `low`, `info` | `none` |
 | `cisco_skill_scan` | Cisco skill-scanner mode: `auto`, `on`, `off` | `auto` |
 | `cisco_policy` | Cisco policy preset: `permissive`, `balanced`, `strict` | `balanced` |
-| `install_cisco` | Install the Cisco skill-scanner dependency from the pinned patched fork used by this repo | `false` |
+| `install_cisco` | Install the scanner with its `cisco` extra enabled | `false` |
 | `submission_enabled` | Open submission issues for awesome-list and registry automation when the plugin clears the submission threshold | `false` |
 | `submission_score_threshold` | Minimum score required before a submission issue is created | `80` |
 | `submission_repos` | Comma-separated GitHub repositories that should receive the submission issue | `hashgraph-online/awesome-codex-plugins` |
@@ -115,7 +115,7 @@ jobs:
     cisco_policy: strict
     install_cisco: true
 ```
-The action installs the Cisco scanner from the same pinned patched fork used in the main scanner repo until upstream publishes a fixed LiteLLM dependency.
+The action installs the scanner with its published `cisco` extra enabled, so the optional Cisco analysis path stays aligned with the dependency declared in `pyproject.toml`.
 
 ### Export registry payload for Codex ecosystem automation
 

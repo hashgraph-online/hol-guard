@@ -65,7 +65,7 @@ Cisco-backed skill scanning is optional:
 pip install "codex-plugin-scanner[cisco]"
 ```
 
-The `cisco` extra is pinned to a patched `hashgraph-online/skill-scanner` fork while the upstream Cisco release still carries a vulnerable LiteLLM pin.
+The `cisco` extra installs the published `cisco-ai-skill-scanner` package from PyPI so the scanner remains publishable on PyPI and the optional Cisco analysis path works with standard package metadata.
 
 You can also run the scanner without a local install:
 
