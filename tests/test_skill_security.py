@@ -90,6 +90,17 @@ def test_skill_security_auto_mode_unavailable_is_not_applicable(monkeypatch):
     assert availability.applicable is False
 
 
+def test_run_cisco_skill_scan_on_mode_requires_cisco_dependency_when_missing(monkeypatch):
+    monkeypatch.setitem(sys.modules, "skill_scanner", ModuleType("skill_scanner"))
+    monkeypatch.delitem(sys.modules, "skill_scanner.core", raising=False)
+    monkeypatch.delitem(sys.modules, "skill_scanner.core.scan_policy", raising=False)
+
+    summary = run_cisco_skill_scan(FIXTURES / "good-plugin" / "skills", mode="on", policy_name="balanced")
+
+    assert summary.status == CiscoIntegrationStatus.UNAVAILABLE
+    assert "Install with the cisco extra." in summary.message
+
+
 def test_scan_plugin_includes_cisco_findings(monkeypatch):
     monkeypatch.setattr(
         "codex_plugin_scanner.checks.skill_security.run_cisco_skill_scan",
