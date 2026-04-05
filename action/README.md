@@ -1,8 +1,14 @@
 # HOL Codex Plugin Scanner GitHub Action
 
-Scan your [Codex plugin](https://developers.openai.com/codex/plugins) for security, publishability, and best practices. The action emits a `0-100` score, a grade, and the requested report format.
+[![Latest Release](https://img.shields.io/github/v/release/hashgraph-online/hol-codex-plugin-scanner-action?display_name=tag)](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action/releases/latest)
+[![Marketplace Repository](https://img.shields.io/badge/github-marketplace_repo-0A84FF)](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action)
+[![Source of Truth](https://img.shields.io/badge/source-codex--plugin--scanner-111827)](https://github.com/hashgraph-online/codex-plugin-scanner/tree/main/action)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/blob/main/LICENSE)
 
-This README is intentionally root-ready for a dedicated GitHub Marketplace action repository. GitHub Marketplace requires that repository to contain a single root `action.yml` and no workflow files.
+| ![Hashgraph Online Logo](https://raw.githubusercontent.com/hashgraph-online/standards-sdk-py/main/Hashgraph-Online.png) | Marketplace-ready GitHub Action for scanning [Codex plugins](https://developers.openai.com/codex/plugins) for security, publishability, runtime readiness, and registry trust signals. The action emits structured reports, SARIF, policy results, and submission metadata while staying aligned to the main scanner release train.<br><br>[Latest Release](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action/releases/latest)<br>[Marketplace Repository](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action)<br>[Scanner Source of Truth](https://github.com/hashgraph-online/codex-plugin-scanner/tree/main/action)<br>[Report an Issue](https://github.com/hashgraph-online/codex-plugin-scanner/issues) |
+| :--- | :--- |
+
+This repository is the Marketplace-facing wrapper for the scanner action. The main scanner repo remains the source of truth, while this published action bundle keeps the required root `action.yml` layout for GitHub Marketplace.
 
 ## Usage
 
@@ -14,8 +20,6 @@ This README is intentionally root-ready for a dedicated GitHub Marketplace actio
     min_score: 70
     fail_on_severity: high
 ```
-
-If your repository exposes multiple plugins from `.agents/plugins/marketplace.json`, keep `plugin_dir: "."`. The action will discover local `./plugins/...` entries automatically, scan each local plugin, and skip remote marketplace entries.
 
 ## Inputs
 
@@ -37,7 +41,7 @@ If your repository exposes multiple plugins from `.agents/plugins/marketplace.js
 | `fail_on_severity` | Fail on findings at or above this severity: `none`, `critical`, `high`, `medium`, `low`, `info` | `none` |
 | `cisco_skill_scan` | Cisco skill-scanner mode: `auto`, `on`, `off` | `auto` |
 | `cisco_policy` | Cisco policy preset: `permissive`, `balanced`, `strict` | `balanced` |
-| `install_cisco` | Install the scanner with its `cisco` extra enabled | `false` |
+| `install_cisco` | Install the published Cisco skill-scanner dependency used by this repo | `false` |
 | `submission_enabled` | Open submission issues for awesome-list and registry automation when the plugin clears the submission threshold | `false` |
 | `submission_score_threshold` | Minimum score required before a submission issue is created | `80` |
 | `submission_repos` | Comma-separated GitHub repositories that should receive the submission issue | `hashgraph-online/awesome-codex-plugins` |
@@ -97,7 +101,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
         with:
           plugin_dir: "."
@@ -119,7 +123,6 @@ This `plugin_dir: "."` pattern is correct for both single-plugin repositories an
     cisco_policy: strict
     install_cisco: true
 ```
-The action installs the scanner with its published `cisco` extra enabled, so the optional Cisco analysis path stays aligned with the dependency declared in `pyproject.toml`.
 
 ### Export registry payload for Codex ecosystem automation
 
@@ -153,7 +156,7 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Scan plugin and submit if eligible
         id: scan
@@ -184,7 +187,7 @@ Use a fine-grained token with `issues:write` on `hashgraph-online/awesome-codex-
     output: scan-report.md
 
 - name: Comment PR
-  uses: actions/github-script@v8
+  uses: actions/github-script@v7
   with:
     script: |
       const fs = require('fs');
@@ -199,15 +202,17 @@ Use a fine-grained token with `issues:write` on `hashgraph-online/awesome-codex-
 
 ## Release Management
 
-- Publish immutable releases such as `v1.4.0`.
+- Publish immutable releases for this Marketplace wrapper repository automatically from the source scanner repo when `action/` changes merge to `main`.
 - Move the floating major tag `v1` to the latest compatible release.
 - Keep this action in its own public repository for GitHub Marketplace publication.
-- Configure `ACTION_REPO_TOKEN` in the source repository so `publish-action-repo.yml` can sync this root-ready bundle automatically.
+- Configure `ACTION_REPO_TOKEN` as a secret in the source repository so `publish-action-repo.yml` can automatically sync this root-ready bundle, create the action-repo release, and publish autogenerated release notes.
 - Optionally set `ACTION_REPOSITORY` in the source repository if the target repository should not be `hashgraph-online/hol-codex-plugin-scanner-action`.
 
-## Source Of Truth
+## Source of Truth
 
 The source bundle for this action lives in the main scanner repository under `action/`. Release artifacts from that repository should export a root-ready action bundle for the dedicated Marketplace repository.
+
+Direct edits in this Marketplace repository should stay limited to Marketplace-specific copy or metadata. Functional changes and release publication logic belong in `hashgraph-online/codex-plugin-scanner` so merges there can publish a matching action release automatically.
 
 ## License
 

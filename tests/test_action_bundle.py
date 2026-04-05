@@ -15,8 +15,6 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405" in action_text
     assert "pip install codex-plugin-scanner" in action_text
     assert 'pip install "$LOCAL_SOURCE"' in action_text
-    assert 'pip install "$LOCAL_SOURCE[cisco]"' in action_text
-    assert 'pip install "codex-plugin-scanner[cisco]"' in action_text
     assert "write_step_summary:" in action_text
     assert "profile:" in action_text
     assert "config:" in action_text
@@ -80,32 +78,39 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "hashgraph-online/hol-codex-plugin-scanner-action" in workflow_text
     assert "Validate publication credentials" in workflow_text
     assert "if: secrets.ACTION_REPO_TOKEN != ''" not in workflow_text
-    assert "inputs.create_repository && 'true' || 'false'" in workflow_text
+    assert 'git status --short -- action.yml README.md LICENSE SECURITY.md CONTRIBUTING.md' in workflow_text
     assert "SOURCE_REF" in workflow_text
-    assert "PUBLISH_IMMUTABLE_RELEASE" in workflow_text
-    assert 'gh repo create "${ACTION_REPOSITORY}"' in workflow_text
+    assert 'gh repo clone "$ACTION_REPOSITORY" action-repo -- --depth 1' in workflow_text
     assert 'cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml' in workflow_text
-    assert 'if [ "${PUBLISH_IMMUTABLE_RELEASE}" = "true" ]; then' in workflow_text
+    assert 'git push origin HEAD:main' in workflow_text
+    assert 'gh release view "${TAG}" --repo "$ACTION_REPOSITORY"' in workflow_text
+    assert 'git ls-remote --tags origin "refs/tags/${TAG}"' in workflow_text
     assert "git push origin refs/tags/v1 --force" in workflow_text
+    assert "steps.release_state.outputs.release_exists == 'false'" in workflow_text
+    assert "steps.release_state.outputs.tag_exists == 'true'" in workflow_text
     assert 'gh release create "${TAG}"' in workflow_text
+    assert "--generate-notes" in workflow_text
     assert "Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/tree/${SOURCE_REF}" in workflow_text
 
 
 def test_action_bundle_docs_live_in_action_readme() -> None:
     action_readme = (ROOT / "action" / "README.md").read_text(encoding="utf-8")
 
-    assert "single root `action.yml`" in action_readme
-    assert "no workflow files" in action_readme
-    assert "dedicated Marketplace repository" in action_readme
-    assert "Source Of Truth" in action_readme
+    assert "Hashgraph-Online.png" in action_readme
+    assert "Latest Release" in action_readme
+    assert "Marketplace-facing wrapper" in action_readme
+    assert "root `action.yml` layout" in action_readme
+    assert "published action bundle" in action_readme
+    assert "Source of Truth" in action_readme
     assert "registry_payload_output" in action_readme
     assert "grade_label" in action_readme
     assert "max_severity" in action_readme
     assert "submission issue" in action_readme
     assert "awesome-codex-plugins" in action_readme
     assert "publish-action-repo.yml" in action_readme
-    assert "actions/github-script@v8" in action_readme
-    assert "scanner with its published `cisco` extra enabled" in action_readme
+    assert "hashgraph-online/hol-codex-plugin-scanner-action@v1" in action_readme
+    assert "actions/checkout@v4" in action_readme
+    assert "actions/github-script@v7" in action_readme
 
 
 def test_readme_uses_stable_apache_license_badge() -> None:
