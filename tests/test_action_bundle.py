@@ -83,7 +83,11 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert 'gh repo clone "$ACTION_REPOSITORY" action-repo -- --depth 1' in workflow_text
     assert 'cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml' in workflow_text
     assert 'git push origin HEAD:main' in workflow_text
+    assert 'gh release view "${TAG}" --repo "$ACTION_REPOSITORY"' in workflow_text
+    assert 'git ls-remote --tags origin "refs/tags/${TAG}"' in workflow_text
     assert "git push origin refs/tags/v1 --force" in workflow_text
+    assert "steps.release_state.outputs.release_exists == 'false'" in workflow_text
+    assert "steps.release_state.outputs.tag_exists == 'true'" in workflow_text
     assert 'gh release create "${TAG}"' in workflow_text
     assert "--generate-notes" in workflow_text
     assert "Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/tree/${SOURCE_REF}" in workflow_text

@@ -107,8 +107,28 @@ jobs:
           git tag -fa v1 -m "Update floating major tag to ${TAG}"
           git push origin refs/tags/v1 --force
 
+      - name: Check action release state
+        id: release_state
+        working-directory: action-repo
+        env:
+          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+
+          if gh release view "${TAG}" --repo "$ACTION_REPOSITORY" >/dev/null 2>&1; then
+            echo "release_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create action repository release
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.release_state.outputs.release_exists == 'false' && (steps.diff.outputs.changed == 'true' || steps.release_state.outputs.tag_exists == 'true')
         env:
           GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
         run: |
