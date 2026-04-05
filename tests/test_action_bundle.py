@@ -98,9 +98,9 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
 
     assert "Hashgraph-Online.png" in action_readme
     assert "Latest Release" in action_readme
-    assert "single root `action.yml`" in action_readme
-    assert "no workflow files" in action_readme
-    assert "dedicated Marketplace repository" in action_readme
+    assert "Marketplace-facing wrapper" in action_readme
+    assert "root `action.yml` layout" in action_readme
+    assert "published action bundle" in action_readme
     assert "Source of Truth" in action_readme
     assert "registry_payload_output" in action_readme
     assert "grade_label" in action_readme

@@ -8,7 +8,7 @@
 | ![Hashgraph Online Logo](https://raw.githubusercontent.com/hashgraph-online/standards-sdk-py/main/Hashgraph-Online.png) | Marketplace-ready GitHub Action for scanning [Codex plugins](https://developers.openai.com/codex/plugins) for security, publishability, runtime readiness, and registry trust signals. The action emits structured reports, SARIF, policy results, and submission metadata while staying aligned to the main scanner release train.<br><br>[Latest Release](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action/releases/latest)<br>[Marketplace Repository](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action)<br>[Scanner Source of Truth](https://github.com/hashgraph-online/codex-plugin-scanner/tree/main/action)<br>[Report an Issue](https://github.com/hashgraph-online/codex-plugin-scanner/issues) |
 | :--- | :--- |
 
-This README is intentionally root-ready for a dedicated GitHub Marketplace action repository. GitHub Marketplace requires that repository to contain a single root `action.yml` and no workflow files.
+This repository is the Marketplace-facing wrapper for the scanner action. The main scanner repo remains the source of truth, while this published action bundle keeps the required root `action.yml` layout for GitHub Marketplace.
 
 ## Usage
 
