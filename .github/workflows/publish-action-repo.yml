@@ -81,10 +81,10 @@ jobs:
         id: diff
         working-directory: action-repo
         run: |
-          if git diff --quiet -- action.yml README.md LICENSE SECURITY.md CONTRIBUTING.md; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
+          if [ -n "$(git status --short -- action.yml README.md LICENSE SECURITY.md CONTRIBUTING.md)" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Commit synced bundle
