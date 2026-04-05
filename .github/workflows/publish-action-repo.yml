@@ -68,6 +68,13 @@ jobs:
           GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
         run: gh repo clone "$ACTION_REPOSITORY" action-repo -- --depth 1
 
+      - name: Configure authenticated action repository remote
+        working-directory: action-repo
+        env:
+          ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+        run: |
+          git remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/$ACTION_REPOSITORY.git"
+
       - name: Sync root-ready action bundle
         working-directory: action-repo
         run: |
