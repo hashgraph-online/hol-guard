@@ -171,8 +171,10 @@ runs:
 
     - name: Install scanner
       shell: bash
+      env:
+        INSTALL_SOURCE: ${{ inputs.install_source }}
+        INSTALL_CISCO: ${{ inputs.install_cisco }}
       run: |
-        INSTALL_SOURCE="${{ inputs.install_source }}"
         LOCAL_SOURCE=""
         for candidate in "$GITHUB_ACTION_PATH" "$GITHUB_ACTION_PATH/.."; do
           if [ -f "$candidate/pyproject.toml" ] && [ -d "$candidate/src/codex_plugin_scanner" ]; then
@@ -186,7 +188,7 @@ runs:
             echo "install_source=local requires the source repository checkout (for example: uses: ./action inside codex-plugin-scanner)." >&2
             exit 1
           fi
-          if [ "${{ inputs.install_cisco }}" = "true" ]; then
+          if [ "$INSTALL_CISCO" = "true" ]; then
             python3 -m pip install "$LOCAL_SOURCE[cisco]"
           else
             python3 -m pip install "$LOCAL_SOURCE"
@@ -222,7 +224,7 @@ runs:
           fi
 
           python3 -m pip install "$DIST_DIR/$DIST_BASENAME"
-          if [ "${{ inputs.install_cisco }}" = "true" ]; then
+          if [ "$INSTALL_CISCO" = "true" ]; then
             python3 -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"
           fi
         else

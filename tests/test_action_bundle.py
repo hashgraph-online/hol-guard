@@ -16,7 +16,8 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert 'python3 -m pip install "pypi-attestations==' in action_text
     assert "install_source:" in action_text
     assert 'default: "pypi"' in action_text
-    assert 'INSTALL_SOURCE="${{ inputs.install_source }}"' in action_text
+    assert "INSTALL_SOURCE: ${{ inputs.install_source }}" in action_text
+    assert "INSTALL_CISCO: ${{ inputs.install_cisco }}" in action_text
     assert 'if [ "$INSTALL_SOURCE" = "local" ]; then' in action_text
     assert "install_source=local requires the source repository checkout" in action_text
     assert 'python3 -m pip install "$LOCAL_SOURCE"' in action_text
@@ -91,6 +92,8 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     assert "ghcr.io/${{ github.repository }}" in workflow_text
     assert "${IMAGE_NAME}:latest" in workflow_text
     assert "org.opencontainers.image.version=${{ needs.build.outputs.version }}" in workflow_text
+    e2e_workflow_text = (ROOT / ".github" / "workflows" / "e2e-test.yml").read_text(encoding="utf-8")
+    assert e2e_workflow_text.count("install_source: local") == 5
 
 
 def test_ci_workflow_covers_cross_platform_runtime() -> None:
@@ -178,8 +181,9 @@ def test_container_files_exist_for_enterprise_distribution() -> None:
     dockerfile_text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     dockerignore_text = (ROOT / ".dockerignore").read_text(encoding="utf-8")
 
-    assert "FROM python:3.12-slim" in dockerfile_text
+    assert "FROM python:3.12-slim@sha256:" in dockerfile_text
     assert 'ENTRYPOINT ["codex-plugin-scanner"]' in dockerfile_text
     assert "python3 -m pip install /app" in dockerfile_text
+    assert "USER scanner" in dockerfile_text
     assert ".git" in dockerignore_text
     assert "tests" in dockerignore_text
