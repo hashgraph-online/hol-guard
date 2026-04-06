@@ -14,8 +14,15 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert 'color: "blue"' in action_text
     assert "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405" in action_text
     assert 'python3 -m pip install "pypi-attestations==' in action_text
+    assert "install_source:" in action_text
+    assert 'default: "pypi"' in action_text
+    assert "INSTALL_SOURCE: ${{ inputs.install_source }}" in action_text
+    assert "INSTALL_CISCO: ${{ inputs.install_cisco }}" in action_text
+    assert 'if [ "$INSTALL_SOURCE" = "local" ]; then' in action_text
+    assert "install_source=local requires the source repository checkout" in action_text
     assert 'python3 -m pip install "$LOCAL_SOURCE"' in action_text
     assert 'python3 -m pip install "$LOCAL_SOURCE[cisco]"' in action_text
+    assert 'elif [ "$INSTALL_SOURCE" = "pypi" ]; then' in action_text
     assert (
         'python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" '
         '"codex-plugin-scanner==${SCANNER_VERSION}"'
@@ -76,6 +83,17 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     assert """printf '%s\\n' "${VERSION}" > "${BUNDLE_ROOT}/scanner-version.txt" """[:-1] in workflow_text
     assert 'cp action/cisco-version.txt "${BUNDLE_ROOT}/cisco-version.txt"' in workflow_text
     assert 'cp action/pypi-attestations-version.txt "${BUNDLE_ROOT}/pypi-attestations-version.txt"' in workflow_text
+    assert "docker pull ghcr.io/hashgraph-online/codex-plugin-scanner:${VERSION}" in workflow_text
+    assert "publish-container:" in workflow_text
+    assert "packages: write" in workflow_text
+    assert "docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2" in workflow_text
+    assert "docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567" in workflow_text
+    assert "docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83" in workflow_text
+    assert "ghcr.io/${{ github.repository }}" in workflow_text
+    assert "${IMAGE_NAME}:latest" in workflow_text
+    assert "org.opencontainers.image.version=${{ needs.build.outputs.version }}" in workflow_text
+    e2e_workflow_text = (ROOT / ".github" / "workflows" / "e2e-test.yml").read_text(encoding="utf-8")
+    assert e2e_workflow_text.count("install_source: local") == 5
 
 
 def test_ci_workflow_covers_cross_platform_runtime() -> None:
@@ -132,6 +150,9 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "published action bundle" in action_readme
     assert "Source of Truth" in action_readme
     assert "verifies its PyPI provenance" in action_readme
+    assert "install_source: local" in action_readme
+    assert "uses: ./action" in action_readme
+    assert "ghcr.io/hashgraph-online/codex-plugin-scanner:<version>" in action_readme
     assert "online`, `submission_enabled`, and `upload_sarif`" in action_readme
     assert "registry_payload_output" in action_readme
     assert "grade_label" in action_readme
@@ -152,3 +173,17 @@ def test_readme_uses_stable_apache_license_badge() -> None:
     assert "https://img.shields.io/github/license/hashgraph-online/codex-plugin-scanner" not in readme
     assert "publish-action-repo.yml" in readme
     assert "docs/github-action-marketplace.md" not in readme
+    assert "ghcr.io/hashgraph-online/codex-plugin-scanner:<version>" in readme
+    assert "Container Image" in readme
+
+
+def test_container_files_exist_for_enterprise_distribution() -> None:
+    dockerfile_text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    dockerignore_text = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+
+    assert "FROM python:3.12-slim@sha256:" in dockerfile_text
+    assert 'ENTRYPOINT ["codex-plugin-scanner"]' in dockerfile_text
+    assert "python3 -m pip install /app" in dockerfile_text
+    assert "USER scanner" in dockerfile_text
+    assert ".git" in dockerignore_text
+    assert "tests" in dockerignore_text

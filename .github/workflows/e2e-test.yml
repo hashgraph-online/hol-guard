@@ -19,6 +19,7 @@ jobs:
       - uses: ./action
         id: scan
         with:
+          install_source: local
           plugin_dir: tests/fixtures/good-plugin
           min_score: 80
 
@@ -30,6 +31,7 @@ jobs:
       - uses: ./action
         id: scan
         with:
+          install_source: local
           plugin_dir: tests/fixtures/good-plugin
           format: json
           output: report.json
@@ -52,6 +54,7 @@ jobs:
       - uses: ./action
         id: scan
         with:
+          install_source: local
           plugin_dir: tests/fixtures/good-plugin
           format: sarif
           output: report.sarif
@@ -75,6 +78,7 @@ jobs:
         id: scan
         continue-on-error: true
         with:
+          install_source: local
           plugin_dir: tests/fixtures/bad-plugin
           min_score: 99
       - name: Verify failure
@@ -94,6 +98,7 @@ jobs:
       - uses: ./action
         id: scan
         with:
+          install_source: local
           plugin_dir: tests/fixtures/good-plugin
           format: markdown
           output: report.md
