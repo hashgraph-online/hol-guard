@@ -121,11 +121,17 @@ jobs:
     needs: [build, publish-pypi]
     runs-on: ubuntu-latest
     permissions:
+      attestations: write
       contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: distributions
+          path: dist/
       - name: Skip if release already exists
         id: release_exists
         env:
@@ -194,16 +200,48 @@ jobs:
           )
 
           echo "bundle_path=${BUNDLE_PATH}" >> $GITHUB_OUTPUT
+      - name: Attest GitHub release assets
+        if: steps.release_exists.outputs.exists == 'false'
+        id: provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
+        with:
+          subject-path: |
+            dist/*
+      - name: Materialize provenance bundle
+        if: steps.release_exists.outputs.exists == 'false'
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          cp "${{ steps.provenance.outputs.bundle-path }}" "dist/codex-plugin-scanner-v${VERSION}.intoto.jsonl"
+      - name: Collect release asset files
+        if: steps.release_exists.outputs.exists == 'false'
+        id: release_assets
+        run: |
+          mapfile -d '' ASSET_FILES < <(find dist -maxdepth 1 -type f -print0 | sort -z)
+          if [ "${#ASSET_FILES[@]}" -eq 0 ]; then
+            echo "No release asset files found in dist/" >&2
+            exit 1
+          fi
+          {
+            echo "files<<EOF"
+            for asset in "${ASSET_FILES[@]}"; do
+              printf '%s\n' "$asset"
+            done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Create release
         if: steps.release_exists.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          mapfile -t RELEASE_ASSETS <<'EOF'
+          ${{ steps.release_assets.outputs.files }}
+          EOF
           VERSION="${{ needs.build.outputs.version }}"
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
             --notes-file ${{ steps.changelog.outputs.notes_path }} \
-            "${{ steps.action_bundle.outputs.bundle_path }}#hol-codex-plugin-scanner-action-v${VERSION}.zip"
+            "${RELEASE_ASSETS[@]}"
 
   publish-container:
     name: Publish container image
