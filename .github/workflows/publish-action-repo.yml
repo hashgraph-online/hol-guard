@@ -5,15 +5,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - action/action.yml
-      - action/README.md
-      - action/scanner-version.txt
-      - action/cisco-version.txt
-      - action/pypi-attestations-version.txt
-      - LICENSE
-      - SECURITY.md
-      - CONTRIBUTING.md
 
 permissions:
   contents: read
@@ -45,6 +36,8 @@ jobs:
 
       - name: Checkout source repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
 
       - name: Compute next action release tag
         id: version

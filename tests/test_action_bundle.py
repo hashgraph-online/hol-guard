@@ -93,6 +93,7 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "hashgraph-online/hol-codex-plugin-scanner-action" in workflow_text
     assert "Validate publication credentials" in workflow_text
     assert "Compute scanner package version" in workflow_text
+    assert "paths:" not in workflow_text
     assert "if: secrets.ACTION_REPO_TOKEN != ''" not in workflow_text
     assert (
         "git status --short -- action.yml README.md scanner-version.txt "
@@ -100,6 +101,7 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     ) in workflow_text
     assert "SOURCE_REF" in workflow_text
     assert 'gh repo clone "$ACTION_REPOSITORY" action-repo -- --depth 1' in workflow_text
+    assert "fetch-depth: 0" in workflow_text
     assert (
         'git remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/$ACTION_REPOSITORY.git"'
     ) in workflow_text
