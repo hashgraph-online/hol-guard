@@ -68,7 +68,7 @@ inputs:
     required: false
     default: "balanced"
   install_cisco:
-    description: "Install the published Cisco skill-scanner dependency used by this repo"
+    description: "Install the opt-in Cisco skill-scanner dependency used by this repo"
     required: false
     default: "false"
   submission_enabled:
@@ -178,15 +178,43 @@ runs:
 
         if [ -n "$LOCAL_SOURCE" ]; then
           if [ "${{ inputs.install_cisco }}" = "true" ]; then
-            pip install "$LOCAL_SOURCE[cisco]"
+            python3 -m pip install "$LOCAL_SOURCE[cisco]"
           else
-            pip install "$LOCAL_SOURCE"
+            python3 -m pip install "$LOCAL_SOURCE"
           fi
         else
+          SCANNER_VERSION_FILE="$GITHUB_ACTION_PATH/scanner-version.txt"
+          CISCO_VERSION_FILE="$GITHUB_ACTION_PATH/cisco-version.txt"
+          PYPI_ATTESTATIONS_VERSION_FILE="$GITHUB_ACTION_PATH/pypi-attestations-version.txt"
+          if [ ! -f "$SCANNER_VERSION_FILE" ] || [ ! -f "$CISCO_VERSION_FILE" ] || [ ! -f "$PYPI_ATTESTATIONS_VERSION_FILE" ]; then
+            echo "Action install metadata files are missing from the Marketplace bundle." >&2
+            exit 1
+          fi
+
+          SCANNER_VERSION="$(tr -d '[:space:]' < "$SCANNER_VERSION_FILE")"
+          CISCO_VERSION="$(tr -d '[:space:]' < "$CISCO_VERSION_FILE")"
+          PYPI_ATTESTATIONS_VERSION="$(tr -d '[:space:]' < "$PYPI_ATTESTATIONS_VERSION_FILE")"
+          SCANNER_REPOSITORY="https://github.com/hashgraph-online/codex-plugin-scanner"
+          DIST_DIR="${RUNNER_TEMP:-$GITHUB_WORKSPACE/.codex-plugin-scanner-dist}"
+          mkdir -p "$DIST_DIR"
+
+          python3 -m pip install "pypi-attestations==${PYPI_ATTESTATIONS_VERSION}"
+          python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" "codex-plugin-scanner==${SCANNER_VERSION}"
+
+          DIST_BASENAME="$(
+            DIST_DIR="$DIST_DIR" python3 -c "import os; from pathlib import Path; dist_dir = Path(os.environ['DIST_DIR']); candidates = sorted(dist_dir.glob('codex_plugin_scanner-*.whl')); expected = len(candidates) == 1; print(candidates[0].name) if expected else (_ for _ in ()).throw(SystemExit(f'Expected exactly one downloaded scanner wheel, found {len(candidates)}'))"
+          )"
+
+          if ! python3 -m pypi_attestations verify pypi \
+            --repository "$SCANNER_REPOSITORY" \
+            "pypi:${DIST_BASENAME}"; then
+            echo "Failed to verify PyPI provenance for codex-plugin-scanner==${SCANNER_VERSION}." >&2
+            exit 1
+          fi
+
+          python3 -m pip install "$DIST_DIR/$DIST_BASENAME"
           if [ "${{ inputs.install_cisco }}" = "true" ]; then
-            pip install "codex-plugin-scanner[cisco]"
-          else
-            pip install codex-plugin-scanner
+            python3 -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"
           fi
         fi
 

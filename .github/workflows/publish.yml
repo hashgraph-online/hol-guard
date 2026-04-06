@@ -178,6 +178,9 @@ jobs:
           mkdir -p "${BUNDLE_ROOT}"
           cp action/action.yml "${BUNDLE_ROOT}/action.yml"
           cp action/README.md "${BUNDLE_ROOT}/README.md"
+          printf '%s\n' "${VERSION}" > "${BUNDLE_ROOT}/scanner-version.txt"
+          cp action/cisco-version.txt "${BUNDLE_ROOT}/cisco-version.txt"
+          cp action/pypi-attestations-version.txt "${BUNDLE_ROOT}/pypi-attestations-version.txt"
           cp LICENSE "${BUNDLE_ROOT}/LICENSE"
           cp SECURITY.md "${BUNDLE_ROOT}/SECURITY.md"
 
