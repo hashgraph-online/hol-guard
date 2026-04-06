@@ -80,7 +80,7 @@ jobs:
             LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n1)
             if [[ -n "$LAST_TAG" ]]; then
               IFS=. read -r MAJOR MINOR PATCH <<< "${LAST_TAG#v}"
-              if [[ -z "$MAJOR" ] || [ -z "$MINOR" ] || [ -z "$PATCH" ]]; then
+              if [[ -z "$MAJOR" || -z "$MINOR" || -z "$PATCH" ]]; then
                 echo "Unsupported release tag format: $LAST_TAG" >&2
                 exit 1
               fi

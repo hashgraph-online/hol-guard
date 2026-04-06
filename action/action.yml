@@ -205,9 +205,12 @@ runs:
             DIST_DIR="$DIST_DIR" python3 -c "import os; from pathlib import Path; dist_dir = Path(os.environ['DIST_DIR']); candidates = sorted(dist_dir.glob('codex_plugin_scanner-*.whl')); expected = len(candidates) == 1; print(candidates[0].name) if expected else (_ for _ in ()).throw(SystemExit(f'Expected exactly one downloaded scanner wheel, found {len(candidates)}'))"
           )"
 
-          python3 -m pypi_attestations verify pypi \
+          if ! python3 -m pypi_attestations verify pypi \
             --repository "$SCANNER_REPOSITORY" \
-            "pypi:${DIST_BASENAME}"
+            "pypi:${DIST_BASENAME}"; then
+            echo "Failed to verify PyPI provenance for codex-plugin-scanner==${SCANNER_VERSION}." >&2
+            exit 1
+          fi
 
           python3 -m pip install "$DIST_DIR/$DIST_BASENAME"
           if [ "${{ inputs.install_cisco }}" = "true" ]; then
