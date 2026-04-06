@@ -71,6 +71,10 @@ inputs:
     description: "Install the opt-in Cisco skill-scanner dependency used by this repo"
     required: false
     default: "false"
+  install_source:
+    description: "Package install source: pypi for the reviewed release path, or local for source-repo dogfooding"
+    required: false
+    default: "pypi"
   submission_enabled:
     description: "Open submission issues for awesome-list and registry automation when the plugin clears the submission threshold"
     required: false
@@ -167,6 +171,9 @@ runs:
 
     - name: Install scanner
       shell: bash
+      env:
+        INSTALL_SOURCE: ${{ inputs.install_source }}
+        INSTALL_CISCO: ${{ inputs.install_cisco }}
       run: |
         LOCAL_SOURCE=""
         for candidate in "$GITHUB_ACTION_PATH" "$GITHUB_ACTION_PATH/.."; do
@@ -176,13 +183,17 @@ runs:
           fi
         done
 
-        if [ -n "$LOCAL_SOURCE" ]; then
-          if [ "${{ inputs.install_cisco }}" = "true" ]; then
+        if [ "$INSTALL_SOURCE" = "local" ]; then
+          if [ -z "$LOCAL_SOURCE" ]; then
+            echo "install_source=local requires the source repository checkout (for example: uses: ./action inside codex-plugin-scanner)." >&2
+            exit 1
+          fi
+          if [ "$INSTALL_CISCO" = "true" ]; then
             python3 -m pip install "$LOCAL_SOURCE[cisco]"
           else
             python3 -m pip install "$LOCAL_SOURCE"
           fi
-        else
+        elif [ "$INSTALL_SOURCE" = "pypi" ]; then
           SCANNER_VERSION_FILE="$GITHUB_ACTION_PATH/scanner-version.txt"
           CISCO_VERSION_FILE="$GITHUB_ACTION_PATH/cisco-version.txt"
           PYPI_ATTESTATIONS_VERSION_FILE="$GITHUB_ACTION_PATH/pypi-attestations-version.txt"
@@ -213,9 +224,12 @@ runs:
           fi
 
           python3 -m pip install "$DIST_DIR/$DIST_BASENAME"
-          if [ "${{ inputs.install_cisco }}" = "true" ]; then
+          if [ "$INSTALL_CISCO" = "true" ]; then
             python3 -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"
           fi
+        else
+          echo "Unsupported install_source: $INSTALL_SOURCE" >&2
+          exit 1
         fi
 
     - name: Run scanner
