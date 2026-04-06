@@ -11,6 +11,7 @@ from .models import CategoryResult
 from .trust_helpers import (
     category_checks,
     check_percent,
+    has_required_skill_frontmatter,
     is_https_url,
     load_mcp_payload,
     normalize_adapter_total,
@@ -53,8 +54,8 @@ def build_skill_domain(
         return None
 
     frontmatters = [payload for payload in (parse_skill_frontmatter(path) for path in skill_files) if payload]
-    frontmatter_count = len(frontmatters)
-    all_frontmatter_valid = frontmatter_count == len(skill_files)
+    valid_frontmatters = [payload for payload in frontmatters if has_required_skill_frontmatter(payload)]
+    all_frontmatter_valid = len(valid_frontmatters) == len(skill_files)
     descriptions = [str(payload.get("description", "")).strip() for payload in frontmatters]
     average_description_length = (
         sum(len(description) for description in descriptions) / len(descriptions) if descriptions else 0
@@ -238,9 +239,10 @@ def build_skill_domain(
 
 
 def build_mcp_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]) -> TrustDomainScore | None:
-    payload = load_mcp_payload(plugin_dir)
-    if payload is None:
+    payload_state = load_mcp_payload(plugin_dir)
+    if payload_state is None:
         return None
+    payload = payload_state.payload
 
     security_checks = category_checks(categories, "Security")
     remotes = payload.get("remotes")
@@ -269,7 +271,7 @@ def build_mcp_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]) -
         if local_servers
         else True
     )
-    config_shape = (not payload) or (
+    config_shape = payload_state.parse_valid and (
         (remotes is None or isinstance(remotes, list)) and (servers is None or isinstance(servers, dict))
     )
 

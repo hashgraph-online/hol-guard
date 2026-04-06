@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
 from .models import CategoryResult
+
+
+@dataclass(frozen=True)
+class McpPayloadState:
+    payload: dict[str, object]
+    parse_valid: bool
 
 
 def round_trust_score(value: float) -> float:
@@ -102,12 +109,22 @@ def parse_skill_frontmatter(skill_file: Path) -> dict[str, object] | None:
     return payload
 
 
-def load_mcp_payload(plugin_dir: Path) -> dict[str, object] | None:
+def has_required_skill_frontmatter(payload: dict[str, object]) -> bool:
+    for field in ("name", "description"):
+        value = payload.get(field)
+        if not isinstance(value, str) or not value.strip():
+            return False
+    return True
+
+
+def load_mcp_payload(plugin_dir: Path) -> McpPayloadState | None:
     path = plugin_dir / ".mcp.json"
     if not path.exists():
         return None
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
+        return McpPayloadState(payload={}, parse_valid=False)
+    if not isinstance(payload, dict):
+        return McpPayloadState(payload={}, parse_valid=False)
+    return McpPayloadState(payload=payload, parse_valid=True)
