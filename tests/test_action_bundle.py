@@ -154,7 +154,7 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
 def test_action_bundle_docs_live_in_action_readme() -> None:
     action_readme = (ROOT / "action" / "README.md").read_text(encoding="utf-8")
 
-    assert "Hashgraph-Online.png" in action_readme
+    assert "https://hol.org/brand/Logo_Whole_Dark.png" in action_readme
     assert "Latest Release" in action_readme
     assert "Marketplace-facing wrapper" in action_readme
     assert "root `action.yml` layout" in action_readme
