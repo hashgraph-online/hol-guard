@@ -45,6 +45,22 @@ If your repository uses a Codex marketplace root like `.agents/plugins/marketpla
 
 The score remains available as a trust and triage signal, but the primary workflow is **preflight + CI gating + publish readiness**.
 
+## Trust Score Provenance
+
+The scanner now emits explicit trust provenance alongside the quality grade:
+
+- bundled skills inherit the live HOL broker adapter model from HCS-28 and HCS-26 alignment work
+- MCP configuration trust is documented in a local draft spec
+- top-level Codex plugin trust is documented in a local draft spec
+
+Current local specs:
+
+- [Skill Trust Local Draft](docs/trust/skill-trust-local.md)
+- [MCP Trust Draft](docs/trust/mcp-trust-draft.md)
+- [Codex Plugin Trust Draft](docs/trust/plugin-trust-draft.md)
+
+This keeps the quality grade and the trust score separate. Signals like `SECURITY.md` are still visible, but their trust weight is now explicit instead of being inferred from raw category points.
+
 ## Quick Start For Contributors
 
 ```bash

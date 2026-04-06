@@ -62,5 +62,9 @@ line-length = 120
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/test-trust-scoring.py" = ["N999"]
+"tests/test-trust-specs.py" = ["N999"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
