@@ -5,6 +5,7 @@
 [![PyPI Downloads](https://img.shields.io/pypi/dm/codex-plugin-scanner)](https://pypistats.org/packages/codex-plugin-scanner)
 [![CI](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml)
 [![Publish](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/publish.yml/badge.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/publish.yml)
+[![Container Image](https://img.shields.io/badge/ghcr-codex--plugin--scanner-2496ED?logo=docker&logoColor=white)](https://github.com/hashgraph-online/codex-plugin-scanner/pkgs/container/codex-plugin-scanner)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/codex-plugin-scanner/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/codex-plugin-scanner)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/codex-plugin-scanner?style=social)](https://github.com/hashgraph-online/codex-plugin-scanner/stargazers)
@@ -73,6 +74,15 @@ You can also run the scanner without a local install:
 
 ```bash
 pipx run codex-plugin-scanner ./my-plugin
+```
+
+Container-first environments can use the published image instead:
+
+```bash
+docker run --rm \
+  -v "$PWD:/workspace" \
+  ghcr.io/hashgraph-online/codex-plugin-scanner:<version> \
+  scan /workspace --format text
 ```
 
 ## What The Scanner Covers

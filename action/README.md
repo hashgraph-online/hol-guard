@@ -12,6 +12,11 @@ This repository is the Marketplace-facing wrapper for the scanner action. The ma
 
 The default Marketplace install path uses an exact `codex-plugin-scanner` PyPI release, verifies its PyPI provenance against `hashgraph-online/codex-plugin-scanner`, and only then installs it. After installation, the default `scan`, `lint`, and offline `verify` paths operate on local repository content only. Live network probing and submission automation remain explicit opt-in features.
 
+Advanced distribution paths are available when you need them:
+
+- `install_source: local` is the explicit dogfood path for `uses: ./action` inside the source repo.
+- `ghcr.io/hashgraph-online/codex-plugin-scanner` is the container distribution for enterprise runners that prefer a reviewed OCI image over runtime package installation.
+
 ## Usage
 
 ```yaml
@@ -44,6 +49,7 @@ The default Marketplace install path uses an exact `codex-plugin-scanner` PyPI r
 | `cisco_skill_scan` | Cisco skill-scanner mode: `auto`, `on`, `off` | `auto` |
 | `cisco_policy` | Cisco policy preset: `permissive`, `balanced`, `strict` | `balanced` |
 | `install_cisco` | Install the opt-in Cisco skill-scanner dependency used by this repo | `false` |
+| `install_source` | Package install source: `pypi` for the reviewed release path, or `local` for source-repo dogfooding | `pypi` |
 | `submission_enabled` | Open submission issues for awesome-list and registry automation when the plugin clears the submission threshold | `false` |
 | `submission_score_threshold` | Minimum score required before a submission issue is created | `80` |
 | `submission_repos` | Comma-separated GitHub repositories that should receive the submission issue | `hashgraph-online/awesome-codex-plugins` |
@@ -125,6 +131,17 @@ This `plugin_dir: "."` pattern is correct for both single-plugin repositories an
     cisco_skill_scan: on
     cisco_policy: strict
     install_cisco: true
+```
+
+### Dogfood the source-repo action bundle
+
+Use this only inside `hashgraph-online/codex-plugin-scanner`, where the action can install the adjacent source tree directly.
+
+```yaml
+- uses: ./action
+  with:
+    plugin_dir: "."
+    install_source: local
 ```
 
 ### Export registry payload for Codex ecosystem automation
@@ -236,3 +253,16 @@ Set `mode` to one of `scan`, `lint`, `verify`, or `submit`.
 For `submit` mode, point `plugin_dir` at one concrete plugin directory. Repository-mode discovery is supported for `scan`, `lint`, and `verify`, but `submit` intentionally remains single-plugin.
 
 For `scan` mode, set `upload_sarif: true` to emit and upload SARIF automatically instead of wiring a separate upload step by hand.
+
+## Container Distribution
+
+The scanner is also published as an OCI image for container-first environments:
+
+```bash
+docker run --rm \
+  -v "$PWD:/workspace" \
+  ghcr.io/hashgraph-online/codex-plugin-scanner:<version> \
+  scan /workspace --format text
+```
+
+The image installs the scanner from the reviewed source tree at release build time. It is separate from the Marketplace action so teams that prefer `docker://` or explicit `docker run` flows can use a pinned image without changing the secure default action path.
