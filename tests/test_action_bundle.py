@@ -79,10 +79,21 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
 
     assert "Build GitHub Action bundle" in workflow_text
     assert "hol-codex-plugin-scanner-action-v${VERSION}.zip" in workflow_text
+    assert "Attest GitHub release assets" in workflow_text
+    assert "actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32" in workflow_text
+    assert "attestations: write" in workflow_text
+    assert "id-token: write" in workflow_text
     assert 'cp action/action.yml "${BUNDLE_ROOT}/action.yml"' in workflow_text
     assert """printf '%s\\n' "${VERSION}" > "${BUNDLE_ROOT}/scanner-version.txt" """[:-1] in workflow_text
     assert 'cp action/cisco-version.txt "${BUNDLE_ROOT}/cisco-version.txt"' in workflow_text
     assert 'cp action/pypi-attestations-version.txt "${BUNDLE_ROOT}/pypi-attestations-version.txt"' in workflow_text
+    assert "dist/codex-plugin-scanner-v${VERSION}.intoto.jsonl" in workflow_text
+    assert "Collect release asset files" in workflow_text
+    assert "find dist -maxdepth 1 -type f -print0 | sort -z" in workflow_text
+    assert 'mapfile -t RELEASE_ASSETS <<\'EOF\'' in workflow_text
+    assert '"${RELEASE_ASSETS[@]}"' in workflow_text
+    assert "subject-path: |" in workflow_text
+    assert "dist/*" in workflow_text
     assert "docker pull ghcr.io/hashgraph-online/codex-plugin-scanner:${VERSION}" in workflow_text
     assert "publish-container:" in workflow_text
     assert "packages: write" in workflow_text
@@ -180,10 +191,30 @@ def test_readme_uses_stable_apache_license_badge() -> None:
 def test_container_files_exist_for_enterprise_distribution() -> None:
     dockerfile_text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     dockerignore_text = (ROOT / ".dockerignore").read_text(encoding="utf-8")
+    docker_requirements_text = (ROOT / "docker-requirements.txt").read_text(encoding="utf-8")
 
     assert "FROM python:3.12-slim@sha256:" in dockerfile_text
+    assert "cat <<'EOF' >/usr/local/bin/codex-plugin-scanner" in dockerfile_text
     assert 'ENTRYPOINT ["codex-plugin-scanner"]' in dockerfile_text
-    assert "python3 -m pip install /app" in dockerfile_text
+    assert "COPY docker-requirements.txt LICENSE README.md /app/" in dockerfile_text
+    assert "python3 -m pip install --require-hashes -r /app/docker-requirements.txt" in dockerfile_text
+    assert dockerfile_text.index("COPY docker-requirements.txt LICENSE README.md /app/") < dockerfile_text.index(
+        "RUN python3 -m pip install --require-hashes -r /app/docker-requirements.txt"
+    )
+    assert dockerfile_text.index("RUN python3 -m pip install --require-hashes -r /app/docker-requirements.txt") < (
+        dockerfile_text.index("COPY src /app/src")
+    )
+    assert "SOURCE_ROOT = \"/app/src\"" in dockerfile_text
+    assert "WORKSPACE = \"/workspace\"" in dockerfile_text
+    assert "from codex_plugin_scanner.cli import main" in dockerfile_text
     assert "USER scanner" in dockerfile_text
+    assert "rich==14.2.0" in docker_requirements_text
+    assert "--hash=sha256:" in docker_requirements_text
     assert ".git" in dockerignore_text
     assert "tests" in dockerignore_text
+
+
+def test_license_declares_spdx_identifier() -> None:
+    license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+
+    assert license_text.startswith("SPDX-License-Identifier: Apache-2.0")
