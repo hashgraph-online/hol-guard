@@ -92,11 +92,7 @@ def parse_skill_frontmatter(skill_file: Path) -> dict[str, object] | None:
         normalized_key = key.strip()
         value = raw_value.strip()
         if value.startswith("[") and value.endswith("]"):
-            payload[normalized_key] = [
-                item.strip().strip("'\"")
-                for item in value[1:-1].split(",")
-                if item.strip()
-            ]
+            payload[normalized_key] = [item.strip().strip("'\"") for item in value[1:-1].split(",") if item.strip()]
             continue
         if value:
             payload[normalized_key] = value.strip("'\"")

@@ -23,8 +23,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
-      - run: uv run --no-sync ruff check src/
-      - run: uv run --no-sync ruff format --check src/
+      - run: uv run --no-sync python -m ruff check src/
+      - run: uv run --no-sync python -m ruff format --check src/
       - run: uv run --no-sync pytest --tb=short
 
   cross-platform:

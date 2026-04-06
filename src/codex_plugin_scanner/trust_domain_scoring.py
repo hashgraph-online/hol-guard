@@ -68,9 +68,7 @@ def build_skill_domain(
             tags.extend(item.strip() for item in value.split(",") if item.strip())
     interface = manifest.get("interface") if isinstance(manifest, dict) else None
     has_category = (
-        isinstance(interface, dict)
-        and isinstance(interface.get("category"), str)
-        and bool(interface.get("category"))
+        isinstance(interface, dict) and isinstance(interface.get("category"), str) and bool(interface.get("category"))
     )
     has_author = (
         isinstance(manifest.get("author"), dict)
@@ -88,10 +86,7 @@ def build_skill_domain(
         "publisherBound": 100.0 if has_author else 0.0,
         "repoCommitIntegrity": (
             100.0
-            if isinstance(repository, str)
-            and repository
-            and isinstance(version, str)
-            and SEMVER_RE.match(version)
+            if isinstance(repository, str) and repository and isinstance(version, str) and SEMVER_RE.match(version)
             else 0.0
         ),
         "manifestIntegrity": 100.0 if all_frontmatter_valid else 0.0,
@@ -158,10 +153,7 @@ def build_skill_domain(
     safety_score = 50.0
     safety_message = "Cisco skill scanning unavailable; using neutral local safety score."
     if context.summary is not None and context.summary.status == CiscoIntegrationStatus.ENABLED:
-        unique_findings = {
-            f"{finding.rule_id}:{finding.severity.value}"
-            for finding in context.summary.findings
-        }
+        unique_findings = {f"{finding.rule_id}:{finding.severity.value}" for finding in context.summary.findings}
         safety_score = 100.0
         for finding_key in unique_findings:
             if finding_key.endswith(":high"):
@@ -230,9 +222,7 @@ def build_skill_domain(
             ),
         ),
     )
-    total = round_trust_score(
-        (adapters[0].score * 1.0 + adapters[1].score * 1.0 + adapters[2].score * 0.75) / 2.75
-    )
+    total = round_trust_score((adapters[0].score * 1.0 + adapters[1].score * 1.0 + adapters[2].score * 0.75) / 2.75)
     return TrustDomainScore(
         domain="skills",
         label=SKILL_TRUST_SPEC.label,
@@ -256,26 +246,29 @@ def build_mcp_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]) -
     remote_entries = remotes if isinstance(remotes, list) else []
     local_servers = servers if isinstance(servers, dict) else {}
     has_named_surfaces = bool(remote_entries) or bool(local_servers)
-    secure_remote_urls = all(
-        isinstance(entry, dict) and is_https_url(str(entry.get("url", "")))
-        for entry in remote_entries
-    ) if remote_entries else True
-    local_commands_valid = all(
-        isinstance(config, dict)
-        and isinstance(config.get("command"), str)
-        and bool(config.get("command"))
-        and (
-            "args" not in config
-            or (
-                isinstance(config.get("args"), list)
-                and all(isinstance(value, str) for value in config.get("args"))
+    secure_remote_urls = (
+        all(isinstance(entry, dict) and is_https_url(str(entry.get("url", ""))) for entry in remote_entries)
+        if remote_entries
+        else True
+    )
+    local_commands_valid = (
+        all(
+            isinstance(config, dict)
+            and isinstance(config.get("command"), str)
+            and bool(config.get("command"))
+            and (
+                "args" not in config
+                or (
+                    isinstance(config.get("args"), list) and all(isinstance(value, str) for value in config.get("args"))
+                )
             )
+            for config in local_servers.values()
         )
-        for config in local_servers.values()
-    ) if local_servers else True
+        if local_servers
+        else True
+    )
     config_shape = (not payload) or (
-        (remotes is None or isinstance(remotes, list))
-        and (servers is None or isinstance(servers, dict))
+        (remotes is None or isinstance(remotes, list)) and (servers is None or isinstance(servers, dict))
     )
 
     verification_components = {
@@ -373,9 +366,7 @@ def build_plugin_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]
     best_checks = category_checks(categories, "Best Practices")
     marketplace_checks = category_checks(categories, "Marketplace")
     interface = (
-        manifest.get("interface")
-        if isinstance(manifest, dict) and isinstance(manifest.get("interface"), dict)
-        else {}
+        manifest.get("interface") if isinstance(manifest, dict) and isinstance(manifest.get("interface"), dict) else {}
     )
     author = manifest.get("author") if isinstance(manifest, dict) and isinstance(manifest.get("author"), dict) else {}
     has_author = isinstance(author.get("name"), str) and bool(author.get("name"))

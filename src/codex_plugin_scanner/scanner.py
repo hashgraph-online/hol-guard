@@ -170,11 +170,7 @@ def _scan_repository(repo_root: Path, options: ScanOptions) -> ScanResult:
         repo_scores.append(repo_category_score)
     score = min(repo_scores) if repo_scores else 0
     trust_report = build_repository_trust_report(
-        tuple(
-            plugin.trust_report
-            for plugin in plugin_results
-            if plugin.trust_report is not None
-        )
+        tuple(plugin.trust_report for plugin in plugin_results if plugin.trust_report is not None)
     )
     return ScanResult(
         score=score,
