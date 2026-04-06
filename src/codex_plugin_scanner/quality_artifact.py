@@ -12,6 +12,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.models import ScanResult
 from codex_plugin_scanner.policy import PolicyEvaluation
+from codex_plugin_scanner.reporting import build_json_payload
 from codex_plugin_scanner.verification import VerificationResult
 from codex_plugin_scanner.version import __version__
 
@@ -69,6 +70,7 @@ def build_quality_artifact(
             "grade": scan_result.grade,
             "findings_total": len(scan_result.findings),
             "severity_counts": scan_result.severity_counts,
+            "trust": build_json_payload(scan_result)["trust"],
         },
         "verify": {
             "verify_pass": verification.verify_pass,

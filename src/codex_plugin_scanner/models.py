@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+from .trust_models import TrustReport
+
 
 class Severity(str, Enum):
     """Severity levels for actionable findings."""
@@ -106,6 +108,7 @@ class ScanResult:
     plugin_results: tuple[ScanResult, ...] = ()
     skipped_targets: tuple[ScanSkipTarget, ...] = ()
     marketplace_file: str | None = None
+    trust_report: TrustReport | None = None
 
 
 def get_grade(score: int) -> str:

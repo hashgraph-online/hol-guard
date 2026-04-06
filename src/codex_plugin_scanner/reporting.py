@@ -12,6 +12,47 @@ def _sorted_findings(findings: tuple[Finding, ...]) -> list[Finding]:
     return sorted(findings, key=lambda finding: SEVERITY_ORDER[finding.severity], reverse=True)
 
 
+def _serialize_trust(result: ScanResult) -> dict[str, object]:
+    report = result.trust_report
+    if report is None:
+        return {"total": 0.0, "domains": []}
+    return {
+        "total": report.total,
+        "domains": [
+            {
+                "domain": domain.domain,
+                "label": domain.label,
+                "score": domain.score,
+                "spec": {
+                    "id": domain.spec_id,
+                    "version": domain.spec_version,
+                    "path": domain.spec_path,
+                    "derivedFrom": list(domain.derived_from),
+                },
+                "adapters": [
+                    {
+                        "id": adapter.adapter_id,
+                        "label": adapter.label,
+                        "weight": adapter.weight,
+                        "score": adapter.score,
+                        "components": [
+                            {
+                                "key": component.key,
+                                "score": component.score,
+                                "rationale": component.rationale,
+                                "evidence": list(component.evidence),
+                            }
+                            for component in adapter.components
+                        ],
+                    }
+                    for adapter in domain.adapters
+                ],
+            }
+            for domain in report.domains
+        ],
+    }
+
+
 def build_json_payload(
     result: ScanResult,
     *,
@@ -48,6 +89,7 @@ def build_json_payload(
                 for integration in result.integrations
             ],
         },
+        "trust": _serialize_trust(result),
         "categories": [
             {
                 "name": category.name,
@@ -107,6 +149,7 @@ def build_json_payload(
                 "pluginDir": plugin.plugin_dir,
                 "score": plugin.score,
                 "grade": plugin.grade,
+                "trust": _serialize_trust(plugin),
                 "summary": {
                     "findings": plugin.severity_counts,
                     "integrations": [
@@ -167,6 +210,7 @@ def format_markdown(result: ScanResult) -> str:
         f"- {'Repository' if result.scope == 'repository' else 'Plugin'}: `{result.plugin_dir}`",
         f"- Score: **{result.score}/100**",
         f"- Grade: **{result.grade} - {GRADE_LABELS.get(result.grade, 'Unknown')}**",
+        f"- Trust: **{result.trust_report.total if result.trust_report else 0.0}/100**",
         "",
         "## Findings Summary",
         "",
@@ -177,7 +221,11 @@ def format_markdown(result: ScanResult) -> str:
     if result.scope == "repository":
         lines += ["", "## Local Plugins", ""]
         for plugin in result.plugin_results:
-            lines.append(f"- **{plugin.plugin_name or plugin.plugin_dir}**: {plugin.score}/100 ({plugin.grade})")
+            trust_total = plugin.trust_report.total if plugin.trust_report else 0.0
+            lines.append(
+                f"- **{plugin.plugin_name or plugin.plugin_dir}**: "
+                f"{plugin.score}/100 ({plugin.grade}), trust {trust_total}/100"
+            )
         if result.skipped_targets:
             lines += ["", "## Skipped Marketplace Entries", ""]
             for skipped in result.skipped_targets:
@@ -201,6 +249,13 @@ def format_markdown(result: ScanResult) -> str:
             lines.append(f"  - {finding.description}")
             if finding.remediation:
                 lines.append(f"  - Remediation: {finding.remediation}")
+
+    if result.trust_report and result.trust_report.domains:
+        lines += ["", "## Trust Provenance", ""]
+        for domain in result.trust_report.domains:
+            lines.append(f"- **{domain.label}** ({domain.spec_id}): {domain.score}/100")
+            for adapter in domain.adapters:
+                lines.append(f"  - {adapter.label}: {adapter.score}/100 (weight {adapter.weight})")
 
     lines += ["", "## Integration Status", ""]
     for integration in result.integrations:
