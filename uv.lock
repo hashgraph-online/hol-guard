@@ -446,7 +446,7 @@ wheels = [
 
 [[package]]
 name = "cisco-ai-skill-scanner"
-version = "2.0.7"
+version = "2.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anthropic" },
@@ -470,9 +470,9 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
     { name = "yara-x" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/64/3e/ce1a686422b56fd2b83e68b0494b1fbdf970d41785c8f0037fbc3530c035/cisco_ai_skill_scanner-2.0.7.tar.gz", hash = "sha256:a4b57e01f6c46361babd9893b77ecd20953a91e387bf38e92429bf32b95291ab", size = 929702, upload-time = "2026-04-02T13:45:45.403Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/34/13/0e9221884b9073066eb04f478f855ac0ef9cb22a12c9399985608ab030d9/cisco_ai_skill_scanner-2.0.8.tar.gz", hash = "sha256:5b55a8c8e2986928844f6d71ce32f551d6224082defca0b1d6ebf784f0724974", size = 968455, upload-time = "2026-04-06T15:14:07.508Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/af/237ab39f48e67d91f3577b18bc35a769e7ded8d6256e655867963c53c1fb/cisco_ai_skill_scanner-2.0.7-py3-none-any.whl", hash = "sha256:89ceaa9fabb55c4c6c01f5a4b05541a74e0958688021de16cf738f696d7e6f6f", size = 430077, upload-time = "2026-04-02T13:45:43.567Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/4e/11adc055c1aa96a2f9bf3dc4ff30acb05f4485dc6540ac3ee60862c2798f/cisco_ai_skill_scanner-2.0.8-py3-none-any.whl", hash = "sha256:82a178c5d0183f32116732119f14072e1f96b0164695155ab9f70b0c8ab002d9", size = 469596, upload-time = "2026-04-06T15:14:05.341Z" },
 ]
 
 [[package]]
@@ -515,7 +515,7 @@ publish = [
 [package.metadata]
 requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.2" },
-    { name = "cisco-ai-skill-scanner", marker = "extra == 'cisco'", specifier = "==2.0.7" },
+    { name = "cisco-ai-skill-scanner", marker = "extra == 'cisco'", specifier = "==2.0.8" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.23.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
@@ -1416,7 +1416,7 @@ wheels = [
 
 [[package]]
 name = "litellm"
-version = "1.82.3"
+version = "1.83.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1432,9 +1432,9 @@ dependencies = [
     { name = "tiktoken" },
     { name = "tokenizers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/53/00/13993312e6d2fb29cd6d5ffceb293455ef747fe5675eaa9aa49b09184656/litellm-1.82.3.tar.gz", hash = "sha256:7215b95e7cc38a52b5ae778d67e8829dec86594c8b05d8431294e95c7d59937c", size = 17368754, upload-time = "2026-03-16T21:51:30.356Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/22/92/6ce9737554994ca8e536e5f4f6a87cc7c4774b656c9eb9add071caf7d54b/litellm-1.83.0.tar.gz", hash = "sha256:860bebc76c4bb27b4cf90b4a77acd66dba25aced37e3db98750de8a1766bfb7a", size = 17333062, upload-time = "2026-03-31T05:08:25.331Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5a/3a/590d58dee65a238f7f3d5c37f8f9f9021ecaf27fe379a393b4259324b56e/litellm-1.82.3-py3-none-any.whl", hash = "sha256:609901f6c5a5cf8c24386e4e3f50738bb8a9db719709fd76b208c8ee6d00f7a7", size = 15551034, upload-time = "2026-03-16T21:51:26.747Z" },
+    { url = "https://files.pythonhosted.org/packages/19/2c/a670cc050fcd6f45c6199eb99e259c73aea92edba8d5c2fc1b3686d36217/litellm-1.83.0-py3-none-any.whl", hash = "sha256:88c536d339248f3987571493015784671ba3f193a328e1ea6780dbebaa2094a8", size = 15610306, upload-time = "2026-03-31T05:08:21.987Z" },
 ]
 
 [[package]]

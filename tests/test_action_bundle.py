@@ -15,6 +15,8 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405" in action_text
     assert "pip install codex-plugin-scanner" in action_text
     assert 'pip install "$LOCAL_SOURCE"' in action_text
+    assert 'pip install "$LOCAL_SOURCE[cisco]"' in action_text
+    assert 'pip install "codex-plugin-scanner[cisco]"' in action_text
     assert "write_step_summary:" in action_text
     assert "profile:" in action_text
     assert "config:" in action_text
@@ -112,6 +114,7 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "hashgraph-online/hol-codex-plugin-scanner-action@v1" in action_readme
     assert "actions/checkout@v4" in action_readme
     assert "actions/github-script@v7" in action_readme
+    assert "published Cisco skill-scanner dependency used by this repo" in action_readme
 
 
 def test_readme_uses_stable_apache_license_badge() -> None:
