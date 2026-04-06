@@ -191,7 +191,14 @@ def test_container_files_exist_for_enterprise_distribution() -> None:
 
     assert "FROM python:3.12-slim@sha256:" in dockerfile_text
     assert 'ENTRYPOINT ["python3", "-m", "codex_plugin_scanner.cli"]' in dockerfile_text
+    assert "COPY docker-requirements.txt LICENSE README.md /app/" in dockerfile_text
     assert "python3 -m pip install --require-hashes -r /app/docker-requirements.txt" in dockerfile_text
+    assert dockerfile_text.index("COPY docker-requirements.txt LICENSE README.md /app/") < dockerfile_text.index(
+        "RUN python3 -m pip install --require-hashes -r /app/docker-requirements.txt"
+    )
+    assert dockerfile_text.index("RUN python3 -m pip install --require-hashes -r /app/docker-requirements.txt") < (
+        dockerfile_text.index("COPY src /app/src")
+    )
     assert "PYTHONPATH=/app/src" in dockerfile_text
     assert "USER scanner" in dockerfile_text
     assert "rich==14.2.0" in docker_requirements_text

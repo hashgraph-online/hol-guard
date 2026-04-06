@@ -7,10 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY docker-requirements.txt /app/
-COPY src /app/src
+COPY docker-requirements.txt LICENSE README.md /app/
 
 RUN python3 -m pip install --require-hashes -r /app/docker-requirements.txt
+
+COPY src /app/src
 
 RUN groupadd --system scanner && \
     useradd --system --gid scanner --create-home --home-dir /home/scanner scanner && \
