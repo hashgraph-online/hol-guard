@@ -88,6 +88,10 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     assert 'cp action/cisco-version.txt "${BUNDLE_ROOT}/cisco-version.txt"' in workflow_text
     assert 'cp action/pypi-attestations-version.txt "${BUNDLE_ROOT}/pypi-attestations-version.txt"' in workflow_text
     assert "dist/codex-plugin-scanner-v${VERSION}.intoto.jsonl" in workflow_text
+    assert "Collect release asset files" in workflow_text
+    assert "find dist -maxdepth 1 -type f -print0 | sort -z" in workflow_text
+    assert 'mapfile -t RELEASE_ASSETS <<\'EOF\'' in workflow_text
+    assert '"${RELEASE_ASSETS[@]}"' in workflow_text
     assert "subject-path: |" in workflow_text
     assert "dist/*" in workflow_text
     assert "docker pull ghcr.io/hashgraph-online/codex-plugin-scanner:${VERSION}" in workflow_text
@@ -190,7 +194,8 @@ def test_container_files_exist_for_enterprise_distribution() -> None:
     docker_requirements_text = (ROOT / "docker-requirements.txt").read_text(encoding="utf-8")
 
     assert "FROM python:3.12-slim@sha256:" in dockerfile_text
-    assert 'ENTRYPOINT ["python3", "-m", "codex_plugin_scanner.cli"]' in dockerfile_text
+    assert "cat <<'EOF' >/usr/local/bin/codex-plugin-scanner" in dockerfile_text
+    assert 'ENTRYPOINT ["codex-plugin-scanner"]' in dockerfile_text
     assert "COPY docker-requirements.txt LICENSE README.md /app/" in dockerfile_text
     assert "python3 -m pip install --require-hashes -r /app/docker-requirements.txt" in dockerfile_text
     assert dockerfile_text.index("COPY docker-requirements.txt LICENSE README.md /app/") < dockerfile_text.index(
@@ -199,7 +204,9 @@ def test_container_files_exist_for_enterprise_distribution() -> None:
     assert dockerfile_text.index("RUN python3 -m pip install --require-hashes -r /app/docker-requirements.txt") < (
         dockerfile_text.index("COPY src /app/src")
     )
-    assert "PYTHONPATH=/app/src" in dockerfile_text
+    assert "SOURCE_ROOT = \"/app/src\"" in dockerfile_text
+    assert "WORKSPACE = \"/workspace\"" in dockerfile_text
+    assert "from codex_plugin_scanner.cli import main" in dockerfile_text
     assert "USER scanner" in dockerfile_text
     assert "rich==14.2.0" in docker_requirements_text
     assert "--hash=sha256:" in docker_requirements_text
