@@ -26,18 +26,21 @@ from .version import __version__
 
 def _build_plain_text(result) -> str:
     if getattr(result, "scope", "plugin") == "repository":
+        trust_total = result.trust_report.total if getattr(result, "trust_report", None) else 0.0
         lines = [
             f"🔗 Codex Plugin Scanner v{__version__}",
             f"Scanning repository: {result.plugin_dir}",
             f"Marketplace: {result.marketplace_file or 'not found'}",
             f"Local plugins scanned: {len(result.plugin_results)}",
             f"Skipped marketplace entries: {len(result.skipped_targets)}",
+            f"Trust: {trust_total}/100",
             "",
             "Per-plugin scores:",
         ]
         for plugin in result.plugin_results:
             plugin_name = plugin.plugin_name or Path(plugin.plugin_dir).name
-            lines.append(f"  - {plugin_name}: {plugin.score}/100 ({plugin.grade})")
+            plugin_trust = plugin.trust_report.total if getattr(plugin, "trust_report", None) else 0.0
+            lines.append(f"  - {plugin_name}: {plugin.score}/100 ({plugin.grade}), trust {plugin_trust}/100")
         if result.skipped_targets:
             lines += ["", "Skipped entries:"]
             for skipped in result.skipped_targets:
@@ -45,7 +48,13 @@ def _build_plain_text(result) -> str:
                 lines.append(f"  - {skipped.name}{source_path}: {skipped.reason}")
         lines.append("")
     else:
-        lines = [f"🔗 Codex Plugin Scanner v{__version__}", f"Scanning: {result.plugin_dir}", ""]
+        trust_total = result.trust_report.total if getattr(result, "trust_report", None) else 0.0
+        lines = [
+            f"🔗 Codex Plugin Scanner v{__version__}",
+            f"Scanning: {result.plugin_dir}",
+            f"Trust: {trust_total}/100",
+            "",
+        ]
     for category in result.categories:
         cat_score = sum(c.points for c in category.checks)
         cat_max = sum(c.max_points for c in category.checks)
@@ -57,6 +66,11 @@ def _build_plain_text(result) -> str:
         lines.append("")
     counts = ", ".join(f"{severity.value}:{result.severity_counts.get(severity.value, 0)}" for severity in Severity)
     lines += [f"Findings: {counts}", ""]
+    if getattr(result, "trust_report", None) and result.trust_report.domains:
+        lines.append("Trust Provenance:")
+        for domain in result.trust_report.domains:
+            lines.append(f"  - {domain.label}: {domain.score}/100 ({domain.spec_id})")
+        lines.append("")
     separator = "━" * 37
     label = GRADE_LABELS.get(result.grade, "Unknown")
     lines += [separator, f"Final Score: {result.score}/100 ({result.grade} - {label})", separator]

@@ -46,7 +46,7 @@
     "scan": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["score", "raw_score", "effective_score", "grade", "findings_total", "severity_counts"],
+      "required": ["score", "raw_score", "effective_score", "grade", "findings_total", "severity_counts", "trust"],
       "properties": {
         "score": {"type": "integer", "minimum": 0, "maximum": 100},
         "raw_score": {"type": "integer", "minimum": 0, "maximum": 100},
@@ -63,6 +63,22 @@
             "medium": {"type": "integer", "minimum": 0},
             "low": {"type": "integer", "minimum": 0},
             "info": {"type": "integer", "minimum": 0}
+          }
+        },
+        "trust": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "domains"],
+          "properties": {
+            "total": {"type": "number", "minimum": 0, "maximum": 100},
+            "domains": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["domain", "label", "score", "spec", "adapters"],
+                "additionalProperties": true
+              }
+            }
           }
         }
       }

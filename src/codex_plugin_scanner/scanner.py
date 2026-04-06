@@ -25,6 +25,7 @@ from .models import (
     get_grade,
 )
 from .repo_detect import LocalPluginTarget, discover_scan_targets
+from .trust_scoring import build_plugin_trust_report, build_repository_trust_report
 
 
 def _build_integration_results(skill_security_context) -> tuple[IntegrationResult, ...]:
@@ -123,6 +124,7 @@ def _scan_single_plugin(plugin_dir: Path, options: ScanOptions) -> ScanResult:
 
     score = _score_categories(tuple(categories))
     findings = tuple(finding for category in categories for check in category.checks for finding in check.findings)
+    trust_report = build_plugin_trust_report(plugin_dir, tuple(categories), skill_security_context)
     return ScanResult(
         score=score,
         grade=get_grade(score),
@@ -133,6 +135,7 @@ def _scan_single_plugin(plugin_dir: Path, options: ScanOptions) -> ScanResult:
         severity_counts=build_severity_counts(findings),
         integrations=_build_integration_results(skill_security_context),
         scope="plugin",
+        trust_report=trust_report,
     )
 
 
@@ -166,6 +169,9 @@ def _scan_repository(repo_root: Path, options: ScanOptions) -> ScanResult:
     if categories[:2]:
         repo_scores.append(repo_category_score)
     score = min(repo_scores) if repo_scores else 0
+    trust_report = build_repository_trust_report(
+        tuple(plugin.trust_report for plugin in plugin_results if plugin.trust_report is not None)
+    )
     return ScanResult(
         score=score,
         grade=get_grade(score),
@@ -179,6 +185,7 @@ def _scan_repository(repo_root: Path, options: ScanOptions) -> ScanResult:
         plugin_results=plugin_results,
         skipped_targets=discovery.skipped_targets,
         marketplace_file=str(discovery.marketplace_file) if discovery.marketplace_file else None,
+        trust_report=trust_report,
     )
 
 

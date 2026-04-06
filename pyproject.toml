@@ -58,9 +58,11 @@ Issues = "https://github.com/hashgraph-online/codex-plugin-scanner/issues"
 [tool.ruff]
 target-version = "py310"
 line-length = 120
+extend-exclude = ["tests/test-trust-scoring.py", "tests/test-trust-specs.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "RUF"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+python_files = ["test_*.py"]
