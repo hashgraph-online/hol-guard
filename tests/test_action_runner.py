@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import socket
 from pathlib import Path
 
 from codex_plugin_scanner.action_runner import main
@@ -179,3 +180,38 @@ def test_action_runner_repository_scan_defaults_to_marketplace_root(monkeypatch,
     assert "- Skipped marketplace entries: 1" in summary_text
     output_lines = output_path.read_text(encoding="utf-8").splitlines()
     assert any(line.startswith("score=") for line in output_lines)
+
+
+def test_action_runner_default_scan_does_not_open_network_connections(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "github-output.txt"
+
+    def _forbid_network(*args, **kwargs):
+        raise AssertionError("default scan mode should not open network connections")
+
+    monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
+    monkeypatch.setenv("FORMAT", "json")
+    monkeypatch.setenv("OUTPUT", "")
+    monkeypatch.setenv("MIN_SCORE", "0")
+    monkeypatch.setenv("FAIL_ON", "none")
+    monkeypatch.setenv("CISCO_SCAN", "off")
+    monkeypatch.setenv("CISCO_POLICY", "balanced")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "false")
+    monkeypatch.setenv("SUBMISSION_SCORE_THRESHOLD", "80")
+    monkeypatch.setenv("SUBMISSION_REPOS", "hashgraph-online/awesome-codex-plugins")
+    monkeypatch.setenv("SUBMISSION_TOKEN", "")
+    monkeypatch.setenv("SUBMISSION_LABELS", "plugin-submission")
+    monkeypatch.setenv("SUBMISSION_CATEGORY", "Community Plugins")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_NAME", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_URL", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_DESCRIPTION", "")
+    monkeypatch.setenv("SUBMISSION_AUTHOR", "")
+    monkeypatch.setenv("ONLINE", "false")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+    monkeypatch.setenv("REGISTRY_PAYLOAD_OUTPUT", "")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+    monkeypatch.setattr(socket, "create_connection", _forbid_network)
+    monkeypatch.setattr(socket.socket, "connect", _forbid_network)
+
+    exit_code = main()
+
+    assert exit_code == 0

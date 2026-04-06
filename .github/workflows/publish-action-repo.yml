@@ -5,12 +5,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - action/action.yml
-      - action/README.md
-      - LICENSE
-      - SECURITY.md
-      - CONTRIBUTING.md
 
 permissions:
   contents: read
@@ -42,6 +36,8 @@ jobs:
 
       - name: Checkout source repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
 
       - name: Compute next action release tag
         id: version
@@ -63,6 +59,29 @@ jobs:
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
+      - name: Compute scanner package version
+        id: scanner_version
+        env:
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          BASE_VERSION=$(python3 -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print(p['project']['version'])")
+          VERSION="$BASE_VERSION"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+            LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n1)
+            if [[ -n "$LAST_TAG" ]]; then
+              IFS=. read -r MAJOR MINOR PATCH <<< "${LAST_TAG#v}"
+              if [[ -z "$MAJOR" || -z "$MINOR" || -z "$PATCH" ]]; then
+                echo "Unsupported release tag format: $LAST_TAG" >&2
+                exit 1
+              fi
+              VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+            fi
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Clone action repository
         env:
           GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
@@ -80,6 +99,9 @@ jobs:
         run: |
           cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml
           cp "${GITHUB_WORKSPACE}/action/README.md" README.md
+          printf '%s\n' "${{ steps.scanner_version.outputs.version }}" > scanner-version.txt
+          cp "${GITHUB_WORKSPACE}/action/cisco-version.txt" cisco-version.txt
+          cp "${GITHUB_WORKSPACE}/action/pypi-attestations-version.txt" pypi-attestations-version.txt
           cp "${GITHUB_WORKSPACE}/LICENSE" LICENSE
           cp "${GITHUB_WORKSPACE}/SECURITY.md" SECURITY.md
           cp "${GITHUB_WORKSPACE}/CONTRIBUTING.md" CONTRIBUTING.md
@@ -88,7 +110,7 @@ jobs:
         id: diff
         working-directory: action-repo
         run: |
-          if [ -n "$(git status --short -- action.yml README.md LICENSE SECURITY.md CONTRIBUTING.md)" ]; then
+          if [ -n "$(git status --short -- action.yml README.md scanner-version.txt cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md)" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -100,7 +122,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add action.yml README.md LICENSE SECURITY.md CONTRIBUTING.md
+          git add action.yml README.md scanner-version.txt cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md
           git commit -m "chore: publish action bundle ${{ steps.version.outputs.tag }}"
 
       - name: Push action repository branch and tags
