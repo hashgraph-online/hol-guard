@@ -41,7 +41,7 @@ This repository is the Marketplace-facing wrapper for the scanner action. The ma
 | `fail_on_severity` | Fail on findings at or above this severity: `none`, `critical`, `high`, `medium`, `low`, `info` | `none` |
 | `cisco_skill_scan` | Cisco skill-scanner mode: `auto`, `on`, `off` | `auto` |
 | `cisco_policy` | Cisco policy preset: `permissive`, `balanced`, `strict` | `balanced` |
-| `install_cisco` | Install the published Cisco skill-scanner dependency used by this repo | `false` |
+| `install_cisco` | Install the official Cisco skill-scanner release used by this repo | `false` |
 | `submission_enabled` | Open submission issues for awesome-list and registry automation when the plugin clears the submission threshold | `false` |
 | `submission_score_threshold` | Minimum score required before a submission issue is created | `80` |
 | `submission_repos` | Comma-separated GitHub repositories that should receive the submission issue | `hashgraph-online/awesome-codex-plugins` |
