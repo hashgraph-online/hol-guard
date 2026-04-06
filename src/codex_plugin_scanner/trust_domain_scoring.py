@@ -78,9 +78,9 @@ def build_skill_domain(
     repository = manifest.get("repository") if isinstance(manifest, dict) else None
     homepage = manifest.get("homepage") if isinstance(manifest, dict) else None
     version = manifest.get("version") if isinstance(manifest, dict) else None
-    same_host = url_host(repository if isinstance(repository, str) else None) and url_host(
-        repository if isinstance(repository, str) else None
-    ) == url_host(homepage if isinstance(homepage, str) else None)
+    repo_host = url_host(repository if isinstance(repository, str) else None)
+    home_host = url_host(homepage if isinstance(homepage, str) else None)
+    same_host = bool(repo_host) and repo_host == home_host
 
     verified_components = {
         "publisherBound": 100.0 if has_author else 0.0,
@@ -156,7 +156,9 @@ def build_skill_domain(
         unique_findings = {f"{finding.rule_id}:{finding.severity.value}" for finding in context.summary.findings}
         safety_score = 100.0
         for finding_key in unique_findings:
-            if finding_key.endswith(":high"):
+            if finding_key.endswith(":critical"):
+                safety_score -= 50.0
+            elif finding_key.endswith(":high"):
                 safety_score -= 25.0
             elif finding_key.endswith(":medium"):
                 safety_score -= 12.0
