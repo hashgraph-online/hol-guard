@@ -178,9 +178,9 @@ runs:
 
         if [ -n "$LOCAL_SOURCE" ]; then
           if [ "${{ inputs.install_cisco }}" = "true" ]; then
-            pip install "$LOCAL_SOURCE[cisco]"
+            python3 -m pip install "$LOCAL_SOURCE[cisco]"
           else
-            pip install "$LOCAL_SOURCE"
+            python3 -m pip install "$LOCAL_SOURCE"
           fi
         else
           SCANNER_VERSION_FILE="$GITHUB_ACTION_PATH/scanner-version.txt"
@@ -198,20 +198,20 @@ runs:
           DIST_DIR="${RUNNER_TEMP:-$GITHUB_WORKSPACE/.codex-plugin-scanner-dist}"
           mkdir -p "$DIST_DIR"
 
-          python -m pip install "pypi-attestations==${PYPI_ATTESTATIONS_VERSION}"
-          python -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" "codex-plugin-scanner==${SCANNER_VERSION}"
+          python3 -m pip install "pypi-attestations==${PYPI_ATTESTATIONS_VERSION}"
+          python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" "codex-plugin-scanner==${SCANNER_VERSION}"
 
           DIST_BASENAME="$(
             DIST_DIR="$DIST_DIR" python3 -c "import os; from pathlib import Path; dist_dir = Path(os.environ['DIST_DIR']); candidates = sorted(dist_dir.glob('codex_plugin_scanner-*.whl')); expected = len(candidates) == 1; print(candidates[0].name) if expected else (_ for _ in ()).throw(SystemExit(f'Expected exactly one downloaded scanner wheel, found {len(candidates)}'))"
           )"
 
-          python -m pypi_attestations verify pypi \
+          python3 -m pypi_attestations verify pypi \
             --repository "$SCANNER_REPOSITORY" \
             "pypi:${DIST_BASENAME}"
 
-          pip install "$DIST_DIR/$DIST_BASENAME"
+          python3 -m pip install "$DIST_DIR/$DIST_BASENAME"
           if [ "${{ inputs.install_cisco }}" = "true" ]; then
-            pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"
+            python3 -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"
           fi
         fi
 

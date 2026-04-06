@@ -13,16 +13,16 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert 'icon: "check-circle"' in action_text
     assert 'color: "blue"' in action_text
     assert "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405" in action_text
-    assert 'pip install "pypi-attestations==' in action_text
-    assert 'pip install "$LOCAL_SOURCE"' in action_text
-    assert 'pip install "$LOCAL_SOURCE[cisco]"' in action_text
+    assert 'python3 -m pip install "pypi-attestations==' in action_text
+    assert 'python3 -m pip install "$LOCAL_SOURCE"' in action_text
+    assert 'python3 -m pip install "$LOCAL_SOURCE[cisco]"' in action_text
     assert (
-        'python -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" '
+        'python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" '
         '"codex-plugin-scanner==${SCANNER_VERSION}"'
     ) in action_text
-    assert "python -m pypi_attestations verify pypi \\" in action_text
-    assert 'pip install "$DIST_DIR/$DIST_BASENAME"' in action_text
-    assert 'pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"' in action_text
+    assert "python3 -m pypi_attestations verify pypi \\" in action_text
+    assert 'python3 -m pip install "$DIST_DIR/$DIST_BASENAME"' in action_text
+    assert 'python3 -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"' in action_text
     assert "scanner-version.txt" in action_text
     assert "cisco-version.txt" in action_text
     assert "pypi-attestations-version.txt" in action_text
