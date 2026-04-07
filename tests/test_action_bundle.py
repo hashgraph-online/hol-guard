@@ -108,7 +108,7 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     assert "docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567" in workflow_text
     assert "docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83" in workflow_text
     assert "ghcr.io/${{ github.repository }}" in workflow_text
-    assert "${IMAGE_NAME}:latest" in workflow_text
+    assert "${IMAGE_NAME}:latest" not in workflow_text
     assert "org.opencontainers.image.version=${{ needs.build.outputs.version }}" in workflow_text
     e2e_workflow_text = (ROOT / ".github" / "workflows" / "e2e-test.yml").read_text(encoding="utf-8")
     assert e2e_workflow_text.count("install_source: local") == 5
