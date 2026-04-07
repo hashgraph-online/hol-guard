@@ -49,9 +49,9 @@ The score remains available as a trust and triage signal, but the primary workfl
 
 The scanner now emits explicit trust provenance alongside the quality grade:
 
-- bundled skills inherit the live HOL broker adapter model from HCS-28 and HCS-26 alignment work
-- MCP configuration trust is documented in a local draft spec
-- top-level Codex plugin trust is documented in a local draft spec
+- bundled skills use the published HCS-28 baseline adapter ids, weights, and denominator rules directly
+- MCP configuration trust uses the same HCS-style adapter, weight, and contribution-mode pattern locally
+- top-level Codex plugin trust uses the same HCS-style adapter, weight, and contribution-mode pattern locally
 
 Current local specs:
 
@@ -59,7 +59,7 @@ Current local specs:
 - [MCP Trust Draft](docs/trust/mcp-trust-draft.md)
 - [Codex Plugin Trust Draft](docs/trust/plugin-trust-draft.md)
 
-This keeps the quality grade and the trust score separate. Signals like `SECURITY.md` are still visible, but their trust weight is now explicit instead of being inferred from raw category points.
+This keeps the quality grade and the trust score separate. Signals like `SECURITY.md` remain visible, but their weight is now a named adapter weight rather than an inferred side effect of raw category points.
 
 ## Quick Start For Contributors
 

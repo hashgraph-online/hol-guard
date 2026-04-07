@@ -1,59 +1,60 @@
-# HOL-HCS-28-SKILL-TRUST-LOCAL-DRAFT
+# HCS-28 Skill Trust Alignment
 
 ## Scope
 
-This local draft defines how `codex-plugin-scanner` attributes trust to bundled Codex skills before those skills are published into the HOL skill registry.
+`codex-plugin-scanner` uses the published HCS-28 baseline adapter catalog for bundled Codex skills. The scanner does not define a private skill trust profile. Instead, it computes local bundled-skill evidence using the HCS-28 adapter ids, weights, contribution modes, and aggregation rules.
 
-## Provenance
+## Normative provenance
 
-This model inherits its adapter shape and weights from the live HOL broker implementation that scores published HCS-26 skills:
+- Specification: `HCS-28`
+- Specification version: `0.1`
+- Profile: `hcs-28/baseline`
+- Related publication model: `HCS-26`
 
-- `verified` adapter weight: `1.0`
-- `safety` adapter weight: `1.0`
-- `metadata` adapter weight: `0.75`
+The normative adapter ids and weights come directly from HCS-28:
 
-The scanner keeps those adapter weights and component names so local scores can be compared to registry scores later. It does not use registry cohort normalization locally because a single plugin checkout has no comparable cohort.
+| Adapter ID | Weight | Contribution Mode |
+| --- | --- | --- |
+| `verification.review-status` | `0.50` | `universal` |
+| `verification.publisher-bound` | `0.20` | `universal` |
+| `verification.repo-commit-integrity` | `0.40` | `universal` |
+| `verification.manifest-integrity` | `0.30` | `universal` |
+| `verification.domain-proof` | `0.10` | `universal` |
+| `metadata.links` | `0.30` | `universal` |
+| `metadata.description` | `0.25` | `universal` |
+| `metadata.taxonomy` | `0.20` | `universal` |
+| `metadata.provenance` | `0.25` | `universal` |
+| `upvotes` | `1.00` | `conditional` |
+| `safety.cisco-scan` | `1.00` | `universal` |
+| `repository.health` | `1.00` | `conditional` |
 
-## Adapter definitions
+## Local read-mode mapping
 
-### `verified`
+The scanner runs bundled skill trust in read mode with `includeExternal=false`. That means the HCS-28 aggregation algorithm stays the same, but local evidence substitutes for external refresh-only signals where possible.
 
-Internal component weights:
+Local bundled-skill normalization:
 
-- `publisherBound`: `20`
-- `repoCommitIntegrity`: `40`
-- `manifestIntegrity`: `30`
-- `domainProof`: `10`
+- `verification.review-status`: `100` only when the local bundled skill package explicitly declares `verified=true`; otherwise `0`
+- `verification.publisher-bound`: `100` when plugin author metadata exists
+- `verification.repo-commit-integrity`: `100` when bundled skill metadata declares both `repo` and `commit`
+- `verification.manifest-integrity`: `100` when every bundled `SKILL.md` parses and includes required frontmatter fields
+- `verification.domain-proof`: `100` when homepage and repository hosts align
+- `metadata.links`: exact HCS-28 baseline rule
+- `metadata.description`: exact HCS-28 description-length thresholds
+- `metadata.taxonomy`: exact HCS-28 tag-count and language-count matrix
+- `metadata.provenance`: exact HCS-28 repo/commit rule
+- `upvotes`: omitted in the denominator unless a local upvote count is provided
+- `safety.cisco-scan`: exact HCS-28 severity normalization when Cisco results exist; otherwise universal `0`
+- `repository.health`: omitted in read mode unless a persisted external score exists
 
-Local mapping:
+## Aggregation
 
-- `publisherBound`: plugin author metadata exists for the bundled skill package
-- `repoCommitIntegrity`: repository metadata plus semver version exists locally
-- `manifestIntegrity`: every bundled `SKILL.md` parses frontmatter with required fields
-- `domainProof`: homepage and repository hosts align
+The scanner follows HCS-28 normalization and denominator rules exactly:
 
-### `safety`
+1. Clamp emitted component values to `[0,100]`.
+2. Materialize missing universal components as `0`.
+3. Compute each adapter total as the arithmetic mean of its component values.
+4. Include conditional adapters in the denominator only when they emit scores.
+5. Compute the composite total as the weighted mean of included adapter totals.
 
-- single `score` component
-- backed by Cisco skill scanning when available
-- falls back to a neutral local score when the optional Cisco dependency is unavailable
-
-### `metadata`
-
-Internal component weights:
-
-- `links`: `30`
-- `description`: `25`
-- `taxonomy`: `20`
-- `provenance`: `25`
-
-Local mapping:
-
-- `links`: homepage and repository metadata for the bundled skill package
-- `description`: average bundled skill description quality
-- `taxonomy`: category and tag coverage
-- `provenance`: repository and version provenance present locally
-
-## Normalization
-
-Each adapter emits a weighted `score` plus component-level signals. The scanner normalizes the adapter the same way the broker does today: it averages the declared adapter components, then computes the final trust total as the weighted average of adapter totals.
+This keeps bundled skill trust explainable and directly comparable to the published HCS-28 baseline semantics without referencing private registry implementation details.

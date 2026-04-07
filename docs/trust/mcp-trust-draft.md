@@ -2,44 +2,40 @@
 
 ## Scope
 
-This local draft defines trust attribution for Codex plugin `.mcp.json` configuration.
+This local draft defines trust attribution for Codex plugin `.mcp.json` configuration using the same scoring shape as HCS-28: one adapter per externally reported score key, explicit contribution modes, and weighted denominator rules.
 
-## Goals
+## Subject model
 
-- explain how MCP trust is derived
-- separate MCP trust from the broader plugin quality grade
-- make transport and execution risk explicit instead of burying it in category points
+The scored subject is one Codex plugin MCP configuration rooted at a plugin directory.
 
-## Adapters
+## Scoring profile
 
-### `verification` weight `1.0`
+- Profile id: `hol-hcs-mcp-trust/baseline`
+- Profile version: `0.1`
+- Execution modes:
+  - read mode: `includeExternal=false`
+  - refresh mode: reserved for future external MCP probes
 
-Internal component weights:
+## Adapter contract
 
-- `configIntegrity`: `40`
-- `executionSafety`: `35`
-- `transportSecurity`: `25`
+Each adapter emits exactly one score key named `<adapterId>.score`.
 
-Signal mapping:
+## Baseline adapter catalog
 
-- `configIntegrity`: `.mcp.json` parses and exposes expected top-level containers
-- `executionSafety`: local MCP commands avoid dangerous execution patterns
-- `transportSecurity`: remote MCP endpoints remain on HTTPS
+| Adapter ID | Weight | Contribution Mode | Local rule |
+| --- | --- | --- | --- |
+| `verification.config-integrity` | `0.40` | `universal` | `100` when `.mcp.json` parses, else `0` |
+| `verification.execution-safety` | `0.35` | `universal` | uses the scanner dangerous-command check |
+| `verification.transport-security` | `0.25` | `universal` | uses the scanner hardened-remote check |
+| `metadata.server-naming` | `0.1875` | `universal` | `100` when every MCP surface is explicitly named |
+| `metadata.command-or-endpoint` | `0.3375` | `universal` | `100` when every MCP surface declares a concrete command or secure endpoint |
+| `metadata.config-shape` | `0.225` | `universal` | `100` when top-level containers match the expected shape |
 
-### `metadata` weight `0.75`
+## Aggregation
 
-Internal component weights:
+The scanner uses the same aggregation pattern as HCS-28:
 
-- `serverNaming`: `25`
-- `commandOrEndpoint`: `45`
-- `configShape`: `30`
-
-Signal mapping:
-
-- `serverNaming`: MCP surfaces are explicitly named
-- `commandOrEndpoint`: every MCP surface declares a concrete command or endpoint
-- `configShape`: local arguments and remote entries follow the expected shape
-
-## Normalization
-
-The scanner emits a weighted adapter `score` plus component-level evidence, then normalizes the adapter total as the average of declared components. The final MCP trust score is the weighted average of adapter totals.
+1. clamp emitted scores to `[0,100]`
+2. materialize missing universal adapter scores as `0`
+3. compute the denominator from applicable adapters
+4. compute the final MCP trust score as the weighted mean of adapter totals

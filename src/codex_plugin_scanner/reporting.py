@@ -15,9 +15,17 @@ def _sorted_findings(findings: tuple[Finding, ...]) -> list[Finding]:
 def _serialize_trust(result: ScanResult) -> dict[str, object]:
     report = result.trust_report
     if report is None:
-        return {"total": 0.0, "domains": []}
+        return {
+            "total": 0.0,
+            "execution": {"includeExternal": False, "computedAt": result.timestamp},
+            "domains": [],
+        }
     return {
         "total": report.total,
+        "execution": {
+            "includeExternal": report.include_external,
+            "computedAt": report.computed_at,
+        },
         "domains": [
             {
                 "domain": domain.domain,
@@ -29,11 +37,19 @@ def _serialize_trust(result: ScanResult) -> dict[str, object]:
                     "path": domain.spec_path,
                     "derivedFrom": list(domain.derived_from),
                 },
+                "profile": {
+                    "id": domain.profile_id,
+                    "version": domain.profile_version,
+                },
                 "adapters": [
                     {
                         "id": adapter.adapter_id,
                         "label": adapter.label,
                         "weight": adapter.weight,
+                        "contributionMode": adapter.contribution_mode,
+                        "applicable": adapter.applicable,
+                        "emitted": adapter.emitted,
+                        "includedInDenominator": adapter.included_in_denominator,
                         "score": adapter.score,
                         "components": [
                             {
