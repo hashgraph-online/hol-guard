@@ -119,6 +119,14 @@ def test_ci_workflow_covers_cross_platform_runtime() -> None:
     assert "macos-latest" in workflow_text
 
 
+def test_codeql_workflow_has_stable_workspace_alias_and_source_root() -> None:
+    workflow_text = (ROOT / ".github" / "workflows" / "codeql.yml").read_text(encoding="utf-8")
+
+    assert "Provide legacy workspace alias for CodeQL default setup state" in workflow_text
+    assert 'ln -sfn "$GITHUB_WORKSPACE" "$LEGACY_ROOT/codex-plugin-scanner"' in workflow_text
+    assert "source-root: ." in workflow_text
+
+
 def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     workflow_text = (ROOT / ".github" / "workflows" / "publish-action-repo.yml").read_text(encoding="utf-8")
 
