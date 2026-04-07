@@ -68,14 +68,23 @@
         "trust": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["total", "domains"],
+          "required": ["total", "execution", "domains"],
           "properties": {
             "total": {"type": "number", "minimum": 0, "maximum": 100},
+            "execution": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["includeExternal", "computedAt"],
+              "properties": {
+                "includeExternal": {"type": "boolean"},
+                "computedAt": {"type": "string", "minLength": 1}
+              }
+            },
             "domains": {
               "type": "array",
               "items": {
                 "type": "object",
-                "required": ["domain", "label", "score", "spec", "adapters"],
+                "required": ["domain", "label", "score", "spec", "profile", "adapters"],
                 "additionalProperties": true
               }
             }

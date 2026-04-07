@@ -16,21 +16,26 @@ def test_good_plugin_emits_skill_and_plugin_trust_domains():
 
     assert result.trust_report is not None
     assert result.trust_report.total > 0
+    assert result.trust_report.include_external is False
 
     domains = {domain.domain: domain for domain in result.trust_report.domains}
     assert set(domains) >= {"plugin", "skills"}
 
     plugin_domain = domains["plugin"]
     assert plugin_domain.spec_id == "HOL-HCS-CODEX-PLUGIN-TRUST-DRAFT"
-    security_adapter = next(adapter for adapter in plugin_domain.adapters if adapter.adapter_id == "security")
+    security_adapter = next(
+        adapter for adapter in plugin_domain.adapters if adapter.adapter_id == "security.disclosure"
+    )
     disclosure_component = next(
-        component for component in security_adapter.components if component.key == "disclosure"
+        component for component in security_adapter.components if component.key == "score"
     )
     assert disclosure_component.score == 100
 
     skill_domain = domains["skills"]
-    assert skill_domain.spec_id == "HOL-HCS-28-SKILL-TRUST-LOCAL-DRAFT"
-    assert {adapter.adapter_id for adapter in skill_domain.adapters} == {"verified", "safety", "metadata"}
+    assert skill_domain.spec_id == "HCS-28"
+    assert skill_domain.profile_id == "hcs-28/baseline"
+    assert "verification.review-status" in {adapter.adapter_id for adapter in skill_domain.adapters}
+    assert "safety.cisco-scan" in {adapter.adapter_id for adapter in skill_domain.adapters}
 
 
 def test_safe_mcp_config_emits_mcp_trust_domain(tmp_path: Path):
@@ -74,7 +79,9 @@ def test_safe_mcp_config_emits_mcp_trust_domain(tmp_path: Path):
     assert result.trust_report is not None
     domains = {domain.domain: domain for domain in result.trust_report.domains}
     assert "mcp" in domains
-    verification_adapter = next(adapter for adapter in domains["mcp"].adapters if adapter.adapter_id == "verification")
+    verification_adapter = next(
+        adapter for adapter in domains["mcp"].adapters if adapter.adapter_id == "verification.config-integrity"
+    )
     assert verification_adapter.score > 0
 
 
@@ -84,5 +91,7 @@ def test_json_payload_includes_trust_provenance():
     payload = build_json_payload(result)
 
     assert payload["trust"]["total"] == result.trust_report.total
+    assert payload["trust"]["execution"]["includeExternal"] is False
     plugin_domain = next(domain for domain in payload["trust"]["domains"] if domain["domain"] == "plugin")
     assert plugin_domain["spec"]["id"] == "HOL-HCS-CODEX-PLUGIN-TRUST-DRAFT"
+    assert plugin_domain["profile"]["id"] == "hol-codex-plugin-trust/baseline"
