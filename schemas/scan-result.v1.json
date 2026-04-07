@@ -62,6 +62,19 @@
       "type": "string",
       "enum": ["A", "B", "C", "D", "F"]
     },
+    "ecosystems": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/detectedPackage"
+      }
+    },
     "summary": {
       "type": "object",
       "additionalProperties": false,
@@ -247,6 +260,19 @@
             }
           }
         }
+      }
+    },
+    "detectedPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ecosystem", "packageKind", "rootPath"],
+      "properties": {
+        "ecosystem": {"type": "string", "minLength": 1},
+        "packageKind": {"type": "string", "minLength": 1},
+        "rootPath": {"type": "string", "minLength": 1},
+        "manifestPath": {"type": ["string", "null"]},
+        "name": {"type": ["string", "null"]},
+        "version": {"type": ["string", "null"]}
       }
     },
     "trustComponent": {

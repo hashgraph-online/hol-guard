@@ -11,6 +11,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 from .config import ConfigError, load_baseline_rule_ids, load_scanner_config
+from .ecosystems.registry import list_supported_ecosystems
 from .lint_fixes import apply_safe_autofixes
 from .models import GRADE_LABELS, ScanOptions, Severity, get_grade
 from .policy import POLICY_PROFILES, build_rule_inventory, evaluate_policy, resolve_profile
@@ -55,6 +56,14 @@ def _build_plain_text(result) -> str:
             f"Trust: {trust_total}/100",
             "",
         ]
+        ecosystems = getattr(result, "ecosystems", ())
+        packages = getattr(result, "packages", ())
+        if ecosystems:
+            lines.append(f"Ecosystems: {', '.join(ecosystems)}")
+        if packages:
+            lines.append(f"Detected packages: {len(packages)}")
+        if ecosystems or packages:
+            lines.append("")
     for category in result.categories:
         cat_score = sum(c.points for c in category.checks)
         cat_max = sum(c.max_points for c in category.checks)
@@ -129,6 +138,7 @@ def _add_common_policy_args(parser: argparse.ArgumentParser) -> None:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="codex-plugin-scanner", description="Scan and lint Codex plugin directories")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument("--list-ecosystems", action="store_true", help="List supported plugin ecosystems and exit")
     subparsers = parser.add_subparsers(dest="command")
 
     scan_parser = subparsers.add_parser("scan", help="Run full weighted scan")
@@ -145,6 +155,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     scan_parser.add_argument("--cisco-skill-scan", choices=("auto", "on", "off"), default="auto")
     scan_parser.add_argument("--cisco-policy", choices=("permissive", "balanced", "strict"), default="balanced")
+    scan_parser.add_argument(
+        "--ecosystem",
+        choices=("auto", "codex", "claude", "gemini", "opencode"),
+        default="auto",
+        help="Target one ecosystem explicitly or auto-detect all supported ecosystems.",
+    )
 
     lint_parser = subparsers.add_parser("lint", help="Run rule-level lint evaluation")
     lint_parser.add_argument("plugin_dir", nargs="?", default=".")
@@ -188,7 +204,7 @@ def _build_parser() -> argparse.ArgumentParser:
 def _resolve_legacy_args(argv: list[str] | None) -> list[str] | None:
     if not argv:
         return argv
-    if argv[0] in {"scan", "lint", "verify", "submit", "doctor", "--version", "-h", "--help"}:
+    if argv[0] in {"scan", "lint", "verify", "submit", "doctor", "--version", "--list-ecosystems", "-h", "--help"}:
         return argv
     return ["scan", *argv]
 
@@ -227,6 +243,7 @@ def _scan_with_policy(args: argparse.Namespace, plugin_dir: Path):
         ScanOptions(
             cisco_skill_scan=getattr(args, "cisco_skill_scan", "auto"),
             cisco_policy=getattr(args, "cisco_policy", "balanced"),
+            ecosystem=getattr(args, "ecosystem", "auto"),
         ),
     )
     result = apply_suppressions(
@@ -259,8 +276,6 @@ def _run_scan(args: argparse.Namespace) -> int:
         return 1
 
     output_format = "json" if args.json else args.format
-    if args.output and not args.json and args.format == "text":
-        output_format = "json"
     if output_format == "json":
         output = format_json(
             result,
@@ -431,6 +446,10 @@ def _run_doctor(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(_resolve_legacy_args(argv))
+    if getattr(args, "list_ecosystems", False):
+        for ecosystem in list_supported_ecosystems():
+            print(ecosystem)
+        return 0
     if args.command in {None, "scan"}:
         return _run_scan(args)
     if args.command == "lint":

@@ -26,6 +26,8 @@ class TestFormatJson:
         assert parsed["profile"] == "default"
         assert parsed["score"] == 100
         assert parsed["grade"] == "A"
+        assert parsed["ecosystems"] == ["codex"]
+        assert len(parsed["packages"]) >= 1
         assert len(parsed["categories"]) == 7
         assert "timestamp" in parsed
         assert "pluginDir" in parsed
@@ -117,10 +119,19 @@ class TestMain:
     def test_output_flag(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             out_file = Path(tmpdir) / "report.json"
-            main([str(FIXTURES / "good-plugin"), "--output", str(out_file)])
+            main([str(FIXTURES / "good-plugin"), "--format", "json", "--output", str(out_file)])
             content = out_file.read_text(encoding="utf-8")
             parsed = json.loads(content)
             assert parsed["score"] == 100
+
+    def test_output_flag_respects_text_format(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "report.txt"
+            rc = main([str(FIXTURES / "good-plugin"), "--format", "text", "--output", str(out_file)])
+            content = out_file.read_text(encoding="utf-8")
+            assert rc == 0
+            assert "Final Score" in content
+            assert not content.lstrip().startswith("{")
 
     def test_min_score_boundary(self):
         rc = main([str(FIXTURES / "bad-plugin"), "--min-score", "38"])
@@ -135,6 +146,15 @@ class TestMain:
 
         with contextlib.suppress(SystemExit):
             main(["--version"])
+
+    def test_list_ecosystems(self, capsys):
+        rc = main(["--list-ecosystems"])
+        output = capsys.readouterr().out
+        assert rc == 0
+        assert "codex" in output
+        assert "claude" in output
+        assert "gemini" in output
+        assert "opencode" in output
 
     def test_text_mode_with_min_score_failure(self, capsys):
         main([str(FIXTURES / "bad-plugin"), "--min-score", "50"])

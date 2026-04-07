@@ -2,20 +2,20 @@
 
 [![Latest Release](https://img.shields.io/github/v/release/hashgraph-online/hol-codex-plugin-scanner-action?display_name=tag)](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action/releases/latest)
 [![Marketplace Repository](https://img.shields.io/badge/github-marketplace_repo-0A84FF)](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action)
-[![Source of Truth](https://img.shields.io/badge/source-codex--plugin--scanner-111827)](https://github.com/hashgraph-online/codex-plugin-scanner/tree/main/action)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/blob/main/LICENSE)
+[![Source of Truth](https://img.shields.io/badge/source-ai--plugin--scanner-111827)](https://github.com/hashgraph-online/ai-plugin-scanner/tree/main/action)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/hashgraph-online/ai-plugin-scanner/blob/main/LICENSE)
 
-| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | Marketplace-ready GitHub Action for scanning [Codex plugins](https://developers.openai.com/codex/plugins) for security, publishability, runtime readiness, and registry trust signals. The action emits structured reports, SARIF, policy results, and submission metadata while staying aligned to the main scanner release train.<br><br>[Latest Release](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action/releases/latest)<br>[Marketplace Repository](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action)<br>[Scanner Source of Truth](https://github.com/hashgraph-online/codex-plugin-scanner/tree/main/action)<br>[Report an Issue](https://github.com/hashgraph-online/codex-plugin-scanner/issues) |
+| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | Marketplace-ready GitHub Action for scanning [Codex plugins](https://developers.openai.com/codex/plugins) for security, publishability, runtime readiness, and registry trust signals. The action emits structured reports, SARIF, policy results, and submission metadata while staying aligned to the main scanner release train.<br><br>[Latest Release](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action/releases/latest)<br>[Marketplace Repository](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action)<br>[Scanner Source of Truth](https://github.com/hashgraph-online/ai-plugin-scanner/tree/main/action)<br>[Report an Issue](https://github.com/hashgraph-online/ai-plugin-scanner/issues) |
 | :--- | :--- |
 
 This repository is the Marketplace-facing wrapper for the scanner action. The main scanner repo remains the source of truth, while this published action bundle keeps the required root `action.yml` layout for GitHub Marketplace.
 
-The default Marketplace install path uses an exact `codex-plugin-scanner` PyPI release, verifies its PyPI provenance against `hashgraph-online/codex-plugin-scanner`, and only then installs it. After installation, the default `scan`, `lint`, and offline `verify` paths operate on local repository content only. Live network probing and submission automation remain explicit opt-in features.
+The default Marketplace install path uses an exact `codex-plugin-scanner` PyPI release, verifies its PyPI provenance against `hashgraph-online/ai-plugin-scanner`, and only then installs it. After installation, the default `scan`, `lint`, and offline `verify` paths operate on local repository content only. Live network probing and submission automation remain explicit opt-in features.
 
 Advanced distribution paths are available when you need them:
 
 - `install_source: local` is the explicit dogfood path for `uses: ./action` inside the source repo.
-- `ghcr.io/hashgraph-online/codex-plugin-scanner` is the container distribution for enterprise runners that prefer a reviewed OCI image over runtime package installation.
+- `ghcr.io/hashgraph-online/ai-plugin-scanner` is the container distribution for enterprise runners that prefer a reviewed OCI image over runtime package installation.
 
 ## Usage
 
@@ -135,7 +135,7 @@ This `plugin_dir: "."` pattern is correct for both single-plugin repositories an
 
 ### Dogfood the source-repo action bundle
 
-Use this only inside `hashgraph-online/codex-plugin-scanner`, where the action can install the adjacent source tree directly.
+Use this only inside `hashgraph-online/ai-plugin-scanner`, where the action can install the adjacent source tree directly.
 
 ```yaml
 - uses: ./action
@@ -233,11 +233,11 @@ Use a fine-grained token with `issues:write` on `hashgraph-online/awesome-codex-
 
 The source bundle for this action lives in the main scanner repository under `action/`. Release artifacts from that repository should export a root-ready action bundle for the dedicated Marketplace repository.
 
-Direct edits in this Marketplace repository should stay limited to Marketplace-specific copy or metadata. Functional changes and release publication logic belong in `hashgraph-online/codex-plugin-scanner` so merges there can publish a matching action release automatically.
+Direct edits in this Marketplace repository should stay limited to Marketplace-specific copy or metadata. Functional changes and release publication logic belong in `hashgraph-online/ai-plugin-scanner` so merges there can publish a matching action release automatically.
 
 ## License
 
-[Apache-2.0](https://github.com/hashgraph-online/codex-plugin-scanner/blob/main/LICENSE)
+[Apache-2.0](https://github.com/hashgraph-online/ai-plugin-scanner/blob/main/LICENSE)
 
 ## Mode-based workflow
 
@@ -261,7 +261,7 @@ The scanner is also published as an OCI image for container-first environments:
 ```bash
 docker run --rm \
   -v "$PWD:/workspace" \
-  ghcr.io/hashgraph-online/codex-plugin-scanner:<version> \
+  ghcr.io/hashgraph-online/ai-plugin-scanner:<version> \
   scan /workspace --format text
 ```
 

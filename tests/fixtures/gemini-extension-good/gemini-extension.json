@@ -1,0 +1,17 @@
+{
+  "name": "gemini-example-extension",
+  "version": "1.1.0",
+  "description": "Example Gemini extension",
+  "contextFileName": "GEMINI.md",
+  "mcpServers": {
+    "example": {
+      "command": "node",
+      "args": [
+        "server.js"
+      ]
+    }
+  },
+  "excludeTools": [
+    "unsafe-shell"
+  ]
+}

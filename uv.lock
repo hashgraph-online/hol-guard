@@ -488,46 +488,6 @@ wheels = [
 ]
 
 [[package]]
-name = "codex-plugin-scanner"
-version = "1.4.0"
-source = { editable = "." }
-dependencies = [
-    { name = "rich" },
-]
-
-[package.optional-dependencies]
-cisco = [
-    { name = "cisco-ai-skill-scanner" },
-]
-dev = [
-    { name = "build" },
-    { name = "jsonschema" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-
-[package.dev-dependencies]
-publish = [
-    { name = "twine" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.2" },
-    { name = "cisco-ai-skill-scanner", marker = "extra == 'cisco'", specifier = "==2.0.8" },
-    { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.23.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
-    { name = "rich", specifier = ">=13.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
-]
-provides-extras = ["cisco", "dev"]
-
-[package.metadata.requires-dev]
-publish = [{ name = "twine", specifier = ">=6.1.0" }]
-
-[[package]]
 name = "colorama"
 version = "0.4.6"
 source = { registry = "https://pypi.org/simple" }
@@ -2065,6 +2025,48 @@ sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
 ]
+
+[[package]]
+name = "plugin-scanner"
+version = "2.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "rich" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
+]
+
+[package.optional-dependencies]
+cisco = [
+    { name = "cisco-ai-skill-scanner" },
+]
+dev = [
+    { name = "build" },
+    { name = "jsonschema" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+
+[package.dev-dependencies]
+publish = [
+    { name = "twine" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.2" },
+    { name = "cisco-ai-skill-scanner", marker = "extra == 'cisco'", specifier = "==2.0.8" },
+    { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.23.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "rich", specifier = ">=13.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
+]
+provides-extras = ["cisco", "dev"]
+
+[package.metadata.requires-dev]
+publish = [{ name = "twine", specifier = ">=6.1.0" }]
 
 [[package]]
 name = "propcache"

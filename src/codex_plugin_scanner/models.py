@@ -75,11 +75,24 @@ class IntegrationResult:
 
 
 @dataclass(frozen=True, slots=True)
+class PackageSummary:
+    """Detected package summary for reporting."""
+
+    ecosystem: str
+    package_kind: str
+    root_path: str
+    manifest_path: str | None = None
+    name: str | None = None
+    version: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ScanOptions:
     """Runtime options that change scanner behavior."""
 
     cisco_skill_scan: str = "auto"
     cisco_policy: str = "balanced"
+    ecosystem: str = "auto"
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +122,8 @@ class ScanResult:
     skipped_targets: tuple[ScanSkipTarget, ...] = ()
     marketplace_file: str | None = None
     trust_report: TrustReport | None = None
+    ecosystems: tuple[str, ...] = ()
+    packages: tuple[PackageSummary, ...] = ()
 
 
 def get_grade(score: int) -> str:

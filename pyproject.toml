@@ -3,16 +3,16 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "codex-plugin-scanner"
-version = "1.4.0"
-description = "Security, operational-security, and publishability scanner for Codex plugins with Cisco-backed skill analysis."
+name = "plugin-scanner"
+version = "2.0.0"
+description = "Security, operational-security, and publishability scanner for Codex, Claude, Gemini, and OpenCode plugin ecosystems."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
 authors = [
     { name = "Hashgraph Online", email = "dev@hol.org" },
 ]
-keywords = ["codex", "plugin", "scanner", "security", "mcp", "cli"]
+keywords = ["plugin", "scanner", "security", "mcp", "cli", "codex", "claude", "gemini", "opencode", "ecosystem"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
@@ -28,6 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "rich>=13.0",
+    "tomli>=2.0; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
@@ -48,17 +49,22 @@ publish = [
 ]
 
 [project.scripts]
+plugin-scanner = "codex_plugin_scanner.cli:main"
 codex-plugin-scanner = "codex_plugin_scanner.cli:main"
+plugin-ecosystem-scanner = "codex_plugin_scanner.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/hashgraph-online/codex-plugin-scanner"
-Repository = "https://github.com/hashgraph-online/codex-plugin-scanner"
-Issues = "https://github.com/hashgraph-online/codex-plugin-scanner/issues"
+Homepage = "https://github.com/hashgraph-online/ai-plugin-scanner"
+Repository = "https://github.com/hashgraph-online/ai-plugin-scanner"
+Issues = "https://github.com/hashgraph-online/ai-plugin-scanner/issues"
 
 [tool.ruff]
 target-version = "py310"
 line-length = 120
 extend-exclude = ["tests/test-trust-scoring.py", "tests/test-trust-specs.py"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/codex_plugin_scanner"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "RUF"]
