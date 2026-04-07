@@ -96,6 +96,8 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     assert "dist/*" in workflow_text
     assert "Build legacy compatibility package (codex-plugin-scanner)" in workflow_text
     assert "codex-plugin-scanner" in workflow_text
+    assert "cp pyproject.toml pyproject.toml.bak" in workflow_text
+    assert "mv pyproject.toml.bak pyproject.toml" in workflow_text
     assert "uv tool install plugin-scanner==${VERSION}" in workflow_text
     assert "uv tool install codex-plugin-scanner==${VERSION}" in workflow_text
     assert "docker pull ghcr.io/hashgraph-online/ai-plugin-scanner:${VERSION}" in workflow_text
@@ -173,10 +175,12 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "root `action.yml` layout" in action_readme
     assert "published action bundle" in action_readme
     assert "Source of Truth" in action_readme
+    assert "source-ai--plugin--scanner-111827" in action_readme
+    assert "https://github.com/hashgraph-online/ai-plugin-scanner/tree/main/action" in action_readme
     assert "verifies its PyPI provenance" in action_readme
     assert "install_source: local" in action_readme
     assert "uses: ./action" in action_readme
-    assert "ghcr.io/hashgraph-online/codex-plugin-scanner:<version>" in action_readme
+    assert "ghcr.io/hashgraph-online/ai-plugin-scanner:<version>" in action_readme
     assert "online`, `submission_enabled`, and `upload_sarif`" in action_readme
     assert "registry_payload_output" in action_readme
     assert "grade_label" in action_readme

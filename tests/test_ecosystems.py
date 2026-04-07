@@ -4,8 +4,12 @@ import json
 import shutil
 from pathlib import Path
 
+import pytest
+
+from codex_plugin_scanner.checks.opencode import check_opencode_config
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.ecosystems.detect import detect_packages
+from codex_plugin_scanner.ecosystems.opencode import OpenCodeAdapter
 from codex_plugin_scanner.ecosystems.types import Ecosystem
 from codex_plugin_scanner.models import ScanOptions
 from codex_plugin_scanner.scanner import scan_plugin
@@ -66,6 +70,7 @@ def test_scan_auto_detects_multiple_packages() -> None:
         FIXTURES / "multi-ecosystem-repo",
         ScanOptions(ecosystem="auto", cisco_skill_scan="off"),
     )
+    assert result.scope == "repository"
     assert set(result.ecosystems) >= {"codex", "gemini"}
     assert len(result.packages) >= 2
     assert any(category.name.startswith("[codex:") for category in result.categories)
@@ -93,6 +98,9 @@ def test_scan_auto_repository_includes_non_codex_packages(tmp_path: Path) -> Non
 
     assert result.scope == "repository"
     assert result.marketplace_file is not None
+    assert len(result.plugin_results) == 2
+    assert {plugin.plugin_name for plugin in result.plugin_results} == {"alpha-plugin", "beta-plugin"}
+    assert any(skip.name == "remote-plugin" for skip in result.skipped_targets)
     assert set(result.ecosystems) >= {"codex", "gemini"}
     assert any(category.name.startswith("[gemini:") for category in result.categories)
     assert all(finding.rule_id != "PLUGIN_JSON_MISSING" for finding in result.findings)
@@ -160,3 +168,23 @@ def test_opencode_jsonc_keeps_block_comment_literals_inside_strings(tmp_path: Pa
 
     assert all(finding.rule_id != "OPENCODE_CONFIG_INVALID" for finding in result.findings)
     assert result.packages and result.packages[0].name == "a/*b*/c"
+
+
+def test_opencode_permission_error_sets_specific_parse_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = tmp_path / "opencode.json"
+    config_path.write_text('{"name":"demo"}', encoding="utf-8")
+
+    def _deny_read(self: Path, encoding: str = "utf-8") -> str:  # pragma: no cover - monkeypatched path
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(Path, "read_text", _deny_read)
+    candidate = OpenCodeAdapter().detect(tmp_path)[0]
+    package = OpenCodeAdapter().parse(candidate)
+    check = check_opencode_config(package)
+
+    assert package.manifest_parse_error is True
+    assert package.manifest_parse_error_reason == "permission-denied"
+    assert check.passed is False
+    assert "permissions" in check.message

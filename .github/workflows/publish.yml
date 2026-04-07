@@ -74,8 +74,10 @@ jobs:
         run: uv run --no-sync python -m build
       - name: Build legacy compatibility package (codex-plugin-scanner)
         run: |
+          cp pyproject.toml pyproject.toml.bak
           sed -i "1,/^name = /{s/^name = .*/name = \"codex-plugin-scanner\"/}" pyproject.toml
           uv run --no-sync python -m build
+          mv pyproject.toml.bak pyproject.toml
       - name: Verify distributions
         run: uv run --no-sync twine check dist/*
       - name: Upload artifacts

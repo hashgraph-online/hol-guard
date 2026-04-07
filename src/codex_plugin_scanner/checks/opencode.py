@@ -36,17 +36,25 @@ def check_opencode_config(package: NormalizedPackage) -> CheckResult:
             message="OpenCode workspace detected via .opencode directory.",
         )
     if package.manifest_parse_error:
+        reason = package.manifest_parse_error_reason or "invalid-json"
+        reason_messages = {
+            "file-not-found": f"{package.manifest_path.name} was not found while scanning.",
+            "permission-denied": f"{package.manifest_path.name} could not be read due to permissions.",
+            "read-error": f"{package.manifest_path.name} could not be read.",
+            "not-object": f"{package.manifest_path.name} must contain a top-level JSON object.",
+            "invalid-json": f"{package.manifest_path.name} is not valid JSON/JSONC.",
+        }
         return CheckResult(
             name="OpenCode config discovered",
             passed=False,
             points=0,
             max_points=2,
-            message=f"{package.manifest_path.name} could not be parsed.",
+            message=reason_messages.get(reason, f"{package.manifest_path.name} could not be parsed."),
             findings=(
                 _finding(
                     "OPENCODE_CONFIG_INVALID",
                     "OpenCode config is invalid",
-                    f"{package.manifest_path.name} is not valid JSON/JSONC.",
+                    reason_messages.get(reason, f"{package.manifest_path.name} is not valid JSON/JSONC."),
                     "Fix opencode.json/opencode.jsonc syntax.",
                     file_path=package.manifest_path.name,
                 ),

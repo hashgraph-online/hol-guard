@@ -81,20 +81,24 @@ def _strip_jsonc(text: str) -> str:
     return "".join(output)
 
 
-def _load_json_or_jsonc(path: Path) -> tuple[dict[str, object], bool]:
+def _load_json_or_jsonc(path: Path) -> tuple[dict[str, object], bool, str | None]:
     try:
         text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}, True, "file-not-found"
+    except PermissionError:
+        return {}, True, "permission-denied"
     except OSError:
-        return {}, True
+        return {}, True, "read-error"
     if path.suffix == ".jsonc":
         text = _strip_jsonc(text)
     try:
         payload = json.loads(text)
         if isinstance(payload, dict):
-            return payload, False
+            return payload, False, None
     except json.JSONDecodeError:
-        return {}, True
-    return {}, True
+        return {}, True, "invalid-json"
+    return {}, True, "not-object"
 
 
 class OpenCodeAdapter:
@@ -140,7 +144,9 @@ class OpenCodeAdapter:
         return candidates
 
     def parse(self, candidate: PackageCandidate) -> NormalizedPackage:
-        manifest, parse_error = _load_json_or_jsonc(candidate.manifest_path) if candidate.manifest_path else ({}, False)
+        manifest, parse_error, parse_error_reason = (
+            _load_json_or_jsonc(candidate.manifest_path) if candidate.manifest_path else ({}, False, None)
+        )
         root = candidate.root_path
         components: dict[str, tuple[str, ...]] = {}
         commands_dir = root / ".opencode" / "commands"
@@ -174,4 +180,5 @@ class OpenCodeAdapter:
             components=components,
             raw_manifest=manifest,
             manifest_parse_error=parse_error,
+            manifest_parse_error_reason=parse_error_reason,
         )

@@ -292,6 +292,8 @@ def _scan_mixed_packages(scan_root: Path, packages: list[NormalizedPackage], opt
     scan_root_resolved = scan_root.resolve()
     categories: list[CategoryResult] = []
     integrations: list[IntegrationResult] = []
+    plugin_results: list[ScanResult] = []
+    skipped_targets = []
     codex_trust_reports = []
     processed_packages: list[NormalizedPackage] = []
     codex_marketplace_roots = tuple(
@@ -335,10 +337,21 @@ def _scan_mixed_packages(scan_root: Path, packages: list[NormalizedPackage], opt
                 integrations.extend(codex_integrations)
                 if codex_repo_result.trust_report is not None:
                     codex_trust_reports.append(codex_repo_result.trust_report)
+                plugin_results.extend(codex_repo_result.plugin_results)
+                skipped_targets.extend(codex_repo_result.skipped_targets)
                 processed_packages.append(package)
                 continue
 
             codex_result = _scan_single_plugin(package_root, options)
+            package_name = package.name or package_root.name
+            if needs_rebase:
+                codex_plugin_result = _rebase_plugin_result(
+                    codex_result,
+                    LocalPluginTarget(name=package_name, plugin_dir=package_root, source_path="./"),
+                    scan_root_resolved,
+                )
+            else:
+                codex_plugin_result = replace(codex_result, plugin_name=package_name)
             codex_categories = [
                 CategoryResult(
                     name=category.name,
@@ -363,6 +376,7 @@ def _scan_mixed_packages(scan_root: Path, packages: list[NormalizedPackage], opt
             integrations.extend(codex_integrations)
             if codex_result.trust_report is not None:
                 codex_trust_reports.append(codex_result.trust_report)
+            plugin_results.append(codex_plugin_result)
             processed_packages.append(package)
             continue
 
@@ -482,7 +496,7 @@ def _scan_mixed_packages(scan_root: Path, packages: list[NormalizedPackage], opt
         for package in reported_packages
         if package.ecosystem == Ecosystem.CODEX and package.package_kind == "marketplace"
     )
-    scope = "repository" if marketplace_candidates else "plugin"
+    scope = "repository" if marketplace_candidates or len(reported_packages) > 1 else "plugin"
     marketplace_file = str(marketplace_candidates[0].manifest_path) if len(marketplace_candidates) == 1 else None
     return ScanResult(
         score=score,
@@ -494,6 +508,8 @@ def _scan_mixed_packages(scan_root: Path, packages: list[NormalizedPackage], opt
         severity_counts=build_severity_counts(findings),
         integrations=tuple(integrations),
         scope=scope,
+        plugin_results=tuple(plugin_results),
+        skipped_targets=tuple(skipped_targets),
         marketplace_file=marketplace_file,
         trust_report=trust_report,
         ecosystems=tuple(sorted({package.ecosystem.value for package in reported_packages})),

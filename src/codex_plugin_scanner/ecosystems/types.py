@@ -42,3 +42,4 @@ class NormalizedPackage:
     policies: dict[str, str] = field(default_factory=dict)
     raw_manifest: dict[str, object] = field(default_factory=dict)
     manifest_parse_error: bool = False
+    manifest_parse_error_reason: str | None = None
