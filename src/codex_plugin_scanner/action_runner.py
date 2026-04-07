@@ -504,9 +504,7 @@ def main() -> int:
             )
         else:
             if scan_scope != "plugin":
-                gate_reasons.append(
-                    "submission mode requires plugin_dir to point at a single plugin directory"
-                )
+                gate_reasons.append("submission mode requires plugin_dir to point at a single plugin directory")
                 rendered = _render_scan_output(
                     result,
                     output_format="json" if output_format == "json" else "text",
