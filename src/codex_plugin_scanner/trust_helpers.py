@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
+from math import exp
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -122,10 +123,10 @@ def category_checks(categories: tuple[CategoryResult, ...], name: str) -> dict[s
 def check_percent(checks: dict[str, object], name: str) -> float:
     check = checks.get(name)
     if check is None:
-        return 100.0
+        return 0.0
     max_points = getattr(check, "max_points", 0)
-    if max_points == 0:
-        return 100.0
+    if max_points <= 0:
+        return 0.0
     return round_trust_score(getattr(check, "points", 0) * 100 / max_points)
 
 
@@ -203,6 +204,4 @@ def load_mcp_payload(plugin_dir: Path) -> McpPayloadState | None:
 
 
 def hcs_28_upvote_score(upvotes: int) -> float:
-    from math import exp
-
     return round_trust_score(round(100 * (1 - exp(-max(0, upvotes) / 20))))

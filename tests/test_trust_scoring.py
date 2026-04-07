@@ -7,6 +7,8 @@ from pathlib import Path
 
 from codex_plugin_scanner.reporting import build_json_payload
 from codex_plugin_scanner.scanner import scan_plugin
+from codex_plugin_scanner.trust_mcp_scoring import build_mcp_domain
+from codex_plugin_scanner.trust_plugin_scoring import build_plugin_domain
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -149,6 +151,35 @@ def test_invalid_mcp_json_zeroes_config_integrity(tmp_path: Path):
     )
     assert config_integrity.score == 0
     assert config_shape.score == 0
+
+
+def test_missing_mcp_security_evidence_defaults_execution_safety_to_zero(tmp_path: Path):
+    plugin_dir = tmp_path
+    write_minimal_plugin(plugin_dir)
+    (plugin_dir / ".mcp.json").write_text(
+        json.dumps({"mcpServers": {"local-demo": {"command": "python"}}}),
+        encoding="utf-8",
+    )
+
+    mcp_domain = build_mcp_domain(plugin_dir, ())
+
+    assert mcp_domain is not None
+    execution_safety = next(
+        adapter for adapter in mcp_domain.adapters if adapter.adapter_id == "verification.execution-safety"
+    )
+    assert execution_safety.score == 0
+
+
+def test_missing_manifest_validation_evidence_defaults_manifest_integrity_to_zero(tmp_path: Path):
+    plugin_dir = tmp_path
+    write_minimal_plugin(plugin_dir)
+
+    plugin_domain = build_plugin_domain(plugin_dir, ())
+
+    manifest_integrity = next(
+        adapter for adapter in plugin_domain.adapters if adapter.adapter_id == "verification.manifest-integrity"
+    )
+    assert manifest_integrity.score == 0
 
 
 def test_json_payload_includes_trust_provenance():
