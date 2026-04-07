@@ -21,6 +21,7 @@ def build_plugin_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]
     interface = (
         manifest.get("interface") if isinstance(manifest, dict) and isinstance(manifest.get("interface"), dict) else {}
     )
+    interface_declared = isinstance(manifest, dict) and "interface" in manifest
     author = manifest.get("author") if isinstance(manifest, dict) and isinstance(manifest.get("author"), dict) else {}
     has_author = isinstance(author.get("name"), str) and bool(author.get("name"))
     has_homepage = is_https_url(manifest.get("homepage") if isinstance(manifest, dict) else None)
@@ -44,7 +45,7 @@ def build_plugin_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]
         if has_author or has_repository or has_homepage
         else 0.0
     )
-    has_marketplace_surface = bool(marketplace_checks)
+    has_marketplace_surface = (plugin_dir / "marketplace.json").exists()
     has_mcp_surface = (plugin_dir / ".mcp.json").exists()
 
     spec_by_id = {adapter.adapter_id: adapter for adapter in PLUGIN_TRUST_SPEC.adapters}
@@ -71,10 +72,10 @@ def build_plugin_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]
                     + check_percent(manifest_checks, "Interface links and assets valid if declared") * 0.40
                 )
             }
-            if interface
+            if interface_declared
             else None,
             rationales={"score": "Interface integrity applies when the plugin declares an install surface."},
-            applicable=bool(interface),
+            applicable=interface_declared,
         ),
         build_adapter_score(
             spec_by_id["verification.path-safety"],

@@ -120,6 +120,47 @@ def test_missing_manifest_validation_evidence_defaults_manifest_integrity_to_zer
     assert manifest_integrity.score == 0
 
 
+def test_missing_marketplace_file_excludes_marketplace_alignment_from_denominator(tmp_path: Path):
+    plugin_dir = tmp_path
+    write_minimal_plugin(plugin_dir)
+
+    plugin_domain = build_plugin_domain(plugin_dir, ())
+
+    marketplace_alignment = next(
+        adapter for adapter in plugin_domain.adapters if adapter.adapter_id == "verification.marketplace-alignment"
+    )
+    assert marketplace_alignment.applicable is False
+    assert marketplace_alignment.included_in_denominator is False
+
+
+def test_declared_invalid_interface_keeps_interface_integrity_applicable(tmp_path: Path):
+    plugin_dir = tmp_path
+    write_minimal_plugin(plugin_dir)
+    (plugin_dir / ".codex-plugin" / "plugin.json").write_text(
+        json.dumps(
+            {
+                "name": "trust-demo",
+                "version": "1.0.0",
+                "description": "Trust scoring demo plugin",
+                "interface": "invalid",
+                "author": {"name": "Hashgraph Online"},
+                "homepage": "https://example.com/plugin",
+                "repository": "https://github.com/hashgraph-online/codex-plugin-scanner",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    plugin_domain = build_plugin_domain(plugin_dir, ())
+
+    interface_integrity = next(
+        adapter for adapter in plugin_domain.adapters if adapter.adapter_id == "verification.interface-integrity"
+    )
+    assert interface_integrity.applicable is True
+    assert interface_integrity.included_in_denominator is True
+    assert interface_integrity.score == 0
+
+
 def test_json_payload_includes_trust_provenance():
     result = scan_plugin(FIXTURES / "good-plugin")
 
