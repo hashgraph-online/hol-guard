@@ -91,9 +91,7 @@ def build_mcp_domain(plugin_dir: Path, categories: tuple[CategoryResult, ...]) -
         build_adapter_score(
             spec_by_id["metadata.command-or-endpoint"],
             component_scores=(
-                {"score": 100.0}
-                if has_named_surfaces and secure_remote_urls and local_commands_valid
-                else None
+                {"score": 100.0} if has_named_surfaces and secure_remote_urls and local_commands_valid else None
             ),
             rationales={
                 "score": (

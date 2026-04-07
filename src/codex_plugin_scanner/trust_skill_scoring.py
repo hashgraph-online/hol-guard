@@ -37,9 +37,7 @@ def _normalized_skill_metadata(
     frontmatters: tuple[dict[str, object], ...],
 ) -> dict[str, object]:
     descriptions = [
-        str(payload.get("description", "")).strip()
-        for payload in frontmatters
-        if payload.get("description")
+        str(payload.get("description", "")).strip() for payload in frontmatters if payload.get("description")
     ]
     tags: set[str] = set()
     languages: set[str] = set()
@@ -98,8 +96,7 @@ def _cisco_score(context: SkillSecurityContext) -> tuple[dict[str, float] | None
     if context.summary is None:
         return None, {
             "score": (
-                "No Cisco scan result is available in read mode, "
-                "so HCS-28 treats the universal safety adapter as 0."
+                "No Cisco scan result is available in read mode, so HCS-28 treats the universal safety adapter as 0."
             )
         }
     if context.summary.status != CiscoIntegrationStatus.ENABLED:
@@ -145,9 +142,7 @@ def build_skill_domain(
 
     adapter_inputs: dict[str, tuple[dict[str, float] | None, dict[str, str], bool]] = {
         "verification.review-status": (
-            {"score": 100.0}
-            if isinstance(manifest, dict) and manifest.get("verified") is True
-            else None,
+            {"score": 100.0} if isinstance(manifest, dict) and manifest.get("verified") is True else None,
             {
                 "score": (
                     "The bundled skill package declares explicit version-scoped verification."
@@ -213,9 +208,7 @@ def build_skill_domain(
             else {"score": 60.0}
             if normalized["homepage"] or normalized["repository"]
             else None,
-            {
-                "score": "HCS-28 metadata.links awards 100 for homepage+repo, 60 for either one, and 0 otherwise."
-            },
+            {"score": "HCS-28 metadata.links awards 100 for homepage+repo, 60 for either one, and 0 otherwise."},
             True,
         ),
         "metadata.description": (
@@ -228,9 +221,7 @@ def build_skill_domain(
             else {"score": 40.0}
             if description_length >= 10
             else None,
-            {
-                "score": "HCS-28 metadata.description uses the published description-length thresholds."
-            },
+            {"score": "HCS-28 metadata.description uses the published description-length thresholds."},
             True,
         ),
         "metadata.taxonomy": (
@@ -249,9 +240,7 @@ def build_skill_domain(
                     else 0.0
                 )
             },
-            {
-                "score": "HCS-28 metadata.taxonomy follows the published tag-count and language-count matrix."
-            },
+            {"score": "HCS-28 metadata.taxonomy follows the published tag-count and language-count matrix."},
             True,
         ),
         "metadata.provenance": (
@@ -264,8 +253,7 @@ def build_skill_domain(
             else None,
             {
                 "score": (
-                    "HCS-28 metadata.provenance awards 100 for repo+commit, "
-                    "70 for repo only, and 40 for commit only."
+                    "HCS-28 metadata.provenance awards 100 for repo+commit, 70 for repo only, and 40 for commit only."
                 )
             },
             True,
