@@ -115,6 +115,34 @@ inputs:
     description: "Override the plugin author used in the submission issue"
     required: false
     default: ""
+  pr_comment:
+    description: "Publish a sticky PR summary comment: off, auto, or always"
+    required: false
+    default: "off"
+  pr_comment_style:
+    description: "PR comment detail level: concise or full"
+    required: false
+    default: "concise"
+  pr_comment_header:
+    description: "Optional sticky comment header override; defaults to a deterministic mode/profile/plugin hash"
+    required: false
+    default: ""
+  pr_comment_max_findings:
+    description: "Maximum number of top findings shown in the PR comment"
+    required: false
+    default: "3"
+  pr_comment_token:
+    description: "Optional token for PR comments. Defaults to github.token; requires pull-requests:write or issues:write."
+    required: false
+    default: ""
+  pr_comment_skip_if_unchanged:
+    description: "Skip updating the sticky PR comment when the rendered body is unchanged"
+    required: false
+    default: "true"
+  pr_comment_compare_to_previous:
+    description: "Include metric deltas versus the previous scanner comment on this PR"
+    required: false
+    default: "true"
 
 outputs:
   score:
@@ -156,6 +184,24 @@ outputs:
   submission_issue_numbers:
     description: "Comma-separated issue numbers for submission issues created or reused"
     value: ${{ steps.scan.outputs.submission_issue_numbers }}
+  pr_comment_status:
+    description: "PR comment result: disabled, skipped, created, updated, unchanged, or failed"
+    value: ${{ steps.scan.outputs.pr_comment_status }}
+  pr_comment_url:
+    description: "URL of the sticky PR comment when created/updated/found"
+    value: ${{ steps.scan.outputs.pr_comment_url }}
+  pr_comment_id:
+    description: "Numeric GitHub issue-comment ID when available"
+    value: ${{ steps.scan.outputs.pr_comment_id }}
+  pr_comment_reason:
+    description: "Reason for a skipped/failed PR comment operation"
+    value: ${{ steps.scan.outputs.pr_comment_reason }}
+  action_exit_code:
+    description: "Scanner exit code computed after reports/comments/SARIF handling"
+    value: ${{ steps.scan.outputs.action_exit_code }}
+  action_exit_reason:
+    description: "Human-readable reason for a non-zero scanner exit code"
+    value: ${{ steps.scan.outputs.action_exit_reason }}
 
 branding:
   icon: "check-circle"
@@ -234,6 +280,7 @@ runs:
 
     - name: Run scanner
       id: scan
+      continue-on-error: true
       shell: bash
       env:
         MODE: ${{ inputs.mode }}
@@ -261,12 +308,36 @@ runs:
         SUBMISSION_PLUGIN_URL: ${{ inputs.submission_plugin_url }}
         SUBMISSION_PLUGIN_DESCRIPTION: ${{ inputs.submission_plugin_description }}
         SUBMISSION_AUTHOR: ${{ inputs.submission_author }}
+        PR_COMMENT: ${{ inputs.pr_comment }}
+        PR_COMMENT_STYLE: ${{ inputs.pr_comment_style }}
+        PR_COMMENT_HEADER: ${{ inputs.pr_comment_header }}
+        PR_COMMENT_MAX_FINDINGS: ${{ inputs.pr_comment_max_findings }}
+        PR_COMMENT_TOKEN: ${{ inputs.pr_comment_token }}
+        PR_COMMENT_SKIP_IF_UNCHANGED: ${{ inputs.pr_comment_skip_if_unchanged }}
+        PR_COMMENT_COMPARE_TO_PREVIOUS: ${{ inputs.pr_comment_compare_to_previous }}
+        GITHUB_TOKEN: ${{ github.token }}
         GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
       run: python3 -m codex_plugin_scanner.action_runner
 
     - name: Upload SARIF
-      if: ${{ inputs.upload_sarif == 'true' && inputs.mode == 'scan' && steps.scan.outputs.report_path != '' }}
+      if: ${{ always() && inputs.upload_sarif == 'true' && inputs.mode == 'scan' && steps.scan.outputs.report_path != '' }}
       uses: github/codeql-action/upload-sarif@51f77329afa6477de8c49fc9c7046c15b9a4e79d
       with:
         sarif_file: ${{ steps.scan.outputs.report_path }}
         category: ${{ inputs.sarif_category }}
+
+    - name: Enforce scanner execution
+      if: ${{ steps.scan.outcome == 'failure' && steps.scan.outputs.action_exit_code == '' }}
+      shell: bash
+      run: |
+        echo "Scanner execution failed before writing action outputs." >&2
+        exit 1
+
+    - name: Enforce scanner outcome
+      if: ${{ steps.scan.outputs.action_exit_code != '' && steps.scan.outputs.action_exit_code != '0' }}
+      shell: bash
+      run: |
+        if [ -n "${{ steps.scan.outputs.action_exit_reason }}" ]; then
+          echo "${{ steps.scan.outputs.action_exit_reason }}" >&2
+        fi
+        exit "${{ steps.scan.outputs.action_exit_code }}"

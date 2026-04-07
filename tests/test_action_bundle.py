@@ -43,6 +43,13 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "sarif_category:" in action_text
     assert "registry_payload_output:" in action_text
     assert "submission_enabled:" in action_text
+    assert "pr_comment:" in action_text
+    assert "pr_comment_style:" in action_text
+    assert "pr_comment_header:" in action_text
+    assert "pr_comment_max_findings:" in action_text
+    assert "pr_comment_token:" in action_text
+    assert "pr_comment_skip_if_unchanged:" in action_text
+    assert "pr_comment_compare_to_previous:" in action_text
     assert "policy_pass:" in action_text
     assert "verify_pass:" in action_text
     assert "grade_label:" in action_text
@@ -51,12 +58,27 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "report_path:" in action_text
     assert "registry_payload_path:" in action_text
     assert "submission_issue_urls:" in action_text
+    assert "pr_comment_status:" in action_text
+    assert "pr_comment_url:" in action_text
+    assert "pr_comment_id:" in action_text
+    assert "pr_comment_reason:" in action_text
+    assert "action_exit_code:" in action_text
+    assert "action_exit_reason:" in action_text
     assert "python3 -m codex_plugin_scanner.action_runner" in action_text
+    assert "continue-on-error: true" in action_text
     assert "MODE: ${{ inputs.mode }}" in action_text
     assert "PROFILE: ${{ inputs.profile }}" in action_text
     assert "CONFIG: ${{ inputs.config }}" in action_text
     assert "BASELINE: ${{ inputs.baseline }}" in action_text
     assert "ONLINE: ${{ inputs.online }}" in action_text
+    assert "PR_COMMENT: ${{ inputs.pr_comment }}" in action_text
+    assert "PR_COMMENT_STYLE: ${{ inputs.pr_comment_style }}" in action_text
+    assert "PR_COMMENT_HEADER: ${{ inputs.pr_comment_header }}" in action_text
+    assert "PR_COMMENT_MAX_FINDINGS: ${{ inputs.pr_comment_max_findings }}" in action_text
+    assert "PR_COMMENT_TOKEN: ${{ inputs.pr_comment_token }}" in action_text
+    assert "PR_COMMENT_SKIP_IF_UNCHANGED: ${{ inputs.pr_comment_skip_if_unchanged }}" in action_text
+    assert "PR_COMMENT_COMPARE_TO_PREVIOUS: ${{ inputs.pr_comment_compare_to_previous }}" in action_text
+    assert "GITHUB_TOKEN: ${{ github.token }}" in action_text
     assert "value: ${{ steps.scan.outputs.score }}" in action_text
     assert "value: ${{ steps.scan.outputs.grade }}" in action_text
     assert "value: ${{ steps.scan.outputs.policy_pass }}" in action_text
@@ -70,8 +92,16 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "value: ${{ steps.scan.outputs.submission_performed }}" in action_text
     assert "value: ${{ steps.scan.outputs.submission_issue_urls }}" in action_text
     assert "value: ${{ steps.scan.outputs.submission_issue_numbers }}" in action_text
+    assert "value: ${{ steps.scan.outputs.pr_comment_status }}" in action_text
+    assert "value: ${{ steps.scan.outputs.pr_comment_url }}" in action_text
+    assert "value: ${{ steps.scan.outputs.pr_comment_id }}" in action_text
+    assert "value: ${{ steps.scan.outputs.pr_comment_reason }}" in action_text
+    assert "value: ${{ steps.scan.outputs.action_exit_code }}" in action_text
+    assert "value: ${{ steps.scan.outputs.action_exit_reason }}" in action_text
     assert "GITHUB_STEP_SUMMARY" in action_text
     assert "github/codeql-action/upload-sarif@" in action_text
+    assert "if: ${{ always() && inputs.upload_sarif == 'true'" in action_text
+    assert "Enforce scanner outcome" in action_text
 
 
 def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
@@ -164,7 +194,7 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "install_source: local" in action_readme
     assert "uses: ./action" in action_readme
     assert "ghcr.io/hashgraph-online/codex-plugin-scanner:<version>" in action_readme
-    assert "online`, `submission_enabled`, and `upload_sarif`" in action_readme
+    assert "online`, `submission_enabled`, `upload_sarif`, and `pr_comment`" in action_readme
     assert "registry_payload_output" in action_readme
     assert "grade_label" in action_readme
     assert "max_severity" in action_readme
@@ -173,8 +203,18 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "publish-action-repo.yml" in action_readme
     assert "hashgraph-online/hol-codex-plugin-scanner-action@v1" in action_readme
     assert "actions/checkout@v4" in action_readme
-    assert "actions/github-script@v7" in action_readme
     assert "opt-in Cisco skill-scanner dependency used by this repo" in action_readme
+    assert "Native sticky PR summary comment" in action_readme
+    assert "pr_comment: auto" in action_readme
+    assert "pr_comment: always" in action_readme
+    assert "Advanced sticky comment configuration" in action_readme
+    assert "pull-requests: write" in action_readme
+    assert "pr_comment_style: full" in action_readme
+    assert "pr_comment_header: scanner-main-scan" in action_readme
+    assert "Fork PR note:" in action_readme
+    assert "Troubleshooting" in action_readme
+    assert "pr_comment_status" in action_readme
+    assert "action_exit_reason" in action_readme
 
 
 def test_readme_uses_stable_apache_license_badge() -> None:

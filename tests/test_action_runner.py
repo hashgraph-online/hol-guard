@@ -6,6 +6,7 @@ import socket
 from pathlib import Path
 
 from codex_plugin_scanner.action_runner import main
+from codex_plugin_scanner.pr_comments import PRCommentOutcome
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -51,6 +52,12 @@ def test_action_runner_writes_all_outputs(monkeypatch, tmp_path, capsys) -> None
     assert "submission_performed=false" in output_lines
     assert "submission_issue_urls=" in output_lines
     assert "submission_issue_numbers=" in output_lines
+    assert "pr_comment_status=disabled" in output_lines
+    assert "pr_comment_url=" in output_lines
+    assert "pr_comment_id=" in output_lines
+    assert "pr_comment_reason=" in output_lines
+    assert "action_exit_code=0" in output_lines
+    assert "action_exit_reason=" in output_lines
 
     stdout = capsys.readouterr().out
     assert '"score": 100' in stdout
@@ -142,6 +149,7 @@ def test_action_runner_verify_mode_writes_human_report(monkeypatch, tmp_path, ca
     assert "Verification: PASS" in output_path.read_text(encoding="utf-8")
     assert "mode=verify" in github_output.read_text(encoding="utf-8")
     assert "verify_pass=true" in github_output.read_text(encoding="utf-8")
+    assert "action_exit_code=0" in github_output.read_text(encoding="utf-8")
     assert "Report written to" in capsys.readouterr().out
 
 
@@ -174,12 +182,64 @@ def test_action_runner_repository_scan_defaults_to_marketplace_root(monkeypatch,
     exit_code = main()
 
     assert exit_code == 0
-    summary_text = summary_path.read_text(encoding="utf-8")
-    assert "- Scope: repository" in summary_text
-    assert "- Local plugins scanned: 2" in summary_text
-    assert "- Skipped marketplace entries: 1" in summary_text
-    output_lines = output_path.read_text(encoding="utf-8").splitlines()
-    assert any(line.startswith("score=") for line in output_lines)
+
+
+def test_action_runner_failed_gate_still_writes_outputs(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "github-output.txt"
+
+    monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
+    monkeypatch.setenv("FORMAT", "json")
+    monkeypatch.setenv("OUTPUT", "")
+    monkeypatch.setenv("MIN_SCORE", "101")
+    monkeypatch.setenv("FAIL_ON", "none")
+    monkeypatch.setenv("CISCO_SCAN", "off")
+    monkeypatch.setenv("CISCO_POLICY", "balanced")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "false")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+
+    exit_code = main()
+
+    assert exit_code == 1
+    output_text = output_path.read_text(encoding="utf-8")
+    assert "score=100" in output_text
+    assert "action_exit_code=1" in output_text
+    assert "action_exit_reason=score 100 is below minimum threshold 101" in output_text
+
+
+def test_action_runner_pr_comment_always_failure_blocks_run(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "github-output.txt"
+
+    monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
+    monkeypatch.setenv("FORMAT", "json")
+    monkeypatch.setenv("OUTPUT", "")
+    monkeypatch.setenv("MIN_SCORE", "0")
+    monkeypatch.setenv("FAIL_ON", "none")
+    monkeypatch.setenv("CISCO_SCAN", "off")
+    monkeypatch.setenv("CISCO_POLICY", "balanced")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "false")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+    monkeypatch.setenv("PR_COMMENT", "always")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(tmp_path / "event.json"))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "hashgraph-online/codex-plugin-scanner")
+    monkeypatch.setenv("GITHUB_REF", "refs/pull/123/merge")
+    monkeypatch.setenv("PR_COMMENT_TOKEN", "token")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.action_runner.publish_pr_comment",
+        lambda **_: PRCommentOutcome(status="failed", reason="boom"),
+    )
+
+    exit_code = main()
+
+    assert exit_code == 1
+    output_text = output_path.read_text(encoding="utf-8")
+    assert "pr_comment_status=failed" in output_text
+    assert "pr_comment_reason=boom" in output_text
+    assert "action_exit_code=1" in output_text
+    assert "action_exit_reason=pull request comment failed: boom" in output_text
 
 
 def test_action_runner_default_scan_does_not_open_network_connections(monkeypatch, tmp_path) -> None:
@@ -215,3 +275,38 @@ def test_action_runner_default_scan_does_not_open_network_connections(monkeypatc
     exit_code = main()
 
     assert exit_code == 0
+
+
+def test_action_runner_step_summary_includes_pr_comment_status(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "github-output.txt"
+    summary_path = tmp_path / "step-summary.md"
+
+    monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
+    monkeypatch.setenv("FORMAT", "json")
+    monkeypatch.setenv("OUTPUT", "")
+    monkeypatch.setenv("MIN_SCORE", "0")
+    monkeypatch.setenv("FAIL_ON", "none")
+    monkeypatch.setenv("CISCO_SCAN", "off")
+    monkeypatch.setenv("CISCO_POLICY", "balanced")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "false")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary_path))
+    monkeypatch.setattr(
+        "codex_plugin_scanner.action_runner.publish_pr_comment",
+        lambda **_: PRCommentOutcome(
+            status="created",
+            url="https://github.com/hashgraph-online/codex-plugin-scanner/pull/1#issuecomment-1",
+            comment_id=1,
+        ),
+    )
+
+    exit_code = main()
+
+    assert exit_code == 0
+    summary_text = summary_path.read_text(encoding="utf-8")
+    assert (
+        "- PR comment: created "
+        "(https://github.com/hashgraph-online/codex-plugin-scanner/pull/1#issuecomment-1)"
+        in summary_text
+    )
