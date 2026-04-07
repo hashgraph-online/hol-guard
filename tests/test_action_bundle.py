@@ -87,14 +87,21 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     assert """printf '%s\\n' "${VERSION}" > "${BUNDLE_ROOT}/scanner-version.txt" """[:-1] in workflow_text
     assert 'cp action/cisco-version.txt "${BUNDLE_ROOT}/cisco-version.txt"' in workflow_text
     assert 'cp action/pypi-attestations-version.txt "${BUNDLE_ROOT}/pypi-attestations-version.txt"' in workflow_text
-    assert "dist/codex-plugin-scanner-v${VERSION}.intoto.jsonl" in workflow_text
+    assert "dist/plugin-scanner-v${VERSION}.intoto.jsonl" in workflow_text
     assert "Collect release asset files" in workflow_text
     assert "find dist -maxdepth 1 -type f -print0 | sort -z" in workflow_text
     assert 'mapfile -t RELEASE_ASSETS <<\'EOF\'' in workflow_text
     assert '"${RELEASE_ASSETS[@]}"' in workflow_text
     assert "subject-path: |" in workflow_text
     assert "dist/*" in workflow_text
-    assert "docker pull ghcr.io/hashgraph-online/codex-plugin-scanner:${VERSION}" in workflow_text
+    assert "Build legacy compatibility package (codex-plugin-scanner)" in workflow_text
+    assert "codex-plugin-scanner" in workflow_text
+    assert "cp pyproject.toml pyproject.toml.bak" in workflow_text
+    assert "mv pyproject.toml.bak pyproject.toml" in workflow_text
+    assert "uv tool install plugin-scanner==${VERSION}" in workflow_text
+    assert "uv tool install codex-plugin-scanner==${VERSION}" in workflow_text
+    assert "docker pull ghcr.io/hashgraph-online/ai-plugin-scanner:${VERSION}" in workflow_text
+    assert "dist/plugin-scanner-v${VERSION}.intoto.jsonl" in workflow_text
     assert "publish-container:" in workflow_text
     assert "packages: write" in workflow_text
     assert "docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2" in workflow_text
@@ -112,6 +119,14 @@ def test_ci_workflow_covers_cross_platform_runtime() -> None:
 
     assert "windows-latest" in workflow_text
     assert "macos-latest" in workflow_text
+
+
+def test_codeql_workflow_has_stable_workspace_alias_and_source_root() -> None:
+    workflow_text = (ROOT / ".github" / "workflows" / "codeql.yml").read_text(encoding="utf-8")
+
+    assert "Provide legacy workspace alias for CodeQL default setup state" in workflow_text
+    assert 'ln -sfn "$GITHUB_WORKSPACE" "$LEGACY_ROOT/codex-plugin-scanner"' in workflow_text
+    assert "source-root: ." in workflow_text
 
 
 def test_publish_action_repo_workflow_syncs_action_repository() -> None:
@@ -160,10 +175,12 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "root `action.yml` layout" in action_readme
     assert "published action bundle" in action_readme
     assert "Source of Truth" in action_readme
+    assert "source-ai--plugin--scanner-111827" in action_readme
+    assert "https://github.com/hashgraph-online/ai-plugin-scanner/tree/main/action" in action_readme
     assert "verifies its PyPI provenance" in action_readme
     assert "install_source: local" in action_readme
     assert "uses: ./action" in action_readme
-    assert "ghcr.io/hashgraph-online/codex-plugin-scanner:<version>" in action_readme
+    assert "ghcr.io/hashgraph-online/ai-plugin-scanner:<version>" in action_readme
     assert "online`, `submission_enabled`, and `upload_sarif`" in action_readme
     assert "registry_payload_output" in action_readme
     assert "grade_label" in action_readme
@@ -184,7 +201,9 @@ def test_readme_uses_stable_apache_license_badge() -> None:
     assert "https://img.shields.io/github/license/hashgraph-online/codex-plugin-scanner" not in readme
     assert "publish-action-repo.yml" in readme
     assert "docs/github-action-marketplace.md" not in readme
-    assert "ghcr.io/hashgraph-online/codex-plugin-scanner:<version>" in readme
+    assert "ghcr.io/hashgraph-online/ai-plugin-scanner:<version>" in readme
+    assert "https://pypi.org/project/plugin-scanner/" in readme
+    assert "https://pypi.org/project/codex-plugin-scanner/" in readme
     assert "Container Image" in readme
 
 

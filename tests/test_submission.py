@@ -3,6 +3,7 @@
 from pathlib import Path
 from urllib.error import HTTPError
 
+from codex_plugin_scanner import __version__
 from codex_plugin_scanner.scanner import scan_plugin
 from codex_plugin_scanner.submission import (
     SubmissionMetadata,
@@ -64,7 +65,7 @@ def test_submission_payload_and_issue_body_include_registry_data() -> None:
         source_repository="hashgraph-online/example-good-plugin",
         source_sha="abc123",
         workflow_url="https://github.com/hashgraph-online/example-good-plugin/actions/runs/1",
-        scanner_version="1.4.0",
+        scanner_version=__version__,
     )
     body = build_submission_issue_body(
         metadata,

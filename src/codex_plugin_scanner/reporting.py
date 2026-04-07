@@ -91,6 +91,18 @@ def build_json_payload(
         "raw_score": result.score if raw_score is None else raw_score,
         "effective_score": result.score if effective_score is None else effective_score,
         "grade": result.grade,
+        "ecosystems": list(result.ecosystems),
+        "packages": [
+            {
+                "ecosystem": package.ecosystem,
+                "packageKind": package.package_kind,
+                "rootPath": package.root_path,
+                "manifestPath": package.manifest_path,
+                "name": package.name,
+                "version": package.version,
+            }
+            for package in result.packages
+        ],
         "summary": {
             "gradeLabel": GRADE_LABELS.get(result.grade, "Unknown"),
             "findings": result.severity_counts,
@@ -227,6 +239,7 @@ def format_markdown(result: ScanResult) -> str:
         f"- Score: **{result.score}/100**",
         f"- Grade: **{result.grade} - {GRADE_LABELS.get(result.grade, 'Unknown')}**",
         f"- Trust: **{result.trust_report.total if result.trust_report else 0.0}/100**",
+        f"- Ecosystems: **{', '.join(result.ecosystems) if result.ecosystems else 'unknown'}**",
         "",
         "## Findings Summary",
         "",
@@ -343,6 +356,7 @@ def format_sarif(result: ScanResult) -> str:
                     "driver": {
                         "name": "codex-plugin-scanner",
                         "informationUri": "https://github.com/hashgraph-online/codex-plugin-scanner",
+                        "version": __version__,
                         "rules": rules,
                     }
                 },

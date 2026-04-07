@@ -1,10 +1,11 @@
-"""Codex Plugin Scanner - security and best-practices scanner for Codex CLI plugins."""
+"""Codex Plugin Scanner - multi-ecosystem scanner for agent plugin packages."""
 
 from .models import (
     GRADE_LABELS,
     CategoryResult,
     CheckResult,
     Finding,
+    PackageSummary,
     ScanOptions,
     ScanResult,
     Severity,
@@ -18,6 +19,7 @@ __all__ = [
     "CategoryResult",
     "CheckResult",
     "Finding",
+    "PackageSummary",
     "ScanOptions",
     "ScanResult",
     "Severity",

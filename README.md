@@ -1,25 +1,26 @@
-# HOL Codex Plugin Scanner
+# HOL Plugin Ecosystem Scanner
 
-[![PyPI Version](https://img.shields.io/pypi/v/codex-plugin-scanner.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/codex-plugin-scanner/)
-[![Python Versions](https://img.shields.io/pypi/pyversions/codex-plugin-scanner)](https://pypi.org/project/codex-plugin-scanner/)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/codex-plugin-scanner)](https://pypistats.org/packages/codex-plugin-scanner)
-[![CI](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/ci.yml)
-[![Publish](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/publish.yml/badge.svg)](https://github.com/hashgraph-online/codex-plugin-scanner/actions/workflows/publish.yml)
-[![Container Image](https://img.shields.io/badge/ghcr-codex--plugin--scanner-2496ED?logo=docker&logoColor=white)](https://github.com/hashgraph-online/codex-plugin-scanner/pkgs/container/codex-plugin-scanner)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/codex-plugin-scanner/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/codex-plugin-scanner)
+[![PyPI Version](https://img.shields.io/pypi/v/plugin-scanner.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/plugin-scanner/)
+[![Legacy Namespace](https://img.shields.io/badge/legacy-codex--plugin--scanner-6b7280?logo=pypi&logoColor=white)](https://pypi.org/project/codex-plugin-scanner/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/plugin-scanner)](https://pypi.org/project/plugin-scanner/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/plugin-scanner)](https://pypistats.org/packages/plugin-scanner)
+[![CI](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/ci.yml)
+[![Publish](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/publish.yml/badge.svg)](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/publish.yml)
+[![Container Image](https://img.shields.io/badge/ghcr-ai--plugin--scanner-2496ED?logo=docker&logoColor=white)](https://github.com/hashgraph-online/ai-plugin-scanner/pkgs/container/ai-plugin-scanner)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/ai-plugin-scanner/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/ai-plugin-scanner)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/codex-plugin-scanner?style=social)](https://github.com/hashgraph-online/codex-plugin-scanner/stargazers)
+[![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/ai-plugin-scanner?style=social)](https://github.com/hashgraph-online/ai-plugin-scanner/stargazers)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
 
-| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | **The default CI gate for Codex plugins**. Lint locally, verify in CI, and ship publish-ready bundles for manifests, skills, MCP, and marketplace metadata.<br><br>Use this after [`$plugin-creator`](https://developers.openai.com/codex/plugins) and before publishing, review, or distribution.<br><br>[PyPI Package](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/codex-plugin-scanner/issues) |
+| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | **The default CI gate for AI agent plugin ecosystems**. Lint locally, verify in CI, and ship publish-ready bundles for manifests, skills, MCP, and marketplace metadata across Codex, Claude, Gemini, and OpenCode.<br><br>Use this after scaffolding and before publishing, review, or distribution.<br><br>[PyPI Package (`plugin-scanner`)](https://pypi.org/project/plugin-scanner/)<br>[Legacy Namespace (`codex-plugin-scanner`)](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/ai-plugin-scanner/issues) |
 | :--- | :--- |
 
 ## Start In 30 Seconds
 
 ```bash
-# Local preflight after scaffolding with $plugin-creator
-pipx run codex-plugin-scanner lint .
-pipx run codex-plugin-scanner verify .
+# Local preflight
+pipx run plugin-scanner lint .
+pipx run plugin-scanner verify .
 ```
 
 ```yaml
@@ -36,7 +37,7 @@ If your repository uses a Codex marketplace root like `.agents/plugins/marketpla
 
 ## Use After `$plugin-creator`
 
-`codex-plugin-scanner` is designed as the quality gate between plugin creation and distribution:
+`plugin-scanner` is designed as the quality gate between plugin creation and distribution:
 
 1. Scaffold with `$plugin-creator`.
 2. Run `lint` locally to catch structure, metadata, and security issues early.
@@ -64,8 +65,8 @@ This keeps the quality grade and the trust score separate. Signals like `SECURIT
 ## Quick Start For Contributors
 
 ```bash
-git clone https://github.com/hashgraph-online/codex-plugin-scanner.git
-cd codex-plugin-scanner
+git clone https://github.com/hashgraph-online/ai-plugin-scanner.git
+cd ai-plugin-scanner
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
@@ -75,13 +76,13 @@ pytest -q
 ## Install
 
 ```bash
-pip install codex-plugin-scanner
+pip install plugin-scanner
 ```
 
 Cisco-backed skill scanning is optional:
 
 ```bash
-pip install "codex-plugin-scanner[cisco]"
+pip install "plugin-scanner[cisco]"
 ```
 
 The `cisco` extra installs the published `cisco-ai-skill-scanner` package from PyPI so the scanner remains publishable on PyPI and the optional Cisco analysis path works with standard package metadata.
@@ -89,7 +90,7 @@ The `cisco` extra installs the published `cisco-ai-skill-scanner` package from P
 You can also run the scanner without a local install:
 
 ```bash
-pipx run codex-plugin-scanner ./my-plugin
+pipx run plugin-scanner ./my-plugin
 ```
 
 Container-first environments can use the published image instead:
@@ -97,13 +98,31 @@ Container-first environments can use the published image instead:
 ```bash
 docker run --rm \
   -v "$PWD:/workspace" \
-  ghcr.io/hashgraph-online/codex-plugin-scanner:<version> \
+  ghcr.io/hashgraph-online/ai-plugin-scanner:<version> \
   scan /workspace --format text
 ```
 
+Backward compatibility remains available for teams still pinned to the historical package namespace:
+
+```bash
+pip install codex-plugin-scanner
+pipx run codex-plugin-scanner verify .
+```
+
+## Ecosystem Support
+
+| Ecosystem | Detection Surfaces |
+| :--- | :--- |
+| Codex | `.codex-plugin/plugin.json`, `marketplace.json`, `.agents/plugins/marketplace.json` |
+| Claude Code | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` |
+| Gemini CLI | `gemini-extension.json`, `commands/**/*.toml` |
+| OpenCode | `opencode.json`, `opencode.jsonc`, `.opencode/commands`, `.opencode/plugins` |
+
+Use `--ecosystem auto` (default) to scan all detected packages in a repository, or select a single ecosystem explicitly.
+
 ## What The Scanner Covers
 
-`codex-plugin-scanner` supports a full quality suite:
+`plugin-scanner` supports a full quality suite:
 
 - `scan` for full-surface security and publishability analysis
 - `lint` for rule-oriented authoring feedback
@@ -127,45 +146,54 @@ The scanner evaluates only the surfaces a plugin actually exposes, then normaliz
 
 ```bash
 # Scan a plugin directory
-codex-plugin-scanner ./my-plugin
+plugin-scanner ./my-plugin
+
+# Auto-detect all supported ecosystems inside a repo (default)
+plugin-scanner ./plugins-repo --ecosystem auto
+
+# Scan only Claude package surfaces
+plugin-scanner ./plugins-repo --ecosystem claude
+
+# List supported ecosystems
+plugin-scanner --list-ecosystems
 
 # Output JSON
-codex-plugin-scanner ./my-plugin --json
+plugin-scanner ./my-plugin --json
 
 # Write a SARIF report for GitHub code scanning
-codex-plugin-scanner ./my-plugin --format sarif --output codex-plugin-scanner.sarif
+plugin-scanner ./my-plugin --format sarif --output plugin-scanner.sarif
 
 # Fail CI on findings at or above high severity
-codex-plugin-scanner ./my-plugin --fail-on-severity high
+plugin-scanner ./my-plugin --fail-on-severity high
 
 # Require Cisco skill scanning with a strict policy
-codex-plugin-scanner ./my-plugin --cisco-skill-scan on --cisco-policy strict
+plugin-scanner ./my-plugin --cisco-skill-scan on --cisco-policy strict
 ```
 
 ## Quality Suite Commands
 
 ```bash
 # Summary scan (legacy form still works)
-codex-plugin-scanner scan ./my-plugin --format json --profile public-marketplace
+plugin-scanner scan ./my-plugin --format json --profile public-marketplace
 
 # Scan a multi-plugin repo from the marketplace root
-codex-plugin-scanner scan . --format json
+plugin-scanner scan . --format json
 
 # Rule-oriented lint (with optional mechanical fixes)
-codex-plugin-scanner lint ./my-plugin --list-rules
-codex-plugin-scanner lint ./my-plugin --explain README_MISSING
-codex-plugin-scanner lint ./my-plugin --fix --profile strict-security
+plugin-scanner lint ./my-plugin --list-rules
+plugin-scanner lint ./my-plugin --explain README_MISSING
+plugin-scanner lint ./my-plugin --fix --profile strict-security
 
 # Runtime readiness verification
-codex-plugin-scanner verify ./my-plugin --format json
-codex-plugin-scanner verify . --format json
-codex-plugin-scanner verify ./my-plugin --online --format text
+plugin-scanner verify ./my-plugin --format json
+plugin-scanner verify . --format json
+plugin-scanner verify ./my-plugin --online --format text
 
 # Artifact-backed submission gate
-codex-plugin-scanner submit ./my-plugin --profile public-marketplace --attest dist/plugin-quality.json
+plugin-scanner submit ./my-plugin --profile public-marketplace --attest dist/plugin-quality.json
 
 # Diagnostic bundle
-codex-plugin-scanner doctor ./my-plugin --component mcp --bundle dist/doctor.zip
+plugin-scanner doctor ./my-plugin --component mcp --bundle dist/doctor.zip
 ```
 
 ## Codex Spec Alignment
@@ -199,7 +227,7 @@ severity_overrides = { CODEXIGNORE_MISSING = "low" }
 ## Example Output
 
 ```text
-🔗 Codex Plugin Scanner v1.4.0
+🔗 Plugin Scanner v2.0.0
 Scanning: ./my-plugin
 
 ── Manifest Validation (31/31) ──
@@ -331,7 +359,7 @@ When a tagged release is published, [publish-action-repo.yml](./.github/workflow
 
 - create the dedicated action repository if it does not already exist
 - sync the root-ready `action.yml`, `README.md`, `LICENSE`, and `SECURITY.md`
-- push the immutable release tag such as `v1.4.0`
+- push the immutable release tag such as `v2.0.0`
 - move the floating `v1` tag
 - create or update the corresponding release in the action repository
 
@@ -460,7 +488,7 @@ The [HOL Registry Broker Codex Plugin](https://github.com/hashgraph-online/regis
 HOL Registry scores: **Trust 80** / **Review 83** / **Enforce 74**
 
 ```text
-🔗 Codex Plugin Scanner v1.4.0
+🔗 Plugin Scanner v2.0.0
 Scanning: ./registry-broker-codex-plugin
 
 ── Manifest Validation (31/31) ──
