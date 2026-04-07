@@ -633,8 +633,8 @@ def publish_pr_comment(
         return PRCommentOutcome(status="updated", url=updated.url, comment_id=updated.comment_id)
     except HTTPError as error:
         reason = f"GitHub API {error.code} while writing PR comment"
-    except OSError as error:
-        reason = f"network error while writing PR comment: {error}"
+    except (OSError, ValueError) as error:
+        reason = f"network error or invalid response while writing PR comment: {error}"
     except RuntimeError as error:
         reason = str(error)
     if config.mode == "always":

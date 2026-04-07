@@ -153,3 +153,31 @@ def test_publish_pr_comment_creates_new_comment(monkeypatch) -> None:
     assert "Compared with the previous scan on this PR" in create_calls[0][1]
     assert "| Score gate | `min_score=80 ✅` |" in create_calls[0][1]
     assert "| Severity gate | `fail_on_severity=high ✅` |" in create_calls[0][1]
+
+
+def test_publish_pr_comment_handles_invalid_api_response_in_auto_mode(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.pr_comments._list_issue_comments",
+        lambda **_: (_ for _ in ()).throw(ValueError("bad json")),
+    )
+
+    outcome = publish_pr_comment(
+        config=PRCommentConfig(
+            mode="auto",
+            style="concise",
+            header="",
+            max_findings=3,
+            token="token",
+            skip_if_unchanged=True,
+            compare_to_previous=True,
+        ),
+        snapshot=_build_snapshot(),
+        event_name="pull_request",
+        event_path="",
+        ref="refs/pull/123/merge",
+        repository="hashgraph-online/codex-plugin-scanner",
+        head_sha="abc123",
+    )
+
+    assert outcome.status == "skipped"
+    assert "invalid response" in outcome.reason
