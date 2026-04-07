@@ -63,6 +63,9 @@ target-version = "py310"
 line-length = 120
 extend-exclude = ["tests/test-trust-scoring.py", "tests/test-trust-specs.py"]
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/codex_plugin_scanner"]
+
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "RUF"]
 
