@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
+
+ContributionMode = Literal["conditional", "universal", "scoped"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +25,10 @@ class TrustAdapterScore:
     adapter_id: str
     label: str
     weight: float
+    contribution_mode: ContributionMode
+    applicable: bool
+    emitted: bool
+    included_in_denominator: bool
     score: float
     components: tuple[TrustComponentScore, ...]
 
@@ -36,6 +43,8 @@ class TrustDomainScore:
     spec_version: str
     spec_path: str
     derived_from: tuple[str, ...]
+    profile_id: str
+    profile_version: str
     score: float
     adapters: tuple[TrustAdapterScore, ...]
 
@@ -45,6 +54,8 @@ class TrustReport:
     """Overall trust report emitted alongside scan results."""
 
     total: float
+    include_external: bool
+    computed_at: str
     domains: tuple[TrustDomainScore, ...] = ()
 
 
@@ -56,6 +67,7 @@ class TrustAdapterSpec:
     label: str
     weight: float
     component_keys: tuple[str, ...]
+    contribution_mode: ContributionMode = "conditional"
     default_component_key: str = "score"
 
 
@@ -68,4 +80,6 @@ class TrustSpecDefinition:
     label: str
     spec_path: str
     derived_from: tuple[str, ...]
+    profile_id: str
+    profile_version: str
     adapters: tuple[TrustAdapterSpec, ...] = field(default_factory=tuple)

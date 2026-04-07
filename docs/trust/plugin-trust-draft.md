@@ -2,53 +2,55 @@
 
 ## Scope
 
-This local draft defines trust attribution for top-level Codex plugins.
+This local draft defines trust attribution for top-level Codex plugins using the same HCS-style structure as HCS-28: single-score adapters, explicit weights, explicit contribution modes, and deterministic denominator rules.
 
-## Why this exists
+## Subject model
 
-The scanner’s quality grade remains useful for gating, but it is not a trust specification. This draft explains how the scanner computes a separate plugin trust score with explicit weights and named evidence so contributors can see exactly how signals such as `SECURITY.md` affect the outcome.
+The scored subject is one top-level Codex plugin rooted at a plugin directory.
 
-## Adapters
+## Scoring profile
 
-### `verification` weight `1.0`
+- Profile id: `hol-codex-plugin-trust/baseline`
+- Profile version: `0.1`
+- Execution modes:
+  - read mode: `includeExternal=false`
+  - refresh mode: reserved for future external provenance checks
 
-Internal component weights:
+## Adapter contract
 
-- `manifestIntegrity`: `35`
-- `interfaceIntegrity`: `25`
-- `pathSafety`: `20`
-- `marketplaceAlignment`: `20`
+Each adapter emits exactly one score key named `<adapterId>.score`.
 
-### `security` weight `1.0`
+## Baseline adapter catalog
 
-Internal component weights:
+| Adapter ID | Weight | Contribution Mode |
+| --- | --- | --- |
+| `verification.manifest-integrity` | `0.35` | `universal` |
+| `verification.interface-integrity` | `0.25` | `conditional` |
+| `verification.path-safety` | `0.20` | `universal` |
+| `verification.marketplace-alignment` | `0.20` | `conditional` |
+| `security.disclosure` | `0.15` | `universal` |
+| `security.license` | `0.10` | `universal` |
+| `security.secret-hygiene` | `0.35` | `universal` |
+| `security.mcp-safety` | `0.20` | `conditional` |
+| `security.approval-hygiene` | `0.20` | `universal` |
+| `metadata.documentation` | `0.15` | `universal` |
+| `metadata.manifest-metadata` | `0.2625` | `universal` |
+| `metadata.discoverability` | `0.15` | `universal` |
+| `metadata.provenance` | `0.1875` | `universal` |
+| `operations.action-pinning` | `0.2625` | `universal` |
+| `operations.permission-scope` | `0.15` | `universal` |
+| `operations.untrusted-checkout` | `0.1875` | `universal` |
+| `operations.update-automation` | `0.15` | `universal` |
 
-- `disclosure`: `15`
-- `license`: `10`
-- `secretHygiene`: `35`
-- `mcpSafety`: `20`
-- `approvalHygiene`: `20`
+## Interpretation
 
-`SECURITY.md` is deliberately only one small part of the security adapter. It is not intended to dominate trust on its own.
+`SECURITY.md` now has one explicit weight: `security.disclosure = 0.15`. It no longer sits inside an opaque grouped adapter. Contributors can see its contribution directly relative to stronger signals such as `security.secret-hygiene = 0.35`, `verification.manifest-integrity = 0.35`, and `operations.action-pinning = 0.2625`.
 
-### `metadata` weight `0.75`
+## Aggregation
 
-Internal component weights:
+The scanner uses the same aggregation pattern as HCS-28:
 
-- `documentation`: `20`
-- `manifestMetadata`: `35`
-- `discoverability`: `20`
-- `provenance`: `25`
-
-### `operations` weight `0.75`
-
-Internal component weights:
-
-- `actionPinning`: `35`
-- `permissionScope`: `20`
-- `untrustedCheckout`: `25`
-- `updateAutomation`: `20`
-
-## Normalization
-
-The scanner emits a weighted adapter `score` plus component-level evidence, then normalizes the adapter total as the average of declared components. The final plugin trust score is the weighted average of adapter totals.
+1. clamp emitted scores to `[0,100]`
+2. materialize missing universal adapter scores as `0`
+3. include conditional adapters only when their subject actually exposes the corresponding surface
+4. compute the final plugin trust score as the weighted mean of the included adapter totals
