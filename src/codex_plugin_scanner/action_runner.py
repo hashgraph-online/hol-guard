@@ -145,7 +145,7 @@ def _build_step_summary_lines(
     local_plugin_count: int | None = None,
     skipped_target_count: int | None = None,
 ) -> tuple[str, ...]:
-    lines = ["## HOL Codex Plugin Scanner", "", f"- Mode: {mode}"]
+    lines = ["## HOL AI Plugin Scanner", "", f"- Mode: {mode}"]
     lines.append(f"- Scope: {scope}")
     if local_plugin_count is not None:
         lines.append(f"- Local plugins scanned: {local_plugin_count}")
@@ -260,7 +260,7 @@ def main() -> int:
                     print("upload_sarif requires format=sarif.", file=sys.stderr)
                     return 1
                 if not output_path:
-                    output_path = "codex-plugin-scanner.sarif"
+                    output_path = "ai-plugin-scanner.sarif"
             rendered = _render_scan_output(
                 result,
                 output_format=output_format,

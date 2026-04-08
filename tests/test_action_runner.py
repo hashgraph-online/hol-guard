@@ -100,7 +100,7 @@ def test_action_runner_writes_step_summary_and_registry_payload(monkeypatch, tmp
     assert '"sourceRepository": "hashgraph-online/example-good-plugin"' in payload_text
 
     summary_text = summary_path.read_text(encoding="utf-8")
-    assert "## HOL Codex Plugin Scanner" in summary_text
+    assert "## HOL AI Plugin Scanner" in summary_text
     assert "- Score: 100/100" in summary_text
     assert "- Grade: A - Excellent" in summary_text
     assert f"- Registry payload: `{registry_payload_path}`" in summary_text

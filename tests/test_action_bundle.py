@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def test_action_metadata_includes_marketplace_branding_and_fallback_install() -> None:
     action_text = (ROOT / "action" / "action.yml").read_text(encoding="utf-8")
 
-    assert 'name: "HOL Codex Plugin Scanner"' in action_text
+    assert 'name: "HOL AI Plugin Scanner"' in action_text
     assert "branding:" in action_text
     assert 'icon: "check-circle"' in action_text
     assert 'color: "blue"' in action_text
@@ -25,7 +25,7 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert 'elif [ "$INSTALL_SOURCE" = "pypi" ]; then' in action_text
     assert (
         'python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" '
-        '"codex-plugin-scanner==${SCANNER_VERSION}"'
+        '"plugin-scanner==${SCANNER_VERSION}"'
     ) in action_text
     assert "python3 -m pypi_attestations verify pypi \\" in action_text
     assert 'python3 -m pip install "$DIST_DIR/$DIST_BASENAME"' in action_text
@@ -33,7 +33,7 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "scanner-version.txt" in action_text
     assert "cisco-version.txt" in action_text
     assert "pypi-attestations-version.txt" in action_text
-    assert 'SCANNER_REPOSITORY="https://github.com/hashgraph-online/codex-plugin-scanner"' in action_text
+    assert 'SCANNER_REPOSITORY="https://github.com/hashgraph-online/ai-plugin-scanner"' in action_text
     assert "write_step_summary:" in action_text
     assert "profile:" in action_text
     assert "config:" in action_text
@@ -51,6 +51,9 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "report_path:" in action_text
     assert "registry_payload_path:" in action_text
     assert "submission_issue_urls:" in action_text
+    assert "pr_comment:" in action_text
+    assert "pr_comment_style:" in action_text
+    assert "pr_comment_max_findings:" in action_text
     assert "python3 -m codex_plugin_scanner.action_runner" in action_text
     assert "MODE: ${{ inputs.mode }}" in action_text
     assert "PROFILE: ${{ inputs.profile }}" in action_text
@@ -70,6 +73,10 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "value: ${{ steps.scan.outputs.submission_performed }}" in action_text
     assert "value: ${{ steps.scan.outputs.submission_issue_urls }}" in action_text
     assert "value: ${{ steps.scan.outputs.submission_issue_numbers }}" in action_text
+    assert "value: ${{ steps.normalized_outputs.outputs.action_exit_code }}" in action_text
+    assert "value: ${{ steps.normalized_outputs.outputs.pr_comment_status }}" in action_text
+    assert "value: ${{ steps.normalized_outputs.outputs.pr_comment_id }}" in action_text
+    assert "value: ${{ steps.normalized_outputs.outputs.pr_comment_url }}" in action_text
     assert "GITHUB_STEP_SUMMARY" in action_text
     assert "github/codeql-action/upload-sarif@" in action_text
 
@@ -78,7 +85,7 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     workflow_text = (ROOT / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8")
 
     assert "Build GitHub Action bundle" in workflow_text
-    assert "hol-codex-plugin-scanner-action-v${VERSION}.zip" in workflow_text
+    assert "hol-ai-plugin-scanner-action-v${VERSION}.zip" in workflow_text
     assert "Attest GitHub release assets" in workflow_text
     assert "actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32" in workflow_text
     assert "attestations: write" in workflow_text
@@ -134,36 +141,42 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
 
     assert "Publish GitHub Action Repository" in workflow_text
     assert "ACTION_REPO_TOKEN" in workflow_text
+    assert "hashgraph-online/hol-ai-plugin-scanner-action" in workflow_text
     assert "hashgraph-online/hol-codex-plugin-scanner-action" in workflow_text
     assert "Validate publication credentials" in workflow_text
     assert "Compute scanner package version" in workflow_text
     assert "paths:" not in workflow_text
     assert "if: secrets.ACTION_REPO_TOKEN != ''" not in workflow_text
+    assert "ACTION_CANONICAL_REPOSITORY" in workflow_text
+    assert "ACTION_COMPAT_REPOSITORY" in workflow_text
     assert (
-        "git status --short -- action.yml README.md scanner-version.txt "
+        'git -C "$repo_dir" status --short -- action.yml README.md scanner-version.txt '
         "cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md"
     ) in workflow_text
     assert "SOURCE_REF" in workflow_text
-    assert 'gh repo clone "$ACTION_REPOSITORY" action-repo -- --depth 1' in workflow_text
     assert "fetch-depth: 0" in workflow_text
+    assert 'gh repo create "$target_repo" --public --description "$repo_description" --clone' in workflow_text
+    assert 'gh repo edit "$target_repo" --description "$repo_description"' in workflow_text
+    assert 'gh repo clone "$target_repo" "$repo_dir" -- --depth 1' in workflow_text
     assert (
-        'git remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/$ACTION_REPOSITORY.git"'
+        'git -C "$repo_dir" remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/${target_repo}.git"'
     ) in workflow_text
-    assert 'cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml' in workflow_text
-    assert """printf '%s\\n' "${{ steps.scanner_version.outputs.version }}" > scanner-version.txt""" in workflow_text
-    assert 'cp "${GITHUB_WORKSPACE}/action/cisco-version.txt" cisco-version.txt' in workflow_text
+    assert 'cp "${GITHUB_WORKSPACE}/action/action.yml" "${repo_dir}/action.yml"' in workflow_text
+    assert """printf '%s\\n' "$SCANNER_VERSION" > "${repo_dir}/scanner-version.txt" """[:-1] in workflow_text
+    assert 'cp "${GITHUB_WORKSPACE}/action/cisco-version.txt" "${repo_dir}/cisco-version.txt"' in workflow_text
     assert (
-        'cp "${GITHUB_WORKSPACE}/action/pypi-attestations-version.txt" pypi-attestations-version.txt'
+        'cp "${GITHUB_WORKSPACE}/action/pypi-attestations-version.txt" '
+        '"${repo_dir}/pypi-attestations-version.txt"'
     ) in workflow_text
-    assert "git push origin HEAD:main" in workflow_text
-    assert 'gh release view "${TAG}" --repo "$ACTION_REPOSITORY"' in workflow_text
-    assert 'git ls-remote --tags origin "refs/tags/${TAG}"' in workflow_text
-    assert "git push origin refs/tags/v1 --force" in workflow_text
-    assert "steps.release_state.outputs.release_exists == 'false'" in workflow_text
-    assert "steps.release_state.outputs.tag_exists == 'true'" in workflow_text
+    assert 'git -C "$repo_dir" push origin HEAD:main' in workflow_text
+    assert 'gh release view "${TAG}" --repo "$target_repo"' in workflow_text
+    assert 'git -C "$repo_dir" ls-remote --tags origin "refs/tags/${TAG}"' in workflow_text
+    assert 'git -C "$repo_dir" push origin refs/tags/v1 --force' in workflow_text
     assert 'gh release create "${TAG}"' in workflow_text
     assert "--generate-notes" in workflow_text
     assert "Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/tree/${SOURCE_REF}" in workflow_text
+    assert '"${GITHUB_WORKSPACE}/action/README.md"' in workflow_text
+    assert '"${GITHUB_WORKSPACE}/action/README.legacy.md"' in workflow_text
 
 
 def test_action_bundle_docs_live_in_action_readme() -> None:
@@ -188,10 +201,20 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "submission issue" in action_readme
     assert "awesome-codex-plugins" in action_readme
     assert "publish-action-repo.yml" in action_readme
+    assert "hashgraph-online/hol-ai-plugin-scanner-action@v1" in action_readme
     assert "hashgraph-online/hol-codex-plugin-scanner-action@v1" in action_readme
     assert "actions/checkout@v4" in action_readme
     assert "actions/github-script@v7" in action_readme
     assert "opt-in Cisco skill-scanner dependency used by this repo" in action_readme
+
+
+def test_legacy_action_readme_marks_compatibility_alias() -> None:
+    legacy_readme = (ROOT / "action" / "README.legacy.md").read_text(encoding="utf-8")
+
+    assert "compatibility alias" in legacy_readme
+    assert "hashgraph-online/hol-codex-plugin-scanner-action@v1" in legacy_readme
+    assert "hashgraph-online/hol-ai-plugin-scanner-action@v1" in legacy_readme
+    assert "same reviewed root bundle" in legacy_readme
 
 
 def test_readme_uses_stable_apache_license_badge() -> None:
@@ -205,6 +228,7 @@ def test_readme_uses_stable_apache_license_badge() -> None:
     assert "https://pypi.org/project/plugin-scanner/" in readme
     assert "https://pypi.org/project/codex-plugin-scanner/" in readme
     assert "Container Image" in readme
+    assert "hashgraph-online/hol-ai-plugin-scanner-action@v1" in readme
 
 
 def test_container_files_exist_for_enterprise_distribution() -> None:

@@ -129,7 +129,7 @@ def format_json(
 
 def _add_common_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--profile", choices=("default", "public-marketplace", "strict-security"))
-    parser.add_argument("--config", help="Path to .codex-plugin-scanner.toml")
+    parser.add_argument("--config", help="Path to a scanner config file such as .plugin-scanner.toml")
     parser.add_argument("--baseline", help="Path to baseline suppression file")
     parser.add_argument("--strict", action="store_true", help="Fail if any finding is present")
     parser.add_argument("--diff-base", help="Reserved for future diff-aware gating")
