@@ -45,7 +45,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
         run: |
-          latest_repo_tag() {
+          latest_release_tag() {
             target_repo="$1"
             if ! gh repo view "$target_repo" >/dev/null 2>&1; then
               return
@@ -53,8 +53,23 @@ jobs:
             gh release list --repo "$target_repo" --limit 1 --json tagName --jq '.[0].tagName // ""'
           }
 
+          latest_remote_tag() {
+            target_repo="$1"
+            if ! gh repo view "$target_repo" >/dev/null 2>&1; then
+              return
+            fi
+            git ls-remote --tags "https://x-access-token:${GH_TOKEN}@github.com/${target_repo}.git" "refs/tags/v*" \
+              | awk -F'/' '{print $3}' \
+              | sort -V \
+              | tail -n1
+          }
+
           LAST_TAG=""
-          for candidate in "$(latest_repo_tag "$ACTION_CANONICAL_REPOSITORY")" "$(latest_repo_tag "$ACTION_COMPAT_REPOSITORY")"; do
+          for candidate in \
+            "$(latest_release_tag "$ACTION_CANONICAL_REPOSITORY")" \
+            "$(latest_release_tag "$ACTION_COMPAT_REPOSITORY")" \
+            "$(latest_remote_tag "$ACTION_CANONICAL_REPOSITORY")" \
+            "$(latest_remote_tag "$ACTION_COMPAT_REPOSITORY")"; do
             if [ -z "$candidate" ]; then
               continue
             fi
@@ -146,10 +161,12 @@ jobs:
             fi
 
             git -C "$repo_dir" tag -fa v1 -m "Update floating major tag to ${TAG}"
-            if ! git -C "$repo_dir" ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
-              git -C "$repo_dir" tag "${TAG}"
-              git -C "$repo_dir" push origin "refs/tags/${TAG}"
+            if git -C "$repo_dir" ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
+              echo "Refusing to publish action bundle with colliding existing tag ${TAG} in ${target_repo}." >&2
+              exit 1
             fi
+            git -C "$repo_dir" tag "${TAG}"
+            git -C "$repo_dir" push origin "refs/tags/${TAG}"
             git -C "$repo_dir" push origin refs/tags/v1 --force
 
             if ! gh release view "${TAG}" --repo "$target_repo" >/dev/null 2>&1; then

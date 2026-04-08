@@ -150,11 +150,20 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "if: secrets.ACTION_REPO_TOKEN != ''" not in workflow_text
     assert "ACTION_CANONICAL_REPOSITORY" in workflow_text
     assert "ACTION_COMPAT_REPOSITORY" in workflow_text
-    assert 'latest_repo_tag() {' in workflow_text
+    assert 'latest_release_tag() {' in workflow_text
+    assert 'latest_remote_tag() {' in workflow_text
     assert (
-        'for candidate in "$(latest_repo_tag "$ACTION_CANONICAL_REPOSITORY")" '
-        '"$(latest_repo_tag "$ACTION_COMPAT_REPOSITORY")"; do'
+        'git ls-remote --tags "https://x-access-token:${GH_TOKEN}@github.com/${target_repo}.git" '
+        '"refs/tags/v*"'
     ) in workflow_text
+    assert 'awk -F' in workflow_text
+    assert (
+        'for candidate in '
+    ) in workflow_text
+    assert '"$(latest_release_tag "$ACTION_CANONICAL_REPOSITORY")" \\' in workflow_text
+    assert '"$(latest_release_tag "$ACTION_COMPAT_REPOSITORY")" \\' in workflow_text
+    assert '"$(latest_remote_tag "$ACTION_CANONICAL_REPOSITORY")" \\' in workflow_text
+    assert '"$(latest_remote_tag "$ACTION_COMPAT_REPOSITORY")"; do' in workflow_text
     assert """printf '%s\\n%s\\n' "$LAST_TAG" "$candidate" | sort -V | tail -n1""" in workflow_text
     assert (
         'git -C "$repo_dir" status --short -- action.yml README.md scanner-version.txt '
@@ -181,6 +190,7 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert 'if [ "$repo_changed" != "true" ]; then' in workflow_text
     assert 'gh release view "${TAG}" --repo "$target_repo"' in workflow_text
     assert 'git -C "$repo_dir" ls-remote --tags origin "refs/tags/${TAG}"' in workflow_text
+    assert 'Refusing to publish action bundle with colliding existing tag ${TAG} in ${target_repo}.' in workflow_text
     assert 'git -C "$repo_dir" push origin refs/tags/v1 --force' in workflow_text
     assert 'gh release create "${TAG}"' in workflow_text
     assert "--generate-notes" in workflow_text
