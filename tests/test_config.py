@@ -74,6 +74,16 @@ def test_load_scanner_config_explicit_missing_file_raises(tmp_path: Path):
         assert True
 
 
+def test_load_scanner_config_resolves_relative_explicit_path_from_plugin_dir(tmp_path: Path):
+    plugin_dir = tmp_path / "plugins" / "example"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / ".plugin-scanner.toml").write_text("[scanner]\nprofile = 'strict-security'\n", encoding="utf-8")
+
+    config = load_scanner_config(plugin_dir, config_path=".plugin-scanner.toml")
+
+    assert config.profile == "strict-security"
+
+
 def test_load_baseline_bad_json(tmp_path: Path):
     (tmp_path / "baseline.json").write_text("[not-valid-json", encoding="utf-8")
     try:

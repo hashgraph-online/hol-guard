@@ -31,6 +31,8 @@ class ConfigError(ValueError):
 def load_scanner_config(plugin_dir: Path, config_path: str | None = None) -> ScannerConfig:
     if config_path:
         candidate = Path(config_path)
+        if not candidate.is_absolute():
+            candidate = plugin_dir / candidate
         if not candidate.exists():
             raise ConfigError(f"Config file '{candidate}' does not exist.")
     else:

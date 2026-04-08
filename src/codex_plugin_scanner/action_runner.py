@@ -319,6 +319,8 @@ def main() -> int:
         else:
             print(rendered)
 
+        output_values["report_path"] = report_path_value
+
         severity_failed = should_fail_for_severity(result, fail_on)
         output_values.update(
             {
@@ -356,6 +358,7 @@ def main() -> int:
                 registry_path = Path(registry_payload_output)
                 registry_path.write_text(json.dumps(registry_payload, indent=2), encoding="utf-8")
                 registry_payload_path_value = str(registry_path)
+                output_values["registry_payload_path"] = registry_payload_path_value
 
             verify_for_submission = verification.verify_pass if verification is not None else True
             submission_eligible = (
@@ -439,6 +442,7 @@ def main() -> int:
             print(rendered)
         return_code = 1 if not verification.verify_pass else 0
         output_values["verify_pass"] = "true" if verification.verify_pass else "false"
+        output_values["report_path"] = report_path_value
     else:
         print(f"Unsupported mode: {mode}", file=sys.stderr)
         return finish(1)
