@@ -98,6 +98,7 @@ jobs:
             readme_source="$2"
             repo_description="$3"
             repo_dir="$GITHUB_WORKSPACE/action-repos/${target_repo##*/}"
+            repo_changed="false"
 
             if gh repo view "$target_repo" >/dev/null 2>&1; then
               gh repo edit "$target_repo" --description "$repo_description"
@@ -119,6 +120,7 @@ jobs:
             cp "${GITHUB_WORKSPACE}/CONTRIBUTING.md" "${repo_dir}/CONTRIBUTING.md"
 
             if [ -n "$(git -C "$repo_dir" status --short -- action.yml README.md scanner-version.txt cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md)" ]; then
+              repo_changed="true"
               git -C "$repo_dir" config user.name "github-actions[bot]"
               git -C "$repo_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
               git -C "$repo_dir" add action.yml README.md scanner-version.txt cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md
@@ -126,12 +128,15 @@ jobs:
               git -C "$repo_dir" push origin HEAD:main
             fi
 
+            if [ "$repo_changed" != "true" ]; then
+              return
+            fi
+
+            git -C "$repo_dir" tag -fa v1 -m "Update floating major tag to ${TAG}"
             if ! git -C "$repo_dir" ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
               git -C "$repo_dir" tag "${TAG}"
               git -C "$repo_dir" push origin "refs/tags/${TAG}"
             fi
-
-            git -C "$repo_dir" tag -fa v1 -m "Update floating major tag to ${TAG}"
             git -C "$repo_dir" push origin refs/tags/v1 --force
 
             if ! gh release view "${TAG}" --repo "$target_repo" >/dev/null 2>&1; then

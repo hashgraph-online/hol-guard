@@ -170,6 +170,9 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
         '"${repo_dir}/pypi-attestations-version.txt"'
     ) in workflow_text
     assert 'git -C "$repo_dir" push origin HEAD:main' in workflow_text
+    assert 'repo_changed="false"' in workflow_text
+    assert 'repo_changed="true"' in workflow_text
+    assert 'if [ "$repo_changed" != "true" ]; then' in workflow_text
     assert 'gh release view "${TAG}" --repo "$target_repo"' in workflow_text
     assert 'git -C "$repo_dir" ls-remote --tags origin "refs/tags/${TAG}"' in workflow_text
     assert 'git -C "$repo_dir" push origin refs/tags/v1 --force' in workflow_text
