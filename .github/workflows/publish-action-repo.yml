@@ -58,7 +58,7 @@ jobs:
             if ! gh repo view "$target_repo" >/dev/null 2>&1; then
               return
             fi
-            git ls-remote --tags "https://x-access-token:${GH_TOKEN}@github.com/${target_repo}.git" "refs/tags/v*" \
+            git ls-remote --tags --refs "https://x-access-token:${GH_TOKEN}@github.com/${target_repo}.git" "refs/tags/v*" \
               | awk -F'/' '{print $3}' \
               | sort -V \
               | tail -n1

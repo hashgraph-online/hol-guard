@@ -153,7 +153,7 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert 'latest_release_tag() {' in workflow_text
     assert 'latest_remote_tag() {' in workflow_text
     assert (
-        'git ls-remote --tags "https://x-access-token:${GH_TOKEN}@github.com/${target_repo}.git" '
+        'git ls-remote --tags --refs "https://x-access-token:${GH_TOKEN}@github.com/${target_repo}.git" '
         '"refs/tags/v*"'
     ) in workflow_text
     assert 'awk -F' in workflow_text
