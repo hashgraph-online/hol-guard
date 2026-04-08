@@ -121,6 +121,30 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
           SCANNER_VERSION: ${{ steps.scanner_version.outputs.version }}
         run: |
+          any_repo_changed="false"
+
+          publish_action_release() {
+            target_repo="$1"
+            repo_dir="$2"
+
+            git -C "$repo_dir" tag -fa v1 -m "Update floating major tag to ${TAG}"
+            if git -C "$repo_dir" ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
+              echo "Refusing to publish action bundle with colliding existing tag ${TAG} in ${target_repo}." >&2
+              exit 1
+            fi
+            git -C "$repo_dir" tag "${TAG}"
+            git -C "$repo_dir" push origin "refs/tags/${TAG}"
+            git -C "$repo_dir" push origin refs/tags/v1 --force
+
+            if ! gh release view "${TAG}" --repo "$target_repo" >/dev/null 2>&1; then
+              gh release create "${TAG}" \
+                --repo "$target_repo" \
+                --title "${TAG}" \
+                --generate-notes \
+                --notes "Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/tree/${SOURCE_REF}"
+            fi
+          }
+
           sync_action_repo() {
             target_repo="$1"
             readme_source="$2"
@@ -154,31 +178,14 @@ jobs:
               git -C "$repo_dir" add action.yml README.md scanner-version.txt cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md
               git -C "$repo_dir" commit -m "chore: publish action bundle ${TAG}"
               git -C "$repo_dir" push origin HEAD:main
+              any_repo_changed="true"
             fi
 
-            if [ "$repo_changed" != "true" ]; then
-              return
-            fi
-
-            git -C "$repo_dir" tag -fa v1 -m "Update floating major tag to ${TAG}"
-            if git -C "$repo_dir" ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
-              echo "Refusing to publish action bundle with colliding existing tag ${TAG} in ${target_repo}." >&2
-              exit 1
-            fi
-            git -C "$repo_dir" tag "${TAG}"
-            git -C "$repo_dir" push origin "refs/tags/${TAG}"
-            git -C "$repo_dir" push origin refs/tags/v1 --force
-
-            if ! gh release view "${TAG}" --repo "$target_repo" >/dev/null 2>&1; then
-              gh release create "${TAG}" \
-                --repo "$target_repo" \
-                --title "${TAG}" \
-                --generate-notes \
-                --notes "Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/tree/${SOURCE_REF}"
-            fi
+            printf '%s\t%s\n' "$target_repo" "$repo_dir" >> "$GITHUB_WORKSPACE/action-repos/publish-targets.tsv"
           }
 
           mkdir -p "$GITHUB_WORKSPACE/action-repos"
+          : > "$GITHUB_WORKSPACE/action-repos/publish-targets.tsv"
 
           sync_action_repo \
             "$ACTION_CANONICAL_REPOSITORY" \
@@ -189,3 +196,11 @@ jobs:
             "$ACTION_COMPAT_REPOSITORY" \
             "${GITHUB_WORKSPACE}/action/README.legacy.md" \
             "Compatibility alias for HOL AI Plugin Scanner GitHub Action"
+
+          if [ "$any_repo_changed" != "true" ]; then
+            exit 0
+          fi
+
+          while IFS=$'\t' read -r target_repo repo_dir; do
+            publish_action_release "$target_repo" "$repo_dir"
+          done < "$GITHUB_WORKSPACE/action-repos/publish-targets.tsv"
