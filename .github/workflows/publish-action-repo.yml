@@ -20,7 +20,7 @@ jobs:
     permissions:
       contents: read
     env:
-      ACTION_CANONICAL_REPOSITORY: ${{ vars.ACTION_CANONICAL_REPOSITORY != '' && vars.ACTION_CANONICAL_REPOSITORY || 'hashgraph-online/hol-ai-plugin-scanner-action' }}
+      ACTION_CANONICAL_REPOSITORY: ${{ vars.ACTION_CANONICAL_REPOSITORY != '' && vars.ACTION_CANONICAL_REPOSITORY || 'hashgraph-online/ai-plugin-scanner-action' }}
       ACTION_COMPAT_REPOSITORY: ${{ vars.ACTION_COMPAT_REPOSITORY != '' && vars.ACTION_COMPAT_REPOSITORY || 'hashgraph-online/hol-codex-plugin-scanner-action' }}
       SOURCE_REF: ${{ github.sha }}
       SOURCE_REPOSITORY: ${{ github.repository }}

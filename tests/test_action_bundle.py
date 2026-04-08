@@ -86,7 +86,7 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     workflow_text = (ROOT / ".github" / "workflows" / "publish.yml").read_text(encoding="utf-8")
 
     assert "Build GitHub Action bundle" in workflow_text
-    assert "hol-ai-plugin-scanner-action-v${VERSION}.zip" in workflow_text
+    assert "ai-plugin-scanner-action-v${VERSION}.zip" in workflow_text
     assert "Attest GitHub release assets" in workflow_text
     assert "actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32" in workflow_text
     assert "attestations: write" in workflow_text
@@ -142,7 +142,7 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
 
     assert "Publish GitHub Action Repository" in workflow_text
     assert "ACTION_REPO_TOKEN" in workflow_text
-    assert "hashgraph-online/hol-ai-plugin-scanner-action" in workflow_text
+    assert "hashgraph-online/ai-plugin-scanner-action" in workflow_text
     assert "hashgraph-online/hol-codex-plugin-scanner-action" in workflow_text
     assert "Validate publication credentials" in workflow_text
     assert "Compute scanner package version" in workflow_text
@@ -202,7 +202,7 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "submission issue" in action_readme
     assert "awesome-codex-plugins" in action_readme
     assert "publish-action-repo.yml" in action_readme
-    assert "hashgraph-online/hol-ai-plugin-scanner-action@v1" in action_readme
+    assert "hashgraph-online/ai-plugin-scanner-action@v1" in action_readme
     assert "hashgraph-online/hol-codex-plugin-scanner-action@v1" in action_readme
     assert "actions/checkout@v4" in action_readme
     assert "actions/github-script@v7" in action_readme
@@ -214,7 +214,7 @@ def test_legacy_action_readme_marks_compatibility_alias() -> None:
 
     assert "compatibility alias" in legacy_readme
     assert "hashgraph-online/hol-codex-plugin-scanner-action@v1" in legacy_readme
-    assert "hashgraph-online/hol-ai-plugin-scanner-action@v1" in legacy_readme
+    assert "hashgraph-online/ai-plugin-scanner-action@v1" in legacy_readme
     assert "same reviewed root bundle" in legacy_readme
 
 
@@ -229,7 +229,7 @@ def test_readme_uses_stable_apache_license_badge() -> None:
     assert "https://pypi.org/project/plugin-scanner/" in readme
     assert "https://pypi.org/project/codex-plugin-scanner/" in readme
     assert "Container Image" in readme
-    assert "hashgraph-online/hol-ai-plugin-scanner-action@v1" in readme
+    assert "hashgraph-online/ai-plugin-scanner-action@v1" in readme
 
 
 def test_container_files_exist_for_enterprise_distribution() -> None:

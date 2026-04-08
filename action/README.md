@@ -1,17 +1,17 @@
 # HOL AI Plugin Scanner GitHub Action
 
-[![Latest Release](https://img.shields.io/github/v/release/hashgraph-online/hol-ai-plugin-scanner-action?display_name=tag)](https://github.com/hashgraph-online/hol-ai-plugin-scanner-action/releases/latest)
-[![Marketplace Repository](https://img.shields.io/badge/github-marketplace_repo-0A84FF)](https://github.com/hashgraph-online/hol-ai-plugin-scanner-action)
+[![Latest Release](https://img.shields.io/github/v/release/hashgraph-online/ai-plugin-scanner-action?display_name=tag)](https://github.com/hashgraph-online/ai-plugin-scanner-action/releases/latest)
+[![Marketplace Repository](https://img.shields.io/badge/github-marketplace_repo-0A84FF)](https://github.com/hashgraph-online/ai-plugin-scanner-action)
 [![Compatibility Alias](https://img.shields.io/badge/compat-hol--codex--plugin--scanner--action-6b7280)](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action)
 [![Source of Truth](https://img.shields.io/badge/source-ai--plugin--scanner-111827)](https://github.com/hashgraph-online/ai-plugin-scanner/tree/main/action)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/hashgraph-online/ai-plugin-scanner/blob/main/LICENSE)
 
-| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | Marketplace-ready GitHub Action for scanning AI plugin repositories across Codex, Claude, Gemini, and OpenCode ecosystems for security, publishability, runtime readiness, and trust signals. The action emits structured reports, SARIF, policy results, and submission metadata while staying aligned to the main scanner release train.<br><br>[Latest Release](https://github.com/hashgraph-online/hol-ai-plugin-scanner-action/releases/latest)<br>[Marketplace Repository](https://github.com/hashgraph-online/hol-ai-plugin-scanner-action)<br>[Compatibility Alias](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action)<br>[Scanner Source of Truth](https://github.com/hashgraph-online/ai-plugin-scanner/tree/main/action)<br>[Report an Issue](https://github.com/hashgraph-online/ai-plugin-scanner/issues) |
+| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | Marketplace-ready GitHub Action for scanning AI plugin repositories across Codex, Claude, Gemini, and OpenCode ecosystems for security, publishability, runtime readiness, and trust signals. The action emits structured reports, SARIF, policy results, and submission metadata while staying aligned to the main scanner release train.<br><br>[Latest Release](https://github.com/hashgraph-online/ai-plugin-scanner-action/releases/latest)<br>[Marketplace Repository](https://github.com/hashgraph-online/ai-plugin-scanner-action)<br>[Compatibility Alias](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action)<br>[Scanner Source of Truth](https://github.com/hashgraph-online/ai-plugin-scanner/tree/main/action)<br>[Report an Issue](https://github.com/hashgraph-online/ai-plugin-scanner/issues) |
 | :--- | :--- |
 
 This repository is the canonical Marketplace-facing wrapper for the scanner action. The main scanner repo remains the source of truth, while this published action bundle keeps the required root `action.yml` layout for GitHub Marketplace.
 
-The legacy action slug `hashgraph-online/hol-codex-plugin-scanner-action@v1` remains supported as a compatibility alias for existing workflows. New integrations should use `hashgraph-online/hol-ai-plugin-scanner-action@v1`.
+The legacy action slug `hashgraph-online/hol-codex-plugin-scanner-action@v1` remains supported as a compatibility alias for existing workflows. New integrations should use `hashgraph-online/ai-plugin-scanner-action@v1`.
 
 The default Marketplace install path uses an exact `plugin-scanner` PyPI release, verifies its PyPI provenance against `hashgraph-online/ai-plugin-scanner`, and only then installs it. After installation, the default `scan`, `lint`, and offline `verify` paths operate on local repository content only. Live network probing and submission automation remain explicit opt-in features.
 
@@ -24,7 +24,7 @@ Advanced distribution paths are available when you need them:
 
 ```yaml
 - name: Scan AI Plugin Repository
-  uses: hashgraph-online/hol-ai-plugin-scanner-action@v1
+  uses: hashgraph-online/ai-plugin-scanner-action@v1
   with:
     plugin_dir: "./my-plugin"
     min_score: 70
@@ -104,7 +104,7 @@ Mode notes:
 ### Basic scan with minimum score gate
 
 ```yaml
-- uses: hashgraph-online/hol-ai-plugin-scanner-action@v1
+- uses: hashgraph-online/ai-plugin-scanner-action@v1
   with:
     plugin_dir: "."
     min_score: 70
@@ -122,7 +122,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: hashgraph-online/hol-ai-plugin-scanner-action@v1
+      - uses: hashgraph-online/ai-plugin-scanner-action@v1
         with:
           plugin_dir: "."
           mode: scan
@@ -136,7 +136,7 @@ This `plugin_dir: "."` pattern is correct for both single-plugin repositories an
 ### With Cisco skill scanning
 
 ```yaml
-- uses: hashgraph-online/hol-ai-plugin-scanner-action@v1
+- uses: hashgraph-online/ai-plugin-scanner-action@v1
   with:
     plugin_dir: "."
     cisco_skill_scan: on
@@ -158,7 +158,7 @@ Use this only inside `hashgraph-online/ai-plugin-scanner`, where the action can 
 ### Export registry payload for ecosystem automation
 
 ```yaml
-- uses: hashgraph-online/hol-ai-plugin-scanner-action@v1
+- uses: hashgraph-online/ai-plugin-scanner-action@v1
   id: scan
   with:
     plugin_dir: "."
@@ -191,7 +191,7 @@ jobs:
 
       - name: Scan plugin and submit if eligible
         id: scan
-        uses: hashgraph-online/hol-ai-plugin-scanner-action@v1
+        uses: hashgraph-online/ai-plugin-scanner-action@v1
         with:
           plugin_dir: "."
           min_score: 80
@@ -210,7 +210,7 @@ Use a fine-grained token with `issues:write` on `hashgraph-online/awesome-codex-
 ### Markdown report as PR comment
 
 ```yaml
-- uses: hashgraph-online/hol-ai-plugin-scanner-action@v1
+- uses: hashgraph-online/ai-plugin-scanner-action@v1
   id: scan
   with:
     plugin_dir: "."
@@ -256,7 +256,7 @@ Direct edits in published action repositories should stay limited to Marketplace
 Set `mode` to one of `scan`, `lint`, `verify`, or `submit`.
 
 ```yaml
-- uses: hashgraph-online/hol-ai-plugin-scanner-action@v1
+- uses: hashgraph-online/ai-plugin-scanner-action@v1
   with:
     mode: verify
     plugin_dir: "."

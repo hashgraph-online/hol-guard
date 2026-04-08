@@ -26,7 +26,7 @@ pipx run plugin-scanner verify .
 ```yaml
 # GitHub Actions PR gate
 - name: AI plugin quality gate
-  uses: hashgraph-online/hol-ai-plugin-scanner-action@v1
+  uses: hashgraph-online/ai-plugin-scanner-action@v1
   with:
     plugin_dir: "."
     fail_on_severity: high
@@ -303,7 +303,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: hashgraph-online/hol-ai-plugin-scanner-action@v1
+      - uses: hashgraph-online/ai-plugin-scanner-action@v1
         with:
           plugin_dir: "."
           mode: scan
@@ -353,7 +353,7 @@ Configure:
 - repository secret `ACTION_REPO_TOKEN`
   It should be a token that can create or update repositories and releases in the canonical and compatibility action repositories.
 - optional repository variable `ACTION_CANONICAL_REPOSITORY`
-  Defaults to `hashgraph-online/hol-ai-plugin-scanner-action`.
+  Defaults to `hashgraph-online/ai-plugin-scanner-action`.
 - optional repository variable `ACTION_COMPAT_REPOSITORY`
   Defaults to `hashgraph-online/hol-codex-plugin-scanner-action`.
 
@@ -399,7 +399,7 @@ jobs:
 
       - name: Scan and submit if eligible
         id: scan
-        uses: hashgraph-online/hol-ai-plugin-scanner-action@v1
+        uses: hashgraph-online/ai-plugin-scanner-action@v1
         with:
           plugin_dir: "."
           min_score: 80
@@ -431,7 +431,7 @@ jobs:
 
       - name: Scan plugin
         id: scan
-        uses: hashgraph-online/hol-ai-plugin-scanner-action@v1
+        uses: hashgraph-online/ai-plugin-scanner-action@v1
         with:
           plugin_dir: "."
           format: sarif
