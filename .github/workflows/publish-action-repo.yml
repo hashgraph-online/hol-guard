@@ -45,10 +45,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
         run: |
+          latest_repo_tag() {
+            target_repo="$1"
+            if ! gh repo view "$target_repo" >/dev/null 2>&1; then
+              return
+            fi
+            gh release list --repo "$target_repo" --limit 1 --json tagName --jq '.[0].tagName // ""'
+          }
+
           LAST_TAG=""
-          if gh repo view "$ACTION_CANONICAL_REPOSITORY" >/dev/null 2>&1; then
-            LAST_TAG=$(gh release list --repo "$ACTION_CANONICAL_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName // ""')
-          fi
+          for candidate in "$(latest_repo_tag "$ACTION_CANONICAL_REPOSITORY")" "$(latest_repo_tag "$ACTION_COMPAT_REPOSITORY")"; do
+            if [ -z "$candidate" ]; then
+              continue
+            fi
+            if [ -z "$LAST_TAG" ] || [ "$(printf '%s\n%s\n' "$LAST_TAG" "$candidate" | sort -V | tail -n1)" = "$candidate" ]; then
+              LAST_TAG="$candidate"
+            fi
+          done
 
           if [ -z "$LAST_TAG" ]; then
             TAG="v1.0.0"

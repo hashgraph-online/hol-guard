@@ -150,6 +150,12 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "if: secrets.ACTION_REPO_TOKEN != ''" not in workflow_text
     assert "ACTION_CANONICAL_REPOSITORY" in workflow_text
     assert "ACTION_COMPAT_REPOSITORY" in workflow_text
+    assert 'latest_repo_tag() {' in workflow_text
+    assert (
+        'for candidate in "$(latest_repo_tag "$ACTION_CANONICAL_REPOSITORY")" '
+        '"$(latest_repo_tag "$ACTION_COMPAT_REPOSITORY")"; do'
+    ) in workflow_text
+    assert """printf '%s\\n%s\\n' "$LAST_TAG" "$candidate" | sort -V | tail -n1""" in workflow_text
     assert (
         'git -C "$repo_dir" status --short -- action.yml README.md scanner-version.txt '
         "cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md"
