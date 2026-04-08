@@ -226,11 +226,22 @@ def main() -> int:
         "submission_performed": "false",
         "submission_issue_urls": "",
         "submission_issue_numbers": "",
+        "action_exit_code": "0",
+        "pr_comment_status": "skipped",
+        "pr_comment_id": "",
+        "pr_comment_url": "",
     }
     verify_pass_for_summary: bool | None = None
     scan_scope = "plugin"
     local_plugin_count: int | None = None
     skipped_target_count: int | None = None
+
+    def finish(return_code: int) -> int:
+        output_values["action_exit_code"] = str(return_code)
+        github_output = _read_env("GITHUB_OUTPUT")
+        if github_output:
+            _write_outputs(github_output, output_values)
+        return return_code
 
     if mode in {"scan", "lint", "submit"}:
         args = _build_scan_args(
@@ -258,7 +269,7 @@ def main() -> int:
             if upload_sarif:
                 if output_format != "sarif":
                     print("upload_sarif requires format=sarif.", file=sys.stderr)
-                    return 1
+                    return finish(1)
                 if not output_path:
                     output_path = "ai-plugin-scanner.sarif"
             rendered = _render_scan_output(
@@ -282,7 +293,7 @@ def main() -> int:
                     "Point plugin_dir at one plugin instead of a repo marketplace root.",
                     file=sys.stderr,
                 )
-                return 1
+                return finish(1)
             verification = verify_plugin(Path(plugin_dir).resolve(), online=online)
             artifact_path = output_path or "plugin-quality.json"
             artifact = build_quality_artifact(
@@ -358,13 +369,13 @@ def main() -> int:
             if submission_eligible:
                 if not submission_repos:
                     print("Submission is enabled but no submission repositories were configured.", file=sys.stderr)
-                    return 1
+                    return finish(1)
                 if not submission_token:
                     print("Submission is enabled but no submission token was provided.", file=sys.stderr)
-                    return 1
+                    return finish(1)
                 if not metadata.plugin_url:
                     print("Submission metadata is missing a plugin repository URL.", file=sys.stderr)
-                    return 1
+                    return finish(1)
                 title = build_submission_issue_title(metadata)
                 body = build_submission_issue_body(
                     metadata,
@@ -400,16 +411,16 @@ def main() -> int:
 
         if result.score < min_score:
             print(f"Score {result.score} is below minimum threshold {min_score}", file=sys.stderr)
-            return 1
+            return finish(1)
         if should_fail_for_severity(result, fail_on):
             print(f'Findings met or exceeded the "{fail_on}" severity threshold.', file=sys.stderr)
-            return 1
+            return finish(1)
         if not policy_eval.policy_pass:
             print(f'Policy profile "{resolved_profile}" failed.', file=sys.stderr)
-            return 1
+            return finish(1)
         if mode == "submit" and verification is not None and not verification.verify_pass:
             print("Submission blocked: runtime verification failed.", file=sys.stderr)
-            return 1
+            return finish(1)
 
     elif mode == "verify":
         verification = verify_plugin(Path(plugin_dir).resolve(), online=online)
@@ -430,7 +441,7 @@ def main() -> int:
         output_values["verify_pass"] = "true" if verification.verify_pass else "false"
     else:
         print(f"Unsupported mode: {mode}", file=sys.stderr)
-        return 1
+        return finish(1)
 
     output_values["report_path"] = report_path_value
     output_values["registry_payload_path"] = registry_payload_path_value
@@ -457,13 +468,9 @@ def main() -> int:
             ),
         )
 
-    github_output = _read_env("GITHUB_OUTPUT")
-    if github_output:
-        _write_outputs(github_output, output_values)
-
     if mode == "verify":
-        return return_code
-    return 0
+        return finish(return_code)
+    return finish(0)
 
 
 if __name__ == "__main__":

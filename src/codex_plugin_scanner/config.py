@@ -32,7 +32,7 @@ def load_scanner_config(plugin_dir: Path, config_path: str | None = None) -> Sca
     if config_path:
         candidate = Path(config_path)
         if not candidate.exists():
-            return ScannerConfig()
+            raise ConfigError(f"Config file '{candidate}' does not exist.")
     else:
         candidate = next((plugin_dir / name for name in DEFAULT_CONFIG_FILES if (plugin_dir / name).exists()), None)
         if candidate is None:

@@ -73,10 +73,11 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "value: ${{ steps.scan.outputs.submission_performed }}" in action_text
     assert "value: ${{ steps.scan.outputs.submission_issue_urls }}" in action_text
     assert "value: ${{ steps.scan.outputs.submission_issue_numbers }}" in action_text
-    assert "value: ${{ steps.normalized_outputs.outputs.action_exit_code }}" in action_text
-    assert "value: ${{ steps.normalized_outputs.outputs.pr_comment_status }}" in action_text
-    assert "value: ${{ steps.normalized_outputs.outputs.pr_comment_id }}" in action_text
-    assert "value: ${{ steps.normalized_outputs.outputs.pr_comment_url }}" in action_text
+    assert "value: ${{ steps.scan.outputs.action_exit_code }}" in action_text
+    assert "value: ${{ steps.scan.outputs.pr_comment_status }}" in action_text
+    assert "value: ${{ steps.scan.outputs.pr_comment_id }}" in action_text
+    assert "value: ${{ steps.scan.outputs.pr_comment_url }}" in action_text
+    assert "Normalize action outputs" not in action_text
     assert "GITHUB_STEP_SUMMARY" in action_text
     assert "github/codeql-action/upload-sarif@" in action_text
 

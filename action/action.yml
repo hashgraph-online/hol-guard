@@ -170,16 +170,16 @@ outputs:
     value: ${{ steps.scan.outputs.submission_issue_numbers }}
   action_exit_code:
     description: "Action execution exit code"
-    value: ${{ steps.normalized_outputs.outputs.action_exit_code }}
+    value: ${{ steps.scan.outputs.action_exit_code }}
   pr_comment_status:
     description: "PR comment status: created, updated, unchanged, skipped, or disabled"
-    value: ${{ steps.normalized_outputs.outputs.pr_comment_status }}
+    value: ${{ steps.scan.outputs.pr_comment_status }}
   pr_comment_id:
     description: "Created or updated PR comment id when available"
-    value: ${{ steps.normalized_outputs.outputs.pr_comment_id }}
+    value: ${{ steps.scan.outputs.pr_comment_id }}
   pr_comment_url:
     description: "Created or updated PR comment URL when available"
-    value: ${{ steps.normalized_outputs.outputs.pr_comment_url }}
+    value: ${{ steps.scan.outputs.pr_comment_url }}
 
 branding:
   icon: "check-circle"
@@ -290,15 +290,6 @@ runs:
         PR_COMMENT_MAX_FINDINGS: ${{ inputs.pr_comment_max_findings }}
         GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
       run: python3 -m codex_plugin_scanner.action_runner
-
-    - name: Normalize action outputs
-      id: normalized_outputs
-      shell: bash
-      run: |
-        echo "action_exit_code=0" >> "$GITHUB_OUTPUT"
-        echo "pr_comment_status=skipped" >> "$GITHUB_OUTPUT"
-        echo "pr_comment_id=" >> "$GITHUB_OUTPUT"
-        echo "pr_comment_url=" >> "$GITHUB_OUTPUT"
 
     - name: Upload SARIF
       if: ${{ inputs.upload_sarif == 'true' && inputs.mode == 'scan' && steps.scan.outputs.report_path != '' }}

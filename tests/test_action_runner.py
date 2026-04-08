@@ -51,6 +51,10 @@ def test_action_runner_writes_all_outputs(monkeypatch, tmp_path, capsys) -> None
     assert "submission_performed=false" in output_lines
     assert "submission_issue_urls=" in output_lines
     assert "submission_issue_numbers=" in output_lines
+    assert "action_exit_code=0" in output_lines
+    assert "pr_comment_status=skipped" in output_lines
+    assert "pr_comment_id=" in output_lines
+    assert "pr_comment_url=" in output_lines
 
     stdout = capsys.readouterr().out
     assert '"score": 100' in stdout

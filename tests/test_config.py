@@ -66,6 +66,14 @@ def test_load_scanner_config_bad_toml(tmp_path: Path):
         assert True
 
 
+def test_load_scanner_config_explicit_missing_file_raises(tmp_path: Path):
+    try:
+        load_scanner_config(tmp_path, config_path=str(tmp_path / "missing.toml"))
+        raise AssertionError("expected ConfigError")
+    except ConfigError:
+        assert True
+
+
 def test_load_baseline_bad_json(tmp_path: Path):
     (tmp_path / "baseline.json").write_text("[not-valid-json", encoding="utf-8")
     try:
