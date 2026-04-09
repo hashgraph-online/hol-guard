@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def test_action_metadata_includes_marketplace_branding_and_fallback_install() -> None:
     action_text = (ROOT / "action" / "action.yml").read_text(encoding="utf-8")
 
-    assert 'name: "HOL Codex Plugin Scanner"' in action_text
+    assert 'name: "AI Plugin Scanner"' in action_text
     assert "branding:" in action_text
     assert 'icon: "check-circle"' in action_text
     assert 'color: "blue"' in action_text
@@ -25,15 +25,18 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert 'elif [ "$INSTALL_SOURCE" = "pypi" ]; then' in action_text
     assert (
         'python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" '
-        '"codex-plugin-scanner==${SCANNER_VERSION}"'
+        '"plugin-scanner==${SCANNER_VERSION}"'
     ) in action_text
+    assert "scanner-sha256.txt" in action_text
+    assert 'SCANNER_SHA256_FILE="$GITHUB_ACTION_PATH/scanner-sha256.txt"' in action_text
+    assert 'echo "Downloaded scanner wheel SHA256 does not match scanner-sha256.txt."' in action_text
     assert "python3 -m pypi_attestations verify pypi \\" in action_text
     assert 'python3 -m pip install "$DIST_DIR/$DIST_BASENAME"' in action_text
     assert 'python3 -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"' in action_text
     assert "scanner-version.txt" in action_text
     assert "cisco-version.txt" in action_text
     assert "pypi-attestations-version.txt" in action_text
-    assert 'SCANNER_REPOSITORY="https://github.com/hashgraph-online/codex-plugin-scanner"' in action_text
+    assert 'SCANNER_REPOSITORY="https://github.com/hashgraph-online/ai-plugin-scanner"' in action_text
     assert "write_step_summary:" in action_text
     assert "profile:" in action_text
     assert "config:" in action_text
@@ -134,14 +137,14 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
 
     assert "Publish GitHub Action Repository" in workflow_text
     assert "ACTION_REPO_TOKEN" in workflow_text
-    assert "hashgraph-online/hol-codex-plugin-scanner-action" in workflow_text
+    assert "hashgraph-online/ai-plugin-scanner-action" in workflow_text
     assert "Validate publication credentials" in workflow_text
     assert "Compute scanner package version" in workflow_text
     assert "paths:" not in workflow_text
     assert "if: secrets.ACTION_REPO_TOKEN != ''" not in workflow_text
     assert (
-        "git status --short -- action.yml README.md scanner-version.txt "
-        "cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md"
+        "git status --short -- action.yml README.md CONTRIBUTING.md SECURITY.md "
+        "scanner-version.txt scanner-sha256.txt cisco-version.txt pypi-attestations-version.txt LICENSE"
     ) in workflow_text
     assert "SOURCE_REF" in workflow_text
     assert 'gh repo clone "$ACTION_REPOSITORY" action-repo -- --depth 1' in workflow_text
@@ -151,6 +154,7 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     ) in workflow_text
     assert 'cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml' in workflow_text
     assert """printf '%s\\n' "${{ steps.scanner_version.outputs.version }}" > scanner-version.txt""" in workflow_text
+    assert 'cp "${GITHUB_WORKSPACE}/action/scanner-sha256.txt" scanner-sha256.txt' in workflow_text
     assert 'cp "${GITHUB_WORKSPACE}/action/cisco-version.txt" cisco-version.txt' in workflow_text
     assert (
         'cp "${GITHUB_WORKSPACE}/action/pypi-attestations-version.txt" pypi-attestations-version.txt'
@@ -171,13 +175,12 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
 
     assert "https://hol.org/brand/Logo_Whole_Dark.png" in action_readme
     assert "Latest Release" in action_readme
-    assert "Marketplace-facing wrapper" in action_readme
-    assert "root `action.yml` layout" in action_readme
-    assert "published action bundle" in action_readme
+    assert "Canonical GitHub Action repository" in action_readme
     assert "Source of Truth" in action_readme
     assert "source-ai--plugin--scanner-111827" in action_readme
     assert "https://github.com/hashgraph-online/ai-plugin-scanner/tree/main/action" in action_readme
     assert "verifies its PyPI provenance" in action_readme
+    assert "pinned by exact version and wheel SHA256" in action_readme
     assert "install_source: local" in action_readme
     assert "uses: ./action" in action_readme
     assert "ghcr.io/hashgraph-online/ai-plugin-scanner:<version>" in action_readme
@@ -188,7 +191,7 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "submission issue" in action_readme
     assert "awesome-codex-plugins" in action_readme
     assert "publish-action-repo.yml" in action_readme
-    assert "hashgraph-online/hol-codex-plugin-scanner-action@v1" in action_readme
+    assert "hashgraph-online/ai-plugin-scanner-action@v1" in action_readme
     assert "actions/checkout@v4" in action_readme
     assert "actions/github-script@v7" in action_readme
     assert "opt-in Cisco skill-scanner dependency used by this repo" in action_readme
