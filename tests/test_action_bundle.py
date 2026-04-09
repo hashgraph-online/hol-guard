@@ -88,6 +88,7 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     assert "id-token: write" in workflow_text
     assert 'cp action/action.yml "${BUNDLE_ROOT}/action.yml"' in workflow_text
     assert """printf '%s\\n' "${VERSION}" > "${BUNDLE_ROOT}/scanner-version.txt" """[:-1] in workflow_text
+    assert 'cp action/scanner-sha256.txt "${BUNDLE_ROOT}/scanner-sha256.txt"' in workflow_text
     assert 'cp action/cisco-version.txt "${BUNDLE_ROOT}/cisco-version.txt"' in workflow_text
     assert 'cp action/pypi-attestations-version.txt "${BUNDLE_ROOT}/pypi-attestations-version.txt"' in workflow_text
     assert "dist/plugin-scanner-v${VERSION}.intoto.jsonl" in workflow_text
@@ -139,7 +140,6 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "ACTION_REPO_TOKEN" in workflow_text
     assert "hashgraph-online/ai-plugin-scanner-action" in workflow_text
     assert "Validate publication credentials" in workflow_text
-    assert "Compute scanner package version" in workflow_text
     assert "paths:" not in workflow_text
     assert "if: secrets.ACTION_REPO_TOKEN != ''" not in workflow_text
     assert (
@@ -153,7 +153,7 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
         'git remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/$ACTION_REPOSITORY.git"'
     ) in workflow_text
     assert 'cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml' in workflow_text
-    assert """printf '%s\\n' "${{ steps.scanner_version.outputs.version }}" > scanner-version.txt""" in workflow_text
+    assert 'cp "${GITHUB_WORKSPACE}/action/scanner-version.txt" scanner-version.txt' in workflow_text
     assert 'cp "${GITHUB_WORKSPACE}/action/scanner-sha256.txt" scanner-sha256.txt' in workflow_text
     assert 'cp "${GITHUB_WORKSPACE}/action/cisco-version.txt" cisco-version.txt' in workflow_text
     assert (

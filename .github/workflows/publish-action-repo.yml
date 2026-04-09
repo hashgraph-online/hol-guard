@@ -59,29 +59,6 @@ jobs:
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Compute scanner package version
-        id: scanner_version
-        env:
-          GITHUB_REF: ${{ github.ref }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-        run: |
-          BASE_VERSION=$(python3 -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print(p['project']['version'])")
-          VERSION="$BASE_VERSION"
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
-            LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n1)
-            if [[ -n "$LAST_TAG" ]]; then
-              IFS=. read -r MAJOR MINOR PATCH <<< "${LAST_TAG#v}"
-              if [[ -z "$MAJOR" || -z "$MINOR" || -z "$PATCH" ]]; then
-                echo "Unsupported release tag format: $LAST_TAG" >&2
-                exit 1
-              fi
-              VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-            fi
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
       - name: Clone action repository
         env:
           GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
@@ -101,7 +78,7 @@ jobs:
           cp "${GITHUB_WORKSPACE}/action/README.md" README.md
           cp "${GITHUB_WORKSPACE}/action/CONTRIBUTING.md" CONTRIBUTING.md
           cp "${GITHUB_WORKSPACE}/action/SECURITY.md" SECURITY.md
-          printf '%s\n' "${{ steps.scanner_version.outputs.version }}" > scanner-version.txt
+          cp "${GITHUB_WORKSPACE}/action/scanner-version.txt" scanner-version.txt
           cp "${GITHUB_WORKSPACE}/action/scanner-sha256.txt" scanner-sha256.txt
           cp "${GITHUB_WORKSPACE}/action/cisco-version.txt" cisco-version.txt
           cp "${GITHUB_WORKSPACE}/action/pypi-attestations-version.txt" pypi-attestations-version.txt
