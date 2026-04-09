@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: codex-plugin-scanner-action-repo-${{ github.ref }}
+  group: ai-plugin-scanner-action-repo-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -20,7 +20,7 @@ jobs:
     permissions:
       contents: read
     env:
-      ACTION_REPOSITORY: ${{ vars.ACTION_REPOSITORY != '' && vars.ACTION_REPOSITORY || 'hashgraph-online/hol-codex-plugin-scanner-action' }}
+      ACTION_REPOSITORY: ${{ vars.ACTION_REPOSITORY != '' && vars.ACTION_REPOSITORY || 'hashgraph-online/ai-plugin-scanner-action' }}
       SOURCE_REF: ${{ github.sha }}
       SOURCE_REPOSITORY: ${{ github.repository }}
       SOURCE_SERVER_URL: ${{ github.server_url }}
@@ -30,7 +30,7 @@ jobs:
           ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
         run: |
           if [ -z "$ACTION_REPO_TOKEN" ]; then
-            echo "ACTION_REPO_TOKEN must be configured to publish the Marketplace action repository." >&2
+            echo "ACTION_REPO_TOKEN must be configured to publish the GitHub Action repository." >&2
             exit 1
           fi
 
@@ -99,18 +99,19 @@ jobs:
         run: |
           cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml
           cp "${GITHUB_WORKSPACE}/action/README.md" README.md
+          cp "${GITHUB_WORKSPACE}/action/CONTRIBUTING.md" CONTRIBUTING.md
+          cp "${GITHUB_WORKSPACE}/action/SECURITY.md" SECURITY.md
           printf '%s\n' "${{ steps.scanner_version.outputs.version }}" > scanner-version.txt
+          cp "${GITHUB_WORKSPACE}/action/scanner-sha256.txt" scanner-sha256.txt
           cp "${GITHUB_WORKSPACE}/action/cisco-version.txt" cisco-version.txt
           cp "${GITHUB_WORKSPACE}/action/pypi-attestations-version.txt" pypi-attestations-version.txt
           cp "${GITHUB_WORKSPACE}/LICENSE" LICENSE
-          cp "${GITHUB_WORKSPACE}/SECURITY.md" SECURITY.md
-          cp "${GITHUB_WORKSPACE}/CONTRIBUTING.md" CONTRIBUTING.md
 
       - name: Detect sync changes
         id: diff
         working-directory: action-repo
         run: |
-          if [ -n "$(git status --short -- action.yml README.md scanner-version.txt cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md)" ]; then
+          if [ -n "$(git status --short -- action.yml README.md CONTRIBUTING.md SECURITY.md scanner-version.txt scanner-sha256.txt cisco-version.txt pypi-attestations-version.txt LICENSE)" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -122,7 +123,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add action.yml README.md scanner-version.txt cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md
+          git add action.yml README.md CONTRIBUTING.md SECURITY.md scanner-version.txt scanner-sha256.txt cisco-version.txt pypi-attestations-version.txt LICENSE
           git commit -m "chore: publish action bundle ${{ steps.version.outputs.tag }}"
 
       - name: Push action repository branch and tags
