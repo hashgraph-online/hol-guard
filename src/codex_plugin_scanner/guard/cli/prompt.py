@@ -74,7 +74,7 @@ def resolve_interactive_decisions(
         except (EOFError, KeyboardInterrupt):
             evaluation["review_hint"] = (
                 "Guard needs an interactive terminal to approve changes. "
-                f"Run `plugin-guard guard diff {artifact.harness}` and allow or deny the artifact before launch."
+                f"Run `hol-guard diff {artifact.harness}` and allow or deny the artifact before launch."
             )
             evaluation["blocked"] = True
             return evaluation

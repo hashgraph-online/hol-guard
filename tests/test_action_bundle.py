@@ -24,8 +24,7 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert 'python3 -m pip install "$LOCAL_SOURCE[cisco]"' in action_text
     assert 'elif [ "$INSTALL_SOURCE" = "pypi" ]; then' in action_text
     assert (
-        'python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" '
-        '"plugin-scanner==${SCANNER_VERSION}"'
+        'python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" "plugin-scanner==${SCANNER_VERSION}"'
     ) in action_text
     assert "python3 -m pypi_attestations verify pypi \\" in action_text
     assert 'python3 -m pip install "$DIST_DIR/$DIST_BASENAME"' in action_text
@@ -98,14 +97,18 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     assert "dist/plugin-scanner-v${VERSION}.intoto.jsonl" in workflow_text
     assert "Collect release asset files" in workflow_text
     assert "find dist -maxdepth 1 -type f -print0 | sort -z" in workflow_text
-    assert 'mapfile -t RELEASE_ASSETS <<\'EOF\'' in workflow_text
+    assert "mapfile -t RELEASE_ASSETS <<'EOF'" in workflow_text
     assert '"${RELEASE_ASSETS[@]}"' in workflow_text
     assert "subject-path: |" in workflow_text
     assert "dist/*" in workflow_text
-    assert "Build legacy compatibility package (codex-plugin-scanner)" in workflow_text
+    assert "Build primary package (hol-guard)" in workflow_text
+    assert "Build compatibility package (plugin-scanner)" in workflow_text
+    assert "Build compatibility package (codex-plugin-scanner)" in workflow_text
+    assert 'sed -i "1,/^name = /{s/^name = .*/name = \\"plugin-scanner\\"/}" pyproject.toml' in workflow_text
     assert "codex-plugin-scanner" in workflow_text
     assert "cp pyproject.toml pyproject.toml.bak" in workflow_text
     assert "mv pyproject.toml.bak pyproject.toml" in workflow_text
+    assert "uv tool install hol-guard==${VERSION}" in workflow_text
     assert "uv tool install plugin-scanner==${VERSION}" in workflow_text
     assert "uv tool install codex-plugin-scanner==${VERSION}" in workflow_text
     assert "docker pull ghcr.io/hashgraph-online/ai-plugin-scanner:${VERSION}" in workflow_text
@@ -150,16 +153,13 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "if: secrets.ACTION_REPO_TOKEN != ''" not in workflow_text
     assert "ACTION_CANONICAL_REPOSITORY" in workflow_text
     assert "ACTION_COMPAT_REPOSITORY" in workflow_text
-    assert 'latest_release_tag() {' in workflow_text
-    assert 'latest_remote_tag() {' in workflow_text
+    assert "latest_release_tag() {" in workflow_text
+    assert "latest_remote_tag() {" in workflow_text
     assert (
-        'git ls-remote --tags --refs "https://x-access-token:${GH_TOKEN}@github.com/${target_repo}.git" '
-        '"refs/tags/v*"'
+        'git ls-remote --tags --refs "https://x-access-token:${GH_TOKEN}@github.com/${target_repo}.git" "refs/tags/v*"'
     ) in workflow_text
-    assert 'awk -F' in workflow_text
-    assert (
-        'for candidate in '
-    ) in workflow_text
+    assert "awk -F" in workflow_text
+    assert ("for candidate in ") in workflow_text
     assert '"$(latest_release_tag "$ACTION_CANONICAL_REPOSITORY")" \\' in workflow_text
     assert '"$(latest_release_tag "$ACTION_COMPAT_REPOSITORY")" \\' in workflow_text
     assert '"$(latest_remote_tag "$ACTION_CANONICAL_REPOSITORY")" \\' in workflow_text
@@ -181,16 +181,14 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert """printf '%s\\n' "$SCANNER_VERSION" > "${repo_dir}/scanner-version.txt" """[:-1] in workflow_text
     assert 'cp "${GITHUB_WORKSPACE}/action/cisco-version.txt" "${repo_dir}/cisco-version.txt"' in workflow_text
     assert (
-        'cp "${GITHUB_WORKSPACE}/action/pypi-attestations-version.txt" '
-        '"${repo_dir}/pypi-attestations-version.txt"'
+        'cp "${GITHUB_WORKSPACE}/action/pypi-attestations-version.txt" "${repo_dir}/pypi-attestations-version.txt"'
     ) in workflow_text
     assert 'git -C "$repo_dir" push origin HEAD:main' in workflow_text
     assert 'any_repo_changed="false"' in workflow_text
     assert 'repo_changed="false"' in workflow_text
     assert 'repo_changed="true"' in workflow_text
     assert (
-        'printf \'%s\\t%s\\n\' "$target_repo" "$repo_dir" >> '
-        '"$GITHUB_WORKSPACE/action-repos/publish-targets.tsv"'
+        'printf \'%s\\t%s\\n\' "$target_repo" "$repo_dir" >> "$GITHUB_WORKSPACE/action-repos/publish-targets.tsv"'
     ) in workflow_text
     assert ': > "$GITHUB_WORKSPACE/action-repos/publish-targets.tsv"' in workflow_text
     assert 'if [ "$any_repo_changed" != "true" ]; then' in workflow_text
@@ -199,7 +197,7 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert 'publish_action_release "$target_repo" "$repo_dir"' in workflow_text
     assert 'gh release view "${TAG}" --repo "$target_repo"' in workflow_text
     assert 'git -C "$repo_dir" ls-remote --tags origin "refs/tags/${TAG}"' in workflow_text
-    assert 'Refusing to publish action bundle with colliding existing tag ${TAG} in ${target_repo}.' in workflow_text
+    assert "Refusing to publish action bundle with colliding existing tag ${TAG} in ${target_repo}." in workflow_text
     assert 'git -C "$repo_dir" push origin refs/tags/v1 --force' in workflow_text
     assert 'gh release create "${TAG}"' in workflow_text
     assert "--generate-notes" in workflow_text
@@ -254,6 +252,7 @@ def test_readme_uses_stable_apache_license_badge() -> None:
     assert "publish-action-repo.yml" in readme
     assert "docs/github-action-marketplace.md" not in readme
     assert "ghcr.io/hashgraph-online/ai-plugin-scanner:<version>" in readme
+    assert "https://pypi.org/project/hol-guard/" in readme
     assert "https://pypi.org/project/plugin-scanner/" in readme
     assert "https://pypi.org/project/codex-plugin-scanner/" in readme
     assert "Container Image" in readme
@@ -276,8 +275,8 @@ def test_container_files_exist_for_enterprise_distribution() -> None:
     assert dockerfile_text.index("RUN python3 -m pip install --require-hashes -r /app/docker-requirements.txt") < (
         dockerfile_text.index("COPY src /app/src")
     )
-    assert "SOURCE_ROOT = \"/app/src\"" in dockerfile_text
-    assert "WORKSPACE = \"/workspace\"" in dockerfile_text
+    assert 'SOURCE_ROOT = "/app/src"' in dockerfile_text
+    assert 'WORKSPACE = "/workspace"' in dockerfile_text
     assert "from codex_plugin_scanner.cli import main" in dockerfile_text
     assert "USER scanner" in dockerfile_text
     assert "rich==14.2.0" in docker_requirements_text

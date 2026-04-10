@@ -11,6 +11,7 @@ from ..models import HarnessDetection
 from ..store import GuardStore
 
 HARNESS_PRIORITY = ("codex", "claude-code", "cursor", "gemini", "opencode")
+GUARD_COMMAND = "hol-guard"
 
 
 def build_guard_start_payload(
@@ -86,10 +87,10 @@ def _summarize_harness(
         "shim_path": str(shim_path) if isinstance(shim_path, str) else None,
         "config_paths": list(detection.config_paths),
         "next_action": next_action,
-        "install_command": f"plugin-scanner guard install {detection.harness}",
-        "run_command": f"plugin-scanner guard run {detection.harness} --dry-run",
-        "review_command": f"plugin-scanner guard diff {detection.harness}",
-        "receipts_command": "plugin-scanner guard receipts",
+        "install_command": f"{GUARD_COMMAND} install {detection.harness}",
+        "run_command": f"{GUARD_COMMAND} run {detection.harness} --dry-run",
+        "review_command": f"{GUARD_COMMAND} diff {detection.harness}",
+        "receipts_command": f"{GUARD_COMMAND} receipts",
     }
 
 
@@ -122,7 +123,7 @@ def _build_next_steps(recommended: dict[str, object] | None) -> list[dict[str, s
         return [
             {
                 "title": "Install a supported harness",
-                "command": "plugin-scanner guard detect",
+                "command": f"{GUARD_COMMAND} detect",
                 "detail": (
                     "Guard did not find a local harness config yet. Start by installing "
                     "Codex, Claude Code, Cursor, Gemini, or OpenCode."
@@ -133,7 +134,7 @@ def _build_next_steps(recommended: dict[str, object] | None) -> list[dict[str, s
     steps.append(
         {
             "title": "Optional sync later",
-            "command": "plugin-scanner guard login --sync-url <url> --token <token>",
+            "command": f"{GUARD_COMMAND} login --sync-url <url> --token <token>",
             "detail": (
                 "Keep receipts local by default, then connect sync only when you want "
                 "shared history or premium trust checks."
@@ -155,7 +156,7 @@ def _install_or_review_step(recommended: dict[str, object]) -> dict[str, str]:
     if next_action == "install-harness":
         return {
             "title": f"Install {harness}",
-            "command": "plugin-scanner guard detect",
+            "command": f"{GUARD_COMMAND} detect",
             "detail": "Guard needs a local harness install before it can protect launches.",
         }
     return {
@@ -177,7 +178,7 @@ def _run_step(recommended: dict[str, object]) -> dict[str, str]:
 def _receipts_step() -> dict[str, str]:
     return {
         "title": "Inspect receipts",
-        "command": "plugin-scanner guard receipts",
+        "command": f"{GUARD_COMMAND} receipts",
         "detail": "See what Guard approved, blocked, or flagged after local runs.",
     }
 

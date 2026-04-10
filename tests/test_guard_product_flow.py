@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from codex_plugin_scanner.cli import main
@@ -75,8 +76,8 @@ class TestGuardProductFlow:
         assert output["receipt_count"] == 0
         assert codex_summary["managed"] is False
         assert codex_summary["next_action"] == "install"
-        assert output["next_steps"][0]["command"] == "plugin-scanner guard install codex"
-        assert output["next_steps"][1]["command"] == "plugin-scanner guard run codex --dry-run"
+        assert output["next_steps"][0]["command"] == "hol-guard install codex"
+        assert output["next_steps"][1]["command"] == "hol-guard run codex --dry-run"
 
     def test_guard_start_human_output_highlights_guard_loop(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -99,6 +100,55 @@ class TestGuardProductFlow:
         assert "Install Guard for codex" in output
         assert "Run Guard before launch" in output
         assert "Optional sync later" in output
+
+    def test_hol_guard_direct_entrypoint_runs_without_nested_guard_command(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(sys, "argv", ["hol-guard"])
+
+        rc = main(
+            [
+                "start",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recommended_harness"] == "codex"
+        assert output["next_steps"][0]["command"] == "hol-guard install codex"
+
+    def test_hol_guard_windows_entrypoint_runs_without_nested_guard_command(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(sys, "argv", ["hol-guard.exe"])
+
+        rc = main(
+            [
+                "start",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recommended_harness"] == "codex"
+        assert output["next_steps"][0]["command"] == "hol-guard install codex"
 
     def test_guard_install_creates_wrapper_shim(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

@@ -1,56 +1,56 @@
 # Guard Get Started
 
-Guard is the local product inside `plugin-scanner`.
-If you want the shortest entrypoint, install and run the dedicated `plugin-guard` console script.
+Guard ships as the `hol-guard` package and command.
+The scanner commands stay available in the same install for CI and package checks.
 
 Use it when you want to protect a harness before local MCP servers, skills, hooks, or plugin surfaces run.
 
-## The local loop
+## The everyday flow
 
-1. Detect your harnesses:
+1. See what Guard found:
 
    ```bash
-   plugin-guard guard start
+   hol-guard start
    ```
 
 2. Install Guard in front of the harness you use most:
 
    ```bash
-   plugin-guard guard install codex
+   hol-guard install codex
    ```
 
 3. Run one dry pass so Guard records the current state:
 
    ```bash
-   plugin-guard guard run codex --dry-run
+   hol-guard run codex --dry-run
    ```
 
-4. Launch through Guard after that. Guard will prompt you if a tool is new or changed:
+4. Launch through Guard after that. Guard will stop and ask if a tool is new or changed:
 
    ```bash
-   plugin-guard guard run codex
+   hol-guard run codex
    ```
 
 5. Review changes when Guard blocks or asks for another look:
 
    ```bash
-   plugin-scanner guard diff codex
-   plugin-scanner guard allow codex --scope artifact --artifact-id codex:project:workspace_skill
-   plugin-scanner guard deny codex --scope artifact --artifact-id codex:project:workspace_skill
+   hol-guard diff codex
+   hol-guard allow codex --scope artifact --artifact-id codex:project:workspace_skill
+   hol-guard deny codex --scope artifact --artifact-id codex:project:workspace_skill
    ```
 
-6. Inspect receipts:
+6. Check receipts and current status:
 
    ```bash
-   plugin-guard guard receipts
-   plugin-guard guard status
+   hol-guard receipts
+   hol-guard status
    ```
 
-7. Connect sync only if you want shared history later:
+7. Sign in later only if you want shared history:
 
    ```bash
-   plugin-scanner guard login --sync-url <url> --token <token>
-   plugin-scanner guard sync
+   hol-guard login --sync-url <url> --token <token>
+   hol-guard sync
    ```
 
 ## What `install` does
@@ -72,11 +72,11 @@ Use these local repos to prove Guard against real first-party surfaces:
 Suggested local validation:
 
 ```bash
-plugin-scanner guard detect codex --json
-plugin-scanner guard install codex
-plugin-scanner guard status
-plugin-scanner guard run codex --dry-run
-plugin-scanner guard receipts
+hol-guard detect codex --json
+hol-guard install codex
+hol-guard status
+hol-guard run codex --dry-run
+hol-guard receipts
 ```
 
 For a real Codex canary, point `~/.codex/config.toml` or `<workspace>/.codex/config.toml` at a local `hashnet-mcp` command, then repeat the Guard loop above.

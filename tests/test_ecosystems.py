@@ -170,9 +170,7 @@ def test_opencode_jsonc_keeps_block_comment_literals_inside_strings(tmp_path: Pa
     assert result.packages and result.packages[0].name == "a/*b*/c"
 
 
-def test_opencode_permission_error_sets_specific_parse_reason(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_opencode_permission_error_sets_specific_parse_reason(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = tmp_path / "opencode.json"
     config_path.write_text('{"name":"demo"}', encoding="utf-8")
 
