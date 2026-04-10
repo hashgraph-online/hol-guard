@@ -1,4 +1,4 @@
-"""Configuration loading for codex-plugin-scanner."""
+"""Configuration loading for the scanner."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class ScannerConfig:
     ignore_paths: tuple[str, ...] = ()
 
 
-DEFAULT_CONFIG_FILE = ".codex-plugin-scanner.toml"
+DEFAULT_CONFIG_FILES = (".plugin-scanner.toml", ".codex-plugin-scanner.toml")
 
 
 class ConfigError(ValueError):
@@ -29,9 +29,16 @@ class ConfigError(ValueError):
 
 
 def load_scanner_config(plugin_dir: Path, config_path: str | None = None) -> ScannerConfig:
-    candidate = Path(config_path) if config_path else plugin_dir / DEFAULT_CONFIG_FILE
-    if not candidate.exists():
-        return ScannerConfig()
+    if config_path:
+        candidate = Path(config_path)
+        if not candidate.is_absolute():
+            candidate = plugin_dir / candidate
+        if not candidate.exists():
+            raise ConfigError(f"Config file '{candidate}' does not exist.")
+    else:
+        candidate = next((plugin_dir / name for name in DEFAULT_CONFIG_FILES if (plugin_dir / name).exists()), None)
+        if candidate is None:
+            return ScannerConfig()
 
     try:
         payload = tomllib.loads(candidate.read_text(encoding="utf-8"))

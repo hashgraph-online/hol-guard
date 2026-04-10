@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: codex-plugin-scanner-action-repo-${{ github.ref }}
+  group: ai-plugin-scanner-action-repo-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -20,7 +20,8 @@ jobs:
     permissions:
       contents: read
     env:
-      ACTION_REPOSITORY: ${{ vars.ACTION_REPOSITORY != '' && vars.ACTION_REPOSITORY || 'hashgraph-online/hol-codex-plugin-scanner-action' }}
+      ACTION_CANONICAL_REPOSITORY: ${{ vars.ACTION_CANONICAL_REPOSITORY != '' && vars.ACTION_CANONICAL_REPOSITORY || 'hashgraph-online/ai-plugin-scanner-action' }}
+      ACTION_COMPAT_REPOSITORY: ${{ vars.ACTION_COMPAT_REPOSITORY != '' && vars.ACTION_COMPAT_REPOSITORY || 'hashgraph-online/hol-codex-plugin-scanner-action' }}
       SOURCE_REF: ${{ github.sha }}
       SOURCE_REPOSITORY: ${{ github.repository }}
       SOURCE_SERVER_URL: ${{ github.server_url }}
@@ -44,7 +45,38 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
         run: |
-          LAST_TAG=$(gh release list --repo "$ACTION_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName // ""')
+          latest_release_tag() {
+            target_repo="$1"
+            if ! gh repo view "$target_repo" >/dev/null 2>&1; then
+              return
+            fi
+            gh release list --repo "$target_repo" --limit 1 --json tagName --jq '.[0].tagName // ""'
+          }
+
+          latest_remote_tag() {
+            target_repo="$1"
+            if ! gh repo view "$target_repo" >/dev/null 2>&1; then
+              return
+            fi
+            git ls-remote --tags --refs "https://x-access-token:${GH_TOKEN}@github.com/${target_repo}.git" "refs/tags/v*" \
+              | awk -F'/' '{print $3}' \
+              | sort -V \
+              | tail -n1
+          }
+
+          LAST_TAG=""
+          for candidate in \
+            "$(latest_release_tag "$ACTION_CANONICAL_REPOSITORY")" \
+            "$(latest_release_tag "$ACTION_COMPAT_REPOSITORY")" \
+            "$(latest_remote_tag "$ACTION_CANONICAL_REPOSITORY")" \
+            "$(latest_remote_tag "$ACTION_COMPAT_REPOSITORY")"; do
+            if [ -z "$candidate" ]; then
+              continue
+            fi
+            if [ -z "$LAST_TAG" ] || [ "$(printf '%s\n%s\n' "$LAST_TAG" "$candidate" | sort -V | tail -n1)" = "$candidate" ]; then
+              LAST_TAG="$candidate"
+            fi
+          done
 
           if [ -z "$LAST_TAG" ]; then
             TAG="v1.0.0"
@@ -82,88 +114,93 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Clone action repository
-        env:
-          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
-        run: gh repo clone "$ACTION_REPOSITORY" action-repo -- --depth 1
-
-      - name: Configure authenticated action repository remote
-        working-directory: action-repo
+      - name: Sync canonical and compatibility action repositories
         env:
           ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
-        run: |
-          git remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/$ACTION_REPOSITORY.git"
-
-      - name: Sync root-ready action bundle
-        working-directory: action-repo
-        run: |
-          cp "${GITHUB_WORKSPACE}/action/action.yml" action.yml
-          cp "${GITHUB_WORKSPACE}/action/README.md" README.md
-          printf '%s\n' "${{ steps.scanner_version.outputs.version }}" > scanner-version.txt
-          cp "${GITHUB_WORKSPACE}/action/cisco-version.txt" cisco-version.txt
-          cp "${GITHUB_WORKSPACE}/action/pypi-attestations-version.txt" pypi-attestations-version.txt
-          cp "${GITHUB_WORKSPACE}/LICENSE" LICENSE
-          cp "${GITHUB_WORKSPACE}/SECURITY.md" SECURITY.md
-          cp "${GITHUB_WORKSPACE}/CONTRIBUTING.md" CONTRIBUTING.md
-
-      - name: Detect sync changes
-        id: diff
-        working-directory: action-repo
-        run: |
-          if [ -n "$(git status --short -- action.yml README.md scanner-version.txt cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md)" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Commit synced bundle
-        if: steps.diff.outputs.changed == 'true'
-        working-directory: action-repo
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add action.yml README.md scanner-version.txt cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md
-          git commit -m "chore: publish action bundle ${{ steps.version.outputs.tag }}"
-
-      - name: Push action repository branch and tags
-        if: steps.diff.outputs.changed == 'true'
-        working-directory: action-repo
-        run: |
-          TAG="${{ steps.version.outputs.tag }}"
-          git push origin HEAD:main
-          git tag "$TAG"
-          git push origin "refs/tags/${TAG}"
-          git tag -fa v1 -m "Update floating major tag to ${TAG}"
-          git push origin refs/tags/v1 --force
-
-      - name: Check action release state
-        id: release_state
-        working-directory: action-repo
-        env:
           GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+          SCANNER_VERSION: ${{ steps.scanner_version.outputs.version }}
         run: |
-          TAG="${{ steps.version.outputs.tag }}"
+          any_repo_changed="false"
 
-          if gh release view "${TAG}" --repo "$ACTION_REPOSITORY" >/dev/null 2>&1; then
-            echo "release_exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "release_exists=false" >> "$GITHUB_OUTPUT"
+          publish_action_release() {
+            target_repo="$1"
+            repo_dir="$2"
+
+            git -C "$repo_dir" tag -fa v1 -m "Update floating major tag to ${TAG}"
+            if git -C "$repo_dir" ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
+              echo "Refusing to publish action bundle with colliding existing tag ${TAG} in ${target_repo}." >&2
+              exit 1
+            fi
+            git -C "$repo_dir" tag "${TAG}"
+            git -C "$repo_dir" push origin "refs/tags/${TAG}"
+            git -C "$repo_dir" push origin refs/tags/v1 --force
+
+            if ! gh release view "${TAG}" --repo "$target_repo" >/dev/null 2>&1; then
+              gh release create "${TAG}" \
+                --repo "$target_repo" \
+                --title "${TAG}" \
+                --generate-notes \
+                --notes "Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/tree/${SOURCE_REF}"
+            fi
+          }
+
+          sync_action_repo() {
+            target_repo="$1"
+            readme_source="$2"
+            repo_description="$3"
+            repo_dir="$GITHUB_WORKSPACE/action-repos/${target_repo##*/}"
+            repo_changed="false"
+
+            if gh repo view "$target_repo" >/dev/null 2>&1; then
+              gh repo edit "$target_repo" --description "$repo_description"
+              gh repo clone "$target_repo" "$repo_dir" -- --depth 1
+            else
+              gh repo create "$target_repo" --public --description "$repo_description" --clone
+              mv "${target_repo##*/}" "$repo_dir"
+            fi
+
+            git -C "$repo_dir" remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/${target_repo}.git"
+
+            cp "${GITHUB_WORKSPACE}/action/action.yml" "${repo_dir}/action.yml"
+            cp "$readme_source" "${repo_dir}/README.md"
+            printf '%s\n' "$SCANNER_VERSION" > "${repo_dir}/scanner-version.txt"
+            cp "${GITHUB_WORKSPACE}/action/cisco-version.txt" "${repo_dir}/cisco-version.txt"
+            cp "${GITHUB_WORKSPACE}/action/pypi-attestations-version.txt" "${repo_dir}/pypi-attestations-version.txt"
+            cp "${GITHUB_WORKSPACE}/LICENSE" "${repo_dir}/LICENSE"
+            cp "${GITHUB_WORKSPACE}/SECURITY.md" "${repo_dir}/SECURITY.md"
+            cp "${GITHUB_WORKSPACE}/CONTRIBUTING.md" "${repo_dir}/CONTRIBUTING.md"
+
+            if [ -n "$(git -C "$repo_dir" status --short -- action.yml README.md scanner-version.txt cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md)" ]; then
+              repo_changed="true"
+              git -C "$repo_dir" config user.name "github-actions[bot]"
+              git -C "$repo_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git -C "$repo_dir" add action.yml README.md scanner-version.txt cisco-version.txt pypi-attestations-version.txt LICENSE SECURITY.md CONTRIBUTING.md
+              git -C "$repo_dir" commit -m "chore: publish action bundle ${TAG}"
+              git -C "$repo_dir" push origin HEAD:main
+              any_repo_changed="true"
+            fi
+
+            printf '%s\t%s\n' "$target_repo" "$repo_dir" >> "$GITHUB_WORKSPACE/action-repos/publish-targets.tsv"
+          }
+
+          mkdir -p "$GITHUB_WORKSPACE/action-repos"
+          : > "$GITHUB_WORKSPACE/action-repos/publish-targets.tsv"
+
+          sync_action_repo \
+            "$ACTION_CANONICAL_REPOSITORY" \
+            "${GITHUB_WORKSPACE}/action/README.md" \
+            "HOL AI Plugin Scanner GitHub Action"
+
+          sync_action_repo \
+            "$ACTION_COMPAT_REPOSITORY" \
+            "${GITHUB_WORKSPACE}/action/README.legacy.md" \
+            "Compatibility alias for HOL AI Plugin Scanner GitHub Action"
+
+          if [ "$any_repo_changed" != "true" ]; then
+            exit 0
           fi
 
-          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
-            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create action repository release
-        if: steps.release_state.outputs.release_exists == 'false' && (steps.diff.outputs.changed == 'true' || steps.release_state.outputs.tag_exists == 'true')
-        env:
-          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
-        run: |
-          TAG="${{ steps.version.outputs.tag }}"
-          gh release create "${TAG}" \
-            --repo "$ACTION_REPOSITORY" \
-            --title "$TAG" \
-            --generate-notes \
-            --notes "Published automatically from ${SOURCE_SERVER_URL}/${SOURCE_REPOSITORY}/tree/${SOURCE_REF}"
+          while IFS=$'\t' read -r target_repo repo_dir; do
+            publish_action_release "$target_repo" "$repo_dir"
+          done < "$GITHUB_WORKSPACE/action-repos/publish-targets.tsv"

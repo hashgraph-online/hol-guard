@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .config import ConfigError, load_baseline_rule_ids, load_scanner_config
 from .ecosystems.registry import list_supported_ecosystems
+from .guard.cli import add_guard_parser, run_guard_command
 from .lint_fixes import apply_safe_autofixes
 from .models import GRADE_LABELS, ScanOptions, Severity, get_grade
 from .policy import POLICY_PROFILES, build_rule_inventory, evaluate_policy, resolve_profile
@@ -129,7 +130,7 @@ def format_json(
 
 def _add_common_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--profile", choices=("default", "public-marketplace", "strict-security"))
-    parser.add_argument("--config", help="Path to .codex-plugin-scanner.toml")
+    parser.add_argument("--config", help="Path to a scanner config file such as .plugin-scanner.toml")
     parser.add_argument("--baseline", help="Path to baseline suppression file")
     parser.add_argument("--strict", action="store_true", help="Fail if any finding is present")
     parser.add_argument("--diff-base", help="Reserved for future diff-aware gating")
@@ -197,6 +198,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default="all",
     )
     doctor_parser.add_argument("--bundle")
+    add_guard_parser(subparsers)
 
     return parser
 
@@ -204,7 +206,19 @@ def _build_parser() -> argparse.ArgumentParser:
 def _resolve_legacy_args(argv: list[str] | None) -> list[str] | None:
     if not argv:
         return argv
-    if argv[0] in {"scan", "lint", "verify", "submit", "doctor", "--version", "--list-ecosystems", "-h", "--help"}:
+    known_commands = {
+        "scan",
+        "lint",
+        "verify",
+        "submit",
+        "doctor",
+        "guard",
+        "--version",
+        "--list-ecosystems",
+        "-h",
+        "--help",
+    }
+    if argv[0] in known_commands:
         return argv
     return ["scan", *argv]
 
@@ -460,6 +474,14 @@ def main(argv: list[str] | None = None) -> int:
         return _run_submit(args)
     if args.command == "doctor":
         return _run_doctor(args)
+    if args.command == "guard":
+        try:
+            return run_guard_command(args)
+        except ValueError as exc:
+            parser.error(str(exc))
+        except Exception as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
     return 1
 
 

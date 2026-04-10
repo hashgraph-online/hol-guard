@@ -25,8 +25,8 @@ pipx run plugin-scanner verify .
 
 ```yaml
 # GitHub Actions PR gate
-- name: Codex plugin quality gate
-  uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
+- name: AI plugin quality gate
+  uses: hashgraph-online/ai-plugin-scanner-action@v1
   with:
     plugin_dir: "."
     fail_on_severity: high
@@ -213,7 +213,7 @@ For repo-scoped marketplaces, `scan`, `lint`, `verify`, and `doctor` can target 
 ## Config + Baseline Example
 
 ```toml
-# .codex-plugin-scanner.toml
+# .plugin-scanner.toml
 [scanner]
 profile = "public-marketplace"
 baseline_file = "baseline.txt"
@@ -303,7 +303,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
+      - uses: hashgraph-online/ai-plugin-scanner-action@v1
         with:
           plugin_dir: "."
           mode: scan
@@ -322,9 +322,9 @@ Local pre-commit style hook:
 repos:
   - repo: local
     hooks:
-      - id: codex-plugin-scanner
-        name: Codex Plugin Scanner
-        entry: codex-plugin-scanner
+      - id: plugin-scanner
+        name: Plugin Scanner
+        entry: plugin-scanner
         language: system
         types: [directory]
         pass_filenames: false
@@ -351,17 +351,19 @@ The source repository can publish the GitHub Action automatically into a dedicat
 Configure:
 
 - repository secret `ACTION_REPO_TOKEN`
-  It should be a token that can create or update repositories and releases in the target repository.
-- optional repository variable `ACTION_REPOSITORY`
+  It should be a token that can create or update repositories and releases in the canonical and compatibility action repositories.
+- optional repository variable `ACTION_CANONICAL_REPOSITORY`
+  Defaults to `hashgraph-online/ai-plugin-scanner-action`.
+- optional repository variable `ACTION_COMPAT_REPOSITORY`
   Defaults to `hashgraph-online/hol-codex-plugin-scanner-action`.
 
-When a tagged release is published, [publish-action-repo.yml](./.github/workflows/publish-action-repo.yml) will:
+When changes land on `main`, [publish-action-repo.yml](./.github/workflows/publish-action-repo.yml) will:
 
-- create the dedicated action repository if it does not already exist
-- sync the root-ready `action.yml`, `README.md`, `LICENSE`, and `SECURITY.md`
+- create the canonical Marketplace repository if it does not already exist
+- sync the root-ready `action.yml`, repo-specific `README.md`, `LICENSE`, and `SECURITY.md` into both the canonical repo and the legacy compatibility repo
 - push the immutable release tag such as `v2.0.0`
 - move the floating `v1` tag
-- create or update the corresponding release in the action repository
+- create or update the corresponding release in each action repository
 
 GitHub Marketplace still requires the one-time listing publication step in the dedicated action repository UI, but after that this repository can keep the action repository current automatically.
 
@@ -369,7 +371,7 @@ GitHub Marketplace still requires the one-time listing publication step in the d
 
 The action can also handle submission intake. A plugin repository can wire the scanner into CI so a passing scan opens or reuses a submission issue in [awesome-codex-plugins](https://github.com/hashgraph-online/awesome-codex-plugins).
 
-It also emits Codex-friendly machine outputs:
+It also emits automation-friendly machine outputs:
 
 - `score`, `grade`, `grade_label`, `max_severity`, and `findings_total` as GitHub Action outputs
 - a concise markdown summary in the job summary by default
@@ -397,7 +399,7 @@ jobs:
 
       - name: Scan and submit if eligible
         id: scan
-        uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
+        uses: hashgraph-online/ai-plugin-scanner-action@v1
         with:
           plugin_dir: "."
           min_score: 80
@@ -413,9 +415,9 @@ jobs:
 
 `submission_token` is required when `submission_enabled: true`. This flow is idempotent. If the plugin repository was already submitted, the action reuses the existing open issue instead of opening duplicates by matching an exact hidden plugin URL marker in the existing issue body.
 
-### Registry Payload For Codex Ecosystem Automation
+### Registry Payload For Plugin Ecosystem Automation
 
-If you want to feed the same scan into a registry, badge pipeline, or another Codex automation step, request a registry payload file directly from the action:
+If you want to feed the same scan into a registry, badge pipeline, or another plugin ecosystem automation step, request a registry payload file directly from the action:
 
 ```yaml
 permissions:
@@ -429,12 +431,12 @@ jobs:
 
       - name: Scan plugin
         id: scan
-        uses: hashgraph-online/hol-codex-plugin-scanner-action@v1
+        uses: hashgraph-online/ai-plugin-scanner-action@v1
         with:
           plugin_dir: "."
           format: sarif
-          output: codex-plugin-scanner.sarif
-          registry_payload_output: codex-plugin-registry-payload.json
+          output: ai-plugin-scanner.sarif
+          registry_payload_output: ai-plugin-registry-payload.json
 
       - name: Show trust signals
         run: |
@@ -445,7 +447,7 @@ jobs:
       - name: Upload registry payload
         uses: actions/upload-artifact@v6
         with:
-          name: codex-plugin-registry-payload
+          name: ai-plugin-registry-payload
           path: ${{ steps.scan.outputs.registry_payload_path }}
 ```
 
