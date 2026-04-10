@@ -77,6 +77,7 @@ def evaluate_detection(
     store: GuardStore,
     config: GuardConfig,
     default_action: str | None = None,
+    persist: bool = True,
 ) -> dict[str, Any]:
     """Apply policy, generate diffs, and persist receipts for a harness."""
 
@@ -106,25 +107,26 @@ def evaluate_detection(
             artifact_name=artifact.name,
             source_scope=artifact.source_scope,
         )
-        store.save_snapshot(
-            detection.harness,
-            artifact.artifact_id,
-            {**diff["current_snapshot"], "artifact_hash": diff["current_hash"]},
-            str(diff["current_hash"]),
-            now,
-        )
-        if diff["changed"]:
-            previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else None
-            store.record_diff(
+        if persist:
+            store.save_snapshot(
                 detection.harness,
                 artifact.artifact_id,
-                list(diff["changed_fields"]),
-                previous_hash,
+                {**diff["current_snapshot"], "artifact_hash": diff["current_hash"]},
                 str(diff["current_hash"]),
                 now,
             )
-        store.add_receipt(receipt)
-        receipts_recorded += 1
+            if diff["changed"]:
+                previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else None
+                store.record_diff(
+                    detection.harness,
+                    artifact.artifact_id,
+                    list(diff["changed_fields"]),
+                    previous_hash,
+                    str(diff["current_hash"]),
+                    now,
+                )
+            store.add_receipt(receipt)
+            receipts_recorded += 1
         results.append(
             {
                 "artifact_id": artifact.artifact_id,

@@ -94,7 +94,7 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
         policy_parser.add_argument("--artifact-id")
         policy_parser.add_argument(
             "--scope",
-            choices=("global", "harness", "workspace", "publisher", "artifact", "session"),
+            choices=("global", "harness", "workspace", "artifact"),
             default="harness",
         )
         policy_parser.add_argument("--reason")
@@ -191,11 +191,14 @@ def run_guard_command(args: argparse.Namespace) -> int:
             default_action=args.default_action,
         )
         _emit("run", payload, getattr(args, "json", False))
-        return 1 if payload.get("blocked") else 0
+        if payload.get("blocked"):
+            return 1
+        return_code = payload.get("return_code")
+        return int(return_code) if isinstance(return_code, int) else 0
 
     if args.guard_command == "diff":
         detection = detect_harness(args.harness, context)
-        payload = evaluate_detection(detection, store, config, default_action="allow")
+        payload = evaluate_detection(detection, store, config, default_action="allow", persist=False)
         changed_artifacts = [item for item in payload["artifacts"] if bool(item["changed"])]
         payload["artifacts"] = changed_artifacts
         payload["changed"] = bool(changed_artifacts)

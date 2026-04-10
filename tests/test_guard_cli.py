@@ -10,8 +10,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import ClassVar
 
+import pytest
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
+from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -330,6 +333,85 @@ args = ["workspace-skill.js", "--changed"]
         assert rc == 0
         assert output["changed"] is True
         assert output["artifacts"][0]["changed_fields"]
+
+        rerun_rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--dry-run",
+                "--default-action",
+                "allow",
+                "--json",
+            ]
+        )
+        rerun_output = json.loads(capsys.readouterr().out)
+
+        assert rerun_rc == 0
+        assert any(item["changed"] is True for item in rerun_output["artifacts"])
+
+    def test_guard_run_returns_launched_harness_exit_code(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "guard_run",
+            lambda *args, **kwargs: {
+                "harness": "codex",
+                "artifacts": [],
+                "blocked": False,
+                "receipts_recorded": 0,
+                "launched": True,
+                "return_code": 7,
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert output["return_code"] == 7
+        assert rc == 7
+
+    def test_guard_allow_rejects_unsupported_scope(self, tmp_path):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(
+                [
+                    "guard",
+                    "allow",
+                    "codex",
+                    "--artifact-id",
+                    "codex:workspace_skill",
+                    "--scope",
+                    "publisher",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--json",
+                ]
+            )
+
+        assert excinfo.value.code == 2
 
     def test_guard_install_and_uninstall_manage_claude_hooks(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

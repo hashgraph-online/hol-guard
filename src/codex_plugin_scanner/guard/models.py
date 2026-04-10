@@ -8,7 +8,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 GuardAction = Literal["allow", "warn", "review", "block", "require-reapproval"]
 GuardMode = Literal["observe", "prompt", "enforce"]
-DecisionScope = Literal["global", "harness", "workspace", "publisher", "artifact", "session"]
+DecisionScope = Literal["global", "harness", "workspace", "artifact"]
 
 
 def _redact_url(value: str | None) -> str | None:
