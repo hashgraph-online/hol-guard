@@ -170,6 +170,7 @@ def _render_receipts(console: Console, payload: dict[str, object]) -> None:
     table.add_column("Harness", style="cyan")
     table.add_column("Artifact", style="bold")
     table.add_column("Decision")
+    table.add_column("Capabilities", style="blue")
     table.add_column("Changed fields", style="magenta")
     for receipt in receipts:
         date_text, time_text = _timestamp_parts(receipt.get("timestamp"))
@@ -179,6 +180,7 @@ def _render_receipts(console: Console, payload: dict[str, object]) -> None:
             str(receipt.get("harness", "unknown")),
             str(receipt.get("artifact_name") or receipt.get("artifact_id") or "unknown"),
             _action_text(str(receipt.get("policy_decision", "warn"))),
+            str(receipt.get("capabilities_summary") or "unknown"),
             ", ".join(_coerce_string_list(receipt.get("changed_capabilities"))) or "none",
         )
     console.print(table)
@@ -252,11 +254,11 @@ def _render_scan(console: Console, payload: dict[str, object]) -> None:
     if isinstance(payload.get("capability_manifest"), dict):
         ecosystems = _coerce_string_list(payload["capability_manifest"].get("ecosystems"))
     artifact_snapshot = payload.get("artifact_snapshot")
+    artifact_path = "."
+    if isinstance(artifact_snapshot, dict):
+        artifact_path = str(artifact_snapshot.get("path") or artifact_snapshot.get("artifact_path") or ".")
     body = Table.grid(padding=(0, 1))
-    body.add_row(
-        "Artifact",
-        str(artifact_snapshot.get("artifact_path", ".")) if isinstance(artifact_snapshot, dict) else ".",
-    )
+    body.add_row("Artifact", artifact_path)
     body.add_row("Ecosystems", ", ".join(ecosystems) or "unknown")
     if isinstance(recommendation, dict):
         body.add_row("Recommended action", _action_text(str(recommendation.get("action", "review"))))
@@ -436,6 +438,7 @@ def _action_text(action: str) -> Text:
         "warn": "yellow",
         "review": "yellow",
         "require-reapproval": "magenta",
+        "sandbox-required": "cyan",
         "block": "red",
     }
     return Text(action, style=styles.get(action, "white"))

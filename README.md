@@ -1,9 +1,8 @@
 # HOL Guard
 
-[![PyPI Version](https://img.shields.io/pypi/v/hol-guard.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/hol-guard/)
-[![Legacy Namespace](https://img.shields.io/badge/legacy-plugin--scanner_and_codex--plugin--scanner-6b7280?logo=pypi&logoColor=white)](https://pypi.org/project/plugin-scanner/)
-[![Python Versions](https://img.shields.io/pypi/pyversions/hol-guard)](https://pypi.org/project/hol-guard/)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/hol-guard)](https://pypistats.org/packages/hol-guard)
+[![Guard Package](https://img.shields.io/badge/package-hol--guard-1459C7?logo=pypi&logoColor=white)](#package-guide)
+[![Scanner Package](https://img.shields.io/badge/package-plugin--scanner-5B49D6?logo=pypi&logoColor=white)](#package-guide)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](#install-the-package-you-need)
 [![CI](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/ci.yml)
 [![Publish](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/publish.yml/badge.svg)](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/publish.yml)
 [![Container Image](https://img.shields.io/badge/ghcr-ai--plugin--scanner-2496ED?logo=docker&logoColor=white)](https://github.com/hashgraph-online/ai-plugin-scanner/pkgs/container/ai-plugin-scanner)
@@ -12,8 +11,16 @@
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/ai-plugin-scanner?style=social)](https://github.com/hashgraph-online/ai-plugin-scanner/stargazers)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
 
-| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Protect Codex, Claude Code, Cursor, Gemini, and OpenCode before local tools run.** HOL Guard watches the tools wired into your harness, shows you what changed, and records what you approved or blocked. The scanner commands stay available for teams that also want linting and CI checks for plugin, skill, MCP, and marketplace packages.<br><br>Start with `hol-guard` if you want local protection. Add the scanner commands later if you also publish or review packages in CI.<br><br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[Legacy Namespace (`plugin-scanner`)](https://pypi.org/project/plugin-scanner/)<br>[Legacy Namespace (`codex-plugin-scanner`)](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/ai-plugin-scanner/issues) |
+| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | **One repo, two first-class Python packages.** Use `hol-guard` to protect Codex, Claude Code, Cursor, Gemini, and OpenCode before local tools run. Use `plugin-scanner` to lint, verify, and gate plugin, skill, MCP, and marketplace packages in CI.<br><br>Install the package that matches your job. The repo houses both products, but users should not need to learn both on day one.<br><br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[PyPI Package (`plugin-scanner`)](https://pypi.org/project/plugin-scanner/)<br>[Compatibility Alias (`codex-plugin-scanner`)](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/ai-plugin-scanner/issues) |
 | :--- | :--- |
+
+## Package Guide
+
+| Install | Use it for | Main commands |
+| :--- | :--- | :--- |
+| `hol-guard` | local harness protection | `hol-guard start`, `hol-guard install codex`, `hol-guard run codex` |
+| `plugin-scanner` | maintainer and CI checks | `plugin-scanner lint`, `plugin-scanner verify`, `plugin-scanner submit` |
+| `codex-plugin-scanner` | compatibility alias for older automation | `codex-plugin-scanner verify` |
 
 ## Protect A Harness In 60 Seconds
 
@@ -58,8 +65,8 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
 ## Use The Scanner In CI
 
 ```bash
-# Install the package once, then use the scanner commands in your shell
-pipx install hol-guard
+# Install the scanner package for maintainer and CI workflows
+pipx install plugin-scanner
 plugin-scanner lint .
 plugin-scanner verify .
 ```
@@ -76,17 +83,17 @@ plugin-scanner verify .
 
 If your repository uses a Codex marketplace root like `.agents/plugins/marketplace.json`, keep `plugin_dir: "."`. The scanner will discover local `./plugins/...` entries automatically, scan each local plugin manifest, and skip remote marketplace entries instead of treating the repo root as a single plugin.
 
-## Start With Guard, Add CI Later
+## Start With Guard, Add Scanner When You Need It
 
 If you use Codex, Claude Code, Cursor, Gemini, or OpenCode every day, start with Guard.
 
 - Guard is the part that protects your local harness before tools run.
 - It helps when a new MCP server appears, when a tool changes after you trusted it, or when you want a receipt for what was approved or blocked.
 
-If you publish plugins, skills, or marketplace packages, add the scanner in CI too.
+If you publish plugins, skills, or marketplace packages, install the scanner package too.
 
 - The scanner checks manifests, metadata, runtime surfaces, and policy rules before a release or CI gate passes.
-- It is the publishing and repo review side of this package, not the first thing a local Guard user needs to learn.
+- It is the maintainer and repo review side of this repo, not something every Guard user needs on day one.
 
 ## Use Scanner After `$plugin-creator`
 
@@ -126,26 +133,33 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
-## Install
+## Install The Package You Need
+
+Guard package:
 
 ```bash
 pip install hol-guard
 ```
 
-Cisco-backed skill scanning is optional:
+Scanner package:
 
 ```bash
-pip install "hol-guard[cisco]"
+pip install plugin-scanner
+```
+
+Cisco-backed scanner analysis is optional:
+
+```bash
+pip install "plugin-scanner[cisco]"
 ```
 
 The `cisco` extra installs the published `cisco-ai-skill-scanner` package from PyPI so the scanner remains publishable on PyPI and the optional Cisco analysis path works with standard package metadata.
 
-You can also install once and use both Guard and scanner commands:
+If you want both tools in one shell during local development:
 
 ```bash
 pipx install hol-guard
-hol-guard start
-plugin-scanner ./my-plugin
+pipx install plugin-scanner
 ```
 
 Container-first environments can use the published image instead:
@@ -157,16 +171,16 @@ docker run --rm \
   scan /workspace --format text
 ```
 
-Backward compatibility remains available for teams still pinned to the historical package namespace:
+The Codex-specific alias remains available for older automation that still expects the historical name:
 
 ```bash
-pip install plugin-scanner
 pip install codex-plugin-scanner
 ```
 
-Compatibility command names also stay available:
+Command names by package:
 
 ```bash
+hol-guard start
 plugin-guard start
 plugin-scanner verify .
 codex-plugin-scanner verify .

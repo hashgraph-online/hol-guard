@@ -92,7 +92,10 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     _add_guard_common_args(run_parser)
     run_parser.add_argument("--json", action="store_true")
     run_parser.add_argument("--dry-run", action="store_true")
-    run_parser.add_argument("--default-action", choices=("allow", "warn", "review", "block", "require-reapproval"))
+    run_parser.add_argument(
+        "--default-action",
+        choices=("allow", "warn", "review", "block", "sandbox-required", "require-reapproval"),
+    )
     run_parser.add_argument("--arg", dest="passthrough_args", action="append", default=[])
 
     scan_parser = guard_subparsers.add_parser("scan", help="Run a consumer-mode scan for a local artifact")
@@ -150,7 +153,10 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     hook_parser.add_argument("--harness", default="claude-code")
     hook_parser.add_argument("--artifact-id")
     hook_parser.add_argument("--artifact-name")
-    hook_parser.add_argument("--policy-action", choices=("allow", "warn", "review", "block", "require-reapproval"))
+    hook_parser.add_argument(
+        "--policy-action",
+        choices=("allow", "warn", "review", "block", "sandbox-required", "require-reapproval"),
+    )
     hook_parser.add_argument("--event-file")
     hook_parser.add_argument("--json", action="store_true")
     guard_subparsers._choices_actions = [
@@ -352,6 +358,10 @@ def run_guard_command(args: argparse.Namespace) -> int:
             artifact_id=artifact_id,
             artifact_hash=str(payload.get("artifact_hash", f"hook:{artifact_id}")),
             policy_decision=policy_action,
+            capabilities_summary=_coalesce_string(
+                payload.get("capabilities_summary"),
+                f"hook artifact • {args.harness}",
+            ),
             changed_capabilities=changed_capabilities or ["hook"],
             provenance_summary=_coalesce_string(
                 payload.get("provenance_summary"),
