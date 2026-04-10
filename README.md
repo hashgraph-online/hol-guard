@@ -422,7 +422,7 @@ Configure:
 - optional repository variable `ACTION_CANONICAL_REPOSITORY`
   Defaults to `hashgraph-online/ai-plugin-scanner-action`.
 - optional repository variable `ACTION_COMPAT_REPOSITORY`
-  Set this only if you still maintain a separate compatibility action repository.
+  Defaults to `hashgraph-online/hol-codex-plugin-scanner-action`.
 
 When changes land on `main`, [publish-action-repo.yml](./.github/workflows/publish-action-repo.yml) will:
 

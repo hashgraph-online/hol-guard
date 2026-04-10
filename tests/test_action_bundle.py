@@ -283,7 +283,8 @@ def test_readme_uses_stable_apache_license_badge() -> None:
     assert "ghcr.io/hashgraph-online/ai-plugin-scanner:<version>" in readme
     assert "https://pypi.org/project/hol-guard/" in readme
     assert "https://pypi.org/project/plugin-scanner/" in readme
-    assert "codex-plugin-scanner" not in readme
+    assert "pip install codex-plugin-scanner" not in readme
+    assert "codex-plugin-scanner verify" not in readme
     assert "Container Image" in readme
     assert "hashgraph-online/ai-plugin-scanner-action@v1" in readme
     assert readme.count("<details>") >= 3
