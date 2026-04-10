@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "plugin-scanner"
 version = "2.0.0"
-description = "Security, operational-security, and publishability scanner for Codex, Claude, Gemini, and OpenCode plugin ecosystems."
+description = "Local Guard runtime plus security and publishability scanning for Codex, Claude, Cursor, Gemini, and OpenCode."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -50,6 +50,7 @@ publish = [
 
 [project.scripts]
 plugin-scanner = "codex_plugin_scanner.cli:main"
+plugin-guard = "codex_plugin_scanner.cli:main"
 codex-plugin-scanner = "codex_plugin_scanner.cli:main"
 plugin-ecosystem-scanner = "codex_plugin_scanner.cli:main"
 
@@ -65,6 +66,15 @@ extend-exclude = ["tests/test-trust-scoring.py", "tests/test-trust-specs.py"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/codex_plugin_scanner"]
+
+[tool.hatch.build]
+exclude = [
+    ".guard-e2e/**",
+    ".guard-e2e-prod/**",
+    ".guard-e2e-prod2/**",
+    ".guard-prod-venv/**",
+    ".guard-prod-venv-fresh/**",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "RUF"]

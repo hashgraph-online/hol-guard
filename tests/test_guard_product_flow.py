@@ -1,0 +1,272 @@
+"""Product-flow behavior tests for Guard onboarding and local launch setup."""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+
+from codex_plugin_scanner.cli import main
+
+
+def _write_json(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def _build_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:
+    _write_text(
+        home_dir / ".codex" / "config.toml",
+        """
+[mcp_servers.global_tools]
+command = "python"
+args = ["-m", "http.server", "9000"]
+""".strip()
+        + "\n",
+    )
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        """
+[mcp_servers.workspace_skill]
+command = "node"
+args = ["workspace-skill.js"]
+""".strip()
+        + "\n",
+    )
+    _write_json(
+        workspace_dir / ".mcp.json",
+        {
+            "mcpServers": {
+                "workspace-tools": {"command": "python", "args": ["-m", "http.server", "9100"]},
+            }
+        },
+    )
+
+
+class TestGuardProductFlow:
+    def test_guard_start_json_guides_first_run(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "start",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        codex_summary = next(item for item in output["harnesses"] if item["harness"] == "codex")
+
+        assert rc == 0
+        assert output["recommended_harness"] == "codex"
+        assert output["sync_configured"] is False
+        assert output["receipt_count"] == 0
+        assert codex_summary["managed"] is False
+        assert codex_summary["next_action"] == "install"
+        assert output["next_steps"][0]["command"] == "plugin-scanner guard install codex"
+        assert output["next_steps"][1]["command"] == "plugin-scanner guard run codex --dry-run"
+
+    def test_guard_start_human_output_highlights_guard_loop(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "start",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+            ]
+        )
+        output = capsys.readouterr().out
+
+        assert rc == 0
+        assert "Install Guard for codex" in output
+        assert "Run Guard before launch" in output
+        assert "Optional sync later" in output
+
+    def test_guard_install_creates_wrapper_shim(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        shim_path = Path(output["managed_install"]["manifest"]["shim_path"])
+
+        assert rc == 0
+        assert output["managed_install"]["active"] is True
+        assert shim_path.exists() is True
+        assert os.access(shim_path, os.X_OK) is True
+        assert "'--guard-home'" in shim_path.read_text(encoding="utf-8")
+        assert f"'{home_dir}'" in shim_path.read_text(encoding="utf-8")
+        assert "'guard'" in shim_path.read_text(encoding="utf-8")
+        assert "'run'" in shim_path.read_text(encoding="utf-8")
+        assert "'codex'" in shim_path.read_text(encoding="utf-8")
+
+    def test_guard_install_without_home_override_keeps_real_home_detection(self, tmp_path, capsys, monkeypatch):
+        real_home = tmp_path / "real-home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(real_home, workspace_dir)
+        monkeypatch.setattr(Path, "home", lambda: real_home)
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "codex",
+                "--guard-home",
+                str(guard_home),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        shim_path = Path(output["managed_install"]["manifest"]["shim_path"])
+        shim_text = shim_path.read_text(encoding="utf-8")
+
+        assert rc == 0
+        assert "'--guard-home'" in shim_text
+        assert f"'{guard_home}'" in shim_text
+        assert "'--home'" not in shim_text
+
+    def test_guard_status_reports_managed_launch_and_review_queue(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+
+        install_rc = main(
+            [
+                "guard",
+                "install",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        json.loads(capsys.readouterr().out)
+        first_run_rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--dry-run",
+                "--default-action",
+                "allow",
+                "--json",
+            ]
+        )
+        json.loads(capsys.readouterr().out)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "require-reapproval"\n')
+        _write_text(
+            workspace_dir / ".codex" / "config.toml",
+            """
+[mcp_servers.workspace_skill]
+command = "node"
+args = ["workspace-skill.js", "--changed"]
+""".strip()
+            + "\n",
+        )
+
+        status_rc = main(
+            [
+                "guard",
+                "status",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        status_output = json.loads(capsys.readouterr().out)
+        codex_summary = next(item for item in status_output["harnesses"] if item["harness"] == "codex")
+
+        assert install_rc == 0
+        assert first_run_rc == 0
+        assert status_rc == 0
+        assert status_output["managed_harnesses"] == 1
+        assert status_output["receipt_count"] >= 1
+        assert codex_summary["managed"] is True
+        assert codex_summary["review_count"] >= 1
+        assert codex_summary["next_action"] == "review"
+
+    def test_guard_shim_forwards_dash_prefixed_args(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        fake_bin = tmp_path / "fake-bin"
+        fake_codex = fake_bin / "codex"
+        args_file = tmp_path / "codex-args.txt"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+        _write_text(
+            fake_codex,
+            "\n".join(
+                (
+                    "#!/bin/sh",
+                    f'printf "%s\\n" "$@" > "{args_file}"',
+                    "exit 0",
+                    "",
+                )
+            ),
+        )
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        fake_codex.chmod(fake_codex.stat().st_mode | 0o755)
+
+        main(
+            [
+                "guard",
+                "install",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        install_output = json.loads(capsys.readouterr().out)
+        shim_path = Path(install_output["managed_install"]["manifest"]["shim_path"])
+        env = os.environ.copy()
+        env["PATH"] = f"{fake_bin}:{env['PATH']}"
+
+        result = subprocess.run([str(shim_path), "--help"], capture_output=True, text=True, env=env, check=False)
+
+        assert result.returncode == 0
+        assert args_file.read_text(encoding="utf-8").strip() == "--help"

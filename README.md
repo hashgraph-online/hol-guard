@@ -12,10 +12,47 @@
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/ai-plugin-scanner?style=social)](https://github.com/hashgraph-online/ai-plugin-scanner/stargazers)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
 
-| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | **The default CI gate for AI agent plugin ecosystems**. Lint locally, verify in CI, and ship publish-ready bundles for manifests, skills, MCP, and marketplace metadata across Codex, Claude, Gemini, and OpenCode.<br><br>Use this after scaffolding and before publishing, review, or distribution.<br><br>[PyPI Package (`plugin-scanner`)](https://pypi.org/project/plugin-scanner/)<br>[Legacy Namespace (`codex-plugin-scanner`)](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/ai-plugin-scanner/issues) |
+| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | **HOL Guard for local harness protection, plus the scanner CI gate for plugin ecosystems**. Protect Codex, Claude Code, Cursor, Gemini, and OpenCode before local tools run, then lint locally, verify in CI, and ship publish-ready bundles for manifests, skills, MCP, and marketplace metadata.<br><br>Use Guard when you want a local safety loop. Use the scanner when you want publishing and CI confidence.<br><br>[PyPI Package (`plugin-scanner`)](https://pypi.org/project/plugin-scanner/)<br>[Legacy Namespace (`codex-plugin-scanner`)](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/ai-plugin-scanner/issues) |
 | :--- | :--- |
 
-## Start In 30 Seconds
+## Guard Start In 60 Seconds
+
+```bash
+# See what Guard can protect on this machine
+pipx run plugin-guard guard start
+
+# Install Guard in front of Codex
+pipx run plugin-guard guard install codex
+
+# Review the current tool state before launch
+pipx run plugin-guard guard run codex
+
+# Inspect local receipts later
+pipx run plugin-guard guard receipts
+```
+
+Guard is local-first:
+
+1. detect your harnesses
+2. install a Guard launcher
+3. run the harness through Guard
+4. approve or block changes
+5. inspect receipts locally
+6. connect sync only if you want shared history later
+
+Guard commands that matter most:
+
+- `plugin-scanner guard start` for the first-run path
+- `plugin-scanner guard status` for the current protection state
+- `plugin-scanner guard install <harness>` to create a local Guard launcher
+- `plugin-scanner guard run <harness> --dry-run` to record the current state before launch
+- `plugin-scanner guard run <harness>` to review and approve changed tools before launch
+- `plugin-scanner guard diff <harness>` when Guard says something changed
+- `plugin-scanner guard receipts` for local history
+
+See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local flow.
+
+## Scanner Start In 30 Seconds
 
 ```bash
 # Local preflight
@@ -35,7 +72,27 @@ pipx run plugin-scanner verify .
 
 If your repository uses a Codex marketplace root like `.agents/plugins/marketplace.json`, keep `plugin_dir: "."`. The scanner will discover local `./plugins/...` entries automatically, scan each local plugin manifest, and skip remote marketplace entries instead of treating the repo root as a single plugin.
 
-## Use After `$plugin-creator`
+## Two Product Modes
+
+### HOL Guard
+
+Use Guard when the problem is local runtime safety inside a harness:
+
+- a new MCP server showed up in local config
+- an existing tool changed after you trusted it
+- you want receipts for what was approved or blocked
+- you want to review changes before Codex, Claude Code, Cursor, Gemini, or OpenCode launches
+
+### Scanner CI Gate
+
+Use the scanner when the problem is authoring, CI, and publish readiness:
+
+- lint manifests and metadata
+- verify runtime and install surfaces
+- block PRs with policy gates
+- emit artifacts before submission or publishing
+
+## Use Scanner After `$plugin-creator`
 
 `plugin-scanner` is designed as the quality gate between plugin creation and distribution:
 

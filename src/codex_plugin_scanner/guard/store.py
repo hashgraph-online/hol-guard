@@ -125,6 +125,15 @@ class GuardStore:
         with self._connect() as connection:
             for statement in statements:
                 connection.execute(statement)
+            self._ensure_policy_column(connection, "publisher", "text")
+
+    @staticmethod
+    def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
+        rows = connection.execute("pragma table_info(policy_decisions)").fetchall()
+        existing = {str(row["name"]) for row in rows}
+        if column_name in existing:
+            return
+        connection.execute(f"alter table policy_decisions add column {column_name} {column_type}")
 
     def list_table_names(self) -> list[str]:
         with self._connect() as connection:
@@ -202,33 +211,43 @@ class GuardStore:
             )
 
     def upsert_policy(self, decision: PolicyDecision, now: str) -> None:
-        artifact_id, workspace = self._normalized_policy_keys(decision)
+        artifact_id, workspace, publisher = self._normalized_policy_keys(decision)
         with self._connect() as connection:
             connection.execute(
                 """
                 delete from policy_decisions
                 where harness = ? and scope = ? and coalesce(artifact_id, '') = coalesce(?, '')
                   and coalesce(workspace, '') = coalesce(?, '')
+                  and coalesce(publisher, '') = coalesce(?, '')
                 """,
-                (decision.harness, decision.scope, artifact_id, workspace),
+                (decision.harness, decision.scope, artifact_id, workspace, publisher),
             )
             connection.execute(
                 """
-                insert into policy_decisions (harness, scope, artifact_id, workspace, action, reason, updated_at)
-                values (?, ?, ?, ?, ?, ?, ?)
+                insert into policy_decisions (
+                  harness, scope, artifact_id, workspace, publisher, action, reason, updated_at
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     decision.harness,
                     decision.scope,
                     artifact_id,
                     workspace,
+                    publisher,
                     decision.action,
                     decision.reason,
                     now,
                 ),
             )
 
-    def resolve_policy(self, harness: str, artifact_id: str | None, workspace: str | None) -> str | None:
+    def resolve_policy(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        workspace: str | None,
+        publisher: str | None = None,
+    ) -> str | None:
         with self._connect() as connection:
             rows = connection.execute(
                 """
@@ -236,21 +255,24 @@ class GuardStore:
                 where harness = ? and (
                   (scope = 'artifact' and artifact_id = ?)
                   or (scope = 'workspace' and workspace = ?)
+                  or (scope = 'publisher' and publisher = ?)
                   or scope = 'harness'
                   or scope = 'global'
                 )
-                order by case scope when 'artifact' then 0 when 'workspace' then 1 when 'harness' then 2 else 3 end,
+                order by case scope when 'artifact' then 0 when 'workspace' then 1 when 'publisher' then 2
+                         when 'harness' then 3 else 4 end,
                          updated_at desc
                 """,
-                (harness, artifact_id, workspace),
+                (harness, artifact_id, workspace, publisher),
             ).fetchall()
         return str(rows[0]["action"]) if rows else None
 
     @staticmethod
-    def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None]:
+    def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None]:
         artifact_id = decision.artifact_id if decision.scope == "artifact" else None
         workspace = decision.workspace if decision.scope == "workspace" else None
-        return artifact_id, workspace
+        publisher = decision.publisher if decision.scope == "publisher" else None
+        return artifact_id, workspace, publisher
 
     def add_receipt(self, receipt: GuardReceipt) -> None:
         with self._connect() as connection:
@@ -306,6 +328,11 @@ class GuardStore:
             for row in rows
         ]
 
+    def count_receipts(self) -> int:
+        with self._connect() as connection:
+            row = connection.execute("select count(*) as total from runtime_receipts").fetchone()
+        return int(row["total"]) if row is not None else 0
+
     def set_managed_install(
         self,
         harness: str,
@@ -343,6 +370,26 @@ class GuardStore:
             "manifest": json.loads(str(row["manifest_json"])),
             "updated_at": str(row["updated_at"]),
         }
+
+    def list_managed_installs(self) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                select harness, active, workspace, manifest_json, updated_at
+                from managed_installs
+                order by harness asc
+                """
+            ).fetchall()
+        return [
+            {
+                "harness": str(row["harness"]),
+                "active": bool(row["active"]),
+                "workspace": row["workspace"],
+                "manifest": json.loads(str(row["manifest_json"])),
+                "updated_at": str(row["updated_at"]),
+            }
+            for row in rows
+        ]
 
     def set_sync_credentials(self, sync_url: str, token: str, now: str) -> None:
         payload = {"sync_url": sync_url, "token": token}

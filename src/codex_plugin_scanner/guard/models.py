@@ -8,7 +8,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 GuardAction = Literal["allow", "warn", "review", "block", "require-reapproval"]
 GuardMode = Literal["observe", "prompt", "enforce"]
-DecisionScope = Literal["global", "harness", "workspace", "artifact"]
+DecisionScope = Literal["global", "harness", "workspace", "artifact", "publisher"]
 
 
 def _redact_url(value: str | None) -> str | None:
@@ -92,6 +92,7 @@ class PolicyDecision:
     action: GuardAction
     artifact_id: str | None = None
     workspace: str | None = None
+    publisher: str | None = None
     reason: str | None = None
 
     def to_dict(self) -> dict[str, object]:

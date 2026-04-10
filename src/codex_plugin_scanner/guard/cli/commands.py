@@ -16,6 +16,8 @@ from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS
 from ..receipts import build_receipt
 from ..runtime import guard_run, sync_receipts
 from ..store import GuardStore
+from .product import build_guard_start_payload, build_guard_status_payload
+from .prompt import build_prompt_artifacts, resolve_interactive_decisions
 from .render import emit_guard_payload
 
 
@@ -26,6 +28,7 @@ def _now() -> str:
 def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the Guard command family."""
 
+    program_name = Path(sys.argv[0]).name or "plugin-scanner"
     guard_parser = subparsers.add_parser(
         "guard",
         help="Run local harness protection workflows",
@@ -35,18 +38,26 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
         ),
         epilog=(
             "Examples:\n"
-            "  codex-plugin-scanner guard detect\n"
-            "  codex-plugin-scanner guard doctor cursor\n"
-            "  codex-plugin-scanner guard run codex --dry-run\n"
-            "  codex-plugin-scanner guard install claude-code --workspace ."
+            f"  {program_name} guard detect\n"
+            f"  {program_name} guard doctor cursor\n"
+            f"  {program_name} guard run codex --dry-run\n"
+            f"  {program_name} guard install claude-code --workspace ."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     guard_subparsers = guard_parser.add_subparsers(
         dest="guard_command",
-        metavar="{detect,install,uninstall,run,scan,diff,receipts,explain,allow,deny,doctor,login,sync}",
+        metavar="{start,status,detect,install,uninstall,run,scan,diff,receipts,explain,allow,deny,doctor,login,sync}",
     )
     guard_subparsers.required = True
+
+    start_parser = guard_subparsers.add_parser("start", help="Show the first Guard steps for a local harness")
+    _add_guard_common_args(start_parser)
+    start_parser.add_argument("--json", action="store_true")
+
+    status_parser = guard_subparsers.add_parser("status", help="Show current Guard protection status")
+    _add_guard_common_args(status_parser)
+    status_parser.add_argument("--json", action="store_true")
 
     detect_parser = guard_subparsers.add_parser("detect", help="Discover supported harnesses and local artifacts")
     detect_parser.add_argument("harness", nargs="?")
@@ -95,10 +106,11 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
         policy_parser.add_argument("--artifact-id")
         policy_parser.add_argument(
             "--scope",
-            choices=("global", "harness", "workspace", "artifact"),
+            choices=("global", "harness", "workspace", "artifact", "publisher"),
             default="harness",
         )
         policy_parser.add_argument("--reason")
+        policy_parser.add_argument("--publisher")
         _add_guard_common_args(policy_parser)
         policy_parser.add_argument("--json", action="store_true")
         policy_parser.set_defaults(policy_action=action)
@@ -112,10 +124,12 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     login_parser.add_argument("--sync-url", required=True)
     login_parser.add_argument("--token", required=True)
     login_parser.add_argument("--home")
+    login_parser.add_argument("--guard-home")
     login_parser.add_argument("--json", action="store_true")
 
     sync_parser = guard_subparsers.add_parser("sync", help="Sync receipts to the configured Guard endpoint")
     sync_parser.add_argument("--home")
+    sync_parser.add_argument("--guard-home")
     sync_parser.add_argument("--json", action="store_true")
 
     hook_parser = guard_subparsers.add_parser("hook", help=argparse.SUPPRESS)
@@ -133,6 +147,7 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
 
 def _add_guard_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--home")
+    parser.add_argument("--guard-home")
     parser.add_argument("--workspace")
 
 
@@ -144,15 +159,26 @@ def run_guard_command(args: argparse.Namespace) -> int:
         _emit("scan", payload, args.json or args.consumer_mode)
         return 0
 
-    guard_home = resolve_guard_home(getattr(args, "home", None))
+    home_override = getattr(args, "home", None)
+    guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
     workspace = Path(args.workspace).resolve() if getattr(args, "workspace", None) else None
     context = HarnessContext(
-        home_dir=Path(getattr(args, "home", None)).resolve() if getattr(args, "home", None) else Path.home(),
+        home_dir=Path(home_override).resolve() if home_override else Path.home().resolve(),
         workspace_dir=workspace,
         guard_home=guard_home,
     )
     config = load_guard_config(guard_home, workspace=workspace)
     store = GuardStore(guard_home)
+
+    if args.guard_command == "start":
+        payload = build_guard_start_payload(context, store, config)
+        _emit("start", payload, getattr(args, "json", False))
+        return 0
+
+    if args.guard_command == "status":
+        payload = build_guard_status_payload(context, store, config)
+        _emit("status", payload, getattr(args, "json", False))
+        return 0
 
     if args.guard_command == "detect":
         detections = [detect_harness(args.harness, context)] if args.harness else detect_all(context)
@@ -182,6 +208,27 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command == "run":
+        interactive_resolver = None
+        if (
+            not getattr(args, "json", False)
+            and not bool(args.dry_run)
+            and config.mode == "prompt"
+            and sys.stdin.isatty()
+        ):
+
+            def interactive_resolver(detection, payload):
+                return resolve_interactive_decisions(
+                    store=store,
+                    evaluation=payload,
+                    prompt_artifacts=build_prompt_artifacts(
+                        harness=detection.harness,
+                        artifacts=list(detection.artifacts),
+                        evaluation_artifacts=[item for item in payload.get("artifacts", []) if isinstance(item, dict)],
+                    ),
+                    workspace=str(workspace) if workspace else None,
+                    now=_now(),
+                )
+
         payload = guard_run(
             args.harness,
             context=context,
@@ -190,7 +237,18 @@ def run_guard_command(args: argparse.Namespace) -> int:
             dry_run=bool(args.dry_run),
             passthrough_args=list(args.passthrough_args),
             default_action=args.default_action,
+            interactive_resolver=interactive_resolver,
         )
+        if (
+            payload.get("blocked")
+            and config.mode == "prompt"
+            and not getattr(args, "json", False)
+            and not sys.stdin.isatty()
+        ):
+            payload["review_hint"] = (
+                f"Guard blocked {args.harness} because this shell is non-interactive. "
+                f"Run `plugin-guard guard diff {args.harness}` and allow or deny the changed artifacts first."
+            )
         _emit("run", payload, getattr(args, "json", False))
         if payload.get("blocked"):
             return 1
@@ -216,7 +274,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command in {"allow", "deny"}:
-        _validate_policy_scope(args.scope, args.artifact_id, workspace)
+        _validate_policy_scope(args.scope, args.artifact_id, workspace, getattr(args, "publisher", None))
         payload = record_policy(
             store=store,
             harness=args.harness,
@@ -224,6 +282,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             scope=args.scope,
             artifact_id=args.artifact_id,
             workspace=str(workspace) if workspace else None,
+            publisher=getattr(args, "publisher", None),
             reason=args.reason,
         )
         _emit(args.guard_command, {"decision": payload}, getattr(args, "json", False))
@@ -349,10 +408,18 @@ def _string_list(value: object | None) -> list[str]:
     return [str(item) for item in value if isinstance(item, str) and item.strip()]
 
 
-def _validate_policy_scope(scope: str, artifact_id: str | None, workspace: Path | None) -> None:
+def _validate_policy_scope(
+    scope: str,
+    artifact_id: str | None,
+    workspace: Path | None,
+    publisher: str | None,
+) -> None:
     if scope == "artifact" and not artifact_id:
         print("--artifact-id is required when --scope artifact", file=sys.stderr)
         raise SystemExit(2)
     if scope == "workspace" and workspace is None:
         print("--workspace is required when --scope workspace", file=sys.stderr)
+        raise SystemExit(2)
+    if scope == "publisher" and not publisher:
+        print("--publisher is required when --scope publisher", file=sys.stderr)
         raise SystemExit(2)
