@@ -80,8 +80,7 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
         console.print(
             Panel(
                 "\n".join(
-                    f"• {item.get('harness')}: run [bold]{item.get('review_command')}[/bold]"
-                    for item in review_items
+                    f"• {item.get('harness')}: run [bold]{item.get('review_command')}[/bold]" for item in review_items
                 ),
                 title="Needs review",
                 border_style="yellow",

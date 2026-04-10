@@ -211,6 +211,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             and config.mode == "prompt"
             and sys.stdin.isatty()
         ):
+
             def interactive_resolver(detection, payload):
                 return resolve_interactive_decisions(
                     store=store,
