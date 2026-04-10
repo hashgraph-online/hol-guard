@@ -193,7 +193,7 @@ jobs:
         run: |
           VERSION="${{ needs.build.outputs.version }}"
           BUNDLE_ROOT="dist/github-action-bundle"
-          BUNDLE_PATH="dist/hol-codex-plugin-scanner-action-v${VERSION}.zip"
+          BUNDLE_PATH="dist/ai-plugin-scanner-action-v${VERSION}.zip"
 
           mkdir -p "${BUNDLE_ROOT}"
           cp action/action.yml "${BUNDLE_ROOT}/action.yml"
