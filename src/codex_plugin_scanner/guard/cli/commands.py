@@ -215,6 +215,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command in {"allow", "deny"}:
+        _validate_policy_scope(args.scope, args.artifact_id, workspace)
         payload = record_policy(
             store=store,
             harness=args.harness,
@@ -342,3 +343,12 @@ def _string_list(value: object | None) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if isinstance(item, str) and item.strip()]
+
+
+def _validate_policy_scope(scope: str, artifact_id: str | None, workspace: Path | None) -> None:
+    if scope == "artifact" and not artifact_id:
+        print("--artifact-id is required when --scope artifact", file=sys.stderr)
+        raise SystemExit(2)
+    if scope == "workspace" and workspace is None:
+        print("--workspace is required when --scope workspace", file=sys.stderr)
+        raise SystemExit(2)

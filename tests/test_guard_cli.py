@@ -413,6 +413,52 @@ args = ["workspace-skill.js", "--changed"]
 
         assert excinfo.value.code == 2
 
+    def test_guard_allow_requires_artifact_id_for_artifact_scope(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(
+                [
+                    "guard",
+                    "allow",
+                    "codex",
+                    "--scope",
+                    "artifact",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--json",
+                ]
+            )
+
+        assert excinfo.value.code == 2
+        assert "--artifact-id is required when --scope artifact" in capsys.readouterr().err
+
+    def test_guard_allow_requires_workspace_for_workspace_scope(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(
+                [
+                    "guard",
+                    "allow",
+                    "codex",
+                    "--scope",
+                    "workspace",
+                    "--home",
+                    str(home_dir),
+                    "--json",
+                ]
+            )
+
+        assert excinfo.value.code == 2
+        assert "--workspace is required when --scope workspace" in capsys.readouterr().err
+
     def test_guard_install_and_uninstall_manage_claude_hooks(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
