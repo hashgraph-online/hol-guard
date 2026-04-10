@@ -123,6 +123,33 @@ class TestGuardProductFlow:
         assert output["recommended_harness"] == "codex"
         assert output["next_steps"][0]["command"] == "hol-guard install codex"
 
+    def test_hol_guard_windows_entrypoint_runs_without_nested_guard_command(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(sys, "argv", ["hol-guard.exe"])
+
+        rc = main(
+            [
+                "start",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recommended_harness"] == "codex"
+        assert output["next_steps"][0]["command"] == "hol-guard install codex"
+
     def test_guard_install_creates_wrapper_shim(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

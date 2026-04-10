@@ -137,7 +137,8 @@ def _add_common_policy_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _is_guard_program(program_name: str) -> bool:
-    return program_name in {"hol-guard", "plugin-guard"}
+    normalized_name = Path(program_name).stem.lower()
+    return normalized_name in {"hol-guard", "plugin-guard"}
 
 
 def _build_parser(program_name: str, *, guard_program: bool) -> argparse.ArgumentParser:
