@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -348,6 +350,7 @@ args = ["workspace-skill.js", "--changed"]
         )
         install_output = json.loads(capsys.readouterr().out)
         settings_local = workspace_dir / ".claude" / "settings.local.json"
+        install_settings_payload = json.loads(settings_local.read_text(encoding="utf-8"))
 
         uninstall_rc = main(
             [
@@ -367,6 +370,12 @@ args = ["workspace-skill.js", "--changed"]
         assert install_rc == 0
         assert install_output["managed_install"]["active"] is True
         assert settings_local.exists()
+        assert len(install_settings_payload["hooks"]["PreToolUse"]) == 1
+        assert install_output["managed_install"]["manifest"]["notes"][0]
+        expected_hook_command = subprocess.list2cmdline(
+            [sys.executable, "-m", "codex_plugin_scanner.cli", "guard", "hook"]
+        )
+        assert install_settings_payload["hooks"]["PreToolUse"][0]["command"] == expected_hook_command
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
         assert settings_payload["hooks"]["PreToolUse"] == []
@@ -447,8 +456,7 @@ args = ["workspace-skill.js", "--changed"]
                 "ok": True,
                 "return_code": 0,
                 "stdout": (
-                    "Loading MCPs...\n"
-                    "No MCP servers configured (expected in .cursor/mcp.json or ~/.cursor/mcp.json)"
+                    "Loading MCPs...\nNo MCP servers configured (expected in .cursor/mcp.json or ~/.cursor/mcp.json)"
                 ),
                 "stderr": "",
             },

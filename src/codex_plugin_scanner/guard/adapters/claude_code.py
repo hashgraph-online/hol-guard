@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 from ..models import GuardArtifact, HarnessDetection
@@ -115,12 +117,16 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             warnings=(),
         )
 
+    @staticmethod
+    def _hook_command() -> str:
+        return subprocess.list2cmdline([sys.executable, "-m", "codex_plugin_scanner.cli", "guard", "hook"])
+
     def install(self, context: HarnessContext) -> dict[str, object]:
         if context.workspace_dir is None:
             return super().install(context)
         settings_path = context.workspace_dir / ".claude" / "settings.local.json"
         payload = _json_payload(settings_path)
-        hook_command = "python -m codex_plugin_scanner.cli guard hook"
+        hook_command = self._hook_command()
         hooks = payload.setdefault("hooks", {})
         if not isinstance(hooks, dict):
             hooks = {}
@@ -143,7 +149,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             return super().uninstall(context)
         settings_path = context.workspace_dir / ".claude" / "settings.local.json"
         payload = _json_payload(settings_path)
-        hook_command = "python -m codex_plugin_scanner.cli guard hook"
+        hook_command = self._hook_command()
         hooks = payload.get("hooks")
         if isinstance(hooks, dict):
             for key in ("PreToolUse", "PostToolUse"):
