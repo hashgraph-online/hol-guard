@@ -23,7 +23,13 @@ def _coerce_action_map(payload: object) -> dict[str, GuardAction]:
     for key, value in payload.items():
         if not isinstance(key, str):
             continue
-        action = value if isinstance(value, str) else value.get("action") if isinstance(value, dict) else None
+        action = (
+            value
+            if isinstance(value, str)
+            else (value.get("action") or value.get("default_action"))
+            if isinstance(value, dict)
+            else None
+        )
         if isinstance(action, str) and action in VALID_GUARD_ACTIONS:
             action_map[key] = action
     return action_map

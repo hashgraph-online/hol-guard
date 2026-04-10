@@ -149,6 +149,30 @@ class TestGuardRuntime:
         assert config.resolve_action_override("codex", None, "hashgraph-online") == "sandbox-required"
         assert config.resolve_action_override("codex", "codex:project:workspace-tools", None) == "block"
 
+    def test_guard_load_config_accepts_default_action_inside_override_sections(self, tmp_path):
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir(parents=True, exist_ok=True)
+        _write_text(
+            guard_home / "config.toml",
+            "\n".join(
+                [
+                    "[harnesses.codex]",
+                    'default_action = "allow"',
+                    '[publishers."hashgraph-online"]',
+                    'default_action = "sandbox-required"',
+                    '[artifacts."codex:project:workspace-tools"]',
+                    'default_action = "block"',
+                ]
+            )
+            + "\n",
+        )
+
+        config = load_guard_config(guard_home)
+
+        assert config.resolve_action_override("codex", None, None) == "allow"
+        assert config.resolve_action_override("codex", None, "hashgraph-online") == "sandbox-required"
+        assert config.resolve_action_override("codex", "codex:project:workspace-tools", None) == "block"
+
     def test_guard_evaluate_detection_uses_config_action_overrides(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         config = GuardConfig(
