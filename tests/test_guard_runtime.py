@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -322,6 +323,105 @@ class TestGuardRuntime:
         assert output["launched"] is False
         assert output["return_code"] == 127
         assert "codex not found" in output["launch_error"]
+
+    def test_guard_run_prompt_allow_once_launches_and_records_override(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        answers = iter(["1", "1"])
+        monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr("rich.console.Console.input", lambda self, prompt="": next(answers))
+        monkeypatch.setattr(
+            guard_runner_module.subprocess,
+            "run",
+            lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+        )
+
+        rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+            ]
+        )
+        output = capsys.readouterr().out
+        receipts = GuardStore(Path(home_dir)).list_receipts(limit=10)
+
+        assert rc == 0
+        assert "Launch allowed" in output
+        assert any(item.get("user_override") == "allow-once" for item in receipts)
+
+    def test_guard_run_prompt_allow_artifact_persists_for_next_run(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        answers = iter(["2", "2"])
+        monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr("rich.console.Console.input", lambda self, prompt="": next(answers))
+        monkeypatch.setattr(
+            guard_runner_module.subprocess,
+            "run",
+            lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+        )
+
+        first_rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+            ]
+        )
+        first_output = capsys.readouterr().out
+
+        second_rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--dry-run",
+                "--json",
+            ]
+        )
+        second_output = json.loads(capsys.readouterr().out)
+
+        assert first_rc == 0
+        assert "Launch allowed" in first_output
+        assert second_rc == 0
+        assert second_output["blocked"] is False
+        assert all(item["policy_action"] == "allow" for item in second_output["artifacts"])
+
+    def test_guard_run_headless_blocks_with_review_hint(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+            ]
+        )
+        output = capsys.readouterr().out
+
+        assert rc == 1
+        assert "non-interactive" in output
 
     def test_guard_invalid_changed_hash_action_falls_back_to_reapproval(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
