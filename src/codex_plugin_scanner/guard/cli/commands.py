@@ -60,9 +60,9 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     """Attach Guard subcommands to a parser."""
     guard_subparsers = guard_parser.add_subparsers(
         dest="guard_command",
+        required=True,
         metavar="{start,status,detect,install,uninstall,run,scan,diff,receipts,explain,allow,deny,doctor,login,sync}",
     )
-    guard_subparsers.required = True
 
     start_parser = guard_subparsers.add_parser("start", help="Show the first Guard steps for a local harness")
     _add_guard_common_args(start_parser)
