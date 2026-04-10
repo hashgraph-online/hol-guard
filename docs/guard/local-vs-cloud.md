@@ -1,6 +1,6 @@
-# Local vs Cloud
+# Works Locally First
 
-Guard is local-first.
+Guard works on your machine before you sign in anywhere.
 
 Local features available without sign-in:
 
@@ -19,4 +19,4 @@ Optional cloud features:
 - billing and entitlements
 - shared team policy
 
-The local runtime does not require any hosted service. `guard login` and `guard sync` exist to layer optional cloud features on top of the local product, not to unlock the core safety workflow.
+The local runtime does not require any hosted service. `hol-guard login` and `hol-guard sync` add optional cloud features later. They do not unlock the core safety workflow.

@@ -413,7 +413,7 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert "HOL Guard local harness status" in output
         assert "global_tools" in output
-        assert "Run `codex-plugin-scanner guard doctor <harness>`" in output
+        assert "Run `hol-guard doctor <harness>`" in output
 
     def test_guard_scan_emits_consumer_contract(self, capsys):
         rc = main(

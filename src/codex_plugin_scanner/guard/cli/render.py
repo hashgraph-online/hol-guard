@@ -45,7 +45,7 @@ def _render_detect(console: Console, payload: dict[str, object]) -> None:
         _render_harness_detail(console, detection)
     if attention_count > 0:
         console.print(
-            "[yellow]Run `codex-plugin-scanner guard doctor <harness>` "
+            "[yellow]Run `hol-guard doctor <harness>` "
             "for harness-specific drift and runtime diagnostics.[/yellow]"
         )
 

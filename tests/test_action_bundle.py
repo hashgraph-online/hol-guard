@@ -102,10 +102,14 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     assert '"${RELEASE_ASSETS[@]}"' in workflow_text
     assert "subject-path: |" in workflow_text
     assert "dist/*" in workflow_text
-    assert "Build legacy compatibility package (codex-plugin-scanner)" in workflow_text
+    assert "Build primary package (hol-guard)" in workflow_text
+    assert "Build compatibility package (plugin-scanner)" in workflow_text
+    assert "Build compatibility package (codex-plugin-scanner)" in workflow_text
+    assert 'sed -i "1,/^name = /{s/^name = .*/name = \\"plugin-scanner\\"/}" pyproject.toml' in workflow_text
     assert "codex-plugin-scanner" in workflow_text
     assert "cp pyproject.toml pyproject.toml.bak" in workflow_text
     assert "mv pyproject.toml.bak pyproject.toml" in workflow_text
+    assert "uv tool install hol-guard==${VERSION}" in workflow_text
     assert "uv tool install plugin-scanner==${VERSION}" in workflow_text
     assert "uv tool install codex-plugin-scanner==${VERSION}" in workflow_text
     assert "docker pull ghcr.io/hashgraph-online/ai-plugin-scanner:${VERSION}" in workflow_text
@@ -254,6 +258,7 @@ def test_readme_uses_stable_apache_license_badge() -> None:
     assert "publish-action-repo.yml" in readme
     assert "docs/github-action-marketplace.md" not in readme
     assert "ghcr.io/hashgraph-online/ai-plugin-scanner:<version>" in readme
+    assert "https://pypi.org/project/hol-guard/" in readme
     assert "https://pypi.org/project/plugin-scanner/" in readme
     assert "https://pypi.org/project/codex-plugin-scanner/" in readme
     assert "Container Image" in readme
