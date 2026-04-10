@@ -63,8 +63,9 @@ def _build_python_shim(harness: str, context: HarnessContext, workspace_args: li
         "guard",
         "run",
         harness,
-        "--home",
+        "--guard-home",
         str(context.guard_home),
+        *_home_override_args(context),
         *workspace_args,
     ]
     return "\n".join(
@@ -83,6 +84,12 @@ def _build_python_shim(harness: str, context: HarnessContext, workspace_args: li
 
 def _build_windows_script(posix_path: Path) -> str:
     return "\r\n".join(("@echo off", f'"{sys.executable}" "{posix_path}" %*', ""))
+
+
+def _home_override_args(context: HarnessContext) -> list[str]:
+    if context.home_dir.resolve() == Path.home().resolve():
+        return []
+    return ["--home", str(context.home_dir)]
 
 
 __all__ = ["install_guard_shim", "remove_guard_shim"]

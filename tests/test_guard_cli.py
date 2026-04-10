@@ -839,6 +839,10 @@ args = ["workspace-skill.js", "--changed"]
                 "codex_plugin_scanner.cli",
                 "guard",
                 "hook",
+                "--guard-home",
+                str(home_dir),
+                "--home",
+                str(home_dir),
                 "--workspace",
                 str(workspace_dir),
             ]
@@ -860,6 +864,10 @@ args = ["workspace-skill.js", "--changed"]
                 "codex_plugin_scanner.cli",
                 "guard",
                 "hook",
+                "--guard-home",
+                str(home_dir),
+                "--home",
+                str(home_dir),
                 "--workspace",
                 str(workspace_dir),
             ]

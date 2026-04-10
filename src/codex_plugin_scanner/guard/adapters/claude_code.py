@@ -120,7 +120,17 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _hook_command(context: HarnessContext) -> str:
-        command = [sys.executable, "-m", "codex_plugin_scanner.cli", "guard", "hook"]
+        command = [
+            sys.executable,
+            "-m",
+            "codex_plugin_scanner.cli",
+            "guard",
+            "hook",
+            "--guard-home",
+            str(context.guard_home),
+        ]
+        if context.home_dir.resolve() != Path.home().resolve():
+            command.extend(["--home", str(context.home_dir)])
         if context.workspace_dir is not None:
             command.extend(["--workspace", str(context.workspace_dir)])
         return subprocess.list2cmdline(command)

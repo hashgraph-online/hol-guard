@@ -124,9 +124,39 @@ class TestGuardProductFlow:
         assert output["managed_install"]["active"] is True
         assert shim_path.exists() is True
         assert os.access(shim_path, os.X_OK) is True
+        assert "'--guard-home'" in shim_path.read_text(encoding="utf-8")
+        assert f"'{home_dir}'" in shim_path.read_text(encoding="utf-8")
         assert "'guard'" in shim_path.read_text(encoding="utf-8")
         assert "'run'" in shim_path.read_text(encoding="utf-8")
         assert "'codex'" in shim_path.read_text(encoding="utf-8")
+
+    def test_guard_install_without_home_override_keeps_real_home_detection(self, tmp_path, capsys, monkeypatch):
+        real_home = tmp_path / "real-home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(real_home, workspace_dir)
+        monkeypatch.setattr(Path, "home", lambda: real_home)
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "codex",
+                "--guard-home",
+                str(guard_home),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        shim_path = Path(output["managed_install"]["manifest"]["shim_path"])
+        shim_text = shim_path.read_text(encoding="utf-8")
+
+        assert rc == 0
+        assert "'--guard-home'" in shim_text
+        assert f"'{guard_home}'" in shim_text
+        assert "'--home'" not in shim_text
 
     def test_guard_status_reports_managed_launch_and_review_queue(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

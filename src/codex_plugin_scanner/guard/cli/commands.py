@@ -124,10 +124,12 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
     login_parser.add_argument("--sync-url", required=True)
     login_parser.add_argument("--token", required=True)
     login_parser.add_argument("--home")
+    login_parser.add_argument("--guard-home")
     login_parser.add_argument("--json", action="store_true")
 
     sync_parser = guard_subparsers.add_parser("sync", help="Sync receipts to the configured Guard endpoint")
     sync_parser.add_argument("--home")
+    sync_parser.add_argument("--guard-home")
     sync_parser.add_argument("--json", action="store_true")
 
     hook_parser = guard_subparsers.add_parser("hook", help=argparse.SUPPRESS)
@@ -145,6 +147,7 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
 
 def _add_guard_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--home")
+    parser.add_argument("--guard-home")
     parser.add_argument("--workspace")
 
 
@@ -156,10 +159,11 @@ def run_guard_command(args: argparse.Namespace) -> int:
         _emit("scan", payload, args.json or args.consumer_mode)
         return 0
 
-    guard_home = resolve_guard_home(getattr(args, "home", None))
+    home_override = getattr(args, "home", None)
+    guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
     workspace = Path(args.workspace).resolve() if getattr(args, "workspace", None) else None
     context = HarnessContext(
-        home_dir=Path(getattr(args, "home", None)).resolve() if getattr(args, "home", None) else Path.home(),
+        home_dir=Path(home_override).resolve() if home_override else Path.home().resolve(),
         workspace_dir=workspace,
         guard_home=guard_home,
     )
