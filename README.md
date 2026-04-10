@@ -168,7 +168,6 @@ Command names by package:
 
 ```bash
 hol-guard start
-plugin-guard start
 plugin-scanner verify .
 ```
 
