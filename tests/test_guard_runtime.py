@@ -12,7 +12,10 @@ from pathlib import Path
 from typing import ClassVar
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.store import GuardStore
@@ -86,6 +89,102 @@ class _RemoteProxyHandler(BaseHTTPRequestHandler):
 
 
 class TestGuardRuntime:
+    def test_guard_run_keeps_prior_snapshot_when_reapproval_blocks(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        baseline = GuardArtifact(
+            artifact_id="codex:project:workspace-tools",
+            name="workspace-tools",
+            harness="codex",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            command="node",
+            args=("workspace.js",),
+            transport="stdio",
+        )
+        changed = GuardArtifact(
+            artifact_id=baseline.artifact_id,
+            name=baseline.name,
+            harness=baseline.harness,
+            artifact_type=baseline.artifact_type,
+            source_scope=baseline.source_scope,
+            config_path=baseline.config_path,
+            command="node",
+            args=("workspace.js", "--changed"),
+            transport="stdio",
+        )
+        baseline_hash = artifact_hash(baseline)
+        store.save_snapshot(
+            "codex",
+            baseline.artifact_id,
+            {**baseline.to_dict(), "artifact_hash": baseline_hash},
+            baseline_hash,
+            "2026-04-10T00:00:00+00:00",
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(baseline.config_path,),
+            artifacts=(changed,),
+        )
+        config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
+
+        first = evaluate_detection(detection, store, config, default_action="allow", persist=True)
+        stored_after_first = store.get_snapshot("codex", baseline.artifact_id)
+        second = evaluate_detection(detection, store, config, default_action="allow", persist=True)
+
+        assert first["blocked"] is True
+        assert stored_after_first is not None
+        assert stored_after_first["artifact_hash"] == baseline_hash
+        assert second["blocked"] is True
+        assert second["artifacts"][0]["changed"] is True
+
+    def test_guard_diff_surfaces_removed_artifacts(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        removed = GuardArtifact(
+            artifact_id="codex:global:global-tools",
+            name="global-tools",
+            harness="codex",
+            artifact_type="mcp_server",
+            source_scope="global",
+            config_path=str(tmp_path / "home" / ".codex" / "config.toml"),
+            command="python",
+            args=("-m", "http.server"),
+            transport="stdio",
+        )
+        removed_hash = artifact_hash(removed)
+        store.save_snapshot(
+            "codex",
+            removed.artifact_id,
+            {**removed.to_dict(), "artifact_hash": removed_hash},
+            removed_hash,
+            "2026-04-10T00:00:00+00:00",
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(),
+            artifacts=(),
+        )
+        config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
+
+        evaluation = evaluate_detection(detection, store, config, default_action="allow", persist=False)
+
+        assert evaluation["blocked"] is True
+        assert evaluation["artifacts"] == [
+            {
+                "artifact_id": "codex:global:global-tools",
+                "artifact_name": "global-tools",
+                "changed": True,
+                "changed_fields": ["removed"],
+                "policy_action": "require-reapproval",
+                "artifact_hash": removed_hash,
+                "removed": True,
+            }
+        ]
+
     def test_guard_hook_records_receipt_from_stdin_event(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

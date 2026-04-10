@@ -166,6 +166,21 @@ class GuardStore:
             return None
         return json.loads(str(row["snapshot_json"]))
 
+    def list_snapshots(self, harness: str) -> dict[str, dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "select artifact_id, snapshot_json from artifact_snapshots where harness = ?",
+                (harness,),
+            ).fetchall()
+        return {str(row["artifact_id"]): json.loads(str(row["snapshot_json"])) for row in rows}
+
+    def delete_snapshot(self, harness: str, artifact_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "delete from artifact_snapshots where artifact_id = ? and harness = ?",
+                (artifact_id, harness),
+            )
+
     def record_diff(
         self,
         harness: str,

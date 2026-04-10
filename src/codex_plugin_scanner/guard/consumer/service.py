@@ -60,6 +60,29 @@ def diff_artifact(previous: dict[str, object] | None, current: GuardArtifact) ->
     }
 
 
+def diff_removed_artifact(previous: dict[str, object]) -> dict[str, object]:
+    previous_hash = previous.get("artifact_hash")
+    return {
+        "changed": True,
+        "changed_fields": ["removed"],
+        "previous_hash": previous_hash if isinstance(previous_hash, str) else None,
+        "current_hash": None,
+        "current_snapshot": previous,
+    }
+
+
+def _is_blocking_action(policy_action: str) -> bool:
+    return policy_action in {"block", "require-reapproval"}
+
+
+def _build_removed_provenance(previous: dict[str, object]) -> str:
+    scope = previous.get("source_scope")
+    config_path = previous.get("config_path")
+    scope_label = str(scope) if isinstance(scope, str) else "unknown"
+    path_label = str(config_path) if isinstance(config_path, str) else "unknown config"
+    return f"{scope_label} artifact removed from {path_label}"
+
+
 def detect_all(context: HarnessContext) -> list[HarnessDetection]:
     """Run detection across all adapters."""
 
@@ -86,8 +109,11 @@ def evaluate_detection(
     blocked = False
     receipts_recorded = 0
     now = _now()
+    previous_snapshots = store.list_snapshots(detection.harness)
+    current_artifact_ids: set[str] = set()
     for artifact in detection.artifacts:
-        previous = store.get_snapshot(detection.harness, artifact.artifact_id)
+        current_artifact_ids.add(artifact.artifact_id)
+        previous = previous_snapshots.get(artifact.artifact_id)
         diff = diff_artifact(previous, artifact)
         policy_action = decide_action(
             configured_action=store.resolve_policy(detection.harness, artifact.artifact_id, workspace),
@@ -95,7 +121,7 @@ def evaluate_detection(
             config=config,
             changed=bool(diff["changed"]),
         )
-        if policy_action in {"block", "require-reapproval"}:
+        if _is_blocking_action(policy_action):
             blocked = True
         receipt = build_receipt(
             harness=detection.harness,
@@ -108,13 +134,6 @@ def evaluate_detection(
             source_scope=artifact.source_scope,
         )
         if persist:
-            store.save_snapshot(
-                detection.harness,
-                artifact.artifact_id,
-                {**diff["current_snapshot"], "artifact_hash": diff["current_hash"]},
-                str(diff["current_hash"]),
-                now,
-            )
             if diff["changed"]:
                 previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else None
                 store.record_diff(
@@ -122,6 +141,14 @@ def evaluate_detection(
                     artifact.artifact_id,
                     list(diff["changed_fields"]),
                     previous_hash,
+                    str(diff["current_hash"]),
+                    now,
+                )
+            if not _is_blocking_action(policy_action):
+                store.save_snapshot(
+                    detection.harness,
+                    artifact.artifact_id,
+                    {**diff["current_snapshot"], "artifact_hash": diff["current_hash"]},
                     str(diff["current_hash"]),
                     now,
                 )
@@ -135,6 +162,55 @@ def evaluate_detection(
                 "changed_fields": diff["changed_fields"],
                 "policy_action": policy_action,
                 "artifact_hash": diff["current_hash"],
+            }
+        )
+    removed_artifact_ids = sorted(set(previous_snapshots) - current_artifact_ids)
+    for artifact_id in removed_artifact_ids:
+        previous = previous_snapshots[artifact_id]
+        diff = diff_removed_artifact(previous)
+        policy_action = decide_action(
+            configured_action=store.resolve_policy(detection.harness, artifact_id, workspace),
+            default_action=default_action,
+            config=config,
+            changed=True,
+        )
+        if _is_blocking_action(policy_action):
+            blocked = True
+        previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else "removed"
+        artifact_name = previous.get("name")
+        source_scope = previous.get("source_scope")
+        receipt = build_receipt(
+            harness=detection.harness,
+            artifact_id=artifact_id,
+            artifact_hash=previous_hash,
+            policy_decision=policy_action,
+            changed_capabilities=["removed"],
+            provenance_summary=_build_removed_provenance(previous),
+            artifact_name=str(artifact_name) if isinstance(artifact_name, str) else artifact_id,
+            source_scope=str(source_scope) if isinstance(source_scope, str) else None,
+        )
+        if persist:
+            store.record_diff(
+                detection.harness,
+                artifact_id,
+                ["removed"],
+                diff["previous_hash"] if isinstance(diff["previous_hash"], str) else None,
+                "removed",
+                now,
+            )
+            if not _is_blocking_action(policy_action):
+                store.delete_snapshot(detection.harness, artifact_id)
+            store.add_receipt(receipt)
+            receipts_recorded += 1
+        results.append(
+            {
+                "artifact_id": artifact_id,
+                "artifact_name": str(artifact_name) if isinstance(artifact_name, str) else artifact_id,
+                "changed": True,
+                "changed_fields": ["removed"],
+                "policy_action": policy_action,
+                "artifact_hash": previous_hash,
+                "removed": True,
             }
         )
     return {
