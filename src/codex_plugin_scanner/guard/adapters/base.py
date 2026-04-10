@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..models import GuardArtifact, HarnessDetection
+from ..shims import install_guard_shim, remove_guard_shim
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,19 +78,21 @@ class HarnessAdapter:
         raise NotImplementedError
 
     def install(self, context: HarnessContext) -> dict[str, object]:
+        shim_manifest = install_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
             "active": True,
-            "config_path": None,
-            "notes": ["No harness config was changed. Guard will evaluate this harness in wrapper mode."],
+            "config_path": shim_manifest["shim_path"],
+            **shim_manifest,
         }
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        shim_manifest = remove_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
             "active": False,
-            "config_path": None,
-            "notes": ["No harness config was changed. Guard wrapper mode is now disabled."],
+            "config_path": shim_manifest["shim_path"],
+            **shim_manifest,
         }
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:

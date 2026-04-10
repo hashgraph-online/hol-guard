@@ -630,7 +630,7 @@ args = ["workspace-skill.js", "--changed"]
         assert output["return_code"] == 7
         assert rc == 7
 
-    def test_guard_allow_rejects_unsupported_scope(self, tmp_path):
+    def test_guard_allow_requires_publisher_for_publisher_scope(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
@@ -640,9 +640,7 @@ args = ["workspace-skill.js", "--changed"]
                 [
                     "guard",
                     "allow",
-                    "codex",
-                    "--artifact-id",
-                    "codex:project:workspace_skill",
+                    "gemini",
                     "--scope",
                     "publisher",
                     "--home",
@@ -654,6 +652,34 @@ args = ["workspace-skill.js", "--changed"]
             )
 
         assert excinfo.value.code == 2
+        assert "--publisher is required when --scope publisher" in capsys.readouterr().err
+
+    def test_guard_allow_persists_publisher_scope(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "allow",
+                "gemini",
+                "--scope",
+                "publisher",
+                "--publisher",
+                "hashgraph-online",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["decision"]["scope"] == "publisher"
+        assert output["decision"]["publisher"] == "hashgraph-online"
 
     def test_guard_allow_requires_artifact_id_for_artifact_scope(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -813,6 +839,10 @@ args = ["workspace-skill.js", "--changed"]
                 "codex_plugin_scanner.cli",
                 "guard",
                 "hook",
+                "--guard-home",
+                str(home_dir),
+                "--home",
+                str(home_dir),
                 "--workspace",
                 str(workspace_dir),
             ]
@@ -834,6 +864,10 @@ args = ["workspace-skill.js", "--changed"]
                 "codex_plugin_scanner.cli",
                 "guard",
                 "hook",
+                "--guard-home",
+                str(home_dir),
+                "--home",
+                str(home_dir),
                 "--workspace",
                 str(workspace_dir),
             ]
