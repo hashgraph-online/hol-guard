@@ -37,7 +37,7 @@ class GeminiHarnessAdapter(HarnessAdapter):
                 extension_name = raw_name if isinstance(raw_name, str) else manifest_path.parent.name
                 artifacts.append(
                     GuardArtifact(
-                        artifact_id=f"gemini:{extension_name}",
+                        artifact_id=f"gemini:{scope}:{extension_name}",
                         name=extension_name,
                         harness=self.harness,
                         artifact_type="extension",
@@ -55,7 +55,7 @@ class GeminiHarnessAdapter(HarnessAdapter):
                         command = server_config.get("command")
                         artifacts.append(
                             GuardArtifact(
-                                artifact_id=f"gemini:{extension_name}:{server_name}",
+                                artifact_id=f"gemini:{scope}:{extension_name}:{server_name}",
                                 name=server_name,
                                 harness=self.harness,
                                 artifact_type="mcp_server",
@@ -82,7 +82,7 @@ class GeminiHarnessAdapter(HarnessAdapter):
                     command = server_config.get("command")
                     artifacts.append(
                         GuardArtifact(
-                            artifact_id=f"gemini:mcp:{server_name}",
+                            artifact_id=f"gemini:global:mcp:{server_name}",
                             name=server_name,
                             harness=self.harness,
                             artifact_type="mcp_server",

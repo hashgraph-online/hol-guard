@@ -84,7 +84,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                                 command = entry.get("command")
                                 artifacts.append(
                                     GuardArtifact(
-                                        artifact_id=f"claude-code:{hook_name.lower()}:{index}",
+                                        artifact_id=f"claude-code:{scope}:{hook_name.lower()}:{index}",
                                         name=hook_name,
                                         harness=self.harness,
                                         artifact_type="hook",

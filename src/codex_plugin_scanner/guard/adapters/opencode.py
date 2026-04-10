@@ -42,7 +42,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
                     command_list = command if isinstance(command, list) else []
                     artifacts.append(
                         GuardArtifact(
-                            artifact_id=f"opencode:{name}",
+                            artifact_id=f"opencode:{scope}:{name}",
                             name=name,
                             harness=self.harness,
                             artifact_type="mcp_server",
@@ -60,7 +60,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
                     found_paths.append(str(command_path))
                     artifacts.append(
                         GuardArtifact(
-                            artifact_id=f"opencode:command:{command_path.stem}",
+                            artifact_id=f"opencode:project:command:{command_path.stem}",
                             name=command_path.stem,
                             harness=self.harness,
                             artifact_type="command",

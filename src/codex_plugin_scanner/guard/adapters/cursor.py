@@ -40,7 +40,7 @@ class CursorHarnessAdapter(HarnessAdapter):
                 command = server_config.get("command")
                 artifacts.append(
                     GuardArtifact(
-                        artifact_id=f"cursor:{name}",
+                        artifact_id=f"cursor:{scope}:{name}",
                         name=name,
                         harness=self.harness,
                         artifact_type="mcp_server",

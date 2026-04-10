@@ -234,6 +234,164 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert artifact_ids == ["claude-code:global:shared-tools", "claude-code:project:shared-tools"]
 
+    def test_guard_detect_scopes_claude_hook_artifact_ids(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".claude" / "settings.json",
+            {
+                "hooks": {
+                    "PreToolUse": [{"command": "python global-hook.py"}],
+                }
+            },
+        )
+        _write_json(
+            workspace_dir / ".claude" / "settings.local.json",
+            {
+                "hooks": {
+                    "PreToolUse": [{"command": "python project-hook.py"}],
+                }
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "claude-code",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = [item["artifact_id"] for item in output["harnesses"][0]["artifacts"]]
+
+        assert rc == 0
+        assert artifact_ids == [
+            "claude-code:global:pretooluse:0",
+            "claude-code:project:pretooluse:0",
+        ]
+
+    def test_guard_detect_scopes_cursor_artifact_ids(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".cursor" / "mcp.json",
+            {
+                "mcpServers": {
+                    "shared-tools": {"command": "npx", "args": ["global-server"]},
+                }
+            },
+        )
+        _write_json(
+            workspace_dir / ".cursor" / "mcp.json",
+            {
+                "mcpServers": {
+                    "shared-tools": {"command": "npx", "args": ["project-server"]},
+                }
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "cursor",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = [item["artifact_id"] for item in output["harnesses"][0]["artifacts"]]
+
+        assert rc == 0
+        assert artifact_ids == ["cursor:global:shared-tools", "cursor:project:shared-tools"]
+
+    def test_guard_detect_scopes_gemini_artifact_ids(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".gemini" / "extensions" / "shared" / "gemini-extension.json",
+            {
+                "name": "shared",
+                "mcpServers": {"shared-tools": {"command": "node", "args": ["global.js"]}},
+            },
+        )
+        _write_json(
+            workspace_dir / ".gemini" / "extensions" / "shared" / "gemini-extension.json",
+            {
+                "name": "shared",
+                "mcpServers": {"shared-tools": {"command": "node", "args": ["project.js"]}},
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "gemini",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = [item["artifact_id"] for item in output["harnesses"][0]["artifacts"]]
+
+        assert rc == 0
+        assert artifact_ids == [
+            "gemini:global:shared",
+            "gemini:global:shared:shared-tools",
+            "gemini:project:shared",
+            "gemini:project:shared:shared-tools",
+        ]
+
+    def test_guard_detect_scopes_opencode_artifact_ids(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".config" / "opencode" / "opencode.json",
+            {
+                "mcp": {
+                    "shared-tools": {"type": "local", "command": ["node", "global.js"]},
+                }
+            },
+        )
+        _write_json(
+            workspace_dir / "opencode.json",
+            {
+                "mcp": {
+                    "shared-tools": {"type": "local", "command": ["node", "project.js"]},
+                }
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = [item["artifact_id"] for item in output["harnesses"][0]["artifacts"]]
+
+        assert rc == 0
+        assert artifact_ids == ["opencode:global:shared-tools", "opencode:project:shared-tools"]
+
     def test_guard_detect_human_output_surfaces_next_steps(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
