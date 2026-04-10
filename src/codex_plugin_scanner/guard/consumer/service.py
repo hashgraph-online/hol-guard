@@ -95,7 +95,7 @@ def evaluate_detection(
             config=config,
             changed=bool(diff["changed"]),
         )
-        if policy_action == "block":
+        if policy_action in {"block", "require-reapproval"}:
             blocked = True
         receipt = build_receipt(
             harness=detection.harness,

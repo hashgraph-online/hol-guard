@@ -59,7 +59,7 @@ class CodexHarnessAdapter(HarnessAdapter):
                     env = server_config.get("env")
                     artifacts.append(
                         GuardArtifact(
-                            artifact_id=f"codex:{name}",
+                            artifact_id=f"codex:{scope}:{name}",
                             name=name,
                             harness=self.harness,
                             artifact_type="mcp_server",

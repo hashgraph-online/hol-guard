@@ -156,6 +156,46 @@ class TestGuardCli:
         assert harnesses["codex"]["artifacts"][0]["source_scope"] == "global"
         assert harnesses["claude-code"]["artifacts"][0]["artifact_type"] in {"mcp_server", "hook", "agent"}
 
+    def test_guard_detect_scopes_codex_artifact_ids(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_text(
+            home_dir / ".codex" / "config.toml",
+            """
+[mcp_servers.shared_tools]
+command = "python"
+args = ["-m", "http.server", "9000"]
+""".strip()
+            + "\n",
+        )
+        _write_text(
+            workspace_dir / ".codex" / "config.toml",
+            """
+[mcp_servers.shared_tools]
+command = "node"
+args = ["workspace-skill.js"]
+""".strip()
+            + "\n",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = [item["artifact_id"] for item in output["harnesses"][0]["artifacts"]]
+
+        assert rc == 0
+        assert artifact_ids == ["codex:global:shared_tools", "codex:project:shared_tools"]
+
     def test_guard_detect_human_output_surfaces_next_steps(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -203,6 +243,7 @@ class TestGuardCli:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
 
         rc = main(
             [
@@ -210,7 +251,7 @@ class TestGuardCli:
                 "allow",
                 "codex",
                 "--artifact-id",
-                "codex:workspace_skill",
+                "codex:project:workspace_skill",
                 "--scope",
                 "artifact",
                 "--home",
@@ -287,6 +328,7 @@ class TestGuardCli:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
 
         first_run = main(
             [
@@ -305,6 +347,8 @@ class TestGuardCli:
         )
         assert first_run == 0
         json.loads(capsys.readouterr().out)
+
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "require-reapproval"\n')
 
         _write_text(
             workspace_dir / ".codex" / "config.toml",
@@ -351,7 +395,9 @@ args = ["workspace-skill.js", "--changed"]
         )
         rerun_output = json.loads(capsys.readouterr().out)
 
-        assert rerun_rc == 0
+        assert rerun_rc == 1
+        assert rerun_output["blocked"] is True
+        assert any(item["policy_action"] == "require-reapproval" for item in rerun_output["artifacts"])
         assert any(item["changed"] is True for item in rerun_output["artifacts"])
 
     def test_guard_run_returns_launched_harness_exit_code(self, tmp_path, capsys, monkeypatch):
@@ -400,7 +446,7 @@ args = ["workspace-skill.js", "--changed"]
                     "allow",
                     "codex",
                     "--artifact-id",
-                    "codex:workspace_skill",
+                    "codex:project:workspace_skill",
                     "--scope",
                     "publisher",
                     "--home",
@@ -501,7 +547,15 @@ args = ["workspace-skill.js", "--changed"]
         assert len(install_settings_payload["hooks"]["PreToolUse"]) == 1
         assert install_output["managed_install"]["manifest"]["notes"][0]
         expected_hook_command = subprocess.list2cmdline(
-            [sys.executable, "-m", "codex_plugin_scanner.cli", "guard", "hook"]
+            [
+                sys.executable,
+                "-m",
+                "codex_plugin_scanner.cli",
+                "guard",
+                "hook",
+                "--workspace",
+                str(workspace_dir),
+            ]
         )
         assert install_settings_payload["hooks"]["PreToolUse"][0]["command"] == expected_hook_command
         assert uninstall_rc == 0
@@ -512,6 +566,7 @@ args = ["workspace-skill.js", "--changed"]
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
 
         server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
