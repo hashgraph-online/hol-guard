@@ -1,5 +1,5 @@
-name: "HOL Codex Plugin Scanner"
-description: "Scan a Codex plugin directory for security, publishability, and best practices. Scores from 0-100."
+name: "HOL AI Plugin Scanner"
+description: "Scan AI plugin repositories for security, publishability, and best-practice quality signals."
 author: "HOL"
 
 inputs:
@@ -24,7 +24,7 @@ inputs:
     required: false
     default: "default"
   config:
-    description: "Optional path to .codex-plugin-scanner.toml"
+    description: "Optional path to a scanner config file such as .plugin-scanner.toml"
     required: false
     default: ""
   baseline:
@@ -42,13 +42,13 @@ inputs:
   sarif_category:
     description: "SARIF category used when upload_sarif is enabled"
     required: false
-    default: "codex-plugin-scanner"
+    default: "ai-plugin-scanner"
   write_step_summary:
     description: "Write a concise markdown summary to the GitHub Actions job summary"
     required: false
     default: "true"
   registry_payload_output:
-    description: "Write a machine-readable Codex ecosystem payload JSON file for registry or awesome-list automation"
+    description: "Write a machine-readable plugin ecosystem payload JSON file for registry or awesome-list automation"
     required: false
     default: ""
   min_score:
@@ -115,6 +115,18 @@ inputs:
     description: "Override the plugin author used in the submission issue"
     required: false
     default: ""
+  pr_comment:
+    description: "PR comment mode: auto, always, or off"
+    required: false
+    default: "auto"
+  pr_comment_style:
+    description: "PR comment style: concise or detailed"
+    required: false
+    default: "concise"
+  pr_comment_max_findings:
+    description: "Maximum findings to include in PR comment summaries"
+    required: false
+    default: "5"
 
 outputs:
   score:
@@ -142,7 +154,7 @@ outputs:
     description: "The path to the rendered report file, if output was requested"
     value: ${{ steps.scan.outputs.report_path }}
   registry_payload_path:
-    description: "The path to the machine-readable Codex ecosystem payload file, if requested"
+    description: "The path to the machine-readable plugin ecosystem payload file, if requested"
     value: ${{ steps.scan.outputs.registry_payload_path }}
   submission_eligible:
     description: "Whether the plugin met the submission threshold and passed the configured severity gate"
@@ -156,6 +168,18 @@ outputs:
   submission_issue_numbers:
     description: "Comma-separated issue numbers for submission issues created or reused"
     value: ${{ steps.scan.outputs.submission_issue_numbers }}
+  action_exit_code:
+    description: "Action execution exit code"
+    value: ${{ steps.scan.outputs.action_exit_code }}
+  pr_comment_status:
+    description: "PR comment status: created, updated, unchanged, skipped, or disabled"
+    value: ${{ steps.scan.outputs.pr_comment_status }}
+  pr_comment_id:
+    description: "Created or updated PR comment id when available"
+    value: ${{ steps.scan.outputs.pr_comment_id }}
+  pr_comment_url:
+    description: "Created or updated PR comment URL when available"
+    value: ${{ steps.scan.outputs.pr_comment_url }}
 
 branding:
   icon: "check-circle"
@@ -185,7 +209,7 @@ runs:
 
         if [ "$INSTALL_SOURCE" = "local" ]; then
           if [ -z "$LOCAL_SOURCE" ]; then
-            echo "install_source=local requires the source repository checkout (for example: uses: ./action inside codex-plugin-scanner)." >&2
+            echo "install_source=local requires the source repository checkout (for example: uses: ./action inside ai-plugin-scanner)." >&2
             exit 1
           fi
           if [ "$INSTALL_CISCO" = "true" ]; then
@@ -205,21 +229,21 @@ runs:
           SCANNER_VERSION="$(tr -d '[:space:]' < "$SCANNER_VERSION_FILE")"
           CISCO_VERSION="$(tr -d '[:space:]' < "$CISCO_VERSION_FILE")"
           PYPI_ATTESTATIONS_VERSION="$(tr -d '[:space:]' < "$PYPI_ATTESTATIONS_VERSION_FILE")"
-          SCANNER_REPOSITORY="https://github.com/hashgraph-online/codex-plugin-scanner"
-          DIST_DIR="${RUNNER_TEMP:-$GITHUB_WORKSPACE/.codex-plugin-scanner-dist}"
+          SCANNER_REPOSITORY="https://github.com/hashgraph-online/ai-plugin-scanner"
+          DIST_DIR="${RUNNER_TEMP:-$GITHUB_WORKSPACE/.ai-plugin-scanner-dist}"
           mkdir -p "$DIST_DIR"
 
           python3 -m pip install "pypi-attestations==${PYPI_ATTESTATIONS_VERSION}"
-          python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" "codex-plugin-scanner==${SCANNER_VERSION}"
+          python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" "plugin-scanner==${SCANNER_VERSION}"
 
           DIST_BASENAME="$(
-            DIST_DIR="$DIST_DIR" python3 -c "import os; from pathlib import Path; dist_dir = Path(os.environ['DIST_DIR']); candidates = sorted(dist_dir.glob('codex_plugin_scanner-*.whl')); expected = len(candidates) == 1; print(candidates[0].name) if expected else (_ for _ in ()).throw(SystemExit(f'Expected exactly one downloaded scanner wheel, found {len(candidates)}'))"
+            DIST_DIR="$DIST_DIR" python3 -c "import os; from pathlib import Path; dist_dir = Path(os.environ['DIST_DIR']); candidates = sorted(dist_dir.glob('plugin_scanner-*.whl')); expected = len(candidates) == 1; print(candidates[0].name) if expected else (_ for _ in ()).throw(SystemExit(f'Expected exactly one downloaded scanner wheel, found {len(candidates)}'))"
           )"
 
           if ! python3 -m pypi_attestations verify pypi \
             --repository "$SCANNER_REPOSITORY" \
             "pypi:${DIST_BASENAME}"; then
-            echo "Failed to verify PyPI provenance for codex-plugin-scanner==${SCANNER_VERSION}." >&2
+            echo "Failed to verify PyPI provenance for plugin-scanner==${SCANNER_VERSION}." >&2
             exit 1
           fi
 
@@ -261,6 +285,9 @@ runs:
         SUBMISSION_PLUGIN_URL: ${{ inputs.submission_plugin_url }}
         SUBMISSION_PLUGIN_DESCRIPTION: ${{ inputs.submission_plugin_description }}
         SUBMISSION_AUTHOR: ${{ inputs.submission_author }}
+        PR_COMMENT: ${{ inputs.pr_comment }}
+        PR_COMMENT_STYLE: ${{ inputs.pr_comment_style }}
+        PR_COMMENT_MAX_FINDINGS: ${{ inputs.pr_comment_max_findings }}
         GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
       run: python3 -m codex_plugin_scanner.action_runner
 
