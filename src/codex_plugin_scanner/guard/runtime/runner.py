@@ -35,9 +35,15 @@ def guard_run(
 
     adapter = get_adapter(harness)
     command = adapter.launch_command(context, passthrough_args)
-    result = subprocess.run(command, cwd=context.workspace_dir or Path.cwd(), check=False)
-    evaluation["launched"] = True
     evaluation["launch_command"] = command
+    try:
+        result = subprocess.run(command, cwd=context.workspace_dir or Path.cwd(), check=False)
+    except FileNotFoundError as error:
+        evaluation["launched"] = False
+        evaluation["return_code"] = 127
+        evaluation["launch_error"] = str(error)
+        return evaluation
+    evaluation["launched"] = True
     evaluation["return_code"] = result.returncode
     return evaluation
 

@@ -5,6 +5,9 @@ from __future__ import annotations
 from ..config import GuardConfig
 from ..models import GuardAction
 
+VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "require-reapproval"}
+SAFE_CHANGED_HASH_ACTION: GuardAction = "require-reapproval"
+
 
 def decide_action(
     configured_action: str | None,
@@ -14,10 +17,12 @@ def decide_action(
 ) -> GuardAction:
     """Resolve the effective policy action."""
 
-    if configured_action in {"allow", "warn", "review", "block", "require-reapproval"}:
+    if configured_action in VALID_GUARD_ACTIONS:
         return configured_action
     if changed:
-        return config.changed_hash_action
-    if default_action in {"allow", "warn", "review", "block", "require-reapproval"}:
+        if config.changed_hash_action in VALID_GUARD_ACTIONS:
+            return config.changed_hash_action
+        return SAFE_CHANGED_HASH_ACTION
+    if default_action in VALID_GUARD_ACTIONS:
         return default_action
     return config.default_action

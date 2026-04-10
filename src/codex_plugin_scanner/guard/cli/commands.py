@@ -330,13 +330,14 @@ def _optional_string(value: object | None) -> str | None:
 
 
 def _artifact_id_from_event(harness: str, payload: dict[str, object]) -> str:
+    source_scope = _coalesce_string(payload.get("source_scope"), "project")
     tool_name = payload.get("tool_name")
     if isinstance(tool_name, str) and tool_name.strip():
-        return f"{harness}:{tool_name.strip()}"
+        return f"{harness}:{source_scope}:{tool_name.strip()}"
     event_name = payload.get("event")
     if isinstance(event_name, str) and event_name.strip():
-        return f"{harness}:{event_name.strip().lower()}"
-    return f"{harness}:hook"
+        return f"{harness}:{source_scope}:{event_name.strip().lower()}"
+    return f"{harness}:{source_scope}:hook"
 
 
 def _string_list(value: object | None) -> list[str]:

@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
+from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -258,6 +259,118 @@ class TestGuardRuntime:
 
         assert rc == 1
         assert output["policy_action"] == "require-reapproval"
+
+    def test_guard_hook_fallback_artifact_id_uses_scope(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        event = {
+            "event": "PreToolUse",
+            "tool_name": "workspace-tools",
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "claude-code",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["artifact_id"] == "claude-code:project:workspace-tools"
+
+    def test_guard_run_returns_structured_error_when_executable_missing(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+        monkeypatch.setattr(
+            guard_runner_module.subprocess,
+            "run",
+            lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("codex not found")),
+        )
+
+        rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--default-action",
+                "allow",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 127
+        assert output["launched"] is False
+        assert output["return_code"] == 127
+        assert "codex not found" in output["launch_error"]
+
+    def test_guard_invalid_changed_hash_action_falls_back_to_reapproval(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        baseline = GuardArtifact(
+            artifact_id="codex:project:workspace-tools",
+            name="workspace-tools",
+            harness="codex",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            command="node",
+            args=("workspace.js",),
+            transport="stdio",
+        )
+        changed = GuardArtifact(
+            artifact_id=baseline.artifact_id,
+            name=baseline.name,
+            harness=baseline.harness,
+            artifact_type=baseline.artifact_type,
+            source_scope=baseline.source_scope,
+            config_path=baseline.config_path,
+            command="node",
+            args=("workspace.js", "--changed"),
+            transport="stdio",
+        )
+        baseline_hash = artifact_hash(baseline)
+        store.save_snapshot(
+            "codex",
+            baseline.artifact_id,
+            {**baseline.to_dict(), "artifact_hash": baseline_hash},
+            baseline_hash,
+            "2026-04-10T00:00:00+00:00",
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(baseline.config_path,),
+            artifacts=(changed,),
+        )
+        config = GuardConfig(
+            guard_home=tmp_path / "guard-home",
+            workspace=None,
+            changed_hash_action="require_reapproval",  # type: ignore[arg-type]
+        )
+
+        evaluation = evaluate_detection(detection, store, config, default_action="allow", persist=False)
+
+        assert evaluation["blocked"] is True
+        assert evaluation["artifacts"][0]["policy_action"] == "require-reapproval"
 
     def test_stdio_proxy_blocks_disallowed_tools_and_redacts_headers(self):
         proxy = StdioGuardProxy(
