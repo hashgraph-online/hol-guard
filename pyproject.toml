@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "plugin-scanner"
+name = "hol-guard"
 version = "2.0.0"
-description = "Local Guard runtime plus security and publishability scanning for Codex, Claude, Cursor, Gemini, and OpenCode."
+description = "Protect local AI harnesses with HOL Guard and run scanner checks for Codex, Claude, Cursor, Gemini, and OpenCode."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -49,6 +49,7 @@ publish = [
 ]
 
 [project.scripts]
+hol-guard = "codex_plugin_scanner.cli:main"
 plugin-scanner = "codex_plugin_scanner.cli:main"
 plugin-guard = "codex_plugin_scanner.cli:main"
 codex-plugin-scanner = "codex_plugin_scanner.cli:main"

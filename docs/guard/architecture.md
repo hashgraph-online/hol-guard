@@ -24,10 +24,10 @@ Guard evaluates local artifacts in this order:
 
 The local product loop is:
 
-1. `guard start` detects supported harnesses and suggests the next step
-2. `guard install <harness>` creates a local launcher shim
-3. `guard run <harness>` evaluates changes before the harness launches
-4. `guard receipts` and `guard status` let users inspect local decisions
-5. `guard login` and `guard sync` stay optional
+1. `hol-guard start` detects supported harnesses and suggests the next step
+2. `hol-guard install <harness>` creates a local launcher shim
+3. `hol-guard run <harness>` evaluates changes before the harness launches
+4. `hol-guard receipts` and `hol-guard status` let users inspect local decisions
+5. `hol-guard login` and `hol-guard sync` stay optional
 
 Wrapper mode is still the core execution strategy in this phase. Config mutation is limited to the Claude Code hook helper, where Guard can add and remove its own hook entry in workspace-local settings.

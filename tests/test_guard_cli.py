@@ -131,6 +131,13 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
 
 
 class TestGuardCli:
+    def test_guard_requires_a_subcommand(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            main(["guard"])
+
+        assert exc_info.value.code == 2
+        assert "the following arguments are required" in capsys.readouterr().err
+
     def test_guard_detect_reports_supported_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -413,7 +420,7 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert "HOL Guard local harness status" in output
         assert "global_tools" in output
-        assert "Run `codex-plugin-scanner guard doctor <harness>`" in output
+        assert "Run `hol-guard doctor <harness>`" in output
 
     def test_guard_scan_emits_consumer_contract(self, capsys):
         rc = main(
