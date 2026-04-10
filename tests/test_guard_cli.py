@@ -15,6 +15,7 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -441,6 +442,26 @@ args = ["workspace-skill.js"]
         assert output["policy_recommendation"]["action"] in {"allow", "review", "block"}
         assert "trust_evidence_bundle" in output
         assert "provenance_record" in output
+
+    def test_guard_scan_human_output_shows_artifact_path(self, capsys):
+        rc = main(
+            [
+                "guard",
+                "scan",
+                str(FIXTURES / "good-plugin"),
+                "--consumer-mode",
+                "--json",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+
+        emit_guard_payload("scan", payload, as_json=False)
+        output = capsys.readouterr().out
+
+        assert rc == 0
+        assert "Consumer scan" in output
+        assert "Artifact" in output
+        assert "good-plugin" in output
 
     def test_guard_run_persists_receipts_and_policy(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-GuardAction = Literal["allow", "warn", "review", "block", "require-reapproval"]
+GuardAction = Literal["allow", "warn", "review", "block", "sandbox-required", "require-reapproval"]
 GuardMode = Literal["observe", "prompt", "enforce"]
 DecisionScope = Literal["global", "harness", "workspace", "artifact", "publisher"]
 
@@ -109,6 +109,7 @@ class GuardReceipt:
     artifact_id: str
     artifact_hash: str
     policy_decision: GuardAction
+    capabilities_summary: str
     changed_capabilities: tuple[str, ...]
     provenance_summary: str
     user_override: str | None = None

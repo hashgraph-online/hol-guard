@@ -10,6 +10,9 @@ Local features available without sign-in:
 - local policy decisions
 - wrapper-mode launch enforcement
 - local receipts and explain output
+- local policy overrides from home or workspace config
+
+Guard does not meter local safety features. You can detect harnesses, install launchers, diff changes, prompt for approval, and inspect receipts without signing in.
 
 Optional cloud features:
 

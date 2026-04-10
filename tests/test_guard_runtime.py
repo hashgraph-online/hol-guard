@@ -13,7 +13,7 @@ from typing import ClassVar
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
@@ -92,6 +92,188 @@ class _RemoteProxyHandler(BaseHTTPRequestHandler):
 
 
 class TestGuardRuntime:
+    def test_guard_store_initializes_runtime_tables_and_receipt_columns(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+
+        assert {
+            "artifact_diffs",
+            "artifact_hashes",
+            "artifact_snapshots",
+            "harness_installations",
+            "managed_installs",
+            "policy_decisions",
+            "publisher_cache",
+            "runtime_receipts",
+            "sync_state",
+        } <= set(store.list_table_names())
+
+        store.add_receipt(
+            build_receipt(
+                harness="codex",
+                artifact_id="codex:project:workspace-tools",
+                artifact_hash="hash-1",
+                policy_decision="allow",
+                capabilities_summary="mcp server • stdio • node",
+                changed_capabilities=["first_seen"],
+                provenance_summary="project artifact defined at .codex/config.toml",
+                artifact_name="workspace-tools",
+                source_scope="project",
+            )
+        )
+        receipts = store.list_receipts(limit=1)
+
+        assert receipts[0]["capabilities_summary"] == "mcp server • stdio • node"
+
+    def test_guard_load_config_parses_override_sections(self, tmp_path):
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir(parents=True, exist_ok=True)
+        _write_text(
+            guard_home / "config.toml",
+            "\n".join(
+                [
+                    'default_action = "warn"',
+                    "[harnesses.codex]",
+                    'action = "allow"',
+                    '[publishers."hashgraph-online"]',
+                    'action = "sandbox-required"',
+                    '[artifacts."codex:project:workspace-tools"]',
+                    'action = "block"',
+                ]
+            )
+            + "\n",
+        )
+
+        config = load_guard_config(guard_home)
+
+        assert config.resolve_action_override("codex", None, None) == "allow"
+        assert config.resolve_action_override("codex", None, "hashgraph-online") == "sandbox-required"
+        assert config.resolve_action_override("codex", "codex:project:workspace-tools", None) == "block"
+
+    def test_guard_load_config_accepts_default_action_inside_override_sections(self, tmp_path):
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir(parents=True, exist_ok=True)
+        _write_text(
+            guard_home / "config.toml",
+            "\n".join(
+                [
+                    "[harnesses.codex]",
+                    'default_action = "allow"',
+                    '[publishers."hashgraph-online"]',
+                    'default_action = "sandbox-required"',
+                    '[artifacts."codex:project:workspace-tools"]',
+                    'default_action = "block"',
+                ]
+            )
+            + "\n",
+        )
+
+        config = load_guard_config(guard_home)
+
+        assert config.resolve_action_override("codex", None, None) == "allow"
+        assert config.resolve_action_override("codex", None, "hashgraph-online") == "sandbox-required"
+        assert config.resolve_action_override("codex", "codex:project:workspace-tools", None) == "block"
+
+    def test_guard_evaluate_detection_uses_config_action_overrides(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        config = GuardConfig(
+            guard_home=tmp_path / "guard-home",
+            workspace=None,
+            harness_actions={"codex": "allow"},
+            publisher_actions={"hashgraph-online": "sandbox-required"},
+            artifact_actions={"codex:project:workspace-tools": "block"},
+        )
+        artifact = GuardArtifact(
+            artifact_id="codex:project:workspace-tools",
+            name="workspace-tools",
+            harness="codex",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            command="node",
+            args=("workspace.js",),
+            transport="stdio",
+            publisher="hashgraph-online",
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+
+        evaluation = evaluate_detection(detection, store, config, persist=True)
+        receipts = store.list_receipts(limit=1)
+
+        assert evaluation["blocked"] is True
+        assert evaluation["artifacts"][0]["policy_action"] == "block"
+        assert receipts[0]["capabilities_summary"] == "mcp server • stdio • node"
+
+    def test_guard_evaluate_detection_blocks_for_sandbox_required_override(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        config = GuardConfig(
+            guard_home=tmp_path / "guard-home",
+            workspace=None,
+            publisher_actions={"hashgraph-online": "sandbox-required"},
+        )
+        artifact = GuardArtifact(
+            artifact_id="codex:project:workspace-tools",
+            name="workspace-tools",
+            harness="codex",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            command="node",
+            args=("workspace.js",),
+            transport="stdio",
+            publisher="hashgraph-online",
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+
+        evaluation = evaluate_detection(detection, store, config, persist=False)
+
+        assert evaluation["blocked"] is True
+        assert evaluation["artifacts"][0]["policy_action"] == "sandbox-required"
+
+    def test_guard_evaluate_detection_uses_default_action_for_first_seen_artifacts(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        config = GuardConfig(
+            guard_home=tmp_path / "guard-home",
+            workspace=None,
+            default_action="warn",
+            changed_hash_action="require-reapproval",
+        )
+        artifact = GuardArtifact(
+            artifact_id="codex:project:workspace-tools",
+            name="workspace-tools",
+            harness="codex",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            command="node",
+            args=("workspace.js",),
+            transport="stdio",
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+
+        evaluation = evaluate_detection(detection, store, config, default_action="allow", persist=False)
+
+        assert evaluation["blocked"] is False
+        assert evaluation["artifacts"][0]["changed_fields"] == ["first_seen"]
+        assert evaluation["artifacts"][0]["policy_action"] == "allow"
+
     def test_guard_run_keeps_prior_snapshot_when_reapproval_blocks(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         baseline = GuardArtifact(
@@ -604,6 +786,7 @@ class TestGuardRuntime:
                 artifact_id="codex:workspace_skill",
                 artifact_hash="hash-123",
                 policy_decision="allow",
+                capabilities_summary="mcp server • stdio • python",
                 changed_capabilities=["first_seen"],
                 provenance_summary="project artifact defined at .codex/config.toml",
                 artifact_name="workspace_skill",

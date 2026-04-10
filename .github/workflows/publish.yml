@@ -70,18 +70,75 @@ jobs:
         run: |
           sed -i "1,/^version = /{s/^version = .*/version = \"$VERSION\"/}" pyproject.toml
           sed -i "1,/^__version__ = /{s/^__version__ = .*/__version__ = \"$VERSION\"/}" src/codex_plugin_scanner/version.py
-      - name: Build primary package (hol-guard)
-        run: uv run --no-sync python -m build
-      - name: Build compatibility package (plugin-scanner)
+      - name: Build Guard package (hol-guard)
         run: |
           cp pyproject.toml pyproject.toml.bak
-          sed -i "1,/^name = /{s/^name = .*/name = \"plugin-scanner\"/}" pyproject.toml
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace('name = "hol-guard"', 'name = "hol-guard"', 1)
+          text = text.replace(
+              'description = "Protect local AI harnesses with HOL Guard and run scanner checks for Codex, Claude, Cursor, Gemini, and OpenCode."',
+              'description = "Protect local AI harnesses with HOL Guard before tools run in Codex, Claude Code, Cursor, Gemini, and OpenCode."',
+              1,
+          )
+          start = text.index("[project.scripts]")
+          end = text.index("\n\n[project.urls]")
+          scripts = '''[project.scripts]
+hol-guard = "codex_plugin_scanner.cli:main"
+plugin-guard = "codex_plugin_scanner.cli:main"'''
+          text = text[:start] + scripts + text[end:]
+          path.write_text(text, encoding="utf-8")
+          PY
           uv run --no-sync python -m build
           mv pyproject.toml.bak pyproject.toml
-      - name: Build compatibility package (codex-plugin-scanner)
+      - name: Build scanner package (plugin-scanner)
         run: |
           cp pyproject.toml pyproject.toml.bak
-          sed -i "1,/^name = /{s/^name = .*/name = \"codex-plugin-scanner\"/}" pyproject.toml
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace('name = "hol-guard"', 'name = "plugin-scanner"', 1)
+          text = text.replace(
+              'description = "Protect local AI harnesses with HOL Guard and run scanner checks for Codex, Claude, Cursor, Gemini, and OpenCode."',
+              'description = "Lint, verify, and gate plugin ecosystems for maintainers, CI, and publish workflows."',
+              1,
+          )
+          start = text.index("[project.scripts]")
+          end = text.index("\n\n[project.urls]")
+          scripts = '''[project.scripts]
+plugin-scanner = "codex_plugin_scanner.cli:main"
+plugin-ecosystem-scanner = "codex_plugin_scanner.cli:main"'''
+          text = text[:start] + scripts + text[end:]
+          path.write_text(text, encoding="utf-8")
+          PY
+          uv run --no-sync python -m build
+          mv pyproject.toml.bak pyproject.toml
+      - name: Build codex compatibility alias (codex-plugin-scanner)
+        run: |
+          cp pyproject.toml pyproject.toml.bak
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace('name = "hol-guard"', 'name = "codex-plugin-scanner"', 1)
+          text = text.replace(
+              'description = "Protect local AI harnesses with HOL Guard and run scanner checks for Codex, Claude, Cursor, Gemini, and OpenCode."',
+              'description = "Compatibility alias for teams still pinned to the codex-plugin-scanner package name."',
+              1,
+          )
+          start = text.index("[project.scripts]")
+          end = text.index("\n\n[project.urls]")
+          scripts = '''[project.scripts]
+codex-plugin-scanner = "codex_plugin_scanner.cli:main"'''
+          text = text[:start] + scripts + text[end:]
+          path.write_text(text, encoding="utf-8")
+          PY
           uv run --no-sync python -m build
           mv pyproject.toml.bak pyproject.toml
       - name: Verify distributions

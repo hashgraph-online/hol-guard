@@ -72,7 +72,7 @@ def diff_removed_artifact(previous: dict[str, object]) -> dict[str, object]:
 
 
 def _is_blocking_action(policy_action: str) -> bool:
-    return policy_action in {"block", "require-reapproval"}
+    return policy_action in {"block", "sandbox-required", "require-reapproval"}
 
 
 def _build_removed_provenance(previous: dict[str, object]) -> str:
@@ -81,6 +81,26 @@ def _build_removed_provenance(previous: dict[str, object]) -> str:
     scope_label = str(scope) if isinstance(scope, str) else "unknown"
     path_label = str(config_path) if isinstance(config_path, str) else "unknown config"
     return f"{scope_label} artifact removed from {path_label}"
+
+
+def _capabilities_summary(artifact: GuardArtifact) -> str:
+    parts = [artifact.artifact_type.replace("_", " ")]
+    if artifact.transport is not None:
+        parts.append(artifact.transport)
+    if artifact.command is not None:
+        parts.append(artifact.command)
+    return " • ".join(parts)
+
+
+def _removed_capabilities_summary(previous: dict[str, object]) -> str:
+    artifact_type = previous.get("artifact_type")
+    source_scope = previous.get("source_scope")
+    parts: list[str] = []
+    if isinstance(artifact_type, str):
+        parts.append(artifact_type.replace("_", " "))
+    if isinstance(source_scope, str):
+        parts.append(f"{source_scope} artifact")
+    return " • ".join(parts) if parts else "removed artifact"
 
 
 def detect_all(context: HarnessContext) -> list[HarnessDetection]:
@@ -115,17 +135,28 @@ def evaluate_detection(
         current_artifact_ids.add(artifact.artifact_id)
         previous = previous_snapshots.get(artifact.artifact_id)
         diff = diff_artifact(previous, artifact)
-        policy_action = decide_action(
-            configured_action=store.resolve_policy(
+        is_first_seen = diff["changed_fields"] == ["first_seen"]
+        configured_action = store.resolve_policy(
+            detection.harness,
+            artifact.artifact_id,
+            workspace,
+            artifact.publisher,
+        )
+        if configured_action is None:
+            configured_action = config.resolve_action_override(
                 detection.harness,
                 artifact.artifact_id,
-                workspace,
                 artifact.publisher,
-            ),
-            default_action=default_action,
-            config=config,
-            changed=bool(diff["changed"]),
-        )
+            )
+        if is_first_seen and configured_action is None and default_action is not None:
+            policy_action = default_action
+        else:
+            policy_action = decide_action(
+                configured_action=configured_action,
+                default_action=default_action,
+                config=config,
+                changed=bool(diff["changed"]),
+            )
         if _is_blocking_action(policy_action):
             blocked = True
         receipt = build_receipt(
@@ -133,6 +164,7 @@ def evaluate_detection(
             artifact_id=artifact.artifact_id,
             artifact_hash=str(diff["current_hash"]),
             policy_decision=policy_action,
+            capabilities_summary=_capabilities_summary(artifact),
             changed_capabilities=list(diff["changed_fields"]),
             provenance_summary=f"{artifact.source_scope} artifact defined at {artifact.config_path}",
             artifact_name=artifact.name,
@@ -189,6 +221,7 @@ def evaluate_detection(
             artifact_id=artifact_id,
             artifact_hash=previous_hash,
             policy_decision=policy_action,
+            capabilities_summary=_removed_capabilities_summary(previous),
             changed_capabilities=["removed"],
             provenance_summary=_build_removed_provenance(previous),
             artifact_name=str(artifact_name) if isinstance(artifact_name, str) else artifact_id,
