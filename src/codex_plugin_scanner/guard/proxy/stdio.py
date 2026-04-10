@@ -26,9 +26,7 @@ def _redact_json(value: Any) -> Any:
                     pairs.append((key, "*****"))
                     continue
                 pairs.append((key, item))
-            return urlunsplit(
-                (parsed.scheme, parsed.netloc, parsed.path, urlencode(pairs), parsed.fragment)
-            )
+            return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(pairs), parsed.fragment))
         return _redact_scalar(value)
     if isinstance(value, list):
         return [_redact_json(item) for item in value]

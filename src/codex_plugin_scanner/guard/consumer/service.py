@@ -49,9 +49,7 @@ def diff_artifact(previous: dict[str, object] | None, current: GuardArtifact) ->
             "current_hash": current_hash,
             "current_snapshot": current_payload,
         }
-    changed_fields = [
-        key for key, value in current_payload.items() if previous.get(key) != value
-    ]
+    changed_fields = [key for key, value in current_payload.items() if previous.get(key) != value]
     previous_hash = previous.get("artifact_hash")
     return {
         "changed": bool(changed_fields),

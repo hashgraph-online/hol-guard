@@ -67,9 +67,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                             source_scope=scope,
                             config_path=str(config_path),
                             command=command if isinstance(command, str) else None,
-                            args=tuple(
-                                str(value) for value in server_config.get("args", []) if isinstance(value, str)
-                            ),
+                            args=tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str)),
                             url=url if isinstance(url, str) else None,
                             transport="http" if isinstance(server_config.get("url"), str) else "stdio",
                         )

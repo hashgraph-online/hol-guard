@@ -337,9 +337,7 @@ class GuardStore:
 
     def get_sync_credentials(self) -> dict[str, str] | None:
         with self._connect() as connection:
-            row = connection.execute(
-                "select payload_json from sync_state where state_key = 'credentials'"
-            ).fetchone()
+            row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
         if row is None:
             return None
         payload = json.loads(str(row["payload_json"]))

@@ -74,9 +74,7 @@ class CursorHarnessAdapter(HarnessAdapter):
                 reported_artifacts = sum(
                     1
                     for line in stdout.splitlines()
-                    if line.strip().startswith("-")
-                    or line.strip().startswith("•")
-                    or line.strip().startswith("*")
+                    if line.strip().startswith("-") or line.strip().startswith("•") or line.strip().startswith("*")
                 )
         payload["reported_artifacts"] = reported_artifacts
         return payload
