@@ -90,6 +90,7 @@ class GuardStore:
               artifact_id text not null,
               artifact_hash text not null,
               policy_decision text not null,
+              capabilities_summary text not null default '',
               changed_capabilities_json text not null,
               provenance_summary text not null,
               user_override text,
@@ -126,6 +127,7 @@ class GuardStore:
             for statement in statements:
                 connection.execute(statement)
             self._ensure_policy_column(connection, "publisher", "text")
+            self._ensure_runtime_receipts_column(connection, "capabilities_summary", "text not null default ''")
 
     @staticmethod
     def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
@@ -134,6 +136,14 @@ class GuardStore:
         if column_name in existing:
             return
         connection.execute(f"alter table policy_decisions add column {column_name} {column_type}")
+
+    @staticmethod
+    def _ensure_runtime_receipts_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
+        rows = connection.execute("pragma table_info(runtime_receipts)").fetchall()
+        existing = {str(row["name"]) for row in rows}
+        if column_name in existing:
+            return
+        connection.execute(f"alter table runtime_receipts add column {column_name} {column_type}")
 
     def list_table_names(self) -> list[str]:
         with self._connect() as connection:
@@ -279,10 +289,11 @@ class GuardStore:
             connection.execute(
                 """
                 insert into runtime_receipts (
-                  receipt_id, harness, artifact_id, artifact_hash, policy_decision, changed_capabilities_json,
+                  receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
+                  changed_capabilities_json,
                   provenance_summary, user_override, artifact_name, source_scope, timestamp
                 )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     receipt.receipt_id,
@@ -290,6 +301,7 @@ class GuardStore:
                     receipt.artifact_id,
                     receipt.artifact_hash,
                     receipt.policy_decision,
+                    receipt.capabilities_summary,
                     json.dumps(list(receipt.changed_capabilities)),
                     receipt.provenance_summary,
                     receipt.user_override,
@@ -303,7 +315,8 @@ class GuardStore:
         with self._connect() as connection:
             rows = connection.execute(
                 """
-                select receipt_id, harness, artifact_id, artifact_hash, policy_decision, changed_capabilities_json,
+                select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
+                       changed_capabilities_json,
                        provenance_summary, user_override, artifact_name, source_scope, timestamp
                 from runtime_receipts
                 order by timestamp desc
@@ -318,6 +331,7 @@ class GuardStore:
                 "artifact_id": str(row["artifact_id"]),
                 "artifact_hash": str(row["artifact_hash"]),
                 "policy_decision": str(row["policy_decision"]),
+                "capabilities_summary": str(row["capabilities_summary"]),
                 "changed_capabilities": json.loads(str(row["changed_capabilities_json"])),
                 "provenance_summary": str(row["provenance_summary"]),
                 "user_override": row["user_override"],

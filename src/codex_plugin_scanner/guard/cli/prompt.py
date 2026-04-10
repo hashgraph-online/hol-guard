@@ -247,6 +247,7 @@ def _record_override_receipt(
         artifact_id=artifact.artifact_id,
         artifact_hash=artifact.artifact_hash,
         policy_decision=policy_decision,
+        capabilities_summary=_capabilities_summary(artifact),
         changed_capabilities=list(artifact.changed_fields),
         provenance_summary=artifact.provenance_summary,
         artifact_name=artifact.artifact_name,
