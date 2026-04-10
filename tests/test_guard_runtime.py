@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.policy import decide_action
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
@@ -371,6 +372,17 @@ class TestGuardRuntime:
 
         assert evaluation["blocked"] is True
         assert evaluation["artifacts"][0]["policy_action"] == "require-reapproval"
+
+    def test_guard_invalid_default_action_falls_back_to_reapproval(self, tmp_path):
+        config = GuardConfig(
+            guard_home=tmp_path / "guard-home",
+            workspace=None,
+            default_action="blok",  # type: ignore[arg-type]
+        )
+
+        action = decide_action(configured_action=None, default_action=None, config=config, changed=False)
+
+        assert action == "require-reapproval"
 
     def test_guard_hook_invalid_policy_action_falls_back_to_reapproval(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

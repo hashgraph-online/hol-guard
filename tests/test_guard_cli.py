@@ -952,6 +952,21 @@ args = ["workspace-skill.js", "--changed"]
         assert excinfo.value.code == 2
         assert "Unsupported harness: codxe" in capsys.readouterr().err
 
+    def test_guard_sync_without_login_returns_cli_error(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+
+        rc = main(
+            [
+                "guard",
+                "sync",
+                "--home",
+                str(home_dir),
+            ]
+        )
+
+        assert rc == 1
+        assert "Guard is not logged in." in capsys.readouterr().err
+
     def test_guard_doctor_reports_runtime_mismatch_for_cursor(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

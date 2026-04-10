@@ -479,6 +479,9 @@ def main(argv: list[str] | None = None) -> int:
             return run_guard_command(args)
         except ValueError as exc:
             parser.error(str(exc))
+        except Exception as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
     return 1
 
 

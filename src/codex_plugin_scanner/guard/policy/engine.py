@@ -7,6 +7,7 @@ from ..models import GuardAction
 
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "require-reapproval"}
 SAFE_CHANGED_HASH_ACTION: GuardAction = "require-reapproval"
+SAFE_DEFAULT_ACTION: GuardAction = "require-reapproval"
 
 
 def decide_action(
@@ -25,4 +26,6 @@ def decide_action(
         return SAFE_CHANGED_HASH_ACTION
     if default_action in VALID_GUARD_ACTIONS:
         return default_action
-    return config.default_action
+    if config.default_action in VALID_GUARD_ACTIONS:
+        return config.default_action
+    return SAFE_DEFAULT_ACTION
