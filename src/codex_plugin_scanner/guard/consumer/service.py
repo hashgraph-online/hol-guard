@@ -116,7 +116,12 @@ def evaluate_detection(
         previous = previous_snapshots.get(artifact.artifact_id)
         diff = diff_artifact(previous, artifact)
         policy_action = decide_action(
-            configured_action=store.resolve_policy(detection.harness, artifact.artifact_id, workspace),
+            configured_action=store.resolve_policy(
+                detection.harness,
+                artifact.artifact_id,
+                workspace,
+                artifact.publisher,
+            ),
             default_action=default_action,
             config=config,
             changed=bool(diff["changed"]),
@@ -228,6 +233,7 @@ def record_policy(
     scope: str,
     artifact_id: str | None,
     workspace: str | None,
+    publisher: str | None = None,
     reason: str | None = None,
 ) -> dict[str, object]:
     """Persist an allow or deny action."""
@@ -238,6 +244,7 @@ def record_policy(
         action=action,  # type: ignore[arg-type]
         artifact_id=artifact_id,
         workspace=workspace,
+        publisher=publisher,
         reason=reason,
     )
     store.upsert_policy(decision, _now())

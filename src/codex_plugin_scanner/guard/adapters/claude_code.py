@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from ..models import GuardArtifact, HarnessDetection
+from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload
 
 
@@ -119,14 +120,30 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _hook_command(context: HarnessContext) -> str:
-        command = [sys.executable, "-m", "codex_plugin_scanner.cli", "guard", "hook"]
+        command = [
+            sys.executable,
+            "-m",
+            "codex_plugin_scanner.cli",
+            "guard",
+            "hook",
+            "--guard-home",
+            str(context.guard_home),
+        ]
+        if context.home_dir.resolve() != Path.home().resolve():
+            command.extend(["--home", str(context.home_dir)])
         if context.workspace_dir is not None:
             command.extend(["--workspace", str(context.workspace_dir)])
         return subprocess.list2cmdline(command)
 
     def install(self, context: HarnessContext) -> dict[str, object]:
+        shim_manifest = install_guard_shim(self.harness, context)
         if context.workspace_dir is None:
-            return super().install(context)
+            return {
+                "harness": self.harness,
+                "active": True,
+                "config_path": shim_manifest["shim_path"],
+                **shim_manifest,
+            }
         settings_path = context.workspace_dir / ".claude" / "settings.local.json"
         payload = _json_payload(settings_path)
         hook_command = self._hook_command(context)
@@ -144,12 +161,22 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "harness": self.harness,
             "active": True,
             "config_path": str(settings_path),
-            "notes": ["Guard hook entries added to .claude/settings.local.json"],
+            **shim_manifest,
+            "notes": [
+                "Guard hook entries added to .claude/settings.local.json",
+                *[str(note) for note in shim_manifest.get("notes", [])],
+            ],
         }
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        shim_manifest = remove_guard_shim(self.harness, context)
         if context.workspace_dir is None:
-            return super().uninstall(context)
+            return {
+                "harness": self.harness,
+                "active": False,
+                "config_path": shim_manifest["shim_path"],
+                **shim_manifest,
+            }
         settings_path = context.workspace_dir / ".claude" / "settings.local.json"
         payload = _json_payload(settings_path)
         hook_command = self._hook_command(context)
@@ -164,5 +191,9 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "harness": self.harness,
             "active": False,
             "config_path": str(settings_path),
-            "notes": ["Guard hook entries removed from .claude/settings.local.json"],
+            **shim_manifest,
+            "notes": [
+                "Guard hook entries removed from .claude/settings.local.json",
+                *[str(note) for note in shim_manifest.get("notes", [])],
+            ],
         }

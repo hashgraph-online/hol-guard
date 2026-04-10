@@ -137,7 +137,11 @@ def _add_common_policy_args(parser: argparse.ArgumentParser) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="codex-plugin-scanner", description="Scan and lint Codex plugin directories")
+    program_name = Path(sys.argv[0]).name or "plugin-scanner"
+    parser = argparse.ArgumentParser(
+        prog=program_name,
+        description="Run HOL Guard locally or scan plugin ecosystems for CI and publish readiness.",
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--list-ecosystems", action="store_true", help="List supported plugin ecosystems and exit")
     subparsers = parser.add_subparsers(dest="command")

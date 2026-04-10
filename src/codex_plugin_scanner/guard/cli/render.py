@@ -50,6 +50,44 @@ def _render_detect(console: Console, payload: dict[str, object]) -> None:
         )
 
 
+def _render_start(console: Console, payload: dict[str, object]) -> None:
+    harnesses = _coerce_dict_list(payload.get("harnesses"))
+    console.print(
+        Panel.fit(
+            f"[bold]HOL Guard first run[/bold]\n"
+            f"{len(harnesses)} harnesses detected • {payload.get('receipt_count', 0)} receipts recorded",
+            border_style="cyan",
+        )
+    )
+    console.print(_build_product_table(harnesses))
+    console.print(_build_steps_panel(_coerce_dict_list(payload.get("next_steps"))))
+
+
+def _render_status(console: Console, payload: dict[str, object]) -> None:
+    harnesses = _coerce_dict_list(payload.get("harnesses"))
+    console.print(
+        Panel.fit(
+            f"[bold]HOL Guard status[/bold]\n"
+            f"{payload.get('managed_harnesses', 0)} managed harnesses • "
+            f"{payload.get('receipt_count', 0)} receipts • "
+            f"sync {'connected' if payload.get('sync_configured') else 'local only'}",
+            border_style="cyan",
+        )
+    )
+    console.print(_build_product_table(harnesses))
+    review_items = [item for item in harnesses if int(item.get("review_count", 0)) > 0]
+    if review_items:
+        console.print(
+            Panel(
+                "\n".join(
+                    f"• {item.get('harness')}: run [bold]{item.get('review_command')}[/bold]" for item in review_items
+                ),
+                title="Needs review",
+                border_style="yellow",
+            )
+        )
+
+
 def _render_doctor(console: Console, payload: dict[str, object]) -> None:
     if "adapters" in payload:
         tables = _coerce_string_list(payload.get("tables"))
@@ -98,6 +136,8 @@ def _render_run(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Harness", f"[bold]{payload.get('harness', 'unknown')}[/bold]")
     body.add_row("Receipts", str(payload.get("receipts_recorded", 0)))
     body.add_row("Launched", _bool_label(launched))
+    if payload.get("review_hint"):
+        body.add_row("Review", str(payload.get("review_hint")))
     if launched:
         body.add_row("Command", _command_text(payload.get("launch_command")))
     console.print(Panel(body, title=title, border_style=border_style))
@@ -158,6 +198,8 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
     body.add_row("Workspace", str(managed_install.get("workspace") or "current shell"))
     if isinstance(manifest, dict):
         body.add_row("Config", str(manifest.get("config_path") or "no config changed"))
+        if manifest.get("shim_command"):
+            body.add_row("Launcher", str(manifest.get("shim_command")))
     console.print(Panel(body, title="Guard install state", border_style="cyan"))
     if notes:
         console.print(Panel("\n".join(f"• {note}" for note in notes), title="Notes", border_style="blue"))
@@ -173,6 +215,8 @@ def _render_decision(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Scope", str(decision.get("scope", "harness")))
     body.add_row("Action", _action_text(str(decision.get("action", "warn"))))
     body.add_row("Artifact", str(decision.get("artifact_id") or "all artifacts"))
+    if decision.get("publisher"):
+        body.add_row("Publisher", str(decision.get("publisher")))
     if decision.get("reason"):
         body.add_row("Reason", str(decision.get("reason")))
     console.print(Panel(body, title="Policy updated", border_style="green"))
@@ -255,6 +299,34 @@ def _build_harness_table(detections: list[dict[str, object]]) -> Table:
             str(_warning_count(detection)),
         )
     return table
+
+
+def _build_product_table(harnesses: list[dict[str, object]]) -> Table:
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True)
+    table.add_column("Harness", style="bold")
+    table.add_column("Managed")
+    table.add_column("Artifacts", justify="right")
+    table.add_column("Review", justify="right")
+    table.add_column("Next step")
+    for harness in harnesses:
+        table.add_row(
+            str(harness.get("harness", "unknown")),
+            _bool_label(bool(harness.get("managed"))),
+            str(harness.get("artifact_count", 0)),
+            str(harness.get("review_count", 0)),
+            str(harness.get("next_action", "install")),
+        )
+    return table
+
+
+def _build_steps_panel(steps: list[dict[str, object]]) -> Panel:
+    lines = []
+    for step in steps:
+        title = str(step.get("title", "Next step"))
+        command = str(step.get("command", ""))
+        detail = str(step.get("detail", ""))
+        lines.append(f"[bold]{title}[/bold]\n  {command}\n  {detail}")
+    return Panel("\n\n".join(lines), title="Next steps", border_style="green")
 
 
 def _render_harness_detail(console: Console, detection: dict[str, object]) -> None:
@@ -412,6 +484,8 @@ def _clean_terminal_output(value: str) -> str:
 
 
 _RENDERERS: dict[str, Any] = {
+    "start": _render_start,
+    "status": _render_status,
     "detect": _render_detect,
     "doctor": _render_doctor,
     "run": _render_run,
