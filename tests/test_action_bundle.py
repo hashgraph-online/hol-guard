@@ -273,21 +273,21 @@ def test_readme_uses_stable_apache_license_badge() -> None:
 
     assert "https://img.shields.io/badge/license-Apache--2.0-blue.svg" in readme
     assert "https://img.shields.io/github/license/hashgraph-online/codex-plugin-scanner" not in readme
-    assert "https://img.shields.io/pypi/v/hol-guard" not in readme
-    assert "https://img.shields.io/pypi/v/plugin-scanner" not in readme
-    assert "https://img.shields.io/pypi/pyversions/hol-guard" not in readme
-    assert "https://img.shields.io/pypi/dm/hol-guard" not in readme
-    assert "https://img.shields.io/badge/package-hol--guard-" in readme
-    assert "https://img.shields.io/badge/package-plugin--scanner-" in readme
+    assert "https://img.shields.io/pypi/v/hol-guard" in readme
+    assert "https://img.shields.io/pypi/v/plugin-scanner" in readme
+    assert "https://img.shields.io/pypi/dm/hol-guard" in readme
+    assert "https://img.shields.io/pypi/dm/plugin-scanner" in readme
     assert "https://img.shields.io/badge/python-3.10%2B-" in readme
     assert "publish-action-repo.yml" in readme
     assert "docs/github-action-marketplace.md" not in readme
     assert "ghcr.io/hashgraph-online/ai-plugin-scanner:<version>" in readme
     assert "https://pypi.org/project/hol-guard/" in readme
     assert "https://pypi.org/project/plugin-scanner/" in readme
-    assert "https://pypi.org/project/codex-plugin-scanner/" in readme
+    assert "pip install codex-plugin-scanner" not in readme
+    assert "codex-plugin-scanner verify" not in readme
     assert "Container Image" in readme
     assert "hashgraph-online/ai-plugin-scanner-action@v1" in readme
+    assert readme.count("<details>") >= 3
 
 
 def test_container_files_exist_for_enterprise_distribution() -> None:
