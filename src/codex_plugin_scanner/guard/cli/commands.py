@@ -26,7 +26,7 @@ def _now() -> str:
 
 
 def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    """Register the Guard command family."""
+    """Register Guard as a nested command family."""
 
     program_name = Path(sys.argv[0]).name or "plugin-scanner"
     guard_parser = subparsers.add_parser(
@@ -45,11 +45,24 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    _configure_guard_parser(guard_parser)
+
+
+def add_guard_root_parser(parser: argparse.ArgumentParser) -> None:
+    """Register Guard as the top-level CLI surface."""
+
+    parser.description = "Protect local harnesses before new or changed tools run."
+    parser.set_defaults(command="guard")
+    _configure_guard_parser(parser)
+
+
+def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
+    """Attach Guard subcommands to a parser."""
     guard_subparsers = guard_parser.add_subparsers(
         dest="guard_command",
+        required=True,
         metavar="{start,status,detect,install,uninstall,run,scan,diff,receipts,explain,allow,deny,doctor,login,sync}",
     )
-    guard_subparsers.required = True
 
     start_parser = guard_subparsers.add_parser("start", help="Show the first Guard steps for a local harness")
     _add_guard_common_args(start_parser)
@@ -247,7 +260,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
         ):
             payload["review_hint"] = (
                 f"Guard blocked {args.harness} because this shell is non-interactive. "
-                f"Run `plugin-guard guard diff {args.harness}` and allow or deny the changed artifacts first."
+                f"Run `hol-guard diff {args.harness}` and allow or deny the changed artifacts first."
             )
         _emit("run", payload, getattr(args, "json", False))
         if payload.get("blocked"):

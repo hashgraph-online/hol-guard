@@ -50,9 +50,7 @@ def test_good_plugin_emits_skill_and_plugin_trust_domains():
     security_adapter = next(
         adapter for adapter in plugin_domain.adapters if adapter.adapter_id == "security.disclosure"
     )
-    disclosure_component = next(
-        component for component in security_adapter.components if component.key == "score"
-    )
+    disclosure_component = next(component for component in security_adapter.components if component.key == "score")
     assert disclosure_component.score == 100
 
     skill_domain = domains["skills"]
@@ -122,9 +120,7 @@ def test_invalid_skill_frontmatter_reduces_manifest_integrity(tmp_path: Path):
     verified_adapter = next(
         adapter for adapter in skill_domain.adapters if adapter.adapter_id == "verification.manifest-integrity"
     )
-    manifest_integrity = next(
-        component for component in verified_adapter.components if component.key == "score"
-    )
+    manifest_integrity = next(component for component in verified_adapter.components if component.key == "score")
     assert manifest_integrity.score == 0
 
 
@@ -139,9 +135,7 @@ def test_invalid_mcp_json_zeroes_config_integrity(tmp_path: Path):
     verification_adapter = next(
         adapter for adapter in mcp_domain.adapters if adapter.adapter_id == "verification.config-integrity"
     )
-    config_integrity = next(
-        component for component in verification_adapter.components if component.key == "score"
-    )
+    config_integrity = next(component for component in verification_adapter.components if component.key == "score")
     config_shape = next(
         component
         for adapter in mcp_domain.adapters

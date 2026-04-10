@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .config import ConfigError, load_baseline_rule_ids, load_scanner_config
 from .ecosystems.registry import list_supported_ecosystems
-from .guard.cli import add_guard_parser, run_guard_command
+from .guard.cli import add_guard_parser, add_guard_root_parser, run_guard_command
 from .lint_fixes import apply_safe_autofixes
 from .models import GRADE_LABELS, ScanOptions, Severity, get_grade
 from .policy import POLICY_PROFILES, build_rule_inventory, evaluate_policy, resolve_profile
@@ -136,8 +136,18 @@ def _add_common_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--diff-base", help="Reserved for future diff-aware gating")
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    program_name = Path(sys.argv[0]).name or "plugin-scanner"
+def _is_guard_program(program_name: str) -> bool:
+    normalized_name = Path(program_name).stem.lower()
+    return normalized_name in {"hol-guard", "plugin-guard"}
+
+
+def _build_parser(program_name: str, *, guard_program: bool) -> argparse.ArgumentParser:
+    if guard_program:
+        parser = argparse.ArgumentParser(prog=program_name, description="Protect local harnesses before tools run.")
+        parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+        add_guard_root_parser(parser)
+        return parser
+
     parser = argparse.ArgumentParser(
         prog=program_name,
         description="Run HOL Guard locally or scan plugin ecosystems for CI and publish readiness.",
@@ -207,8 +217,12 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _resolve_legacy_args(argv: list[str] | None) -> list[str] | None:
+def _resolve_legacy_args(argv: list[str] | None, *, guard_program: bool) -> list[str] | None:
     if not argv:
+        return argv
+    if guard_program:
+        if argv[0] == "guard":
+            return argv[1:]
         return argv
     known_commands = {
         "scan",
@@ -462,8 +476,10 @@ def _run_doctor(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = _build_parser()
-    args = parser.parse_args(_resolve_legacy_args(argv))
+    program_name = Path(sys.argv[0]).name or "plugin-scanner"
+    guard_program = _is_guard_program(program_name)
+    parser = _build_parser(program_name, guard_program=guard_program)
+    args = parser.parse_args(_resolve_legacy_args(argv, guard_program=guard_program))
     if getattr(args, "list_ecosystems", False):
         for ecosystem in list_supported_ecosystems():
             print(ecosystem)

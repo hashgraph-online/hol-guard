@@ -1,9 +1,9 @@
-# HOL Plugin Ecosystem Scanner
+# HOL Guard
 
-[![PyPI Version](https://img.shields.io/pypi/v/plugin-scanner.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/plugin-scanner/)
-[![Legacy Namespace](https://img.shields.io/badge/legacy-codex--plugin--scanner-6b7280?logo=pypi&logoColor=white)](https://pypi.org/project/codex-plugin-scanner/)
-[![Python Versions](https://img.shields.io/pypi/pyversions/plugin-scanner)](https://pypi.org/project/plugin-scanner/)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/plugin-scanner)](https://pypistats.org/packages/plugin-scanner)
+[![PyPI Version](https://img.shields.io/pypi/v/hol-guard.svg?logo=pypi&logoColor=white&cacheSeconds=300)](https://pypi.org/project/hol-guard/)
+[![Legacy Namespace](https://img.shields.io/badge/legacy-plugin--scanner_and_codex--plugin--scanner-6b7280?logo=pypi&logoColor=white)](https://pypi.org/project/plugin-scanner/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/hol-guard)](https://pypi.org/project/hol-guard/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/hol-guard)](https://pypistats.org/packages/hol-guard)
 [![CI](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/ci.yml)
 [![Publish](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/publish.yml/badge.svg)](https://github.com/hashgraph-online/ai-plugin-scanner/actions/workflows/publish.yml)
 [![Container Image](https://img.shields.io/badge/ghcr-ai--plugin--scanner-2496ED?logo=docker&logoColor=white)](https://github.com/hashgraph-online/ai-plugin-scanner/pkgs/container/ai-plugin-scanner)
@@ -12,52 +12,56 @@
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/ai-plugin-scanner?style=social)](https://github.com/hashgraph-online/ai-plugin-scanner/stargazers)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
 
-| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | **HOL Guard for local harness protection, plus the scanner CI gate for plugin ecosystems**. Protect Codex, Claude Code, Cursor, Gemini, and OpenCode before local tools run, then lint locally, verify in CI, and ship publish-ready bundles for manifests, skills, MCP, and marketplace metadata.<br><br>Use Guard when you want a local safety loop. Use the scanner when you want publishing and CI confidence.<br><br>[PyPI Package (`plugin-scanner`)](https://pypi.org/project/plugin-scanner/)<br>[Legacy Namespace (`codex-plugin-scanner`)](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/ai-plugin-scanner/issues) |
+| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Protect Codex, Claude Code, Cursor, Gemini, and OpenCode before local tools run.** HOL Guard watches the tools wired into your harness, shows you what changed, and records what you approved or blocked. The scanner commands stay available for teams that also want linting and CI checks for plugin, skill, MCP, and marketplace packages.<br><br>Start with `hol-guard` if you want local protection. Add the scanner commands later if you also publish or review packages in CI.<br><br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[Legacy Namespace (`plugin-scanner`)](https://pypi.org/project/plugin-scanner/)<br>[Legacy Namespace (`codex-plugin-scanner`)](https://pypi.org/project/codex-plugin-scanner/)<br>[HOL Plugin Registry](https://hol.org/registry/plugins)<br>[HOL GitHub Organization](https://github.com/hashgraph-online)<br>[Report an Issue](https://github.com/hashgraph-online/ai-plugin-scanner/issues) |
 | :--- | :--- |
 
-## Guard Start In 60 Seconds
+## Protect A Harness In 60 Seconds
 
 ```bash
-# See what Guard can protect on this machine
-pipx run plugin-guard guard start
+# See what Guard found on this machine
+pipx run hol-guard start
 
 # Install Guard in front of Codex
-pipx run plugin-guard guard install codex
+pipx run hol-guard install codex
 
-# Review the current tool state before launch
-pipx run plugin-guard guard run codex
+# Record the current tool state once
+pipx run hol-guard run codex --dry-run
 
-# Inspect local receipts later
-pipx run plugin-guard guard receipts
+# Launch through Guard after that
+pipx run hol-guard run codex
+
+# Check what Guard approved or blocked
+pipx run hol-guard receipts
 ```
 
-Guard is local-first:
+How Guard works:
 
-1. detect your harnesses
-2. install a Guard launcher
-3. run the harness through Guard
-4. approve or block changes
-5. inspect receipts locally
-6. connect sync only if you want shared history later
+1. find the harnesses on your machine
+2. install a Guard launcher in front of the one you use
+3. record the current tool state once
+4. let Guard stop and review new or changed tools before launch
+5. check receipts locally
+6. connect sync later only if you want shared history
 
-Guard commands that matter most:
+Start here if you are trying to stay safe inside a harness:
 
-- `plugin-scanner guard start` for the first-run path
-- `plugin-scanner guard status` for the current protection state
-- `plugin-scanner guard install <harness>` to create a local Guard launcher
-- `plugin-scanner guard run <harness> --dry-run` to record the current state before launch
-- `plugin-scanner guard run <harness>` to review and approve changed tools before launch
-- `plugin-scanner guard diff <harness>` when Guard says something changed
-- `plugin-scanner guard receipts` for local history
+- `hol-guard start` shows the first steps
+- `hol-guard status` shows what Guard is watching now
+- `hol-guard install <harness>` creates the launcher
+- `hol-guard run <harness> --dry-run` records the current state
+- `hol-guard run <harness>` reviews changes before launch
+- `hol-guard diff <harness>` shows what changed
+- `hol-guard receipts` shows local history
 
 See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local flow.
 
-## Scanner Start In 30 Seconds
+## Use The Scanner In CI
 
 ```bash
-# Local preflight
-pipx run plugin-scanner lint .
-pipx run plugin-scanner verify .
+# Install the package once, then use the scanner commands in your shell
+pipx install hol-guard
+plugin-scanner lint .
+plugin-scanner verify .
 ```
 
 ```yaml
@@ -72,38 +76,30 @@ pipx run plugin-scanner verify .
 
 If your repository uses a Codex marketplace root like `.agents/plugins/marketplace.json`, keep `plugin_dir: "."`. The scanner will discover local `./plugins/...` entries automatically, scan each local plugin manifest, and skip remote marketplace entries instead of treating the repo root as a single plugin.
 
-## Two Product Modes
+## Start With Guard, Add CI Later
 
-### HOL Guard
+If you use Codex, Claude Code, Cursor, Gemini, or OpenCode every day, start with Guard.
 
-Use Guard when the problem is local runtime safety inside a harness:
+- Guard is the part that protects your local harness before tools run.
+- It helps when a new MCP server appears, when a tool changes after you trusted it, or when you want a receipt for what was approved or blocked.
 
-- a new MCP server showed up in local config
-- an existing tool changed after you trusted it
-- you want receipts for what was approved or blocked
-- you want to review changes before Codex, Claude Code, Cursor, Gemini, or OpenCode launches
+If you publish plugins, skills, or marketplace packages, add the scanner in CI too.
 
-### Scanner CI Gate
-
-Use the scanner when the problem is authoring, CI, and publish readiness:
-
-- lint manifests and metadata
-- verify runtime and install surfaces
-- block PRs with policy gates
-- emit artifacts before submission or publishing
+- The scanner checks manifests, metadata, runtime surfaces, and policy rules before a release or CI gate passes.
+- It is the publishing and repo review side of this package, not the first thing a local Guard user needs to learn.
 
 ## Use Scanner After `$plugin-creator`
 
-`plugin-scanner` is designed as the quality gate between plugin creation and distribution:
+If you are building and shipping packages, the scanner fits after `$plugin-creator`:
 
 1. Scaffold with `$plugin-creator`.
 2. Run `lint` locally to catch structure, metadata, and security issues early.
 3. Run `verify` in CI to block regressions and enforce quality policy.
 4. Ship or submit with confidence, backed by scanner artifacts and trust signals.
 
-The score remains available as a trust and triage signal, but the primary workflow is **preflight + CI gating + publish readiness**.
+The score stays available as a trust and triage signal, but the day-to-day workflow is simple: check locally, verify in CI, then release.
 
-## Trust Score Provenance
+## How Trust Scoring Works
 
 The scanner now emits explicit trust provenance alongside the quality grade:
 
@@ -133,21 +129,23 @@ pytest -q
 ## Install
 
 ```bash
-pip install plugin-scanner
+pip install hol-guard
 ```
 
 Cisco-backed skill scanning is optional:
 
 ```bash
-pip install "plugin-scanner[cisco]"
+pip install "hol-guard[cisco]"
 ```
 
 The `cisco` extra installs the published `cisco-ai-skill-scanner` package from PyPI so the scanner remains publishable on PyPI and the optional Cisco analysis path works with standard package metadata.
 
-You can also run the scanner without a local install:
+You can also install once and use both Guard and scanner commands:
 
 ```bash
-pipx run plugin-scanner ./my-plugin
+pipx install hol-guard
+hol-guard start
+plugin-scanner ./my-plugin
 ```
 
 Container-first environments can use the published image instead:
@@ -162,8 +160,16 @@ docker run --rm \
 Backward compatibility remains available for teams still pinned to the historical package namespace:
 
 ```bash
+pip install plugin-scanner
 pip install codex-plugin-scanner
-pipx run codex-plugin-scanner verify .
+```
+
+Compatibility command names also stay available:
+
+```bash
+plugin-guard start
+plugin-scanner verify .
+codex-plugin-scanner verify .
 ```
 
 ## Ecosystem Support
@@ -177,11 +183,11 @@ pipx run codex-plugin-scanner verify .
 
 Use `--ecosystem auto` (default) to scan all detected packages in a repository, or select a single ecosystem explicitly.
 
-## What The Scanner Covers
+## What The Scanner Checks
 
 `plugin-scanner` supports a full quality suite:
 
-- `scan` for full-surface security and publishability analysis
+- `scan` for full-surface security and release analysis
 - `lint` for rule-oriented authoring feedback
 - `verify` for runtime and install-surface readiness checks
 - `submit` for artifact-backed submission gating
