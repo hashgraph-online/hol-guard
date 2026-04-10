@@ -196,6 +196,44 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert artifact_ids == ["codex:global:shared_tools", "codex:project:shared_tools"]
 
+    def test_guard_detect_scopes_claude_artifact_ids(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".claude" / "settings.json",
+            {
+                "mcpServers": {
+                    "shared-tools": {"command": "python", "args": ["-m", "http.server", "9000"]},
+                }
+            },
+        )
+        _write_json(
+            workspace_dir / ".mcp.json",
+            {
+                "mcpServers": {
+                    "shared-tools": {"command": "node", "args": ["workspace.js"]},
+                }
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "claude-code",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = [item["artifact_id"] for item in output["harnesses"][0]["artifacts"]]
+
+        assert rc == 0
+        assert artifact_ids == ["claude-code:global:shared-tools", "claude-code:project:shared-tools"]
+
     def test_guard_detect_human_output_surfaces_next_steps(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -504,6 +542,70 @@ args = ["workspace-skill.js", "--changed"]
 
         assert excinfo.value.code == 2
         assert "--workspace is required when --scope workspace" in capsys.readouterr().err
+
+    def test_guard_harness_policy_overrides_across_workspaces(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_one = tmp_path / "workspace-one"
+        workspace_two = tmp_path / "workspace-two"
+        _build_guard_fixture(home_dir, workspace_one)
+        _build_guard_fixture(home_dir, workspace_two)
+
+        first_rc = main(
+            [
+                "guard",
+                "allow",
+                "codex",
+                "--scope",
+                "harness",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_one),
+                "--json",
+            ]
+        )
+        json.loads(capsys.readouterr().out)
+
+        second_rc = main(
+            [
+                "guard",
+                "deny",
+                "codex",
+                "--scope",
+                "harness",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_two),
+                "--json",
+            ]
+        )
+        json.loads(capsys.readouterr().out)
+
+        receipts_rc = main(["guard", "receipts", "--home", str(home_dir), "--json"])
+        json.loads(capsys.readouterr().out)
+
+        assert first_rc == 0
+        assert second_rc == 0
+        assert receipts_rc == 0
+
+        run_rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_one),
+                "--dry-run",
+                "--json",
+            ]
+        )
+        run_output = json.loads(capsys.readouterr().out)
+
+        assert run_rc == 1
+        assert any(item["policy_action"] == "block" for item in run_output["artifacts"])
 
     def test_guard_install_and_uninstall_manage_claude_hooks(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

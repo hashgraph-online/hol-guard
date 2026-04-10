@@ -297,7 +297,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             },
             getattr(args, "json", False),
         )
-        return 1 if policy_action == "block" else 0
+        return 1 if policy_action in {"block", "require-reapproval"} else 0
 
     return 1
 

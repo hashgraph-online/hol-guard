@@ -125,6 +125,41 @@ class TestGuardRuntime:
         assert receipts[0]["artifact_id"] == "claude-code:workspace-tools"
         assert receipts[0]["user_override"] is None
 
+    def test_guard_hook_blocks_require_reapproval(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        event = {
+            "event": "PreToolUse",
+            "tool_name": "workspace-tools",
+            "artifact_id": "claude-code:project:workspace-tools",
+            "artifact_name": "workspace-tools",
+            "policy_action": "require-reapproval",
+            "changed_capabilities": ["tool_name"],
+            "provenance_summary": "project artifact defined at .mcp.json",
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "claude-code",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["policy_action"] == "require-reapproval"
+
     def test_stdio_proxy_blocks_disallowed_tools_and_redacts_headers(self):
         proxy = StdioGuardProxy(
             command=[

@@ -62,7 +62,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                     url = server_config.get("url")
                     artifacts.append(
                         GuardArtifact(
-                            artifact_id=f"claude-code:{name}",
+                            artifact_id=f"claude-code:{scope}:{name}",
                             name=name,
                             harness=self.harness,
                             artifact_type="mcp_server",

@@ -187,6 +187,7 @@ class GuardStore:
             )
 
     def upsert_policy(self, decision: PolicyDecision, now: str) -> None:
+        artifact_id, workspace = self._normalized_policy_keys(decision)
         with self._connect() as connection:
             connection.execute(
                 """
@@ -194,7 +195,7 @@ class GuardStore:
                 where harness = ? and scope = ? and coalesce(artifact_id, '') = coalesce(?, '')
                   and coalesce(workspace, '') = coalesce(?, '')
                 """,
-                (decision.harness, decision.scope, decision.artifact_id, decision.workspace),
+                (decision.harness, decision.scope, artifact_id, workspace),
             )
             connection.execute(
                 """
@@ -204,8 +205,8 @@ class GuardStore:
                 (
                     decision.harness,
                     decision.scope,
-                    decision.artifact_id,
-                    decision.workspace,
+                    artifact_id,
+                    workspace,
                     decision.action,
                     decision.reason,
                     now,
@@ -223,11 +224,18 @@ class GuardStore:
                   or scope = 'harness'
                   or scope = 'global'
                 )
-                order by case scope when 'artifact' then 0 when 'workspace' then 1 when 'harness' then 2 else 3 end
+                order by case scope when 'artifact' then 0 when 'workspace' then 1 when 'harness' then 2 else 3 end,
+                         updated_at desc
                 """,
                 (harness, artifact_id, workspace),
             ).fetchall()
         return str(rows[0]["action"]) if rows else None
+
+    @staticmethod
+    def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None]:
+        artifact_id = decision.artifact_id if decision.scope == "artifact" else None
+        workspace = decision.workspace if decision.scope == "workspace" else None
+        return artifact_id, workspace
 
     def add_receipt(self, receipt: GuardReceipt) -> None:
         with self._connect() as connection:
