@@ -280,7 +280,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             ),
             artifact_name=artifact_name,
             source_scope=_coalesce_string(payload.get("source_scope"), "project"),
-            user_override=_coalesce_string(payload.get("user_override")),
+            user_override=_optional_string(payload.get("user_override")),
         )
         store.add_receipt(receipt)
         _emit(
@@ -317,6 +317,12 @@ def _coalesce_string(*values: object | None) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return "unknown-artifact"
+
+
+def _optional_string(value: object | None) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def _artifact_id_from_event(harness: str, payload: dict[str, object]) -> str:

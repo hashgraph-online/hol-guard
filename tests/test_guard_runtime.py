@@ -74,16 +74,12 @@ class _RemoteProxyHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length).decode("utf-8") if length else "{}"
-        _RemoteProxyHandler.captured_headers = {
-            key.lower(): value for key, value in self.headers.items()
-        }
+        _RemoteProxyHandler.captured_headers = {key.lower(): value for key, value in self.headers.items()}
         _RemoteProxyHandler.captured_body = json.loads(body)
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(
-            json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"ok": True}}).encode("utf-8")
-        )
+        self.wfile.write(json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"ok": True}}).encode("utf-8"))
 
     def log_message(self, fmt: str, *args) -> None:
         return
@@ -127,6 +123,7 @@ class TestGuardRuntime:
         assert output["recorded"] is True
         assert output["artifact_id"] == "claude-code:workspace-tools"
         assert receipts[0]["artifact_id"] == "claude-code:workspace-tools"
+        assert receipts[0]["user_override"] is None
 
     def test_stdio_proxy_blocks_disallowed_tools_and_redacts_headers(self):
         proxy = StdioGuardProxy(
