@@ -12,6 +12,7 @@ from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..config import load_guard_config, resolve_guard_home
 from ..consumer import detect_all, detect_harness, evaluate_detection, record_policy, run_consumer_scan
+from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS
 from ..receipts import build_receipt
 from ..runtime import guard_run, sync_receipts
 from ..store import GuardStore
@@ -269,6 +270,8 @@ def run_guard_command(args: argparse.Namespace) -> int:
             store.resolve_policy(args.harness, artifact_id, str(workspace) if workspace else None),
             config.default_action,
         )
+        if policy_action not in VALID_GUARD_ACTIONS:
+            policy_action = SAFE_CHANGED_HASH_ACTION
         changed_capabilities = _string_list(payload.get("changed_capabilities"))
         if not changed_capabilities and isinstance(payload.get("event"), str):
             changed_capabilities = [str(payload["event"])]

@@ -372,6 +372,38 @@ class TestGuardRuntime:
         assert evaluation["blocked"] is True
         assert evaluation["artifacts"][0]["policy_action"] == "require-reapproval"
 
+    def test_guard_hook_invalid_policy_action_falls_back_to_reapproval(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        event = {
+            "event": "PreToolUse",
+            "tool_name": "workspace-tools",
+            "artifact_id": "claude-code:project:workspace-tools",
+            "policy_action": "require_reapproval",
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "claude-code",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["policy_action"] == "require-reapproval"
+
     def test_stdio_proxy_blocks_disallowed_tools_and_redacts_headers(self):
         proxy = StdioGuardProxy(
             command=[

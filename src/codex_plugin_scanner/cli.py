@@ -475,7 +475,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "doctor":
         return _run_doctor(args)
     if args.command == "guard":
-        return run_guard_command(args)
+        try:
+            return run_guard_command(args)
+        except ValueError as exc:
+            parser.error(str(exc))
     return 1
 
 

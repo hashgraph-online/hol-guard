@@ -20,7 +20,7 @@ def _merge_hook_entry(entries: list[dict[str, object]], command: str) -> list[di
 
 
 def _remove_hook_entry(entries: list[dict[str, object]], command: str) -> list[dict[str, object]]:
-    return [entry for entry in entries if entry.get("command") != command]
+    return [entry for entry in entries if not isinstance(entry, dict) or entry.get("command") != command]
 
 
 class ClaudeCodeHarnessAdapter(HarnessAdapter):

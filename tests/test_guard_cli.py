@@ -822,6 +822,51 @@ args = ["workspace-skill.js", "--changed"]
         assert uninstall_output["managed_install"]["active"] is False
         assert settings_payload["hooks"]["PreToolUse"] == []
 
+    def test_guard_uninstall_handles_non_dict_claude_hook_entries(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        settings_local = workspace_dir / ".claude" / "settings.local.json"
+        expected_hook_command = subprocess.list2cmdline(
+            [
+                sys.executable,
+                "-m",
+                "codex_plugin_scanner.cli",
+                "guard",
+                "hook",
+                "--workspace",
+                str(workspace_dir),
+            ]
+        )
+        _write_json(
+            settings_local,
+            {
+                "hooks": {
+                    "PreToolUse": ["unexpected-entry", {"command": expected_hook_command}],
+                    "PostToolUse": [],
+                }
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "uninstall",
+                "claude-code",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        payload = json.loads(settings_local.read_text(encoding="utf-8"))
+
+        assert rc == 0
+        assert output["managed_install"]["active"] is False
+        assert payload["hooks"]["PreToolUse"] == ["unexpected-entry"]
+
     def test_guard_login_and_sync_posts_receipts(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -885,6 +930,27 @@ args = ["workspace-skill.js", "--changed"]
         assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer demo-token"
         assert _SyncRequestHandler.captured_body is not None
         assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
+
+    def test_guard_invalid_harness_returns_parser_error(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(
+                [
+                    "guard",
+                    "detect",
+                    "codxe",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                ]
+            )
+
+        assert excinfo.value.code == 2
+        assert "Unsupported harness: codxe" in capsys.readouterr().err
 
     def test_guard_doctor_reports_runtime_mismatch_for_cursor(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
