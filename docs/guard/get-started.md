@@ -1,7 +1,7 @@
 # Guard Get Started
 
-Guard ships as the `hol-guard` package and command.
-The scanner commands stay available in the same install for CI and package checks.
+Install `hol-guard` when you want local harness protection.
+Install `plugin-scanner` separately when you want maintainer or CI checks for plugin packages.
 
 Use it when you want to protect a harness before local MCP servers, skills, hooks, or plugin surfaces run.
 
@@ -52,6 +52,50 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard login --sync-url <url> --token <token>
    hol-guard sync
    ```
+
+## Fine-tune local policy
+
+Guard works with local defaults first, then optional overrides for a harness, publisher, or artifact.
+
+Home config:
+
+```toml
+mode = "prompt"
+default_action = "warn"
+changed_hash_action = "require-reapproval"
+
+[harnesses.codex]
+default_action = "allow"
+
+[publishers.hashgraph-online]
+default_action = "allow"
+
+[artifacts."codex:project:workspace_tools"]
+default_action = "sandbox-required"
+```
+
+Optional project override:
+
+```toml
+# .ai-plugin-scanner-guard.toml
+[artifacts."codex:project:workspace_tools"]
+default_action = "block"
+```
+
+Guard resolves decisions in this order:
+
+1. saved decisions from `hol-guard allow` or `hol-guard deny`
+2. project override file
+3. home config
+4. Guard's built-in recommendation
+
+Use these actions in config or saved decisions:
+
+- `allow`
+- `warn`
+- `block`
+- `sandbox-required`
+- `require-reapproval`
 
 ## What `install` does
 

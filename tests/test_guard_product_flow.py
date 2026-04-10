@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.cli import main
 
 
@@ -51,6 +53,31 @@ args = ["workspace-skill.js"]
 
 
 class TestGuardProductFlow:
+    def test_plugin_scanner_help_stays_scanner_only(self, capsys, monkeypatch):
+        monkeypatch.setattr(sys, "argv", ["plugin-scanner"])
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["--help"])
+
+        output = capsys.readouterr().out
+
+        assert excinfo.value.code == 0
+        assert "Scan plugin ecosystems for CI and publish readiness." in output
+        assert "{scan,lint,verify,submit,doctor}" in output
+        assert "guard" not in output
+
+    def test_python_module_entry_keeps_combined_surface(self, capsys, monkeypatch):
+        monkeypatch.setattr(sys, "argv", ["cli.py"])
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["--help"])
+
+        output = capsys.readouterr().out
+
+        assert excinfo.value.code == 0
+        assert "Run HOL Guard locally or scan plugin ecosystems for CI and publish readiness." in output
+        assert "{scan,lint,verify,submit,doctor,guard}" in output
+
     def test_guard_start_json_guides_first_run(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

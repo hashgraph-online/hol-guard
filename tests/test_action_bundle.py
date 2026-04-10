@@ -101,10 +101,12 @@ def test_publish_workflow_attaches_marketplace_action_bundle() -> None:
     assert '"${RELEASE_ASSETS[@]}"' in workflow_text
     assert "subject-path: |" in workflow_text
     assert "dist/*" in workflow_text
-    assert "Build primary package (hol-guard)" in workflow_text
-    assert "Build compatibility package (plugin-scanner)" in workflow_text
-    assert "Build compatibility package (codex-plugin-scanner)" in workflow_text
-    assert 'sed -i "1,/^name = /{s/^name = .*/name = \\"plugin-scanner\\"/}" pyproject.toml' in workflow_text
+    assert "Build Guard package (hol-guard)" in workflow_text
+    assert "Build scanner package (plugin-scanner)" in workflow_text
+    assert "Build codex compatibility alias (codex-plugin-scanner)" in workflow_text
+    assert 'name = "plugin-scanner"' in workflow_text
+    assert 'plugin-ecosystem-scanner = "codex_plugin_scanner.cli:main"' in workflow_text
+    assert 'hol-guard = "codex_plugin_scanner.cli:main"' in workflow_text
     assert "codex-plugin-scanner" in workflow_text
     assert "cp pyproject.toml pyproject.toml.bak" in workflow_text
     assert "mv pyproject.toml.bak pyproject.toml" in workflow_text
@@ -130,6 +132,28 @@ def test_ci_workflow_covers_cross_platform_runtime() -> None:
 
     assert "windows-latest" in workflow_text
     assert "macos-latest" in workflow_text
+
+
+def test_harness_smoke_workflow_covers_nightly_self_hosted_release_gate() -> None:
+    workflow_text = (ROOT / ".github" / "workflows" / "harness-smoke.yml").read_text(encoding="utf-8")
+
+    assert "name: Guard Harness Smoke" in workflow_text
+    assert "schedule:" in workflow_text
+    assert "workflow_dispatch:" in workflow_text
+    assert "self-hosted" in workflow_text
+    assert "linux" in workflow_text
+    assert "macOS" in workflow_text
+    assert "windows" in workflow_text
+    assert "hol-guard detect codex" in workflow_text
+    assert "hol-guard run codex" in workflow_text
+    assert "--dry-run --default-action allow --json" in workflow_text
+    assert "codex mcp list" in workflow_text
+    assert "cursor-agent mcp list" in workflow_text
+    assert "gemini --help" in workflow_text
+    assert "opencode --help" in workflow_text
+    assert "Codex release gate" in workflow_text
+    assert "Claude or Cursor release gate" in workflow_text
+    assert "Gemini or OpenCode release gate" in workflow_text
 
 
 def test_codeql_workflow_has_stable_workspace_alias_and_source_root() -> None:
@@ -249,6 +273,13 @@ def test_readme_uses_stable_apache_license_badge() -> None:
 
     assert "https://img.shields.io/badge/license-Apache--2.0-blue.svg" in readme
     assert "https://img.shields.io/github/license/hashgraph-online/codex-plugin-scanner" not in readme
+    assert "https://img.shields.io/pypi/v/hol-guard" not in readme
+    assert "https://img.shields.io/pypi/v/plugin-scanner" not in readme
+    assert "https://img.shields.io/pypi/pyversions/hol-guard" not in readme
+    assert "https://img.shields.io/pypi/dm/hol-guard" not in readme
+    assert "https://img.shields.io/badge/package-hol--guard-" in readme
+    assert "https://img.shields.io/badge/package-plugin--scanner-" in readme
+    assert "https://img.shields.io/badge/python-3.10%2B-" in readme
     assert "publish-action-repo.yml" in readme
     assert "docs/github-action-marketplace.md" not in readme
     assert "ghcr.io/hashgraph-online/ai-plugin-scanner:<version>" in readme

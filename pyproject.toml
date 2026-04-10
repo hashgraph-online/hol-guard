@@ -70,6 +70,8 @@ packages = ["src/codex_plugin_scanner"]
 
 [tool.hatch.build]
 exclude = [
+    ".guard-live/**",
+    ".guard-package-venv/**",
     ".guard-e2e/**",
     ".guard-e2e-prod/**",
     ".guard-e2e-prod2/**",

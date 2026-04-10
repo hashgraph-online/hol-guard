@@ -1,0 +1,114 @@
+name: Guard Harness Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 7 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  codex-release-gate:
+    name: Codex release gate
+    runs-on:
+      - self-hosted
+      - linux
+      - guard
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          enable-cache: true
+      - name: Prepare Guard environment
+        run: |
+          uv sync --frozen --extra dev
+          mkdir -p .guard-ci/codex-home/.codex .guard-ci/codex-workspace/.codex
+          cat > .guard-ci/codex-home/.codex/config.toml <<'EOF'
+          [mcp_servers.global_tools]
+          command = "python3"
+          args = ["-m", "http.server", "9000"]
+          EOF
+          cat > .guard-ci/codex-workspace/.codex/config.toml <<'EOF'
+          [mcp_servers.workspace_skill]
+          command = "node"
+          args = ["workspace-skill.js"]
+          EOF
+      - name: Guard detect and install for Codex
+        run: |
+          uv run hol-guard detect codex --home .guard-ci/codex-home --workspace .guard-ci/codex-workspace --json
+          uv run hol-guard install codex --home .guard-ci/codex-home --workspace .guard-ci/codex-workspace --json
+          uv run hol-guard run codex --home .guard-ci/codex-home --workspace .guard-ci/codex-workspace --dry-run --default-action allow --json
+      - name: Verify Codex runtime is available
+        run: |
+          command -v codex
+          codex mcp list
+
+  macos-release-gate:
+    name: Claude or Cursor release gate
+    runs-on:
+      - self-hosted
+      - macOS
+      - guard
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          enable-cache: true
+      - name: Prepare Guard environment
+        run: uv sync --frozen --extra dev
+      - name: Guard detect for Claude Code
+        run: uv run hol-guard detect claude-code --json
+      - name: Guard detect for Cursor
+        run: uv run hol-guard detect cursor --json
+      - name: Verify Claude Code or Cursor runtime
+        run: |
+          if command -v claude >/dev/null 2>&1; then
+            claude --help >/dev/null
+            exit 0
+          fi
+          command -v cursor-agent
+          cursor-agent mcp list
+
+  windows-release-gate:
+    name: Gemini or OpenCode release gate
+    runs-on:
+      - self-hosted
+      - windows
+      - guard
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          enable-cache: true
+      - name: Prepare Guard environment
+        shell: pwsh
+        run: uv sync --frozen --extra dev
+      - name: Guard detect for Gemini
+        shell: pwsh
+        run: uv run hol-guard detect gemini --json
+      - name: Guard detect for OpenCode
+        shell: pwsh
+        run: uv run hol-guard detect opencode --json
+      - name: Verify Gemini or OpenCode runtime
+        shell: pwsh
+        run: |
+          $gemini = Get-Command gemini -ErrorAction SilentlyContinue
+          if ($null -ne $gemini) {
+            gemini --help | Out-Null
+            exit 0
+          }
+          $opencode = Get-Command opencode -ErrorAction SilentlyContinue
+          if ($null -eq $opencode) {
+            throw "Expected gemini or opencode on the Windows Guard runner."
+          }
+          opencode --help | Out-Null
