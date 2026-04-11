@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -59,8 +60,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         request_id = parsed.path.removeprefix("/approvals/").removesuffix("/decision")
         payload = self._load_request_body()
-        action = str(payload.get("action") or "allow")
-        scope = str(payload.get("scope") or "artifact")
+        action = payload.get("action")
+        scope = payload.get("scope")
+        if not isinstance(action, str) or not action.strip() or not isinstance(scope, str) or not scope.strip():
+            self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
+            return
         reason = payload.get("reason")
         if not isinstance(reason, str):
             reason = None
@@ -68,8 +72,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             updated = apply_approval_resolution(
                 store=self.server.store,  # type: ignore[attr-defined]
                 request_id=request_id,
-                action=action,
-                scope=scope,
+                action=action.strip(),
+                scope=scope.strip(),
                 workspace=None,
                 reason=reason,
             )
@@ -88,7 +92,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         raw_body = self.rfile.read(length).decode("utf-8")
         content_type = self.headers.get("Content-Type", "")
         if "application/json" in content_type:
-            payload = json.loads(raw_body)
+            try:
+                payload = json.loads(raw_body)
+            except json.JSONDecodeError:
+                return {}
             return payload if isinstance(payload, dict) else {}
         form_payload = parse_qs(raw_body)
         return {key: values[-1] for key, values in form_payload.items() if values}
@@ -145,18 +152,21 @@ class GuardDaemonServer:
 def _build_approval_center_html(items: list[dict[str, object]]) -> str:
     rows = []
     for item in items:
-        request_id = str(item.get("request_id") or "unknown")
-        changed_fields = (
+        request_id = html.escape(str(item.get("request_id") or "unknown"), quote=True)
+        changed_fields = html.escape(
             ", ".join(str(value) for value in item.get("changed_fields", []) if isinstance(value, str)) or "none"
         )
+        artifact_label = html.escape(str(item.get("artifact_name") or item.get("artifact_id") or "unknown"))
+        harness_label = html.escape(str(item.get("harness") or "unknown"))
+        recommendation_label = html.escape(str(item.get("policy_action") or "warn"))
         rows.append(
             "\n".join(
                 [
                     "<article style='border:1px solid #d9d9d9;border-radius:16px;padding:16px;margin:16px 0;'>",
-                    f"<h2 style='margin:0 0 8px 0'>{item.get('artifact_name') or item.get('artifact_id')}</h2>",
-                    f"<p><strong>Harness:</strong> {item.get('harness')}</p>",
+                    f"<h2 style='margin:0 0 8px 0'>{artifact_label}</h2>",
+                    f"<p><strong>Harness:</strong> {harness_label}</p>",
                     f"<p><strong>Changed fields:</strong> {changed_fields}</p>",
-                    f"<p><strong>Recommendation:</strong> {item.get('policy_action')}</p>",
+                    f"<p><strong>Recommendation:</strong> {recommendation_label}</p>",
                     "<form method='post' action='/approvals/"
                     f"{request_id}/decision' style='display:flex;gap:8px;flex-wrap:wrap;'>",
                     "<input type='hidden' name='scope' value='artifact'>",
