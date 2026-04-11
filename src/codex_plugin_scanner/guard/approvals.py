@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -113,6 +114,29 @@ def approval_center_hint(
         f"Open {approval_center_url} to review them. "
         f"{flow['fallback_hint']}"
     )
+
+
+def wait_for_approval_requests(
+    *,
+    store: GuardStore,
+    request_ids: list[str],
+    timeout_seconds: int,
+    poll_interval: float = 0.25,
+) -> dict[str, object]:
+    deadline = time.monotonic() + max(timeout_seconds, 0)
+    while True:
+        items = [store.get_approval_request(request_id) for request_id in request_ids]
+        resolved_items = [item for item in items if isinstance(item, dict) and item.get("status") == "resolved"]
+        pending_ids = [
+            request_id
+            for request_id, item in zip(request_ids, items, strict=True)
+            if not isinstance(item, dict) or item.get("status") != "resolved"
+        ]
+        if not pending_ids:
+            return {"resolved": True, "pending_request_ids": [], "items": resolved_items}
+        if time.monotonic() >= deadline:
+            return {"resolved": False, "pending_request_ids": pending_ids, "items": resolved_items}
+        time.sleep(poll_interval)
 
 
 def _artifact_name(item: dict[str, object], artifact_id: str) -> str:

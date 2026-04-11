@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
@@ -172,6 +173,15 @@ class TestGuardRuntime:
         assert config.resolve_action_override("codex", None, None) == "allow"
         assert config.resolve_action_override("codex", None, "hashgraph-online") == "sandbox-required"
         assert config.resolve_action_override("codex", "codex:project:workspace-tools", None) == "block"
+
+    def test_guard_load_config_parses_approval_wait_timeout(self, tmp_path):
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir(parents=True, exist_ok=True)
+        _write_text(guard_home / "config.toml", "approval_wait_timeout_seconds = 7\n")
+
+        config = load_guard_config(guard_home)
+
+        assert config.approval_wait_timeout_seconds == 7
 
     def test_guard_evaluate_detection_uses_config_action_overrides(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -605,6 +615,56 @@ class TestGuardRuntime:
         assert rc == 1
         assert "approval center" in output.lower()
         assert "Queued approvals" in output
+
+    def test_guard_run_headless_waits_for_local_approval_and_resumes(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
+
+        store = GuardStore(home_dir)
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+        monkeypatch.setattr(
+            guard_runner_module.subprocess,
+            "run",
+            lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+        )
+
+        def resolve_pending() -> None:
+            for _ in range(40):
+                pending = store.list_approval_requests(limit=10)
+                if pending:
+                    apply_approval_resolution(
+                        store=store,
+                        request_id=str(pending[0]["request_id"]),
+                        action="allow",
+                        scope="artifact",
+                        workspace=None,
+                        reason="approved from test",
+                    )
+                    return
+                threading.Event().wait(0.05)
+
+        worker = threading.Thread(target=resolve_pending, daemon=True)
+        worker.start()
+
+        rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+            ]
+        )
+        output = capsys.readouterr().out
+
+        assert rc == 0
+        assert "Launch allowed" in output
+        assert "Approval received" in output
 
     def test_guard_invalid_changed_hash_action_falls_back_to_reapproval(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

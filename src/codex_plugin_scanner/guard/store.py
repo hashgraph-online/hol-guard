@@ -361,6 +361,35 @@ class GuardStore:
             for row in rows
         ]
 
+    def get_receipt(self, receipt_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
+                       changed_capabilities_json,
+                       provenance_summary, user_override, artifact_name, source_scope, timestamp
+                from runtime_receipts
+                where receipt_id = ?
+                """,
+                (receipt_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "receipt_id": str(row["receipt_id"]),
+            "harness": str(row["harness"]),
+            "artifact_id": str(row["artifact_id"]),
+            "artifact_hash": str(row["artifact_hash"]),
+            "policy_decision": str(row["policy_decision"]),
+            "capabilities_summary": str(row["capabilities_summary"]),
+            "changed_capabilities": json.loads(str(row["changed_capabilities_json"])),
+            "provenance_summary": str(row["provenance_summary"]),
+            "user_override": row["user_override"],
+            "artifact_name": row["artifact_name"],
+            "source_scope": row["source_scope"],
+            "timestamp": str(row["timestamp"]),
+        }
+
     def count_receipts(self) -> int:
         with self._connect() as connection:
             row = connection.execute("select count(*) as total from runtime_receipts").fetchone()
@@ -406,6 +435,55 @@ class GuardStore:
     def count_approval_requests(self, *, status: str | None = "pending") -> int:
         with self._connect() as connection:
             return count_pending_approval_requests(connection, status=status)
+
+    def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
+        query = """
+            select harness, scope, artifact_id, workspace, publisher, action, reason, updated_at
+            from policy_decisions
+        """
+        params: tuple[object, ...] = ()
+        if harness is not None:
+            query += " where harness = ?"
+            params = (harness,)
+        query += " order by updated_at desc"
+        with self._connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [
+            {
+                "harness": str(row["harness"]),
+                "scope": str(row["scope"]),
+                "artifact_id": row["artifact_id"],
+                "workspace": row["workspace"],
+                "publisher": row["publisher"],
+                "action": str(row["action"]),
+                "reason": row["reason"],
+                "updated_at": str(row["updated_at"]),
+            }
+            for row in rows
+        ]
+
+    def get_latest_diff(self, harness: str, artifact_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select artifact_id, harness, changed_fields_json, previous_hash, current_hash, recorded_at
+                from artifact_diffs
+                where harness = ? and artifact_id = ?
+                order by diff_id desc
+                limit 1
+                """,
+                (harness, artifact_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "artifact_id": str(row["artifact_id"]),
+            "harness": str(row["harness"]),
+            "changed_fields": json.loads(str(row["changed_fields_json"])),
+            "previous_hash": row["previous_hash"],
+            "current_hash": str(row["current_hash"]),
+            "recorded_at": str(row["recorded_at"]),
+        }
 
     def set_managed_install(
         self,

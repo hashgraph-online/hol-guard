@@ -5,12 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
-from ..approvals import approval_center_hint, queue_blocked_approvals
+from ..approvals import approval_center_hint, queue_blocked_approvals, wait_for_approval_requests
 from ..config import load_guard_config, resolve_guard_home
 from ..consumer import detect_all, detect_harness, evaluate_detection, record_policy, run_consumer_scan
 from ..daemon import GuardDaemonServer, ensure_guard_daemon
@@ -262,7 +263,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     now=_now(),
                 )
         elif not bool(args.dry_run) and config.mode == "prompt":
-            blocked_resolver = _headless_approval_resolver(args=args, context=context, store=store)
+            blocked_resolver = _headless_approval_resolver(args=args, context=context, store=store, config=config)
 
         payload = guard_run(
             args.harness,
@@ -416,6 +417,7 @@ def _headless_approval_resolver(
     args: argparse.Namespace,
     context: HarnessContext,
     store: GuardStore,
+    config,
 ):
     def resolve(detection, payload):
         approval_center_url = ensure_guard_daemon(context.guard_home)
@@ -434,9 +436,33 @@ def _headless_approval_resolver(
             approval_center_url=approval_center_url,
             queued=queued,
         )
+        _open_approval_center(approval_center_url)
+        wait_result = wait_for_approval_requests(
+            store=store,
+            request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
+            timeout_seconds=config.approval_wait_timeout_seconds,
+        )
+        payload["approval_wait"] = wait_result
+        if bool(wait_result.get("resolved")):
+            resolved_items = [item for item in wait_result.get("items", []) if isinstance(item, dict)]
+            payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)
+            if not payload["blocked"]:
+                payload["review_hint"] = "Approval received. Guard is resuming the harness launch."
+        else:
+            payload["review_hint"] = (
+                f"Approval is still pending. Open {approval_center_url} and resolve request "
+                f"{', '.join(str(item) for item in wait_result.get('pending_request_ids', []))}."
+            )
         return payload
 
     return resolve
+
+
+def _open_approval_center(approval_center_url: str) -> None:
+    try:
+        webbrowser.open(approval_center_url)
+    except Exception:
+        return
 
 
 def _load_hook_payload(event_file: str | None) -> dict[str, object]:
