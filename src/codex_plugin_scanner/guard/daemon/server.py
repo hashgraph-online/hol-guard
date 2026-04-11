@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import html
 import json
+import mimetypes
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -18,6 +19,11 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     store: GuardStore
 
 
+_STATIC_DIR = Path(__file__).with_name("static")
+_INDEX_PATH = _STATIC_DIR / "index.html"
+_ENTRY_PATH = _STATIC_DIR / "assets" / "guard-dashboard.js"
+
+
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
     _MAX_BODY_BYTES = 1_000_000
 
@@ -25,9 +31,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         store = self.server.store  # type: ignore[attr-defined]
         parsed = urlparse(self.path)
         path_parts = [part for part in parsed.path.split("/") if part]
-        if parsed.path == "/":
-            self._write_html(_build_approval_center_html(store.list_approval_requests(limit=200)))
-            return
         if parsed.path == "/healthz":
             self._write_json(
                 {
@@ -47,12 +50,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._write_json({"error": "not_found"}, status=404)
                 return
             self._write_json(approval)
-            return
-        if parsed.path == "/requests":
-            self._write_html(_build_approval_center_html(store.list_approval_requests(limit=200)))
-            return
-        if len(path_parts) == 2 and path_parts[0] == "requests":
-            self._write_html(_build_request_detail_html(store, path_parts[1]))
             return
         if parsed.path == "/v1/receipts":
             self._write_json({"items": store.list_receipts(limit=200)})
@@ -83,19 +80,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return
             self._write_json(diff)
             return
+        if parsed.path.startswith("/assets/") or parsed.path.startswith("/brand/"):
+            self._write_static_asset(parsed.path.removeprefix("/"))
+            return
         if parsed.path == "/receipts":
             self._write_json({"items": store.list_receipts(limit=200)})
             return
-        if parsed.path == "/approvals":
-            self._write_json({"items": store.list_approval_requests(limit=200)})
-            return
-        if parsed.path.startswith("/approvals/"):
-            request_id = parsed.path.removeprefix("/approvals/")
-            approval = store.get_approval_request(request_id)
-            if approval is None:
-                self._write_json({"error": "not_found"}, status=404)
-                return
-            self._write_json(approval)
+        if self._is_dashboard_route(parsed.path):
+            self._write_dashboard_shell()
             return
         self.send_response(404)
         self.end_headers()
@@ -133,13 +125,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
         except ValueError as error:
             self._write_json({"resolved": False, "error": str(error)}, status=400)
-            return
-        if "/decision" in parsed.path:
-            self._write_html(
-                "<!doctype html><html><body style='font-family:ui-sans-serif,system-ui;padding:24px;'>"
-                "<h1>Approval resolved</h1><p>Guard has received your decision. "
-                "You can close this window and return to your terminal.</p></body></html>"
-            )
             return
         self._write_json({"resolved": True, "item": updated})
 
@@ -230,19 +215,40 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _write_html(self, body: str) -> None:
-        encoded = body.encode("utf-8")
+    def _write_static_asset(self, relative_path: str) -> None:
+        target = (_STATIC_DIR / relative_path).resolve()
+        if not target.is_file() or _STATIC_DIR.resolve() not in target.parents:
+            self.send_response(404)
+            self.end_headers()
+            return
+        body = target.read_bytes()
+        content_type, _ = mimetypes.guess_type(str(target))
         self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(encoded)))
+        self.send_header("Content-Type", content_type or "application/octet-stream")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(encoded)
+        self.wfile.write(body)
+
+    def _write_dashboard_shell(self) -> None:
+        if _INDEX_PATH.is_file() and _ENTRY_PATH.is_file():
+            self._write_static_asset("index.html")
+            return
+        self._write_json({"error": "dashboard_bundle_missing"}, status=503)
+
+    @staticmethod
+    def _is_dashboard_route(path: str) -> bool:
+        if path in {"/", "/requests", "/approvals"}:
+            return True
+        if path.startswith("/requests/"):
+            return True
+        return path.startswith("/approvals/") and not path.endswith("/decision")
 
 
 class GuardDaemonServer:
     """Small local daemon for health, receipts, and approval-center introspection."""
 
     def __init__(self, store: GuardStore, host: str = "127.0.0.1", port: int = 0) -> None:
+        _validate_dashboard_bundle()
         self._server = _GuardDaemonHttpServer((host, port), _GuardDaemonHandler)
         self._server.store = store
         self.port = int(self._server.server_address[1])
@@ -270,133 +276,14 @@ class GuardDaemonServer:
             self._thread.join(timeout=5)
             self._thread = None
 
-
-def _build_approval_center_html(items: list[dict[str, object]]) -> str:
-    rows = []
-    for item in items:
-        request_id = html.escape(str(item.get("request_id") or "unknown"), quote=True)
-        changed_fields = html.escape(
-            ", ".join(str(value) for value in item.get("changed_fields", []) if isinstance(value, str)) or "none"
-        )
-        artifact_label = html.escape(str(item.get("artifact_name") or item.get("artifact_id") or "unknown"))
-        harness_label = html.escape(str(item.get("harness") or "unknown"))
-        recommendation_label = html.escape(str(item.get("policy_action") or "warn"))
-        detail_url = f"/requests/{request_id}"
-        rows.append(
-            "\n".join(
-                [
-                    "<article style='border:1px solid #d9d9d9;border-radius:16px;padding:16px;margin:16px 0;'>",
-                    f"<h2 style='margin:0 0 8px 0'>{artifact_label}</h2>",
-                    f"<p><strong>Harness:</strong> {harness_label}</p>",
-                    f"<p><strong>Changed fields:</strong> {changed_fields}</p>",
-                    f"<p><strong>Recommendation:</strong> {recommendation_label}</p>",
-                    f"<p><a href='{detail_url}'>Open approval details</a></p>",
-                    "</article>",
-                ]
-            )
-        )
-    body = "\n".join(rows) or "<p>No pending approvals.</p>"
-    return (
-        "<!doctype html><html><head><meta charset='utf-8'><title>HOL Guard approval center</title></head>"
-        "<body style='font-family:ui-sans-serif,system-ui;padding:24px;max-width:900px;margin:0 auto;'>"
-        "<h1>HOL Guard approval center</h1>"
-        "<p>Approve blocked harness changes without losing the current session.</p>"
-        f"{body}"
-        "</body></html>"
-    )
-
-
-def _build_request_detail_html(store: GuardStore, request_id: str) -> str:
-    item = store.get_approval_request(request_id)
-    if item is None:
-        return (
-            "<!doctype html><html><body style='font-family:ui-sans-serif,system-ui;padding:24px;'>"
-            "<h1>Approval not found</h1><p>The requested approval no longer exists.</p></body></html>"
-        )
-    artifact_id = str(item.get("artifact_id") or "unknown")
-    harness = str(item.get("harness") or "unknown")
-    diff = store.get_latest_diff(harness, artifact_id)
-    latest_receipt = store.get_latest_receipt(harness, artifact_id)
-    changed_fields = (
-        ", ".join(str(value) for value in item.get("changed_fields", []) if isinstance(value, str)) or "none"
-    )
-    recommended_scope = str(item.get("recommended_scope") or "artifact")
-    scope_options = [
-        ("artifact", "Trust this exact artifact"),
-        ("workspace", "Trust this workspace"),
-        ("publisher", "Trust this publisher in this harness"),
-        ("harness", "Trust this harness"),
-        ("global", "Trust globally"),
-    ]
-    scope_options_html = "".join(
-        (
-            f"<option value='{html.escape(value, quote=True)}'"
-            f"{' selected' if recommended_scope == value else ''}>"
-            f"{html.escape(label)}</option>"
-        )
-        for value, label in scope_options
-    )
-    diff_html = (
-        "<p>No previous diff is stored for this artifact yet.</p>"
-        if diff is None
-        else (
-            "<ul>"
-            "<li><strong>Changed fields:</strong> "
-            f"{html.escape(', '.join(str(value) for value in diff['changed_fields']))}</li>"
-            f"<li><strong>Previous hash:</strong> {html.escape(str(diff['previous_hash'] or 'none'))}</li>"
-            f"<li><strong>Current hash:</strong> {html.escape(str(diff['current_hash']))}</li>"
-            "</ul>"
-        )
-    )
-    receipt_html = (
-        "<p>No previous receipt recorded.</p>"
-        if latest_receipt is None
-        else (
-            "<ul>"
-            f"<li><strong>Decision:</strong> {html.escape(str(latest_receipt['policy_decision']))}</li>"
-            f"<li><strong>Capabilities:</strong> {html.escape(str(latest_receipt['capabilities_summary']))}</li>"
-            f"<li><strong>Provenance:</strong> {html.escape(str(latest_receipt['provenance_summary']))}</li>"
-            "</ul>"
-        )
-    )
-    return (
-        "<!doctype html><html><head><meta charset='utf-8'><title>HOL Guard approval detail</title></head>"
-        "<body style='font-family:ui-sans-serif,system-ui;padding:24px;max-width:900px;margin:0 auto;'>"
-        f"<p><a href='/'>← Back to pending approvals</a></p>"
-        f"<h1>{html.escape(str(item.get('artifact_name') or artifact_id))}</h1>"
-        f"<p><strong>Harness:</strong> {html.escape(harness)}</p>"
-        f"<p><strong>Artifact ID:</strong> {html.escape(artifact_id)}</p>"
-        f"<p><strong>Changed fields:</strong> {html.escape(changed_fields)}</p>"
-        f"<p><strong>Recommended scope:</strong> {html.escape(str(item.get('recommended_scope') or 'artifact'))}</p>"
-        f"<p><strong>Recommendation:</strong> {html.escape(str(item.get('policy_action') or 'review'))}</p>"
-        "<h2>What changed</h2>"
-        f"{diff_html}"
-        "<h2>Latest recorded evidence</h2>"
-        f"{receipt_html}"
-        "<h2>Approve or block</h2>"
-        "<form method='post' action='/approvals/"
-        f"{html.escape(request_id, quote=True)}/decision' style='display:grid;gap:12px;max-width:480px;'>"
-        "<label>Decision scope"
-        "<select name='scope'>"
-        f"{scope_options_html}"
-        "</select>"
-        "</label>"
-        "<label>Workspace path (required for workspace scope)"
-        "<input name='workspace' type='text' />"
-        "</label>"
-        "<label>Reason"
-        "<input name='reason' type='text' value='approved in local approval center' />"
-        "</label>"
-        "<div style='display:flex;gap:8px;flex-wrap:wrap;'>"
-        "<button name='action' value='allow'>Allow</button>"
-        "<button name='action' value='block'>Block</button>"
-        "</div>"
-        "</form>"
-        "</body></html>"
-    )
-
-
 def _now() -> str:
     from datetime import datetime, timezone
 
     return datetime.now(timezone.utc).isoformat()
+
+
+def _validate_dashboard_bundle() -> None:
+    if not _INDEX_PATH.is_file() or not _ENTRY_PATH.is_file():
+        raise RuntimeError(
+            "Guard dashboard bundle is missing. Run `pnpm install && pnpm run build` in the dashboard directory."
+        )

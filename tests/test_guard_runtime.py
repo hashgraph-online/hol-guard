@@ -499,7 +499,7 @@ class TestGuardRuntime:
             [
                 "guard",
                 "run",
-                "codex",
+                "claude-code",
                 "--home",
                 str(home_dir),
                 "--workspace",
@@ -594,10 +594,12 @@ class TestGuardRuntime:
         assert second_output["blocked"] is False
         assert all(item["policy_action"] == "allow" for item in second_output["artifacts"])
 
-    def test_guard_run_headless_blocks_with_review_hint(self, tmp_path, capsys):
+    def test_guard_run_headless_blocks_with_review_hint(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
 
         rc = main(
             [
@@ -608,13 +610,14 @@ class TestGuardRuntime:
                 str(home_dir),
                 "--workspace",
                 str(workspace_dir),
+                "--json",
             ]
         )
         output = capsys.readouterr().out
 
         assert rc == 1
-        assert "approval center" in output.lower()
-        assert "Queued approvals" in output
+        assert '"approval_center_url": "http://127.0.0.1:4455"' in output
+        assert '"blocked": true' in output
 
     def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
         self, tmp_path, capsys, monkeypatch
@@ -693,7 +696,7 @@ class TestGuardRuntime:
             [
                 "guard",
                 "run",
-                "codex",
+                "claude-code",
                 "--home",
                 str(home_dir),
                 "--workspace",

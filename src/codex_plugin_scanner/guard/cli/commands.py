@@ -420,6 +420,7 @@ def _headless_approval_resolver(
     config,
 ):
     def resolve(detection, payload):
+        approval_flow = get_adapter(args.harness).approval_flow()
         approval_center_url = ensure_guard_daemon(context.guard_home)
         queued = queue_blocked_approvals(
             detection=detection,
@@ -437,6 +438,13 @@ def _headless_approval_resolver(
             queued=queued,
         )
         _open_approval_center(approval_center_url)
+        if approval_flow["tier"] != "native-or-center":
+            payload["approval_wait"] = {
+                "resolved": False,
+                "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
+                "items": [],
+            }
+            return payload
         wait_result = wait_for_approval_requests(
             store=store,
             request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],

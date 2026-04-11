@@ -103,7 +103,7 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/approvals", timeout=5) as response:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/requests", timeout=5) as response:
                 approvals_payload = json.loads(response.read().decode("utf-8"))
             request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/approvals/req-456/decision",
@@ -112,12 +112,12 @@ class TestGuardApprovals:
                 method="POST",
             )
             with urllib.request.urlopen(request, timeout=5) as response:
-                decision_body = response.read().decode("utf-8")
+                decision_payload = json.loads(response.read().decode("utf-8"))
         finally:
             daemon.stop()
 
         assert approvals_payload["items"][0]["request_id"] == "req-456"
-        assert "Approval resolved" in decision_body
+        assert decision_payload["resolved"] is True
         assert store.get_approval_request("req-456")["status"] == "resolved"
 
     def test_guard_daemon_v1_endpoints_expose_requests_diff_receipts_and_policy(self, tmp_path):
@@ -360,8 +360,9 @@ class TestGuardApprovals:
 
         assert "<img src=x onerror=alert(1)>" not in body
         assert "<script>" not in body
-        assert "&lt;img src=x onerror=alert(1)&gt;" in body
-        assert "codex&lt;script&gt;" in body
+        assert "guard-dashboard-root" in body
+        assert "Local approval center" in body
+        assert "Hashgraph Online" in body
 
     def test_guard_daemon_rejects_cross_origin_post_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -431,7 +432,7 @@ class TestGuardApprovals:
         assert status == 403
         assert payload["error"] == "forbidden_origin"
 
-    def test_guard_daemon_detail_page_uses_latest_receipt_and_preselects_scope(self, tmp_path):
+    def test_guard_daemon_detail_page_serves_dashboard_shell(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         target_artifact = "codex:project:workspace_skill"
         target_receipt = {
@@ -488,8 +489,33 @@ class TestGuardApprovals:
         finally:
             daemon.stop()
 
-        assert "target provenance summary" in body
-        assert "<option value='workspace' selected>" in body
+        assert "guard-dashboard-root" in body
+        assert "Local approval center" in body
+        assert "Hashgraph Online" in body
+
+    def test_guard_daemon_serves_dashboard_assets_when_present(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            asset_url = f"http://127.0.0.1:{daemon.port}/assets/guard-dashboard.js"
+            with urllib.request.urlopen(asset_url, timeout=5) as response:
+                body = response.read().decode("utf-8")
+                content_type = response.headers.get("Content-Type")
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/brand/Logo_Whole.png", timeout=5
+            ) as response:
+                logo_bytes = response.read()
+                logo_type = response.headers.get("Content-Type")
+        finally:
+            daemon.stop()
+
+        assert content_type is not None
+        assert "javascript" in content_type
+        assert "guard-dashboard-root" in body
+        assert logo_type == "image/png"
+        assert len(logo_bytes) > 0
 
     def test_guard_run_headless_enqueues_approval_request(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

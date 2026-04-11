@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #3f4174;
+  --brand-white: #ffffff;
+  --brand-dark: #3f4174;
+  --brand-blue: #5599fe;
+  --brand-green: #48df7b;
+  --brand-green-text: #0d7a3a;
+  --brand-green-bg: #dcfce7;
+  --brand-purple: #b56cff;
+  --border: 214 32% 91%;
+  --input: 214 32% 91%;
+  --ring: 263 85% 64%;
+  --background-hsl: 0 0% 100%;
+  --foreground-hsl: 222 47% 28%;
+  --primary: 263 85% 64%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 214 95% 62%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 214 95% 62%;
+  --accent-foreground: 0 0% 100%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 28%;
+}
+
+@theme inline {
+  --color-background: hsl(var(--background-hsl));
+  --color-foreground: hsl(var(--foreground-hsl));
+  --color-brand-white: var(--brand-white);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-green: var(--brand-green);
+  --color-brand-green-text: var(--brand-green-text);
+  --color-brand-green-bg: var(--brand-green-bg);
+  --color-brand-purple: var(--brand-purple);
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --font-sans: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(85, 153, 254, 0.12), transparent 42%),
+    linear-gradient(180deg, #fbfcff 0%, #f5f7fb 100%);
+  color: hsl(var(--foreground-hsl));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#guard-dashboard-root {
+  min-height: 100vh;
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
