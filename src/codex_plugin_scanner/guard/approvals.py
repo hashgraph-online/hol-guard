@@ -71,6 +71,8 @@ def apply_approval_resolution(
         raise ValueError(f"Unknown approval request: {request_id}")
     if request["status"] != "pending":
         raise ValueError(f"Approval request already resolved: {request_id}")
+    if scope == "workspace" and not workspace:
+        raise ValueError(f"Approval request {request_id} requires --workspace for workspace scope.")
     if scope == "publisher" and not isinstance(request.get("publisher"), str):
         raise ValueError(f"Approval request {request_id} has no publisher scope to approve.")
     decision = PolicyDecision(

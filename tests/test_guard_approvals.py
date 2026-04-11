@@ -293,6 +293,52 @@ class TestGuardApprovals:
         assert approve_output["resolved"] is True
         assert store.resolve_policy("codex", "codex:project:workspace_skill", None) == "allow"
 
+    def test_guard_approvals_cli_rejects_workspace_scope_without_workspace(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-workspace",
+                harness="codex",
+                artifact_id="codex:project:workspace_skill",
+                artifact_name="workspace_skill",
+                artifact_hash="hash-workspace",
+                policy_action="require-reapproval",
+                recommended_scope="workspace",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                review_command="hol-guard approvals approve req-workspace",
+                approval_url="http://127.0.0.1/pending",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+
+        try:
+            main(
+                [
+                    "guard",
+                    "approvals",
+                    "approve",
+                    "req-workspace",
+                    "--home",
+                    str(home_dir),
+                    "--scope",
+                    "workspace",
+                    "--json",
+                ]
+            )
+        except SystemExit as error:
+            rc = error.code
+        else:
+            raise AssertionError("expected argparse failure for missing workspace scope target")
+
+        captured = capsys.readouterr()
+
+        assert rc == 2
+        assert "requires --workspace" in captured.err
+        assert store.get_approval_request("req-workspace")["status"] == "pending"
+
     def test_guard_queue_blocked_approvals_creates_requests_for_changed_artifacts(self, tmp_path):
         guard_home = tmp_path / "guard-home"
         store = GuardStore(guard_home)
