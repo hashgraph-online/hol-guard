@@ -54,11 +54,14 @@ def _render_start(console: Console, payload: dict[str, object]) -> None:
     console.print(
         Panel.fit(
             f"[bold]HOL Guard first run[/bold]\n"
-            f"{len(harnesses)} harnesses detected • {payload.get('receipt_count', 0)} receipts recorded",
+            f"{len(harnesses)} harnesses detected • {payload.get('receipt_count', 0)} receipts recorded • "
+            f"{payload.get('pending_approvals', 0)} approvals waiting",
             border_style="cyan",
         )
     )
     console.print(_build_product_table(harnesses))
+    if payload.get("approval_center_url"):
+        console.print(f"Approval center: [bold]{payload.get('approval_center_url')}[/bold]")
     console.print(_build_steps_panel(_coerce_dict_list(payload.get("next_steps"))))
 
 
@@ -69,11 +72,14 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
             f"[bold]HOL Guard status[/bold]\n"
             f"{payload.get('managed_harnesses', 0)} managed harnesses • "
             f"{payload.get('receipt_count', 0)} receipts • "
+            f"{payload.get('pending_approvals', 0)} approvals • "
             f"sync {'connected' if payload.get('sync_configured') else 'local only'}",
             border_style="cyan",
         )
     )
     console.print(_build_product_table(harnesses))
+    if payload.get("approval_center_url"):
+        console.print(f"Approval center: [bold]{payload.get('approval_center_url')}[/bold]")
     review_items = [item for item in harnesses if int(item.get("review_count", 0)) > 0]
     if review_items:
         console.print(
@@ -135,12 +141,17 @@ def _render_run(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Harness", f"[bold]{payload.get('harness', 'unknown')}[/bold]")
     body.add_row("Receipts", str(payload.get("receipts_recorded", 0)))
     body.add_row("Launched", _bool_label(launched))
+    if payload.get("approval_center_url"):
+        body.add_row("Approval center", str(payload.get("approval_center_url")))
     if payload.get("review_hint"):
         body.add_row("Review", str(payload.get("review_hint")))
     if launched:
         body.add_row("Command", _command_text(payload.get("launch_command")))
     console.print(Panel(body, title=title, border_style=border_style))
     console.print(_build_artifact_result_table(_coerce_dict_list(payload.get("artifacts"))))
+    approval_requests = _coerce_dict_list(payload.get("approval_requests"))
+    if approval_requests:
+        console.print(_build_approval_table(approval_requests, title="Queued approvals"))
 
 
 def _render_diff(console: Console, payload: dict[str, object]) -> None:
@@ -184,6 +195,29 @@ def _render_receipts(console: Console, payload: dict[str, object]) -> None:
             ", ".join(_coerce_string_list(receipt.get("changed_capabilities"))) or "none",
         )
     console.print(table)
+
+
+def _render_approvals(console: Console, payload: dict[str, object]) -> None:
+    if payload.get("resolved"):
+        item = payload.get("item")
+        if isinstance(item, dict):
+            body = Table.grid(padding=(0, 1))
+            body.add_row("Artifact", str(item.get("artifact_name") or item.get("artifact_id") or "unknown"))
+            body.add_row("Harness", str(item.get("harness") or "unknown"))
+            body.add_row("Action", _action_text(str(item.get("resolution_action") or "warn")))
+            body.add_row("Scope", str(item.get("resolution_scope") or "artifact"))
+            console.print(Panel(body, title="Approval resolved", border_style="green"))
+            return
+    items = _coerce_dict_list(payload.get("items"))
+    console.print(
+        Panel.fit(
+            f"[bold]Pending Guard approvals[/bold]\n{len(items)} item{'s' if len(items) != 1 else ''} waiting",
+            border_style="yellow" if items else "green",
+        )
+    )
+    if payload.get("approval_center_url"):
+        console.print(f"Approval center: [bold]{payload.get('approval_center_url')}[/bold]")
+    console.print(_build_approval_table(items, title=None))
 
 
 def _render_managed_install(console: Console, payload: dict[str, object]) -> None:
@@ -380,6 +414,29 @@ def _build_artifact_result_table(artifacts: list[dict[str, object]]) -> Table:
     return table
 
 
+def _build_approval_table(items: list[dict[str, object]], *, title: str | None) -> Table:
+    table = Table(title=title, box=box.SIMPLE_HEAVY, show_header=True)
+    table.add_column("Request", style="dim", no_wrap=True)
+    table.add_column("Harness", style="cyan")
+    table.add_column("Artifact", style="bold")
+    table.add_column("Changed", style="magenta")
+    table.add_column("Recommendation")
+    table.add_column("Resolve", style="blue")
+    if not items:
+        table.add_row("—", "—", "No pending approvals", "—", "—", "—")
+        return table
+    for item in items:
+        table.add_row(
+            str(item.get("request_id") or "unknown"),
+            str(item.get("harness") or "unknown"),
+            str(item.get("artifact_name") or item.get("artifact_id") or "unknown"),
+            ", ".join(_coerce_string_list(item.get("changed_fields"))) or "none",
+            _action_text(str(item.get("policy_action") or "warn")),
+            str(item.get("review_command") or "hol-guard approvals"),
+        )
+    return table
+
+
 def _build_runtime_probe_panel(runtime_probe: dict[str, object]) -> Panel:
     body = Table.grid(padding=(0, 1))
     body.add_row("Command", _command_text(runtime_probe.get("command")))
@@ -486,6 +543,7 @@ def _clean_terminal_output(value: str) -> str:
 
 
 _RENDERERS: dict[str, Any] = {
+    "approvals": _render_approvals,
     "start": _render_start,
     "status": _render_status,
     "detect": _render_detect,

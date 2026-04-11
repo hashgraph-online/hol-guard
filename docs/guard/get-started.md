@@ -31,22 +31,28 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard run codex
    ```
 
-5. Review changes when Guard blocks or asks for another look:
+5. If the shell is interactive, approve inline. If the shell cannot prompt, Guard queues the change in the local approval center instead of ending the session with a dead stop:
 
    ```bash
-   hol-guard diff codex
-   hol-guard allow codex --scope artifact --artifact-id codex:project:workspace_skill
-   hol-guard deny codex --scope artifact --artifact-id codex:project:workspace_skill
+   hol-guard approvals
    ```
 
-6. Check receipts and current status:
+6. Review or resolve changes from the terminal when you want a text-only path:
+
+   ```bash
+   hol-guard approvals approve <request-id>
+   hol-guard approvals deny <request-id>
+   hol-guard diff codex
+   ```
+
+7. Check receipts and current status:
 
    ```bash
    hol-guard receipts
    hol-guard status
    ```
 
-7. Sign in later only if you want shared history:
+8. Sign in later only if you want shared history:
 
    ```bash
    hol-guard login --sync-url <url> --token <token>
@@ -105,6 +111,27 @@ Use these actions in config or saved decisions:
 - Windows: `~/.config/.ai-plugin-scanner-guard/bin/guard-<harness>.cmd`
 
 Claude Code also gets Guard hook entries in `.claude/settings.local.json` when you install from a workspace.
+
+## Harness approval model
+
+Guard uses three approval tiers:
+
+1. native harness approval where the harness already has a strong tool permission model
+2. the local Guard approval center on `127.0.0.1` when Guard needs to pause a launch cleanly
+3. terminal resolution through `hol-guard approvals` when you do not want a browser surface
+
+Current strategy:
+
+- `claude-code`
+  prefers Claude hooks and can hand blocked work to the approval center cleanly
+- `codex`
+  uses the Guard approval center today; App Server is the long-term richer in-client path
+- `cursor`
+  keeps Cursor’s native tool approval and lets Guard own artifact trust before tool use
+- `opencode`
+  keeps OpenCode’s permission model and lets Guard manage package and provenance policy
+- `gemini`
+  scans extension manifests and routes blocked changes to the approval center
 
 ## First-party canaries
 

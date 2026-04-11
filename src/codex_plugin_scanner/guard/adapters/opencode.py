@@ -12,6 +12,11 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
 
     harness = "opencode"
     executable = "opencode"
+    approval_tier = "native-harness"
+    approval_summary = (
+        "OpenCode already has tool permissions, so Guard authors policy and provenance rules before launch."
+    )
+    fallback_hint = "Use Guard for artifact-level trust and keep OpenCode's native allow or deny model intact."
 
     @staticmethod
     def _scope_for(context: HarnessContext, path) -> str:

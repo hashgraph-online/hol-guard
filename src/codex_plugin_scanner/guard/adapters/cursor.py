@@ -11,6 +11,11 @@ class CursorHarnessAdapter(HarnessAdapter):
 
     harness = "cursor"
     executable = "cursor-agent"
+    approval_tier = "native-harness"
+    approval_summary = (
+        "Cursor already owns tool approval, so Guard focuses on artifact trust, provenance, and preflight review."
+    )
+    fallback_hint = "Resolve package-level trust in Guard and let Cursor keep its built-in tool approval flow."
 
     @staticmethod
     def _scope_for(context: HarnessContext, path) -> str:

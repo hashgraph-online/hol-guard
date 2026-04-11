@@ -27,6 +27,7 @@ def guard_run(
     passthrough_args: list[str],
     default_action: str | None = None,
     interactive_resolver: Callable[[HarnessDetection, dict[str, Any]], dict[str, Any]] | None = None,
+    blocked_resolver: Callable[[HarnessDetection, dict[str, Any]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Evaluate local harness state and optionally launch the harness."""
 
@@ -34,6 +35,8 @@ def guard_run(
     evaluation = evaluate_detection(detection, store, config, default_action=default_action)
     if not dry_run and interactive_resolver is not None and evaluation["blocked"]:
         evaluation = interactive_resolver(detection, evaluation)
+    elif not dry_run and blocked_resolver is not None and evaluation["blocked"]:
+        evaluation = blocked_resolver(detection, evaluation)
     if evaluation["blocked"] or dry_run:
         evaluation["launched"] = False
         evaluation["launch_command"] = []
