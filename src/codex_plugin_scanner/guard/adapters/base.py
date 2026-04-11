@@ -73,6 +73,9 @@ class HarnessAdapter:
 
     harness = ""
     executable = ""
+    approval_tier = "approval-center"
+    approval_summary = "Guard pauses the launch and routes approval through the local approval center."
+    fallback_hint = "Use `hol-guard approvals` if you want to resolve it from the terminal."
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         raise NotImplementedError
@@ -117,6 +120,13 @@ class HarnessAdapter:
         if runtime_probe is not None and runtime_probe.get("timed_out") is True:
             warnings.append(f"{self.executable} diagnostics timed out before Guard could confirm runtime state.")
         return warnings
+
+    def approval_flow(self) -> dict[str, str]:
+        return {
+            "tier": self.approval_tier,
+            "summary": self.approval_summary,
+            "fallback_hint": self.fallback_hint,
+        }
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         detection = self.detect(context)

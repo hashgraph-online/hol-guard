@@ -29,6 +29,11 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
 
     harness = "claude-code"
     executable = "claude"
+    approval_tier = "native-or-center"
+    approval_summary = (
+        "Guard uses Claude hooks first and falls back to the local approval center when the shell cannot prompt."
+    )
+    fallback_hint = "Claude is the best current harness for deferred Guard approvals."
 
     @staticmethod
     def _scope_for(context: HarnessContext, path: Path) -> str:
