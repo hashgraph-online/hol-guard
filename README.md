@@ -30,6 +30,7 @@ pipx run hol-guard start
 pipx run hol-guard install codex
 pipx run hol-guard run codex --dry-run
 pipx run hol-guard run codex
+pipx run hol-guard approvals
 pipx run hol-guard receipts
 ```
 
@@ -37,7 +38,8 @@ What you get from Guard:
 
 - Detects local harness config on your machine
 - Records a baseline before you trust a tool
-- Stops on new or changed artifacts before launch
+- Pauses cleanly on new or changed artifacts before launch
+- Queues blocked changes in a localhost approval center when the harness cannot prompt inline
 - Stores receipts locally so you can review decisions later
 - Keeps sync optional until you actually want shared history
 
@@ -55,11 +57,27 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
 - `hol-guard run <harness> --dry-run`
   Records the current state once before you trust it.
 - `hol-guard run <harness>`
-  Reviews changes before launch.
-- `hol-guard diff <harness>`
-  Shows what changed.
+  Reviews changes before launch and hands blocked sessions to the approval center when needed.
+- `hol-guard approvals`
+  Lists pending approvals or resolves them from the terminal.
 - `hol-guard receipts`
   Shows local approval and block history.
+
+</details>
+
+<details>
+<summary>Harness approval strategy</summary>
+
+- `claude-code`
+  Guard prefers Claude hooks first, then the local approval center when the shell cannot prompt.
+- `codex`
+  Guard owns artifact approval today through the local approval center. App Server is the future path for richer in-client approvals.
+- `cursor`
+  Guard respects Cursor’s native tool approval and focuses on artifact trust before launch.
+- `opencode`
+  Guard authors package-level policy while OpenCode keeps native allow or deny rules.
+- `gemini`
+  Guard scans extensions and falls back to the local approval center for blocked changes.
 
 </details>
 

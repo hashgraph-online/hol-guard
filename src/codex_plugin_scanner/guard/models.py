@@ -120,3 +120,27 @@ class GuardReceipt:
         payload = asdict(self)
         payload["changed_capabilities"] = list(self.changed_capabilities)
         return payload
+
+
+@dataclass(frozen=True, slots=True)
+class GuardApprovalRequest:
+    """Pending approval request surfaced through the local approval center."""
+
+    request_id: str
+    harness: str
+    artifact_id: str
+    artifact_name: str
+    artifact_hash: str
+    policy_action: GuardAction
+    recommended_scope: DecisionScope
+    changed_fields: tuple[str, ...]
+    source_scope: str
+    config_path: str
+    review_command: str
+    approval_url: str
+    publisher: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        payload = asdict(self)
+        payload["changed_fields"] = list(self.changed_fields)
+        return payload

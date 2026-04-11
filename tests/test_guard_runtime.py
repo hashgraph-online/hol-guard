@@ -603,7 +603,8 @@ class TestGuardRuntime:
         output = capsys.readouterr().out
 
         assert rc == 1
-        assert "non-interactive" in output
+        assert "approval center" in output.lower()
+        assert "Queued approvals" in output
 
     def test_guard_invalid_changed_hash_action_falls_back_to_reapproval(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

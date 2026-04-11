@@ -29,6 +29,9 @@ class CodexHarnessAdapter(HarnessAdapter):
 
     harness = "codex"
     executable = "codex"
+    approval_tier = "approval-center"
+    approval_summary = "Guard owns artifact approval today and can hand blocked changes to the local approval center."
+    fallback_hint = "For richer in-client approvals later, move the session onto Codex App Server."
 
     @staticmethod
     def _scope_for(context: HarnessContext, path: Path) -> str:
