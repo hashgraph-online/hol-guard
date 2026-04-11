@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -52,15 +53,16 @@
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
   --font-sans: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top, rgba(85, 153, 254, 0.12), transparent 42%),
-    linear-gradient(180deg, #fbfcff 0%, #f5f7fb 100%);
+    radial-gradient(circle at top, rgba(85, 153, 254, 0.11), transparent 40%),
+    radial-gradient(circle at 85% 0%, rgba(72, 223, 123, 0.08), transparent 28%),
+    linear-gradient(180deg, #fbfcff 0%, #f4f7fc 100%);
   color: hsl(var(--foreground-hsl));
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -69,6 +71,29 @@ body {
 
 #guard-dashboard-root {
   min-height: 100vh;
+}
+
+@keyframes guard-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.guard-surface-in {
+  animation: guard-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.guard-delay-1 {
+  animation-delay: 70ms;
+}
+
+.guard-delay-2 {
+  animation-delay: 130ms;
 }
 
 a,
@@ -81,4 +106,23 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+input:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-blue) 55%, white 45%);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guard-surface-in,
+  .guard-delay-1,
+  .guard-delay-2 {
+    animation: none !important;
+  }
+
+  * {
+    scroll-behavior: auto !important;
+  }
 }
