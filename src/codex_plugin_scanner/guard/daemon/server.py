@@ -165,7 +165,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if origin is None:
             return True
-        return origin.startswith("http://127.0.0.1") or origin.startswith("http://localhost")
+        parsed = urlparse(origin)
+        if parsed.scheme not in {"http", "https"}:
+            return False
+        return parsed.hostname in {"127.0.0.1", "localhost", "::1"}
 
     def _handle_policy_upsert(self, payload: dict[str, object]) -> None:
         harness = payload.get("harness")

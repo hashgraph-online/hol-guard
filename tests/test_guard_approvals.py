@@ -397,6 +397,40 @@ class TestGuardApprovals:
         assert status == 403
         assert payload["error"] == "forbidden_origin"
 
+    def test_guard_daemon_rejects_spoofed_localhost_origin_post_requests(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
+                data=json.dumps(
+                    {
+                        "harness": "codex",
+                        "scope": "harness",
+                        "action": "allow",
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": "http://127.0.0.1.evil.example",
+                },
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for spoofed localhost origin")
+        finally:
+            daemon.stop()
+
+        assert status == 403
+        assert payload["error"] == "forbidden_origin"
+
     def test_guard_daemon_detail_page_uses_latest_receipt_and_preselects_scope(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         target_artifact = "codex:project:workspace_skill"
