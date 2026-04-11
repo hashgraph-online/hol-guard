@@ -32,8 +32,13 @@ def guard_run(
     """Evaluate local harness state and optionally launch the harness."""
 
     detection = detect_harness(harness, context)
-    persist_initial = blocked_resolver is None
-    evaluation = evaluate_detection(detection, store, config, default_action=default_action, persist=persist_initial)
+    if blocked_resolver is None:
+        evaluation = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
+    else:
+        evaluation = evaluate_detection(detection, store, config, default_action=default_action, persist=False)
+        if not evaluation["blocked"]:
+            evaluation = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
+
     if not dry_run and interactive_resolver is not None and evaluation["blocked"]:
         evaluation = interactive_resolver(detection, evaluation)
     elif not dry_run and blocked_resolver is not None and evaluation["blocked"]:

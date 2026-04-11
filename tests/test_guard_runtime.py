@@ -616,6 +616,44 @@ class TestGuardRuntime:
         assert "approval center" in output.lower()
         assert "Queued approvals" in output
 
+    def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(
+            guard_runner_module.subprocess,
+            "run",
+            lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+        )
+
+        rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--default-action",
+                "allow",
+            ]
+        )
+        output = capsys.readouterr().out
+        store = GuardStore(home_dir)
+        receipts = store.list_receipts(limit=10)
+        snapshots = store.list_snapshots("codex")
+
+        assert rc == 0
+        assert "Launch allowed" in output
+        assert len(receipts) == 2
+        assert {
+            "codex:global:global_tools",
+            "codex:project:workspace_skill",
+        } <= set(snapshots)
+
     def test_guard_run_headless_waits_for_local_approval_and_resumes(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -635,15 +673,17 @@ class TestGuardRuntime:
             for _ in range(40):
                 pending = store.list_approval_requests(limit=10)
                 if pending:
-                    apply_approval_resolution(
-                        store=store,
-                        request_id=str(pending[0]["request_id"]),
-                        action="allow",
-                        scope="artifact",
-                        workspace=None,
-                        reason="approved from test",
-                    )
-                    return
+                    for request in pending:
+                        apply_approval_resolution(
+                            store=store,
+                            request_id=str(request["request_id"]),
+                            action="allow",
+                            scope="artifact",
+                            workspace=None,
+                            reason="approved from test",
+                        )
+                    if not store.list_approval_requests(limit=10):
+                        return
                 threading.Event().wait(0.05)
 
         worker = threading.Thread(target=resolve_pending, daemon=True)
