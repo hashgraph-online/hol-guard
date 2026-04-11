@@ -390,6 +390,37 @@ class GuardStore:
             "timestamp": str(row["timestamp"]),
         }
 
+    def get_latest_receipt(self, harness: str, artifact_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
+                       changed_capabilities_json,
+                       provenance_summary, user_override, artifact_name, source_scope, timestamp
+                from runtime_receipts
+                where harness = ? and artifact_id = ?
+                order by timestamp desc
+                limit 1
+                """,
+                (harness, artifact_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "receipt_id": str(row["receipt_id"]),
+            "harness": str(row["harness"]),
+            "artifact_id": str(row["artifact_id"]),
+            "artifact_hash": str(row["artifact_hash"]),
+            "policy_decision": str(row["policy_decision"]),
+            "capabilities_summary": str(row["capabilities_summary"]),
+            "changed_capabilities": json.loads(str(row["changed_capabilities_json"])),
+            "provenance_summary": str(row["provenance_summary"]),
+            "user_override": row["user_override"],
+            "artifact_name": row["artifact_name"],
+            "source_scope": row["source_scope"],
+            "timestamp": str(row["timestamp"]),
+        }
+
     def count_receipts(self) -> int:
         with self._connect() as connection:
             row = connection.execute("select count(*) as total from runtime_receipts").fetchone()

@@ -19,6 +19,8 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
 
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
+    _MAX_BODY_BYTES = 1_000_000
+
     def do_GET(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
         parsed = urlparse(self.path)
@@ -99,6 +101,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
+        if not self._origin_is_allowed():
+            self._write_json({"error": "forbidden_origin"}, status=403)
+            return
         parsed = urlparse(self.path)
         payload = self._load_request_body()
         path_parts = [part for part in parsed.path.split("/") if part]
@@ -129,6 +134,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"resolved": False, "error": str(error)}, status=400)
             return
+        if "/decision" in parsed.path:
+            self._write_html(
+                "<!doctype html><html><body style='font-family:ui-sans-serif,system-ui;padding:24px;'>"
+                "<h1>Approval resolved</h1><p>Guard has received your decision. "
+                "You can close this window and return to your terminal.</p></body></html>"
+            )
+            return
         self._write_json({"resolved": True, "item": updated})
 
     def log_message(self, fmt: str, *args: Any) -> None:
@@ -136,7 +148,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _load_request_body(self) -> dict[str, object]:
         length = int(self.headers.get("Content-Length", "0"))
-        if length <= 0:
+        if length <= 0 or length > self._MAX_BODY_BYTES:
             return {}
         raw_body = self.rfile.read(length).decode("utf-8")
         content_type = self.headers.get("Content-Type", "")
@@ -148,6 +160,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return payload if isinstance(payload, dict) else {}
         form_payload = parse_qs(raw_body)
         return {key: values[-1] for key, values in form_payload.items() if values}
+
+    def _origin_is_allowed(self) -> bool:
+        origin = self.headers.get("Origin")
+        if origin is None:
+            return True
+        return origin.startswith("http://127.0.0.1") or origin.startswith("http://localhost")
 
     def _handle_policy_upsert(self, payload: dict[str, object]) -> None:
         harness = payload.get("harness")
@@ -295,16 +313,25 @@ def _build_request_detail_html(store: GuardStore, request_id: str) -> str:
     artifact_id = str(item.get("artifact_id") or "unknown")
     harness = str(item.get("harness") or "unknown")
     diff = store.get_latest_diff(harness, artifact_id)
-    latest_receipt = next(
-        (
-            receipt
-            for receipt in store.list_receipts(limit=200)
-            if str(receipt.get("artifact_id")) == artifact_id and str(receipt.get("harness")) == harness
-        ),
-        None,
-    )
+    latest_receipt = store.get_latest_receipt(harness, artifact_id)
     changed_fields = (
         ", ".join(str(value) for value in item.get("changed_fields", []) if isinstance(value, str)) or "none"
+    )
+    recommended_scope = str(item.get("recommended_scope") or "artifact")
+    scope_options = [
+        ("artifact", "Trust this exact artifact"),
+        ("workspace", "Trust this workspace"),
+        ("publisher", "Trust this publisher in this harness"),
+        ("harness", "Trust this harness"),
+        ("global", "Trust globally"),
+    ]
+    scope_options_html = "".join(
+        (
+            f"<option value='{html.escape(value, quote=True)}'"
+            f"{' selected' if recommended_scope == value else ''}>"
+            f"{html.escape(label)}</option>"
+        )
+        for value, label in scope_options
     )
     diff_html = (
         "<p>No previous diff is stored for this artifact yet.</p>"
@@ -348,11 +375,7 @@ def _build_request_detail_html(store: GuardStore, request_id: str) -> str:
         f"{html.escape(request_id, quote=True)}/decision' style='display:grid;gap:12px;max-width:480px;'>"
         "<label>Decision scope"
         "<select name='scope'>"
-        "<option value='artifact'>Trust this exact artifact</option>"
-        "<option value='workspace'>Trust this workspace</option>"
-        "<option value='publisher'>Trust this publisher in this harness</option>"
-        "<option value='harness'>Trust this harness</option>"
-        "<option value='global'>Trust globally</option>"
+        f"{scope_options_html}"
         "</select>"
         "</label>"
         "<label>Workspace path (required for workspace scope)"

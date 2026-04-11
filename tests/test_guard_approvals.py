@@ -112,12 +112,12 @@ class TestGuardApprovals:
                 method="POST",
             )
             with urllib.request.urlopen(request, timeout=5) as response:
-                decision_payload = json.loads(response.read().decode("utf-8"))
+                decision_body = response.read().decode("utf-8")
         finally:
             daemon.stop()
 
         assert approvals_payload["items"][0]["request_id"] == "req-456"
-        assert decision_payload["resolved"] is True
+        assert "Approval resolved" in decision_body
         assert store.get_approval_request("req-456")["status"] == "resolved"
 
     def test_guard_daemon_v1_endpoints_expose_requests_diff_receipts_and_policy(self, tmp_path):
@@ -362,6 +362,100 @@ class TestGuardApprovals:
         assert "<script>" not in body
         assert "&lt;img src=x onerror=alert(1)&gt;" in body
         assert "codex&lt;script&gt;" in body
+
+    def test_guard_daemon_rejects_cross_origin_post_requests(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
+                data=json.dumps(
+                    {
+                        "harness": "codex",
+                        "scope": "harness",
+                        "action": "allow",
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": "https://evil.example",
+                },
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for disallowed origin")
+        finally:
+            daemon.stop()
+
+        assert status == 403
+        assert payload["error"] == "forbidden_origin"
+
+    def test_guard_daemon_detail_page_uses_latest_receipt_and_preselects_scope(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        target_artifact = "codex:project:workspace_skill"
+        target_receipt = {
+            "harness": "codex",
+            "artifact_id": target_artifact,
+            "artifact_hash": "hash-target",
+            "policy_decision": "allow",
+            "capabilities_summary": "target capabilities",
+            "changed_capabilities": ["args"],
+            "provenance_summary": "target provenance summary",
+            "artifact_name": "workspace_skill",
+            "source_scope": "project",
+        }
+        from codex_plugin_scanner.guard.receipts import build_receipt
+
+        store.add_receipt(build_receipt(**target_receipt))
+        for index in range(250):
+            store.add_receipt(
+                build_receipt(
+                    harness="codex",
+                    artifact_id=f"codex:project:other_{index}",
+                    artifact_hash=f"hash-{index}",
+                    policy_decision="allow",
+                    capabilities_summary=f"other capabilities {index}",
+                    changed_capabilities=["args"],
+                    provenance_summary=f"other provenance {index}",
+                    artifact_name=f"other_{index}",
+                    source_scope="project",
+                )
+            )
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-detail",
+                harness="codex",
+                artifact_id=target_artifact,
+                artifact_name="workspace_skill",
+                artifact_hash="hash-target",
+                policy_action="require-reapproval",
+                recommended_scope="workspace",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                review_command="hol-guard approvals approve req-detail",
+                approval_url="http://127.0.0.1/pending",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/requests/req-detail", timeout=5) as response:
+                body = response.read().decode("utf-8")
+        finally:
+            daemon.stop()
+
+        assert "target provenance summary" in body
+        assert "<option value='workspace' selected>" in body
 
     def test_guard_run_headless_enqueues_approval_request(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
