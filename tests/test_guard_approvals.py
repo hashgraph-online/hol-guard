@@ -257,6 +257,28 @@ class TestGuardApprovals:
 
         assert resolved is None
 
+    def test_guard_store_does_not_match_hash_scoped_artifact_policy_without_current_hash(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.upsert_policy(
+            PolicyDecision(
+                harness="codex",
+                scope="artifact",
+                action="allow",
+                artifact_id="codex:project:workspace_skill",
+                artifact_hash="hash-locked",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+
+        resolved = store.resolve_policy(
+            "codex",
+            "codex:project:workspace_skill",
+            None,
+            now="2026-04-11T00:30:00+00:00",
+        )
+
+        assert resolved is None
+
     def test_ensure_guard_daemon_uses_stable_default_port(self, tmp_path, monkeypatch):
         launched_commands: list[list[str]] = []
         guard_home = tmp_path / "guard-home"
@@ -883,7 +905,7 @@ class TestGuardApprovals:
         assert list_output["items"][0]["request_id"] == "req-789"
         assert approve_rc == 0
         assert approve_output["resolved"] is True
-        assert store.resolve_policy("codex", "codex:project:workspace_skill", None) == "allow"
+        assert store.resolve_policy("codex", "codex:project:workspace_skill", "hash-789") == "allow"
 
     def test_guard_approvals_cli_rejects_workspace_scope_without_workspace(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

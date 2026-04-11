@@ -518,7 +518,11 @@ class GuardStore:
                 """
                 select scope, action, artifact_hash from policy_decisions
                 where harness = ? and (
-                  (scope = 'artifact' and artifact_id = ? and (? is null or artifact_hash = ? or artifact_hash is null))
+                  (
+                    scope = 'artifact' and artifact_id = ? and (
+                      artifact_hash is null or (? is not null and artifact_hash = ?)
+                    )
+                  )
                   or (scope = 'workspace' and workspace = ?)
                   or (scope = 'publisher' and publisher = ?)
                   or scope = 'harness'

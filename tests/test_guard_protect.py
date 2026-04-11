@@ -88,6 +88,39 @@ class TestGuardProtect:
         assert output["execution"]["returncode"] == 0
         assert output_path.read_text(encoding="utf-8") == "ok"
 
+    def test_guard_protect_does_not_persist_allow_receipt_when_execution_fails(
+        self,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        store = GuardStore(home_dir)
+
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                sys.executable,
+                "-c",
+                "import sys; sys.exit(7)",
+            ]
+        )
+
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 7
+        assert output["verdict"]["action"] == "allow"
+        assert output["executed"] is True
+        assert output["execution"]["returncode"] == 7
+        assert store.list_receipts(limit=10) == []
+
     def test_guard_protect_intercepts_codex_mcp_add_remote_endpoint(self, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

@@ -114,19 +114,6 @@ def build_protect_payload(
     advisories = store.list_cached_advisories(limit=None)
     verdict = evaluate_protect_request(request, advisories)
     receipt = _build_install_receipt(request, verdict)
-    store.add_receipt(receipt)
-    store.add_event(
-        f"install_time_{verdict.action}",
-        {
-            "artifact_id": request.targets[0].artifact_id,
-            "artifact_name": request.targets[0].artifact_name,
-            "executor": request.executor,
-            "install_kind": request.install_kind,
-            "action": verdict.action,
-            "risk_signals": list(verdict.risk_signals),
-        },
-        now,
-    )
     payload: dict[str, object] = {
         "generated_at": now,
         "request": request.to_dict(),
@@ -138,6 +125,19 @@ def build_protect_payload(
         "matched_advisories": list(verdict.matched_advisories),
     }
     if verdict.blocking or dry_run:
+        store.add_receipt(receipt)
+        store.add_event(
+            f"install_time_{verdict.action}",
+            {
+                "artifact_id": request.targets[0].artifact_id,
+                "artifact_name": request.targets[0].artifact_name,
+                "executor": request.executor,
+                "install_kind": request.install_kind,
+                "action": verdict.action,
+                "risk_signals": list(verdict.risk_signals),
+            },
+            now,
+        )
         return (payload, 2 if verdict.blocking else 0)
     execution = subprocess.run(
         list(request.command),
@@ -153,6 +153,34 @@ def build_protect_payload(
         "stdout": execution.stdout,
         "stderr": execution.stderr,
     }
+    if execution.returncode == 0:
+        store.add_receipt(receipt)
+        store.add_event(
+            "install_time_allow",
+            {
+                "artifact_id": request.targets[0].artifact_id,
+                "artifact_name": request.targets[0].artifact_name,
+                "executor": request.executor,
+                "install_kind": request.install_kind,
+                "action": verdict.action,
+                "risk_signals": list(verdict.risk_signals),
+            },
+            now,
+        )
+    else:
+        store.add_event(
+            "install_time_execution_failed",
+            {
+                "artifact_id": request.targets[0].artifact_id,
+                "artifact_name": request.targets[0].artifact_name,
+                "executor": request.executor,
+                "install_kind": request.install_kind,
+                "action": verdict.action,
+                "returncode": execution.returncode,
+                "risk_signals": list(verdict.risk_signals),
+            },
+            now,
+        )
     return (payload, int(execution.returncode))
 
 
