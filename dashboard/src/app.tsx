@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import {
   fetchDiff,
+  fetchLatestReceipt,
   fetchPolicy,
   fetchReceipts,
   fetchRequest,
@@ -33,6 +34,11 @@ type DetailState =
       policy: GuardPolicyDecision[];
     };
 
+type ReceiptsState =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; items: GuardReceipt[] };
+
 function usePathname(): string {
   const [pathname, setPathname] = useState(window.location.pathname);
 
@@ -60,15 +66,21 @@ function parseRequestId(pathname: string): string | null {
   return null;
 }
 
+function resolveView(pathname: string): "queue" | "receipts" {
+  if (pathname === "/receipts") {
+    return "receipts";
+  }
+  return "queue";
+}
+
 async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kind: "idle" | "loading" }>> {
   try {
     const item = await fetchRequest(requestId);
-    const [diff, receipts, policy] = await Promise.all([
+    const [diff, receipt, policy] = await Promise.all([
       fetchDiff(item.artifact_id, item.harness),
-      fetchReceipts(),
+      fetchLatestReceipt(item.artifact_id, item.harness),
       fetchPolicy(item.harness)
     ]);
-    const receipt = receipts.find((entry) => entry.artifact_id === item.artifact_id) ?? null;
     return { kind: "ready", item, diff, receipt, policy };
   } catch (error) {
     return {
@@ -80,9 +92,11 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
 
 export function App() {
   const pathname = usePathname();
+  const view = resolveView(pathname);
   const requestId = parseRequestId(pathname);
   const [requests, setRequests] = useState<RequestState>({ kind: "loading" });
   const [detail, setDetail] = useState<DetailState>({ kind: "idle" });
+  const [receipts, setReceipts] = useState<ReceiptsState>({ kind: "loading" });
   const [resolutionMessage, setResolutionMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -98,6 +112,27 @@ export function App() {
           setRequests({
             kind: "error",
             message: error instanceof Error ? error.message : "Unable to load the local approval queue."
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchReceipts()
+      .then((items) => {
+        if (!cancelled) {
+          setReceipts({ kind: "ready", items });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setReceipts({
+            kind: "error",
+            message: error instanceof Error ? error.message : "Unable to load local receipt history."
           });
         }
       });
@@ -128,8 +163,10 @@ export function App() {
 
   return (
     <ApprovalCenterLayout
+      view={view}
       requests={requests}
       detail={detail}
+      receipts={receipts}
       activeRequestId={activeRequestId}
       resolutionMessage={resolutionMessage}
       onGoHome={() => navigate("/")}
@@ -138,8 +175,9 @@ export function App() {
         await resolveRequest(payload);
         setResolutionMessage("Decision saved. Return to the harness and rerun the same command.");
         navigate("/");
-        const items = await fetchRequests();
-        setRequests({ kind: "ready", items });
+        const [nextRequests, nextReceipts] = await Promise.all([fetchRequests(), fetchReceipts()]);
+        setRequests({ kind: "ready", items: nextRequests });
+        setReceipts({ kind: "ready", items: nextReceipts });
       }}
     />
   );

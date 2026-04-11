@@ -8,9 +8,10 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from ..approvals import apply_approval_resolution
+from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from ..store import GuardStore
 from .manager import clear_guard_daemon_state, write_guard_daemon_state
 
@@ -22,6 +23,11 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
 _STATIC_DIR = Path(__file__).with_name("static")
 _INDEX_PATH = _STATIC_DIR / "index.html"
 _ENTRY_PATH = _STATIC_DIR / "assets" / "guard-dashboard.js"
+_ROOT_STATIC_FILES = {
+    "/favicon.ico",
+    "/favicon-16x16.png",
+    "/favicon-32x32.png",
+}
 
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
@@ -54,6 +60,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path == "/v1/receipts":
             self._write_json({"items": store.list_receipts(limit=200)})
             return
+        if parsed.path == "/v1/receipts/latest":
+            query = parse_qs(parsed.query)
+            harness = query.get("harness", [None])[-1]
+            artifact_id = query.get("artifact_id", [None])[-1]
+            if not isinstance(harness, str) or not harness or not isinstance(artifact_id, str) or not artifact_id:
+                self._write_json({"error": "missing_receipt_query"}, status=400)
+                return
+            receipt = store.get_latest_receipt(harness, artifact_id)
+            if receipt is None:
+                self._write_json({"error": "not_found"}, status=404)
+                return
+            self._write_json(receipt)
+            return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "receipts"]:
             receipt = store.get_receipt(path_parts[2])
             if receipt is None:
@@ -74,11 +93,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if not isinstance(harness, str) or not harness:
                 self._write_json({"error": "missing_harness"}, status=400)
                 return
-            diff = store.get_latest_diff(harness, path_parts[2])
+            diff = store.get_latest_diff(harness, unquote(path_parts[2]))
             if diff is None:
                 self._write_json({"error": "not_found"}, status=404)
                 return
             self._write_json(diff)
+            return
+        if parsed.path in _ROOT_STATIC_FILES:
+            self._write_static_asset(parsed.path.removeprefix("/"))
             return
         if parsed.path.startswith("/assets/") or parsed.path.startswith("/brand/"):
             self._write_static_asset(parsed.path.removeprefix("/"))
@@ -162,15 +184,28 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not all(isinstance(value, str) and value.strip() for value in (harness, scope, action)):
             self._write_json({"saved": False, "error": "missing_required_fields"}, status=400)
             return
+        normalized_scope = str(scope).strip()
+        normalized_action = str(action).strip()
+        if normalized_scope not in DECISION_SCOPE_VALUES or normalized_action not in GUARD_ACTION_VALUES:
+            self._write_json({"saved": False, "error": "unsupported_policy_value"}, status=400)
+            return
         record = {
             "harness": str(harness).strip(),
-            "scope": str(scope).strip(),
-            "action": str(action).strip(),
+            "scope": normalized_scope,
+            "action": normalized_action,
             "artifact_id": self._optional_string(payload.get("artifact_id")),
             "workspace": self._optional_string(payload.get("workspace")),
             "publisher": self._optional_string(payload.get("publisher")),
             "reason": self._optional_string(payload.get("reason")),
         }
+        if not self._scope_target_is_valid(
+            normalized_scope,
+            artifact_id=record["artifact_id"],
+            workspace=record["workspace"],
+            publisher=record["publisher"],
+        ):
+            self._write_json({"saved": False, "error": "missing_scope_target"}, status=400)
+            return
         store = self.server.store  # type: ignore[attr-defined]
         from ..models import PolicyDecision
 
@@ -193,6 +228,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if isinstance(value, str) and value.strip():
             return value.strip()
         return None
+
+    @staticmethod
+    def _scope_target_is_valid(
+        scope: str,
+        *,
+        artifact_id: str | None,
+        workspace: str | None,
+        publisher: str | None,
+    ) -> bool:
+        if scope in {"global", "harness"}:
+            return True
+        if scope == "artifact":
+            return artifact_id is not None
+        if scope == "workspace":
+            return workspace is not None
+        if scope == "publisher":
+            return publisher is not None
+        return False
 
     @staticmethod
     def _resolve_request_action(
@@ -275,6 +328,7 @@ class GuardDaemonServer:
         if self._thread is not None:
             self._thread.join(timeout=5)
             self._thread = None
+
 
 def _now() -> str:
     from datetime import datetime, timezone

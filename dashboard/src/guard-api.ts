@@ -44,6 +44,25 @@ export async function fetchReceipts(): Promise<GuardReceipt[]> {
   return payload.items;
 }
 
+export async function fetchLatestReceipt(
+  artifactId: string,
+  harness: string
+): Promise<GuardReceipt | null> {
+  if (isGuardDemoMode()) {
+    return getDemoReceipts().find((entry) => entry.artifact_id === artifactId) ?? null;
+  }
+  const response = await fetch(
+    `/v1/receipts/latest?harness=${encodeURIComponent(harness)}&artifact_id=${encodeURIComponent(artifactId)}`
+  );
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(`Receipt request failed with ${response.status}`);
+  }
+  return (await response.json()) as GuardReceipt;
+}
+
 export async function fetchPolicy(harness: string): Promise<GuardPolicyDecision[]> {
   if (isGuardDemoMode()) {
     return getDemoPolicy(harness);
@@ -77,13 +96,14 @@ export async function resolveRequest(input: {
   requestId: string;
   action: "allow" | "block";
   scope: string;
-  workspace: string;
+  workspace?: string;
   reason: string;
 }): Promise<void> {
   if (isGuardDemoMode()) {
     return;
   }
-  await readJson(`/approvals/${encodeURIComponent(input.requestId)}/decision`, {
+  const actionPath = input.action === "allow" ? "approve" : "block";
+  await readJson(`/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

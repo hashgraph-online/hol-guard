@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -12,21 +12,34 @@
   --brand-green-text: #0d7a3a;
   --brand-green-bg: #dcfce7;
   --brand-purple: #b56cff;
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
+  --brand-red: #dc2626;
+  --brand-amber: #d97706;
+  --border: 230 20% 91%;
+  --input: 230 20% 91%;
   --ring: 263 85% 64%;
-  --background-hsl: 0 0% 100%;
-  --foreground-hsl: 222 47% 28%;
+  --background-hsl: 228 40% 99%;
+  --foreground-hsl: 233 30% 35%;
   --primary: 263 85% 64%;
   --primary-foreground: 0 0% 100%;
   --secondary: 214 95% 62%;
   --secondary-foreground: 0 0% 100%;
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
+  --muted: 228 30% 96%;
+  --muted-foreground: 233 14% 46%;
   --accent: 214 95% 62%;
   --accent-foreground: 0 0% 100%;
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 28%;
+  --card-foreground: 233 30% 35%;
+  --surface-1: #f5f7fc;
+  --surface-2: #eef1f8;
+  --surface-3: #e4e7f0;
+  --shadow-brand-blue: 0 4px 14px 0 rgba(85, 153, 254, 0.39);
+  --shadow-brand-green: 0 4px 14px 0 rgba(72, 223, 123, 0.39);
+  --gradient-brand: linear-gradient(135deg, #5599fe 0%, #b56cff 50%, #48df7b 100%);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
 }
 
 @theme inline {
@@ -39,6 +52,8 @@
   --color-brand-green-text: var(--brand-green-text);
   --color-brand-green-bg: var(--brand-green-bg);
   --color-brand-purple: var(--brand-purple);
+  --color-brand-red: var(--brand-red);
+  --color-brand-amber: var(--brand-amber);
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -52,17 +67,20 @@
   --color-accent-foreground: hsl(var(--accent-foreground));
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-ring-offset-background: hsl(var(--background-hsl));
   --font-sans: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top, rgba(85, 153, 254, 0.11), transparent 40%),
-    radial-gradient(circle at 85% 0%, rgba(72, 223, 123, 0.08), transparent 28%),
-    linear-gradient(180deg, #fbfcff 0%, #f4f7fc 100%);
+  background: linear-gradient(180deg, #f8fbff 0%, #f5f7fc 100%);
   color: hsl(var(--foreground-hsl));
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -76,7 +94,7 @@ body {
 @keyframes guard-enter {
   from {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -84,16 +102,63 @@ body {
   }
 }
 
+@keyframes guard-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes guard-pulse-dot {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes guard-checkmark-draw {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes guard-fade-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .guard-surface-in {
-  animation: guard-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: guard-enter 320ms var(--ease-out-quint) both;
 }
 
 .guard-delay-1 {
-  animation-delay: 70ms;
+  animation-delay: 60ms;
 }
 
 .guard-delay-2 {
-  animation-delay: 130ms;
+  animation-delay: 120ms;
+}
+
+.guard-delay-3 {
+  animation-delay: 180ms;
+}
+
+.guard-skeleton {
+  background: linear-gradient(90deg, var(--surface-1) 25%, var(--surface-2) 50%, var(--surface-1) 75%);
+  background-size: 200% 100%;
+  animation: guard-shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+
+.guard-success-check {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: guard-checkmark-draw 400ms var(--ease-out-quart) 150ms forwards;
+}
+
+.guard-fade-in {
+  animation: guard-fade-scale 250ms var(--ease-out-quart) both;
 }
 
 a,
@@ -111,18 +176,26 @@ button {
 input:focus-visible,
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--brand-blue) 55%, white 45%);
+  outline: 2px solid color-mix(in srgb, var(--brand-blue) 50%, white 50%);
   outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .guard-surface-in,
   .guard-delay-1,
-  .guard-delay-2 {
+  .guard-delay-2,
+  .guard-delay-3,
+  .guard-success-check,
+  .guard-fade-in {
+    animation: none !important;
+  }
+
+  .guard-skeleton {
     animation: none !important;
   }
 
   * {
     scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -7,6 +7,7 @@ import os
 import subprocess
 import urllib.request
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,8 @@ from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
 from ..models import HarnessDetection
 from ..store import GuardStore
+
+_APPROVAL_METADATA_KEYS = ("approval_center_url", "approval_requests", "approval_wait", "review_hint")
 
 
 def guard_run(
@@ -43,14 +46,12 @@ def guard_run(
         evaluation = interactive_resolver(detection, evaluation)
     elif not dry_run and blocked_resolver is not None and evaluation["blocked"]:
         pending_evaluation = blocked_resolver(detection, evaluation)
-        if not pending_evaluation["blocked"]:
-            reevaluated = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
-            for key in ("approval_center_url", "approval_requests", "approval_wait", "review_hint"):
-                if key in pending_evaluation:
-                    reevaluated[key] = pending_evaluation[key]
-            evaluation = reevaluated
-        else:
-            evaluation = pending_evaluation
+        detection = detect_harness(harness, context)
+        reevaluated = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
+        for key in _APPROVAL_METADATA_KEYS:
+            if key in pending_evaluation:
+                reevaluated[key] = pending_evaluation[key]
+        evaluation = reevaluated
     if evaluation["blocked"] or dry_run:
         evaluation["launched"] = False
         evaluation["launch_command"] = []
@@ -82,7 +83,8 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     if credentials is None:
         raise RuntimeError("Guard is not logged in.")
     receipts = store.list_receipts(limit=200)
-    body = json.dumps({"receipts": receipts}).encode("utf-8")
+    inventory = store.list_inventory()
+    body = json.dumps({"receipts": receipts, "inventory": inventory}).encode("utf-8")
     request = urllib.request.Request(
         str(credentials["sync_url"]),
         data=body,
@@ -94,8 +96,19 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     )
     with urllib.request.urlopen(request, timeout=10) as response:
         payload = json.loads(response.read().decode("utf-8"))
+    advisories = payload.get("advisories")
+    advisories_stored = 0
+    if isinstance(advisories, list):
+        advisory_items = [item for item in advisories if isinstance(item, dict)]
+        advisories_stored = store.cache_advisories(advisory_items, _now())
     return {
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": payload.get("receiptsStored"),
+        "advisories_stored": advisories_stored,
         "receipts": len(receipts),
+        "inventory": len(inventory),
     }
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()

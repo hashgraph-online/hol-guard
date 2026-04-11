@@ -1,15 +1,26 @@
+export type DecisionScope = "artifact" | "workspace" | "publisher" | "harness" | "global";
+
 export type GuardApprovalRequest = {
   request_id: string;
   harness: string;
   artifact_id: string;
   artifact_name: string;
+  artifact_type: string;
   artifact_hash: string;
   publisher: string | null;
   policy_action: string;
-  recommended_scope: string;
+  recommended_scope: DecisionScope;
+  risk_headline?: string;
+  risk_summary?: string;
+  risk_signals?: string[];
+  why_now?: string;
+  trigger_summary?: string;
   changed_fields: string[];
   source_scope: string;
   config_path: string;
+  workspace?: string | null;
+  launch_target?: string | null;
+  transport: string | null;
   review_command: string;
   approval_url: string;
   status: string;
@@ -46,7 +57,7 @@ export type GuardArtifactDiff = {
 
 export type GuardPolicyDecision = {
   harness: string;
-  scope: string;
+  scope: DecisionScope;
   artifact_id: string | null;
   workspace: string | null;
   publisher: string | null;
