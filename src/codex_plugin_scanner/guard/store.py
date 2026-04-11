@@ -8,7 +8,25 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from .models import GuardReceipt, PolicyDecision
+from .models import GuardApprovalRequest, GuardReceipt, PolicyDecision
+from .store_approvals import (
+    add_approval_request as persist_approval_request,
+)
+from .store_approvals import (
+    approval_schema_statement,
+)
+from .store_approvals import (
+    count_approval_requests as count_pending_approval_requests,
+)
+from .store_approvals import (
+    get_approval_request as load_approval_request,
+)
+from .store_approvals import (
+    list_approval_requests as load_approval_requests,
+)
+from .store_approvals import (
+    resolve_approval_request as persist_approval_resolution,
+)
 
 
 class GuardStore:
@@ -122,6 +140,7 @@ class GuardStore:
               updated_at text not null
             )
             """,
+            approval_schema_statement(),
         )
         with self._connect() as connection:
             for statement in statements:
@@ -346,6 +365,47 @@ class GuardStore:
         with self._connect() as connection:
             row = connection.execute("select count(*) as total from runtime_receipts").fetchone()
         return int(row["total"]) if row is not None else 0
+
+    def add_approval_request(self, request: GuardApprovalRequest, now: str) -> None:
+        with self._connect() as connection:
+            persist_approval_request(connection, request, now)
+
+    def list_approval_requests(
+        self,
+        *,
+        status: str | None = "pending",
+        harness: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            return load_approval_requests(connection, status=status, harness=harness, limit=limit)
+
+    def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return load_approval_request(connection, request_id)
+
+    def resolve_approval_request(
+        self,
+        request_id: str,
+        *,
+        resolution_action: str,
+        resolution_scope: str,
+        reason: str | None,
+        resolved_at: str,
+    ) -> None:
+        with self._connect() as connection:
+            persist_approval_resolution(
+                connection,
+                request_id,
+                resolution_action=resolution_action,
+                resolution_scope=resolution_scope,
+                reason=reason,
+                resolved_at=resolved_at,
+            )
+
+    def count_approval_requests(self, *, status: str | None = "pending") -> int:
+        with self._connect() as connection:
+            return count_pending_approval_requests(connection, status=status)
 
     def set_managed_install(
         self,

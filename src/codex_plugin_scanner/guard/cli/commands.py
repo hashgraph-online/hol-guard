@@ -10,12 +10,15 @@ from pathlib import Path
 
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
+from ..approvals import approval_center_hint, queue_blocked_approvals
 from ..config import load_guard_config, resolve_guard_home
 from ..consumer import detect_all, detect_harness, evaluate_detection, record_policy, run_consumer_scan
+from ..daemon import GuardDaemonServer, ensure_guard_daemon
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS
 from ..receipts import build_receipt
 from ..runtime import guard_run, sync_receipts
 from ..store import GuardStore
+from .approval_commands import add_approval_parser, run_approval_command
 from .product import build_guard_start_payload, build_guard_status_payload
 from .prompt import build_prompt_artifacts, resolve_interactive_decisions
 from .render import emit_guard_payload
@@ -61,7 +64,10 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     guard_subparsers = guard_parser.add_subparsers(
         dest="guard_command",
         required=True,
-        metavar="{start,status,detect,install,uninstall,run,scan,diff,receipts,explain,allow,deny,doctor,login,sync}",
+        metavar=(
+            "{start,status,detect,install,uninstall,run,scan,diff,receipts,approvals,explain,"
+            "allow,deny,doctor,login,sync}"
+        ),
     )
 
     start_parser = guard_subparsers.add_parser("start", help="Show the first Guard steps for a local harness")
@@ -112,6 +118,8 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     _add_guard_common_args(receipts_parser)
     receipts_parser.add_argument("--json", action="store_true")
 
+    add_approval_parser(guard_subparsers, _add_guard_common_args)
+
     explain_parser = guard_subparsers.add_parser("explain", help="Show the latest evidence for a local artifact")
     explain_parser.add_argument("target")
     explain_parser.add_argument("--json", action="store_true")
@@ -159,8 +167,13 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     )
     hook_parser.add_argument("--event-file")
     hook_parser.add_argument("--json", action="store_true")
+
+    daemon_parser = guard_subparsers.add_parser("daemon", help=argparse.SUPPRESS)
+    _add_guard_common_args(daemon_parser)
+    daemon_parser.add_argument("--serve", action="store_true")
+    daemon_parser.add_argument("--json", action="store_true")
     guard_subparsers._choices_actions = [
-        action for action in guard_subparsers._choices_actions if action.dest != "hook"
+        action for action in guard_subparsers._choices_actions if action.dest not in {"hook", "daemon"}
     ]
 
 
@@ -228,6 +241,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
 
     if args.guard_command == "run":
         interactive_resolver = None
+        blocked_resolver = None
         if (
             not getattr(args, "json", False)
             and not bool(args.dry_run)
@@ -247,6 +261,8 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     workspace=str(workspace) if workspace else None,
                     now=_now(),
                 )
+        elif not bool(args.dry_run) and config.mode == "prompt":
+            blocked_resolver = _headless_approval_resolver(args=args, context=context, store=store)
 
         payload = guard_run(
             args.harness,
@@ -257,17 +273,8 @@ def run_guard_command(args: argparse.Namespace) -> int:
             passthrough_args=list(args.passthrough_args),
             default_action=args.default_action,
             interactive_resolver=interactive_resolver,
+            blocked_resolver=blocked_resolver,
         )
-        if (
-            payload.get("blocked")
-            and config.mode == "prompt"
-            and not getattr(args, "json", False)
-            and not sys.stdin.isatty()
-        ):
-            payload["review_hint"] = (
-                f"Guard blocked {args.harness} because this shell is non-interactive. "
-                f"Run `hol-guard diff {args.harness}` and allow or deny the changed artifacts first."
-            )
         _emit("run", payload, getattr(args, "json", False))
         if payload.get("blocked"):
             return 1
@@ -285,6 +292,11 @@ def run_guard_command(args: argparse.Namespace) -> int:
 
     if args.guard_command == "receipts":
         _emit("receipts", {"generated_at": _now(), "items": store.list_receipts()}, getattr(args, "json", False))
+        return 0
+
+    if args.guard_command == "approvals":
+        payload = run_approval_command(args, store=store, workspace=workspace)
+        _emit("approvals", payload, getattr(args, "json", False))
         return 0
 
     if args.guard_command == "explain":
@@ -327,6 +339,14 @@ def run_guard_command(args: argparse.Namespace) -> int:
     if args.guard_command == "sync":
         payload = sync_receipts(store)
         _emit("sync", payload, getattr(args, "json", False))
+        return 0
+
+    if args.guard_command == "daemon":
+        daemon = GuardDaemonServer(store)
+        if args.serve:
+            daemon.serve()
+            return 0
+        _emit("doctor", {"daemon_url": f"http://127.0.0.1:{daemon.port}"}, getattr(args, "json", False))
         return 0
 
     if args.guard_command == "hook":
@@ -389,6 +409,34 @@ def run_guard_command(args: argparse.Namespace) -> int:
 
 def _emit(command: str, payload: dict[str, object], as_json: bool) -> None:
     emit_guard_payload(command, payload, as_json)
+
+
+def _headless_approval_resolver(
+    *,
+    args: argparse.Namespace,
+    context: HarnessContext,
+    store: GuardStore,
+):
+    def resolve(detection, payload):
+        approval_center_url = ensure_guard_daemon(context.guard_home)
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation=payload,
+            store=store,
+            approval_center_url=approval_center_url,
+            now=_now(),
+        )
+        payload["approval_requests"] = queued
+        payload["approval_center_url"] = approval_center_url
+        payload["review_hint"] = approval_center_hint(
+            context=context,
+            harness=args.harness,
+            approval_center_url=approval_center_url,
+            queued=queued,
+        )
+        return payload
+
+    return resolve
 
 
 def _load_hook_payload(event_file: str | None) -> dict[str, object]:
