@@ -9,6 +9,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import evaluate_detection
+from codex_plugin_scanner.guard.incident import build_incident_context
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.risk import artifact_risk_signals, artifact_risk_summary
 from codex_plugin_scanner.guard.store import GuardStore
@@ -157,3 +158,21 @@ def test_evaluate_detection_reports_remote_mcp_risk_summary(tmp_path):
     output = evaluate_detection(detection, store, config, persist=False)
 
     assert "remote server" in output["artifacts"][0]["risk_summary"].lower()
+
+
+def test_incident_context_keeps_context_for_generic_config_file_names():
+    incident = build_incident_context(
+        harness="codex",
+        artifact=None,
+        artifact_id="codex:project:secret_probe",
+        artifact_name="secret_probe",
+        artifact_type="mcp_server",
+        source_scope="project",
+        config_path="/tmp/workspace/global_tools/config.toml",
+        changed_fields=["first_seen"],
+        policy_action="block",
+        launch_target="python -c print('hello')",
+        risk_summary="Guard saw a risky launch target.",
+    )
+
+    assert "workspace/global_tools/config.toml" in incident["trigger_summary"]

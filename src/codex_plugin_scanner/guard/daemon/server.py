@@ -119,7 +119,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         parsed = urlparse(self.path)
-        payload = self._load_request_body()
+        payload, body_error = self._load_request_body()
+        if body_error is not None:
+            self._write_json({"error": body_error}, status=400)
+            return
         path_parts = [part for part in parsed.path.split("/") if part]
         if parsed.path == "/v1/policy/decisions":
             self._handle_policy_upsert(payload)
@@ -153,20 +156,23 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         return
 
-    def _load_request_body(self) -> dict[str, object]:
+    def _load_request_body(self) -> tuple[dict[str, object], str | None]:
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0 or length > self._MAX_BODY_BYTES:
-            return {}
-        raw_body = self.rfile.read(length).decode("utf-8")
+            return {}, None
+        try:
+            raw_body = self.rfile.read(length).decode("utf-8")
+        except UnicodeDecodeError:
+            return {}, "invalid_request_body"
         content_type = self.headers.get("Content-Type", "")
         if "application/json" in content_type:
             try:
                 payload = json.loads(raw_body)
             except json.JSONDecodeError:
-                return {}
-            return payload if isinstance(payload, dict) else {}
+                return {}, "invalid_request_body"
+            return (payload if isinstance(payload, dict) else {}), None
         form_payload = parse_qs(raw_body)
-        return {key: values[-1] for key, values in form_payload.items() if values}
+        return {key: values[-1] for key, values in form_payload.items() if values}, None
 
     def _origin_is_allowed(self) -> bool:
         origin = self.headers.get("Origin")

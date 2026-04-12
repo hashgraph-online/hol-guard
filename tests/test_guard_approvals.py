@@ -645,7 +645,7 @@ class TestGuardApprovals:
             daemon.stop()
 
         assert status == 400
-        assert payload["error"] == "missing_required_fields"
+        assert payload["error"] == "invalid_request_body"
 
     def test_guard_daemon_escapes_html_values_in_approval_center(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

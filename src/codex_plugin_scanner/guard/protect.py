@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shlex
 import subprocess
 from dataclasses import dataclass
@@ -23,6 +24,8 @@ _SEVERITY_ORDER: dict[SeverityLabel, int] = {
     "high": 2,
     "critical": 3,
 }
+_DEFAULT_PROTECT_TIMEOUT_SECONDS = 300
+_MAX_PROTECT_TIMEOUT_SECONDS = 3600
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +148,7 @@ def build_protect_payload(
         capture_output=True,
         check=False,
         text=True,
-        timeout=60,
+        timeout=_protect_command_timeout_seconds(),
     )
     payload["executed"] = True
     payload["execution"] = {
@@ -182,6 +185,19 @@ def build_protect_payload(
             now,
         )
     return (payload, int(execution.returncode))
+
+
+def _protect_command_timeout_seconds() -> int:
+    raw_timeout = os.getenv("GUARD_PROTECT_TIMEOUT_SECONDS")
+    if raw_timeout is None:
+        return _DEFAULT_PROTECT_TIMEOUT_SECONDS
+    try:
+        parsed_timeout = int(raw_timeout)
+    except ValueError:
+        return _DEFAULT_PROTECT_TIMEOUT_SECONDS
+    if parsed_timeout < 1:
+        return _DEFAULT_PROTECT_TIMEOUT_SECONDS
+    return min(parsed_timeout, _MAX_PROTECT_TIMEOUT_SECONDS)
 
 
 def parse_protect_command(command: list[str]) -> ProtectRequest:

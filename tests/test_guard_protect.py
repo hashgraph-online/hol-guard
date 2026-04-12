@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import sys
 from datetime import datetime, timezone
+from subprocess import CompletedProcess
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import protect
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -151,6 +153,84 @@ class TestGuardProtect:
         assert output["executed"] is False
         assert output["targets"][0]["artifact_type"] == "mcp_server"
         assert "remote server" in output["verdict"]["reason"].lower()
+
+    def test_guard_protect_uses_configurable_execution_timeout(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        captured: dict[str, object] = {}
+
+        def fake_run(*args, **kwargs) -> CompletedProcess[str]:
+            captured["timeout"] = kwargs["timeout"]
+            return CompletedProcess(args[0], 0, stdout="", stderr="")
+
+        monkeypatch.setenv("GUARD_PROTECT_TIMEOUT_SECONDS", "180")
+        monkeypatch.setattr(protect.subprocess, "run", fake_run)
+
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                sys.executable,
+                "-c",
+                "print('ok')",
+            ]
+        )
+
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["executed"] is True
+        assert captured["timeout"] == 180
+
+    def test_guard_protect_uses_default_execution_timeout_when_env_is_invalid(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        captured: dict[str, object] = {}
+
+        def fake_run(*args, **kwargs) -> CompletedProcess[str]:
+            captured["timeout"] = kwargs["timeout"]
+            return CompletedProcess(args[0], 0, stdout="", stderr="")
+
+        monkeypatch.setenv("GUARD_PROTECT_TIMEOUT_SECONDS", "invalid")
+        monkeypatch.setattr(protect.subprocess, "run", fake_run)
+
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                sys.executable,
+                "-c",
+                "print('ok')",
+            ]
+        )
+
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["executed"] is True
+        assert captured["timeout"] == 300
 
     def test_guard_protect_checks_blocking_advisory_beyond_default_cache_limit(self, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"

@@ -115,6 +115,10 @@ def _short_config_path(config_path: str | None) -> str:
     if ".opencode" in parts:
         index = parts.index(".opencode")
         return str(Path(*parts[index:]))
+    if len(parts) >= 3:
+        return str(Path(*parts[-3:]))
+    if len(parts) >= 2:
+        return str(Path(*parts[-2:]))
     return path.name or config_path
 
 
