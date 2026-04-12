@@ -42,8 +42,6 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.4.0",
 ]
-
-[dependency-groups]
 publish = [
     "twine>=6.1.0",
 ]
