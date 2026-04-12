@@ -5,7 +5,7 @@ from __future__ import annotations
 from ..config import GuardConfig
 from ..models import GuardAction
 
-VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "require-reapproval"}
+VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 SAFE_CHANGED_HASH_ACTION: GuardAction = "require-reapproval"
 SAFE_DEFAULT_ACTION: GuardAction = "require-reapproval"
 

@@ -11,6 +11,11 @@ class GeminiHarnessAdapter(HarnessAdapter):
 
     harness = "gemini"
     executable = "gemini"
+    approval_tier = "approval-center"
+    approval_summary = (
+        "Guard scans Gemini extensions before launch and sends blocked changes to the local approval center."
+    )
+    fallback_hint = "Gemini gets preflight approval through Guard until it exposes a richer native approval surface."
 
     @staticmethod
     def _scope_for(context: HarnessContext, path) -> str:

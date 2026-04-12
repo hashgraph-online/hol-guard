@@ -13,6 +13,26 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
 from .models import GuardAction, GuardMode
 
 DEFAULT_GUARD_DIRNAME = ".ai-plugin-scanner-guard"
+VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
+
+
+def _coerce_action_map(payload: object) -> dict[str, GuardAction]:
+    if not isinstance(payload, dict):
+        return {}
+    action_map: dict[str, GuardAction] = {}
+    for key, value in payload.items():
+        if not isinstance(key, str):
+            continue
+        action = (
+            value
+            if isinstance(value, str)
+            else (value.get("action") or value.get("default_action"))
+            if isinstance(value, dict)
+            else None
+        )
+        if isinstance(action, str) and action in VALID_GUARD_ACTIONS:
+            action_map[key] = action
+    return action_map
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,9 +47,27 @@ class GuardConfig:
     changed_hash_action: GuardAction = "require-reapproval"
     new_network_domain_action: GuardAction = "warn"
     subprocess_action: GuardAction = "warn"
+    approval_wait_timeout_seconds: int = 120
     telemetry: bool = False
     sync: bool = False
     billing: bool = False
+    harness_actions: dict[str, GuardAction] | None = None
+    publisher_actions: dict[str, GuardAction] | None = None
+    artifact_actions: dict[str, GuardAction] | None = None
+
+    def resolve_action_override(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        publisher: str | None,
+    ) -> GuardAction | None:
+        if artifact_id is not None and self.artifact_actions is not None and artifact_id in self.artifact_actions:
+            return self.artifact_actions[artifact_id]
+        if publisher is not None and self.publisher_actions is not None and publisher in self.publisher_actions:
+            return self.publisher_actions[publisher]
+        if self.harness_actions is not None and harness in self.harness_actions:
+            return self.harness_actions[harness]
+        return None
 
 
 def resolve_guard_home(override: str | None = None) -> Path:
@@ -70,7 +108,11 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         changed_hash_action=str(merged.get("changed_hash_action", "require-reapproval")),  # type: ignore[arg-type]
         new_network_domain_action=str(merged.get("new_network_domain_action", "warn")),  # type: ignore[arg-type]
         subprocess_action=str(merged.get("subprocess_action", "warn")),  # type: ignore[arg-type]
+        approval_wait_timeout_seconds=int(merged.get("approval_wait_timeout_seconds", 120)),
         telemetry=bool(merged.get("telemetry", False)),
         sync=bool(merged.get("sync", False)),
         billing=bool(merged.get("billing", False)),
+        harness_actions=_coerce_action_map(merged.get("harnesses")),
+        publisher_actions=_coerce_action_map(merged.get("publishers")),
+        artifact_actions=_coerce_action_map(merged.get("artifacts")),
     )

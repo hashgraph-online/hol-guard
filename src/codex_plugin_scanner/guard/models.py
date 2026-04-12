@@ -6,9 +6,18 @@ from dataclasses import asdict, dataclass, field
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-GuardAction = Literal["allow", "warn", "review", "block", "require-reapproval"]
+GuardAction = Literal["allow", "warn", "review", "block", "sandbox-required", "require-reapproval"]
 GuardMode = Literal["observe", "prompt", "enforce"]
 DecisionScope = Literal["global", "harness", "workspace", "artifact", "publisher"]
+GUARD_ACTION_VALUES: tuple[GuardAction, ...] = (
+    "allow",
+    "warn",
+    "review",
+    "block",
+    "sandbox-required",
+    "require-reapproval",
+)
+DECISION_SCOPE_VALUES: tuple[DecisionScope, ...] = ("global", "harness", "workspace", "artifact", "publisher")
 
 
 def _redact_url(value: str | None) -> str | None:
@@ -91,9 +100,13 @@ class PolicyDecision:
     scope: DecisionScope
     action: GuardAction
     artifact_id: str | None = None
+    artifact_hash: str | None = None
     workspace: str | None = None
     publisher: str | None = None
     reason: str | None = None
+    owner: str | None = None
+    source: str = "local"
+    expires_at: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -109,6 +122,7 @@ class GuardReceipt:
     artifact_id: str
     artifact_hash: str
     policy_decision: GuardAction
+    capabilities_summary: str
     changed_capabilities: tuple[str, ...]
     provenance_summary: str
     user_override: str | None = None
@@ -118,4 +132,41 @@ class GuardReceipt:
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
         payload["changed_capabilities"] = list(self.changed_capabilities)
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
+class GuardApprovalRequest:
+    """Pending approval request surfaced through the local approval center."""
+
+    request_id: str
+    harness: str
+    artifact_id: str
+    artifact_name: str
+    artifact_hash: str
+    policy_action: GuardAction
+    recommended_scope: DecisionScope
+    changed_fields: tuple[str, ...]
+    source_scope: str
+    config_path: str
+    review_command: str
+    approval_url: str
+    workspace: str | None = None
+    artifact_type: str = "artifact"
+    launch_target: str | None = None
+    transport: str | None = None
+    publisher: str | None = None
+    risk_summary: str | None = None
+    risk_signals: tuple[str, ...] = ()
+    artifact_label: str | None = None
+    source_label: str | None = None
+    trigger_summary: str | None = None
+    why_now: str | None = None
+    launch_summary: str | None = None
+    risk_headline: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        payload = asdict(self)
+        payload["changed_fields"] = list(self.changed_fields)
+        payload["risk_signals"] = list(self.risk_signals)
         return payload
