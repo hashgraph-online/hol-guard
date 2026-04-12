@@ -16,6 +16,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
+from codex_plugin_scanner.guard.store import GuardStore
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -1270,6 +1271,29 @@ args = ["workspace-skill.js", "--changed"]
         assert rc == 2
         assert "Guard install requires a harness or --all." in stderr
 
+    @pytest.mark.parametrize("command", ["install", "uninstall"])
+    def test_guard_install_commands_reject_harness_with_all(self, tmp_path, capsys, command: str):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                command,
+                "codex",
+                "--all",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+            ]
+        )
+        stderr = capsys.readouterr().err
+
+        assert rc == 2
+        assert "Pass either a harness or --all, not both." in stderr
+
     def test_guard_login_and_sync_posts_receipts(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -1518,6 +1542,79 @@ args = ["workspace-skill.js", "--changed"]
         assert sync_rc == 0
         assert exceptions_rc == 0
         assert exceptions_output["items"][0]["expires_at"] == "2099-01-01T00:00:00+00:00"
+
+    def test_guard_sync_clears_cached_policy_when_server_omits_it(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        _SyncRequestHandler.response_payload = {
+            "syncedAt": "2026-04-09T00:00:00Z",
+            "receiptsStored": 0,
+            "inventoryStored": 0,
+            "inventoryDiff": {"generatedAt": "2026-04-09T00:00:00Z", "items": []},
+            "advisories": [],
+            "policy": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "require-reapproval",
+            },
+            "alertPreferences": {
+                "emailEnabled": True,
+                "digestMode": "daily",
+            },
+            "teamPolicyPack": {
+                "name": "Security team default",
+                "allowedPublishers": ["hashgraph-online"],
+            },
+        }
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            login_rc = main(
+                [
+                    "guard",
+                    "login",
+                    "--home",
+                    str(home_dir),
+                    "--sync-url",
+                    f"http://127.0.0.1:{server.server_port}/receipts",
+                    "--token",
+                    "demo-token",
+                    "--json",
+                ]
+            )
+            json.loads(capsys.readouterr().out)
+
+            first_sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
+            json.loads(capsys.readouterr().out)
+
+            _SyncRequestHandler.response_payload = {
+                "syncedAt": "2026-04-10T00:00:00Z",
+                "receiptsStored": 0,
+                "inventoryStored": 0,
+                "inventoryDiff": {"generatedAt": "2026-04-10T00:00:00Z", "items": []},
+                "advisories": [],
+            }
+
+            second_sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
+            json.loads(capsys.readouterr().out)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+
+        policy_rc = main(["guard", "policies", "--home", str(home_dir), "--json"])
+        policy_output = json.loads(capsys.readouterr().out)
+        store = GuardStore(home_dir)
+
+        assert login_rc == 0
+        assert first_sync_rc == 0
+        assert second_sync_rc == 0
+        assert policy_rc == 0
+        assert not any(item["source"] == "cloud-sync" for item in policy_output["items"])
+        assert store.get_sync_payload("policy") == {}
+        assert store.get_sync_payload("alert_preferences") == {}
+        assert store.get_sync_payload("team_policy_pack") == {}
 
     def test_guard_run_auto_syncs_cloud_policy_bundle(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

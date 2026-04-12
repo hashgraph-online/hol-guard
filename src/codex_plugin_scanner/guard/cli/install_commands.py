@@ -43,6 +43,8 @@ def _resolve_targets(
     context: HarnessContext,
     store: GuardStore,
 ) -> list[str]:
+    if requested_harness is not None and install_all:
+        raise ValueError("Pass either a harness or --all, not both.")
     if requested_harness is not None and not install_all:
         return [requested_harness]
     if not install_all:
