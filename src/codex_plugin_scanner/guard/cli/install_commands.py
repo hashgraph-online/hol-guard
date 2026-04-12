@@ -45,6 +45,11 @@ def _resolve_targets(
 ) -> list[str]:
     if requested_harness is not None and not install_all:
         return [requested_harness]
+    if not install_all:
+        action = "install" if command == "install" else "uninstall"
+        raise ValueError(
+            f"Guard {action} requires a harness or --all."
+        )
     detected = {
         detection.harness
         for detection in detect_all(context)

@@ -1250,6 +1250,26 @@ args = ["workspace-skill.js", "--changed"]
         assert uninstall_rc == 0
         assert all(item["active"] is False for item in output["managed_installs"])
 
+    def test_guard_install_requires_harness_without_all(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+            ]
+        )
+        stderr = capsys.readouterr().err
+
+        assert rc == 2
+        assert "Guard install requires a harness or --all." in stderr
+
     def test_guard_login_and_sync_posts_receipts(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

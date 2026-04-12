@@ -81,10 +81,11 @@ class _GitHubHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         if pages is not None and page < max(pages):
             next_page = page + 1
+            host, port = self.server.server_address[:2]
             next_url = (
-                "http://"
-                + self.headers["Host"]
-                + f"/repos/hashgraph-online/example-good-plugin/issues/12/comments?per_page=100&page={next_page}"
+                f"http://{host}:{port}"
+                "/repos/hashgraph-online/example-good-plugin/issues/12/comments"
+                f"?per_page=100&page={next_page}"
             )
             self.send_header("Link", f'<{next_url}>; rel="next"')
         self.send_header("Content-Type", "application/json")
@@ -446,6 +447,40 @@ def test_action_runner_pr_comment_failure_is_nonfatal(monkeypatch, tmp_path, cap
     assert exit_code == 0
     assert "pr_comment_status=failed" in output_lines
     assert "Warning: failed to update PR comment" in stderr
+
+
+def test_action_runner_invalid_pr_comment_max_findings_falls_back_to_default(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    output_path = tmp_path / "github-output.txt"
+
+    monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
+    monkeypatch.setenv("FORMAT", "json")
+    monkeypatch.setenv("OUTPUT", "")
+    monkeypatch.setenv("MIN_SCORE", "0")
+    monkeypatch.setenv("FAIL_ON", "none")
+    monkeypatch.setenv("CISCO_SCAN", "off")
+    monkeypatch.setenv("CISCO_POLICY", "balanced")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "false")
+    monkeypatch.setenv("SUBMISSION_SCORE_THRESHOLD", "80")
+    monkeypatch.setenv("SUBMISSION_REPOS", "hashgraph-online/awesome-codex-plugins")
+    monkeypatch.setenv("SUBMISSION_TOKEN", "")
+    monkeypatch.setenv("SUBMISSION_LABELS", "plugin-submission")
+    monkeypatch.setenv("SUBMISSION_CATEGORY", "Community Plugins")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_NAME", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_URL", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_DESCRIPTION", "")
+    monkeypatch.setenv("SUBMISSION_AUTHOR", "")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+    monkeypatch.setenv("REGISTRY_PAYLOAD_OUTPUT", "")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+    monkeypatch.setenv("PR_COMMENT_MAX_FINDINGS", "not-a-number")
+
+    exit_code = main()
+
+    assert exit_code == 0
+    assert "pr_comment_status=skipped" in output_path.read_text(encoding="utf-8")
 
 
 def test_upsert_pr_comment_finds_existing_comment_on_later_page() -> None:

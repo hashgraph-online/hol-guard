@@ -50,6 +50,15 @@ def _read_env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
+def _read_positive_int_env(name: str, *, default: int) -> int:
+    raw = _read_env(name, str(default)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
 def _write_outputs(path: str, values: dict[str, str]) -> None:
     with Path(path).open("a", encoding="utf-8") as handle:
         for key, value in values.items():
@@ -71,7 +80,10 @@ def _resolve_pr_comment_settings(
     pr_comment = resolve_pr_comment_config(
         default_mode=_read_env("PR_COMMENT", "auto"),
         default_style=_read_env("PR_COMMENT_STYLE", "concise"),
-        default_max_findings=int(_read_env("PR_COMMENT_MAX_FINDINGS", "5")),
+        default_max_findings=_read_positive_int_env(
+            "PR_COMMENT_MAX_FINDINGS",
+            default=5,
+        ),
         configured_mode=config.github_pr_comment,
         configured_style=config.github_pr_comment_style,
         configured_max_findings=config.github_pr_comment_max_findings,
@@ -236,9 +248,7 @@ def main() -> int:
         plugin_dir=plugin_dir,
         config_path=config,
     )
-    pull_request_number = (
-        load_pull_request_number(github_event_path) if github_event_path else None
-    )
+    pull_request_number = load_pull_request_number(github_event_path) if github_event_path else None
 
     workflow_url = ""
     if github_repository and github_run_id:

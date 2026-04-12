@@ -505,9 +505,7 @@ class GuardStore:
 
     def replace_remote_policies(self, decisions: list[PolicyDecision], now: str) -> None:
         with self._connect() as connection:
-            connection.execute(
-                "delete from policy_decisions where source in ('cloud-sync', 'team-policy')"
-            )
+            connection.execute("delete from policy_decisions where source in ('cloud-sync', 'team-policy')")
             for decision in decisions:
                 artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
                 connection.execute(

@@ -162,11 +162,7 @@ def sync_pain_signals(store: GuardStore) -> int:
         if not candidates:
             break
         last_processed_event_id = int(candidates[-1]["event_id"])
-        signal_items = [
-            payload
-            for item in candidates
-            if (payload := _pain_signal_item(item)) is not None
-        ]
+        signal_items = [payload for item in candidates if (payload := _pain_signal_item(item)) is not None]
         if signal_items:
             request = urllib.request.Request(
                 _pain_signal_sync_url(str(credentials["sync_url"])),
@@ -361,8 +357,7 @@ def _record_synced_alert_events(
     now: str,
 ) -> None:
     advisories_enabled = not (
-        isinstance(alert_preferences, dict)
-        and alert_preferences.get("advisoriesEnabled") is False
+        isinstance(alert_preferences, dict) and alert_preferences.get("advisoriesEnabled") is False
     )
     if advisories_enabled:
         for item in advisories:
