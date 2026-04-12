@@ -6,9 +6,11 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 
-from .models import GuardApprovalRequest, GuardReceipt, PolicyDecision
+from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, PolicyDecision
 from .store_approvals import (
     add_approval_request as persist_approval_request,
 )
@@ -90,14 +92,42 @@ class GuardStore:
             )
             """,
             """
+            create table if not exists artifact_inventory (
+              artifact_id text not null,
+              harness text not null,
+              artifact_name text not null,
+              artifact_type text not null,
+              source_scope text not null,
+              config_path text not null,
+              publisher text,
+              origin_url text,
+              launch_command text,
+              transport text,
+              first_seen_at text not null,
+              last_seen_at text not null,
+              last_changed_at text,
+              last_approved_at text,
+              removed_at text,
+              present integer not null default 1,
+              last_policy_action text not null,
+              artifact_hash text not null,
+              primary key (artifact_id, harness)
+            )
+            """,
+            """
             create table if not exists policy_decisions (
               decision_id integer primary key autoincrement,
               harness text not null,
               scope text not null,
               artifact_id text,
+              artifact_hash text,
               workspace text,
+              publisher text,
               action text not null,
               reason text,
+              owner text,
+              source text not null default 'local',
+              expires_at text,
               updated_at text not null
             )
             """,
@@ -132,6 +162,14 @@ class GuardStore:
             )
             """,
             """
+            create table if not exists guard_events (
+              event_id integer primary key autoincrement,
+              event_name text not null,
+              payload_json text not null,
+              occurred_at text not null
+            )
+            """,
+            """
             create table if not exists managed_installs (
               harness text primary key,
               active integer not null,
@@ -146,7 +184,23 @@ class GuardStore:
             for statement in statements:
                 connection.execute(statement)
             self._ensure_policy_column(connection, "publisher", "text")
+            self._ensure_policy_column(connection, "artifact_hash", "text")
+            self._ensure_policy_column(connection, "owner", "text")
+            self._ensure_policy_column(connection, "source", "text not null default 'local'")
+            self._ensure_policy_column(connection, "expires_at", "text")
             self._ensure_runtime_receipts_column(connection, "capabilities_summary", "text not null default ''")
+            self._ensure_approval_column(connection, "artifact_type", "text not null default 'artifact'")
+            self._ensure_approval_column(connection, "launch_target", "text")
+            self._ensure_approval_column(connection, "transport", "text")
+            self._ensure_approval_column(connection, "risk_summary", "text")
+            self._ensure_approval_column(connection, "risk_signals_json", "text not null default '[]'")
+            self._ensure_approval_column(connection, "artifact_label", "text")
+            self._ensure_approval_column(connection, "source_label", "text")
+            self._ensure_approval_column(connection, "trigger_summary", "text")
+            self._ensure_approval_column(connection, "why_now", "text")
+            self._ensure_approval_column(connection, "launch_summary", "text")
+            self._ensure_approval_column(connection, "risk_headline", "text")
+            self._ensure_approval_column(connection, "workspace", "text")
 
     @staticmethod
     def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
@@ -163,6 +217,14 @@ class GuardStore:
         if column_name in existing:
             return
         connection.execute(f"alter table runtime_receipts add column {column_name} {column_type}")
+
+    @staticmethod
+    def _ensure_approval_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
+        rows = connection.execute("pragma table_info(approval_requests)").fetchall()
+        existing = {str(row["name"]) for row in rows}
+        if column_name in existing:
+            return
+        connection.execute(f"alter table approval_requests add column {column_name} {column_type}")
 
     def list_table_names(self) -> list[str]:
         with self._connect() as connection:
@@ -239,33 +301,204 @@ class GuardStore:
                 (artifact_id, harness, json.dumps(changed_fields), previous_hash, current_hash, now),
             )
 
+    def record_inventory_artifact(
+        self,
+        *,
+        artifact: GuardArtifact,
+        artifact_hash: str,
+        policy_action: str,
+        changed: bool,
+        now: str,
+        approved: bool,
+    ) -> None:
+        launch_command = None
+        if artifact.command:
+            launch_command = " ".join([artifact.command, *artifact.args]).strip()
+        with self._connect() as connection:
+            existing = connection.execute(
+                """
+                select first_seen_at from artifact_inventory where artifact_id = ? and harness = ?
+                """,
+                (artifact.artifact_id, artifact.harness),
+            ).fetchone()
+            first_seen_at = str(existing["first_seen_at"]) if existing is not None else now
+            last_changed_at = now if changed else None
+            last_approved_at = now if approved else None
+            connection.execute(
+                """
+                insert into artifact_inventory (
+                  artifact_id, harness, artifact_name, artifact_type, source_scope, config_path, publisher,
+                  origin_url, launch_command, transport, first_seen_at, last_seen_at, last_changed_at,
+                  last_approved_at, removed_at, present, last_policy_action, artifact_hash
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(artifact_id, harness) do update set
+                  artifact_name = excluded.artifact_name,
+                  artifact_type = excluded.artifact_type,
+                  source_scope = excluded.source_scope,
+                  config_path = excluded.config_path,
+                  publisher = excluded.publisher,
+                  origin_url = excluded.origin_url,
+                  launch_command = excluded.launch_command,
+                  transport = excluded.transport,
+                  last_seen_at = excluded.last_seen_at,
+                  last_changed_at = coalesce(excluded.last_changed_at, artifact_inventory.last_changed_at),
+                  last_approved_at = coalesce(excluded.last_approved_at, artifact_inventory.last_approved_at),
+                  removed_at = null,
+                  present = 1,
+                  last_policy_action = excluded.last_policy_action,
+                  artifact_hash = excluded.artifact_hash
+                """,
+                (
+                    artifact.artifact_id,
+                    artifact.harness,
+                    artifact.name,
+                    artifact.artifact_type,
+                    artifact.source_scope,
+                    artifact.config_path,
+                    artifact.publisher,
+                    artifact.url,
+                    launch_command,
+                    artifact.transport,
+                    first_seen_at,
+                    now,
+                    last_changed_at,
+                    last_approved_at,
+                    None,
+                    1,
+                    policy_action,
+                    artifact_hash,
+                ),
+            )
+
+    def mark_inventory_removed(
+        self,
+        *,
+        harness: str,
+        artifact_id: str,
+        policy_action: str,
+        artifact_hash: str,
+        now: str,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                update artifact_inventory
+                set last_seen_at = ?, last_changed_at = ?, removed_at = ?, present = 0,
+                    last_policy_action = ?, artifact_hash = ?
+                where artifact_id = ? and harness = ?
+                """,
+                (now, now, now, policy_action, artifact_hash, artifact_id, harness),
+            )
+
+    def list_inventory(self, harness: str | None = None) -> list[dict[str, object]]:
+        query = """
+            select artifact_id, harness, artifact_name, artifact_type, source_scope, config_path, publisher,
+                   origin_url, launch_command, transport, first_seen_at, last_seen_at, last_changed_at,
+                   last_approved_at, removed_at, present, last_policy_action, artifact_hash
+            from artifact_inventory
+        """
+        params: tuple[object, ...] = ()
+        if harness is not None:
+            query += " where harness = ?"
+            params = (harness,)
+        query += " order by harness asc, artifact_name asc"
+        with self._connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [
+            {
+                "artifact_id": str(row["artifact_id"]),
+                "harness": str(row["harness"]),
+                "artifact_name": str(row["artifact_name"]),
+                "artifact_type": str(row["artifact_type"]),
+                "source_scope": str(row["source_scope"]),
+                "config_path": str(row["config_path"]),
+                "publisher": row["publisher"],
+                "origin_url": row["origin_url"],
+                "launch_command": row["launch_command"],
+                "transport": row["transport"],
+                "first_seen_at": str(row["first_seen_at"]),
+                "last_seen_at": str(row["last_seen_at"]),
+                "last_changed_at": row["last_changed_at"],
+                "last_approved_at": row["last_approved_at"],
+                "removed_at": row["removed_at"],
+                "present": bool(row["present"]),
+                "last_policy_action": str(row["last_policy_action"]),
+                "artifact_hash": str(row["artifact_hash"]),
+            }
+            for row in rows
+        ]
+
+    def find_inventory_item(self, artifact_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select artifact_id, harness, artifact_name, artifact_type, source_scope, config_path, publisher,
+                       origin_url, launch_command, transport, first_seen_at, last_seen_at, last_changed_at,
+                       last_approved_at, removed_at, present, last_policy_action, artifact_hash
+                from artifact_inventory
+                where artifact_id = ?
+                order by last_seen_at desc
+                limit 1
+                """,
+                (artifact_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "artifact_id": str(row["artifact_id"]),
+            "harness": str(row["harness"]),
+            "artifact_name": str(row["artifact_name"]),
+            "artifact_type": str(row["artifact_type"]),
+            "source_scope": str(row["source_scope"]),
+            "config_path": str(row["config_path"]),
+            "publisher": row["publisher"],
+            "origin_url": row["origin_url"],
+            "launch_command": row["launch_command"],
+            "transport": row["transport"],
+            "first_seen_at": str(row["first_seen_at"]),
+            "last_seen_at": str(row["last_seen_at"]),
+            "last_changed_at": row["last_changed_at"],
+            "last_approved_at": row["last_approved_at"],
+            "removed_at": row["removed_at"],
+            "present": bool(row["present"]),
+            "last_policy_action": str(row["last_policy_action"]),
+            "artifact_hash": str(row["artifact_hash"]),
+        }
+
     def upsert_policy(self, decision: PolicyDecision, now: str) -> None:
-        artifact_id, workspace, publisher = self._normalized_policy_keys(decision)
+        artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
         with self._connect() as connection:
             connection.execute(
                 """
                 delete from policy_decisions
                 where harness = ? and scope = ? and coalesce(artifact_id, '') = coalesce(?, '')
+                  and coalesce(artifact_hash, '') = coalesce(?, '')
                   and coalesce(workspace, '') = coalesce(?, '')
                   and coalesce(publisher, '') = coalesce(?, '')
                 """,
-                (decision.harness, decision.scope, artifact_id, workspace, publisher),
+                (decision.harness, decision.scope, artifact_id, artifact_hash, workspace, publisher),
             )
             connection.execute(
                 """
                 insert into policy_decisions (
-                  harness, scope, artifact_id, workspace, publisher, action, reason, updated_at
+                  harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
+                  expires_at, updated_at
                 )
-                values (?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     decision.harness,
                     decision.scope,
                     artifact_id,
+                    artifact_hash,
                     workspace,
                     publisher,
                     decision.action,
                     decision.reason,
+                    decision.owner,
+                    decision.source,
+                    decision.expires_at,
                     now,
                 ),
             )
@@ -274,34 +507,43 @@ class GuardStore:
         self,
         harness: str,
         artifact_id: str | None,
-        workspace: str | None,
+        artifact_hash: str | None = None,
+        workspace: str | None = None,
         publisher: str | None = None,
+        now: str | None = None,
     ) -> str | None:
+        current_time = now or _now()
         with self._connect() as connection:
             rows = connection.execute(
                 """
-                select scope, action from policy_decisions
+                select scope, action, artifact_hash from policy_decisions
                 where harness = ? and (
-                  (scope = 'artifact' and artifact_id = ?)
+                  (
+                    scope = 'artifact' and artifact_id = ? and (
+                      artifact_hash is null or (? is not null and artifact_hash = ?)
+                    )
+                  )
                   or (scope = 'workspace' and workspace = ?)
                   or (scope = 'publisher' and publisher = ?)
                   or scope = 'harness'
                   or scope = 'global'
                 )
+                and (expires_at is null or expires_at > ?)
                 order by case scope when 'artifact' then 0 when 'workspace' then 1 when 'publisher' then 2
                          when 'harness' then 3 else 4 end,
                          updated_at desc
                 """,
-                (harness, artifact_id, workspace, publisher),
+                (harness, artifact_id, artifact_hash, artifact_hash, workspace, publisher, current_time),
             ).fetchall()
         return str(rows[0]["action"]) if rows else None
 
     @staticmethod
-    def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None]:
+    def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:
         artifact_id = decision.artifact_id if decision.scope == "artifact" else None
+        artifact_hash = decision.artifact_hash if decision.scope == "artifact" else None
         workspace = decision.workspace if decision.scope == "workspace" else None
         publisher = decision.publisher if decision.scope == "publisher" else None
-        return artifact_id, workspace, publisher
+        return artifact_id, artifact_hash, workspace, publisher
 
     def add_receipt(self, receipt: GuardReceipt) -> None:
         with self._connect() as connection:
@@ -361,21 +603,86 @@ class GuardStore:
             for row in rows
         ]
 
-    def count_receipts(self) -> int:
+    def get_receipt(self, receipt_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
-            row = connection.execute("select count(*) as total from runtime_receipts").fetchone()
+            row = connection.execute(
+                """
+                select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
+                       changed_capabilities_json,
+                       provenance_summary, user_override, artifact_name, source_scope, timestamp
+                from runtime_receipts
+                where receipt_id = ?
+                """,
+                (receipt_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "receipt_id": str(row["receipt_id"]),
+            "harness": str(row["harness"]),
+            "artifact_id": str(row["artifact_id"]),
+            "artifact_hash": str(row["artifact_hash"]),
+            "policy_decision": str(row["policy_decision"]),
+            "capabilities_summary": str(row["capabilities_summary"]),
+            "changed_capabilities": json.loads(str(row["changed_capabilities_json"])),
+            "provenance_summary": str(row["provenance_summary"]),
+            "user_override": row["user_override"],
+            "artifact_name": row["artifact_name"],
+            "source_scope": row["source_scope"],
+            "timestamp": str(row["timestamp"]),
+        }
+
+    def get_latest_receipt(self, harness: str, artifact_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
+                       changed_capabilities_json,
+                       provenance_summary, user_override, artifact_name, source_scope, timestamp
+                from runtime_receipts
+                where harness = ? and artifact_id = ?
+                order by timestamp desc
+                limit 1
+                """,
+                (harness, artifact_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "receipt_id": str(row["receipt_id"]),
+            "harness": str(row["harness"]),
+            "artifact_id": str(row["artifact_id"]),
+            "artifact_hash": str(row["artifact_hash"]),
+            "policy_decision": str(row["policy_decision"]),
+            "capabilities_summary": str(row["capabilities_summary"]),
+            "changed_capabilities": json.loads(str(row["changed_capabilities_json"])),
+            "provenance_summary": str(row["provenance_summary"]),
+            "user_override": row["user_override"],
+            "artifact_name": row["artifact_name"],
+            "source_scope": row["source_scope"],
+            "timestamp": str(row["timestamp"]),
+        }
+
+    def count_receipts(self, harness: str | None = None) -> int:
+        query = "select count(*) as total from runtime_receipts"
+        params: tuple[object, ...] = ()
+        if harness is not None:
+            query += " where harness = ?"
+            params = (harness,)
+        with self._connect() as connection:
+            row = connection.execute(query, params).fetchone()
         return int(row["total"]) if row is not None else 0
 
-    def add_approval_request(self, request: GuardApprovalRequest, now: str) -> None:
+    def add_approval_request(self, request: GuardApprovalRequest, now: str) -> str:
         with self._connect() as connection:
-            persist_approval_request(connection, request, now)
+            return persist_approval_request(connection, request, now)
 
     def list_approval_requests(
         self,
         *,
         status: str | None = "pending",
         harness: str | None = None,
-        limit: int = 50,
+        limit: int | None = 50,
     ) -> list[dict[str, object]]:
         with self._connect() as connection:
             return load_approval_requests(connection, status=status, harness=harness, limit=limit)
@@ -403,9 +710,120 @@ class GuardStore:
                 resolved_at=resolved_at,
             )
 
+    def resolve_matching_approval_requests(
+        self,
+        *,
+        harness: str,
+        scope: str,
+        artifact_id: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        resolution_action: str,
+        resolution_scope: str,
+        reason: str | None,
+        resolved_at: str,
+    ) -> list[str]:
+        pending = self.list_approval_requests(status="pending", harness=harness, limit=None)
+        resolved_ids: list[str] = []
+        for item in pending:
+            if not self._matches_scope(
+                item,
+                scope=scope,
+                artifact_id=artifact_id,
+                workspace=workspace,
+                publisher=publisher,
+            ):
+                continue
+            request_id = str(item["request_id"])
+            self.resolve_approval_request(
+                request_id,
+                resolution_action=resolution_action,
+                resolution_scope=resolution_scope,
+                reason=reason,
+                resolved_at=resolved_at,
+            )
+            resolved_ids.append(request_id)
+        return resolved_ids
+
+    @staticmethod
+    def _matches_scope(
+        item: dict[str, object],
+        *,
+        scope: str,
+        artifact_id: str | None,
+        workspace: str | None,
+        publisher: str | None,
+    ) -> bool:
+        if scope == "global":
+            return True
+        if scope == "harness":
+            return True
+        if scope == "artifact":
+            return str(item["artifact_id"]) == artifact_id
+        if scope == "publisher":
+            return isinstance(item.get("publisher"), str) and item.get("publisher") == publisher
+        if scope == "workspace" and isinstance(workspace, str):
+            config_path = str(item.get("config_path") or "")
+            return _path_within_workspace(config_path, workspace)
+        return False
+
     def count_approval_requests(self, *, status: str | None = "pending") -> int:
         with self._connect() as connection:
             return count_pending_approval_requests(connection, status=status)
+
+    def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
+        query = """
+            select harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
+                   expires_at, updated_at
+            from policy_decisions
+        """
+        params: tuple[object, ...] = ()
+        if harness is not None:
+            query += " where harness = ?"
+            params = (harness,)
+        query += " order by updated_at desc"
+        with self._connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        return [
+            {
+                "harness": str(row["harness"]),
+                "scope": str(row["scope"]),
+                "artifact_id": row["artifact_id"],
+                "artifact_hash": row["artifact_hash"],
+                "workspace": row["workspace"],
+                "publisher": row["publisher"],
+                "action": str(row["action"]),
+                "reason": row["reason"],
+                "owner": row["owner"],
+                "source": str(row["source"]),
+                "expires_at": row["expires_at"],
+                "updated_at": str(row["updated_at"]),
+            }
+            for row in rows
+        ]
+
+    def get_latest_diff(self, harness: str, artifact_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select artifact_id, harness, changed_fields_json, previous_hash, current_hash, recorded_at
+                from artifact_diffs
+                where harness = ? and artifact_id = ?
+                order by diff_id desc
+                limit 1
+                """,
+                (harness, artifact_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "artifact_id": str(row["artifact_id"]),
+            "harness": str(row["harness"]),
+            "changed_fields": json.loads(str(row["changed_fields_json"])),
+            "previous_hash": row["previous_hash"],
+            "current_hash": str(row["current_hash"]),
+            "recorded_at": str(row["recorded_at"]),
+        }
 
     def set_managed_install(
         self,
@@ -465,6 +883,58 @@ class GuardStore:
             for row in rows
         ]
 
+    def cache_advisories(self, advisories: list[dict[str, object]], now: str) -> int:
+        stored = 0
+        with self._connect() as connection:
+            for advisory in advisories:
+                cache_key = self._advisory_cache_key(advisory)
+                connection.execute(
+                    """
+                    insert into publisher_cache (publisher_key, payload_json, updated_at)
+                    values (?, ?, ?)
+                    on conflict(publisher_key) do update set
+                      payload_json = excluded.payload_json,
+                      updated_at = excluded.updated_at
+                    """,
+                    (cache_key, json.dumps(advisory), now),
+                )
+                stored += 1
+        return stored
+
+    def list_cached_advisories(self, limit: int | None = 100) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            if limit is None:
+                rows = connection.execute(
+                    """
+                    select publisher_key, payload_json, updated_at
+                    from publisher_cache
+                    order by updated_at desc
+                    """
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    select publisher_key, payload_json, updated_at
+                    from publisher_cache
+                    order by updated_at desc
+                    limit ?
+                    """,
+                    (limit,),
+                ).fetchall()
+        items: list[dict[str, object]] = []
+        for row in rows:
+            payload = json.loads(str(row["payload_json"]))
+            if not isinstance(payload, dict):
+                continue
+            items.append(
+                {
+                    "cache_key": str(row["publisher_key"]),
+                    "updated_at": str(row["updated_at"]),
+                    **payload,
+                }
+            )
+        return items
+
     def set_sync_credentials(self, sync_url: str, token: str, now: str) -> None:
         payload = {"sync_url": sync_url, "token": token}
         with self._connect() as connection:
@@ -479,6 +949,44 @@ class GuardStore:
                 (json.dumps(payload), now),
             )
 
+    def add_event(self, event_name: str, payload: dict[str, object], now: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into guard_events (event_name, payload_json, occurred_at)
+                values (?, ?, ?)
+                """,
+                (event_name, json.dumps(payload), now),
+            )
+
+    def list_events(self, limit: int = 100, event_name: str | None = None) -> list[dict[str, object]]:
+        query = """
+            select event_id, event_name, payload_json, occurred_at
+            from guard_events
+        """
+        params: tuple[object, ...] = ()
+        if event_name is not None:
+            query += " where event_name = ?"
+            params = (event_name,)
+        query += " order by occurred_at desc, event_id desc limit ?"
+        params = (*params, limit)
+        with self._connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+        items: list[dict[str, object]] = []
+        for row in rows:
+            payload = json.loads(str(row["payload_json"]))
+            if not isinstance(payload, dict):
+                payload = {}
+            items.append(
+                {
+                    "event_id": int(row["event_id"]),
+                    "event_name": str(row["event_name"]),
+                    "occurred_at": str(row["occurred_at"]),
+                    "payload": payload,
+                }
+            )
+        return items
+
     def get_sync_credentials(self) -> dict[str, str] | None:
         with self._connect() as connection:
             row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
@@ -492,3 +1000,23 @@ class GuardStore:
         if not isinstance(sync_url, str) or not isinstance(token, str):
             return None
         return {"sync_url": sync_url, "token": token}
+
+    @staticmethod
+    def _advisory_cache_key(advisory: dict[str, object]) -> str:
+        advisory_id = advisory.get("id")
+        if isinstance(advisory_id, str) and advisory_id.strip():
+            return advisory_id.strip()
+        advisory_digest = sha256(
+            json.dumps(advisory, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        ).hexdigest()
+        return f"anonymous:{advisory_digest}"
+
+
+def _path_within_workspace(config_path: str, workspace: str) -> bool:
+    config_path_obj = Path(config_path)
+    workspace_path_obj = Path(workspace)
+    return config_path_obj == workspace_path_obj or workspace_path_obj in config_path_obj.parents
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()

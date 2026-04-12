@@ -197,6 +197,112 @@ def _render_receipts(console: Console, payload: dict[str, object]) -> None:
     console.print(table)
 
 
+def _render_inventory(console: Console, payload: dict[str, object]) -> None:
+    items = _coerce_dict_list(payload.get("items"))
+    console.print(
+        Panel.fit(
+            f"[bold]Local Guard inventory[/bold]\n{len(items)} tracked artifact{'s' if len(items) != 1 else ''}",
+            border_style="cyan",
+        )
+    )
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True)
+    table.add_column("Artifact", style="bold")
+    table.add_column("Harness", style="cyan")
+    table.add_column("Type")
+    table.add_column("Scope")
+    table.add_column("Verdict")
+    table.add_column("Present")
+    for item in items:
+        table.add_row(
+            str(item.get("artifact_name") or item.get("artifact_id") or "unknown"),
+            str(item.get("harness") or "unknown"),
+            str(item.get("artifact_type") or "artifact"),
+            str(item.get("source_scope") or "unknown"),
+            _action_text(str(item.get("last_policy_action") or "warn")),
+            _bool_label(bool(item.get("present"))),
+        )
+    console.print(table)
+
+
+def _render_policies(console: Console, payload: dict[str, object]) -> None:
+    items = _coerce_dict_list(payload.get("items"))
+    console.print(
+        Panel.fit(
+            f"[bold]Guard policy decisions[/bold]\n{len(items)} active rule{'s' if len(items) != 1 else ''}",
+            border_style="cyan",
+        )
+    )
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True)
+    table.add_column("Harness", style="cyan")
+    table.add_column("Scope")
+    table.add_column("Action")
+    table.add_column("Artifact", style="bold")
+    table.add_column("Publisher")
+    table.add_column("Owner")
+    table.add_column("Expires")
+    for item in items:
+        table.add_row(
+            str(item.get("harness") or "unknown"),
+            str(item.get("scope") or "harness"),
+            _action_text(str(item.get("action") or "warn")),
+            str(item.get("artifact_id") or "all artifacts"),
+            str(item.get("publisher") or "—"),
+            str(item.get("owner") or "—"),
+            str(item.get("expires_at") or "never"),
+        )
+    console.print(table)
+
+
+def _render_advisories(console: Console, payload: dict[str, object]) -> None:
+    items = _coerce_dict_list(payload.get("items"))
+    console.print(
+        Panel.fit(
+            f"[bold]Guard advisories[/bold]\n{len(items)} cached advisory{'s' if len(items) != 1 else ''}",
+            border_style="cyan",
+        )
+    )
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True)
+    table.add_column("Publisher", style="bold")
+    table.add_column("Severity")
+    table.add_column("Headline")
+    table.add_column("Updated", style="dim")
+    for item in items:
+        table.add_row(
+            str(item.get("publisher") or "unknown"),
+            str(item.get("severity") or "info"),
+            str(item.get("headline") or item.get("cache_key") or "advisory"),
+            str(item.get("updated_at") or "unknown"),
+        )
+    console.print(table)
+
+
+def _render_events(console: Console, payload: dict[str, object]) -> None:
+    items = _coerce_dict_list(payload.get("items"))
+    console.print(
+        Panel.fit(
+            f"[bold]Guard lifecycle events[/bold]\n{len(items)} local event{'s' if len(items) != 1 else ''}",
+            border_style="cyan",
+        )
+    )
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True)
+    table.add_column("When", style="dim", no_wrap=True)
+    table.add_column("Event", style="bold")
+    table.add_column("Summary")
+    for item in items:
+        event_name = str(item.get("event_name") or "unknown")
+        payload_item = item.get("payload")
+        summary = event_name
+        if isinstance(payload_item, dict):
+            summary = str(
+                payload_item.get("artifact_name")
+                or payload_item.get("artifact_id")
+                or payload_item.get("sync_url")
+                or event_name
+            )
+        table.add_row(str(item.get("occurred_at") or "unknown"), event_name, summary)
+    console.print(table)
+
+
 def _render_approvals(console: Console, payload: dict[str, object]) -> None:
     if payload.get("resolved"):
         item = payload.get("item")
@@ -270,7 +376,9 @@ def _render_sync(console: Console, payload: dict[str, object]) -> None:
     body = Table.grid(padding=(0, 1))
     body.add_row("Synced at", str(payload.get("synced_at") or "unknown"))
     body.add_row("Receipts sent", str(payload.get("receipts") or 0))
+    body.add_row("Inventory sent", str(payload.get("inventory") or 0))
     body.add_row("Receipts stored", str(payload.get("receipts_stored") or 0))
+    body.add_row("Advisories stored", str(payload.get("advisories_stored") or 0))
     console.print(Panel(body, title="Guard sync complete", border_style="green"))
 
 
@@ -305,6 +413,65 @@ def _render_scan(console: Console, payload: dict[str, object]) -> None:
             word_wrap=True,
         )
     )
+
+
+def _render_preflight(console: Console, payload: dict[str, object]) -> None:
+    install_verdict = payload.get("install_verdict")
+    install_target = payload.get("install_target")
+    body = Table.grid(padding=(0, 1))
+    if isinstance(install_target, dict):
+        body.add_row("Target", str(install_target.get("path") or "."))
+        body.add_row("Harness", str(install_target.get("intended_harness") or "not specified"))
+    if isinstance(install_verdict, dict):
+        body.add_row("Install verdict", _action_text(str(install_verdict.get("action") or "review")))
+        body.add_row("Can install", _bool_label(bool(install_verdict.get("can_install"))))
+        body.add_row("Reason", str(install_verdict.get("reason") or "unknown"))
+    threat_intelligence = payload.get("threat_intelligence")
+    if isinstance(threat_intelligence, dict):
+        body.add_row("Verdict source", str(threat_intelligence.get("verdict_source") or "local-scan"))
+        body.add_row("Highest severity", str(threat_intelligence.get("highest_severity") or "info"))
+        body.add_row("Findings", str(threat_intelligence.get("finding_count") or 0))
+    console.print(Panel(body, title="Install-time preflight", border_style="cyan"))
+    _render_scan(console, payload)
+
+
+def _render_protect(console: Console, payload: dict[str, object]) -> None:
+    verdict = payload.get("verdict")
+    request = payload.get("request")
+    body = Table.grid(padding=(0, 1))
+    if isinstance(request, dict):
+        body.add_row("Command", _command_text(request.get("command")))
+        body.add_row("Kind", str(request.get("install_kind") or "unknown"))
+    if isinstance(verdict, dict):
+        action = str(verdict.get("action") or "review")
+        body.add_row("Action", _action_text(action))
+        body.add_row("Executed", _bool_label(bool(payload.get("executed"))))
+        body.add_row("Reason", str(verdict.get("reason") or "unknown"))
+    console.print(Panel(body, title="Install protection", border_style="cyan"))
+    risk_signals = _coerce_string_list(verdict.get("risk_signals")) if isinstance(verdict, dict) else []
+    if risk_signals:
+        console.print(
+            Panel(
+                "\n".join(f"• {item}" for item in risk_signals),
+                title="Risk signals",
+                border_style="yellow",
+            )
+        )
+    targets = _coerce_dict_list(payload.get("targets"))
+    if targets:
+        table = Table(box=box.SIMPLE_HEAVY, show_header=True)
+        table.add_column("Target", style="bold")
+        table.add_column("Type")
+        table.add_column("Ecosystem")
+        table.add_column("Spec")
+        for item in targets:
+            table.add_row(
+                str(item.get("artifact_name") or "unknown"),
+                str(item.get("artifact_type") or "artifact"),
+                str(item.get("ecosystem") or "unknown"),
+                str(item.get("raw_spec") or item.get("package_name") or "unknown"),
+            )
+        console.print(table)
 
 
 def _render_fallback(console: Console, payload: dict[str, object]) -> None:
@@ -404,12 +571,14 @@ def _build_artifact_result_table(artifacts: list[dict[str, object]]) -> Table:
     table.add_column("Changed")
     table.add_column("Policy")
     table.add_column("Fields")
+    table.add_column("Risk")
     for artifact in artifacts:
         table.add_row(
             str(artifact.get("artifact_name") or artifact.get("artifact_id") or "unknown"),
             _bool_label(bool(artifact.get("changed"))),
             _action_text(str(artifact.get("policy_action", "warn"))),
             ", ".join(_coerce_string_list(artifact.get("changed_fields"))) or "none",
+            str(artifact.get("risk_summary") or "no obvious secret/network signal"),
         )
     return table
 
@@ -420,10 +589,11 @@ def _build_approval_table(items: list[dict[str, object]], *, title: str | None) 
     table.add_column("Harness", style="cyan")
     table.add_column("Artifact", style="bold")
     table.add_column("Changed", style="magenta")
+    table.add_column("Risk")
     table.add_column("Recommendation")
     table.add_column("Resolve", style="blue")
     if not items:
-        table.add_row("—", "—", "No pending approvals", "—", "—", "—")
+        table.add_row("—", "—", "No pending approvals", "—", "—", "—", "—")
         return table
     for item in items:
         table.add_row(
@@ -431,6 +601,7 @@ def _build_approval_table(items: list[dict[str, object]], *, title: str | None) 
             str(item.get("harness") or "unknown"),
             str(item.get("artifact_name") or item.get("artifact_id") or "unknown"),
             ", ".join(_coerce_string_list(item.get("changed_fields"))) or "none",
+            str(item.get("risk_summary") or "no obvious secret/network signal"),
             _action_text(str(item.get("policy_action") or "warn")),
             str(item.get("review_command") or "hol-guard approvals"),
         )
@@ -551,6 +722,12 @@ _RENDERERS: dict[str, Any] = {
     "run": _render_run,
     "diff": _render_diff,
     "receipts": _render_receipts,
+    "inventory": _render_inventory,
+    "policies": _render_policies,
+    "exceptions": _render_policies,
+    "advisories": _render_advisories,
+    "events": _render_events,
+    "abom": _render_fallback,
     "install": _render_managed_install,
     "uninstall": _render_managed_install,
     "allow": _render_decision,
@@ -558,6 +735,8 @@ _RENDERERS: dict[str, Any] = {
     "login": _render_login,
     "sync": _render_sync,
     "hook": _render_hook,
+    "protect": _render_protect,
+    "preflight": _render_preflight,
     "scan": _render_scan,
     "explain": _render_scan,
 }
