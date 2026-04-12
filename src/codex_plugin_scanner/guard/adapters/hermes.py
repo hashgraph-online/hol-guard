@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from ..models import GuardArtifact, HarnessDetection
@@ -133,7 +134,6 @@ class HermesHarnessAdapter(HarnessAdapter):
 
     def _extract_code_blocks(self, content: str) -> list[str]:
         """Extract code blocks from SKILL.md for risk analysis."""
-        import re
         blocks = []
         # Match ```bash, ```python, ``` etc blocks
         pattern = r"```(?:\w+)?\n(.*?)```"

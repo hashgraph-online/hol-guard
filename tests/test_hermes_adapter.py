@@ -1,6 +1,5 @@
 """Tests for Hermes harness adapter."""
 
-import json
 from pathlib import Path
 
 import pytest
