@@ -1043,7 +1043,7 @@ publish = [
 [package.metadata]
 requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.2" },
-    { name = "cisco-ai-skill-scanner", specifier = "==2.0.8" },
+    { name = "cisco-ai-skill-scanner", specifier = "~=2.0.8" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.23.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
@@ -1052,7 +1052,7 @@ requires-dist = [
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "twine", marker = "extra == 'publish'", specifier = ">=6.1.0" },
 ]
-provides-extras = ["dev", "publish"]
+provides-extras = ["cisco", "dev", "publish"]
 
 [[package]]
 name = "httpcore"
