@@ -26,8 +26,7 @@
 ## Guard Quickstart
 
 ```bash
-pipx run hol-guard start
-pipx run hol-guard install codex
+pipx run hol-guard bootstrap
 pipx run hol-guard run codex --dry-run
 pipx run hol-guard run codex
 pipx run hol-guard approvals
@@ -50,6 +49,8 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
 
 - `hol-guard start`
   Shows the next step for the harnesses Guard found.
+- `hol-guard bootstrap`
+  Detects the best local harness, starts the approval center, and installs Guard in front of it.
 - `hol-guard status`
   Shows what Guard is watching now.
 - `hol-guard install <harness>`
@@ -158,7 +159,13 @@ Scanner package:
 pip install plugin-scanner
 ```
 
-Cisco skill scanning support is included in the default `plugin-scanner` install (via `cisco-ai-skill-scanner`).
+Cisco-backed scanner analysis is optional:
+
+```bash
+pip install "plugin-scanner[cisco]"
+```
+
+The `cisco` extra installs the published `cisco-ai-skill-scanner` package from PyPI so the scanner remains publishable on PyPI and the optional Cisco analysis path works with standard package metadata.
 
 If you want both tools in one shell during local development:
 

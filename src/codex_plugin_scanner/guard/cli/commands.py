@@ -12,7 +12,7 @@ from pathlib import Path
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approvals import approval_center_hint, queue_blocked_approvals, wait_for_approval_requests
-from ..config import load_guard_config, resolve_guard_home
+from ..config import load_guard_config, overlay_synced_guard_policy, resolve_guard_home
 from ..consumer import detect_all, detect_harness, evaluate_detection, record_policy, run_consumer_scan
 from ..daemon import GuardDaemonServer, ensure_guard_daemon
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS
@@ -21,6 +21,8 @@ from ..receipts import build_receipt
 from ..runtime import guard_run, sync_receipts
 from ..store import GuardStore
 from .approval_commands import add_approval_parser, run_approval_command
+from .bootstrap import DEFAULT_ALIAS_NAME, build_guard_bootstrap_payload
+from .install_commands import apply_managed_install
 from .product import build_guard_start_payload, build_guard_status_payload
 from .prompt import build_prompt_artifacts, resolve_interactive_decisions
 from .render import emit_guard_payload
@@ -67,7 +69,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         dest="guard_command",
         required=True,
         metavar=(
-            "{start,status,detect,install,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
+            "{start,status,bootstrap,detect,install,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
             "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,login,sync}"
         ),
     )
@@ -80,18 +82,34 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     _add_guard_common_args(status_parser)
     status_parser.add_argument("--json", action="store_true")
 
+    bootstrap_parser = guard_subparsers.add_parser(
+        "bootstrap",
+        help="Detect a harness, start the approval center, and install Guard for the best local target",
+    )
+    bootstrap_parser.add_argument("harness", nargs="?")
+    _add_guard_common_args(bootstrap_parser)
+    bootstrap_parser.add_argument("--skip-install", action="store_true")
+    bootstrap_parser.add_argument("--alias-name", default=DEFAULT_ALIAS_NAME)
+    bootstrap_parser.add_argument("--write-shell-alias", action="store_true")
+    bootstrap_parser.add_argument("--json", action="store_true")
+
     detect_parser = guard_subparsers.add_parser("detect", help="Discover supported harnesses and local artifacts")
     detect_parser.add_argument("harness", nargs="?")
     _add_guard_common_args(detect_parser)
     detect_parser.add_argument("--json", action="store_true")
 
-    install_parser = guard_subparsers.add_parser("install", help="Enable Guard management for a harness")
-    install_parser.add_argument("harness")
+    install_parser = guard_subparsers.add_parser("install", help="Enable Guard management for one or more harnesses")
+    install_parser.add_argument("harness", nargs="?")
+    install_parser.add_argument("--all", action="store_true")
     _add_guard_common_args(install_parser)
     install_parser.add_argument("--json", action="store_true")
 
-    uninstall_parser = guard_subparsers.add_parser("uninstall", help="Disable Guard management for a harness")
-    uninstall_parser.add_argument("harness")
+    uninstall_parser = guard_subparsers.add_parser(
+        "uninstall",
+        help="Disable Guard management for one or more harnesses",
+    )
+    uninstall_parser.add_argument("harness", nargs="?")
+    uninstall_parser.add_argument("--all", action="store_true")
     _add_guard_common_args(uninstall_parser)
     uninstall_parser.add_argument("--json", action="store_true")
 
@@ -262,8 +280,10 @@ def run_guard_command(args: argparse.Namespace) -> int:
     )
     config = load_guard_config(guard_home, workspace=workspace)
     store = GuardStore(guard_home)
+    config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
 
     if args.guard_command == "protect":
+        _refresh_cloud_policy_bundle(store)
         protect_command = list(getattr(args, "protect_command", []) or [])
         if len(protect_command) == 0:
             print("guard protect requires a command to wrap.", file=sys.stderr)
@@ -288,6 +308,23 @@ def run_guard_command(args: argparse.Namespace) -> int:
         _emit("status", payload, getattr(args, "json", False))
         return 0
 
+    if args.guard_command == "bootstrap":
+        try:
+            payload = build_guard_bootstrap_payload(
+                context=context,
+                store=store,
+                config=config,
+                requested_harness=getattr(args, "harness", None),
+                skip_install=bool(getattr(args, "skip_install", False)),
+                alias_name=str(getattr(args, "alias_name", DEFAULT_ALIAS_NAME)),
+                write_shell_alias=bool(getattr(args, "write_shell_alias", False)),
+            )
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        _emit("bootstrap", payload, getattr(args, "json", False))
+        return 0
+
     if args.guard_command == "detect":
         detections = [detect_harness(args.harness, context)] if args.harness else detect_all(context)
         payload = {
@@ -298,24 +335,42 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command == "install":
-        adapter = get_adapter(args.harness)
-        manifest = adapter.install(context)
-        store.set_managed_install(args.harness, True, str(workspace) if workspace else None, manifest, _now())
-        _emit("install", {"managed_install": store.get_managed_install(args.harness)}, getattr(args, "json", False))
+        try:
+            payload = apply_managed_install(
+                "install",
+                args.harness,
+                bool(getattr(args, "all", False)),
+                context,
+                store,
+                str(workspace) if workspace else None,
+                _now(),
+            )
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        _emit("install", payload, getattr(args, "json", False))
         return 0
 
     if args.guard_command == "uninstall":
-        adapter = get_adapter(args.harness)
-        manifest = adapter.uninstall(context)
-        store.set_managed_install(args.harness, False, str(workspace) if workspace else None, manifest, _now())
-        _emit(
-            "uninstall",
-            {"managed_install": store.get_managed_install(args.harness)},
-            getattr(args, "json", False),
-        )
+        try:
+            payload = apply_managed_install(
+                "uninstall",
+                args.harness,
+                bool(getattr(args, "all", False)),
+                context,
+                store,
+                str(workspace) if workspace else None,
+                _now(),
+            )
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        _emit("uninstall", payload, getattr(args, "json", False))
         return 0
 
     if args.guard_command == "run":
+        _refresh_cloud_policy_bundle(store)
+        config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
         interactive_resolver = None
         blocked_resolver = None
         if (
@@ -665,6 +720,20 @@ def _resolve_policy_expiry(args: argparse.Namespace) -> str | None:
         print("--expires-in-hours must be greater than 0.", file=sys.stderr)
         raise SystemExit(2)
     return (datetime.now(timezone.utc) + timedelta(hours=float(hours))).isoformat()
+
+
+def _synced_policy_payload(store: GuardStore) -> dict[str, object] | None:
+    payload = store.get_sync_payload("policy")
+    return payload if isinstance(payload, dict) else None
+
+
+def _refresh_cloud_policy_bundle(store: GuardStore) -> None:
+    if store.get_sync_credentials() is None:
+        return
+    try:
+        sync_receipts(store)
+    except Exception:
+        return
 
 
 def _filter_policy_items(items: list[dict[str, object]], *, active_only: bool) -> list[dict[str, object]]:

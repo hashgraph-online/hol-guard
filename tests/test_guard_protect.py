@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from subprocess import CompletedProcess
+from typing import ClassVar
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import protect
@@ -14,6 +17,22 @@ from codex_plugin_scanner.guard.store import GuardStore
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+class _SyncRequestHandler(BaseHTTPRequestHandler):
+    response_payload: ClassVar[dict[str, object]] = {}
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        if length:
+            self.rfile.read(length)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(self.response_payload).encode("utf-8"))
+
+    def log_message(self, fmt: str, *args) -> None:
+        return
 
 
 class TestGuardProtect:
@@ -306,3 +325,97 @@ class TestGuardProtect:
 
         assert len(advisories) == 2
         assert {str(item["package"]) for item in advisories} == {"pkg-alpha", "pkg-beta"}
+
+    def test_guard_protect_auto_syncs_cloud_advisories(self, tmp_path, capsys) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        _SyncRequestHandler.response_payload = {
+            "syncedAt": "2026-04-09T00:00:00Z",
+            "receiptsStored": 0,
+            "inventoryStored": 0,
+            "inventoryDiff": {"generatedAt": "2026-04-09T00:00:00Z", "items": []},
+            "advisories": [
+                {
+                    "id": "adv-sync-block",
+                    "ecosystem": "npm",
+                    "package": "badpkg",
+                    "severity": "high",
+                    "action": "block",
+                    "headline": "Known exfiltration package.",
+                }
+            ],
+            "policy": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "require-reapproval",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+                "updatedAt": "2026-04-09T00:00:00Z",
+            },
+            "alertPreferences": {
+                "emailEnabled": True,
+                "digestMode": "daily",
+                "watchlistEnabled": True,
+                "advisoriesEnabled": True,
+                "repeatedWarningsEnabled": True,
+                "teamAlertsEnabled": True,
+                "updatedAt": "2026-04-09T00:00:00Z",
+            },
+            "exceptions": [],
+            "teamPolicyPack": {
+                "name": "Security team default",
+                "sharedHarnessDefaults": {"codex": "enforce"},
+                "allowedPublishers": [],
+                "blockedArtifacts": [],
+                "alertChannel": "email",
+                "updatedAt": "2026-04-09T00:00:00Z",
+                "auditTrail": [],
+            },
+        }
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            login_rc = main(
+                [
+                    "guard",
+                    "login",
+                    "--home",
+                    str(home_dir),
+                    "--sync-url",
+                    f"http://127.0.0.1:{server.server_port}/receipts",
+                    "--token",
+                    "demo-token",
+                    "--json",
+                ]
+            )
+            json.loads(capsys.readouterr().out)
+
+            protect_rc = main(
+                [
+                    "guard",
+                    "protect",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--json",
+                    "npm",
+                    "install",
+                    "badpkg",
+                ]
+            )
+            protect_output = json.loads(capsys.readouterr().out)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+
+        assert login_rc == 0
+        assert protect_rc == 2
+        assert protect_output["verdict"]["action"] == "block"
+        assert protect_output["matched_advisories"][0]["id"] == "adv-sync-block"
