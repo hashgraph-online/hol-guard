@@ -48,13 +48,17 @@ class HermesHarnessAdapter(HarnessAdapter):
                         frontmatter = self._parse_frontmatter(content)
                         # Extract code blocks for risk scanning
                         code_blocks = self._extract_code_blocks(content)
-                    except OSError:
+                    except (OSError, UnicodeDecodeError):
                         content = ""
                         frontmatter = {}
                         code_blocks = []
 
                     skill_name = frontmatter.get("name") or skill_dir.name
                     description = frontmatter.get("description", "")
+
+                    # Include full skill content for comprehensive risk analysis
+                    # (not just fenced code blocks, so plain-text instructions are caught)
+                    risk_content = content
 
                     artifacts.append(
                         GuardArtifact(
@@ -67,7 +71,7 @@ class HermesHarnessAdapter(HarnessAdapter):
                             command=str(skill_md),
                             url=None,
                             transport=None,
-                            args=tuple(code_blocks),
+                            args=tuple(code_blocks) if code_blocks else (risk_content,),
                             metadata={
                                 "category": category_dir.name,
                                 "description": description[:200] if description else "",
@@ -88,7 +92,11 @@ class HermesHarnessAdapter(HarnessAdapter):
                             continue
                         command = server_config.get("command")
                         url = server_config.get("url")
+                        args = server_config.get("args", [])
                         env = server_config.get("env", {})
+
+                        # Convert args list to tuple for artifact
+                        args_tuple = tuple(str(a) for a in args if isinstance(a, str))
 
                         artifacts.append(
                             GuardArtifact(
@@ -101,6 +109,7 @@ class HermesHarnessAdapter(HarnessAdapter):
                                 command=command if isinstance(command, str) else None,
                                 url=url if isinstance(url, str) else None,
                                 transport="http" if isinstance(url, str) else "stdio",
+                                args=args_tuple,
                                 metadata={"env_keys": sorted(env.keys()) if isinstance(env, dict) else []},
                             )
                         )
@@ -135,8 +144,8 @@ class HermesHarnessAdapter(HarnessAdapter):
     def _extract_code_blocks(self, content: str) -> list[str]:
         """Extract code blocks from SKILL.md for risk analysis."""
         blocks = []
-        # Match ```bash, ```python, ``` etc blocks
-        pattern = r"```(?:\w+)?\n(.*?)```"
+        # Match ```bash, ```python, ``` etc blocks, allowing trailing spaces
+        pattern = r"```[^\n]*\n(.*?)\n?```"
         for match in re.finditer(pattern, content, re.DOTALL):
             code = match.group(1).strip()
             if code:
