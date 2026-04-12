@@ -12,7 +12,7 @@ from typing import ClassVar
 from urllib.parse import parse_qs, urlsplit
 
 from codex_plugin_scanner.action_runner import main
-from codex_plugin_scanner.github_reporting import upsert_pr_comment
+from codex_plugin_scanner.github_reporting import GitHubPrCommentResult, upsert_pr_comment
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -481,6 +481,93 @@ def test_action_runner_invalid_pr_comment_max_findings_falls_back_to_default(
 
     assert exit_code == 0
     assert "pr_comment_status=skipped" in output_path.read_text(encoding="utf-8")
+
+
+def test_action_runner_verify_mode_ignores_invalid_repo_pr_comment_config(
+    monkeypatch,
+    tmp_path,
+    capsys,
+) -> None:
+    output_path = tmp_path / "github-output.txt"
+    event_path = tmp_path / "event.json"
+    plugin_dir = tmp_path / "repo"
+    shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
+    (plugin_dir / ".plugin-scanner.toml").write_text("[github\npr_comment = \"off\"\n", encoding="utf-8")
+    event_path.write_text(json.dumps({"pull_request": {"number": 12}}), encoding="utf-8")
+
+    monkeypatch.setenv("MODE", "verify")
+    monkeypatch.setenv("PLUGIN_DIR", str(plugin_dir))
+    monkeypatch.setenv("FORMAT", "text")
+    monkeypatch.setenv("OUTPUT", "")
+    monkeypatch.setenv("ONLINE", "false")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+    monkeypatch.setenv("REGISTRY_PAYLOAD_OUTPUT", "")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "hashgraph-online/example-good-plugin")
+    monkeypatch.setenv("PR_COMMENT", "auto")
+    monkeypatch.setenv("PR_COMMENT_STYLE", "concise")
+    monkeypatch.setenv("PR_COMMENT_MAX_FINDINGS", "5")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.action_runner.upsert_pr_comment",
+        lambda **_kwargs: GitHubPrCommentResult(status="created", comment_id="101", comment_url="https://example.com"),
+    )
+
+    exit_code = main()
+    stderr = capsys.readouterr().err
+
+    assert exit_code == 0
+    assert "pr_comment_status=created" in output_path.read_text(encoding="utf-8")
+    assert "Warning: failed to load scanner config for PR comment settings" in stderr
+
+
+def test_action_runner_updates_pr_comment_before_gate_failure(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "github-output.txt"
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps({"pull_request": {"number": 12}}), encoding="utf-8")
+    captured: dict[str, str] = {}
+
+    monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
+    monkeypatch.setenv("FORMAT", "json")
+    monkeypatch.setenv("OUTPUT", "")
+    monkeypatch.setenv("MIN_SCORE", "101")
+    monkeypatch.setenv("FAIL_ON", "none")
+    monkeypatch.setenv("CISCO_SCAN", "off")
+    monkeypatch.setenv("CISCO_POLICY", "balanced")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "false")
+    monkeypatch.setenv("SUBMISSION_SCORE_THRESHOLD", "80")
+    monkeypatch.setenv("SUBMISSION_REPOS", "hashgraph-online/awesome-codex-plugins")
+    monkeypatch.setenv("SUBMISSION_TOKEN", "")
+    monkeypatch.setenv("SUBMISSION_LABELS", "plugin-submission")
+    monkeypatch.setenv("SUBMISSION_CATEGORY", "Community Plugins")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_NAME", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_URL", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_DESCRIPTION", "")
+    monkeypatch.setenv("SUBMISSION_AUTHOR", "")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+    monkeypatch.setenv("REGISTRY_PAYLOAD_OUTPUT", "")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "hashgraph-online/example-good-plugin")
+    monkeypatch.setenv("GITHUB_API_URL", "https://api.github.test")
+
+    def _capture_comment(**kwargs: object) -> GitHubPrCommentResult:
+        body = kwargs.get("body")
+        if isinstance(body, str):
+            captured["body"] = body
+        return GitHubPrCommentResult(status="created", comment_id="101", comment_url="https://example.com")
+
+    monkeypatch.setattr("codex_plugin_scanner.action_runner.upsert_pr_comment", _capture_comment)
+
+    exit_code = main()
+
+    assert exit_code == 1
+    assert "## Guard repo scan" in captured["body"]
+    assert "pr_comment_status=created" in output_path.read_text(encoding="utf-8")
 
 
 def test_upsert_pr_comment_finds_existing_comment_on_later_page() -> None:

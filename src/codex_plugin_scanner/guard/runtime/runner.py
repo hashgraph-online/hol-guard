@@ -200,15 +200,21 @@ def _build_remote_policy_decisions(payload: dict[str, object]) -> list[PolicyDec
             if not isinstance(item, dict):
                 continue
             scope = item.get("scope")
-            if scope not in {"artifact", "publisher", "harness", "global"}:
+            if scope not in {"artifact", "publisher", "harness", "global", "workspace"}:
+                continue
+            workspace = _remote_workspace(item)
+            if scope == "workspace" and workspace is None:
+                continue
+            harness = _remote_harness(item.get("harness"), allow_wildcard=scope != "harness")
+            if harness is None:
                 continue
             decisions.append(
                 PolicyDecision(
-                    harness=_remote_harness(item.get("harness")),
+                    harness=harness,
                     scope=scope,
                     action="allow",
                     artifact_id=_optional_string(item.get("artifactId")),
-                    workspace=None,
+                    workspace=workspace,
                     publisher=_optional_string(item.get("publisher")),
                     reason=_optional_string(item.get("reason")),
                     owner=_optional_string(item.get("owner")),
@@ -252,10 +258,14 @@ def _build_remote_policy_decisions(payload: dict[str, object]) -> list[PolicyDec
     return decisions
 
 
-def _remote_harness(value: object) -> str:
+def _remote_harness(value: object, *, allow_wildcard: bool = True) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
-    return "*"
+    return "*" if allow_wildcard else None
+
+
+def _remote_workspace(item: dict[str, object]) -> str | None:
+    return _optional_string(item.get("workspace")) or _optional_string(item.get("workspacePath"))
 
 
 def _optional_string(value: object) -> str | None:
@@ -370,7 +380,7 @@ def _record_synced_alert_events(
                 "premium_advisory",
                 {
                     "artifact_id": artifact_id,
-                    "artifact_name": _optional_string(item.get("artifactName")),
+                    "artifact_name": _optional_string(item.get("artifactName")) or artifact_id,
                     "severity": _optional_string(item.get("severity")),
                     "reason": _optional_string(item.get("reason")),
                 },

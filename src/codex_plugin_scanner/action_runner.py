@@ -11,7 +11,7 @@ from urllib.error import HTTPError, URLError
 
 from . import __version__
 from .cli import _build_plain_text, _build_verification_text, _scan_with_policy
-from .config import load_scanner_config
+from .config import ConfigError, load_scanner_config
 from .github_reporting import (
     build_scan_pr_comment_body,
     build_verify_pr_comment_body,
@@ -76,7 +76,11 @@ def _resolve_pr_comment_settings(
     plugin_dir: str,
     config_path: str,
 ) -> tuple[str, str, int]:
-    config = load_scanner_config(Path(plugin_dir).resolve(), config_path or None)
+    config = None
+    try:
+        config = load_scanner_config(Path(plugin_dir).resolve(), config_path or None)
+    except ConfigError as error:
+        print(f"Warning: failed to load scanner config for PR comment settings: {error}", file=sys.stderr)
     pr_comment = resolve_pr_comment_config(
         default_mode=_read_env("PR_COMMENT", "auto"),
         default_style=_read_env("PR_COMMENT_STYLE", "concise"),
@@ -84,9 +88,9 @@ def _resolve_pr_comment_settings(
             "PR_COMMENT_MAX_FINDINGS",
             default=5,
         ),
-        configured_mode=config.github_pr_comment,
-        configured_style=config.github_pr_comment_style,
-        configured_max_findings=config.github_pr_comment_max_findings,
+        configured_mode=config.github_pr_comment if config is not None else None,
+        configured_style=config.github_pr_comment_style if config is not None else None,
+        configured_max_findings=config.github_pr_comment_max_findings if config is not None else None,
     )
     return pr_comment.mode, pr_comment.style, pr_comment.max_findings
 
@@ -285,6 +289,55 @@ def main() -> int:
     pr_comment_body = ""
 
     def finish(return_code: int) -> int:
+        output_values["report_path"] = report_path_value
+        output_values["registry_payload_path"] = registry_payload_path_value
+        if pr_comment_mode == "off":
+            output_values["pr_comment_status"] = "disabled"
+        elif should_manage_pr_comment(
+            mode=pr_comment_mode,
+            event_name=github_event_name,
+            pull_request_number=pull_request_number,
+        ):
+            if github_repository and github_token and pr_comment_body:
+                try:
+                    pr_comment_result = upsert_pr_comment(
+                        repository=github_repository,
+                        pull_request_number=pull_request_number if pull_request_number is not None else 0,
+                        token=github_token,
+                        api_base_url=github_api_url,
+                        body=pr_comment_body,
+                    )
+                    output_values["pr_comment_status"] = pr_comment_result.status
+                    output_values["pr_comment_id"] = pr_comment_result.comment_id
+                    output_values["pr_comment_url"] = pr_comment_result.comment_url
+                except (HTTPError, URLError, RuntimeError) as error:
+                    print(f"Warning: failed to update PR comment: {error}", file=sys.stderr)
+                    output_values["pr_comment_status"] = "failed"
+            else:
+                output_values["pr_comment_status"] = "skipped"
+        else:
+            output_values["pr_comment_status"] = "skipped"
+        step_summary_path = _read_env("GITHUB_STEP_SUMMARY")
+        if write_step_summary and step_summary_path:
+            _write_step_summary(
+                step_summary_path,
+                _build_step_summary_lines(
+                    mode=mode,
+                    score=output_values["score"],
+                    grade=output_values["grade"],
+                    grade_label=output_values["grade_label"],
+                    max_severity=output_values["max_severity"] or "none",
+                    findings_total=output_values["findings_total"],
+                    report_path=report_path_value,
+                    registry_payload_path=registry_payload_path_value,
+                    submission_issues=submission_issues,
+                    submission_eligible=submission_eligible,
+                    verify_pass=verify_pass_for_summary,
+                    scope=scan_scope,
+                    local_plugin_count=local_plugin_count,
+                    skipped_target_count=skipped_target_count,
+                ),
+            )
         output_values["action_exit_code"] = str(return_code)
         github_output = _read_env("GITHUB_OUTPUT")
         if github_output:
@@ -514,58 +567,6 @@ def main() -> int:
     else:
         print(f"Unsupported mode: {mode}", file=sys.stderr)
         return finish(1)
-
-    output_values["report_path"] = report_path_value
-    output_values["registry_payload_path"] = registry_payload_path_value
-
-    if pr_comment_mode == "off":
-        output_values["pr_comment_status"] = "disabled"
-    elif should_manage_pr_comment(
-        mode=pr_comment_mode,
-        event_name=github_event_name,
-        pull_request_number=pull_request_number,
-    ):
-        if github_repository and github_token and pr_comment_body:
-            try:
-                pr_comment_result = upsert_pr_comment(
-                    repository=github_repository,
-                    pull_request_number=pull_request_number if pull_request_number is not None else 0,
-                    token=github_token,
-                    api_base_url=github_api_url,
-                    body=pr_comment_body,
-                )
-                output_values["pr_comment_status"] = pr_comment_result.status
-                output_values["pr_comment_id"] = pr_comment_result.comment_id
-                output_values["pr_comment_url"] = pr_comment_result.comment_url
-            except (HTTPError, URLError, RuntimeError) as error:
-                print(f"Warning: failed to update PR comment: {error}", file=sys.stderr)
-                output_values["pr_comment_status"] = "failed"
-        else:
-            output_values["pr_comment_status"] = "skipped"
-    else:
-        output_values["pr_comment_status"] = "skipped"
-
-    step_summary_path = _read_env("GITHUB_STEP_SUMMARY")
-    if write_step_summary and step_summary_path:
-        _write_step_summary(
-            step_summary_path,
-            _build_step_summary_lines(
-                mode=mode,
-                score=output_values["score"],
-                grade=output_values["grade"],
-                grade_label=output_values["grade_label"],
-                max_severity=output_values["max_severity"] or "none",
-                findings_total=output_values["findings_total"],
-                report_path=report_path_value,
-                registry_payload_path=registry_payload_path_value,
-                submission_issues=submission_issues,
-                submission_eligible=submission_eligible,
-                verify_pass=verify_pass_for_summary,
-                scope=scan_scope,
-                local_plugin_count=local_plugin_count,
-                skipped_target_count=skipped_target_count,
-            ),
-        )
 
     if mode == "verify":
         return finish(return_code)
