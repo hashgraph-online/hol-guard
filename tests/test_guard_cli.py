@@ -1466,6 +1466,59 @@ args = ["workspace-skill.js", "--changed"]
         )
         assert exceptions_output["items"][0]["artifact_id"] == "codex:project:workspace_skill"
 
+    def test_guard_exceptions_handles_synced_naive_expiry_timestamps(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        _SyncRequestHandler.response_payload = {
+            "syncedAt": "2026-04-09T00:00:00Z",
+            "receiptsStored": 0,
+            "inventoryStored": 0,
+            "inventoryDiff": {"generatedAt": "2026-04-09T00:00:00Z", "items": []},
+            "advisories": [],
+            "exceptions": [
+                {
+                    "exceptionId": "artifact:codex:project:workspace_skill",
+                    "scope": "artifact",
+                    "artifactId": "codex:project:workspace_skill",
+                    "reason": "Temporary allow for workspace skill",
+                    "owner": "guard@example.com",
+                    "source": "manual",
+                    "expiresAt": "2099-01-01T00:00:00",
+                }
+            ],
+        }
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            login_rc = main(
+                [
+                    "guard",
+                    "login",
+                    "--home",
+                    str(home_dir),
+                    "--sync-url",
+                    f"http://127.0.0.1:{server.server_port}/receipts",
+                    "--token",
+                    "demo-token",
+                    "--json",
+                ]
+            )
+            json.loads(capsys.readouterr().out)
+
+            sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
+            json.loads(capsys.readouterr().out)
+            exceptions_rc = main(["guard", "exceptions", "--home", str(home_dir), "--json"])
+            exceptions_output = json.loads(capsys.readouterr().out)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+
+        assert login_rc == 0
+        assert sync_rc == 0
+        assert exceptions_rc == 0
+        assert exceptions_output["items"][0]["expires_at"] == "2099-01-01T00:00:00+00:00"
+
     def test_guard_run_auto_syncs_cloud_policy_bundle(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

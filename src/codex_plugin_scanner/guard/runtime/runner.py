@@ -225,7 +225,7 @@ def _build_remote_policy_decisions(payload: dict[str, object]) -> list[PolicyDec
                     reason=_optional_string(item.get("reason")),
                     owner=_optional_string(item.get("owner")),
                     source="cloud-sync",
-                    expires_at=_optional_string(item.get("expiresAt")),
+                    expires_at=_normalized_timestamp_string(item.get("expiresAt")),
                 )
             )
     team_policy_pack = payload.get("teamPolicyPack")
@@ -278,6 +278,16 @@ def _optional_string(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
     return None
+
+
+def _normalized_timestamp_string(value: object) -> str | None:
+    raw_value = _optional_string(value)
+    if raw_value is None:
+        return None
+    parsed = _parse_iso_timestamp(raw_value)
+    if parsed is None:
+        return None
+    return parsed.isoformat()
 
 
 def _last_uploaded_event_id(payload: dict[str, object] | list[object] | None) -> int:
