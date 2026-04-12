@@ -1023,14 +1023,12 @@ name = "hol-guard"
 version = "2.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cisco-ai-skill-scanner" },
     { name = "rich" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 
 [package.optional-dependencies]
-cisco = [
-    { name = "cisco-ai-skill-scanner" },
-]
 dev = [
     { name = "build" },
     { name = "jsonschema" },
@@ -1045,7 +1043,7 @@ publish = [
 [package.metadata]
 requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.2" },
-    { name = "cisco-ai-skill-scanner", marker = "extra == 'cisco'", specifier = "==2.0.8" },
+    { name = "cisco-ai-skill-scanner", specifier = "~=2.0.8" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.23.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
