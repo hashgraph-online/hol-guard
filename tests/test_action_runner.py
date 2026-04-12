@@ -2,12 +2,80 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 import socket
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import ClassVar
 
 from codex_plugin_scanner.action_runner import main
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+class _GitHubHandler(BaseHTTPRequestHandler):
+    comments: ClassVar[list[dict[str, object]]] = []
+
+    def do_GET(self) -> None:
+        if self.path.endswith("/repos/hashgraph-online/example-good-plugin/issues/12/comments"):
+            self._write_json(200, self.comments)
+            return
+        self.send_error(404)
+
+    def do_POST(self) -> None:
+        if self.path.endswith("/repos/hashgraph-online/example-good-plugin/issues/12/comments"):
+            payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))).decode("utf-8"))
+            body = payload.get("body")
+            if not isinstance(body, str):
+                self.send_error(400)
+                return
+            comment = {
+                "id": 101,
+                "html_url": "https://github.com/hashgraph-online/example-good-plugin/pull/12#issuecomment-101",
+                "body": body,
+            }
+            type(self).comments = [comment]
+            self._write_json(201, comment)
+            return
+        self.send_error(404)
+
+    def do_PATCH(self) -> None:
+        if self.path.endswith("/repos/hashgraph-online/example-good-plugin/issues/comments/101"):
+            payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))).decode("utf-8"))
+            body = payload.get("body")
+            if not isinstance(body, str):
+                self.send_error(400)
+                return
+            comment = {
+                "id": 101,
+                "html_url": "https://github.com/hashgraph-online/example-good-plugin/pull/12#issuecomment-101",
+                "body": body,
+            }
+            type(self).comments = [comment]
+            self._write_json(200, comment)
+            return
+        self.send_error(404)
+
+    def log_message(self, message: str, *args: object) -> None:
+        return None
+
+    def _write_json(self, status_code: int, payload: object) -> None:
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+def _start_github_server() -> tuple[ThreadingHTTPServer, str]:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _GitHubHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address
+    return server, f"http://{host}:{port}"
 
 
 def test_action_runner_writes_all_outputs(monkeypatch, tmp_path, capsys) -> None:
@@ -260,3 +328,96 @@ def test_action_runner_preserves_output_paths_on_gate_failure(monkeypatch, tmp_p
     assert f"report_path={report_path}" in output_lines
     assert f"registry_payload_path={registry_payload_path}" in output_lines
     assert "action_exit_code=1" in output_lines
+
+
+def test_action_runner_creates_pr_comment_for_pull_request_event(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "github-output.txt"
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps({"pull_request": {"number": 12}}), encoding="utf-8")
+    _GitHubHandler.comments = []
+    server, api_base_url = _start_github_server()
+    try:
+        monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
+        monkeypatch.setenv("FORMAT", "json")
+        monkeypatch.setenv("OUTPUT", "")
+        monkeypatch.setenv("MIN_SCORE", "0")
+        monkeypatch.setenv("FAIL_ON", "none")
+        monkeypatch.setenv("CISCO_SCAN", "off")
+        monkeypatch.setenv("CISCO_POLICY", "balanced")
+        monkeypatch.setenv("SUBMISSION_ENABLED", "false")
+        monkeypatch.setenv("SUBMISSION_SCORE_THRESHOLD", "80")
+        monkeypatch.setenv("SUBMISSION_REPOS", "hashgraph-online/awesome-codex-plugins")
+        monkeypatch.setenv("SUBMISSION_TOKEN", "")
+        monkeypatch.setenv("SUBMISSION_LABELS", "plugin-submission")
+        monkeypatch.setenv("SUBMISSION_CATEGORY", "Community Plugins")
+        monkeypatch.setenv("SUBMISSION_PLUGIN_NAME", "")
+        monkeypatch.setenv("SUBMISSION_PLUGIN_URL", "")
+        monkeypatch.setenv("SUBMISSION_PLUGIN_DESCRIPTION", "")
+        monkeypatch.setenv("SUBMISSION_AUTHOR", "")
+        monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+        monkeypatch.setenv("REGISTRY_PAYLOAD_OUTPUT", "")
+        monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+        monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+        monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+        monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY", "hashgraph-online/example-good-plugin")
+        monkeypatch.setenv("GITHUB_API_URL", api_base_url)
+
+        exit_code = main()
+
+        assert exit_code == 0
+        output_lines = output_path.read_text(encoding="utf-8").splitlines()
+        assert "pr_comment_status=created" in output_lines
+        assert "pr_comment_id=101" in output_lines
+        assert (
+            "pr_comment_url=https://github.com/hashgraph-online/example-good-plugin/pull/12#issuecomment-101"
+            in output_lines
+        )
+        assert _GitHubHandler.comments
+        assert "## Guard repo scan" in str(_GitHubHandler.comments[0]["body"])
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_action_runner_uses_repo_config_to_disable_pr_comment(monkeypatch, tmp_path) -> None:
+    output_path = tmp_path / "github-output.txt"
+    plugin_dir = tmp_path / "repo"
+    shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
+    (plugin_dir / ".plugin-scanner.toml").write_text(
+        """
+[github]
+pr_comment = "off"
+""",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("PLUGIN_DIR", str(plugin_dir))
+    monkeypatch.setenv("FORMAT", "json")
+    monkeypatch.setenv("OUTPUT", "")
+    monkeypatch.setenv("MIN_SCORE", "0")
+    monkeypatch.setenv("FAIL_ON", "none")
+    monkeypatch.setenv("CISCO_SCAN", "off")
+    monkeypatch.setenv("CISCO_POLICY", "balanced")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "false")
+    monkeypatch.setenv("SUBMISSION_SCORE_THRESHOLD", "80")
+    monkeypatch.setenv("SUBMISSION_REPOS", "hashgraph-online/awesome-codex-plugins")
+    monkeypatch.setenv("SUBMISSION_TOKEN", "")
+    monkeypatch.setenv("SUBMISSION_LABELS", "plugin-submission")
+    monkeypatch.setenv("SUBMISSION_CATEGORY", "Community Plugins")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_NAME", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_URL", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_DESCRIPTION", "")
+    monkeypatch.setenv("SUBMISSION_AUTHOR", "")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+    monkeypatch.setenv("REGISTRY_PAYLOAD_OUTPUT", "")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+    monkeypatch.setenv("PR_COMMENT", "auto")
+    monkeypatch.setenv("PR_COMMENT_STYLE", "concise")
+    monkeypatch.setenv("PR_COMMENT_MAX_FINDINGS", "5")
+
+    exit_code = main()
+
+    assert exit_code == 0
+    output_lines = output_path.read_text(encoding="utf-8").splitlines()
+    assert "pr_comment_status=disabled" in output_lines

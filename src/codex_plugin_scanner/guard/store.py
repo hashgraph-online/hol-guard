@@ -503,6 +503,37 @@ class GuardStore:
                 ),
             )
 
+    def replace_remote_policies(self, decisions: list[PolicyDecision], now: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "delete from policy_decisions where source in ('cloud-sync', 'team-policy')"
+            )
+            for decision in decisions:
+                artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
+                connection.execute(
+                    """
+                    insert into policy_decisions (
+                      harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,
+                      expires_at, updated_at
+                    )
+                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        decision.harness,
+                        decision.scope,
+                        artifact_id,
+                        artifact_hash,
+                        workspace,
+                        publisher,
+                        decision.action,
+                        decision.reason,
+                        decision.owner,
+                        decision.source,
+                        decision.expires_at,
+                        now,
+                    ),
+                )
+
     def resolve_policy(
         self,
         harness: str,
@@ -517,7 +548,7 @@ class GuardStore:
             rows = connection.execute(
                 """
                 select scope, action, artifact_hash from policy_decisions
-                where harness = ? and (
+                where (harness = ? or harness = '*') and (
                   (
                     scope = 'artifact' and artifact_id = ? and (
                       artifact_hash is null or (? is not null and artifact_hash = ?)
@@ -948,6 +979,32 @@ class GuardStore:
                 """,
                 (json.dumps(payload), now),
             )
+
+    def set_sync_payload(self, state_key: str, payload: dict[str, object] | list[object], now: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into sync_state (state_key, payload_json, updated_at)
+                values (?, ?, ?)
+                on conflict(state_key) do update set
+                  payload_json = excluded.payload_json,
+                  updated_at = excluded.updated_at
+                """,
+                (state_key, json.dumps(payload), now),
+            )
+
+    def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "select payload_json from sync_state where state_key = ?",
+                (state_key,),
+            ).fetchone()
+        if row is None:
+            return None
+        payload = json.loads(str(row["payload_json"]))
+        if isinstance(payload, (dict, list)):
+            return payload
+        return None
 
     def add_event(self, event_name: str, payload: dict[str, object], now: str) -> None:
         with self._connect() as connection:
