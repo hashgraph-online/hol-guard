@@ -93,6 +93,29 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
         )
 
 
+def _render_bootstrap(console: Console, payload: dict[str, object]) -> None:
+    harness = payload.get("recommended_harness") or "none"
+    bootstrap_install = payload.get("bootstrap_install")
+    install_summary = "not changed"
+    if isinstance(bootstrap_install, dict):
+        if bool(bootstrap_install.get("installed")):
+            install_summary = f"installed for {bootstrap_install.get('harness', harness)}"
+        elif bootstrap_install.get("reason") == "already_managed":
+            install_summary = f"already managing {bootstrap_install.get('harness', harness)}"
+        else:
+            install_summary = str(bootstrap_install.get("reason") or install_summary)
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Recommended harness", str(harness))
+    body.add_row("Approval center", str(payload.get("approval_center_url") or "not running"))
+    body.add_row("Daemon ready", _bool_label(bool(payload.get("approval_center_reachable"))))
+    body.add_row("Install", install_summary)
+    alias = payload.get("shell_alias")
+    if isinstance(alias, dict):
+        body.add_row("Protect alias", str(alias.get("snippet") or "not configured"))
+    console.print(Panel(body, title="Guard bootstrap", border_style="cyan"))
+    console.print(_build_steps_panel(_coerce_dict_list(payload.get("next_steps"))))
+
+
 def _render_doctor(console: Console, payload: dict[str, object]) -> None:
     if "adapters" in payload:
         tables = _coerce_string_list(payload.get("tables"))
@@ -328,9 +351,31 @@ def _render_approvals(console: Console, payload: dict[str, object]) -> None:
 
 def _render_managed_install(console: Console, payload: dict[str, object]) -> None:
     managed_install = payload.get("managed_install")
-    if not isinstance(managed_install, dict):
+    if isinstance(managed_install, dict):
+        _render_single_managed_install(console, managed_install)
+        return
+    managed_installs = _coerce_dict_list(payload.get("managed_installs"))
+    if not managed_installs:
         _render_fallback(console, payload)
         return
+    summary = Table(title="Guard managed harnesses")
+    summary.add_column("Harness", style="bold")
+    summary.add_column("Active")
+    summary.add_column("Workspace")
+    summary.add_column("Config")
+    for item in managed_installs:
+        manifest = item.get("manifest")
+        config_path = manifest.get("config_path") if isinstance(manifest, dict) else None
+        summary.add_row(
+            str(item.get("harness") or "unknown"),
+            _bool_label(bool(item.get("active"))),
+            str(item.get("workspace") or "current shell"),
+            str(config_path or "no config changed"),
+        )
+    console.print(summary)
+
+
+def _render_single_managed_install(console: Console, managed_install: dict[str, object]) -> None:
     manifest = managed_install.get("manifest")
     notes = _coerce_string_list(manifest.get("notes")) if isinstance(manifest, dict) else []
     body = Table.grid(padding=(0, 1))
@@ -717,6 +762,7 @@ _RENDERERS: dict[str, Any] = {
     "approvals": _render_approvals,
     "start": _render_start,
     "status": _render_status,
+    "bootstrap": _render_bootstrap,
     "detect": _render_detect,
     "doctor": _render_doctor,
     "run": _render_run,

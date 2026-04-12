@@ -22,6 +22,10 @@ ignore_paths = ["tests/*"]
 enabled = ["README_MISSING"]
 disabled = ["HARDCODED_SECRET"]
 severity_overrides = { README_MISSING = "low" }
+[github]
+pr_comment = "always"
+pr_comment_style = "detailed"
+pr_comment_max_findings = 7
 """,
         encoding="utf-8",
     )
@@ -30,6 +34,9 @@ severity_overrides = { README_MISSING = "low" }
     assert "README_MISSING" in config.enabled_rules
     assert "HARDCODED_SECRET" in config.disabled_rules
     assert config.ignore_paths == ("tests/*",)
+    assert config.github_pr_comment == "always"
+    assert config.github_pr_comment_style == "detailed"
+    assert config.github_pr_comment_max_findings == 7
 
 
 def test_load_scanner_config_supports_legacy_filename(tmp_path: Path):
@@ -42,6 +49,24 @@ profile = "default"
     )
     config = load_scanner_config(tmp_path)
     assert config.profile == "default"
+
+
+def test_load_scanner_config_ignores_non_table_github_block(tmp_path: Path):
+    (tmp_path / ".plugin-scanner.toml").write_text(
+        """
+github = "off"
+[scanner]
+profile = "default"
+""",
+        encoding="utf-8",
+    )
+
+    config = load_scanner_config(tmp_path)
+
+    assert config.profile == "default"
+    assert config.github_pr_comment is None
+    assert config.github_pr_comment_style is None
+    assert config.github_pr_comment_max_findings is None
 
 
 def test_load_scanner_config_prefers_generic_filename(tmp_path: Path):
