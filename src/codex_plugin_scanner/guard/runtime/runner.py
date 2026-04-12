@@ -151,49 +151,49 @@ def sync_pain_signals(store: GuardStore) -> int:
         return 0
     cursor_payload = store.get_sync_payload("pain_signal_cursor")
     last_event_id = _last_uploaded_event_id(cursor_payload)
-    candidates = [
-        item
-        for item in store.list_events(limit=500)
-        if int(item.get("event_id", 0)) > last_event_id
-        and str(item.get("event_name")) in _PAIN_SIGNAL_EVENTS
-    ]
-    if not candidates:
-        return 0
-    candidates.sort(key=lambda item: int(item.get("event_id", 0)))
-    signal_items = [
-        payload
-        for item in candidates
-        if (payload := _pain_signal_item(item)) is not None
-    ]
-    if not signal_items:
+    uploaded_count = 0
+    current_event_id = last_event_id
+    while True:
+        candidates = store.list_events_after(
+            current_event_id,
+            limit=500,
+            event_names=tuple(sorted(_PAIN_SIGNAL_EVENTS)),
+        )
+        if not candidates:
+            break
+        last_processed_event_id = int(candidates[-1]["event_id"])
+        signal_items = [
+            payload
+            for item in candidates
+            if (payload := _pain_signal_item(item)) is not None
+        ]
+        if signal_items:
+            request = urllib.request.Request(
+                _pain_signal_sync_url(str(credentials["sync_url"])),
+                data=json.dumps({"items": signal_items}).encode("utf-8"),
+                method="POST",
+                headers={
+                    "Authorization": f"Bearer {credentials['token']}",
+                    "Content-Type": "application/json",
+                },
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=10):
+                    pass
+            except urllib.error.HTTPError as error:
+                if error.code == 404:
+                    return 0
+                raise
+            uploaded_count += len(signal_items)
+        current_event_id = last_processed_event_id
         store.set_sync_payload(
             "pain_signal_cursor",
-            {"event_id": int(candidates[-1]["event_id"])},
+            {"event_id": current_event_id},
             _now(),
         )
-        return 0
-    request = urllib.request.Request(
-        _pain_signal_sync_url(str(credentials["sync_url"])),
-        data=json.dumps({"items": signal_items}).encode("utf-8"),
-        method="POST",
-        headers={
-            "Authorization": f"Bearer {credentials['token']}",
-            "Content-Type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=10):
-            pass
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            return 0
-        raise
-    store.set_sync_payload(
-        "pain_signal_cursor",
-        {"event_id": int(candidates[-1]["event_id"])},
-        _now(),
-    )
-    return len(signal_items)
+        if len(candidates) < 500:
+            break
+    return uploaded_count
 
 
 def _build_remote_policy_decisions(payload: dict[str, object]) -> list[PolicyDecision]:
@@ -340,7 +340,7 @@ def _pain_signal_sync_url(sync_url: str) -> str:
     elif segments and segments[-1] in {"receipts", "inventory"}:
         next_segments = [*segments[:-1], "signals", "pain"]
     else:
-        next_segments = [*segments[:-1], "signals", "pain"] if segments else ["signals", "pain"]
+        next_segments = [*segments, "signals", "pain"]
     return urllib.parse.urlunsplit(
         (
             parsed.scheme,
@@ -401,6 +401,7 @@ def _record_synced_alert_events(
             "exception_expiring",
             {
                 "artifact_id": artifact_id,
+                "artifact_name": _optional_string(item.get("artifactName")) or artifact_id,
                 "expires_at": expires_at,
                 "reason": _optional_string(item.get("reason")),
                 "owner": _optional_string(item.get("owner")),

@@ -309,15 +309,19 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command == "bootstrap":
-        payload = build_guard_bootstrap_payload(
-            context=context,
-            store=store,
-            config=config,
-            requested_harness=getattr(args, "harness", None),
-            skip_install=bool(getattr(args, "skip_install", False)),
-            alias_name=str(getattr(args, "alias_name", DEFAULT_ALIAS_NAME)),
-            write_shell_alias=bool(getattr(args, "write_shell_alias", False)),
-        )
+        try:
+            payload = build_guard_bootstrap_payload(
+                context=context,
+                store=store,
+                config=config,
+                requested_harness=getattr(args, "harness", None),
+                skip_install=bool(getattr(args, "skip_install", False)),
+                alias_name=str(getattr(args, "alias_name", DEFAULT_ALIAS_NAME)),
+                write_shell_alias=bool(getattr(args, "write_shell_alias", False)),
+            )
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
         _emit("bootstrap", payload, getattr(args, "json", False))
         return 0
 

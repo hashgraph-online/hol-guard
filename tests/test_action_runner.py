@@ -9,18 +9,21 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
+from urllib.parse import parse_qs, urlsplit
 
 from codex_plugin_scanner.action_runner import main
+from codex_plugin_scanner.github_reporting import upsert_pr_comment
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class _GitHubHandler(BaseHTTPRequestHandler):
     comments: ClassVar[list[dict[str, object]]] = []
+    comment_pages: ClassVar[dict[int, list[dict[str, object]]] | None] = None
 
     def do_GET(self) -> None:
-        if self.path.endswith("/repos/hashgraph-online/example-good-plugin/issues/12/comments"):
-            self._write_json(200, self.comments)
+        if urlsplit(self.path).path.endswith("/repos/hashgraph-online/example-good-plugin/issues/12/comments"):
+            self._write_comments()
             return
         self.send_error(404)
 
@@ -64,6 +67,26 @@ class _GitHubHandler(BaseHTTPRequestHandler):
     def _write_json(self, status_code: int, payload: object) -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status_code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _write_comments(self) -> None:
+        query = parse_qs(urlsplit(self.path).query)
+        page = int(query.get("page", ["1"])[0])
+        pages = type(self).comment_pages
+        comments = self.comments if pages is None else pages.get(page, [])
+        body = json.dumps(comments).encode("utf-8")
+        self.send_response(200)
+        if pages is not None and page < max(pages):
+            next_page = page + 1
+            next_url = (
+                "http://"
+                + self.headers["Host"]
+                + f"/repos/hashgraph-online/example-good-plugin/issues/12/comments?per_page=100&page={next_page}"
+            )
+            self.send_header("Link", f'<{next_url}>; rel="next"')
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -335,6 +358,7 @@ def test_action_runner_creates_pr_comment_for_pull_request_event(monkeypatch, tm
     event_path = tmp_path / "event.json"
     event_path.write_text(json.dumps({"pull_request": {"number": 12}}), encoding="utf-8")
     _GitHubHandler.comments = []
+    _GitHubHandler.comment_pages = None
     server, api_base_url = _start_github_server()
     try:
         monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
@@ -378,6 +402,87 @@ def test_action_runner_creates_pr_comment_for_pull_request_event(monkeypatch, tm
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_action_runner_pr_comment_failure_is_nonfatal(monkeypatch, tmp_path, capsys) -> None:
+    output_path = tmp_path / "github-output.txt"
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps({"pull_request": {"number": 12}}), encoding="utf-8")
+
+    monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
+    monkeypatch.setenv("FORMAT", "json")
+    monkeypatch.setenv("OUTPUT", "")
+    monkeypatch.setenv("MIN_SCORE", "0")
+    monkeypatch.setenv("FAIL_ON", "none")
+    monkeypatch.setenv("CISCO_SCAN", "off")
+    monkeypatch.setenv("CISCO_POLICY", "balanced")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "false")
+    monkeypatch.setenv("SUBMISSION_SCORE_THRESHOLD", "80")
+    monkeypatch.setenv("SUBMISSION_REPOS", "hashgraph-online/awesome-codex-plugins")
+    monkeypatch.setenv("SUBMISSION_TOKEN", "")
+    monkeypatch.setenv("SUBMISSION_LABELS", "plugin-submission")
+    monkeypatch.setenv("SUBMISSION_CATEGORY", "Community Plugins")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_NAME", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_URL", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_DESCRIPTION", "")
+    monkeypatch.setenv("SUBMISSION_AUTHOR", "")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+    monkeypatch.setenv("REGISTRY_PAYLOAD_OUTPUT", "")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "hashgraph-online/example-good-plugin")
+    monkeypatch.setenv("GITHUB_API_URL", "https://api.github.test")
+    monkeypatch.setattr(
+        "codex_plugin_scanner.action_runner.upsert_pr_comment",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    exit_code = main()
+    output_lines = output_path.read_text(encoding="utf-8").splitlines()
+    stderr = capsys.readouterr().err
+
+    assert exit_code == 0
+    assert "pr_comment_status=failed" in output_lines
+    assert "Warning: failed to update PR comment" in stderr
+
+
+def test_upsert_pr_comment_finds_existing_comment_on_later_page() -> None:
+    _GitHubHandler.comments = []
+    _GitHubHandler.comment_pages = {
+        1: [
+            {
+                "id": 88,
+                "html_url": "https://github.com/hashgraph-online/example-good-plugin/pull/12#issuecomment-88",
+                "body": "other",
+            }
+        ],
+        2: [
+            {
+                "id": 101,
+                "html_url": "https://github.com/hashgraph-online/example-good-plugin/pull/12#issuecomment-101",
+                "body": "<!-- hol-guard-pr-comment -->\nold",
+            }
+        ],
+    }
+    server, api_base_url = _start_github_server()
+    try:
+        result = upsert_pr_comment(
+            repository="hashgraph-online/example-good-plugin",
+            pull_request_number=12,
+            token="test-token",
+            api_base_url=api_base_url,
+            body="<!-- hol-guard-pr-comment -->\nnew",
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        _GitHubHandler.comment_pages = None
+
+    assert result.status == "updated"
+    assert result.comment_id == "101"
+    assert _GitHubHandler.comments[0]["body"] == "<!-- hol-guard-pr-comment -->\nnew"
 
 
 def test_action_runner_uses_repo_config_to_disable_pr_comment(monkeypatch, tmp_path) -> None:

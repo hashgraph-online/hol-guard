@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 
 from . import __version__
 from .cli import _build_plain_text, _build_verification_text, _scan_with_policy
@@ -515,16 +516,20 @@ def main() -> int:
         pull_request_number=pull_request_number,
     ):
         if github_repository and github_token and pr_comment_body:
-            pr_comment_result = upsert_pr_comment(
-                repository=github_repository,
-                pull_request_number=pull_request_number if pull_request_number is not None else 0,
-                token=github_token,
-                api_base_url=github_api_url,
-                body=pr_comment_body,
-            )
-            output_values["pr_comment_status"] = pr_comment_result.status
-            output_values["pr_comment_id"] = pr_comment_result.comment_id
-            output_values["pr_comment_url"] = pr_comment_result.comment_url
+            try:
+                pr_comment_result = upsert_pr_comment(
+                    repository=github_repository,
+                    pull_request_number=pull_request_number if pull_request_number is not None else 0,
+                    token=github_token,
+                    api_base_url=github_api_url,
+                    body=pr_comment_body,
+                )
+                output_values["pr_comment_status"] = pr_comment_result.status
+                output_values["pr_comment_id"] = pr_comment_result.comment_id
+                output_values["pr_comment_url"] = pr_comment_result.comment_url
+            except (HTTPError, URLError, RuntimeError) as error:
+                print(f"Warning: failed to update PR comment: {error}", file=sys.stderr)
+                output_values["pr_comment_status"] = "failed"
         else:
             output_values["pr_comment_status"] = "skipped"
     else:

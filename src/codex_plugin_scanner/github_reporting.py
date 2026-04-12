@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from .models import GRADE_LABELS, Finding, ScanResult, max_severity
@@ -161,9 +161,7 @@ def upsert_pr_comment(
         repository=repository,
         pull_request_number=pull_request_number,
     )
-    comments = _request_json("GET", comments_url, token)
-    if not isinstance(comments, list):
-        raise RuntimeError("GitHub comment lookup returned an unexpected response.")
+    comments = _list_pr_comments(comments_url, token)
     existing_comment = _find_existing_pr_comment(comments)
     if existing_comment is None:
         created_comment = _request_json("POST", comments_url, token, {"body": body})
@@ -181,6 +179,21 @@ def upsert_pr_comment(
         {"body": body},
     )
     return _parse_comment_result(updated_comment, status="updated")
+
+
+def _list_pr_comments(
+    comments_url: str,
+    token: str,
+) -> list[dict[str, object]]:
+    comments: list[dict[str, object]] = []
+    next_url: str | None = _url_with_query_value(comments_url, "per_page", "100")
+    while next_url is not None:
+        payload, link_header = _request_json_with_headers("GET", next_url, token)
+        if not isinstance(payload, list):
+            raise RuntimeError("GitHub comment lookup returned an unexpected response.")
+        comments.extend(payload)
+        next_url = _next_link_url(link_header)
+    return comments
 
 
 def _render_findings_section(
@@ -220,6 +233,23 @@ def _request_json(
         return json.loads(response.read().decode("utf-8"))
 
 
+def _request_json_with_headers(
+    method: str,
+    url: str,
+    token: str,
+    payload: dict[str, object] | None = None,
+) -> tuple[dict[str, object] | list[dict[str, object]], str | None]:
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    request = Request(url, data=data, method=method)
+    request.add_header("Accept", "application/vnd.github+json")
+    request.add_header("Authorization", f"Bearer {token}")
+    request.add_header("User-Agent", "hol-guard")
+    if data is not None:
+        request.add_header("Content-Type", "application/json")
+    with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        return json.loads(response.read().decode("utf-8")), response.headers.get("Link")
+
+
 def _find_existing_pr_comment(
     comments: list[dict[str, object]],
 ) -> dict[str, object] | None:
@@ -227,6 +257,34 @@ def _find_existing_pr_comment(
         body = item.get("body")
         if isinstance(body, str) and PR_COMMENT_MARKER in body:
             return item
+    return None
+
+
+def _url_with_query_value(url: str, key: str, value: str) -> str:
+    parsed = urlsplit(url)
+    query_items = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query_items[key] = value
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(query_items),
+            parsed.fragment,
+        )
+    )
+
+
+def _next_link_url(link_header: str | None) -> str | None:
+    if link_header is None or not link_header.strip():
+        return None
+    for item in link_header.split(","):
+        section = item.strip()
+        if 'rel="next"' not in section:
+            continue
+        if not section.startswith("<") or ">" not in section:
+            continue
+        return section[1 : section.index(">")]
     return None
 
 

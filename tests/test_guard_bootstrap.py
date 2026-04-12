@@ -133,3 +133,28 @@ def test_guard_bootstrap_handles_missing_harnesses(tmp_path, capsys, monkeypatch
     assert output["recommended_harness"] is None
     assert output["bootstrap_install"]["reason"] == "no_harness_detected"
     assert output["next_steps"][0]["command"] == "hol-guard detect"
+
+
+def test_guard_bootstrap_invalid_harness_returns_cli_error(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.bootstrap.ensure_guard_daemon",
+        lambda _guard_home: "http://127.0.0.1:4781",
+    )
+
+    rc = main(
+        [
+            "guard",
+            "bootstrap",
+            "not-a-real-harness",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+        ]
+    )
+    stderr = capsys.readouterr().err
+
+    assert rc == 2
+    assert "Unsupported harness" in stderr

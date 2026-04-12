@@ -1044,6 +1044,42 @@ class GuardStore:
             )
         return items
 
+    def list_events_after(
+        self,
+        event_id: int,
+        *,
+        limit: int = 100,
+        event_names: tuple[str, ...] | None = None,
+    ) -> list[dict[str, object]]:
+        query = """
+            select event_id, event_name, payload_json, occurred_at
+            from guard_events
+            where event_id > ?
+        """
+        params: list[object] = [event_id]
+        if event_names:
+            placeholders = ", ".join("?" for _ in event_names)
+            query += f" and event_name in ({placeholders})"
+            params.extend(event_names)
+        query += " order by event_id asc limit ?"
+        params.append(limit)
+        with self._connect() as connection:
+            rows = connection.execute(query, tuple(params)).fetchall()
+        items: list[dict[str, object]] = []
+        for row in rows:
+            payload = json.loads(str(row["payload_json"]))
+            if not isinstance(payload, dict):
+                payload = {}
+            items.append(
+                {
+                    "event_id": int(row["event_id"]),
+                    "event_name": str(row["event_name"]),
+                    "occurred_at": str(row["occurred_at"]),
+                    "payload": payload,
+                }
+            )
+        return items
+
     def get_sync_credentials(self) -> dict[str, str] | None:
         with self._connect() as connection:
             row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
