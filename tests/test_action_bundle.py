@@ -156,6 +156,7 @@ def test_scorecard_workflow_matches_official_install_pattern() -> None:
     assert "persist-credentials: false" in workflow_text
     assert "path: results.sarif" in workflow_text
     assert "retention-days: 5" in workflow_text
+    assert workflow_text.count("if: always()") == 2
     assert 'uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13' in workflow_text
     assert "sarif_file: results.sarif" in workflow_text
     assert "if: always()" in workflow_text
