@@ -38,7 +38,7 @@ jobs:
           enable-cache: true
 
       - name: Refresh lockfile
-        run: uv lock
+        run: uv lock --no-build
 
       - name: Commit lockfile updates
         run: |
