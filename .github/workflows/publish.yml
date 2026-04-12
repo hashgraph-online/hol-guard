@@ -86,9 +86,9 @@ jobs:
           )
           start = text.index("[project.scripts]")
           end = text.index("\n\n[project.urls]")
-          scripts = '''[project.scripts]
-hol-guard = "codex_plugin_scanner.cli:main"
-plugin-guard = "codex_plugin_scanner.cli:main"'''
+          scripts = "[project.scripts]\n" \
+              'hol-guard = "codex_plugin_scanner.cli:main"\n' \
+              'plugin-guard = "codex_plugin_scanner.cli:main"'
           text = text[:start] + scripts + text[end:]
           path.write_text(text, encoding="utf-8")
           PY
@@ -110,9 +110,9 @@ plugin-guard = "codex_plugin_scanner.cli:main"'''
           )
           start = text.index("[project.scripts]")
           end = text.index("\n\n[project.urls]")
-          scripts = '''[project.scripts]
-plugin-scanner = "codex_plugin_scanner.cli:main"
-plugin-ecosystem-scanner = "codex_plugin_scanner.cli:main"'''
+          scripts = "[project.scripts]\n" \
+              'plugin-scanner = "codex_plugin_scanner.cli:main"\n' \
+              'plugin-ecosystem-scanner = "codex_plugin_scanner.cli:main"'
           text = text[:start] + scripts + text[end:]
           path.write_text(text, encoding="utf-8")
           PY
@@ -134,8 +134,8 @@ plugin-ecosystem-scanner = "codex_plugin_scanner.cli:main"'''
           )
           start = text.index("[project.scripts]")
           end = text.index("\n\n[project.urls]")
-          scripts = '''[project.scripts]
-codex-plugin-scanner = "codex_plugin_scanner.cli:main"'''
+          scripts = "[project.scripts]\n" \
+              'codex-plugin-scanner = "codex_plugin_scanner.cli:main"'
           text = text[:start] + scripts + text[end:]
           path.write_text(text, encoding="utf-8")
           PY
