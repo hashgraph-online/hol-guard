@@ -33,7 +33,7 @@ dependencies = [
 
 [project.optional-dependencies]
 cisco = [
-    "cisco-ai-skill-scanner==2.0.8",
+    "cisco-ai-skill-scanner==2.0.9",
 ]
 dev = [
     "build>=1.2.2",
