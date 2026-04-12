@@ -158,3 +158,29 @@ def test_guard_bootstrap_invalid_harness_returns_cli_error(tmp_path, capsys, mon
 
     assert rc == 2
     assert "Unsupported harness" in stderr
+
+
+def test_guard_bootstrap_skip_install_still_rejects_invalid_harness(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.bootstrap.ensure_guard_daemon",
+        lambda _guard_home: "http://127.0.0.1:4781",
+    )
+
+    rc = main(
+        [
+            "guard",
+            "bootstrap",
+            "not-a-real-harness",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--skip-install",
+        ]
+    )
+    stderr = capsys.readouterr().err
+
+    assert rc == 2
+    assert "Unsupported harness" in stderr

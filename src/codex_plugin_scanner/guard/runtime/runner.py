@@ -178,7 +178,13 @@ def sync_pain_signals(store: GuardStore) -> int:
                     pass
             except urllib.error.HTTPError as error:
                 if error.code == 404:
-                    return 0
+                    current_event_id = last_processed_event_id
+                    store.set_sync_payload(
+                        "pain_signal_cursor",
+                        {"event_id": current_event_id},
+                        _now(),
+                    )
+                    return uploaded_count
                 raise
             uploaded_count += len(signal_items)
         current_event_id = last_processed_event_id

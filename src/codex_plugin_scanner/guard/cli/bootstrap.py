@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..daemon import ensure_guard_daemon
@@ -78,6 +79,7 @@ def _build_bootstrap_install(
             "installed": False,
             "reason": "no_harness_detected",
         }
+    get_adapter(requested_harness)
     if skip_install:
         return {
             "installed": False,
