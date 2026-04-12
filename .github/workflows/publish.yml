@@ -40,7 +40,7 @@ jobs:
         with:
           enable-cache: true
       - name: Install dependencies
-        run: uv sync --frozen --extra dev --group publish
+        run: uv sync --frozen --extra dev --extra publish
       - name: Compute publish version
         id: version
         env:
