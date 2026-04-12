@@ -7,6 +7,7 @@ Automated coverage in this phase includes:
 - SQLite persistence through real command execution in temporary homes and workspaces
 - consumer-mode JSON contract generation against scanner fixtures
 - local HTTP sync against a live in-process server instead of mocked transport
+- scheduled self-hosted harness smoke through `.github/workflows/harness-smoke.yml`
 
 Manual verification should include:
 
@@ -30,3 +31,10 @@ First-party canaries for local manual validation:
 - a local `registry-broker-skills` checkout for scanner fixtures and trust review
 
 Claude Code smoke tests remain conditional on the local `claude` binary being available.
+
+Nightly release-bar coverage should include:
+
+- Codex on a self-hosted Linux runner
+- Claude Code or Cursor on a self-hosted macOS runner
+- Gemini or OpenCode on a self-hosted Windows runner
+- a release gate that only passes when those harness families stay green

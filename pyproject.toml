@@ -42,8 +42,6 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.4.0",
 ]
-
-[dependency-groups]
 publish = [
     "twine>=6.1.0",
 ]
@@ -69,12 +67,16 @@ extend-exclude = ["tests/test-trust-scoring.py", "tests/test-trust-specs.py"]
 packages = ["src/codex_plugin_scanner"]
 
 [tool.hatch.build]
+artifacts = ["src/codex_plugin_scanner/guard/daemon/static/**"]
 exclude = [
+    ".guard-live/**",
+    ".guard-package-venv/**",
     ".guard-e2e/**",
     ".guard-e2e-prod/**",
     ".guard-e2e-prod2/**",
     ".guard-prod-venv/**",
     ".guard-prod-venv-fresh/**",
+    "dashboard/node_modules/**",
 ]
 
 [tool.ruff.lint]

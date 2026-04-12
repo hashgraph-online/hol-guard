@@ -25,6 +25,12 @@ coverage/
 
 # Tooling
 .ruff_cache/
+dashboard/node_modules/
+dashboard/.vite/
+dashboard/dist/
+.guard-*/
+.guard-ui-review/
+.package-check/
 
 # IDE
 .idea/

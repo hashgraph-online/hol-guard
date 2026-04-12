@@ -141,16 +141,25 @@ def _is_guard_program(program_name: str) -> bool:
     return normalized_name in {"hol-guard", "plugin-guard"}
 
 
-def _build_parser(program_name: str, *, guard_program: bool) -> argparse.ArgumentParser:
-    if guard_program:
+def _is_scanner_program(program_name: str) -> bool:
+    normalized_name = Path(program_name).stem.lower()
+    return normalized_name in {"plugin-scanner", "codex-plugin-scanner", "plugin-ecosystem-scanner"}
+
+
+def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentParser:
+    if program_mode == "guard":
         parser = argparse.ArgumentParser(prog=program_name, description="Protect local harnesses before tools run.")
         parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
         add_guard_root_parser(parser)
         return parser
 
+    description = "Scan plugin ecosystems for CI and publish readiness."
+    if program_mode == "combined":
+        description = "Run HOL Guard locally or scan plugin ecosystems for CI and publish readiness."
+
     parser = argparse.ArgumentParser(
         prog=program_name,
-        description="Run HOL Guard locally or scan plugin ecosystems for CI and publish readiness.",
+        description=description,
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--list-ecosystems", action="store_true", help="List supported plugin ecosystems and exit")
@@ -212,15 +221,16 @@ def _build_parser(program_name: str, *, guard_program: bool) -> argparse.Argumen
         default="all",
     )
     doctor_parser.add_argument("--bundle")
-    add_guard_parser(subparsers)
+    if program_mode == "combined":
+        add_guard_parser(subparsers)
 
     return parser
 
 
-def _resolve_legacy_args(argv: list[str] | None, *, guard_program: bool) -> list[str] | None:
+def _resolve_legacy_args(argv: list[str] | None, *, program_mode: str) -> list[str] | None:
     if not argv:
         return argv
-    if guard_program:
+    if program_mode == "guard":
         if argv[0] == "guard":
             return argv[1:]
         return argv
@@ -230,12 +240,13 @@ def _resolve_legacy_args(argv: list[str] | None, *, guard_program: bool) -> list
         "verify",
         "submit",
         "doctor",
-        "guard",
         "--version",
         "--list-ecosystems",
         "-h",
         "--help",
     }
+    if program_mode == "combined":
+        known_commands.add("guard")
     if argv[0] in known_commands:
         return argv
     return ["scan", *argv]
@@ -477,9 +488,14 @@ def _run_doctor(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     program_name = Path(sys.argv[0]).name or "plugin-scanner"
-    guard_program = _is_guard_program(program_name)
-    parser = _build_parser(program_name, guard_program=guard_program)
-    args = parser.parse_args(_resolve_legacy_args(argv, guard_program=guard_program))
+    if _is_guard_program(program_name):
+        program_mode = "guard"
+    elif _is_scanner_program(program_name):
+        program_mode = "scanner"
+    else:
+        program_mode = "combined"
+    parser = _build_parser(program_name, program_mode=program_mode)
+    args = parser.parse_args(_resolve_legacy_args(argv, program_mode=program_mode))
     if getattr(args, "list_ecosystems", False):
         for ecosystem in list_supported_ecosystems():
             print(ecosystem)

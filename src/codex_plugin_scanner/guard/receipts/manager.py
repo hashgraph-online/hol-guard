@@ -13,6 +13,7 @@ def build_receipt(
     artifact_id: str,
     artifact_hash: str,
     policy_decision: str,
+    capabilities_summary: str,
     changed_capabilities: list[str],
     provenance_summary: str,
     artifact_name: str | None,
@@ -28,6 +29,7 @@ def build_receipt(
         artifact_id=artifact_id,
         artifact_hash=artifact_hash,
         policy_decision=policy_decision,  # type: ignore[arg-type]
+        capabilities_summary=capabilities_summary,
         changed_capabilities=tuple(changed_capabilities),
         provenance_summary=provenance_summary,
         user_override=user_override,

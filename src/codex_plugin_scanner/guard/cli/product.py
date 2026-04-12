@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..consumer import detect_all, evaluate_detection
+from ..daemon import load_guard_daemon_url
 from ..models import HarnessDetection
 from ..store import GuardStore
 
@@ -52,6 +54,8 @@ def _build_guard_product_payload(
         "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
         "sync_configured": store.get_sync_credentials() is not None,
         "receipt_count": receipt_count,
+        "pending_approvals": store.count_approval_requests(),
+        "approval_center_url": load_guard_daemon_url(context.guard_home),
         "managed_harnesses": managed_harnesses,
         "recommended_harness": recommended["harness"] if recommended is not None else None,
         "harnesses": harnesses,
@@ -67,6 +71,7 @@ def _summarize_harness(
     config: GuardConfig,
 ) -> dict[str, object]:
     evaluation = evaluate_detection(detection, store, config, default_action="allow", persist=False)
+    approval_flow = get_adapter(detection.harness).approval_flow()
     managed_install = store.get_managed_install(detection.harness)
     review_count = sum(1 for artifact in evaluation["artifacts"] if bool(artifact["changed"]))
     managed = bool(managed_install and managed_install.get("active"))
@@ -91,6 +96,7 @@ def _summarize_harness(
         "run_command": f"{GUARD_COMMAND} run {detection.harness} --dry-run",
         "review_command": f"{GUARD_COMMAND} diff {detection.harness}",
         "receipts_command": f"{GUARD_COMMAND} receipts",
+        "approval_flow": approval_flow,
     }
 
 
@@ -131,6 +137,7 @@ def _build_next_steps(recommended: dict[str, object] | None) -> list[dict[str, s
             }
         ]
     steps = [_install_or_review_step(recommended), _run_step(recommended), _receipts_step()]
+    steps.append(_approvals_step())
     steps.append(
         {
             "title": "Optional sync later",
@@ -180,6 +187,14 @@ def _receipts_step() -> dict[str, str]:
         "title": "Inspect receipts",
         "command": f"{GUARD_COMMAND} receipts",
         "detail": "See what Guard approved, blocked, or flagged after local runs.",
+    }
+
+
+def _approvals_step() -> dict[str, str]:
+    return {
+        "title": "Resolve queued approvals",
+        "command": f"{GUARD_COMMAND} approvals",
+        "detail": "Use the local approval center or the approvals queue when a harness session cannot prompt inline.",
     }
 
 
