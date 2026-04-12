@@ -45,7 +45,7 @@ def test_json_output_is_parseable():
     assert parsed["score"] == EXPECTED_GOOD_PLUGIN_SCORE
     assert len(parsed["categories"]) == 7
     total_checks = sum(len(c["checks"]) for c in parsed["categories"])
-    assert total_checks == 33
+    assert total_checks == 34
 
 
 def test_text_output_is_readable():
@@ -75,7 +75,7 @@ def test_all_check_names_unique():
 def test_max_points_total_100():
     result = scan_plugin(FIXTURES / "good-plugin", ScanOptions(cisco_skill_scan="off"))
     total_max = sum(c.max_points for cat in result.categories for c in cat.checks)
-    assert total_max == 72
+    assert total_max == 77
 
 
 def test_mit_license_plugin():
