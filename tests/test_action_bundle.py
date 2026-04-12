@@ -134,6 +134,25 @@ def test_ci_workflow_covers_cross_platform_runtime() -> None:
     assert "macos-latest" in workflow_text
 
 
+def test_scorecard_workflow_matches_official_install_pattern() -> None:
+    workflow_text = (ROOT / ".github" / "workflows" / "scorecard.yml").read_text(encoding="utf-8")
+
+    assert "name: OpenSSF Scorecard" in workflow_text
+    assert "permissions: read-all" in workflow_text
+    assert "branches: [main]" in workflow_text
+    assert "id-token: write" in workflow_text
+    assert "security-events: write" in workflow_text
+    assert 'uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd' in workflow_text
+    assert 'uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a' in workflow_text
+    assert "results_file: results.sarif" in workflow_text
+    assert "results_format: sarif" in workflow_text
+    assert "publish_results: true" in workflow_text
+    assert 'uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f' in workflow_text
+    assert "retention-days: 5" in workflow_text
+    assert 'uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13' in workflow_text
+    assert "sarif_file: results.sarif" in workflow_text
+
+
 def test_harness_smoke_workflow_covers_nightly_self_hosted_release_gate() -> None:
     workflow_text = (ROOT / ".github" / "workflows" / "harness-smoke.yml").read_text(encoding="utf-8")
 
