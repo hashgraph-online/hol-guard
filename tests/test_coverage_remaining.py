@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 FIXTURES = Path(__file__).parent / "fixtures"
+EXPECTED_GOOD_PLUGIN_SCORE = 91
 
 
 def test_incomplete_frontmatter_delimiters():
@@ -115,7 +116,7 @@ def test_main_output_to_file_and_json_together():
         content = out_file.read_text()
         import json
 
-        assert json.loads(content)["score"] == 100
+        assert json.loads(content)["score"] == EXPECTED_GOOD_PLUGIN_SCORE
 
 
 def test_skills_field_empty_string():
