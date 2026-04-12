@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import io
 import json
 import sys
@@ -12,6 +13,8 @@ from pathlib import Path
 from typing import ClassVar
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
@@ -172,6 +175,15 @@ class TestGuardRuntime:
         assert config.resolve_action_override("codex", None, None) == "allow"
         assert config.resolve_action_override("codex", None, "hashgraph-online") == "sandbox-required"
         assert config.resolve_action_override("codex", "codex:project:workspace-tools", None) == "block"
+
+    def test_guard_load_config_parses_approval_wait_timeout(self, tmp_path):
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir(parents=True, exist_ok=True)
+        _write_text(guard_home / "config.toml", "approval_wait_timeout_seconds = 7\n")
+
+        config = load_guard_config(guard_home)
+
+        assert config.approval_wait_timeout_seconds == 7
 
     def test_guard_evaluate_detection_uses_config_action_overrides(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -358,17 +370,20 @@ class TestGuardRuntime:
         evaluation = evaluate_detection(detection, store, config, default_action="allow", persist=False)
 
         assert evaluation["blocked"] is True
-        assert evaluation["artifacts"] == [
-            {
-                "artifact_id": "codex:global:global-tools",
-                "artifact_name": "global-tools",
-                "changed": True,
-                "changed_fields": ["removed"],
-                "policy_action": "require-reapproval",
-                "artifact_hash": removed_hash,
-                "removed": True,
-            }
-        ]
+        assert len(evaluation["artifacts"]) == 1
+        artifact = evaluation["artifacts"][0]
+
+        assert artifact["artifact_id"] == "codex:global:global-tools"
+        assert artifact["artifact_name"] == "global-tools"
+        assert artifact["changed"] is True
+        assert artifact["changed_fields"] == ["removed"]
+        assert artifact["policy_action"] == "require-reapproval"
+        assert artifact["artifact_hash"] == removed_hash
+        assert artifact["removed"] is True
+        assert artifact["artifact_label"] == "MCP server"
+        assert artifact["source_label"] == "global Codex config"
+        assert "global-tools" in str(artifact["trigger_summary"])
+        assert "disappeared" in str(artifact["why_now"]).lower()
 
     def test_guard_hook_records_receipt_from_stdin_event(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
@@ -489,7 +504,7 @@ class TestGuardRuntime:
             [
                 "guard",
                 "run",
-                "codex",
+                "claude-code",
                 "--home",
                 str(home_dir),
                 "--workspace",
@@ -584,10 +599,12 @@ class TestGuardRuntime:
         assert second_output["blocked"] is False
         assert all(item["policy_action"] == "allow" for item in second_output["artifacts"])
 
-    def test_guard_run_headless_blocks_with_review_hint(self, tmp_path, capsys):
+    def test_guard_run_headless_blocks_with_review_hint(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
 
         rc = main(
             [
@@ -598,13 +615,294 @@ class TestGuardRuntime:
                 str(home_dir),
                 "--workspace",
                 str(workspace_dir),
+                "--json",
             ]
         )
         output = capsys.readouterr().out
 
         assert rc == 1
-        assert "approval center" in output.lower()
-        assert "Queued approvals" in output
+        assert '"approval_center_url": "http://127.0.0.1:4455"' in output
+        assert '"blocked": true' in output
+
+    def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(
+            guard_runner_module.subprocess,
+            "run",
+            lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+        )
+
+        rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--default-action",
+                "allow",
+            ]
+        )
+        output = capsys.readouterr().out
+        store = GuardStore(home_dir)
+        receipts = store.list_receipts(limit=10)
+        snapshots = store.list_snapshots("codex")
+
+        assert rc == 0
+        assert "Launch allowed" in output
+        assert len(receipts) == 2
+        assert {
+            "codex:global:global_tools",
+            "codex:project:workspace_skill",
+        } <= set(snapshots)
+
+    def test_guard_run_headless_waits_for_local_approval_and_resumes(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
+
+        store = GuardStore(home_dir)
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+        monkeypatch.setattr(
+            guard_runner_module.subprocess,
+            "run",
+            lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+        )
+
+        def resolve_pending() -> None:
+            for _ in range(40):
+                pending = store.list_approval_requests(limit=10)
+                if pending:
+                    for request in pending:
+                        apply_approval_resolution(
+                            store=store,
+                            request_id=str(request["request_id"]),
+                            action="allow",
+                            scope="artifact",
+                            workspace=None,
+                            reason="approved from test",
+                        )
+                    if not store.list_approval_requests(limit=10):
+                        return
+                threading.Event().wait(0.05)
+
+        worker = threading.Thread(target=resolve_pending, daemon=True)
+        worker.start()
+
+        rc = main(
+            [
+                "guard",
+                "run",
+                "claude-code",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+            ]
+        )
+        output = capsys.readouterr().out
+
+        assert rc == 0
+        assert "Launch allowed" in output
+        assert "Approval received" in output
+
+    def test_guard_run_headless_redetects_before_persisted_resume(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 1\n")
+
+        store = GuardStore(home_dir)
+        baseline = GuardArtifact(
+            artifact_id="claude-code:project:workspace-tools",
+            name="workspace-tools",
+            harness="claude-code",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=str(workspace_dir / ".mcp.json"),
+            command="python",
+            args=("-m", "http.server", "9100"),
+            transport="stdio",
+        )
+        baseline_hash = artifact_hash(baseline)
+        store.save_snapshot(
+            "claude-code",
+            baseline.artifact_id,
+            {**baseline.to_dict(), "artifact_hash": baseline_hash},
+            baseline_hash,
+            "2026-04-10T00:00:00+00:00",
+        )
+        detections = [
+            HarnessDetection(
+                harness="claude-code",
+                installed=True,
+                command_available=True,
+                config_paths=(str(workspace_dir / ".mcp.json"),),
+                artifacts=(
+                    GuardArtifact(
+                        artifact_id=baseline.artifact_id,
+                        name="workspace-tools",
+                        harness="claude-code",
+                        artifact_type="mcp_server",
+                        source_scope="project",
+                        config_path=str(workspace_dir / ".mcp.json"),
+                        command="python",
+                        args=("-m", "http.server", "9100", "--changed-1"),
+                        transport="stdio",
+                    ),
+                ),
+            ),
+            HarnessDetection(
+                harness="claude-code",
+                installed=True,
+                command_available=True,
+                config_paths=(str(workspace_dir / ".mcp.json"),),
+                artifacts=(
+                    GuardArtifact(
+                        artifact_id=baseline.artifact_id,
+                        name="workspace-tools",
+                        harness="claude-code",
+                        artifact_type="mcp_server",
+                        source_scope="project",
+                        config_path=str(workspace_dir / ".mcp.json"),
+                        command="python",
+                        args=("-m", "http.server", "9100", "--changed-2"),
+                        transport="stdio",
+                    ),
+                ),
+            ),
+        ]
+        call_count = {"detect": 0}
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+        monkeypatch.setattr(
+            guard_runner_module.subprocess,
+            "run",
+            lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+        )
+
+        def fake_detect(harness: str, context):
+            call_count["detect"] += 1
+            index = min(call_count["detect"] - 1, len(detections) - 1)
+            return detections[index]
+
+        monkeypatch.setattr(guard_runner_module, "detect_harness", fake_detect)
+
+        def resolve_pending() -> None:
+            for _ in range(40):
+                pending = store.list_approval_requests(limit=10)
+                if pending:
+                    apply_approval_resolution(
+                        store=store,
+                        request_id=str(pending[0]["request_id"]),
+                        action="allow",
+                        scope="artifact",
+                        workspace=None,
+                        reason="approved from test",
+                    )
+                    return
+                threading.Event().wait(0.05)
+
+        worker = threading.Thread(target=resolve_pending, daemon=True)
+        worker.start()
+
+        config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+        blocked_resolver = guard_commands_module._headless_approval_resolver(
+            args=argparse.Namespace(harness="claude-code"),
+            context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+            store=store,
+            config=config,
+        )
+        result = guard_runner_module.guard_run(
+            "claude-code",
+            HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+            store,
+            config,
+            dry_run=False,
+            passthrough_args=[],
+            default_action=None,
+            interactive_resolver=None,
+            blocked_resolver=blocked_resolver,
+        )
+
+        assert result["blocked"] is True
+        assert result["artifacts"][0]["changed_fields"] == ["args"]
+        assert result["artifacts"][0]["artifact_hash"] == artifact_hash(detections[-1].artifacts[0])
+        assert call_count["detect"] >= 2
+
+    def test_guard_headless_blocked_run_persists_receipts_and_diffs(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        store = GuardStore(home_dir)
+        baseline = GuardArtifact(
+            artifact_id="claude-code:project:workspace-tools",
+            name="workspace-tools",
+            harness="claude-code",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=str(workspace_dir / ".mcp.json"),
+            command="python",
+            args=("-m", "http.server", "9100"),
+            transport="stdio",
+        )
+        baseline_hash = artifact_hash(baseline)
+        store.save_snapshot(
+            "claude-code",
+            baseline.artifact_id,
+            {**baseline.to_dict(), "artifact_hash": baseline_hash},
+            baseline_hash,
+            "2026-04-10T00:00:00+00:00",
+        )
+        changed = GuardArtifact(
+            artifact_id=baseline.artifact_id,
+            name=baseline.name,
+            harness=baseline.harness,
+            artifact_type=baseline.artifact_type,
+            source_scope=baseline.source_scope,
+            config_path=baseline.config_path,
+            command="python",
+            args=("-m", "http.server", "9100", "--changed"),
+            transport="stdio",
+        )
+        detection = HarnessDetection(
+            harness="claude-code",
+            installed=True,
+            command_available=True,
+            config_paths=(baseline.config_path,),
+            artifacts=(changed,),
+        )
+
+        monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+
+        config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+        result = guard_runner_module.guard_run(
+            "claude-code",
+            HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+            store,
+            config,
+            dry_run=False,
+            passthrough_args=[],
+            default_action=None,
+            interactive_resolver=None,
+            blocked_resolver=lambda _detection, evaluation: evaluation,
+        )
+
+        latest_diff = store.get_latest_diff("claude-code", baseline.artifact_id)
+        latest_receipt = store.get_latest_receipt("claude-code", baseline.artifact_id)
+
+        assert result["blocked"] is True
+        assert latest_diff is not None
+        assert latest_diff["current_hash"] == artifact_hash(changed)
+        assert latest_receipt is not None
+        assert latest_receipt["policy_decision"] == "require-reapproval"
 
     def test_guard_invalid_changed_hash_action_falls_back_to_reapproval(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

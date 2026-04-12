@@ -4,15 +4,23 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
+from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from codex_plugin_scanner.guard.models import (
+    GuardApprovalRequest,
+    GuardArtifact,
+    HarnessDetection,
+    PolicyDecision,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -47,6 +55,7 @@ args = ["workspace-skill.js"]
 class TestGuardApprovals:
     def test_guard_store_persists_and_resolves_approval_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
+        workspace_dir = tmp_path / "workspace"
         request = GuardApprovalRequest(
             request_id="req-123",
             harness="codex",
@@ -57,7 +66,8 @@ class TestGuardApprovals:
             recommended_scope="artifact",
             changed_fields=("args",),
             source_scope="project",
-            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            config_path=str(workspace_dir / ".codex" / "config.toml"),
+            workspace=str(workspace_dir),
             review_command="hol-guard approvals approve req-123",
             approval_url="http://127.0.0.1:4455/approvals/req-123",
         )
@@ -75,10 +85,223 @@ class TestGuardApprovals:
 
         assert pending[0]["status"] == "pending"
         assert pending[0]["approval_url"] == "http://127.0.0.1:4455/approvals/req-123"
+        assert pending[0]["workspace"] == str(workspace_dir)
         assert resolved is not None
         assert resolved["status"] == "resolved"
         assert resolved["resolution_action"] == "allow"
         assert resolved["resolution_scope"] == "artifact"
+
+    def test_guard_store_keeps_request_id_when_duplicate_pending_request_is_requeued(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        original = GuardApprovalRequest(
+            request_id="req-original",
+            harness="codex",
+            artifact_id="codex:project:workspace_skill",
+            artifact_name="workspace_skill",
+            artifact_hash="hash-1",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("args",),
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            review_command="hol-guard approvals approve req-original",
+            approval_url="http://127.0.0.1:4455/approvals/req-original",
+        )
+        updated = GuardApprovalRequest(
+            request_id="req-new",
+            harness="codex",
+            artifact_id=original.artifact_id,
+            artifact_name="workspace_skill",
+            artifact_hash="hash-2",
+            policy_action="require-reapproval",
+            recommended_scope="artifact",
+            changed_fields=("command",),
+            source_scope="project",
+            config_path=original.config_path,
+            review_command="hol-guard approvals approve req-new",
+            approval_url="http://127.0.0.1:4455/approvals/req-new",
+        )
+
+        first_id = store.add_approval_request(original, "2026-04-11T00:00:00+00:00")
+        second_id = store.add_approval_request(updated, "2026-04-11T00:01:00+00:00")
+        pending = store.list_approval_requests()
+
+        assert first_id == "req-original"
+        assert second_id == "req-original"
+        assert len(pending) == 1
+        assert pending[0]["request_id"] == "req-original"
+        assert pending[0]["artifact_hash"] == "hash-2"
+        assert pending[0]["changed_fields"] == ["command"]
+
+    def test_guard_broad_scope_resolution_clears_matching_pending_requests(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        for request_id, artifact_id in (
+            ("req-a", "codex:project:first"),
+            ("req-b", "codex:project:second"),
+        ):
+            store.add_approval_request(
+                GuardApprovalRequest(
+                    request_id=request_id,
+                    harness="codex",
+                    artifact_id=artifact_id,
+                    artifact_name=artifact_id.rsplit(":", maxsplit=1)[-1],
+                    artifact_hash=f"hash-{request_id}",
+                    policy_action="require-reapproval",
+                    recommended_scope="harness",
+                    changed_fields=("args",),
+                    source_scope="project",
+                    config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                    review_command=f"hol-guard approvals approve {request_id}",
+                    approval_url=f"http://127.0.0.1:4455/approvals/{request_id}",
+                ),
+                "2026-04-11T00:00:00+00:00",
+            )
+
+        resolved = apply_approval_resolution(
+            store=store,
+            request_id="req-a",
+            action="allow",
+            scope="harness",
+            workspace=None,
+            reason="trusted in harness",
+            now="2026-04-11T00:02:00+00:00",
+        )
+
+        assert resolved["status"] == "resolved"
+        assert store.get_approval_request("req-b")["status"] == "resolved"
+
+    def test_guard_broad_scope_resolution_clears_more_than_default_pending_page(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        for index in range(520):
+            store.add_approval_request(
+                GuardApprovalRequest(
+                    request_id=f"req-{index}",
+                    harness="codex",
+                    artifact_id=f"codex:project:item-{index}",
+                    artifact_name=f"item-{index}",
+                    artifact_hash=f"hash-{index}",
+                    policy_action="require-reapproval",
+                    recommended_scope="harness",
+                    changed_fields=("args",),
+                    source_scope="project",
+                    config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                    review_command=f"hol-guard approvals approve req-{index}",
+                    approval_url=f"http://127.0.0.1:4455/approvals/req-{index}",
+                ),
+                "2026-04-11T00:00:00+00:00",
+            )
+
+        resolved = apply_approval_resolution(
+            store=store,
+            request_id="req-0",
+            action="allow",
+            scope="harness",
+            workspace=None,
+            reason="trusted in harness",
+            now="2026-04-11T00:02:00+00:00",
+        )
+
+        pending = store.list_approval_requests(status="pending", harness="codex", limit=None)
+
+        assert resolved["status"] == "resolved"
+        assert pending == []
+
+    def test_guard_store_ignores_expired_policy_decisions(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.upsert_policy(
+            PolicyDecision(
+                harness="codex",
+                scope="artifact",
+                action="allow",
+                artifact_id="codex:project:workspace_skill",
+                artifact_hash="hash-123",
+                expires_at="2026-04-11T01:00:00+00:00",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+
+        before_expiry = store.resolve_policy(
+            "codex",
+            "codex:project:workspace_skill",
+            "hash-123",
+            now="2026-04-11T00:30:00+00:00",
+        )
+        after_expiry = store.resolve_policy(
+            "codex",
+            "codex:project:workspace_skill",
+            "hash-123",
+            now="2026-04-11T02:00:00+00:00",
+        )
+        decisions = store.list_policy_decisions()
+
+        assert before_expiry == "allow"
+        assert after_expiry is None
+        assert decisions[0]["expires_at"] == "2026-04-11T01:00:00+00:00"
+        assert decisions[0]["source"] == "local"
+
+    def test_guard_store_ignores_expired_policy_decisions_without_explicit_now(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.upsert_policy(
+            PolicyDecision(
+                harness="codex",
+                scope="artifact",
+                action="allow",
+                artifact_id="codex:project:workspace_skill",
+                artifact_hash="hash-legacy",
+                expires_at="2000-01-01T00:00:00+00:00",
+            ),
+            "1999-01-01T00:00:00+00:00",
+        )
+
+        resolved = store.resolve_policy("codex", "codex:project:workspace_skill", "hash-legacy")
+
+        assert resolved is None
+
+    def test_guard_store_does_not_match_hash_scoped_artifact_policy_without_current_hash(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.upsert_policy(
+            PolicyDecision(
+                harness="codex",
+                scope="artifact",
+                action="allow",
+                artifact_id="codex:project:workspace_skill",
+                artifact_hash="hash-locked",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+
+        resolved = store.resolve_policy(
+            "codex",
+            "codex:project:workspace_skill",
+            None,
+            now="2026-04-11T00:30:00+00:00",
+        )
+
+        assert resolved is None
+
+    def test_ensure_guard_daemon_uses_stable_default_port(self, tmp_path, monkeypatch):
+        launched_commands: list[list[str]] = []
+        guard_home = tmp_path / "guard-home"
+        expected_port = daemon_manager_module._configured_port(guard_home)
+        responses = iter([None, f"http://127.0.0.1:{expected_port}"])
+
+        monkeypatch.delenv("GUARD_DAEMON_PORT", raising=False)
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "load_guard_daemon_url",
+            lambda _guard_home: next(responses),
+        )
+        monkeypatch.setattr(
+            daemon_manager_module.subprocess,
+            "Popen",
+            lambda command, **_kwargs: launched_commands.append(command) or SimpleNamespace(),
+        )
+
+        url = daemon_manager_module.ensure_guard_daemon(guard_home)
+
+        assert url == f"http://127.0.0.1:{expected_port}"
+        assert launched_commands
+        assert launched_commands[0][-2:] == ["--port", str(expected_port)]
 
     def test_guard_daemon_serves_approval_queue_and_resolves_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -103,7 +326,7 @@ class TestGuardApprovals:
         daemon.start()
 
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/approvals", timeout=5) as response:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/requests", timeout=5) as response:
                 approvals_payload = json.loads(response.read().decode("utf-8"))
             request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/approvals/req-456/decision",
@@ -119,6 +342,201 @@ class TestGuardApprovals:
         assert approvals_payload["items"][0]["request_id"] == "req-456"
         assert decision_payload["resolved"] is True
         assert store.get_approval_request("req-456")["status"] == "resolved"
+
+    def test_guard_daemon_v1_endpoints_expose_requests_diff_receipts_and_policy(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        artifact = GuardArtifact(
+            artifact_id="codex:project:workspace_skill",
+            name="workspace_skill",
+            harness="codex",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            command="node",
+            args=("workspace.js",),
+            transport="stdio",
+            publisher="hashgraph-online",
+        )
+        store.record_diff(
+            "codex",
+            artifact.artifact_id,
+            ["args"],
+            "hash-before",
+            "hash-after",
+            "2026-04-11T00:00:00+00:00",
+        )
+        receipt = {
+            "harness": "codex",
+            "artifact_id": artifact.artifact_id,
+            "artifact_hash": "hash-after",
+            "policy_decision": "allow",
+            "capabilities_summary": "mcp server • stdio • node",
+            "changed_capabilities": ["args"],
+            "provenance_summary": "project artifact defined at .codex/config.toml",
+            "artifact_name": "workspace_skill",
+            "source_scope": "project",
+        }
+        from codex_plugin_scanner.guard.receipts import build_receipt
+
+        built_receipt = build_receipt(**receipt)
+        store.add_receipt(built_receipt)
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-v1",
+                harness="codex",
+                artifact_id=artifact.artifact_id,
+                artifact_name="workspace_skill",
+                artifact_hash="hash-after",
+                policy_action="require-reapproval",
+                recommended_scope="artifact",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                review_command="hol-guard approvals approve req-v1",
+                approval_url="http://127.0.0.1/pending",
+                publisher="hashgraph-online",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/requests", timeout=5) as response:
+                requests_payload = json.loads(response.read().decode("utf-8"))
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/requests/req-v1", timeout=5) as response:
+                request_payload = json.loads(response.read().decode("utf-8"))
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/v1/receipts/{built_receipt.receipt_id}", timeout=5
+            ) as response:
+                receipt_payload = json.loads(response.read().decode("utf-8"))
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/v1/receipts/latest?harness=codex&artifact_id="
+                f"{urllib.parse.quote(artifact.artifact_id, safe='')}",
+                timeout=5,
+            ) as response:
+                latest_receipt_payload = json.loads(response.read().decode("utf-8"))
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/v1/artifacts/{artifact.artifact_id}/diff?harness=codex", timeout=5
+            ) as response:
+                diff_payload = json.loads(response.read().decode("utf-8"))
+            policy_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
+                data=json.dumps(
+                    {
+                        "harness": "codex",
+                        "scope": "publisher",
+                        "publisher": "hashgraph-online",
+                        "action": "allow",
+                        "reason": "saved from api",
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(policy_request, timeout=5) as response:
+                policy_save_payload = json.loads(response.read().decode("utf-8"))
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/v1/policy?harness=codex", timeout=5
+            ) as response:
+                policy_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert requests_payload["items"][0]["request_id"] == "req-v1"
+        assert request_payload["artifact_id"] == artifact.artifact_id
+        assert receipt_payload["receipt_id"] == built_receipt.receipt_id
+        assert latest_receipt_payload["receipt_id"] == built_receipt.receipt_id
+        assert diff_payload["changed_fields"] == ["args"]
+        assert policy_save_payload["saved"] is True
+        assert policy_payload["items"][0]["publisher"] == "hashgraph-online"
+
+    def test_guard_daemon_diff_route_decodes_artifact_ids(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        artifact_id = "codex:project:tools/with/slash"
+        store.record_diff(
+            "codex",
+            artifact_id,
+            ["command"],
+            "hash-before",
+            "hash-after",
+            "2026-04-11T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/v1/artifacts/codex%3Aproject%3Atools%2Fwith%2Fslash/diff?harness=codex",
+                timeout=5,
+            ) as response:
+                diff_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert diff_payload["artifact_id"] == artifact_id
+
+    def test_guard_daemon_policy_upsert_rejects_unsupported_values(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
+                data=json.dumps(
+                    {
+                        "harness": "codex",
+                        "scope": "harness",
+                        "action": "deny",
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for unsupported policy action")
+        finally:
+            daemon.stop()
+
+        assert status == 400
+        assert payload["error"] == "unsupported_policy_value"
+
+    def test_guard_daemon_policy_upsert_requires_scope_target(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
+                data=json.dumps(
+                    {
+                        "harness": "codex",
+                        "scope": "artifact",
+                        "action": "allow",
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for missing scope target")
+        finally:
+            daemon.stop()
+
+        assert status == 400
+        assert payload["error"] == "missing_scope_target"
 
     def test_guard_daemon_rejects_missing_decision_fields(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -162,6 +580,48 @@ class TestGuardApprovals:
         assert status == 400
         assert payload["error"] == "missing_required_fields"
 
+    def test_guard_daemon_approve_route_requires_workspace_for_workspace_scope(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-workspace-http",
+                harness="codex",
+                artifact_id="codex:project:workspace_skill",
+                artifact_name="workspace_skill",
+                artifact_hash="hash-400",
+                policy_action="require-reapproval",
+                recommended_scope="workspace",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                review_command="hol-guard approvals approve req-workspace-http",
+                approval_url="http://127.0.0.1/pending",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests/req-workspace-http/approve",
+                data=json.dumps({"scope": "workspace"}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for missing workspace path")
+        finally:
+            daemon.stop()
+
+        assert status == 400
+        assert "requires --workspace" in payload["error"]
+
     def test_guard_daemon_ignores_invalid_json_body(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -185,7 +645,7 @@ class TestGuardApprovals:
             daemon.stop()
 
         assert status == 400
-        assert payload["error"] == "missing_required_fields"
+        assert payload["error"] == "invalid_request_body"
 
     def test_guard_daemon_escapes_html_values_in_approval_center(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -217,8 +677,162 @@ class TestGuardApprovals:
 
         assert "<img src=x onerror=alert(1)>" not in body
         assert "<script>" not in body
-        assert "&lt;img src=x onerror=alert(1)&gt;" in body
-        assert "codex&lt;script&gt;" in body
+        assert "guard-dashboard-root" in body
+        assert "Local approval center" in body
+        assert "Hashgraph Online" in body
+
+    def test_guard_daemon_rejects_cross_origin_post_requests(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
+                data=json.dumps(
+                    {
+                        "harness": "codex",
+                        "scope": "harness",
+                        "action": "allow",
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": "https://evil.example",
+                },
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for disallowed origin")
+        finally:
+            daemon.stop()
+
+        assert status == 403
+        assert payload["error"] == "forbidden_origin"
+
+    def test_guard_daemon_rejects_spoofed_localhost_origin_post_requests(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
+                data=json.dumps(
+                    {
+                        "harness": "codex",
+                        "scope": "harness",
+                        "action": "allow",
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": "http://127.0.0.1.evil.example",
+                },
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for spoofed localhost origin")
+        finally:
+            daemon.stop()
+
+        assert status == 403
+        assert payload["error"] == "forbidden_origin"
+
+    def test_guard_daemon_detail_page_serves_dashboard_shell(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        target_artifact = "codex:project:workspace_skill"
+        target_receipt = {
+            "harness": "codex",
+            "artifact_id": target_artifact,
+            "artifact_hash": "hash-target",
+            "policy_decision": "allow",
+            "capabilities_summary": "target capabilities",
+            "changed_capabilities": ["args"],
+            "provenance_summary": "target provenance summary",
+            "artifact_name": "workspace_skill",
+            "source_scope": "project",
+        }
+        from codex_plugin_scanner.guard.receipts import build_receipt
+
+        store.add_receipt(build_receipt(**target_receipt))
+        for index in range(250):
+            store.add_receipt(
+                build_receipt(
+                    harness="codex",
+                    artifact_id=f"codex:project:other_{index}",
+                    artifact_hash=f"hash-{index}",
+                    policy_decision="allow",
+                    capabilities_summary=f"other capabilities {index}",
+                    changed_capabilities=["args"],
+                    provenance_summary=f"other provenance {index}",
+                    artifact_name=f"other_{index}",
+                    source_scope="project",
+                )
+            )
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-detail",
+                harness="codex",
+                artifact_id=target_artifact,
+                artifact_name="workspace_skill",
+                artifact_hash="hash-target",
+                policy_action="require-reapproval",
+                recommended_scope="workspace",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                review_command="hol-guard approvals approve req-detail",
+                approval_url="http://127.0.0.1/pending",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/requests/req-detail", timeout=5) as response:
+                body = response.read().decode("utf-8")
+        finally:
+            daemon.stop()
+
+        assert "guard-dashboard-root" in body
+        assert "Local approval center" in body
+        assert "Hashgraph Online" in body
+
+    def test_guard_daemon_serves_dashboard_assets_when_present(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            asset_url = f"http://127.0.0.1:{daemon.port}/assets/guard-dashboard.js"
+            with urllib.request.urlopen(asset_url, timeout=5) as response:
+                body = response.read().decode("utf-8")
+                content_type = response.headers.get("Content-Type")
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/brand/Logo_Whole.png", timeout=5
+            ) as response:
+                logo_bytes = response.read()
+                logo_type = response.headers.get("Content-Type")
+        finally:
+            daemon.stop()
+
+        assert content_type is not None
+        assert "javascript" in content_type
+        assert "guard-dashboard-root" in body
+        assert logo_type == "image/png"
+        assert len(logo_bytes) > 0
 
     def test_guard_run_headless_enqueues_approval_request(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -291,7 +905,7 @@ class TestGuardApprovals:
         assert list_output["items"][0]["request_id"] == "req-789"
         assert approve_rc == 0
         assert approve_output["resolved"] is True
-        assert store.resolve_policy("codex", "codex:project:workspace_skill", None) == "allow"
+        assert store.resolve_policy("codex", "codex:project:workspace_skill", "hash-789") == "allow"
 
     def test_guard_approvals_cli_rejects_workspace_scope_without_workspace(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -338,6 +952,59 @@ class TestGuardApprovals:
         assert rc == 2
         assert "requires --workspace" in captured.err
         assert store.get_approval_request("req-workspace")["status"] == "pending"
+
+    def test_guard_workspace_resolution_does_not_match_sibling_workspace(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        primary_workspace = tmp_path / "workspace"
+        sibling_workspace = tmp_path / "workspace-copy"
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-primary",
+                harness="codex",
+                artifact_id="codex:project:primary",
+                artifact_name="primary",
+                artifact_hash="hash-primary",
+                policy_action="require-reapproval",
+                recommended_scope="workspace",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(primary_workspace / ".codex" / "config.toml"),
+                review_command="hol-guard approvals approve req-primary",
+                approval_url="http://127.0.0.1/pending",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-sibling",
+                harness="codex",
+                artifact_id="codex:project:sibling",
+                artifact_name="sibling",
+                artifact_hash="hash-sibling",
+                policy_action="require-reapproval",
+                recommended_scope="workspace",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(sibling_workspace / ".codex" / "config.toml"),
+                review_command="hol-guard approvals approve req-sibling",
+                approval_url="http://127.0.0.1/pending",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+
+        resolved = apply_approval_resolution(
+            store=store,
+            request_id="req-primary",
+            action="allow",
+            scope="workspace",
+            workspace=str(primary_workspace),
+            reason="trusted in workspace",
+            now="2026-04-11T00:02:00+00:00",
+        )
+
+        assert resolved["status"] == "resolved"
+        assert store.get_approval_request("req-primary")["status"] == "resolved"
+        assert store.get_approval_request("req-sibling")["status"] == "pending"
 
     def test_guard_queue_blocked_approvals_creates_requests_for_changed_artifacts(self, tmp_path):
         guard_home = tmp_path / "guard-home"
