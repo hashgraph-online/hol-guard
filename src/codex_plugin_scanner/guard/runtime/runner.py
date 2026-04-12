@@ -431,9 +431,12 @@ def _sync_timestamp(payload: dict[str, object]) -> str:
 def _parse_iso_timestamp(value: str) -> datetime | None:
     normalized = value.replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(normalized)
+        parsed = datetime.fromisoformat(normalized)
     except ValueError:
         return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def _now() -> str:
