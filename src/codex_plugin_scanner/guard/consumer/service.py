@@ -11,9 +11,11 @@ from typing import Any
 from ..adapters import get_adapter, list_adapters
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
+from ..incident import build_incident_context
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..policy import decide_action
 from ..receipts import build_receipt
+from ..risk import artifact_risk_signals, artifact_risk_summary
 from ..schemas import build_consumer_mode_contract
 from ..store import GuardStore
 
@@ -49,7 +51,10 @@ def diff_artifact(previous: dict[str, object] | None, current: GuardArtifact) ->
             "current_hash": current_hash,
             "current_snapshot": current_payload,
         }
-    changed_fields = [key for key, value in current_payload.items() if previous.get(key) != value]
+    previous_payload = dict(previous)
+    if "env_keys" not in previous_payload:
+        previous_payload["env_keys"] = []
+    changed_fields = [key for key, value in current_payload.items() if previous_payload.get(key) != value]
     previous_hash = previous.get("artifact_hash")
     return {
         "changed": bool(changed_fields),
@@ -129,6 +134,7 @@ def evaluate_detection(
     blocked = False
     receipts_recorded = 0
     now = _now()
+    prior_receipts = store.count_receipts(detection.harness) if persist else 0
     previous_snapshots = store.list_snapshots(detection.harness)
     current_artifact_ids: set[str] = set()
     for artifact in detection.artifacts:
@@ -139,6 +145,7 @@ def evaluate_detection(
         configured_action = store.resolve_policy(
             detection.harness,
             artifact.artifact_id,
+            str(diff["current_hash"]),
             workspace,
             artifact.publisher,
         )
@@ -159,6 +166,22 @@ def evaluate_detection(
             )
         if _is_blocking_action(policy_action):
             blocked = True
+        risk_signals = artifact_risk_signals(artifact)
+        risk_summary = artifact_risk_summary(artifact)
+        launch_target = _launch_target_from_artifact(artifact)
+        incident = build_incident_context(
+            harness=detection.harness,
+            artifact=artifact,
+            artifact_id=artifact.artifact_id,
+            artifact_name=artifact.name,
+            artifact_type=artifact.artifact_type,
+            source_scope=artifact.source_scope,
+            config_path=artifact.config_path,
+            changed_fields=list(diff["changed_fields"]),
+            policy_action=policy_action,
+            launch_target=launch_target,
+            risk_summary=risk_summary,
+        )
         receipt = build_receipt(
             harness=detection.harness,
             artifact_id=artifact.artifact_id,
@@ -171,6 +194,14 @@ def evaluate_detection(
             source_scope=artifact.source_scope,
         )
         if persist:
+            store.record_inventory_artifact(
+                artifact=artifact,
+                artifact_hash=str(diff["current_hash"]),
+                policy_action=policy_action,
+                changed=bool(diff["changed"]),
+                now=now,
+                approved=not _is_blocking_action(policy_action),
+            )
             if diff["changed"]:
                 previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else None
                 store.record_diff(
@@ -190,6 +221,18 @@ def evaluate_detection(
                     now,
                 )
             store.add_receipt(receipt)
+            if diff["changed"] and not is_first_seen:
+                store.add_event(
+                    "changed_artifact_caught",
+                    {
+                        "harness": detection.harness,
+                        "artifact_id": artifact.artifact_id,
+                        "artifact_name": artifact.name,
+                        "policy_action": policy_action,
+                        "changed_fields": list(diff["changed_fields"]),
+                    },
+                    now,
+                )
             receipts_recorded += 1
         results.append(
             {
@@ -199,23 +242,49 @@ def evaluate_detection(
                 "changed_fields": diff["changed_fields"],
                 "policy_action": policy_action,
                 "artifact_hash": diff["current_hash"],
+                "risk_signals": list(risk_signals),
+                "risk_summary": risk_summary,
+                "artifact_type": artifact.artifact_type,
+                "artifact_label": incident["artifact_label"],
+                "source_label": incident["source_label"],
+                "trigger_summary": incident["trigger_summary"],
+                "why_now": incident["why_now"],
+                "launch_summary": incident["launch_summary"],
+                "risk_headline": incident["risk_headline"],
             }
         )
     removed_artifact_ids = sorted(set(previous_snapshots) - current_artifact_ids)
     for artifact_id in removed_artifact_ids:
         previous = previous_snapshots[artifact_id]
         diff = diff_removed_artifact(previous)
+        previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else "removed"
         policy_action = decide_action(
-            configured_action=store.resolve_policy(detection.harness, artifact_id, workspace),
+            configured_action=store.resolve_policy(detection.harness, artifact_id, previous_hash, workspace),
             default_action=default_action,
             config=config,
             changed=True,
         )
         if _is_blocking_action(policy_action):
             blocked = True
-        previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else "removed"
         artifact_name = previous.get("name")
         source_scope = previous.get("source_scope")
+        removed_artifact_type_value = previous.get("artifact_type")
+        removed_artifact_type = (
+            str(removed_artifact_type_value) if isinstance(removed_artifact_type_value, str) else "artifact"
+        )
+        incident = build_incident_context(
+            harness=detection.harness,
+            artifact=None,
+            artifact_id=artifact_id,
+            artifact_name=str(artifact_name) if isinstance(artifact_name, str) else artifact_id,
+            artifact_type=removed_artifact_type,
+            source_scope=str(source_scope) if isinstance(source_scope, str) else None,
+            config_path=str(previous.get("config_path")) if isinstance(previous.get("config_path"), str) else None,
+            changed_fields=["removed"],
+            policy_action=policy_action,
+            launch_target=None,
+            risk_summary=None,
+        )
         receipt = build_receipt(
             harness=detection.harness,
             artifact_id=artifact_id,
@@ -228,6 +297,13 @@ def evaluate_detection(
             source_scope=str(source_scope) if isinstance(source_scope, str) else None,
         )
         if persist:
+            store.mark_inventory_removed(
+                harness=detection.harness,
+                artifact_id=artifact_id,
+                policy_action=policy_action,
+                artifact_hash=previous_hash,
+                now=now,
+            )
             store.record_diff(
                 detection.harness,
                 artifact_id,
@@ -239,6 +315,17 @@ def evaluate_detection(
             if not _is_blocking_action(policy_action):
                 store.delete_snapshot(detection.harness, artifact_id)
             store.add_receipt(receipt)
+            store.add_event(
+                "changed_artifact_caught",
+                {
+                    "harness": detection.harness,
+                    "artifact_id": artifact_id,
+                    "artifact_name": str(artifact_name) if isinstance(artifact_name, str) else artifact_id,
+                    "policy_action": policy_action,
+                    "changed_fields": ["removed"],
+                },
+                now,
+            )
             receipts_recorded += 1
         results.append(
             {
@@ -249,7 +336,24 @@ def evaluate_detection(
                 "policy_action": policy_action,
                 "artifact_hash": previous_hash,
                 "removed": True,
+                "artifact_type": removed_artifact_type,
+                "artifact_label": incident["artifact_label"],
+                "source_label": incident["source_label"],
+                "trigger_summary": incident["trigger_summary"],
+                "why_now": incident["why_now"],
+                "launch_summary": incident["launch_summary"],
+                "risk_headline": incident["risk_headline"],
             }
+        )
+    if persist and prior_receipts == 0 and receipts_recorded > 0:
+        store.add_event(
+            "first_protected_harness_session",
+            {
+                "harness": detection.harness,
+                "artifact_count": len(results),
+                "blocked": blocked,
+            },
+            now,
         )
     return {
         "harness": detection.harness,
@@ -268,6 +372,9 @@ def record_policy(
     workspace: str | None,
     publisher: str | None = None,
     reason: str | None = None,
+    owner: str | None = None,
+    source: str = "local",
+    expires_at: str | None = None,
 ) -> dict[str, object]:
     """Persist an allow or deny action."""
 
@@ -276,15 +383,27 @@ def record_policy(
         scope=scope,  # type: ignore[arg-type]
         action=action,  # type: ignore[arg-type]
         artifact_id=artifact_id,
+        artifact_hash=None,
         workspace=workspace,
         publisher=publisher,
         reason=reason,
+        owner=owner,
+        source=source,
+        expires_at=expires_at,
     )
     store.upsert_policy(decision, _now())
     return decision.to_dict()
 
 
-def run_consumer_scan(target: Path) -> dict[str, object]:
+def _launch_target_from_artifact(artifact: GuardArtifact) -> str | None:
+    if artifact.url:
+        return artifact.url
+    if artifact.command:
+        return " ".join([artifact.command, *artifact.args]).strip()
+    return None
+
+
+def run_consumer_scan(target: Path, intended_harness: str | None = None) -> dict[str, object]:
     """Expose the consumer-mode scan contract."""
 
-    return build_consumer_mode_contract(target)
+    return build_consumer_mode_contract(target, intended_harness=intended_harness)
