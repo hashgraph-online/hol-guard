@@ -17,20 +17,16 @@ def test_action_metadata_includes_marketplace_branding_and_fallback_install() ->
     assert "install_source:" in action_text
     assert 'default: "pypi"' in action_text
     assert "INSTALL_SOURCE: ${{ inputs.install_source }}" in action_text
-    assert "INSTALL_CISCO: ${{ inputs.install_cisco }}" in action_text
     assert 'if [ "$INSTALL_SOURCE" = "local" ]; then' in action_text
     assert "install_source=local requires the source repository checkout" in action_text
     assert 'python3 -m pip install "$LOCAL_SOURCE"' in action_text
-    assert 'python3 -m pip install "$LOCAL_SOURCE[cisco]"' in action_text
     assert 'elif [ "$INSTALL_SOURCE" = "pypi" ]; then' in action_text
     assert (
         'python3 -m pip download --only-binary=:all: --no-deps --dest "$DIST_DIR" "plugin-scanner==${SCANNER_VERSION}"'
     ) in action_text
     assert "python3 -m pypi_attestations verify pypi \\" in action_text
     assert 'python3 -m pip install "$DIST_DIR/$DIST_BASENAME"' in action_text
-    assert 'python3 -m pip install "cisco-ai-skill-scanner==${CISCO_VERSION}"' in action_text
     assert "scanner-version.txt" in action_text
-    assert "cisco-version.txt" in action_text
     assert "pypi-attestations-version.txt" in action_text
     assert 'SCANNER_REPOSITORY="https://github.com/hashgraph-online/ai-plugin-scanner"' in action_text
     assert "write_step_summary:" in action_text
@@ -256,7 +252,6 @@ def test_action_bundle_docs_live_in_action_readme() -> None:
     assert "hashgraph-online/hol-codex-plugin-scanner-action@v1" in action_readme
     assert "actions/checkout@v4" in action_readme
     assert "actions/github-script@v7" in action_readme
-    assert "opt-in Cisco skill-scanner dependency used by this repo" in action_readme
 
 
 def test_legacy_action_readme_marks_compatibility_alias() -> None:

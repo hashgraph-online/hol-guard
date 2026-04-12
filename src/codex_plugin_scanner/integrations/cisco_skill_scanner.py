@@ -146,7 +146,7 @@ def run_cisco_skill_scan(skills_dir: Path, mode: str = "auto", policy_name: str 
     except ImportError:
         if mode == "on":
             return _build_unavailable_summary(
-                "Cisco skill scanner is required but not installed. Install with the cisco extra.",
+                "Cisco skill scanner is required but not installed. Ensure package dependencies are installed.",
                 status=CiscoIntegrationStatus.UNAVAILABLE,
             )
         return _build_unavailable_summary(

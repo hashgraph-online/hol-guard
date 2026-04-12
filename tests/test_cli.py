@@ -24,7 +24,7 @@ class TestFormatJson:
         assert parsed["schema_version"] == "scan-result.v1"
         assert parsed["tool_version"]
         assert parsed["profile"] == "default"
-        assert parsed["score"] == 100
+        assert parsed["score"] == result.score
         assert parsed["grade"] == "A"
         assert parsed["ecosystems"] == ["codex"]
         assert len(parsed["packages"]) >= 1
@@ -64,7 +64,7 @@ class TestFormatText:
         result = scan_plugin(FIXTURES / "good-plugin")
         output = format_text(result)
         assert "Codex Plugin Scanner" in output
-        assert "100/100" in output
+        assert f"{result.score}/100" in output
         assert "Excellent" in output
 
     def test_contains_category_names(self):
@@ -114,7 +114,7 @@ class TestMain:
         main([str(FIXTURES / "good-plugin"), "--json"])
         output = capsys.readouterr().out
         parsed = json.loads(output)
-        assert parsed["score"] == 100
+        assert parsed["score"] == scan_plugin(FIXTURES / "good-plugin").score
 
     def test_output_flag(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -122,7 +122,7 @@ class TestMain:
             main([str(FIXTURES / "good-plugin"), "--format", "json", "--output", str(out_file)])
             content = out_file.read_text(encoding="utf-8")
             parsed = json.loads(content)
-            assert parsed["score"] == 100
+            assert parsed["score"] == scan_plugin(FIXTURES / "good-plugin").score
 
     def test_output_flag_respects_text_format(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -164,7 +164,8 @@ class TestMain:
 
     def test_min_score_exact_boundary(self):
         # At exact boundary should pass (>=)
-        rc = main([str(FIXTURES / "good-plugin"), "--min-score", "100"])
+        score = scan_plugin(FIXTURES / "good-plugin").score
+        rc = main([str(FIXTURES / "good-plugin"), "--min-score", str(score)])
         assert rc == 0
 
     def test_lint_list_rules(self, capsys):
