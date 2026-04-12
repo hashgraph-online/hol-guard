@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 
 from ..models import GuardArtifact, HarnessDetection
 from .base import HarnessAdapter, HarnessContext, _command_available
@@ -16,7 +15,10 @@ class HermesHarnessAdapter(HarnessAdapter):
     harness = "hermes"
     executable = "hermes"
     approval_tier = "approval-center"
-    approval_summary = "Guard can scan Hermes skills before execution and hand blocked artifacts to the local approval center."
+    approval_summary = (
+        "Guard can scan Hermes skills before execution and hand blocked "
+        "artifacts to the local approval center."
+    )
     fallback_hint = "Configure Hermes to use Guard-launched sessions for skill execution."
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
