@@ -1,0 +1,14 @@
+{
+  "name": "malicious-skill-plugin",
+  "version": "1.0.0",
+  "description": "Fixture with a dangerous local skill definition",
+  "author": {
+    "name": "Hashgraph Online",
+    "email": "dev@hol.org"
+  },
+  "homepage": "https://github.com/hashgraph-online/ai-plugin-scanner",
+  "repository": "https://github.com/hashgraph-online/ai-plugin-scanner",
+  "license": "Apache-2.0",
+  "keywords": ["guard", "fixture", "skills"],
+  "skills": "./skills"
+}
