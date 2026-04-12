@@ -19,6 +19,9 @@ class ScannerConfig:
     baseline_file: str | None = None
     severity_overrides: dict[str, str] | None = None
     ignore_paths: tuple[str, ...] = ()
+    github_pr_comment: str | None = None
+    github_pr_comment_style: str | None = None
+    github_pr_comment_max_findings: int | None = None
 
 
 DEFAULT_CONFIG_FILES = (".plugin-scanner.toml", ".codex-plugin-scanner.toml")
@@ -45,8 +48,15 @@ def load_scanner_config(plugin_dir: Path, config_path: str | None = None) -> Sca
     except Exception as exc:  # pragma: no cover - parser-specific errors
         raise ConfigError(f"Failed to parse config '{candidate}': {exc}") from exc
 
-    scanner = payload.get("scanner", {})
-    rules = payload.get("rules", {})
+    scanner_value = payload.get("scanner", {})
+    scanner = scanner_value if isinstance(scanner_value, dict) else {}
+    rules_value = payload.get("rules", {})
+    rules = rules_value if isinstance(rules_value, dict) else {}
+    github_value = payload.get("github", {})
+    github = github_value if isinstance(github_value, dict) else {}
+    github_pr_comment_max_findings = github.get("pr_comment_max_findings")
+    if not isinstance(github_pr_comment_max_findings, int):
+        github_pr_comment_max_findings = None
 
     return ScannerConfig(
         profile=scanner.get("profile"),
@@ -55,6 +65,11 @@ def load_scanner_config(plugin_dir: Path, config_path: str | None = None) -> Sca
         baseline_file=scanner.get("baseline_file"),
         severity_overrides={str(k): str(v) for k, v in rules.get("severity_overrides", {}).items()},
         ignore_paths=tuple(str(path) for path in scanner.get("ignore_paths", [])),
+        github_pr_comment=github.get("pr_comment") if isinstance(github.get("pr_comment"), str) else None,
+        github_pr_comment_style=github.get("pr_comment_style")
+        if isinstance(github.get("pr_comment_style"), str)
+        else None,
+        github_pr_comment_max_findings=github_pr_comment_max_findings,
     )
 
 

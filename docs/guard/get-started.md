@@ -10,10 +10,10 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
 1. See what Guard found:
 
    ```bash
-   hol-guard start
+   hol-guard bootstrap
    ```
 
-2. Install Guard in front of the harness you use most:
+2. If you prefer the manual path, install Guard in front of the harness you use most:
 
    ```bash
    hol-guard install codex

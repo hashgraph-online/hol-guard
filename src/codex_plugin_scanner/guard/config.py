@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 try:  # pragma: no cover - Python 3.11+
@@ -14,6 +14,7 @@ from .models import GuardAction, GuardMode
 
 DEFAULT_GUARD_DIRNAME = ".ai-plugin-scanner-guard"
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
+VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
 
 
 def _coerce_action_map(payload: object) -> dict[str, GuardAction]:
@@ -116,3 +117,49 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         publisher_actions=_coerce_action_map(merged.get("publishers")),
         artifact_actions=_coerce_action_map(merged.get("artifacts")),
     )
+
+
+def overlay_synced_guard_policy(
+    config: GuardConfig,
+    payload: dict[str, object] | None,
+) -> GuardConfig:
+    if not isinstance(payload, dict):
+        return config
+    next_mode = config.mode
+    raw_mode = payload.get("mode")
+    if isinstance(raw_mode, str) and raw_mode in VALID_GUARD_MODES:
+        next_mode = raw_mode
+    default_action = _coerce_action_value(payload.get("defaultAction"), config.default_action)
+    unknown_publisher_action = _coerce_action_value(
+        payload.get("unknownPublisherAction"),
+        config.unknown_publisher_action,
+    )
+    changed_hash_action = _coerce_action_value(
+        payload.get("changedHashAction"),
+        config.changed_hash_action,
+    )
+    new_network_domain_action = _coerce_action_value(
+        payload.get("newNetworkDomainAction"),
+        config.new_network_domain_action,
+    )
+    subprocess_action = _coerce_action_value(
+        payload.get("subprocessAction"),
+        config.subprocess_action,
+    )
+    sync_enabled = payload.get("syncEnabled")
+    return replace(
+        config,
+        mode=next_mode,
+        default_action=default_action,
+        unknown_publisher_action=unknown_publisher_action,
+        changed_hash_action=changed_hash_action,
+        new_network_domain_action=new_network_domain_action,
+        subprocess_action=subprocess_action,
+        sync=bool(sync_enabled) if isinstance(sync_enabled, bool) else config.sync,
+    )
+
+
+def _coerce_action_value(value: object, fallback: GuardAction) -> GuardAction:
+    if isinstance(value, str) and value in VALID_GUARD_ACTIONS:
+        return value
+    return fallback

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -15,10 +17,19 @@ from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
-from ..models import HarnessDetection
+from ..models import HarnessDetection, PolicyDecision
 from ..store import GuardStore
 
 _APPROVAL_METADATA_KEYS = ("approval_center_url", "approval_requests", "approval_wait", "review_hint")
+_PAIN_SIGNAL_EVENTS = frozenset(
+    {
+        "changed_artifact_caught",
+        "exception_expiring",
+        "install_time_block",
+        "premium_advisory",
+    }
+)
+_EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
 
 
 def guard_run(
@@ -96,18 +107,346 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     )
     with urllib.request.urlopen(request, timeout=10) as response:
         payload = json.loads(response.read().decode("utf-8"))
+    now = _sync_timestamp(payload)
     advisories = payload.get("advisories")
     advisories_stored = 0
     if isinstance(advisories, list):
         advisory_items = [item for item in advisories if isinstance(item, dict)]
-        advisories_stored = store.cache_advisories(advisory_items, _now())
+        advisories_stored = store.cache_advisories(advisory_items, now)
+    policy = payload.get("policy")
+    if isinstance(policy, dict):
+        store.set_sync_payload("policy", policy, now)
+    alert_preferences = payload.get("alertPreferences")
+    if isinstance(alert_preferences, dict):
+        store.set_sync_payload("alert_preferences", alert_preferences, now)
+    team_policy_pack = payload.get("teamPolicyPack")
+    if isinstance(team_policy_pack, dict):
+        store.set_sync_payload("team_policy_pack", team_policy_pack, now)
+    exceptions = payload.get("exceptions")
+    remote_decisions = _build_remote_policy_decisions(payload)
+    store.replace_remote_policies(remote_decisions, now)
+    _record_synced_alert_events(
+        store=store,
+        advisories=advisories if isinstance(advisories, list) else [],
+        alert_preferences=alert_preferences if isinstance(alert_preferences, dict) else None,
+        exceptions=exceptions if isinstance(exceptions, list) else [],
+        now=now,
+    )
+    pain_signals_uploaded = sync_pain_signals(store)
     return {
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": payload.get("receiptsStored"),
         "advisories_stored": advisories_stored,
+        "exceptions_stored": len(exceptions) if isinstance(exceptions, list) else 0,
+        "remote_policies_stored": len(remote_decisions),
+        "pain_signals_uploaded": pain_signals_uploaded,
         "receipts": len(receipts),
         "inventory": len(inventory),
     }
+
+
+def sync_pain_signals(store: GuardStore) -> int:
+    credentials = store.get_sync_credentials()
+    if credentials is None:
+        return 0
+    cursor_payload = store.get_sync_payload("pain_signal_cursor")
+    last_event_id = _last_uploaded_event_id(cursor_payload)
+    uploaded_count = 0
+    current_event_id = last_event_id
+    while True:
+        candidates = store.list_events_after(
+            current_event_id,
+            limit=500,
+            event_names=tuple(sorted(_PAIN_SIGNAL_EVENTS)),
+        )
+        if not candidates:
+            break
+        last_processed_event_id = int(candidates[-1]["event_id"])
+        signal_items = [payload for item in candidates if (payload := _pain_signal_item(item)) is not None]
+        if signal_items:
+            request = urllib.request.Request(
+                _pain_signal_sync_url(str(credentials["sync_url"])),
+                data=json.dumps({"items": signal_items}).encode("utf-8"),
+                method="POST",
+                headers={
+                    "Authorization": f"Bearer {credentials['token']}",
+                    "Content-Type": "application/json",
+                },
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=10):
+                    pass
+            except urllib.error.HTTPError as error:
+                if error.code == 404:
+                    current_event_id = last_processed_event_id
+                    store.set_sync_payload(
+                        "pain_signal_cursor",
+                        {"event_id": current_event_id},
+                        _now(),
+                    )
+                    return uploaded_count
+                raise
+            uploaded_count += len(signal_items)
+        current_event_id = last_processed_event_id
+        store.set_sync_payload(
+            "pain_signal_cursor",
+            {"event_id": current_event_id},
+            _now(),
+        )
+        if len(candidates) < 500:
+            break
+    return uploaded_count
+
+
+def _build_remote_policy_decisions(payload: dict[str, object]) -> list[PolicyDecision]:
+    decisions: list[PolicyDecision] = []
+    exceptions = payload.get("exceptions")
+    if isinstance(exceptions, list):
+        for item in exceptions:
+            if not isinstance(item, dict):
+                continue
+            scope = item.get("scope")
+            if scope not in {"artifact", "publisher", "harness", "global", "workspace"}:
+                continue
+            workspace = _remote_workspace(item)
+            if scope == "workspace" and workspace is None:
+                continue
+            harness = _remote_harness(item.get("harness"), allow_wildcard=scope != "harness")
+            if harness is None:
+                continue
+            decisions.append(
+                PolicyDecision(
+                    harness=harness,
+                    scope=scope,
+                    action="allow",
+                    artifact_id=_optional_string(item.get("artifactId")),
+                    workspace=workspace,
+                    publisher=_optional_string(item.get("publisher")),
+                    reason=_optional_string(item.get("reason")),
+                    owner=_optional_string(item.get("owner")),
+                    source="cloud-sync",
+                    expires_at=_normalized_timestamp_string(item.get("expiresAt")),
+                )
+            )
+    team_policy_pack = payload.get("teamPolicyPack")
+    if isinstance(team_policy_pack, dict):
+        policy_name = _optional_string(team_policy_pack.get("name")) or "team policy"
+        blocked_artifacts = team_policy_pack.get("blockedArtifacts")
+        if isinstance(blocked_artifacts, list):
+            for artifact_id in blocked_artifacts:
+                if not isinstance(artifact_id, str) or not artifact_id.strip():
+                    continue
+                decisions.append(
+                    PolicyDecision(
+                        harness="*",
+                        scope="artifact",
+                        action="block",
+                        artifact_id=artifact_id,
+                        reason=f"Blocked by {policy_name}.",
+                        source="team-policy",
+                    )
+                )
+        allowed_publishers = team_policy_pack.get("allowedPublishers")
+        if isinstance(allowed_publishers, list):
+            for publisher in allowed_publishers:
+                if not isinstance(publisher, str) or not publisher.strip():
+                    continue
+                decisions.append(
+                    PolicyDecision(
+                        harness="*",
+                        scope="publisher",
+                        action="allow",
+                        publisher=publisher,
+                        reason=f"Allowed by {policy_name}.",
+                        source="team-policy",
+                    )
+                )
+    return decisions
+
+
+def _remote_harness(value: object, *, allow_wildcard: bool = True) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value
+    return "*" if allow_wildcard else None
+
+
+def _remote_workspace(item: dict[str, object]) -> str | None:
+    return _optional_string(item.get("workspace")) or _optional_string(item.get("workspacePath"))
+
+
+def _optional_string(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
+
+
+def _normalized_timestamp_string(value: object) -> str | None:
+    raw_value = _optional_string(value)
+    if raw_value is None:
+        return None
+    parsed = _parse_iso_timestamp(raw_value)
+    if parsed is None:
+        return None
+    return parsed.isoformat()
+
+
+def _last_uploaded_event_id(payload: dict[str, object] | list[object] | None) -> int:
+    if not isinstance(payload, dict):
+        return 0
+    event_id = payload.get("event_id")
+    return event_id if isinstance(event_id, int) and event_id > 0 else 0
+
+
+def _pain_signal_item(event: dict[str, object]) -> dict[str, object] | None:
+    event_name = _optional_string(event.get("event_name"))
+    payload = event.get("payload")
+    occurred_at = _optional_string(event.get("occurred_at"))
+    if event_name is None or not isinstance(payload, dict) or occurred_at is None:
+        return None
+    artifact_id = _optional_string(payload.get("artifact_id"))
+    artifact_name = _optional_string(payload.get("artifact_name"))
+    if artifact_id is None or artifact_name is None:
+        return None
+    harness = _optional_string(payload.get("harness")) or _optional_string(payload.get("executor")) or "unknown"
+    artifact_type = _artifact_type_for_signal(payload, artifact_id)
+    latest_summary = _pain_signal_summary(event_name, payload)
+    return {
+        "signalId": f"{event_name}:{harness}:{artifact_id}",
+        "signalName": event_name,
+        "artifactId": artifact_id,
+        "artifactName": artifact_name,
+        "artifactType": artifact_type,
+        "harness": harness,
+        "latestSummary": latest_summary,
+        "occurredAt": occurred_at,
+        "source": "scanner",
+        "publisher": _optional_string(payload.get("publisher")),
+    }
+
+
+def _artifact_type_for_signal(payload: dict[str, object], artifact_id: str) -> str:
+    artifact_type = _optional_string(payload.get("artifact_type"))
+    if artifact_type in {"plugin", "skill"}:
+        return artifact_type
+    if artifact_id.startswith("skill:"):
+        return "skill"
+    return "plugin"
+
+
+def _pain_signal_summary(event_name: str, payload: dict[str, object]) -> str:
+    reason = _optional_string(payload.get("reason"))
+    if reason is not None:
+        return reason
+    changed_fields = payload.get("changed_fields")
+    if event_name == "changed_artifact_caught" and isinstance(changed_fields, list):
+        changed_labels = [str(item) for item in changed_fields if isinstance(item, str)]
+        if changed_labels:
+            return f"Artifact changed across: {', '.join(changed_labels)}."
+    risk_signals = payload.get("risk_signals")
+    if isinstance(risk_signals, list):
+        labels = [str(item) for item in risk_signals if isinstance(item, str)]
+        if labels:
+            return f"Guard flagged install-time risk: {', '.join(labels)}."
+    expires_at = _optional_string(payload.get("expires_at"))
+    if event_name == "exception_expiring" and expires_at is not None:
+        return f"Guard exception expires at {expires_at}."
+    return f"Guard recorded {event_name.replace('_', ' ')} for this artifact."
+
+
+def _pain_signal_sync_url(sync_url: str) -> str:
+    parsed = urllib.parse.urlsplit(sync_url)
+    path = parsed.path.rstrip("/")
+    segments = [segment for segment in path.split("/") if segment]
+    if len(segments) >= 2 and segments[-2:] in (["receipts", "sync"], ["inventory", "sync"]):
+        next_segments = [*segments[:-2], "signals", "pain"]
+    elif segments and segments[-1] in {"receipts", "inventory"}:
+        next_segments = [*segments[:-1], "signals", "pain"]
+    else:
+        next_segments = [*segments, "signals", "pain"]
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            "/" + "/".join(next_segments),
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+
+
+def _record_synced_alert_events(
+    *,
+    store: GuardStore,
+    advisories: list[object],
+    alert_preferences: dict[str, object] | None,
+    exceptions: list[object],
+    now: str,
+) -> None:
+    advisories_enabled = not (
+        isinstance(alert_preferences, dict) and alert_preferences.get("advisoriesEnabled") is False
+    )
+    if advisories_enabled:
+        for item in advisories:
+            if not isinstance(item, dict):
+                continue
+            artifact_id = _optional_string(item.get("artifactId"))
+            if artifact_id is None:
+                continue
+            store.add_event(
+                "premium_advisory",
+                {
+                    "artifact_id": artifact_id,
+                    "artifact_name": _optional_string(item.get("artifactName")) or artifact_id,
+                    "severity": _optional_string(item.get("severity")),
+                    "reason": _optional_string(item.get("reason")),
+                },
+                now,
+            )
+    current_time = _parse_iso_timestamp(now)
+    for item in exceptions:
+        if not isinstance(item, dict):
+            continue
+        artifact_id = _optional_string(item.get("artifactId"))
+        expires_at = _optional_string(item.get("expiresAt"))
+        if artifact_id is None or expires_at is None:
+            continue
+        expiry_time = _parse_iso_timestamp(expires_at)
+        if expiry_time is None or current_time is None:
+            continue
+        if (
+            expiry_time <= current_time
+            or (expiry_time - current_time).total_seconds() > _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS * 60 * 60
+        ):
+            continue
+        store.add_event(
+            "exception_expiring",
+            {
+                "artifact_id": artifact_id,
+                "artifact_name": _optional_string(item.get("artifactName")) or artifact_id,
+                "expires_at": expires_at,
+                "reason": _optional_string(item.get("reason")),
+                "owner": _optional_string(item.get("owner")),
+            },
+            now,
+        )
+
+
+def _sync_timestamp(payload: dict[str, object]) -> str:
+    synced_at = _optional_string(payload.get("syncedAt"))
+    if synced_at is not None and _parse_iso_timestamp(synced_at) is not None:
+        return synced_at
+    return _now()
+
+
+def _parse_iso_timestamp(value: str) -> datetime | None:
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
 def _now() -> str:

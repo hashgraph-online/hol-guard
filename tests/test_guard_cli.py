@@ -1189,6 +1189,87 @@ args = ["workspace-skill.js", "--changed"]
         assert output["managed_install"]["active"] is False
         assert payload["hooks"]["PreToolUse"] == ["unexpected-entry"]
 
+    def test_guard_install_auto_detects_configured_harnesses(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "--all",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["auto_detected"] is True
+        harnesses = {item["harness"] for item in output["managed_installs"]}
+        assert {"codex", "claude-code", "cursor", "gemini", "opencode"} <= harnesses
+
+    def test_guard_uninstall_auto_detects_managed_harnesses(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        install_rc = main(
+            [
+                "guard",
+                "install",
+                "--all",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        json.loads(capsys.readouterr().out)
+
+        uninstall_rc = main(
+            [
+                "guard",
+                "uninstall",
+                "--all",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert install_rc == 0
+        assert uninstall_rc == 0
+        assert all(item["active"] is False for item in output["managed_installs"])
+
+    def test_guard_install_requires_harness_without_all(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+            ]
+        )
+        stderr = capsys.readouterr().err
+
+        assert rc == 2
+        assert "Guard install requires a harness or --all." in stderr
+
     def test_guard_login_and_sync_posts_receipts(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -1274,6 +1355,50 @@ args = ["workspace-skill.js", "--changed"]
                     "headline": "Publisher rotated to a new remote domain.",
                 }
             ],
+            "policy": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "allow",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+                "updatedAt": "2026-04-09T00:00:00Z",
+            },
+            "alertPreferences": {
+                "emailEnabled": True,
+                "digestMode": "daily",
+                "watchlistEnabled": True,
+                "advisoriesEnabled": True,
+                "repeatedWarningsEnabled": True,
+                "teamAlertsEnabled": True,
+                "updatedAt": "2026-04-09T00:00:00Z",
+            },
+            "exceptions": [
+                {
+                    "exceptionId": "artifact:codex:project:workspace_skill",
+                    "scope": "artifact",
+                    "harness": None,
+                    "artifactId": "codex:project:workspace_skill",
+                    "publisher": None,
+                    "reason": "Temporary allow for workspace skill",
+                    "owner": "guard@example.com",
+                    "source": "manual",
+                    "expiresAt": "2099-01-01T00:00:00Z",
+                    "createdAt": "2026-04-09T00:00:00Z",
+                    "updatedAt": "2026-04-09T00:00:00Z",
+                }
+            ],
+            "teamPolicyPack": {
+                "name": "Security team default",
+                "sharedHarnessDefaults": {"codex": "enforce"},
+                "allowedPublishers": ["hashgraph-online"],
+                "blockedArtifacts": [],
+                "alertChannel": "email",
+                "updatedAt": "2026-04-09T00:00:00Z",
+                "auditTrail": [],
+            },
         }
 
         server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
@@ -1317,6 +1442,10 @@ args = ["workspace-skill.js", "--changed"]
 
             advisories_rc = main(["guard", "advisories", "--home", str(home_dir), "--json"])
             advisories_output = json.loads(capsys.readouterr().out)
+            policies_rc = main(["guard", "policies", "--home", str(home_dir), "--json"])
+            policies_output = json.loads(capsys.readouterr().out)
+            exceptions_rc = main(["guard", "exceptions", "--home", str(home_dir), "--json"])
+            exceptions_output = json.loads(capsys.readouterr().out)
         finally:
             server.shutdown()
             thread.join(timeout=5)
@@ -1325,9 +1454,159 @@ args = ["workspace-skill.js", "--changed"]
         assert run_rc == 0
         assert sync_rc == 0
         assert advisories_rc == 0
+        assert policies_rc == 0
+        assert exceptions_rc == 0
         assert sync_output["advisories_stored"] == 1
         assert advisories_output["items"][0]["publisher"] == "hashgraph-online"
         assert advisories_output["items"][0]["headline"] == "Publisher rotated to a new remote domain."
+        assert any(item["source"] == "cloud-sync" and item["action"] == "allow" for item in policies_output["items"])
+        assert any(
+            item["source"] == "team-policy" and item["publisher"] == "hashgraph-online"
+            for item in policies_output["items"]
+        )
+        assert exceptions_output["items"][0]["artifact_id"] == "codex:project:workspace_skill"
+
+    def test_guard_exceptions_handles_synced_naive_expiry_timestamps(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        _SyncRequestHandler.response_payload = {
+            "syncedAt": "2026-04-09T00:00:00Z",
+            "receiptsStored": 0,
+            "inventoryStored": 0,
+            "inventoryDiff": {"generatedAt": "2026-04-09T00:00:00Z", "items": []},
+            "advisories": [],
+            "exceptions": [
+                {
+                    "exceptionId": "artifact:codex:project:workspace_skill",
+                    "scope": "artifact",
+                    "artifactId": "codex:project:workspace_skill",
+                    "reason": "Temporary allow for workspace skill",
+                    "owner": "guard@example.com",
+                    "source": "manual",
+                    "expiresAt": "2099-01-01T00:00:00",
+                }
+            ],
+        }
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            login_rc = main(
+                [
+                    "guard",
+                    "login",
+                    "--home",
+                    str(home_dir),
+                    "--sync-url",
+                    f"http://127.0.0.1:{server.server_port}/receipts",
+                    "--token",
+                    "demo-token",
+                    "--json",
+                ]
+            )
+            json.loads(capsys.readouterr().out)
+
+            sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
+            json.loads(capsys.readouterr().out)
+            exceptions_rc = main(["guard", "exceptions", "--home", str(home_dir), "--json"])
+            exceptions_output = json.loads(capsys.readouterr().out)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+
+        assert login_rc == 0
+        assert sync_rc == 0
+        assert exceptions_rc == 0
+        assert exceptions_output["items"][0]["expires_at"] == "2099-01-01T00:00:00+00:00"
+
+    def test_guard_run_auto_syncs_cloud_policy_bundle(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+        _SyncRequestHandler.response_payload = {
+            "syncedAt": "2026-04-09T00:00:00Z",
+            "receiptsStored": 0,
+            "inventoryStored": 0,
+            "inventoryDiff": {"generatedAt": "2026-04-09T00:00:00Z", "items": []},
+            "advisories": [],
+            "policy": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "allow",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+                "updatedAt": "2026-04-09T00:00:00Z",
+            },
+            "alertPreferences": {
+                "emailEnabled": True,
+                "digestMode": "daily",
+                "watchlistEnabled": True,
+                "advisoriesEnabled": True,
+                "repeatedWarningsEnabled": True,
+                "teamAlertsEnabled": True,
+                "updatedAt": "2026-04-09T00:00:00Z",
+            },
+            "exceptions": [],
+            "teamPolicyPack": {
+                "name": "Security team default",
+                "sharedHarnessDefaults": {"codex": "enforce"},
+                "allowedPublishers": [],
+                "blockedArtifacts": ["codex:global:global_tools"],
+                "alertChannel": "email",
+                "updatedAt": "2026-04-09T00:00:00Z",
+                "auditTrail": [],
+            },
+        }
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            login_rc = main(
+                [
+                    "guard",
+                    "login",
+                    "--home",
+                    str(home_dir),
+                    "--sync-url",
+                    f"http://127.0.0.1:{server.server_port}/receipts",
+                    "--token",
+                    "demo-token",
+                    "--json",
+                ]
+            )
+            json.loads(capsys.readouterr().out)
+
+            run_rc = main(
+                [
+                    "guard",
+                    "run",
+                    "codex",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--dry-run",
+                    "--json",
+                ]
+            )
+            run_output = json.loads(capsys.readouterr().out)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+
+        assert login_rc == 0
+        assert run_rc == 1
+        assert _SyncRequestHandler.captured_body is not None
+        assert run_output["blocked"] is True
+        assert any(
+            artifact["artifact_id"] == "codex:global:global_tools" and artifact["policy_action"] == "block"
+            for artifact in run_output["artifacts"]
+        )
 
     def test_guard_invalid_harness_returns_parser_error(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
