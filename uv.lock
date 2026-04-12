@@ -1038,8 +1038,6 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
-
-[package.dev-dependencies]
 publish = [
     { name = "twine" },
 ]
@@ -1054,11 +1052,9 @@ requires-dist = [
     { name = "rich", specifier = ">=13.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
+    { name = "twine", marker = "extra == 'publish'", specifier = ">=6.1.0" },
 ]
-provides-extras = ["cisco", "dev"]
-
-[package.metadata.requires-dev]
-publish = [{ name = "twine", specifier = ">=6.1.0" }]
+provides-extras = ["cisco", "dev", "publish"]
 
 [[package]]
 name = "httpcore"

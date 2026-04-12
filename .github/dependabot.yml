@@ -40,24 +40,6 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: "github-actions"
-    directory: "/action"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "05:20"
-      timezone: "America/New_York"
-    open-pull-requests-limit: 10
-    labels:
-      - "dependencies"
-      - "github-actions"
-    commit-message:
-      prefix: "deps(action-bundle)"
-    groups:
-      action-bundle-actions:
-        patterns:
-          - "*"
-
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
@@ -71,3 +53,7 @@ updates:
       - "docker"
     commit-message:
       prefix: "deps(docker)"
+    groups:
+      docker-all:
+        patterns:
+          - "*"
