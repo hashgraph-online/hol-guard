@@ -47,6 +47,7 @@ class GuardConfig:
     changed_hash_action: GuardAction = "require-reapproval"
     new_network_domain_action: GuardAction = "warn"
     subprocess_action: GuardAction = "warn"
+    approval_wait_timeout_seconds: int = 120
     telemetry: bool = False
     sync: bool = False
     billing: bool = False
@@ -107,6 +108,7 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         changed_hash_action=str(merged.get("changed_hash_action", "require-reapproval")),  # type: ignore[arg-type]
         new_network_domain_action=str(merged.get("new_network_domain_action", "warn")),  # type: ignore[arg-type]
         subprocess_action=str(merged.get("subprocess_action", "warn")),  # type: ignore[arg-type]
+        approval_wait_timeout_seconds=int(merged.get("approval_wait_timeout_seconds", 120)),
         telemetry=bool(merged.get("telemetry", False)),
         sync=bool(merged.get("sync", False)),
         billing=bool(merged.get("billing", False)),
