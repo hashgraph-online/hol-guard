@@ -29,12 +29,11 @@ classifiers = [
 dependencies = [
     "rich>=13.0",
     "tomli>=2.0; python_version < '3.11'",
+    "cisco-ai-skill-scanner~=2.0.8",
 ]
 
 [project.optional-dependencies]
-cisco = [
-    "cisco-ai-skill-scanner==2.0.8",
-]
+cisco = []
 dev = [
     "build>=1.2.2",
     "jsonschema>=4.23.0",

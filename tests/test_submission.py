@@ -16,6 +16,7 @@ from codex_plugin_scanner.submission import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
+EXPECTED_GOOD_PLUGIN_SCORE = 91
 
 
 def test_resolve_submission_metadata_prefers_manifest_fields() -> None:
@@ -74,7 +75,7 @@ def test_submission_payload_and_issue_body_include_registry_data() -> None:
         workflow_url="https://github.com/hashgraph-online/example-good-plugin/actions/runs/1",
     )
 
-    assert payload["score"] == 100
+    assert payload["score"] == EXPECTED_GOOD_PLUGIN_SCORE
     assert payload["grade"] == "A"
     assert payload["pluginUrl"] == metadata.plugin_url
     assert "## Registry Payload" in body

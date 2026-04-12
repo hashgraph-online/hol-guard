@@ -7,6 +7,7 @@ from codex_plugin_scanner.models import GRADE_LABELS, CategoryResult, CheckResul
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
+EXPECTED_GOOD_PLUGIN_SCORE = 91
 
 
 class TestGetGrade:
@@ -63,9 +64,9 @@ class TestModels:
 
 
 class TestScanPlugin:
-    def test_good_plugin_scores_100(self):
+    def test_good_plugin_scores_expected(self):
         result = scan_plugin(FIXTURES / "good-plugin")
-        assert result.score == 100
+        assert result.score == EXPECTED_GOOD_PLUGIN_SCORE
         assert result.grade == "A"
         assert result.timestamp  # non-empty
         assert "good-plugin" in result.plugin_dir

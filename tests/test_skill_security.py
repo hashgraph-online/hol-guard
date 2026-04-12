@@ -98,7 +98,7 @@ def test_run_cisco_skill_scan_on_mode_requires_cisco_dependency_when_missing(mon
     summary = run_cisco_skill_scan(FIXTURES / "good-plugin" / "skills", mode="on", policy_name="balanced")
 
     assert summary.status == CiscoIntegrationStatus.UNAVAILABLE
-    assert "Install with the cisco extra." in summary.message
+    assert "Ensure package dependencies are installed." in summary.message
 
 
 def test_scan_plugin_includes_cisco_findings(monkeypatch):
