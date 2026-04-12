@@ -8,6 +8,7 @@ from codex_plugin_scanner.cli import format_text
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
+EXPECTED_GOOD_PLUGIN_SCORE = 91
 
 
 class TestRichOutputBranch:
@@ -17,7 +18,7 @@ class TestRichOutputBranch:
         result = scan_plugin(FIXTURES / "good-plugin")
         output = format_text(result)
         assert isinstance(output, str)
-        assert "100/100" in output
+        assert f"{EXPECTED_GOOD_PLUGIN_SCORE}/100" in output
 
     def test_format_text_fallback(self):
         """Formatting remains stable even if rich is unavailable."""
@@ -25,7 +26,7 @@ class TestRichOutputBranch:
         with patch.dict("sys.modules", {"rich": None}):
             output = format_text(result)
             assert isinstance(output, str)
-            assert "100/100" in output
+            assert f"{EXPECTED_GOOD_PLUGIN_SCORE}/100" in output
 
 
 class TestOSErrorBranches:

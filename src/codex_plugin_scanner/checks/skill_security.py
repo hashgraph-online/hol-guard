@@ -82,7 +82,7 @@ def _availability_check(summary: CiscoSkillScanSummary, mode: str) -> CheckResul
                 category="skill-security",
                 title="Cisco skill scanner unavailable",
                 description=summary.message,
-                remediation="Install the cisco extra or disable the Cisco scan requirement for this run.",
+                remediation="Install scanner dependencies or disable the Cisco scan requirement for this run.",
                 source="cisco-skill-scanner",
             ),
         )

@@ -158,13 +158,7 @@ Scanner package:
 pip install plugin-scanner
 ```
 
-Cisco-backed scanner analysis is optional:
-
-```bash
-pip install "plugin-scanner[cisco]"
-```
-
-The `cisco` extra installs the published `cisco-ai-skill-scanner` package from PyPI so the scanner remains publishable on PyPI and the optional Cisco analysis path works with standard package metadata.
+Cisco skill scanning support is included in the default `plugin-scanner` install (via `cisco-ai-skill-scanner`).
 
 If you want both tools in one shell during local development:
 
