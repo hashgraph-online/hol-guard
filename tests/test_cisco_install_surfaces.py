@@ -52,6 +52,11 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "uv sync --frozen --extra dev --python ${{ matrix.python-version }}" in ci_workflow
     assert "uv sync --frozen --extra dev --extra publish --extra cisco" in publish_workflow
     assert 'uv tool install "hol-guard[cisco]==' in publish_workflow
-    assert "RUN python3 -m pip install -r /app/docker-requirements.txt" in dockerfile
-    assert ".[cisco]" in docker_requirements
+    assert "COPY docker-requirements.txt LICENSE README.md /app/" in dockerfile
+    assert "RUN python3 -m pip install --require-hashes -r /app/docker-requirements.txt" in dockerfile
+    requirements_copy_index = dockerfile.index("COPY docker-requirements.txt LICENSE README.md /app/")
+    source_copy_index = dockerfile.index("COPY src /app/src")
+    assert requirements_copy_index < source_copy_index
+    assert "cisco-ai-mcp-scanner==" in docker_requirements
+    assert "--hash=sha256:" in docker_requirements
     assert "uv sync --extra dev --extra cisco" in contributing
