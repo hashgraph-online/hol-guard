@@ -21,7 +21,6 @@ _EXCLUDED_DIRS = {
     ".venv",
     "__pycache__",
     "coverage",
-    "dist",
     "node_modules",
     "venv",
 }
@@ -230,6 +229,11 @@ def run_cisco_mcp_scan(plugin_dir: Path, mode: str = "auto") -> CiscoMcpScanSumm
         return _build_summary(
             status=CiscoIntegrationStatus.UNAVAILABLE,
             message="Cisco MCP scanner not installed; deep MCP scan skipped.",
+        )
+    except Exception as exc:
+        return _build_summary(
+            status=CiscoIntegrationStatus.FAILED,
+            message=f"Cisco MCP scanner failed to load: {exc}",
         )
 
     try:

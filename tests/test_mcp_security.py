@@ -73,6 +73,33 @@ def test_scan_ignores_excluded_descendants(monkeypatch, tmp_path: Path) -> None:
     assert all("node_modules" not in path for path in analyzed_paths)
 
 
+def test_scan_includes_dist_descendants(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+    (plugin_dir / "dist").mkdir()
+    (plugin_dir / "dist" / "server.js").write_text("console.log('dist')\n", encoding="utf-8")
+    analyzed_paths: list[str] = []
+
+    class RecordingYaraAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        async def analyze(self, content: str, context: dict[str, Any] | None = None) -> list[FakeCiscoFinding]:
+            analyzed_paths.append(str((context or {}).get("file_path", "")))
+            return []
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        lambda: {"YaraAnalyzer": RecordingYaraAnalyzer},
+    )
+
+    summary = run_cisco_mcp_scan(plugin_dir, mode="on")
+
+    assert summary.status == CiscoIntegrationStatus.ENABLED
+    assert summary.targets_scanned == 3
+    assert any(path.endswith("dist/server.js") for path in analyzed_paths)
+
+
 def test_mcp_security_auto_mode_unavailable_is_not_applicable(monkeypatch, tmp_path: Path) -> None:
     plugin_dir = tmp_path / "plugin"
     _write_plugin(plugin_dir)
@@ -112,6 +139,24 @@ def test_mcp_security_on_mode_requires_dependency(monkeypatch, tmp_path: Path) -
     assert availability.passed is False
     assert availability.max_points > 0
     assert availability.findings[0].rule_id == "CISCO-MCP-SCANNER-UNAVAILABLE"
+
+
+def test_mcp_security_handles_loader_failures(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+
+    def _raise_runtime_error() -> object:
+        raise RuntimeError("loader boom")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        _raise_runtime_error,
+    )
+
+    summary = run_cisco_mcp_scan(plugin_dir, mode="auto")
+
+    assert summary.status == CiscoIntegrationStatus.FAILED
+    assert "loader boom" in summary.message
 
 
 def test_scan_plugin_includes_cisco_mcp_findings(monkeypatch, tmp_path: Path) -> None:
