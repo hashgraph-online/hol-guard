@@ -182,8 +182,18 @@ def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentP
         choices=("none", "critical", "high", "medium", "low", "info"),
         default="none",
     )
-    scan_parser.add_argument("--cisco-skill-scan", choices=("auto", "on", "off"), default="auto")
-    scan_parser.add_argument("--cisco-mcp-scan", choices=("auto", "on", "off"), default="auto")
+    scan_parser.add_argument(
+        "--cisco-skill-scan",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="Run Cisco skill scanning from the baseline install.",
+    )
+    scan_parser.add_argument(
+        "--cisco-mcp-scan",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="Run Cisco MCP static analysis. Requires the optional [cisco] extra on Python 3.11+.",
+    )
     scan_parser.add_argument("--cisco-policy", choices=("permissive", "balanced", "strict"), default="balanced")
     scan_parser.add_argument(
         "--ecosystem",

@@ -19,16 +19,20 @@ This repository ships:
 ```bash
 git clone https://github.com/hashgraph-online/ai-plugin-scanner.git
 cd ai-plugin-scanner
-uv sync --extra dev
+uv sync --extra dev --extra cisco
 ```
+
+For lean baseline validation on Python 3.10, use `uv sync --extra dev --python 3.10` instead.
 
 If you prefer a virtualenv-first workflow, the repository can also be installed in editable mode:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,cisco]"
 ```
+
+The editable Cisco extra is intended for Python 3.11+ contributor environments.
 
 ## Validation Requirements
 
