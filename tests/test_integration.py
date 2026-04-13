@@ -9,7 +9,7 @@ from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
 EXPECTED_GOOD_PLUGIN_SCORE = 91
-EXPECTED_BAD_PLUGIN_SCORE = 38
+EXPECTED_BAD_PLUGIN_SCORE = 39
 
 
 def test_good_plugin_expected_score():
@@ -45,7 +45,7 @@ def test_json_output_is_parseable():
     assert parsed["score"] == EXPECTED_GOOD_PLUGIN_SCORE
     assert len(parsed["categories"]) == 7
     total_checks = sum(len(c["checks"]) for c in parsed["categories"])
-    assert total_checks == 34
+    assert total_checks == 37
 
 
 def test_text_output_is_readable():

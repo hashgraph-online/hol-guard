@@ -165,7 +165,18 @@ Cisco-backed scanner analysis is optional:
 pip install "plugin-scanner[cisco]"
 ```
 
-The `cisco` extra installs the published `cisco-ai-skill-scanner` package from PyPI so the scanner remains publishable on PyPI and the optional Cisco analysis path works with standard package metadata.
+The base install already includes the published `cisco-ai-skill-scanner` package for
+skill analysis. The `cisco` extra adds the optional published
+`cisco-ai-mcp-scanner` package on Python 3.11+ so static MCP analysis stays opt-in
+and the scanner remains publishable on PyPI with standard package metadata.
+
+Credit to [Cisco AI Defense](https://github.com/cisco-ai-defense) for open-sourcing
+[skill-scanner](https://github.com/cisco-ai-defense/skill-scanner),
+[mcp-scanner](https://github.com/cisco-ai-defense/mcp-scanner),
+[a2a-scanner](https://github.com/cisco-ai-defense/a2a-scanner), and
+[aibom](https://github.com/cisco-ai-defense/aibom). This scanner now ships the
+published `cisco-ai-skill-scanner` integration plus an optional static
+`cisco-ai-mcp-scanner` integration, with A2A and AIBOM work left for follow-up PRs.
 
 If you want both tools in one shell during local development:
 
@@ -216,7 +227,7 @@ The scanner evaluates only the surfaces a plugin actually exposes, then normaliz
 | Category | Max Points | Coverage |
 | :--- | :--- | :--- |
 | Manifest Validation | 31 | `plugin.json`, required fields, semver, kebab-case, recommended metadata, interface metadata, interface links and assets, safe declared paths |
-| Security | 24 | `SECURITY.md`, `LICENSE`, hardcoded secret detection, dangerous MCP commands, MCP transport hardening, risky approval defaults |
+| Security | 36 | `SECURITY.md`, `LICENSE`, hardcoded secret detection, dangerous MCP commands, MCP transport hardening, risky approval defaults, Cisco MCP scan status, elevated MCP findings, MCP analyzability |
 | Operational Security | 20 | SHA-pinned GitHub Actions, `write-all`, privileged untrusted checkout patterns, Dependabot, dependency lockfiles |
 | Best Practices | 15 | `README.md`, skills directory, `SKILL.md` frontmatter, committed `.env`, `.codexignore` |
 | Marketplace | 15 | `.agents/plugins/marketplace.json` validity, legacy `marketplace.json` compatibility, policy fields, safe source paths |
@@ -249,6 +260,9 @@ plugin-scanner ./my-plugin --fail-on-severity high
 
 # Require Cisco skill scanning with a strict policy
 plugin-scanner ./my-plugin --cisco-skill-scan on --cisco-policy strict
+
+# Require optional Cisco MCP static analysis
+plugin-scanner ./my-plugin --cisco-mcp-scan on
 ```
 
 ## Quality Suite Commands
@@ -374,6 +388,7 @@ The scanner currently detects or validates:
 - Publishability issues in `interface` metadata, HTTPS links, and declared asset paths
 - Workflow hardening gaps including unpinned third-party actions, `write-all`, privileged checkout patterns, missing Dependabot, and missing lockfiles
 - Skill-level issues surfaced by Cisco `skill-scanner` when the optional integration is installed
+- Static MCP findings surfaced by Cisco `mcp-scanner` when the optional `cisco` extra is installed
 
 ## CI And Automation
 
@@ -614,6 +629,7 @@ Plugins that pass the scanner with a high score are candidates for listing in th
 - [OpenAI Codex Plugin Documentation](https://developers.openai.com/codex/plugins)
 - [Model Context Protocol Documentation](https://modelcontextprotocol.io)
 - [Cisco AI Skill Scanner](https://pypi.org/project/cisco-ai-skill-scanner/)
+- [Cisco AI MCP Scanner](https://pypi.org/project/cisco-ai-mcp-scanner/)
 - [HOL GitHub Organization](https://github.com/hashgraph-online)
 
 ## License
