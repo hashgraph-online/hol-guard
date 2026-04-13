@@ -40,7 +40,7 @@ jobs:
         with:
           enable-cache: true
       - name: Install dependencies
-        run: uv sync --frozen --extra dev --extra publish
+        run: uv sync --frozen --extra dev --extra publish --extra cisco
       - name: Compute publish version
         id: version
         env:
@@ -234,6 +234,7 @@ jobs:
           ${LOG}
 
           ### Installation
+          Base install:
           \`\`\`bash
           uv tool install hol-guard==${VERSION}
           \`\`\`
@@ -244,6 +245,15 @@ jobs:
 
           \`\`\`bash
           uv tool install codex-plugin-scanner==${VERSION}
+          \`\`\`
+
+          Full Cisco coverage on Python 3.11+:
+          \`\`\`bash
+          uv tool install "hol-guard[cisco]==${VERSION}"
+          \`\`\`
+
+          \`\`\`bash
+          uv tool install "plugin-scanner[cisco]==${VERSION}"
           \`\`\`
 
           \`\`\`bash
