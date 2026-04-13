@@ -435,6 +435,34 @@ def _render_hook(console: Console, payload: dict[str, object]) -> None:
     console.print(Panel(body, title="Guard hook event", border_style="cyan"))
 
 
+def _cisco_status_text(status: str) -> Text:
+    styles = {
+        "enabled": "green",
+        "skipped": "yellow",
+        "unavailable": "yellow",
+        "failed": "red",
+    }
+    return Text(status, style=styles.get(status, "white"))
+
+
+def _render_cisco_evidence(console: Console, payload: dict[str, object]) -> None:
+    cisco_evidence = payload.get("cisco_evidence")
+    if not isinstance(cisco_evidence, dict):
+        return
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Mode", str(cisco_evidence.get("mode", "offline-only")).replace("-", " "))
+    body.add_row("Status", _cisco_status_text(str(cisco_evidence.get("status", "skipped"))))
+    body.add_row("Findings", str(cisco_evidence.get("finding_count", 0)))
+    body.add_row("Targets", str(cisco_evidence.get("target_count", 0)))
+    body.add_row("Summary", str(cisco_evidence.get("summary", "No Cisco MCP evidence collected.")))
+    for integration in _coerce_dict_list(cisco_evidence.get("integrations")):
+        body.add_row(
+            str(integration.get("name", "cisco-mcp-scanner")),
+            str(integration.get("message", "No Cisco MCP detail available.")),
+        )
+    console.print(Panel(body, title="Cisco static scan evidence", border_style="blue"))
+
+
 def _render_scan(console: Console, payload: dict[str, object]) -> None:
     recommendation = payload.get("policy_recommendation")
     ecosystems = []
@@ -450,6 +478,7 @@ def _render_scan(console: Console, payload: dict[str, object]) -> None:
     if isinstance(recommendation, dict):
         body.add_row("Recommended action", _action_text(str(recommendation.get("action", "review"))))
     console.print(Panel(body, title="Consumer scan", border_style="cyan"))
+    _render_cisco_evidence(console, payload)
     console.print(
         Syntax(
             json.dumps(payload, indent=2),

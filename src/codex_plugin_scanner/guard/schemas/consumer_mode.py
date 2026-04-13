@@ -7,7 +7,12 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from ...models import SEVERITY_ORDER, Severity
+from ...models import (
+    SEVERITY_ORDER,
+    IntegrationResult,
+    ScanOptions,
+    Severity,
+)
 from ...scanner import scan_plugin
 
 
@@ -29,10 +34,74 @@ def _install_recommendation(
     return ("allow", "Install-time scan found no blocking issues in the local artifact.")
 
 
-def build_consumer_mode_contract(target: Path, intended_harness: str | None = None) -> dict[str, object]:
+def _is_applicable_cisco_mcp_integration(integration: IntegrationResult) -> bool:
+    return "cisco-mcp-scanner" in integration.name and (
+        "targets_scanned" in integration.metadata or "scan_mode" in integration.metadata
+    )
+
+
+def _resolve_cisco_status(integrations: tuple[IntegrationResult, ...]) -> str:
+    statuses = {integration.status for integration in integrations}
+    for status in ("failed", "unavailable", "enabled", "skipped"):
+        if status in statuses:
+            return status
+    return "skipped"
+
+
+def _target_count(integrations: tuple[IntegrationResult, ...]) -> int:
+    total = 0
+    for integration in integrations:
+        raw_count = integration.metadata.get("targets_scanned")
+        if raw_count is None:
+            continue
+        try:
+            total += int(raw_count)
+        except ValueError:
+            continue
+    return total
+
+
+def _build_cisco_summary(status: str, finding_count: int, target_count: int) -> str:
+    if status == "enabled":
+        return (
+            f"{finding_count} finding across {target_count} local MCP target(s)"
+            if finding_count == 1
+            else f"{finding_count} findings across {target_count} local MCP target(s)"
+        )
+    if status == "skipped":
+        return f"Cisco MCP scanning disabled for {target_count} local MCP target(s)"
+    if status == "unavailable":
+        return f"Cisco MCP scanner unavailable for {target_count} local MCP target(s)"
+    return f"Cisco MCP scan failed for {target_count} local MCP target(s)"
+
+
+def _extract_cisco_evidence(integrations: tuple[IntegrationResult, ...]) -> dict[str, object] | None:
+    applicable_integrations = tuple(
+        integration for integration in integrations if _is_applicable_cisco_mcp_integration(integration)
+    )
+    if not applicable_integrations:
+        return None
+    finding_count = sum(integration.findings_count for integration in applicable_integrations)
+    target_count = _target_count(applicable_integrations)
+    status = _resolve_cisco_status(applicable_integrations)
+    return {
+        "mode": "offline-only",
+        "status": status,
+        "finding_count": finding_count,
+        "target_count": target_count,
+        "summary": _build_cisco_summary(status, finding_count, target_count),
+        "integrations": [asdict(integration) for integration in applicable_integrations],
+    }
+
+
+def build_consumer_mode_contract(
+    target: Path,
+    intended_harness: str | None = None,
+    options: ScanOptions | None = None,
+) -> dict[str, object]:
     """Build the stable consumer-mode payload for a local artifact."""
 
-    scan_result = scan_plugin(target)
+    scan_result = scan_plugin(target, options=options)
     summary_payload = {
         "path": str(target),
         "score": scan_result.score,
@@ -63,7 +132,7 @@ def build_consumer_mode_contract(target: Path, intended_harness: str | None = No
         "ecosystems": list(scan_result.ecosystems),
         "packages": [asdict(package) for package in scan_result.packages],
     }
-    return {
+    payload = {
         "schema_version": "guard-consumer.v2",
         "generated_at": scan_result.timestamp,
         "install_target": {
@@ -111,3 +180,7 @@ def build_consumer_mode_contract(target: Path, intended_harness: str | None = No
             "finding_count": len(scan_result.findings),
         },
     }
+    cisco_evidence = _extract_cisco_evidence(scan_result.integrations)
+    if cisco_evidence is not None:
+        payload["cisco_evidence"] = cisco_evidence
+    return payload
