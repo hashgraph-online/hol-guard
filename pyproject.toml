@@ -35,7 +35,7 @@ dependencies = [
 [project.optional-dependencies]
 cisco = []
 dev = [
-    "build>=1.2.2",
+    "build>=1.4.3",
     "jsonschema>=4.23.0",
     "pyyaml>=6.0",
     "pytest>=7.0",
