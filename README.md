@@ -177,6 +177,8 @@ pip install "plugin-scanner[cisco]"
 
 `cisco-ai-mcp-scanner` stays in the optional `cisco` extra because it is Python 3.11+ only and adds a heavier YARA-backed install surface than the lean baseline should require.
 
+On Guard surfaces, the Cisco extra adds optional offline evidence to `hol-guard scan`, `hol-guard preflight`, and `hol-guard explain <path>`. Use `--cisco-mode {auto,on,off}` to control that consumer-mode evidence path for local artifact scans. `hol-guard run` and Guard runtime prompt/file-read protection remain native Guard behavior in this pass.
+
 ### Cisco package status
 
 Credit to [Cisco AI Defense](https://github.com/cisco-ai-defense) for open-sourcing the packages below.
