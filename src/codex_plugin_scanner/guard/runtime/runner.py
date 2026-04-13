@@ -36,7 +36,6 @@ _ENV_PROMPT_PATTERN = re.compile(r"(?<![\w-])\.env(?:\.[\w.-]+)?\b")
 _ENV_READ_VERB_PATTERN = re.compile(
     r"\b(cat|read|open|show|print|dump|copy|reveal|inspect|view|grep|less|more|head|tail|source)\b"
 )
-_ENV_NEGATION_PATTERN = re.compile(r"\b(do not|don't|never|avoid)\b")
 
 
 def guard_run(
@@ -139,8 +138,6 @@ def _prompt_env_artifact(
 
 def _requests_direct_env_read(prompt_text: str) -> bool:
     if _ENV_PROMPT_PATTERN.search(prompt_text) is None:
-        return False
-    if _ENV_NEGATION_PATTERN.search(prompt_text) and _ENV_READ_VERB_PATTERN.search(prompt_text):
         return False
     return _ENV_READ_VERB_PATTERN.search(prompt_text) is not None
 
