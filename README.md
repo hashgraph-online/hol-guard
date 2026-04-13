@@ -139,13 +139,15 @@ This keeps the quality grade and the trust score separate. Signals like `SECURIT
 ```bash
 git clone https://github.com/hashgraph-online/ai-plugin-scanner.git
 cd ai-plugin-scanner
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync --extra dev --extra cisco
 pytest -q
 ```
 
+Use `uv sync --extra dev --python 3.10` when you need the lean baseline path without the Cisco MCP extra.
+
 ## Install The Package You Need
+
+### Lean baseline install
 
 Guard package:
 
@@ -159,24 +161,32 @@ Scanner package:
 pip install plugin-scanner
 ```
 
-Cisco-backed scanner analysis is optional:
+The lean baseline keeps Python 3.10 support intact and always includes the shipped `cisco-ai-skill-scanner` integration.
+
+### Full Cisco coverage
+
+Install the Cisco extra on Python 3.11+ when you want static MCP coverage in addition to the baseline skill scanner:
+
+```bash
+pip install "hol-guard[cisco]"
+```
 
 ```bash
 pip install "plugin-scanner[cisco]"
 ```
 
-The base install already includes the published `cisco-ai-skill-scanner` package for
-skill analysis. The `cisco` extra adds the optional published
-`cisco-ai-mcp-scanner` package on Python 3.11+ so static MCP analysis stays opt-in
-and the scanner remains publishable on PyPI with standard package metadata.
+`cisco-ai-mcp-scanner` stays in the optional `cisco` extra because it is Python 3.11+ only and adds a heavier YARA-backed install surface than the lean baseline should require.
 
-Credit to [Cisco AI Defense](https://github.com/cisco-ai-defense) for open-sourcing
-[skill-scanner](https://github.com/cisco-ai-defense/skill-scanner),
-[mcp-scanner](https://github.com/cisco-ai-defense/mcp-scanner),
-[a2a-scanner](https://github.com/cisco-ai-defense/a2a-scanner), and
-[aibom](https://github.com/cisco-ai-defense/aibom). This scanner now ships the
-published `cisco-ai-skill-scanner` integration plus an optional static
-`cisco-ai-mcp-scanner` integration, with A2A and AIBOM work left for follow-up PRs.
+### Cisco package status
+
+Credit to [Cisco AI Defense](https://github.com/cisco-ai-defense) for open-sourcing the packages below.
+
+| Package | Status in this repo | Notes |
+| :--- | :--- | :--- |
+| `cisco-ai-skill-scanner` | shipped by default | Included in the lean baseline install. |
+| `cisco-ai-mcp-scanner` | shipped via `[cisco]` | Recommended for full Cisco coverage on Python 3.11+, including repo-controlled CI and Docker. |
+| `cisco-ai-a2a-scanner` | deferred | Requires live A2A endpoints and is not added in this pass. |
+| `cisco-aibom` | deferred | Artifact-oriented output with heavier deps and no scoring value in this pass. |
 
 If you want both tools in one shell during local development:
 
@@ -185,7 +195,7 @@ pipx install hol-guard
 pipx install plugin-scanner
 ```
 
-Container-first environments can use the published image instead:
+Container-first environments can use the published image instead. The repo-controlled image installs a lock-derived Cisco dependency set on Python 3.12 so the container has full static Cisco coverage by default.
 
 ```bash
 docker run --rm \
@@ -417,6 +427,8 @@ jobs:
 
 For a multi-plugin repo, the same workflow can stay pointed at `plugin_dir: "."` as long as the repository has `.agents/plugins/marketplace.json` with local `./plugins/...` entries.
 
+For repo-controlled validation in this repository, Linux jobs that target full coverage install the `cisco` extra on Python 3.12, while the baseline matrix keeps Python 3.10 compatibility explicit.
+
 Local pre-commit style hook:
 
 ```yaml
@@ -437,6 +449,8 @@ repos:
 The Marketplace action lives in the dedicated repository [hashgraph-online/ai-plugin-scanner-action](https://github.com/hashgraph-online/ai-plugin-scanner-action).
 
 This repository no longer vendors a local action bundle. Use the standalone action repository for `action.yml`, release notes, and action-specific documentation. The legacy alias [hashgraph-online/hol-codex-plugin-scanner-action](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action) remains available for existing workflows.
+
+When you run the scanner in your own job instead of the packaged action, install `plugin-scanner[cisco]` on Python 3.11+ and set `CISCO_MCP_SCAN=auto` or `CISCO_MCP_SCAN=on` for full Cisco MCP coverage.
 
 ### Plugin Author Submission Flow
 
@@ -527,12 +541,14 @@ The registry payload mirrors the submission data used by HOL ecosystem automatio
 ## Development
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,cisco]"
 ruff check src tests
 ruff format --check src
 pytest -q
 python -m build
 ```
+
+Use `pip install -e ".[dev]"` or `uv sync --extra dev --python 3.10` when you need the lean baseline path without the Cisco MCP extra.
 
 ## Repository Workflows
 

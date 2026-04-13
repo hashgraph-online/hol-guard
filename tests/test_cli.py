@@ -1,5 +1,6 @@
 """Tests for CLI output formatting and argument parsing."""
 
+import contextlib
 import json
 import shutil
 import sys
@@ -17,6 +18,8 @@ from codex_plugin_scanner.scanner import scan_plugin
 FIXTURES = Path(__file__).parent / "fixtures"
 NONEXISTENT_PLUGIN_DIR = Path("/nonexistent/plugin-dir").resolve()
 EXPECTED_GOOD_PLUGIN_SCORE = 91
+
+
 class TestFormatJson:
     def test_valid_json_output(self):
         result = scan_plugin(FIXTURES / "good-plugin")
@@ -107,6 +110,18 @@ class TestMain:
         args = parser.parse_args(["scan", str(FIXTURES / "good-plugin"), "--cisco-mcp-scan", "on"])
 
         assert args.cisco_mcp_scan == "on"
+
+    def test_scan_help_explains_cisco_mcp_extra_requirement(self, capsys):
+        parser = cli_module._build_parser("plugin-scanner", program_mode="scanner")
+
+        with contextlib.suppress(SystemExit):
+            parser.parse_args(["scan", "--help"])
+
+        output = capsys.readouterr().out
+
+        assert "--cisco-mcp-scan" in output
+        assert "[cisco]" in output
+        assert "Python 3.11+" in output
 
     def test_returns_0_for_good_plugin(self):
         rc = main([str(FIXTURES / "good-plugin")])
