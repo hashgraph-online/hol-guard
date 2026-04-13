@@ -91,6 +91,7 @@ class ScanOptions:
     """Runtime options that change scanner behavior."""
 
     cisco_skill_scan: str = "auto"
+    cisco_mcp_scan: str = "auto"
     cisco_policy: str = "balanced"
     ecosystem: str = "auto"
 

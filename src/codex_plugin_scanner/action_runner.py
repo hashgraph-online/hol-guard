@@ -104,6 +104,7 @@ def _build_scan_args(
     min_score: int,
     fail_on_severity: str,
     cisco_scan: str,
+    cisco_mcp_scan: str,
     cisco_policy: str,
 ) -> argparse.Namespace:
     return argparse.Namespace(
@@ -116,6 +117,7 @@ def _build_scan_args(
         min_score=min_score,
         fail_on_severity=fail_on_severity,
         cisco_skill_scan=cisco_scan,
+        cisco_mcp_scan=cisco_mcp_scan,
         cisco_policy=cisco_policy,
     )
 
@@ -229,6 +231,7 @@ def main() -> int:
     min_score = int(_read_env("MIN_SCORE", "0"))
     fail_on = _read_env("FAIL_ON", "none")
     cisco_scan = _read_env("CISCO_SCAN", "auto")
+    cisco_mcp_scan = _read_env("CISCO_MCP_SCAN", "auto")
     cisco_policy = _read_env("CISCO_POLICY", "balanced")
     submission_enabled = _read_bool_env("SUBMISSION_ENABLED")
     submission_threshold = int(_read_env("SUBMISSION_SCORE_THRESHOLD", "80"))
@@ -353,6 +356,7 @@ def main() -> int:
             min_score=min_score,
             fail_on_severity=fail_on,
             cisco_scan=cisco_scan,
+            cisco_mcp_scan=cisco_mcp_scan,
             cisco_policy=cisco_policy,
         )
         raw_result, result, resolved_profile, policy_eval, _effective_score = _scan_with_policy(

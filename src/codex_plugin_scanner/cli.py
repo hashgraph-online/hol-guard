@@ -81,6 +81,11 @@ def _build_plain_text(result) -> str:
         for domain in result.trust_report.domains:
             lines.append(f"  - {domain.label}: {domain.score}/100 ({domain.spec_id})")
         lines.append("")
+    if result.integrations:
+        lines.append("Integration Status:")
+        for integration in result.integrations:
+            lines.append(f"  - {integration.name}: {integration.status} - {integration.message}")
+        lines.append("")
     separator = "━" * 37
     label = GRADE_LABELS.get(result.grade, "Unknown")
     lines += [separator, f"Final Score: {result.score}/100 ({result.grade} - {label})", separator]
@@ -178,6 +183,7 @@ def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentP
         default="none",
     )
     scan_parser.add_argument("--cisco-skill-scan", choices=("auto", "on", "off"), default="auto")
+    scan_parser.add_argument("--cisco-mcp-scan", choices=("auto", "on", "off"), default="auto")
     scan_parser.add_argument("--cisco-policy", choices=("permissive", "balanced", "strict"), default="balanced")
     scan_parser.add_argument(
         "--ecosystem",
@@ -285,6 +291,7 @@ def _scan_with_policy(args: argparse.Namespace, plugin_dir: Path):
         plugin_dir,
         ScanOptions(
             cisco_skill_scan=getattr(args, "cisco_skill_scan", "auto"),
+            cisco_mcp_scan=getattr(args, "cisco_mcp_scan", "auto"),
             cisco_policy=getattr(args, "cisco_policy", "balanced"),
             ecosystem=getattr(args, "ecosystem", "auto"),
         ),

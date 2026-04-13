@@ -12,6 +12,7 @@ from .checks.code_quality import run_code_quality_checks
 from .checks.gemini import run_gemini_checks
 from .checks.manifest import run_manifest_checks
 from .checks.marketplace import run_marketplace_checks
+from .checks.mcp_security import resolve_mcp_security_context, run_mcp_security_checks
 from .checks.opencode import run_opencode_checks
 from .checks.operational_security import run_operational_security_checks
 from .checks.security import run_security_checks
@@ -35,7 +36,7 @@ from .repo_detect import LocalPluginTarget, discover_scan_targets
 from .trust_scoring import build_plugin_trust_report, build_repository_trust_report
 
 
-def _build_integration_results(skill_security_context, package_label: str = "") -> tuple[IntegrationResult, ...]:
+def _build_skill_integration_results(skill_security_context, package_label: str = "") -> tuple[IntegrationResult, ...]:
     integration_name = "cisco-skill-scanner" if not package_label else f"cisco-skill-scanner[{package_label}]"
     if skill_security_context.skip_message:
         return (
@@ -67,6 +68,58 @@ def _build_integration_results(skill_security_context, package_label: str = "") 
             findings_count=summary.total_findings,
             metadata=metadata,
         ),
+    )
+
+
+def _build_mcp_integration_results(mcp_security_context, package_label: str = "") -> tuple[IntegrationResult, ...]:
+    integration_name = "cisco-mcp-scanner" if not package_label else f"cisco-mcp-scanner[{package_label}]"
+    if mcp_security_context.skip_message:
+        return (
+            IntegrationResult(
+                name=integration_name,
+                status=CiscoIntegrationStatus.SKIPPED,
+                message=mcp_security_context.skip_message,
+            ),
+        )
+
+    summary = mcp_security_context.summary
+    if summary is None:
+        return (
+            IntegrationResult(
+                name=integration_name,
+                status=CiscoIntegrationStatus.SKIPPED,
+                message="Cisco MCP scan context unavailable.",
+            ),
+        )
+
+    metadata = {
+        "scan_mode": summary.scan_mode,
+        "targets_scanned": str(summary.targets_scanned),
+    }
+    if summary.analyzers_used:
+        metadata["analyzers"] = ",".join(summary.analyzers_used)
+    return (
+        IntegrationResult(
+            name=integration_name,
+            status=summary.status,
+            message=summary.message,
+            findings_count=summary.total_findings,
+            metadata=metadata,
+        ),
+    )
+
+
+def _build_integration_results(
+    skill_security_context,
+    mcp_security_context,
+    package_label: str = "",
+) -> tuple[IntegrationResult, ...]:
+    return _build_skill_integration_results(
+        skill_security_context,
+        package_label,
+    ) + _build_mcp_integration_results(
+        mcp_security_context,
+        package_label,
     )
 
 
@@ -190,9 +243,13 @@ def _rebase_plugin_result(plugin_result: ScanResult, plugin_target: LocalPluginT
 
 def _scan_single_plugin(plugin_dir: Path, options: ScanOptions) -> ScanResult:
     skill_security_context = resolve_skill_security_context(plugin_dir, options)
+    mcp_security_context = resolve_mcp_security_context(plugin_dir, options)
     categories: list[CategoryResult] = [
         CategoryResult(name="Manifest Validation", checks=run_manifest_checks(plugin_dir)),
-        CategoryResult(name="Security", checks=run_security_checks(plugin_dir)),
+        CategoryResult(
+            name="Security",
+            checks=run_security_checks(plugin_dir) + run_mcp_security_checks(plugin_dir, options, mcp_security_context),
+        ),
         CategoryResult(name="Operational Security", checks=run_operational_security_checks(plugin_dir)),
         CategoryResult(name="Best Practices", checks=run_best_practice_checks(plugin_dir)),
         CategoryResult(name="Marketplace", checks=run_marketplace_checks(plugin_dir)),
@@ -214,7 +271,7 @@ def _scan_single_plugin(plugin_dir: Path, options: ScanOptions) -> ScanResult:
         plugin_dir=str(plugin_dir),
         findings=findings,
         severity_counts=build_severity_counts(findings),
-        integrations=_build_integration_results(skill_security_context),
+        integrations=_build_integration_results(skill_security_context, mcp_security_context),
         scope="plugin",
         trust_report=trust_report,
         ecosystems=("codex",),
