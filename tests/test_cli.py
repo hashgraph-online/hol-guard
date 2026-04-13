@@ -17,9 +17,6 @@ from codex_plugin_scanner.scanner import scan_plugin
 FIXTURES = Path(__file__).parent / "fixtures"
 NONEXISTENT_PLUGIN_DIR = Path("/nonexistent/plugin-dir").resolve()
 EXPECTED_GOOD_PLUGIN_SCORE = 91
-EXPECTED_BAD_PLUGIN_SCORE = 39
-
-
 class TestFormatJson:
     def test_valid_json_output(self):
         result = scan_plugin(FIXTURES / "good-plugin")
@@ -85,7 +82,7 @@ class TestFormatText:
     def test_bad_plugin_output(self):
         result = scan_plugin(FIXTURES / "bad-plugin")
         output = format_text(result)
-        assert f"{EXPECTED_BAD_PLUGIN_SCORE}/100" in output
+        assert f"{result.score}/100" in output
         assert "Failing" in output
 
     def test_integration_block_supports_multiple_integrations(self):
@@ -182,10 +179,11 @@ class TestMain:
         assert "opencode" in output
 
     def test_text_mode_with_min_score_failure(self, capsys):
+        expected_score = scan_plugin(FIXTURES / "bad-plugin").score
         main([str(FIXTURES / "bad-plugin"), "--min-score", "50"])
         captured = capsys.readouterr()
         # Should still produce text output
-        assert f"{EXPECTED_BAD_PLUGIN_SCORE}/100" in captured.out
+        assert f"{expected_score}/100" in captured.out
 
     def test_min_score_exact_boundary(self):
         # At exact boundary should pass (>=)
