@@ -43,7 +43,7 @@ dev = [
     "ruff>=0.15.10",
 ]
 publish = [
-    "twine>=6.1.0",
+    "twine>=6.2.0",
 ]
 
 [project.scripts]
