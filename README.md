@@ -112,7 +112,7 @@ If your repository uses a Codex marketplace root like `.agents/plugins/marketpla
 
 - Contributor setup: jump to [Development](#development)
 - Local Guard docs: [docs/guard/get-started.md](docs/guard/get-started.md)
-- GitHub Action docs: [action/README.md](action/README.md)
+- GitHub Action docs: [hashgraph-online/ai-plugin-scanner-action](https://github.com/hashgraph-online/ai-plugin-scanner-action)
 - Registry and trust references: keep reading below
 
 <details>
@@ -419,39 +419,9 @@ repos:
 
 ## GitHub Action
 
-The scanner ships with a composite GitHub Action source bundle in [action/action.yml](action/action.yml).
+The Marketplace action lives in the dedicated repository [hashgraph-online/ai-plugin-scanner-action](https://github.com/hashgraph-online/ai-plugin-scanner-action).
 
-GitHub Marketplace has two important constraints for actions:
-
-- the published action must live in a dedicated public repository with a single root `action.yml`
-- that repository cannot contain workflow files
-
-Because the scanner repository itself contains CI and release workflows, the Marketplace listing should be published from a separate action-only repository.
-
-The dedicated action-repository guide now lives directly in [action/README.md](action/README.md).
-
-### Automated Action Publication
-
-The source repository can publish the GitHub Action automatically into a dedicated public action repository.
-
-Configure:
-
-- repository secret `ACTION_REPO_TOKEN`
-  It should be a token that can create or update repositories and releases in the canonical and compatibility action repositories.
-- optional repository variable `ACTION_CANONICAL_REPOSITORY`
-  Defaults to `hashgraph-online/ai-plugin-scanner-action`.
-- optional repository variable `ACTION_COMPAT_REPOSITORY`
-  Defaults to `hashgraph-online/hol-codex-plugin-scanner-action`.
-
-When changes land on `main`, [publish-action-repo.yml](./.github/workflows/publish-action-repo.yml) will:
-
-- create the canonical Marketplace repository if it does not already exist
-- sync the root-ready `action.yml`, repo-specific `README.md`, `LICENSE`, and `SECURITY.md` into both the canonical repo and the legacy compatibility repo
-- push the immutable release tag such as `v2.0.0`
-- move the floating `v1` tag
-- create or update the corresponding release in each action repository
-
-GitHub Marketplace still requires the one-time listing publication step in the dedicated action repository UI, but after that this repository can keep the action repository current automatically.
+This repository no longer vendors a local action bundle. Use the standalone action repository for `action.yml`, release notes, and action-specific documentation. The legacy alias [hashgraph-online/hol-codex-plugin-scanner-action](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action) remains available for existing workflows.
 
 ### Plugin Author Submission Flow
 
