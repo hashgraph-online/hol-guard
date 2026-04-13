@@ -33,9 +33,6 @@ _PAIN_SIGNAL_EVENTS = frozenset(
 )
 _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
 _ENV_PROMPT_PATTERN = re.compile(r"(?<![\w-])\.env(?:\.[\w.-]+)?\b")
-_ENV_READ_VERB_PATTERN = re.compile(
-    r"\b(cat|read|open|show|print|dump|copy|reveal|inspect|view|grep|less|more|head|tail|source)\b"
-)
 
 
 def guard_run(
@@ -128,7 +125,7 @@ def _prompt_env_artifact(
         harness=harness,
         artifact_type="prompt_request",
         source_scope="session",
-        config_path=str(context.workspace_dir or context.home_dir),
+        config_path=str(_prompt_policy_path(context)),
         metadata={
             "prompt_signals": ["asks the harness to read a local .env file directly"],
             "prompt_summary": prompt_summary,
@@ -137,9 +134,13 @@ def _prompt_env_artifact(
 
 
 def _requests_direct_env_read(prompt_text: str) -> bool:
-    if _ENV_PROMPT_PATTERN.search(prompt_text) is None:
-        return False
-    return _ENV_READ_VERB_PATTERN.search(prompt_text) is not None
+    return _ENV_PROMPT_PATTERN.search(prompt_text) is not None
+
+
+def _prompt_policy_path(context: HarnessContext) -> Path:
+    if context.workspace_dir is not None:
+        return context.workspace_dir / ".codex" / "config.toml"
+    return context.home_dir / ".codex" / "config.toml"
 
 
 def sync_receipts(store: GuardStore) -> dict[str, object]:

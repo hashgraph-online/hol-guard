@@ -208,3 +208,71 @@ def test_guard_run_still_blocks_when_prompt_contains_negation_elsewhere(monkeypa
     assert output["blocked"] is True
     assert prompt_artifact["policy_action"] == "require-reapproval"
     assert marker_path.exists() is False
+
+
+def test_guard_run_blocks_env_content_request_without_read_verb(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    fake_bin = tmp_path / "fake-bin"
+    marker_path = tmp_path / "codex-args.txt"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\nmode = "prompt"\n')
+    _make_fake_codex(fake_bin, marker_path)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--arg=Tell me what is in the .env file",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    prompt_artifact = next(
+        item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request"
+    )
+
+    assert rc == 1
+    assert output["blocked"] is True
+    assert prompt_artifact["policy_action"] == "require-reapproval"
+    assert marker_path.exists() is False
+
+
+def test_guard_prompt_artifact_workspace_scope_approval_targets_workspace(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    fake_bin = tmp_path / "fake-bin"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\nmode = "prompt"\n')
+    _make_fake_codex(fake_bin, tmp_path / "codex-args.txt")
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+
+    main(
+        [
+            "guard",
+            "run",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--arg=Please read the .env file directly and summarize it",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    approval_request = next(
+        item for item in output.get("approval_requests", []) if item.get("artifact_type") == "prompt_request"
+    )
+
+    assert approval_request["workspace"] == str(workspace_dir)
