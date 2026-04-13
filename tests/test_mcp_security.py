@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,33 @@ def _write_plugin(plugin_dir: Path) -> None:
         encoding="utf-8",
     )
     (plugin_dir / "server.py").write_text("print('hello')\n", encoding="utf-8")
+
+
+def test_scan_ignores_excluded_descendants(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+    (plugin_dir / "node_modules").mkdir()
+    (plugin_dir / "node_modules" / "ignored.py").write_text("print('ignored')\n", encoding="utf-8")
+    analyzed_paths: list[str] = []
+
+    class RecordingYaraAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        async def analyze(self, content: str, context: dict[str, Any] | None = None) -> list[FakeCiscoFinding]:
+            analyzed_paths.append(str((context or {}).get("file_path", "")))
+            return []
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        lambda: {"YaraAnalyzer": RecordingYaraAnalyzer},
+    )
+
+    summary = run_cisco_mcp_scan(plugin_dir, mode="on")
+
+    assert summary.status == CiscoIntegrationStatus.ENABLED
+    assert summary.targets_scanned == 2
+    assert all("node_modules" not in path for path in analyzed_paths)
 
 
 def test_mcp_security_auto_mode_unavailable_is_not_applicable(monkeypatch, tmp_path: Path) -> None:
@@ -137,6 +165,53 @@ def test_scan_plugin_includes_cisco_mcp_findings(monkeypatch, tmp_path: Path) ->
     assert {finding.file_path for finding in mcp_findings} == {".mcp.json", "server.py"}
 
 
+def test_scan_uses_plugin_relative_exclusions(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "dist" / "plugin"
+    plugin_dir.mkdir(parents=True)
+    _write_plugin(plugin_dir)
+
+    class RecordingYaraAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        async def analyze(self, content: str, context: dict[str, Any] | None = None) -> list[FakeCiscoFinding]:
+            return []
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        lambda: {"YaraAnalyzer": RecordingYaraAnalyzer},
+    )
+
+    summary = run_cisco_mcp_scan(plugin_dir, mode="on")
+
+    assert summary.status == CiscoIntegrationStatus.ENABLED
+    assert summary.targets_scanned == 2
+
+
+def test_scan_runs_safely_inside_running_event_loop(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+
+    class RecordingYaraAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        async def analyze(self, content: str, context: dict[str, Any] | None = None) -> list[FakeCiscoFinding]:
+            return []
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        lambda: {"YaraAnalyzer": RecordingYaraAnalyzer},
+    )
+
+    async def _run_scan() -> CiscoIntegrationStatus:
+        return run_cisco_mcp_scan(plugin_dir, mode="on").status
+
+    status = asyncio.run(_run_scan())
+
+    assert status == CiscoIntegrationStatus.ENABLED
+
+
 def test_mcp_security_skips_plugins_without_mcp_config() -> None:
     context = resolve_mcp_security_context(FIXTURES / "good-plugin", ScanOptions(cisco_mcp_scan="on"))
     checks = run_mcp_security_checks(FIXTURES / "good-plugin", ScanOptions(cisco_mcp_scan="on"), context)
@@ -165,3 +240,32 @@ def test_mcp_security_handles_scanner_failures(monkeypatch, tmp_path: Path) -> N
 
     assert summary.status == CiscoIntegrationStatus.FAILED
     assert "boom" in summary.message
+
+
+def test_targets_scanned_counts_only_processed_targets(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+    original_read_text = Path.read_text
+
+    class RecordingYaraAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        async def analyze(self, content: str, context: dict[str, Any] | None = None) -> list[FakeCiscoFinding]:
+            return []
+
+    def _read_text(self: Path, *args: object, **kwargs: object) -> str:
+        if self.name == "server.py":
+            raise OSError("unreadable")
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", _read_text)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        lambda: {"YaraAnalyzer": RecordingYaraAnalyzer},
+    )
+
+    summary = run_cisco_mcp_scan(plugin_dir, mode="on")
+
+    assert summary.status == CiscoIntegrationStatus.ENABLED
+    assert summary.targets_scanned == 1

@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Thread
+from typing import TypeVar
 
 from ..models import Finding, Severity, severity_from_value
 from .cisco_skill_scanner import CiscoIntegrationStatus
@@ -23,6 +27,7 @@ _EXCLUDED_DIRS = {
 }
 _SOURCE_SUFFIXES = {".cjs", ".js", ".json", ".jsx", ".mjs", ".py", ".ts", ".tsx"}
 _MAX_TARGET_SIZE_BYTES = 1_000_000
+T = TypeVar("T")
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,24 +138,52 @@ def _collect_static_targets(plugin_dir: Path) -> tuple[Path, ...]:
         return ()
 
     targets = [config_path]
-    for file_path in sorted(plugin_dir.rglob("*")):
-        if not file_path.is_file() or file_path == config_path:
-            continue
-        if any(part in _EXCLUDED_DIRS for part in file_path.parts):
-            continue
-        if file_path.suffix.lower() not in _SOURCE_SUFFIXES:
-            continue
-        try:
-            if file_path.stat().st_size > _MAX_TARGET_SIZE_BYTES:
+    for root, dirs, files in os.walk(plugin_dir, topdown=True):
+        dirs[:] = sorted(dir_name for dir_name in dirs if dir_name not in _EXCLUDED_DIRS)
+        current_dir = Path(root)
+        for file_name in sorted(files):
+            file_path = current_dir / file_name
+            if file_path == config_path or file_path.suffix.lower() not in _SOURCE_SUFFIXES:
                 continue
-        except OSError:
-            continue
-        targets.append(file_path)
+            try:
+                if file_path.stat().st_size > _MAX_TARGET_SIZE_BYTES:
+                    continue
+            except OSError:
+                continue
+            targets.append(file_path)
     return tuple(targets)
 
 
-async def _scan_targets(plugin_dir: Path, targets: tuple[Path, ...], analyzer: object) -> tuple[Finding, ...]:
+def _run_awaitable(awaitable: Awaitable[T]) -> T:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(awaitable)
+
+    result: list[T] = []
+    errors: list[BaseException] = []
+
+    def _runner() -> None:
+        try:
+            result.append(asyncio.run(awaitable))
+        except BaseException as exc:
+            errors.append(exc)
+
+    thread = Thread(target=_runner)
+    thread.start()
+    thread.join()
+    if errors:
+        raise errors[0]
+    if result:
+        return result[0]
+    raise RuntimeError("Cisco MCP scanner completed without a result.")
+
+
+async def _scan_targets(
+    plugin_dir: Path, targets: tuple[Path, ...], analyzer: object
+) -> tuple[tuple[Finding, ...], int]:
     findings: list[Finding] = []
+    targets_scanned = 0
     for target in targets:
         try:
             content = target.read_text(encoding="utf-8", errors="ignore")
@@ -165,9 +198,10 @@ async def _scan_targets(plugin_dir: Path, targets: tuple[Path, ...], analyzer: o
                 "file_path": str(target),
             },
         )
+        targets_scanned += 1
         for finding in external_findings:
             findings.append(_normalize_finding(plugin_dir, target, finding))
-    return tuple(findings)
+    return tuple(findings), targets_scanned
 
 
 def run_cisco_mcp_scan(plugin_dir: Path, mode: str = "auto") -> CiscoMcpScanSummary:
@@ -202,14 +236,13 @@ def run_cisco_mcp_scan(plugin_dir: Path, mode: str = "auto") -> CiscoMcpScanSumm
         analyzer_class = components["YaraAnalyzer"]
         analyzer = analyzer_class()
         targets = _collect_static_targets(plugin_dir)
-        findings = asyncio.run(_scan_targets(plugin_dir, targets, analyzer))
+        findings, targets_scanned = _run_awaitable(_scan_targets(plugin_dir, targets, analyzer))
     except Exception as exc:
         return _build_summary(
             status=CiscoIntegrationStatus.FAILED,
             message=f"Cisco MCP scanner failed: {exc}",
         )
 
-    targets_scanned = len(targets)
     if findings:
         message = (
             f"Cisco MCP scanner completed static analysis for {targets_scanned} target(s) "
