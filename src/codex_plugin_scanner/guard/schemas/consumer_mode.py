@@ -35,7 +35,9 @@ def _install_recommendation(
 
 
 def _is_applicable_cisco_mcp_integration(integration: IntegrationResult) -> bool:
-    return integration.name.startswith("cisco-mcp-scanner") and not integration.message.startswith("No .mcp.json found")
+    return "cisco-mcp-scanner" in integration.name and (
+        "targets_scanned" in integration.metadata or "scan_mode" in integration.metadata
+    )
 
 
 def _resolve_cisco_status(integrations: tuple[IntegrationResult, ...]) -> str:
@@ -56,7 +58,7 @@ def _target_count(integrations: tuple[IntegrationResult, ...]) -> int:
             total += int(raw_count)
         except ValueError:
             continue
-    return total if total > 0 else len(integrations)
+    return total
 
 
 def _build_cisco_summary(status: str, finding_count: int, target_count: int) -> str:

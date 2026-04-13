@@ -12,7 +12,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.schemas.consumer_mode import build_consumer_mode_contract
-from codex_plugin_scanner.models import ScanOptions
+from codex_plugin_scanner.models import IntegrationResult, ScanOptions, ScanResult
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -103,6 +103,43 @@ def test_build_consumer_mode_contract_omits_cisco_evidence_without_local_mcp_art
     payload = build_consumer_mode_contract(FIXTURES / "good-plugin", options=_build_scan_options("on"))
 
     assert "cisco_evidence" not in payload
+
+
+def test_build_consumer_mode_contract_includes_rebased_cisco_mcp_integration(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "repo"
+    target.mkdir()
+
+    def fake_scan_plugin(path: Path, options: ScanOptions | None = None) -> ScanResult:
+        return ScanResult(
+            score=92,
+            grade="A",
+            categories=(),
+            timestamp="2026-04-13T00:00:00+00:00",
+            plugin_dir=str(path),
+            findings=(),
+            severity_counts={severity: 0 for severity in ("critical", "high", "medium", "low", "info")},
+            integrations=(
+                IntegrationResult(
+                    name="workspace / cisco-mcp-scanner",
+                    status="enabled",
+                    message="Cisco MCP scanner completed static analysis for 2 target(s) with no findings.",
+                    metadata={"scan_mode": "static", "targets_scanned": "2"},
+                ),
+            ),
+            scope="repository",
+            ecosystems=("codex",),
+            packages=(),
+        )
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.schemas.consumer_mode.scan_plugin", fake_scan_plugin)
+
+    payload = build_consumer_mode_contract(target)
+
+    assert payload["cisco_evidence"]["summary"] == "0 findings across 2 local MCP target(s)"
+    assert payload["cisco_evidence"]["integrations"][0]["name"] == "workspace / cisco-mcp-scanner"
 
 
 @pytest.mark.parametrize("command", ["scan", "preflight", "explain"])

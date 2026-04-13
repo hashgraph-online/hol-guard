@@ -279,19 +279,37 @@ def _build_cisco_scan_options(mode: str) -> ScanOptions:
     return ScanOptions(cisco_skill_scan=mode, cisco_mcp_scan=mode)
 
 
+def _resolve_cisco_scan_options(mode: str) -> ScanOptions | None:
+    if mode == "auto":
+        return None
+    return _build_cisco_scan_options(mode)
+
+
+def _run_consumer_scan_with_mode(
+    target: Path,
+    *,
+    intended_harness: str | None = None,
+    cisco_mode: str,
+) -> dict[str, object]:
+    options = _resolve_cisco_scan_options(cisco_mode)
+    if options is None:
+        return run_consumer_scan(target, intended_harness=intended_harness)
+    return run_consumer_scan(target, intended_harness=intended_harness, options=options)
+
+
 def run_guard_command(args: argparse.Namespace) -> int:
     """Execute a Guard subcommand."""
 
     if args.guard_command == "scan":
-        payload = run_consumer_scan(Path(args.target).resolve(), options=_build_cisco_scan_options(args.cisco_mode))
+        payload = _run_consumer_scan_with_mode(Path(args.target).resolve(), cisco_mode=args.cisco_mode)
         _emit("scan", payload, args.json or args.consumer_mode)
         return 0
 
     if args.guard_command == "preflight":
-        payload = run_consumer_scan(
+        payload = _run_consumer_scan_with_mode(
             Path(args.target).resolve(),
             intended_harness=getattr(args, "harness", None),
-            options=_build_cisco_scan_options(args.cisco_mode),
+            cisco_mode=args.cisco_mode,
         )
         _emit("preflight", payload, getattr(args, "json", False))
         if getattr(args, "enforce", False):
@@ -504,7 +522,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command == "explain":
-        payload = _build_explain_payload(store, args.target, options=_build_cisco_scan_options(args.cisco_mode))
+        payload = _build_explain_payload_with_mode(store, args.target, cisco_mode=args.cisco_mode)
         _emit("explain", payload, getattr(args, "json", False))
         return 0
 
@@ -1001,6 +1019,13 @@ def _build_explain_payload(
         "latest_diff": latest_diff,
         "advisories": advisories,
     }
+
+
+def _build_explain_payload_with_mode(store: GuardStore, target: str, cisco_mode: str) -> dict[str, object]:
+    options = _resolve_cisco_scan_options(cisco_mode)
+    if options is None:
+        return _build_explain_payload(store, target)
+    return _build_explain_payload(store, target, options=options)
 
 
 def _matching_advisories(store: GuardStore, publisher: object) -> list[dict[str, object]]:
