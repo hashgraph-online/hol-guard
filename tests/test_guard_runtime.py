@@ -997,6 +997,133 @@ class TestGuardRuntime:
         assert rc == 1
         assert output["policy_action"] == "require-reapproval"
 
+    def test_guard_hook_blocks_sensitive_runtime_file_read_until_exactly_approved(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+
+        blocked_event = {
+            "event": "PreToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": ".env.local"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
+
+        first_rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "claude-code",
+                "--json",
+            ]
+        )
+        first_output = json.loads(capsys.readouterr().out)
+        approval_request = first_output["approval_requests"][0]
+
+        approval_rc = main(
+            [
+                "guard",
+                "approvals",
+                "approve",
+                str(approval_request["request_id"]),
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        json.loads(capsys.readouterr().out)
+
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
+        second_rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "claude-code",
+                "--json",
+            ]
+        )
+        second_output = json.loads(capsys.readouterr().out)
+
+        different_event = {
+            "event": "PreToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "~/.aws/credentials"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(different_event)))
+        third_rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "claude-code",
+                "--json",
+            ]
+        )
+        third_output = json.loads(capsys.readouterr().out)
+
+        assert first_rc == 1
+        assert first_output["policy_action"] == "require-reapproval"
+        assert first_output["artifact_type"] == "file_read_request"
+        assert "sensitive local file" in first_output["risk_summary"].lower()
+        assert approval_request["recommended_scope"] == "artifact"
+        assert approval_rc == 0
+        assert second_rc == 0
+        assert second_output["policy_action"] == "allow"
+        assert third_rc == 1
+        assert third_output["policy_action"] == "require-reapproval"
+
+    def test_guard_hook_allows_non_sensitive_read_file_requests(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        safe_event = {
+            "event": "PreToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "README.md"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(safe_event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "claude-code",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["policy_action"] in {"allow", "warn"}
+        assert output.get("approval_requests") in (None, [])
+
     def test_stdio_proxy_blocks_disallowed_tools_and_redacts_headers(self):
         proxy = StdioGuardProxy(
             command=[
@@ -1053,6 +1180,77 @@ class TestGuardRuntime:
         assert allowed["events"][1]["redacted_params"]["arguments"]["headers"]["Authorization"] == "*****"
         assert blocked["responses"][0]["error"]["code"] == -32001
         assert blocked["events"][0]["decision"] == "block"
+
+    def test_stdio_proxy_blocks_sensitive_file_reads_without_forwarding(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
+        config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace")
+        proxy = StdioGuardProxy(
+            command=[
+                sys.executable,
+                "-u",
+                "-c",
+                "\n".join(
+                    [
+                        "import json, sys",
+                        "for line in sys.stdin:",
+                        "    message = json.loads(line)",
+                        "    result = {'tool': message.get('params', {}).get('name')}",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}))",
+                        "    sys.stdout.flush()",
+                    ]
+                ),
+            ],
+            cwd=tmp_path / "workspace",
+            guard_store=store,
+            guard_config=config,
+            approval_center_url="http://127.0.0.1:4455",
+            harness="codex",
+        )
+
+        allowed = proxy.run_session(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "read_file",
+                        "arguments": {
+                            "path": "README.md",
+                            "headers": {"Authorization": "Bearer secret-token"},
+                        },
+                    },
+                }
+            ]
+        )
+        blocked = proxy.run_session(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "read_file",
+                        "arguments": {
+                            "path": ".env",
+                            "headers": {"Authorization": "Bearer secret-token"},
+                        },
+                    },
+                }
+            ]
+        )
+
+        assert allowed["responses"][0]["result"]["tool"] == "read_file"
+        assert allowed["events"][0]["decision"] == "forward"
+        assert blocked["responses"][0]["error"]["code"] == -32001
+        assert "sensitive local file" in blocked["responses"][0]["error"]["message"].lower()
+        assert blocked["events"][0]["decision"] == "block"
+        assert blocked["events"][0]["redacted_params"]["arguments"]["headers"]["Authorization"] == "*****"
+        assert blocked["events"][0]["path_summary"].endswith("/.env")
+        pending = store.list_approval_requests(limit=10)
+        assert len(pending) == 1
+        assert pending[0]["artifact_type"] == "file_read_request"
 
     def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers(self):
         server = HTTPServer(("127.0.0.1", 0), _RemoteProxyHandler)

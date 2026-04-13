@@ -8,10 +8,16 @@ from pathlib import Path
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.consumer import evaluate_detection
+from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.incident import build_incident_context
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.risk import artifact_risk_signals, artifact_risk_summary
+from codex_plugin_scanner.guard.runtime.secret_file_requests import (
+    build_file_read_request_artifact,
+    classify_sensitive_path,
+    extract_sensitive_file_read_request,
+    is_file_read_tool_name,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -42,6 +48,27 @@ def test_artifact_risk_signals_detect_secret_and_network_patterns():
     assert "can send or receive network traffic" in signals
     assert "runs through a shell wrapper" in signals
     assert "secrets" in summary.lower()
+
+
+def test_artifact_risk_signals_detect_direct_env_prompt_requests():
+    artifact = GuardArtifact(
+        artifact_id="codex:session:prompt-env-read:abc123",
+        name="direct .env prompt access",
+        harness="codex",
+        artifact_type="prompt_request",
+        source_scope="session",
+        config_path="/workspace",
+        metadata={
+            "prompt_signals": ["asks the harness to read a local .env file directly"],
+            "prompt_summary": "Prompt asks the harness to read a local .env file directly.",
+        },
+    )
+
+    signals = artifact_risk_signals(artifact)
+    summary = artifact_risk_summary(artifact)
+
+    assert "asks the harness to read a local .env file directly" in signals
+    assert summary == "Prompt asks the harness to read a local .env file directly."
 
 
 def test_queue_blocked_approvals_includes_risk_summary_and_signals(tmp_path):
@@ -176,3 +203,66 @@ def test_incident_context_keeps_context_for_generic_config_file_names():
     )
 
     assert "workspace/global_tools/config.toml" in incident["trigger_summary"]
+
+
+def test_secret_file_path_classifier_stays_precise(tmp_path):
+    env_match = classify_sensitive_path(".env")
+    env_local_match = classify_sensitive_path("/workspace/.env.local")
+    aws_match = classify_sensitive_path("~/.aws/credentials", home_dir=tmp_path)
+
+    assert env_match is not None
+    assert env_match.path_class == "local .env file"
+    assert env_local_match is not None
+    assert env_local_match.path_class == "local .env file"
+    assert aws_match is not None
+    assert aws_match.path_class == "AWS shared credentials file"
+    assert aws_match.normalized_path.endswith(".aws/credentials")
+    assert classify_sensitive_path("README.md") is None
+    assert classify_sensitive_path(".envrc") is None
+
+
+def test_file_read_request_classifier_is_argument_aware(tmp_path):
+    env_request = extract_sensitive_file_read_request("read_file", {"path": ".env.local"})
+    claude_request = extract_sensitive_file_read_request("Read", {"file_path": "~/.ssh/config"}, home_dir=tmp_path)
+
+    assert is_file_read_tool_name("read_file") is True
+    assert is_file_read_tool_name("Read") is True
+    assert is_file_read_tool_name("write_file") is False
+    assert env_request is not None
+    assert env_request.path_match.path_class == "local .env file"
+    assert claude_request is not None
+    assert claude_request.path_match.path_class == "SSH client config"
+    assert extract_sensitive_file_read_request("read_file", {"path": "README.md"}) is None
+    assert extract_sensitive_file_read_request("write_file", {"path": ".env"}) is None
+
+
+def test_file_read_request_artifact_hash_is_exact_to_tool_and_path():
+    first_request = extract_sensitive_file_read_request("read_file", {"path": ".env"})
+    same_request = extract_sensitive_file_read_request("read_file", {"path": ".env"})
+    different_request = extract_sensitive_file_read_request("read_file", {"path": ".env.local"})
+
+    assert first_request is not None
+    assert same_request is not None
+    assert different_request is not None
+
+    first_artifact = build_file_read_request_artifact(
+        harness="claude-code",
+        request=first_request,
+        config_path="/workspace/.claude/settings.local.json",
+        source_scope="project",
+    )
+    same_artifact = build_file_read_request_artifact(
+        harness="claude-code",
+        request=same_request,
+        config_path="/workspace/.claude/settings.local.json",
+        source_scope="project",
+    )
+    different_artifact = build_file_read_request_artifact(
+        harness="claude-code",
+        request=different_request,
+        config_path="/workspace/.claude/settings.local.json",
+        source_scope="project",
+    )
+
+    assert artifact_hash(first_artifact) == artifact_hash(same_artifact)
+    assert artifact_hash(first_artifact) != artifact_hash(different_artifact)
