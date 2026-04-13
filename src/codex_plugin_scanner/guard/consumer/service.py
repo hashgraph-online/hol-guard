@@ -44,9 +44,10 @@ def diff_artifact(previous: dict[str, object] | None, current: GuardArtifact) ->
     current_payload = _serialize_artifact(current)
     current_hash = artifact_hash(current)
     if previous is None:
+        changed_fields = ["prompt_request"] if current.artifact_type == "prompt_request" else ["first_seen"]
         return {
             "changed": True,
-            "changed_fields": ["first_seen"],
+            "changed_fields": changed_fields,
             "previous_hash": None,
             "current_hash": current_hash,
             "current_snapshot": current_payload,
@@ -155,7 +156,9 @@ def evaluate_detection(
                 artifact.artifact_id,
                 artifact.publisher,
             )
-        if is_first_seen and configured_action is None and default_action is not None:
+        if configured_action is None and artifact.artifact_type == "prompt_request":
+            policy_action = "require-reapproval"
+        elif is_first_seen and configured_action is None and default_action is not None:
             policy_action = default_action
         else:
             policy_action = decide_action(
@@ -396,6 +399,9 @@ def record_policy(
 
 
 def _launch_target_from_artifact(artifact: GuardArtifact) -> str | None:
+    prompt_summary = artifact.metadata.get("prompt_summary")
+    if isinstance(prompt_summary, str) and prompt_summary:
+        return prompt_summary
     if artifact.url:
         return artifact.url
     if artifact.command:

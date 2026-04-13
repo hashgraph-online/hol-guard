@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import subprocess
 import urllib.error
 import urllib.parse
@@ -17,7 +19,7 @@ from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
-from ..models import HarnessDetection, PolicyDecision
+from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..store import GuardStore
 
 _APPROVAL_METADATA_KEYS = ("approval_center_url", "approval_requests", "approval_wait", "review_hint")
@@ -30,6 +32,11 @@ _PAIN_SIGNAL_EVENTS = frozenset(
     }
 )
 _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
+_ENV_PROMPT_PATTERN = re.compile(r"(?<![\w-])\.env(?:\.[\w.-]+)?\b")
+_ENV_READ_VERB_PATTERN = re.compile(
+    r"\b(cat|read|open|show|print|dump|copy|reveal|inspect|view|grep|less|more|head|tail|source)\b"
+)
+_ENV_NEGATION_PATTERN = re.compile(r"\b(do not|don't|never|avoid)\b")
 
 
 def guard_run(
@@ -45,7 +52,7 @@ def guard_run(
 ) -> dict[str, Any]:
     """Evaluate local harness state and optionally launch the harness."""
 
-    detection = detect_harness(harness, context)
+    detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
     if blocked_resolver is None:
         evaluation = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
     else:
@@ -57,7 +64,7 @@ def guard_run(
         evaluation = interactive_resolver(detection, evaluation)
     elif not dry_run and blocked_resolver is not None and evaluation["blocked"]:
         pending_evaluation = blocked_resolver(detection, evaluation)
-        detection = detect_harness(harness, context)
+        detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
         reevaluated = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
         for key in _APPROVAL_METADATA_KEYS:
             if key in pending_evaluation:
@@ -85,6 +92,57 @@ def guard_run(
     evaluation["launched"] = True
     evaluation["return_code"] = result.returncode
     return evaluation
+
+
+def _detection_with_prompt_artifacts(
+    detection: HarnessDetection,
+    context: HarnessContext,
+    passthrough_args: list[str],
+) -> HarnessDetection:
+    prompt_artifact = _prompt_env_artifact(detection.harness, context, passthrough_args)
+    if prompt_artifact is None:
+        return detection
+    return HarnessDetection(
+        harness=detection.harness,
+        installed=detection.installed,
+        command_available=detection.command_available,
+        config_paths=detection.config_paths,
+        artifacts=(*detection.artifacts, prompt_artifact),
+        warnings=detection.warnings,
+    )
+
+
+def _prompt_env_artifact(
+    harness: str,
+    context: HarnessContext,
+    passthrough_args: list[str],
+) -> GuardArtifact | None:
+    prompt_text = " ".join(value.strip() for value in passthrough_args if value.strip())
+    normalized_prompt = " ".join(prompt_text.split()).lower()
+    if not normalized_prompt or not _requests_direct_env_read(normalized_prompt):
+        return None
+    prompt_hash = hashlib.sha256(normalized_prompt.encode("utf-8")).hexdigest()
+    prompt_summary = "Prompt asks the harness to read a local .env file directly."
+    return GuardArtifact(
+        artifact_id=f"{harness}:session:prompt-env-read:{prompt_hash}",
+        name="direct .env prompt access",
+        harness=harness,
+        artifact_type="prompt_request",
+        source_scope="session",
+        config_path=str(context.workspace_dir or context.home_dir),
+        metadata={
+            "prompt_signals": ["asks the harness to read a local .env file directly"],
+            "prompt_summary": prompt_summary,
+        },
+    )
+
+
+def _requests_direct_env_read(prompt_text: str) -> bool:
+    if _ENV_PROMPT_PATTERN.search(prompt_text) is None:
+        return False
+    if _ENV_NEGATION_PATTERN.search(prompt_text) and _ENV_READ_VERB_PATTERN.search(prompt_text):
+        return False
+    return _ENV_READ_VERB_PATTERN.search(prompt_text) is not None
 
 
 def sync_receipts(store: GuardStore) -> dict[str, object]:

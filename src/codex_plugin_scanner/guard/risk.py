@@ -9,6 +9,9 @@ from .models import GuardArtifact
 
 def artifact_risk_signals(artifact: GuardArtifact) -> tuple[str, ...]:
     signals: list[str] = []
+    prompt_signals = _prompt_signals(artifact)
+    if prompt_signals:
+        signals.extend(prompt_signals)
     combined = " ".join(_artifact_terms(artifact)).lower()
     command_name = PurePath(artifact.command or "").name.lower()
     env_keys = _env_keys(artifact)
@@ -38,6 +41,9 @@ def artifact_risk_signals(artifact: GuardArtifact) -> tuple[str, ...]:
 
 
 def artifact_risk_summary(artifact: GuardArtifact) -> str:
+    prompt_summary = _prompt_summary(artifact)
+    if prompt_summary is not None:
+        return prompt_summary
     signals = artifact_risk_signals(artifact)
     if len(signals) == 0:
         return "No obvious secret-access or network signal was detected in the launch definition."
@@ -57,6 +63,20 @@ def _env_keys(artifact: GuardArtifact) -> list[str]:
     if not isinstance(env_keys, list):
         return []
     return [str(value) for value in env_keys if isinstance(value, str) and value]
+
+
+def _prompt_signals(artifact: GuardArtifact) -> list[str]:
+    value = artifact.metadata.get("prompt_signals")
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str) and item]
+
+
+def _prompt_summary(artifact: GuardArtifact) -> str | None:
+    value = artifact.metadata.get("prompt_summary")
+    if isinstance(value, str) and value:
+        return value
+    return None
 
 
 def _has_shell_wrapper(artifact: GuardArtifact) -> bool:
