@@ -7,6 +7,7 @@ from .claude_code import ClaudeCodeHarnessAdapter
 from .codex import CodexHarnessAdapter
 from .cursor import CursorHarnessAdapter
 from .gemini import GeminiHarnessAdapter
+from .hermes import HermesHarnessAdapter
 from .opencode import OpenCodeHarnessAdapter
 
 ADAPTERS: tuple[HarnessAdapter, ...] = (
@@ -14,6 +15,7 @@ ADAPTERS: tuple[HarnessAdapter, ...] = (
     ClaudeCodeHarnessAdapter(),
     CursorHarnessAdapter(),
     GeminiHarnessAdapter(),
+    HermesHarnessAdapter(),
     OpenCodeHarnessAdapter(),
 )
 
