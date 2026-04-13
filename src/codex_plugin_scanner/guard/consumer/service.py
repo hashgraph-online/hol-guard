@@ -44,9 +44,10 @@ def diff_artifact(previous: dict[str, object] | None, current: GuardArtifact) ->
     current_payload = _serialize_artifact(current)
     current_hash = artifact_hash(current)
     if previous is None:
+        changed_fields = _first_seen_changed_fields(current)
         return {
             "changed": True,
-            "changed_fields": ["first_seen"],
+            "changed_fields": changed_fields,
             "previous_hash": None,
             "current_hash": current_hash,
             "current_snapshot": current_payload,
@@ -155,7 +156,9 @@ def evaluate_detection(
                 artifact.artifact_id,
                 artifact.publisher,
             )
-        if is_first_seen and configured_action is None and default_action is not None:
+        if configured_action is None and artifact.artifact_type in {"prompt_request", "file_read_request"}:
+            policy_action = "require-reapproval"
+        elif is_first_seen and configured_action is None and default_action is not None:
             policy_action = default_action
         else:
             policy_action = decide_action(
@@ -396,11 +399,25 @@ def record_policy(
 
 
 def _launch_target_from_artifact(artifact: GuardArtifact) -> str | None:
+    request_summary = artifact.metadata.get("request_summary")
+    if isinstance(request_summary, str) and request_summary:
+        return request_summary
+    prompt_summary = artifact.metadata.get("prompt_summary")
+    if isinstance(prompt_summary, str) and prompt_summary:
+        return prompt_summary
     if artifact.url:
         return artifact.url
     if artifact.command:
         return " ".join([artifact.command, *artifact.args]).strip()
     return None
+
+
+def _first_seen_changed_fields(artifact: GuardArtifact) -> list[str]:
+    if artifact.artifact_type == "prompt_request":
+        return ["prompt_request"]
+    if artifact.artifact_type == "file_read_request":
+        return ["file_read_request"]
+    return ["first_seen"]
 
 
 def run_consumer_scan(target: Path, intended_harness: str | None = None) -> dict[str, object]:

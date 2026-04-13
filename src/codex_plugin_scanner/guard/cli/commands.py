@@ -13,12 +13,16 @@ from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approvals import approval_center_hint, queue_blocked_approvals, wait_for_approval_requests
 from ..config import load_guard_config, overlay_synced_guard_policy, resolve_guard_home
-from ..consumer import detect_all, detect_harness, evaluate_detection, record_policy, run_consumer_scan
+from ..consumer import artifact_hash, detect_all, detect_harness, evaluate_detection, record_policy, run_consumer_scan
 from ..daemon import GuardDaemonServer, ensure_guard_daemon
+from ..incident import build_incident_context
+from ..models import GuardArtifact, HarnessDetection
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS
 from ..protect import build_protect_payload
 from ..receipts import build_receipt
+from ..risk import artifact_risk_signals, artifact_risk_summary
 from ..runtime import guard_run, sync_receipts
+from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
 from ..store import GuardStore
 from .approval_commands import add_approval_parser, run_approval_command
 from .bootstrap import DEFAULT_ALIAS_NAME, build_guard_bootstrap_payload
@@ -529,6 +533,106 @@ def run_guard_command(args: argparse.Namespace) -> int:
 
     if args.guard_command == "hook":
         payload = _load_hook_payload(getattr(args, "event_file", None))
+        runtime_artifact = _hook_file_read_artifact(
+            harness=args.harness,
+            payload=payload,
+            home_dir=context.home_dir,
+            workspace=workspace,
+        )
+        if runtime_artifact is not None:
+            runtime_artifact_hash = artifact_hash(runtime_artifact)
+            artifact_id = runtime_artifact.artifact_id
+            artifact_name = runtime_artifact.name
+            policy_action = _coalesce_string(
+                getattr(args, "policy_action", None),
+                payload.get("policy_action"),
+                store.resolve_policy(
+                    args.harness,
+                    artifact_id,
+                    runtime_artifact_hash,
+                    str(workspace) if workspace else None,
+                ),
+            )
+            if policy_action not in VALID_GUARD_ACTIONS:
+                policy_action = SAFE_CHANGED_HASH_ACTION
+            changed_capabilities = ["file_read_request"]
+            risk_signals = list(artifact_risk_signals(runtime_artifact))
+            risk_summary = artifact_risk_summary(runtime_artifact)
+            incident = build_incident_context(
+                harness=args.harness,
+                artifact=runtime_artifact,
+                artifact_id=artifact_id,
+                artifact_name=artifact_name,
+                artifact_type=runtime_artifact.artifact_type,
+                source_scope=runtime_artifact.source_scope,
+                config_path=runtime_artifact.config_path,
+                changed_fields=changed_capabilities,
+                policy_action=policy_action,  # type: ignore[arg-type]
+                launch_target=_runtime_request_summary(runtime_artifact),
+                risk_summary=risk_summary,
+            )
+            receipt = build_receipt(
+                harness=args.harness,
+                artifact_id=artifact_id,
+                artifact_hash=runtime_artifact_hash,
+                policy_decision=policy_action,
+                capabilities_summary=_runtime_capabilities_summary(runtime_artifact),
+                changed_capabilities=changed_capabilities,
+                provenance_summary=f"runtime tool request evaluated from {runtime_artifact.config_path}",
+                artifact_name=artifact_name,
+                source_scope=runtime_artifact.source_scope,
+                user_override=_optional_string(payload.get("user_override")),
+            )
+            store.add_receipt(receipt)
+            response_payload = {
+                "recorded": True,
+                "artifact_id": artifact_id,
+                "artifact_name": artifact_name,
+                "artifact_type": runtime_artifact.artifact_type,
+                "policy_action": policy_action,
+                "risk_signals": risk_signals,
+                "risk_summary": risk_summary,
+                "artifact_label": incident["artifact_label"],
+                "source_label": incident["source_label"],
+                "trigger_summary": incident["trigger_summary"],
+                "why_now": incident["why_now"],
+                "launch_summary": incident["launch_summary"],
+                "risk_headline": incident["risk_headline"],
+                "path_summary": _runtime_requested_path(runtime_artifact),
+            }
+            if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+                approval_center_url = ensure_guard_daemon(guard_home)
+                queued = queue_blocked_approvals(
+                    detection=_runtime_detection(args.harness, runtime_artifact),
+                    evaluation={
+                        "artifacts": [
+                            {
+                                "artifact_id": artifact_id,
+                                "artifact_name": artifact_name,
+                                "artifact_hash": runtime_artifact_hash,
+                                "policy_action": policy_action,
+                                "changed_fields": changed_capabilities,
+                                "artifact_type": runtime_artifact.artifact_type,
+                                "source_scope": runtime_artifact.source_scope,
+                                "config_path": runtime_artifact.config_path,
+                                "launch_target": _runtime_request_summary(runtime_artifact),
+                            }
+                        ]
+                    },
+                    store=store,
+                    approval_center_url=approval_center_url,
+                    now=_now(),
+                )
+                response_payload["approval_requests"] = queued
+                response_payload["approval_center_url"] = approval_center_url
+                response_payload["review_hint"] = approval_center_hint(
+                    context=context,
+                    harness=args.harness,
+                    approval_center_url=approval_center_url,
+                    queued=queued,
+                )
+            _emit("hook", response_payload, getattr(args, "json", False))
+            return 1 if policy_action in {"block", "require-reapproval"} else 0
         artifact_id = _coalesce_string(
             getattr(args, "artifact_id", None),
             payload.get("artifact_id"),
@@ -693,6 +797,75 @@ def _string_list(value: object | None) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if isinstance(item, str) and item.strip()]
+
+
+def _hook_file_read_artifact(
+    *,
+    harness: str,
+    payload: dict[str, object],
+    home_dir: Path,
+    workspace: Path | None,
+) -> GuardArtifact | None:
+    request = extract_sensitive_file_read_request(
+        payload.get("tool_name"),
+        payload.get("tool_input", payload.get("arguments")),
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+    if request is None:
+        return None
+    source_scope = _coalesce_string(payload.get("source_scope"), "project")
+    return build_file_read_request_artifact(
+        harness=harness,
+        request=request,
+        config_path=str(_runtime_policy_path(harness, home_dir, workspace)),
+        source_scope=source_scope,
+    )
+
+
+def _runtime_policy_path(harness: str, home_dir: Path, workspace: Path | None) -> Path:
+    if harness == "claude-code":
+        if workspace is not None:
+            return workspace / ".claude" / "settings.local.json"
+        return home_dir / ".claude" / "settings.json"
+    if harness == "codex":
+        if workspace is not None:
+            return workspace / ".codex" / "config.toml"
+        return home_dir / ".codex" / "config.toml"
+    if workspace is not None:
+        return workspace / ".mcp.json"
+    return home_dir / ".mcp.json"
+
+
+def _runtime_detection(harness: str, artifact: GuardArtifact) -> HarnessDetection:
+    return HarnessDetection(
+        harness=harness,
+        installed=True,
+        command_available=True,
+        config_paths=(artifact.config_path,),
+        artifacts=(artifact,),
+    )
+
+
+def _runtime_capabilities_summary(artifact: GuardArtifact) -> str:
+    tool_name = artifact.metadata.get("tool_name")
+    if isinstance(tool_name, str) and tool_name:
+        return f"file read request • {tool_name}"
+    return "file read request"
+
+
+def _runtime_request_summary(artifact: GuardArtifact) -> str | None:
+    summary = artifact.metadata.get("request_summary")
+    if isinstance(summary, str) and summary:
+        return summary
+    return None
+
+
+def _runtime_requested_path(artifact: GuardArtifact) -> str | None:
+    normalized_path = artifact.metadata.get("normalized_path")
+    if isinstance(normalized_path, str) and normalized_path:
+        return normalized_path
+    return None
 
 
 def _validate_policy_scope(

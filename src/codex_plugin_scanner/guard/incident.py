@@ -19,6 +19,8 @@ _ARTIFACT_LABELS = {
     "hook": "Hook",
     "agent": "Agent",
     "command": "Command",
+    "prompt_request": "Prompt request",
+    "file_read_request": "File read request",
     "artifact": "Artifact",
 }
 
@@ -40,13 +42,26 @@ def build_incident_context(
     harness_label = _HARNESS_LABELS.get(harness, harness.title())
     artifact_label = _ARTIFACT_LABELS.get(artifact_type or "artifact", "Artifact")
     normalized_scope = source_scope or "project"
-    short_config_path = _short_config_path(config_path)
-    source_label = f"{normalized_scope} {harness_label} config"
-    action_verb = _trigger_verb(policy_action=policy_action, changed_fields=changed_fields)
-    trigger_summary = (
-        f"Guard {action_verb} the {artifact_label} `{artifact_name or artifact_id}` from "
-        f"`{short_config_path}` for {harness_label}."
-    )
+    if artifact_type == "prompt_request":
+        source_label = f"{harness_label} session prompt"
+        trigger_summary = (
+            f"Guard paused the {artifact_label} `{artifact_name or artifact_id}` from the active "
+            f"{harness_label} prompt."
+        )
+    elif artifact_type == "file_read_request":
+        source_label = f"{harness_label} runtime tool call"
+        trigger_summary = (
+            f"Guard paused the {artifact_label} `{artifact_name or artifact_id}` from an active "
+            f"{harness_label} tool call."
+        )
+    else:
+        short_config_path = _short_config_path(config_path)
+        source_label = f"{normalized_scope} {harness_label} config"
+        action_verb = _trigger_verb(policy_action=policy_action, changed_fields=changed_fields)
+        trigger_summary = (
+            f"Guard {action_verb} the {artifact_label} `{artifact_name or artifact_id}` from "
+            f"`{short_config_path}` for {harness_label}."
+        )
     why_now = _why_now_text(changed_fields, policy_action, harness_label)
     launch_summary = _launch_summary(artifact=artifact, launch_target=launch_target)
     risk_headline = risk_summary or "Guard could not classify a high-confidence secret or network signal."
@@ -64,6 +79,13 @@ def _why_now_text(changed_fields: list[str], policy_action: GuardAction, harness
     normalized = {field.strip().lower() for field in changed_fields}
     if len(normalized) == 0 and policy_action == "allow":
         return "Guard matched an existing allow rule for this exact version, so the launch can continue."
+    if "prompt_request" in normalized:
+        return (
+            "The prompt asks the agent to read a local .env file directly, "
+            "so Guard paused it until you approve that secret access."
+        )
+    if "file_read_request" in normalized:
+        return "The tool requested a protected local secret file, so Guard paused the read until you approve it."
     if "first_seen" in normalized:
         return f"It is new in this {harness_label.lower()} workspace, so Guard paused it for review."
     if "removed" in normalized:
@@ -91,6 +113,12 @@ def _trigger_verb(*, policy_action: GuardAction, changed_fields: list[str]) -> s
 
 def _launch_summary(*, artifact: GuardArtifact | None, launch_target: str | None) -> str:
     if artifact is not None:
+        request_summary = artifact.metadata.get("request_summary")
+        if isinstance(request_summary, str) and request_summary:
+            return request_summary
+        prompt_summary = artifact.metadata.get("prompt_summary")
+        if isinstance(prompt_summary, str) and prompt_summary:
+            return prompt_summary
         if artifact.url:
             return f"Connects to `{artifact.url}`."
         if artifact.command:
