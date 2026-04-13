@@ -19,7 +19,7 @@ This repository ships:
 ```bash
 git clone https://github.com/hashgraph-online/ai-plugin-scanner.git
 cd ai-plugin-scanner
-uv sync --frozen --extra dev
+uv sync --extra dev
 ```
 
 If you prefer a virtualenv-first workflow, the repository can also be installed in editable mode:
@@ -37,15 +37,25 @@ All non-trivial changes should include or update automated tests.
 Run the standard validation commands before opening or updating a pull request:
 
 ```bash
-uv run --no-sync python -m ruff check src tests
-uv run --no-sync python -m ruff format --check src tests
-uv run --no-sync pytest --tb=short
+# If using uv:
+uv run python -m ruff check src tests
+uv run python -m ruff format --check src tests
+uv run pytest --tb=short
+
+# If using pip (with the virtualenv activated):
+python -m ruff check src tests
+python -m ruff format --check src tests
+pytest --tb=short
 ```
 
 If you changed packaging or release logic, also verify the build:
 
 ```bash
-uv run --no-sync python -m build
+# If using uv:
+uv run python -m build
+
+# If using pip:
+python -m build
 ```
 
 ## Contribution Process
