@@ -10,7 +10,6 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - "dependencies"
-      - "python"
     commit-message:
       prefix: "deps(pip)"
     groups:
@@ -50,7 +49,6 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - "dependencies"
-      - "docker"
     commit-message:
       prefix: "deps(docker)"
     groups:
