@@ -4,31 +4,40 @@
 
 | Version | Supported |
 |---------|-----------|
-| 1.x     | Yes       |
+| 2.x     | Yes       |
+| 1.x     | No        |
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in this project, please report it responsibly:
+If you discover a security vulnerability in `ai-plugin-scanner`, please report it privately:
 
-1. Do not open a public issue.
-2. Email us at security@hol.org with details.
-3. Include steps to reproduce, expected vs actual behavior, and potential impact.
-4. We will acknowledge within 48 hours and aim to resolve within 7 days.
+1. Do not open a public issue for the vulnerability.
+2. Email `security@hol.org`.
+3. Include the affected package or surface (`hol-guard`, `plugin-scanner`, GitHub Action, container image, or release workflow).
+4. Include reproduction steps, impact, and any known mitigations.
 
-## Security Best Practices
+We aim to:
 
-This tool helps you follow security best practices for Codex plugins. For the latest guidance, see the [Codex Security documentation](https://developers.openai.com/codex/security).
+- acknowledge vulnerability reports within 48 hours
+- provide an initial triage response within 14 days
+- resolve confirmed issues as quickly as practical based on severity and release risk
 
-### For Plugin Authors
+## Scope
 
-- Never commit API keys, tokens, or secrets to your repository.
-- Use environment variables for sensitive configuration.
-- Avoid dangerous shell commands in `.mcp.json` configurations.
-- Include a `SECURITY.md` in your plugin repository.
-- Use permissive licenses (Apache-2.0 or MIT) for clarity.
+This policy covers:
 
-### For Scanner Users
+- the Python packages published from this repository
+- the reviewed container image
+- the GitHub Action bundle sourced from this repository
+- release and automation workflows maintained in this repository
 
-- This scanner checks for common patterns but does not guarantee security.
-- Always review plugin code manually before installation.
-- Keep this tool updated for the latest check definitions.
+## Secure Use Guidance
+
+For users of the project:
+
+- keep the scanner and Guard packages updated to the latest supported release line
+- review plugin code and MCP configuration before enabling it in a local harness
+- avoid committing secrets, API keys, or local environment files into plugin repositories
+- prefer HTTPS-only remote endpoints and pinned GitHub Actions in plugin repositories
+
+The scanner and Guard help identify risky patterns, but they are not a substitute for manual review or a full secure development lifecycle.
