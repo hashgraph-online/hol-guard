@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability reporting
+    url: https://github.com/hashgraph-online/ai-plugin-scanner/blob/main/SECURITY.md
+    about: Report vulnerabilities privately via the process documented in SECURITY.md.
+  - name: Project discussions
+    url: https://github.com/hashgraph-online/ai-plugin-scanner/discussions
+    about: Use discussions for design questions, proposals, and broader product feedback.

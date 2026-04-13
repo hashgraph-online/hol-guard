@@ -1,30 +1,30 @@
 name: Dependabot Lockfile Sync
 
 on:
-  pull_request_target:
-    types:
-      - opened
-      - synchronize
-      - reopened
+  push:
+    branches:
+      - "dependabot/**"
     paths:
       - "pyproject.toml"
       - "requirements.txt"
       - "docker-requirements.txt"
       - ".github/dependabot.yml"
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   sync-lockfile:
-    if: github.actor == 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout PR branch
+      - name: Checkout Dependabot branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.ref }}
           fetch-depth: 0
 
       - name: Set up Python

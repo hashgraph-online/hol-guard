@@ -1,37 +1,78 @@
-# Contributing to Codex Plugin Scanner
+# Contributing to AI Plugin Scanner
 
-Thank you for your interest in contributing!
+Thanks for contributing to `ai-plugin-scanner`.
+
+This repository ships:
+
+- `hol-guard` for local harness protection
+- `plugin-scanner` for CI and maintainer checks across supported AI plugin ecosystems
+- `codex-plugin-scanner` as a compatibility package alias
+
+## Before You Start
+
+- Search existing [issues](https://github.com/hashgraph-online/ai-plugin-scanner/issues) before opening a new report.
+- Use [discussions](https://github.com/hashgraph-online/ai-plugin-scanner/discussions) for design questions, proposals, and broader feedback.
+- Open a pull request for code or documentation changes. PRs against `main` are the normal contribution path.
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/hashgraph-online/codex-plugin-scanner.git
-cd codex-plugin-scanner
-pip install -e ".[dev]"
-pytest
+git clone https://github.com/hashgraph-online/ai-plugin-scanner.git
+cd ai-plugin-scanner
+uv sync --extra dev
 ```
 
-## Adding New Checks
+If you prefer a virtualenv-first workflow, the repository can also be installed in editable mode:
 
-1. Create a new check function in the appropriate file under `src/codex_plugin_scanner/checks/`.
-2. Add it to the corresponding `run_*_checks()` function.
-3. Write tests in `tests/`.
-4. Update the README's checks table.
-5. Submit a PR.
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
 
-## Code Style
+## Validation Requirements
 
-- Python 3.10+
-- Ruff for linting and formatting
-- All checks must return a `CheckResult` with accurate point values
+All non-trivial changes should include or update automated tests.
 
-## Pull Request Process
+Run the standard validation commands before opening or updating a pull request:
 
-1. Fork the repo
-2. Create a feature branch
-3. Write tests for new functionality
-4. Ensure `pytest` passes and `ruff check` is clean
-5. Submit PR against `main`
+```bash
+# If using uv:
+uv run python -m ruff check src tests
+uv run python -m ruff format --check src tests
+uv run pytest --tb=short
+
+# If using pip (with the virtualenv activated):
+python -m ruff check src tests
+python -m ruff format --check src tests
+pytest --tb=short
+```
+
+If you changed packaging or release logic, also verify the build:
+
+```bash
+# If using uv:
+uv run python -m build
+
+# If using pip:
+python -m build
+```
+
+## Contribution Process
+
+1. Fork the repository.
+2. Create a feature branch from `main`.
+3. Make the smallest coherent change that fixes the issue or adds the feature.
+4. Add or update tests for new functionality and changed behavior.
+5. Run the validation commands above.
+6. Open a pull request against `main` with a clear summary of what changed and why.
+
+## Contribution Expectations
+
+- Python code should remain compatible with the versions declared in `pyproject.toml`.
+- Keep command examples and package names aligned with the current product names: `hol-guard`, `plugin-scanner`, and `ai-plugin-scanner`.
+- Update user-facing docs when the CLI surface, GitHub Action contract, trust scoring behavior, or published workflows change.
+- Do not commit secrets, credentials, or local environment files.
 
 ## License
 
