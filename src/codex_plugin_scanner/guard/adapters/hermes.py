@@ -73,7 +73,7 @@ class HermesHarnessAdapter(HarnessAdapter):
                             command=str(skill_md),
                             url=None,
                             transport=None,
-                            args=tuple(code_blocks) if code_blocks else (risk_content,),
+                            args=tuple(code_blocks) if code_blocks else (),
                             metadata={
                                 "category": category_dir.name,
                                 "description": description[:200] if description else "",
