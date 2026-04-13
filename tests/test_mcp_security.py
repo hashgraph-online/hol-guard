@@ -314,3 +314,30 @@ def test_targets_scanned_counts_only_processed_targets(monkeypatch, tmp_path: Pa
 
     assert summary.status == CiscoIntegrationStatus.ENABLED
     assert summary.targets_scanned == 1
+
+
+def test_scan_skips_oversized_mcp_config(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+    config_path = plugin_dir / ".mcp.json"
+    config_path.write_text("x" * 1_100_000, encoding="utf-8")
+    analyzed_paths: list[str] = []
+
+    class RecordingYaraAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        async def analyze(self, content: str, context: dict[str, Any] | None = None) -> list[FakeCiscoFinding]:
+            analyzed_paths.append(str((context or {}).get("file_path", "")))
+            return []
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        lambda: {"YaraAnalyzer": RecordingYaraAnalyzer},
+    )
+
+    summary = run_cisco_mcp_scan(plugin_dir, mode="on")
+
+    assert summary.status == CiscoIntegrationStatus.ENABLED
+    assert summary.targets_scanned == 1
+    assert all(not path.endswith(".mcp.json") for path in analyzed_paths)

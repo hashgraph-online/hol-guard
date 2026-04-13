@@ -136,7 +136,12 @@ def _collect_static_targets(plugin_dir: Path) -> tuple[Path, ...]:
     if not config_path.is_file():
         return ()
 
-    targets = [config_path]
+    targets: list[Path] = []
+    try:
+        if config_path.stat().st_size <= _MAX_TARGET_SIZE_BYTES:
+            targets.append(config_path)
+    except OSError:
+        pass
     for root, dirs, files in os.walk(plugin_dir, topdown=True):
         dirs[:] = sorted(dir_name for dir_name in dirs if dir_name not in _EXCLUDED_DIRS)
         current_dir = Path(root)
