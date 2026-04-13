@@ -13,7 +13,7 @@ If you discover a security vulnerability in `ai-plugin-scanner`, please report i
 
 1. Do not open a public issue for the vulnerability.
 2. Email `security@hol.org`.
-3. Include the affected package or surface (`hol-guard`, `plugin-scanner`, GitHub Action, container image, or release workflow).
+3. Include the affected package or surface (`hol-guard`, `plugin-scanner`, container image, or release workflow).
 4. Include reproduction steps, impact, and any known mitigations.
 
 We aim to:
@@ -28,8 +28,7 @@ This policy covers:
 
 - the Python packages published from this repository
 - the reviewed container image
-- the GitHub Action bundle sourced from this repository
-- release and automation workflows maintained in this repository
+- release artifacts and automation workflows maintained in this repository
 
 ## Secure Use Guidance
 
