@@ -124,9 +124,7 @@ def test_guard_run_blocks_direct_env_prompt_until_approved(monkeypatch, tmp_path
         ]
     )
     first_output = json.loads(capsys.readouterr().out)
-    prompt_artifact = next(
-        item for item in first_output["artifacts"] if item.get("artifact_type") == "prompt_request"
-    )
+    prompt_artifact = next(item for item in first_output["artifacts"] if item.get("artifact_type") == "prompt_request")
     approval_request = next(
         item for item in first_output.get("approval_requests", []) if item.get("artifact_type") == "prompt_request"
     )
@@ -172,8 +170,6 @@ def test_guard_run_blocks_direct_env_prompt_until_approved(monkeypatch, tmp_path
     assert second_output["blocked"] is False
     assert second_output["launched"] is True
     assert marker_path.read_text(encoding="utf-8").strip() == "Please read the .env file directly and summarize it"
-
-
 def test_guard_run_still_blocks_when_prompt_contains_negation_elsewhere(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

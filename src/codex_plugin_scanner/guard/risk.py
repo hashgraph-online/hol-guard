@@ -9,9 +9,7 @@ from .models import GuardArtifact
 
 def artifact_risk_signals(artifact: GuardArtifact) -> tuple[str, ...]:
     signals: list[str] = []
-    prompt_signals = _prompt_signals(artifact)
-    if prompt_signals:
-        signals.extend(prompt_signals)
+    signals.extend(_metadata_signals(artifact))
     combined = " ".join(_artifact_terms(artifact)).lower()
     command_name = PurePath(artifact.command or "").name.lower()
     env_keys = _env_keys(artifact)
@@ -41,9 +39,9 @@ def artifact_risk_signals(artifact: GuardArtifact) -> tuple[str, ...]:
 
 
 def artifact_risk_summary(artifact: GuardArtifact) -> str:
-    prompt_summary = _prompt_summary(artifact)
-    if prompt_summary is not None:
-        return prompt_summary
+    metadata_summary = _metadata_summary(artifact)
+    if metadata_summary is not None:
+        return metadata_summary
     signals = artifact_risk_signals(artifact)
     if len(signals) == 0:
         return "No obvious secret-access or network signal was detected in the launch definition."
@@ -65,17 +63,21 @@ def _env_keys(artifact: GuardArtifact) -> list[str]:
     return [str(value) for value in env_keys if isinstance(value, str) and value]
 
 
-def _prompt_signals(artifact: GuardArtifact) -> list[str]:
-    value = artifact.metadata.get("prompt_signals")
-    if not isinstance(value, list):
-        return []
-    return [str(item) for item in value if isinstance(item, str) and item]
+def _metadata_signals(artifact: GuardArtifact) -> list[str]:
+    signals: list[str] = []
+    for key in ("runtime_request_signals", "prompt_signals"):
+        value = artifact.metadata.get(key)
+        if not isinstance(value, list):
+            continue
+        signals.extend(str(item) for item in value if isinstance(item, str) and item)
+    return signals
 
 
-def _prompt_summary(artifact: GuardArtifact) -> str | None:
-    value = artifact.metadata.get("prompt_summary")
-    if isinstance(value, str) and value:
-        return value
+def _metadata_summary(artifact: GuardArtifact) -> str | None:
+    for key in ("runtime_request_summary", "prompt_summary"):
+        value = artifact.metadata.get(key)
+        if isinstance(value, str) and value:
+            return value
     return None
 
 
