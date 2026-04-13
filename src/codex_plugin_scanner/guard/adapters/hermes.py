@@ -97,6 +97,12 @@ class HermesHarnessAdapter(HarnessAdapter):
                         args = server_config.get("args", [])
                         env = server_config.get("env", {})
 
+                        # Validate args is a list before iterating
+                        if not isinstance(args, list):
+                            args = []
+                        if not isinstance(env, dict):
+                            env = {}
+
                         # Convert args list to tuple for artifact
                         args_tuple = tuple(str(a) for a in args if isinstance(a, str))
 
