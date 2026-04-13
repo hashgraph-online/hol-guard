@@ -9,6 +9,7 @@ import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approvals import approval_center_hint, queue_blocked_approvals, wait_for_approval_requests
@@ -145,11 +146,13 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     preflight_parser.add_argument("--harness")
     preflight_parser.add_argument("--enforce", action="store_true")
     preflight_parser.add_argument("--json", action="store_true")
+    _add_guard_cisco_mode_arg(preflight_parser)
 
     scan_parser = guard_subparsers.add_parser("scan", help="Run a consumer-mode scan for a local artifact")
     scan_parser.add_argument("target", nargs="?", default=".")
     scan_parser.add_argument("--consumer-mode", action="store_true")
     scan_parser.add_argument("--json", action="store_true")
+    _add_guard_cisco_mode_arg(scan_parser)
 
     diff_parser = guard_subparsers.add_parser("diff", help="Compare current harness artifacts to stored snapshots")
     diff_parser.add_argument("harness")
@@ -171,10 +174,16 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
 
     add_approval_parser(guard_subparsers, _add_guard_common_args)
 
-    explain_parser = guard_subparsers.add_parser("explain", help="Show the latest evidence for a local artifact")
+    explain_parser = guard_subparsers.add_parser(
+        "explain",
+        help=(
+            "Show the latest evidence for a local artifact or local path with offline Cisco MCP evidence when available"
+        ),
+    )
     explain_parser.add_argument("target")
     _add_guard_common_args(explain_parser)
     explain_parser.add_argument("--json", action="store_true")
+    _add_guard_cisco_mode_arg(explain_parser)
 
     for name, action in (("allow", "allow"), ("deny", "block")):
         policy_parser = guard_subparsers.add_parser(name, help=f"{name.title()} a harness artifact")
@@ -257,16 +266,51 @@ def _add_guard_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace")
 
 
+def _add_guard_cisco_mode_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--cisco-mode",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="Control optional Cisco scanner evidence for local consumer-mode artifact scans.",
+    )
+
+
+def _build_cisco_scan_options(mode: str) -> ScanOptions:
+    return ScanOptions(cisco_skill_scan=mode, cisco_mcp_scan=mode)
+
+
+def _resolve_cisco_scan_options(mode: str) -> ScanOptions | None:
+    if mode == "auto":
+        return None
+    return _build_cisco_scan_options(mode)
+
+
+def _run_consumer_scan_with_mode(
+    target: Path,
+    *,
+    intended_harness: str | None = None,
+    cisco_mode: str,
+) -> dict[str, object]:
+    options = _resolve_cisco_scan_options(cisco_mode)
+    if options is None:
+        return run_consumer_scan(target, intended_harness=intended_harness)
+    return run_consumer_scan(target, intended_harness=intended_harness, options=options)
+
+
 def run_guard_command(args: argparse.Namespace) -> int:
     """Execute a Guard subcommand."""
 
     if args.guard_command == "scan":
-        payload = run_consumer_scan(Path(args.target).resolve())
+        payload = _run_consumer_scan_with_mode(Path(args.target).resolve(), cisco_mode=args.cisco_mode)
         _emit("scan", payload, args.json or args.consumer_mode)
         return 0
 
     if args.guard_command == "preflight":
-        payload = run_consumer_scan(Path(args.target).resolve(), intended_harness=getattr(args, "harness", None))
+        payload = _run_consumer_scan_with_mode(
+            Path(args.target).resolve(),
+            intended_harness=getattr(args, "harness", None),
+            cisco_mode=args.cisco_mode,
+        )
         _emit("preflight", payload, getattr(args, "json", False))
         if getattr(args, "enforce", False):
             install_verdict = payload.get("install_verdict")
@@ -478,7 +522,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command == "explain":
-        payload = _build_explain_payload(store, args.target)
+        payload = _build_explain_payload_with_mode(store, args.target, cisco_mode=args.cisco_mode)
         _emit("explain", payload, getattr(args, "json", False))
         return 0
 
@@ -954,10 +998,14 @@ def _build_abom_payload(store: GuardStore) -> dict[str, object]:
     }
 
 
-def _build_explain_payload(store: GuardStore, target: str) -> dict[str, object]:
+def _build_explain_payload(
+    store: GuardStore,
+    target: str,
+    options: ScanOptions | None = None,
+) -> dict[str, object]:
     target_path = Path(target).expanduser()
     if target_path.exists():
-        return run_consumer_scan(target_path.resolve())
+        return run_consumer_scan(target_path.resolve(), options=options)
     inventory_item = store.find_inventory_item(target)
     if inventory_item is None:
         raise ValueError(f"Guard does not know artifact {target}.")
@@ -971,6 +1019,13 @@ def _build_explain_payload(store: GuardStore, target: str) -> dict[str, object]:
         "latest_diff": latest_diff,
         "advisories": advisories,
     }
+
+
+def _build_explain_payload_with_mode(store: GuardStore, target: str, cisco_mode: str) -> dict[str, object]:
+    options = _resolve_cisco_scan_options(cisco_mode)
+    if options is None:
+        return _build_explain_payload(store, target)
+    return _build_explain_payload(store, target, options=options)
 
 
 def _matching_advisories(store: GuardStore, publisher: object) -> list[dict[str, object]]:
