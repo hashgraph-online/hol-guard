@@ -254,29 +254,6 @@ jobs:
           EOF
 
           echo "notes_path=release-notes.md" >> $GITHUB_OUTPUT
-      - name: Build GitHub Action bundle
-        if: steps.release_exists.outputs.exists == 'false'
-        id: action_bundle
-        run: |
-          VERSION="${{ needs.build.outputs.version }}"
-          BUNDLE_ROOT="dist/github-action-bundle"
-          BUNDLE_PATH="dist/ai-plugin-scanner-action-v${VERSION}.zip"
-
-          mkdir -p "${BUNDLE_ROOT}"
-          cp action/action.yml "${BUNDLE_ROOT}/action.yml"
-          cp action/README.md "${BUNDLE_ROOT}/README.md"
-          printf '%s\n' "${VERSION}" > "${BUNDLE_ROOT}/scanner-version.txt"
-          cp action/cisco-version.txt "${BUNDLE_ROOT}/cisco-version.txt"
-          cp action/pypi-attestations-version.txt "${BUNDLE_ROOT}/pypi-attestations-version.txt"
-          cp LICENSE "${BUNDLE_ROOT}/LICENSE"
-          cp SECURITY.md "${BUNDLE_ROOT}/SECURITY.md"
-
-          (
-            cd "${BUNDLE_ROOT}"
-            zip -rq "../$(basename "${BUNDLE_PATH}")" .
-          )
-
-          echo "bundle_path=${BUNDLE_PATH}" >> $GITHUB_OUTPUT
       - name: Attest GitHub release assets
         if: steps.release_exists.outputs.exists == 'false'
         id: provenance
