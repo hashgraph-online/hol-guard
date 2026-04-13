@@ -33,7 +33,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-cisco = []
+cisco = [
+    "cisco-ai-mcp-scanner~=4.5; python_version >= '3.11'",
+]
 dev = [
     "build>=1.2.2",
     "jsonschema>=4.26.0",

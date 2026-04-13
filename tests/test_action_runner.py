@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import ClassVar
 from urllib.parse import parse_qs, urlsplit
 
-from codex_plugin_scanner.action_runner import main
+from codex_plugin_scanner.action_runner import _build_scan_args, main
 from codex_plugin_scanner.github_reporting import GitHubPrCommentResult, upsert_pr_comment
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -150,6 +150,22 @@ def test_action_runner_writes_all_outputs(monkeypatch, tmp_path, capsys) -> None
 
     stdout = capsys.readouterr().out
     assert '"score": 100' in stdout
+
+
+def test_build_scan_args_propagates_cisco_mcp_scan() -> None:
+    args = _build_scan_args(
+        plugin_dir=str(FIXTURES / "good-plugin"),
+        profile="default",
+        config="",
+        baseline="",
+        min_score=0,
+        fail_on_severity="none",
+        cisco_scan="auto",
+        cisco_mcp_scan="on",
+        cisco_policy="balanced",
+    )
+
+    assert args.cisco_mcp_scan == "on"
 
 
 def test_action_runner_writes_step_summary_and_registry_payload(monkeypatch, tmp_path) -> None:

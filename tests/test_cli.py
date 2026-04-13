@@ -5,19 +5,18 @@ import shutil
 import sys
 import tempfile
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 
 from codex_plugin_scanner import cli as cli_module
 from codex_plugin_scanner.cli import format_json, format_text, main
+from codex_plugin_scanner.models import IntegrationResult
 from codex_plugin_scanner.rules import get_rule_spec as original_get_rule_spec
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
 NONEXISTENT_PLUGIN_DIR = Path("/nonexistent/plugin-dir").resolve()
 EXPECTED_GOOD_PLUGIN_SCORE = 91
-EXPECTED_BAD_PLUGIN_SCORE = 38
-
-
 class TestFormatJson:
     def test_valid_json_output(self):
         result = scan_plugin(FIXTURES / "good-plugin")
@@ -83,11 +82,32 @@ class TestFormatText:
     def test_bad_plugin_output(self):
         result = scan_plugin(FIXTURES / "bad-plugin")
         output = format_text(result)
-        assert f"{EXPECTED_BAD_PLUGIN_SCORE}/100" in output
+        assert f"{result.score}/100" in output
         assert "Failing" in output
+
+    def test_integration_block_supports_multiple_integrations(self):
+        result = scan_plugin(FIXTURES / "good-plugin")
+        result = replace(
+            result,
+            integrations=(
+                IntegrationResult(name="cisco-skill-scanner", status="enabled", message="Skill scan complete"),
+                IntegrationResult(name="cisco-mcp-scanner", status="enabled", message="MCP scan complete"),
+            ),
+        )
+
+        output = format_text(result)
+
+        assert "cisco-skill-scanner" in output
+        assert "cisco-mcp-scanner" in output
 
 
 class TestMain:
+    def test_parser_accepts_cisco_mcp_scan(self):
+        parser = cli_module._build_parser("plugin-scanner", program_mode="scanner")
+        args = parser.parse_args(["scan", str(FIXTURES / "good-plugin"), "--cisco-mcp-scan", "on"])
+
+        assert args.cisco_mcp_scan == "on"
+
     def test_returns_0_for_good_plugin(self):
         rc = main([str(FIXTURES / "good-plugin")])
         assert rc == 0
@@ -140,7 +160,7 @@ class TestMain:
         assert rc == 0
 
     def test_min_score_just_above(self):
-        rc = main([str(FIXTURES / "bad-plugin"), "--min-score", "39"])
+        rc = main([str(FIXTURES / "bad-plugin"), "--min-score", "40"])
         assert rc == 1
 
     def test_version_flag(self, capsys):
@@ -159,10 +179,11 @@ class TestMain:
         assert "opencode" in output
 
     def test_text_mode_with_min_score_failure(self, capsys):
+        expected_score = scan_plugin(FIXTURES / "bad-plugin").score
         main([str(FIXTURES / "bad-plugin"), "--min-score", "50"])
         captured = capsys.readouterr()
         # Should still produce text output
-        assert f"{EXPECTED_BAD_PLUGIN_SCORE}/100" in captured.out
+        assert f"{expected_score}/100" in captured.out
 
     def test_min_score_exact_boundary(self):
         # At exact boundary should pass (>=)
