@@ -986,7 +986,7 @@ def _run_artifact_should_be_visible(artifact: dict[str, object]) -> bool:
 
 
 def _artifact_needs_review(artifact: dict[str, object]) -> bool:
-    return str(artifact.get("policy_action") or "allow") != "allow"
+    return str(artifact.get("policy_action") or "allow") in {"block", "sandbox-required", "require-reapproval"}
 
 
 def _build_approval_table(items: list[dict[str, object]], *, title: str | None) -> Table:

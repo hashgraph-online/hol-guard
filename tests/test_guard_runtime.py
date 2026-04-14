@@ -957,6 +957,42 @@ class TestGuardRuntime:
         assert "Inspect only the changed config entries (optional)" in output
         assert "hol-guard diff codex" in output
 
+    def test_guard_run_renderer_counts_only_blocking_actions_as_needing_review(self, capsys):
+        emit_guard_payload(
+            "run",
+            {
+                "harness": "codex",
+                "blocked": True,
+                "dry_run": True,
+                "launched": False,
+                "receipts_recorded": 2,
+                "artifacts": [
+                    {
+                        "artifact_id": "codex:project:warn-only-tool",
+                        "artifact_name": "warn-only-tool",
+                        "changed": True,
+                        "changed_fields": ["command"],
+                        "policy_action": "warn",
+                        "why_now": "Guard wants to highlight this change, but it does not block launch.",
+                    },
+                    {
+                        "artifact_id": "codex:project:blocked-tool",
+                        "artifact_name": "blocked-tool",
+                        "changed": True,
+                        "changed_fields": ["first_seen"],
+                        "policy_action": "require-reapproval",
+                        "why_now": "Guard blocked this definition because the configured policy does not trust it yet.",
+                    },
+                ],
+            },
+            False,
+        )
+        output = capsys.readouterr().out
+
+        assert "warn-only-tool" in output
+        assert "blocked-tool" in output
+        assert "Needs review 1" in output
+
     def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
         self, tmp_path, capsys, monkeypatch
     ):
