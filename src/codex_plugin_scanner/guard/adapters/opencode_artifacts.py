@@ -29,11 +29,11 @@ PROJECT_SKILL_DIRECTORIES = (
 def config_paths(context: HarnessContext) -> tuple[Path, ...]:
     paths: list[Path] = []
     paths.extend(context.home_dir / ".config" / "opencode" / name for name in CONFIG_FILENAMES)
-    if context.workspace_dir is not None:
-        paths.extend(context.workspace_dir / name for name in CONFIG_FILENAMES)
     configured_path = configured_config_path(context)
     if configured_path is not None:
         paths.append(configured_path)
+    if context.workspace_dir is not None:
+        paths.extend(context.workspace_dir / name for name in CONFIG_FILENAMES)
     deduped_paths: list[Path] = []
     seen_paths: set[str] = set()
     for path in paths:
@@ -197,7 +197,10 @@ def append_artifact(
     artifact: GuardArtifact,
 ) -> None:
     if artifact.artifact_id in seen_artifact_ids:
-        return
+        for index, existing_artifact in enumerate(artifacts):
+            if existing_artifact.artifact_id == artifact.artifact_id:
+                artifacts[index] = artifact
+                return
     seen_artifact_ids.add(artifact.artifact_id)
     artifacts.append(artifact)
 
