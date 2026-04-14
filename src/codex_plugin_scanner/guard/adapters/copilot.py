@@ -139,6 +139,16 @@ def _managed_hook_payload(payload: dict[str, object]) -> dict[str, object]:
     return normalized_payload
 
 
+def _mcp_servers_payload(payload: dict[str, object]) -> dict[str, object] | None:
+    servers = payload.get("servers")
+    if isinstance(servers, dict):
+        return servers
+    mcp_servers = payload.get("mcpServers")
+    if isinstance(mcp_servers, dict):
+        return mcp_servers
+    return None
+
+
 def _command_parts(server_config: dict[str, object]) -> tuple[str | None, tuple[str, ...]]:
     command = server_config.get("command")
     args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
@@ -309,8 +319,8 @@ class CopilotHarnessAdapter(HarnessAdapter):
         payload: dict[str, object],
         scope: str,
     ) -> list[GuardArtifact]:
-        servers = payload.get("servers")
-        if not isinstance(servers, dict):
+        servers = _mcp_servers_payload(payload)
+        if servers is None:
             return []
         artifacts: list[GuardArtifact] = []
         for name, server_config in servers.items():

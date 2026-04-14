@@ -33,7 +33,7 @@ def test_copilot_detects_documented_local_surfaces_and_redacts_secrets(tmp_path)
     _write_json(
         context.home_dir / ".copilot" / "mcp-config.json",
         {
-            "servers": {
+            "mcpServers": {
                 "global-tool": {
                     "command": "npx",
                     "args": ["--token=secret-token", "server.js"],
