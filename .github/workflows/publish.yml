@@ -52,11 +52,27 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
-            LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n1)
-            if [[ -n "$LAST_TAG" ]]; then
-              IFS=. read -r MAJOR MINOR PATCH <<< "${LAST_TAG#v}"
+            # Check git tags first
+            LAST_TAG=$(git tag --list 'v*' --sort=-version:refname 2>/dev/null | head -n1)
+            LAST_TAG_VERSION="${LAST_TAG#v}"
+
+            # Also check GitHub releases (they may exist without corresponding git tags)
+            GH_RELEASE_VERSION=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null | sed 's/^v//')
+
+            # Use whichever version is higher
+            if [[ -n "$GH_RELEASE_VERSION" && -n "$LAST_TAG_VERSION" ]]; then
+              COMPARE=$(printf '%s\n%s\n' "$LAST_TAG_VERSION" "$GH_RELEASE_VERSION" | sort -V | tail -n1)
+              HIGHEST="$COMPARE"
+            elif [[ -n "$GH_RELEASE_VERSION" ]]; then
+              HIGHEST="$GH_RELEASE_VERSION"
+            elif [[ -n "$LAST_TAG_VERSION" ]]; then
+              HIGHEST="$LAST_TAG_VERSION"
+            fi
+
+            if [[ -n "$HIGHEST" ]]; then
+              IFS=. read -r MAJOR MINOR PATCH <<< "$HIGHEST"
               if [[ -z "$MAJOR" || -z "$MINOR" || -z "$PATCH" ]]; then
-                echo "Unsupported release tag format: $LAST_TAG" >&2
+                echo "Unsupported release tag format: $HIGHEST" >&2
                 exit 1
               fi
               VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
@@ -304,6 +320,7 @@ jobs:
           VERSION="${{ needs.build.outputs.version }}"
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
+            --target main \
             --notes-file ${{ steps.changelog.outputs.notes_path }} \
             "${RELEASE_ASSETS[@]}"
 
