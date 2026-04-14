@@ -2,11 +2,11 @@ name: CodeQL
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
+  merge_group:
   schedule:
     - cron: "0 4 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,7 +14,6 @@ permissions:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    if: ${{ vars.CODEQL_ADVANCED_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
