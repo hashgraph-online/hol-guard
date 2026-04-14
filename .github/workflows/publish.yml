@@ -57,9 +57,13 @@ jobs:
             LAST_TAG_VERSION="${LAST_TAG#v}"
 
             # Also check GitHub releases (they may exist without corresponding git tags)
+            # GH_TOKEN needed for authenticated gh calls in GitHub Actions
+            export GH_TOKEN="$GITHUB_TOKEN"
             # Null-safe: returns empty if no releases exist
             # Collect all releases and pick max semver (not just first which may not be highest)
-            GH_RELEASES=$(gh release list --json tagName --jq '.[].tagName' 2>/dev/null | sed 's/^v//' | sort -V 2>/dev/null || echo "")
+            # Filter to strict semver tags (vX.Y.Z) to exclude non-semver like "nightly" or "rc"
+            GH_RELEASES=$(gh release list --json tagName --jq '.[].tagName' 2>/dev/null | \
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V 2>/dev/null || echo "")
             GH_RELEASE_VERSION=$(echo "$GH_RELEASES" | grep -v '^$' | tail -n1)
 
             # Use whichever version is higher
