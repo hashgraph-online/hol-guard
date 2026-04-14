@@ -172,6 +172,8 @@ class CopilotHarnessAdapter(HarnessAdapter):
         "Guard can install documented Copilot CLI repo hooks and falls back to the local approval center when needed."
     )
     fallback_hint = "Use Guard-managed repo hooks for Copilot CLI tool events and the local approval center for review."
+    approval_prompt_channel = "hook"
+    approval_auto_open_browser = False
 
     @staticmethod
     def _scope_for(context: HarnessContext, path: Path) -> str:

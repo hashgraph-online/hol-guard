@@ -33,6 +33,8 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
     fallback_hint = (
         "Use Guard approvals for blocked artifacts and OpenCode's native allow once or allow session flow for skills."
     )
+    approval_prompt_channel = "native"
+    approval_auto_open_browser = False
 
     @staticmethod
     def _scope_for(context: HarnessContext, path: Path) -> str:

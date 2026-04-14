@@ -163,9 +163,12 @@ def _render_run(console: Console, payload: dict[str, object]) -> None:
     title = "Blocked before launch" if blocked else "Launch allowed"
     border_style = "red" if blocked else "green"
     body = Table.grid(padding=(0, 1))
+    approval_delivery = payload.get("approval_delivery")
     body.add_row("Harness", f"[bold]{payload.get('harness', 'unknown')}[/bold]")
     body.add_row("Receipts", str(payload.get("receipts_recorded", 0)))
     body.add_row("Launched", _bool_label(launched))
+    if isinstance(approval_delivery, dict) and approval_delivery.get("summary"):
+        body.add_row("Prompt route", str(approval_delivery.get("summary")))
     if payload.get("approval_center_url"):
         body.add_row("Approval center", str(payload.get("approval_center_url")))
     if payload.get("review_hint"):
@@ -462,6 +465,12 @@ def _render_hook(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Recorded", _bool_label(bool(payload.get("recorded"))))
     body.add_row("Artifact", str(payload.get("artifact_name") or payload.get("artifact_id") or "unknown"))
     body.add_row("Decision", _action_text(str(payload.get("policy_action", "warn"))))
+    if payload.get("path_summary"):
+        body.add_row("Path", str(payload.get("path_summary")))
+    if payload.get("approval_center_url"):
+        body.add_row("Approval center", str(payload.get("approval_center_url")))
+    if payload.get("review_hint"):
+        body.add_row("Review", str(payload.get("review_hint")))
     console.print(Panel(body, title="Guard hook event", border_style="cyan"))
 
 

@@ -159,16 +159,40 @@ def approval_center_hint(
     approval_center_url: str,
     queued: list[dict[str, object]],
 ) -> str:
-    adapter = get_adapter(harness)
-    flow = adapter.approval_flow()
+    del context
+    flow = approval_prompt_flow(harness)
     count = len(queued)
     risk_summary = _queue_risk_summary(queued)
     return (
         f"Guard queued {count} approval request{'s' if count != 1 else ''} for {harness}. "
+        f"{flow['summary']} "
         f"Open {approval_center_url} to review them. "
         f"{risk_summary} "
         f"{flow['fallback_hint']}"
     )
+
+
+def approval_prompt_flow(harness: str) -> dict[str, object]:
+    try:
+        flow = get_adapter(harness).approval_flow()
+    except ValueError:
+        flow = {}
+    return {
+        "tier": str(flow.get("tier") or "approval-center"),
+        "summary": str(flow.get("summary") or ""),
+        "fallback_hint": str(flow.get("fallback_hint") or ""),
+        "prompt_channel": str(flow.get("prompt_channel") or "browser"),
+        "auto_open_browser": bool(flow.get("auto_open_browser", True)),
+    }
+
+
+def approval_delivery_payload(flow: dict[str, object]) -> dict[str, object]:
+    auto_open_browser = bool(flow.get("auto_open_browser"))
+    return {
+        "destination": "browser" if auto_open_browser else "harness",
+        "prompt_channel": str(flow.get("prompt_channel") or "browser"),
+        "summary": str(flow.get("summary") or ""),
+    }
 
 
 def wait_for_approval_requests(

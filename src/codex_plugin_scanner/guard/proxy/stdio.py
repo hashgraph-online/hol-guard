@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from ..approvals import queue_blocked_approvals
+from ..approvals import approval_delivery_payload, approval_prompt_flow, queue_blocked_approvals
 from ..consumer import artifact_hash
 from ..models import HarnessDetection
 from ..receipts import build_receipt
@@ -48,8 +48,13 @@ def _redact_json(value: Any) -> Any:
     return value
 
 
-def _blocked_tool_response(message_id: Any, tool_name: str, reason: str | None = None) -> dict[str, Any]:
-    return {
+def _blocked_tool_response(
+    message_id: Any,
+    tool_name: str,
+    reason: str | None = None,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "jsonrpc": "2.0",
         "id": message_id,
         "error": {
@@ -57,6 +62,9 @@ def _blocked_tool_response(message_id: Any, tool_name: str, reason: str | None =
             "message": reason or f"Guard blocked tool call for {tool_name}.",
         },
     }
+    if data:
+        payload["error"]["data"] = data
+    return payload
 
 
 class StdioGuardProxy:
@@ -162,6 +170,11 @@ class StdioGuardProxy:
                             )
                         if policy_action in {"block", "sandbox-required", "require-reapproval"}:
                             event["decision"] = "block"
+                            blocked_message = (
+                                f"Guard blocked sensitive local file access for {tool_name}: "
+                                f"{sensitive_request.path_match.path_class}."
+                            )
+                            response_data = None
                             if self.guard_store is not None and self.approval_center_url is not None:
                                 event["approval_requests"] = queue_blocked_approvals(
                                     detection=HarnessDetection(
@@ -189,13 +202,27 @@ class StdioGuardProxy:
                                     store=self.guard_store,
                                     approval_center_url=self.approval_center_url,
                                 )
+                                approval_flow = approval_prompt_flow(self.harness)
+                                event["approval_center_url"] = self.approval_center_url
+                                event["approval_delivery"] = approval_delivery_payload(approval_flow)
+                                event["review_hint"] = (
+                                    f"{approval_flow['summary']} Open {self.approval_center_url} to review the "
+                                    "blocked request."
+                                )
+                                blocked_message = f"{blocked_message} {event['review_hint']}"
+                                response_data = {
+                                    "approvalCenterUrl": self.approval_center_url,
+                                    "approvalRequests": event["approval_requests"],
+                                    "approvalDelivery": event["approval_delivery"],
+                                    "reviewHint": event["review_hint"],
+                                }
                             events.append(event)
                             responses.append(
                                 _blocked_tool_response(
                                     message.get("id"),
                                     tool_name,
-                                    f"Guard blocked sensitive local file access for {tool_name}: "
-                                    f"{sensitive_request.path_match.path_class}.",
+                                    blocked_message,
+                                    response_data,
                                 )
                             )
                             continue

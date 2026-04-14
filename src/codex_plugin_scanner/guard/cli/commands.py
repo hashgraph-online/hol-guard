@@ -13,7 +13,13 @@ from pathlib import Path
 from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
-from ..approvals import approval_center_hint, queue_blocked_approvals, wait_for_approval_requests
+from ..approvals import (
+    approval_center_hint,
+    approval_delivery_payload,
+    approval_prompt_flow,
+    queue_blocked_approvals,
+    wait_for_approval_requests,
+)
 from ..bridge import (
     BridgeConfig,
     GuardBridge,
@@ -787,6 +793,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     approval_center_url=approval_center_url,
                     queued=queued,
                 )
+                response_payload["approval_delivery"] = _approval_delivery_payload(args.harness)
             if _should_emit_copilot_hook_response(args):
                 _emit_copilot_hook_response(
                     policy_action=policy_action,
@@ -874,11 +881,20 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
     return args.harness == "copilot" and not getattr(args, "json", False)
 
 
+def _approval_delivery_payload(harness: str) -> dict[str, object]:
+    return approval_delivery_payload(approval_prompt_flow(harness))
+
+
 def _copilot_hook_reason(*values: object | None) -> str:
+    messages: list[str] = []
     for value in values:
         if isinstance(value, str) and value.strip():
-            return value.strip()
-    return "Guard blocked this tool call."
+            candidate = value.strip()
+            if candidate not in messages:
+                messages.append(candidate)
+    if messages:
+        return " ".join(messages)
+    return "Guard blocked this tool call. Open the Guard approval center to review the request."
 
 
 def _emit_copilot_hook_response(*, policy_action: str, reason: str) -> None:
@@ -900,7 +916,7 @@ def _headless_approval_resolver(
     config,
 ):
     def resolve(detection, payload):
-        approval_flow = get_adapter(args.harness).approval_flow()
+        approval_flow = approval_prompt_flow(args.harness)
         approval_center_url = ensure_guard_daemon(context.guard_home)
         queued = queue_blocked_approvals(
             detection=detection,
@@ -917,8 +933,10 @@ def _headless_approval_resolver(
             approval_center_url=approval_center_url,
             queued=queued,
         )
-        _open_approval_center(approval_center_url)
-        if approval_flow["tier"] != "native-or-center":
+        payload["approval_delivery"] = _approval_delivery_payload(args.harness)
+        if bool(approval_flow["auto_open_browser"]):
+            _open_approval_center(approval_center_url)
+        if str(approval_flow["tier"]) != "native-or-center":
             payload["approval_wait"] = {
                 "resolved": False,
                 "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
