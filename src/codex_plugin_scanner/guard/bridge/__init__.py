@@ -228,17 +228,24 @@ class GuardBridge:
         while self._running:
             try:
                 requests_list = self._fetch_pending_requests(guard_url)
+                # Prune to only currently pending IDs to avoid memory leak
+                current_ids = {req.request_id for req in requests_list}
+                self._seen_ids &= current_ids
+
                 for req in requests_list:
                     if req.request_id in self._seen_ids:
                         continue
-                    self._seen_ids.add(req.request_id)
+                    # Add AFTER successful notification to allow retry on failure
 
                     message = _format_notification(req)
                     if self.config.dry_run:
                         print(f"[Guard Bridge] DRYRUN: would send notification", file=sys.stderr)
+                        self._seen_ids.add(req.request_id)  # Track even in dry-run
                     else:
                         success = self.backend.send_notification(req, message)
-                        if not success:
+                        if success:
+                            self._seen_ids.add(req.request_id)
+                        else:
                             print(f"[Guard Bridge] Failed to send notification for {req.request_id}", file=sys.stderr)
 
             except Exception as e:

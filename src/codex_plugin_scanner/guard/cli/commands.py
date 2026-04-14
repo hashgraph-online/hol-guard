@@ -14,7 +14,7 @@ from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approvals import approval_center_hint, queue_blocked_approvals, wait_for_approval_requests
-from ..bridge import BridgeConfig, GuardBridge, run_bridge
+from ..bridge import BridgeConfig, GuardBridge, run_bridge, StderrBackend, TelegramBackend, WebhookBackend, HermesBackend
 from ..config import load_guard_config, overlay_synced_guard_policy, resolve_guard_home
 from ..consumer import artifact_hash, detect_all, detect_harness, evaluate_detection, record_policy, run_consumer_scan
 from ..daemon import GuardDaemonServer, ensure_guard_daemon
@@ -257,6 +257,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     bridge_parser.add_argument("--telegram-token", help="Telegram bot token for notifications")
     bridge_parser.add_argument("--telegram-chat-id", help="Telegram chat ID for notifications")
     bridge_parser.add_argument("--webhook-url", help="Webhook URL for notifications")
+    bridge_parser.add_argument("--hermes-chat-id", help="Hermes chat ID for notifications")
     bridge_parser.add_argument("--dry-run", action="store_true", help="Log notifications without sending")
     _add_guard_common_args(bridge_parser)
 
@@ -644,8 +645,24 @@ def run_guard_command(args: argparse.Namespace) -> int:
         poll_interval = getattr(args, "poll_interval", 10) or 10
         guard_url = getattr(args, "guard_url", None)
         dry_run = getattr(args, "dry_run", False)
+
+        # Instantiate backend based on CLI args
+        backend = None
+        telegram_token = getattr(args, "telegram_token", None)
+        telegram_chat_id = getattr(args, "telegram_chat_id", None)
+        webhook_url = getattr(args, "webhook_url", None)
+        hermes_chat_id = getattr(args, "hermes_chat_id", None)
+
+        if telegram_token and telegram_chat_id:
+            backend = TelegramBackend(telegram_token, telegram_chat_id)
+        elif webhook_url:
+            backend = WebhookBackend(webhook_url)
+        elif hermes_chat_id:
+            backend = HermesBackend(hermes_chat_id)
+        # Else defaults to StderrBackend via GuardBridge constructor
+
         config = BridgeConfig(guard_url=guard_url, poll_interval=poll_interval, dry_run=dry_run)
-        bridge = GuardBridge(config=config, store=store)
+        bridge = GuardBridge(config=config, store=store, backend=backend)
         bridge.run()
         return 0
 
