@@ -169,3 +169,38 @@ def test_copilot_install_rewrites_legacy_guard_owned_hook_file_to_documented_sch
 
     assert uninstall_payload["active"] is False
     assert managed_hook_path.exists() is False
+
+
+def test_copilot_install_and_uninstall_preserve_existing_managed_hook_content(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = CopilotHarnessAdapter()
+    managed_hook_path = context.workspace_dir / ".github" / "hooks" / "hol-guard-copilot.json"
+    _write_json(
+        managed_hook_path,
+        {
+            "version": 1,
+            "hooks": {
+                "sessionStart": [{"command": "python banner.py"}],
+                "preToolUse": [{"command": "python existing-pre.py"}],
+            },
+        },
+    )
+
+    adapter.install(context)
+    managed_payload = json.loads(managed_hook_path.read_text(encoding="utf-8"))
+
+    assert managed_payload["hooks"]["sessionStart"] == [{"command": "python banner.py"}]
+    assert len(managed_payload["hooks"]["preToolUse"]) == 2
+    assert managed_payload["hooks"]["preToolUse"][0] == {"command": "python existing-pre.py"}
+
+    uninstall_payload = adapter.uninstall(context)
+    remaining_payload = json.loads(managed_hook_path.read_text(encoding="utf-8"))
+
+    assert uninstall_payload["active"] is False
+    assert remaining_payload == {
+        "version": 1,
+        "hooks": {
+            "sessionStart": [{"command": "python banner.py"}],
+            "preToolUse": [{"command": "python existing-pre.py"}],
+        },
+    }

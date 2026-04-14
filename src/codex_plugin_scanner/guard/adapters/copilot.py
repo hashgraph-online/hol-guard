@@ -83,13 +83,23 @@ def _hooks_payload(payload: dict[str, object]) -> dict[str, object]:
 
 
 def _managed_hook_payload(payload: dict[str, object]) -> dict[str, object]:
-    hooks_payload = _hooks_payload(payload)
-    normalized_hooks = {
-        hook_name: list(entries)
-        for hook_name in _HOOK_EVENTS
-        if isinstance((entries := hooks_payload.get(hook_name)), list)
+    normalized_payload: dict[str, object] = {"version": 1, "hooks": {}}
+    version = payload.get("version")
+    if isinstance(version, int):
+        normalized_payload["version"] = version
+    hooks = payload.get("hooks")
+    if isinstance(hooks, dict):
+        normalized_payload["hooks"] = {
+            str(hook_name): list(entries) if isinstance(entries, list) else entries
+            for hook_name, entries in hooks.items()
+        }
+        return normalized_payload
+    normalized_payload["hooks"] = {
+        str(hook_name): list(entries)
+        for hook_name, entries in payload.items()
+        if hook_name != "version" and hook_name not in _HOOK_EVENTS and isinstance(entries, list)
     }
-    return {"version": 1, "hooks": normalized_hooks}
+    return normalized_payload
 
 
 def _command_parts(server_config: dict[str, object]) -> tuple[str | None, tuple[str, ...]]:
@@ -180,7 +190,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
                     *[str(note) for note in shim_manifest.get("notes", [])],
                 ],
             }
-        payload = {"version": 1, "hooks": {}}
+        payload = _managed_hook_payload(_json_payload(hook_path))
         hooks_payload = payload["hooks"]
         hook_entry = _hook_entry(context)
         for hook_name in _HOOK_EVENTS:
