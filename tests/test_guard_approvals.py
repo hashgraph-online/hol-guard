@@ -381,6 +381,38 @@ class TestGuardApprovals:
         assert snapshot_payload["runtime_state"]["approval_center_url"] == f"http://127.0.0.1:{daemon.port}"
         assert snapshot_payload["runtime_state"]["session_id"]
 
+    def test_guard_daemon_runtime_snapshot_counts_all_pending_requests_beyond_page_limit(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        for index in range(205):
+            store.add_approval_request(
+                GuardApprovalRequest(
+                    request_id=f"req-snapshot-{index}",
+                    harness="codex",
+                    artifact_id=f"codex:project:item-{index}",
+                    artifact_name=f"item-{index}",
+                    artifact_hash=f"hash-{index}",
+                    policy_action="require-reapproval",
+                    recommended_scope="artifact",
+                    changed_fields=("args",),
+                    source_scope="project",
+                    config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                    review_command=f"hol-guard approvals approve req-snapshot-{index}",
+                    approval_url="http://127.0.0.1/pending",
+                ),
+                "2026-04-11T00:00:00+00:00",
+            )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+                snapshot_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert snapshot_payload["pending_count"] == 205
+        assert len(snapshot_payload["items"]) == 200
+
     def test_guard_daemon_v1_endpoints_expose_requests_diff_receipts_and_policy(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         artifact = GuardArtifact(
@@ -953,24 +985,11 @@ class TestGuardApprovals:
         )
         post_calls: list[tuple[str, dict[str, object]]] = []
 
-        def fake_get(url: str, timeout: int):
-            assert url == "http://127.0.0.1:4455/v1/requests/req-bridge"
-            assert timeout == 10
-            return SimpleNamespace(
-                status_code=200,
-                json=lambda: {
-                    "request_id": "req-bridge",
-                    "recommended_scope": "workspace",
-                    "workspace": str(tmp_path / "workspace"),
-                },
-            )
-
         def fake_post(url: str, json: dict[str, object], timeout: int):
             post_calls.append((url, json))
             assert timeout == 30
             return SimpleNamespace(status_code=200, json=lambda: {"resolved": True})
 
-        monkeypatch.setattr(guard_bridge_module.requests, "get", fake_get)
         monkeypatch.setattr(guard_bridge_module.requests, "post", fake_post)
 
         resolved = bridge._execute_resolution("approve", "req-bridge")
@@ -980,8 +999,7 @@ class TestGuardApprovals:
             (
                 "http://127.0.0.1:4455/v1/requests/req-bridge/approve",
                 {
-                    "scope": "workspace",
-                    "workspace": str(tmp_path / "workspace"),
+                    "scope": "artifact",
                     "reason": "resolved from Guard Bridge",
                 },
             )

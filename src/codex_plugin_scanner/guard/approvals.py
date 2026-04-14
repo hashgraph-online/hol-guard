@@ -185,7 +185,7 @@ def build_runtime_snapshot(
         "generated_at": now or _now(),
         "approval_center_url": approval_center_url,
         "runtime_state": store.get_runtime_state(),
-        "pending_count": len(pending_requests),
+        "pending_count": store.count_approval_requests(),
         "receipt_count": store.count_receipts(),
         "items": pending_requests,
         "latest_receipts": latest_receipts,
