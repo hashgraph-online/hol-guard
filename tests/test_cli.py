@@ -123,6 +123,18 @@ class TestMain:
         assert "[cisco]" in output
         assert "Python 3.11+" in output
 
+    def test_scan_help_lists_common_workflows(self, capsys):
+        parser = cli_module._build_parser("plugin-scanner", program_mode="scanner")
+
+        with contextlib.suppress(SystemExit):
+            parser.parse_args(["scan", "--help"])
+
+        output = capsys.readouterr().out
+
+        assert "Common workflows:" in output
+        assert "plugin-scanner scan ./my-plugin" in output
+        assert "Use --format json or --json in CI" in output
+
     def test_returns_0_for_good_plugin(self):
         rc = main([str(FIXTURES / "good-plugin")])
         assert rc == 0
@@ -200,6 +212,50 @@ class TestMain:
         # Should still produce text output
         assert f"{expected_score}/100" in captured.out
 
+    def test_text_scan_emits_provenance_to_stderr(self, tmp_path, capsys):
+        plugin_dir = tmp_path / "good-plugin"
+        shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
+        baseline_path = plugin_dir / "baseline.txt"
+        baseline_path.write_text("README_MISSING\n", encoding="utf-8")
+        (plugin_dir / ".plugin-scanner.toml").write_text(
+            """
+[scanner]
+profile = "default"
+baseline_file = "baseline.txt"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        rc = main([str(plugin_dir)])
+        captured = capsys.readouterr()
+
+        assert rc == 0
+        assert "Policy profile: default" in captured.err
+        assert f"Using config: {plugin_dir / '.plugin-scanner.toml'}" in captured.err
+        assert f"Using baseline: {baseline_path}" in captured.err
+
+    def test_text_scan_reports_missing_baseline_in_provenance(self, tmp_path, capsys):
+        plugin_dir = tmp_path / "good-plugin"
+        shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
+        baseline_path = plugin_dir / "baseline.txt"
+        (plugin_dir / ".plugin-scanner.toml").write_text(
+            """
+[scanner]
+profile = "default"
+baseline_file = "baseline.txt"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        rc = main([str(plugin_dir)])
+        captured = capsys.readouterr()
+
+        assert rc == 0
+        assert f"Baseline not found: {baseline_path}" in captured.err
+        assert f"Using baseline: {baseline_path}" not in captured.err
+
     def test_min_score_exact_boundary(self):
         # At exact boundary should pass (>=)
         rc = main([str(FIXTURES / "good-plugin"), "--min-score", str(EXPECTED_GOOD_PLUGIN_SCORE)])
@@ -216,6 +272,14 @@ class TestMain:
         output = capsys.readouterr().out
         assert rc == 0
         assert '"rule_id": "CODEXIGNORE_MISSING"' in output
+
+    def test_lint_explain_unknown_rule_includes_hint(self, capsys):
+        rc = main(["lint", "--explain", "NOT_A_REAL_RULE"])
+        captured = capsys.readouterr()
+
+        assert rc == 1
+        assert "Unknown rule id: NOT_A_REAL_RULE" in captured.err
+        assert "lint --list-rules" in captured.err
 
     def test_lint_fails_for_strict_profile(self):
         rc = main(["lint", str(FIXTURES / "bad-plugin"), "--profile", "strict-security"])
@@ -294,6 +358,24 @@ class TestMain:
         captured = capsys.readouterr()
         assert rc == 1
         assert 'Policy profile "strict-security" failed.' in captured.err
+
+    def test_scan_reports_min_score_failures_with_hint(self, capsys):
+        rc = main(["scan", str(FIXTURES / "bad-plugin"), "--min-score", "50"])
+        captured = capsys.readouterr()
+        expected_score = scan_plugin(FIXTURES / "bad-plugin").score
+
+        assert rc == 1
+        assert f"Score {expected_score} is below threshold 50" in captured.err
+        assert "hint:" in captured.err
+
+    def test_json_min_score_failures_do_not_emit_text_hint(self, capsys):
+        rc = main(["scan", str(FIXTURES / "bad-plugin"), "--min-score", "50", "--format", "json"])
+        captured = capsys.readouterr()
+        parsed = json.loads(captured.out)
+
+        assert rc == 1
+        assert parsed["score"] == scan_plugin(FIXTURES / "bad-plugin").score
+        assert "hint:" not in captured.err
 
     def test_doctor_bundle(self, tmp_path):
         bundle = tmp_path / "doctor.json"

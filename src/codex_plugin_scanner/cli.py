@@ -10,11 +10,19 @@ import zipfile
 from dataclasses import asdict, replace
 from pathlib import Path
 
-from .config import ConfigError, load_baseline_rule_ids, load_scanner_config
+from .cli_ui import (
+    build_cli_epilog,
+    build_plain_text,
+    build_scan_help_epilog,
+    build_verification_text,
+    emit_hint,
+    emit_scan_provenance,
+)
+from .config import DEFAULT_CONFIG_FILES, ConfigError, load_baseline_rule_ids, load_scanner_config
 from .ecosystems.registry import list_supported_ecosystems
 from .guard.cli import add_guard_parser, add_guard_root_parser, run_guard_command
 from .lint_fixes import apply_safe_autofixes
-from .models import GRADE_LABELS, ScanOptions, Severity, get_grade
+from .models import ScanOptions, get_grade
 from .policy import POLICY_PROFILES, build_rule_inventory, evaluate_policy, resolve_profile
 from .quality_artifact import build_quality_artifact, write_quality_artifact
 from .reporting import format_json as render_json
@@ -26,92 +34,8 @@ from .verification import build_doctor_report, build_verification_payload, verif
 from .version import __version__
 
 
-def _build_plain_text(result) -> str:
-    if getattr(result, "scope", "plugin") == "repository":
-        trust_total = result.trust_report.total if getattr(result, "trust_report", None) else 0.0
-        lines = [
-            f"🔗 Codex Plugin Scanner v{__version__}",
-            f"Scanning repository: {result.plugin_dir}",
-            f"Marketplace: {result.marketplace_file or 'not found'}",
-            f"Local plugins scanned: {len(result.plugin_results)}",
-            f"Skipped marketplace entries: {len(result.skipped_targets)}",
-            f"Trust: {trust_total}/100",
-            "",
-            "Per-plugin scores:",
-        ]
-        for plugin in result.plugin_results:
-            plugin_name = plugin.plugin_name or Path(plugin.plugin_dir).name
-            plugin_trust = plugin.trust_report.total if getattr(plugin, "trust_report", None) else 0.0
-            lines.append(f"  - {plugin_name}: {plugin.score}/100 ({plugin.grade}), trust {plugin_trust}/100")
-        if result.skipped_targets:
-            lines += ["", "Skipped entries:"]
-            for skipped in result.skipped_targets:
-                source_path = f" [{skipped.source_path}]" if skipped.source_path else ""
-                lines.append(f"  - {skipped.name}{source_path}: {skipped.reason}")
-        lines.append("")
-    else:
-        trust_total = result.trust_report.total if getattr(result, "trust_report", None) else 0.0
-        lines = [
-            f"🔗 Codex Plugin Scanner v{__version__}",
-            f"Scanning: {result.plugin_dir}",
-            f"Trust: {trust_total}/100",
-            "",
-        ]
-        ecosystems = getattr(result, "ecosystems", ())
-        packages = getattr(result, "packages", ())
-        if ecosystems:
-            lines.append(f"Ecosystems: {', '.join(ecosystems)}")
-        if packages:
-            lines.append(f"Detected packages: {len(packages)}")
-        if ecosystems or packages:
-            lines.append("")
-    for category in result.categories:
-        cat_score = sum(c.points for c in category.checks)
-        cat_max = sum(c.max_points for c in category.checks)
-        lines.append(f"── {category.name} ({cat_score}/{cat_max}) ──")
-        for check in category.checks:
-            icon = "✅" if check.passed else "⚠️"
-            pts = f"+{check.points}" if check.passed else "+0"
-            lines.append(f"  {icon} {check.name:<42} {pts}")
-        lines.append("")
-    counts = ", ".join(f"{severity.value}:{result.severity_counts.get(severity.value, 0)}" for severity in Severity)
-    lines += [f"Findings: {counts}", ""]
-    if getattr(result, "trust_report", None) and result.trust_report.domains:
-        lines.append("Trust Provenance:")
-        for domain in result.trust_report.domains:
-            lines.append(f"  - {domain.label}: {domain.score}/100 ({domain.spec_id})")
-        lines.append("")
-    if result.integrations:
-        lines.append("Integration Status:")
-        for integration in result.integrations:
-            lines.append(f"  - {integration.name}: {integration.status} - {integration.message}")
-        lines.append("")
-    separator = "━" * 37
-    label = GRADE_LABELS.get(result.grade, "Unknown")
-    lines += [separator, f"Final Score: {result.score}/100 ({result.grade} - {label})", separator]
-    return "\n".join(lines)
-
-
 def format_text(result) -> str:
-    return _build_plain_text(result)
-
-
-def _build_verification_text(payload: dict[str, object]) -> str:
-    verify_pass = bool(payload.get("verify_pass"))
-    status = "PASS" if verify_pass else "FAIL"
-    lines = [f"Verification: {status}", ""]
-    cases = payload.get("cases", [])
-    if not isinstance(cases, list):
-        return "\n".join(lines)
-    for case in cases:
-        if not isinstance(case, dict):
-            continue
-        icon = "✅" if case.get("passed") else "⚠️"
-        component = case.get("component", "unknown")
-        name = case.get("name", "unnamed")
-        message = case.get("message", "")
-        lines.append(f"{icon} {component}: {name} - {message}")
-    return "\n".join(lines)
+    return build_plain_text(result)
 
 
 def format_json(
@@ -153,7 +77,12 @@ def _is_scanner_program(program_name: str) -> bool:
 
 def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentParser:
     if program_mode == "guard":
-        parser = argparse.ArgumentParser(prog=program_name, description="Protect local harnesses before tools run.")
+        parser = argparse.ArgumentParser(
+            prog=program_name,
+            description="Protect local harnesses before tools run.",
+            epilog=build_cli_epilog(program_name, include_guard=False),
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
         parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
         add_guard_root_parser(parser)
         return parser
@@ -165,12 +94,19 @@ def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentP
     parser = argparse.ArgumentParser(
         prog=program_name,
         description=description,
+        epilog=build_cli_epilog(program_name, include_guard=program_mode == "combined"),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--list-ecosystems", action="store_true", help="List supported plugin ecosystems and exit")
     subparsers = parser.add_subparsers(dest="command")
 
-    scan_parser = subparsers.add_parser("scan", help="Run full weighted scan")
+    scan_parser = subparsers.add_parser(
+        "scan",
+        help="Run full weighted scan",
+        epilog=build_scan_help_epilog(program_name),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     scan_parser.add_argument("plugin_dir")
     scan_parser.add_argument("--json", action="store_true")
     scan_parser.add_argument("--format", choices=("text", "json", "markdown", "sarif"), default="text")
@@ -277,12 +213,32 @@ def _print_lint_explain(rule_id: str) -> int:
     spec = get_rule_spec(rule_id)
     if spec is None:
         print(f"Unknown rule id: {rule_id}", file=sys.stderr)
+        emit_hint("run `lint --list-rules` to inspect the available rule identifiers.")
         return 1
     print(json.dumps(asdict(spec), indent=2, default=str))
     return 0
 
 
+def _resolve_scanner_config_path(plugin_dir: Path, config_path: str | None) -> Path | None:
+    if config_path:
+        candidate = Path(config_path)
+        return candidate if candidate.is_absolute() else (plugin_dir / candidate)
+    for name in DEFAULT_CONFIG_FILES:
+        candidate = plugin_dir / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _resolve_baseline_path(plugin_dir: Path, baseline_path: str | None) -> Path | None:
+    if not baseline_path:
+        return None
+    candidate = Path(baseline_path)
+    return candidate if candidate.is_absolute() else (plugin_dir / candidate)
+
+
 def _resolve_policy_profile(args: argparse.Namespace, plugin_dir: Path):
+    config_path = _resolve_scanner_config_path(plugin_dir, getattr(args, "config", None))
     try:
         config = load_scanner_config(plugin_dir, getattr(args, "config", None))
         baseline_path = getattr(args, "baseline", None) or config.baseline_file
@@ -292,11 +248,11 @@ def _resolve_policy_profile(args: argparse.Namespace, plugin_dir: Path):
         raise
 
     profile = resolve_profile(getattr(args, "profile", None) or config.profile)
-    return profile, config, baseline_ids
+    return profile, config, baseline_ids, config_path, _resolve_baseline_path(plugin_dir, baseline_path)
 
 
 def _scan_with_policy(args: argparse.Namespace, plugin_dir: Path):
-    profile, config, baseline_ids = _resolve_policy_profile(args, plugin_dir)
+    profile, config, baseline_ids, config_path, baseline_path = _resolve_policy_profile(args, plugin_dir)
     raw_result = scan_plugin(
         plugin_dir,
         ScanOptions(
@@ -322,7 +278,7 @@ def _scan_with_policy(args: argparse.Namespace, plugin_dir: Path):
     policy_eval = evaluate_policy(result.findings, profile, rule_inventory=inventory)
     effective_score = compute_effective_score(result)
     result = replace(result, score=effective_score, grade=get_grade(effective_score))
-    return raw_result, result, profile, policy_eval, effective_score
+    return raw_result, result, profile, policy_eval, effective_score, config_path, baseline_path
 
 
 def _run_scan(args: argparse.Namespace) -> int:
@@ -331,11 +287,16 @@ def _run_scan(args: argparse.Namespace) -> int:
         print(f'Error: "{resolved}" is not a directory.', file=sys.stderr)
         return 1
     try:
-        raw_result, result, profile, policy_eval, effective_score = _scan_with_policy(args, resolved)
+        raw_result, result, profile, policy_eval, effective_score, config_path, baseline_path = _scan_with_policy(
+            args,
+            resolved,
+        )
     except ConfigError:
         return 1
 
     output_format = "json" if args.json else args.format
+    if output_format == "text":
+        emit_scan_provenance(profile=profile, config_path=config_path, baseline_path=baseline_path)
     if output_format == "json":
         output = format_json(
             result,
@@ -350,7 +311,7 @@ def _run_scan(args: argparse.Namespace) -> int:
     elif output_format == "sarif":
         output = format_sarif(result)
     else:
-        output = _build_plain_text(result)
+        output = build_plain_text(result)
         print(output)
 
     if args.output:
@@ -362,18 +323,25 @@ def _run_scan(args: argparse.Namespace) -> int:
     min_score = args.min_score
     if result.score < min_score:
         print(f"Score {result.score} is below threshold {min_score}", file=sys.stderr)
+        if output_format == "text":
+            emit_hint(
+                "review the highest-severity findings above, then rerun with --format json if you need automation."
+            )
         return 1
     if should_fail_for_severity(result, args.fail_on_severity):
         print(
             f'Findings met or exceeded the "{args.fail_on_severity}" severity threshold.',
             file=sys.stderr,
         )
+        emit_hint("adjust --fail-on-severity only if your policy allows reporting without a blocking gate.")
         return 1
     if args.strict and result.findings:
         print("Strict mode failed because findings were present.", file=sys.stderr)
+        emit_hint("rerun without --strict to inspect findings without turning the report into a failing gate.")
         return 1
     if not policy_eval.policy_pass:
         print(f'Policy profile "{profile}" failed.', file=sys.stderr)
+        emit_hint("use a different --profile only when that matches your documented review policy.")
         return 1
     return 0
 
@@ -394,7 +362,10 @@ def _run_lint(args: argparse.Namespace) -> int:
             print(f"- {change}")
 
     try:
-        _raw, result, profile, policy_eval, effective_score = _scan_with_policy(args, resolved)
+        _raw, result, profile, policy_eval, effective_score, _config_path, _baseline_path = _scan_with_policy(
+            args,
+            resolved,
+        )
     except ConfigError:
         return 1
 
@@ -436,7 +407,7 @@ def _run_verify(args: argparse.Namespace) -> int:
     if args.format == "json":
         print(json.dumps(payload, indent=2))
     else:
-        print(_build_verification_text(payload))
+        print(build_verification_text(payload))
     return 0 if verification.verify_pass else 1
 
 
@@ -446,7 +417,10 @@ def _run_submit(args: argparse.Namespace) -> int:
         print(f'Error: "{resolved}" is not a directory.', file=sys.stderr)
         return 1
     try:
-        raw_result, result, profile, policy_eval, _effective_score = _scan_with_policy(args, resolved)
+        raw_result, result, profile, policy_eval, _effective_score, _config_path, _baseline_path = _scan_with_policy(
+            args,
+            resolved,
+        )
     except ConfigError:
         return 1
     if getattr(result, "scope", "plugin") != "plugin":

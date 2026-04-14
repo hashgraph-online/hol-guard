@@ -463,30 +463,85 @@ def _render_cisco_evidence(console: Console, payload: dict[str, object]) -> None
     console.print(Panel(body, title="Cisco static scan evidence", border_style="blue"))
 
 
-def _render_scan(console: Console, payload: dict[str, object]) -> None:
+def _build_consumer_summary_table(payload: dict[str, object]) -> Table:
     recommendation = payload.get("policy_recommendation")
-    ecosystems = []
-    if isinstance(payload.get("capability_manifest"), dict):
-        ecosystems = _coerce_string_list(payload["capability_manifest"].get("ecosystems"))
+    manifest = payload.get("capability_manifest")
+    threat_intelligence = payload.get("threat_intelligence")
+    evidence_bundle = payload.get("trust_evidence_bundle")
+    provenance_record = payload.get("provenance_record")
     artifact_snapshot = payload.get("artifact_snapshot")
     artifact_path = "."
     if isinstance(artifact_snapshot, dict):
         artifact_path = str(artifact_snapshot.get("path") or artifact_snapshot.get("artifact_path") or ".")
+    artifact_name = Path(artifact_path).name or artifact_path
+    ecosystems = _coerce_string_list(manifest.get("ecosystems")) if isinstance(manifest, dict) else []
+    categories = _coerce_string_list(manifest.get("category_names")) if isinstance(manifest, dict) else []
+    packages = _coerce_dict_list(manifest.get("packages")) if isinstance(manifest, dict) else []
+    severity_counts = (
+        evidence_bundle.get("severity_counts")
+        if isinstance(evidence_bundle, dict) and isinstance(evidence_bundle.get("severity_counts"), dict)
+        else {}
+    )
     body = Table.grid(padding=(0, 1))
+    body.add_row("Name", artifact_name)
     body.add_row("Artifact", artifact_path)
     body.add_row("Ecosystems", ", ".join(ecosystems) or "unknown")
+    if categories:
+        body.add_row("Categories", ", ".join(categories))
+    if packages:
+        body.add_row("Packages", str(len(packages)))
     if isinstance(recommendation, dict):
         body.add_row("Recommended action", _action_text(str(recommendation.get("action", "review"))))
-    console.print(Panel(body, title="Consumer scan", border_style="cyan"))
-    _render_cisco_evidence(console, payload)
-    console.print(
-        Syntax(
-            json.dumps(payload, indent=2),
-            "json",
-            theme="ansi_dark",
-            word_wrap=True,
+        body.add_row("Reason", str(recommendation.get("reason") or "No recommendation detail provided."))
+    if isinstance(threat_intelligence, dict):
+        body.add_row("Highest severity", str(threat_intelligence.get("highest_severity") or "info"))
+        body.add_row("Finding count", str(threat_intelligence.get("finding_count") or 0))
+    elif severity_counts:
+        body.add_row(
+            "Findings",
+            ", ".join(f"{key}:{value}" for key, value in severity_counts.items() if value) or "none",
         )
-    )
+    if isinstance(provenance_record, dict) and provenance_record.get("trust_score") is not None:
+        body.add_row("Trust score", str(provenance_record.get("trust_score")))
+    return body
+
+
+def _render_consumer_evidence_panels(console: Console, payload: dict[str, object]) -> None:
+    evidence_bundle = payload.get("trust_evidence_bundle")
+    if isinstance(evidence_bundle, dict):
+        severity_counts = evidence_bundle.get("severity_counts")
+        integrations = _coerce_dict_list(evidence_bundle.get("integrations"))
+        summary = Table.grid(padding=(0, 1))
+        if isinstance(severity_counts, dict):
+            summary.add_row(
+                "By severity",
+                ", ".join(f"{key}:{value}" for key, value in severity_counts.items() if value) or "none",
+            )
+        if integrations:
+            summary.add_row(
+                "Integrations",
+                ", ".join(
+                    str(item.get("name") or "integration") for item in integrations if item.get("name") is not None
+                )
+                or "none",
+            )
+        if summary.row_count > 0:
+            console.print(Panel(summary, title="Evidence summary", border_style="yellow"))
+        findings = _coerce_string_list(evidence_bundle.get("findings"))
+        if findings:
+            console.print(
+                Panel(
+                    "\n".join(f"• {item}" for item in findings[:5]),
+                    title="Evidence highlights",
+                    border_style="yellow",
+                )
+            )
+
+
+def _render_scan(console: Console, payload: dict[str, object]) -> None:
+    console.print(Panel(_build_consumer_summary_table(payload), title="Consumer scan", border_style="cyan"))
+    _render_consumer_evidence_panels(console, payload)
+    _render_cisco_evidence(console, payload)
 
 
 def _render_preflight(console: Console, payload: dict[str, object]) -> None:
@@ -506,7 +561,9 @@ def _render_preflight(console: Console, payload: dict[str, object]) -> None:
         body.add_row("Highest severity", str(threat_intelligence.get("highest_severity") or "info"))
         body.add_row("Findings", str(threat_intelligence.get("finding_count") or 0))
     console.print(Panel(body, title="Install-time preflight", border_style="cyan"))
-    _render_scan(console, payload)
+    console.print(Panel(_build_consumer_summary_table(payload), title="Artifact scan", border_style="blue"))
+    _render_consumer_evidence_panels(console, payload)
+    _render_cisco_evidence(console, payload)
 
 
 def _render_protect(console: Console, payload: dict[str, object]) -> None:
