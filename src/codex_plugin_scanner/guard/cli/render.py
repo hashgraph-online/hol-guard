@@ -784,9 +784,9 @@ def _run_title(*, blocked: bool, dry_run: bool) -> str:
 
 def _run_outcome_text(*, blocked: bool, dry_run: bool, launched: bool) -> str:
     if blocked and dry_run:
-        return "Guard found changes that need review before a real launch."
+        return "Guard found artifacts that need review before a real launch."
     if blocked:
-        return "Guard paused the launch until you review the changed artifacts."
+        return "Guard paused the launch until you review the artifacts that need attention."
     if dry_run:
         return "Guard reviewed the current config without launching the harness."
     if launched:

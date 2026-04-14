@@ -993,6 +993,33 @@ class TestGuardRuntime:
         assert "blocked-tool" in output
         assert "Needs review 1" in output
 
+    def test_guard_run_renderer_uses_neutral_blocked_copy_for_policy_only_blockers(self, capsys):
+        emit_guard_payload(
+            "run",
+            {
+                "harness": "codex",
+                "blocked": True,
+                "dry_run": True,
+                "launched": False,
+                "receipts_recorded": 1,
+                "artifacts": [
+                    {
+                        "artifact_id": "codex:project:blocked-tool",
+                        "artifact_name": "blocked-tool",
+                        "changed": False,
+                        "changed_fields": [],
+                        "policy_action": "require-reapproval",
+                        "why_now": "Guard blocked this definition because the configured policy does not trust it yet.",
+                    }
+                ],
+            },
+            False,
+        )
+        output = capsys.readouterr().out
+
+        assert "Guard found changes that need review before a real launch." not in output
+        assert "Guard found artifacts that need review before a real launch." in output
+
     def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
         self, tmp_path, capsys, monkeypatch
     ):
