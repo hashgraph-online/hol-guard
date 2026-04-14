@@ -165,8 +165,11 @@ class CopilotHarnessAdapter(HarnessAdapter):
                     payload = _json_payload(hook_path)
                     if not payload:
                         continue
+                    hook_artifacts = self._hook_artifacts(hook_path, payload)
+                    if len(hook_artifacts) == 0:
+                        continue
                     found_paths.append(str(hook_path))
-                    artifacts.extend(self._hook_artifacts(hook_path, payload))
+                    artifacts.extend(hook_artifacts)
         return HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),

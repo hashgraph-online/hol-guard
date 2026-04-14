@@ -101,6 +101,22 @@ def test_copilot_detect_tolerates_malformed_json(tmp_path):
     assert [artifact.artifact_id for artifact in detection.artifacts] == ["copilot:project:workspace-tool"]
 
 
+def test_copilot_detect_ignores_hook_json_without_hook_entries(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = CopilotHarnessAdapter()
+    unrelated_hook = context.workspace_dir / ".github" / "hooks" / "notes.json"
+    _write_json(unrelated_hook, {"message": "not a hook file"})
+    _write_json(
+        context.workspace_dir / ".vscode" / "mcp.json",
+        {"servers": {"workspace-tool": {"command": "python", "args": ["server.py"]}}},
+    )
+
+    detection = adapter.detect(context)
+
+    assert str(unrelated_hook) not in detection.config_paths
+    assert [artifact.artifact_id for artifact in detection.artifacts] == ["copilot:project:workspace-tool"]
+
+
 def test_copilot_install_and_uninstall_manage_guard_owned_hook_file_idempotently(tmp_path):
     context = _build_context(tmp_path)
     adapter = CopilotHarnessAdapter()
