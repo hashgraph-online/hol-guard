@@ -100,6 +100,7 @@ class TestGuardProductFlow:
         assert rc == 0
         assert output["recommended_harness"] == "codex"
         assert output["sync_configured"] is False
+        assert output["cloud_state"] == "local_only"
         assert output["receipt_count"] == 0
         assert codex_summary["managed"] is False
         assert codex_summary["next_action"] == "install"
@@ -133,6 +134,34 @@ class TestGuardProductFlow:
         assert output["recommended_harness"] == "copilot"
         assert copilot_summary["install_command"] == "hol-guard install copilot"
         assert output["next_steps"][1]["command"] == "hol-guard run copilot --dry-run"
+
+    def test_guard_connect_json_surfaces_local_only_state(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "connect",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["cloud_state"] == "local_only"
+        assert output["sync_configured"] is False
+        assert output["connect_url"] == "https://hol.org/guard/connect"
+        assert output["dashboard_url"] == "https://hol.org/guard"
+        assert output["next_steps"][0]["command"] == "https://hol.org/guard/connect"
 
     def test_guard_start_human_output_highlights_guard_loop(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
