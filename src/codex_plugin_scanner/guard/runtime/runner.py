@@ -139,16 +139,31 @@ def _requests_direct_env_read(prompt_text: str) -> bool:
 
 
 def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) -> Path:
+    config_candidates = _prompt_config_candidates(detection)
     if context.workspace_dir is not None:
-        for config_path in detection.config_paths:
+        for config_path in config_candidates:
             candidate = Path(config_path)
             if candidate.is_relative_to(context.workspace_dir):
                 return candidate
-    if detection.config_paths:
-        return Path(detection.config_paths[0])
+    if config_candidates:
+        return Path(config_candidates[0])
+    if detection.harness == "opencode":
+        if context.workspace_dir is not None:
+            return context.workspace_dir / "opencode.json"
+        return context.home_dir / ".config" / "opencode" / "opencode.json"
     if context.workspace_dir is not None:
         return context.workspace_dir / ".codex" / "config.toml"
     return context.home_dir / ".codex" / "config.toml"
+
+
+def _prompt_config_candidates(detection: HarnessDetection) -> tuple[str, ...]:
+    if detection.harness == "opencode":
+        return tuple(
+            config_path
+            for config_path in detection.config_paths
+            if Path(config_path).name in {"opencode.json", "opencode.jsonc"}
+        )
+    return detection.config_paths
 
 
 def sync_receipts(store: GuardStore) -> dict[str, object]:

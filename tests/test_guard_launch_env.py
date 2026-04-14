@@ -449,6 +449,97 @@ def test_guard_run_opencode_reapproves_changed_plugin_and_skill_content(monkeypa
     assert "metadata" in skill_artifact["changed_fields"]
 
 
+def test_guard_run_opencode_reapproves_changed_secret_plugin_option(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_json(
+        home_dir / ".config" / "opencode" / "opencode.json",
+        {"plugins": [["opencode-global-plugin", {"token": "alpha"}]]},
+    )
+    _write_json(workspace_dir / "opencode.json", {})
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "require-reapproval"\nmode = "prompt"\n')
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+
+    first_rc = main(
+        [
+            "guard",
+            "run",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--dry-run",
+            "--default-action",
+            "allow",
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    _write_json(
+        home_dir / ".config" / "opencode" / "opencode.json",
+        {"plugins": [["opencode-global-plugin", {"token": "beta"}]]},
+    )
+
+    second_rc = main(
+        [
+            "guard",
+            "run",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--default-action",
+            "require-reapproval",
+            "--json",
+        ]
+    )
+    second_output = json.loads(capsys.readouterr().out)
+    plugin_artifact = next(
+        item
+        for item in second_output["artifacts"]
+        if item["artifact_id"] == "opencode:global:plugin:opencode-global-plugin"
+    )
+
+    assert first_rc == 0
+    assert second_rc == 1
+    assert second_output["blocked"] is True
+    assert plugin_artifact["policy_action"] == "require-reapproval"
+    assert "metadata" in plugin_artifact["changed_fields"]
+
+
+def test_guard_run_opencode_prompt_request_prefers_real_config_file(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_json(home_dir / ".config" / "opencode" / "opencode.json", {"name": "guard-opencode"})
+    _write_text(workspace_dir / ".opencode" / "plugins" / "workspace-plugin.mjs", "export default {};\n")
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\nmode = "prompt"\n')
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--arg=Please read the .env.guard-test file directly and summarize it",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    prompt_artifact = next(item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request")
+
+    assert rc == 1
+    assert output["blocked"] is True
+    assert prompt_artifact["config_path"] == str(home_dir / ".config" / "opencode" / "opencode.json")
+
+
 def test_guard_run_still_blocks_when_prompt_contains_negation_elsewhere(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
