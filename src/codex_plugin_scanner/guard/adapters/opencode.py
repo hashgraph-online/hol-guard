@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from ...ecosystems.opencode import _load_json_or_jsonc
@@ -113,10 +114,12 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         if not overlay_path.exists():
             return {}
         try:
-            runtime_config = overlay_path.read_text(encoding="utf-8")
-        except OSError:
+            runtime_config = json.loads(overlay_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
             return {}
-        return {"OPENCODE_CONFIG_CONTENT": runtime_config}
+        existing_config = _inline_config(os.getenv("OPENCODE_CONFIG_CONTENT"))
+        merged_config = _merge_configs(existing_config, runtime_config)
+        return {"OPENCODE_CONFIG_CONTENT": json.dumps(merged_config)}
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
         if context.workspace_dir is not None and passthrough_args:
@@ -137,3 +140,37 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
 
 
 __all__ = ["OpenCodeHarnessAdapter"]
+
+
+def _inline_config(raw_content: str | None) -> dict[str, object]:
+    if not raw_content:
+        return {}
+    try:
+        payload = json.loads(raw_content)
+    except json.JSONDecodeError:
+        return {}
+    parsed = _object_dict(payload)
+    return parsed if parsed is not None else {}
+
+
+def _merge_configs(base: dict[str, object], overlay: dict[str, object]) -> dict[str, object]:
+    merged = dict(base)
+    for key, value in overlay.items():
+        existing_value = merged.get(key)
+        nested_overlay = _object_dict(value)
+        nested_existing = _object_dict(existing_value)
+        if nested_overlay is not None and nested_existing is not None:
+            merged[key] = _merge_configs(nested_existing, nested_overlay)
+            continue
+        merged[key] = value
+    return merged
+
+
+def _object_dict(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    result: dict[str, object] = {}
+    for key, item in value.items():
+        if isinstance(key, str):
+            result[key] = item
+    return result

@@ -285,6 +285,60 @@ def test_guard_run_launches_opencode_with_runtime_overlay(monkeypatch, tmp_path,
     assert overlay_payload["permission"]["skill"]["*"] == "ask"
 
 
+def test_guard_run_merges_existing_opencode_config_content(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_opencode_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
+    captured_env: dict[str, str] = {}
+
+    def _fake_run(command, cwd=None, check=False, env=None):
+        del command, cwd, check
+        captured_env.update(env or {})
+        return _CompletedProcess(0)
+
+    main(
+        [
+            "guard",
+            "install",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    monkeypatch.setenv(
+        "OPENCODE_CONFIG_CONTENT",
+        json.dumps({"model": "gpt-4.1", "permission": {"network": {"*": "allow"}}}),
+    )
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--arg=--help",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    overlay_payload = json.loads(captured_env["OPENCODE_CONFIG_CONTENT"])
+
+    assert rc == 0
+    assert output["launched"] is True
+    assert overlay_payload["model"] == "gpt-4.1"
+    assert overlay_payload["permission"]["network"]["*"] == "allow"
+    assert overlay_payload["permission"]["skill"]["*"] == "ask"
+
+
 def test_guard_run_opencode_prompt_request_uses_opencode_policy_path(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

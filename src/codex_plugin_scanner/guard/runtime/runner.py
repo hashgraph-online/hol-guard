@@ -139,7 +139,7 @@ def _requests_direct_env_read(prompt_text: str) -> bool:
 
 
 def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) -> Path:
-    config_candidates = _prompt_config_candidates(detection)
+    config_candidates = _prompt_config_candidates(detection, context)
     if context.workspace_dir is not None:
         for config_path in config_candidates:
             candidate = Path(config_path)
@@ -156,12 +156,22 @@ def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) ->
     return context.home_dir / ".codex" / "config.toml"
 
 
-def _prompt_config_candidates(detection: HarnessDetection) -> tuple[str, ...]:
+def _prompt_config_candidates(detection: HarnessDetection, context: HarnessContext) -> tuple[str, ...]:
     if detection.harness == "opencode":
+        configured_path = os.getenv("OPENCODE_CONFIG")
+        configured_candidate = None
+        if configured_path:
+            candidate = Path(configured_path).expanduser()
+            if not candidate.is_absolute():
+                if context.workspace_dir is not None:
+                    candidate = context.workspace_dir / candidate
+                else:
+                    candidate = Path.cwd() / candidate
+            configured_candidate = str(candidate)
         return tuple(
             config_path
             for config_path in detection.config_paths
-            if Path(config_path).name in {"opencode.json", "opencode.jsonc"}
+            if Path(config_path).name in {"opencode.json", "opencode.jsonc"} or config_path == configured_candidate
         )
     return detection.config_paths
 

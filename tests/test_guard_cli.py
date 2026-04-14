@@ -523,6 +523,33 @@ args = ["workspace-skill.js"]
         assert "opencode:project:skill:opencode:skill/shared" in artifact_ids
         assert "opencode:project:skill:opencode:skills/nested/shared" in artifact_ids
 
+    def test_guard_detect_reads_opencode_config_from_environment_override(self, monkeypatch, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        custom_config_path = workspace_dir / "custom" / "guard-opencode.json"
+        _write_json(custom_config_path, {"plugins": ["env-plugin"]})
+        monkeypatch.setenv("OPENCODE_CONFIG", str(custom_config_path))
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        detection = output["harnesses"][0]
+        artifact_ids = [item["artifact_id"] for item in detection["artifacts"]]
+
+        assert rc == 0
+        assert "opencode:project:plugin:env-plugin" in artifact_ids
+        assert str(custom_config_path) in detection["config_paths"]
+
     def test_guard_detect_handles_unreadable_opencode_plugin_files(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
