@@ -59,6 +59,7 @@ def _render_start(console: Console, payload: dict[str, object]) -> None:
             border_style="cyan",
         )
     )
+    console.print(_build_cloud_summary_panel(payload))
     console.print(_build_product_table(harnesses))
     if payload.get("approval_center_url"):
         console.print(f"Approval center: [bold]{payload.get('approval_center_url')}[/bold]")
@@ -77,6 +78,7 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
             border_style="cyan",
         )
     )
+    console.print(_build_cloud_summary_panel(payload))
     console.print(_build_product_table(harnesses))
     if payload.get("approval_center_url"):
         console.print(f"Approval center: [bold]{payload.get('approval_center_url')}[/bold]")
@@ -415,6 +417,34 @@ def _render_login(console: Console, payload: dict[str, object]) -> None:
             border_style="green",
         )
     )
+
+
+def _render_connect(console: Console, payload: dict[str, object]) -> None:
+    border_style = _cloud_border_style(str(payload.get("cloud_state") or "local_only"))
+    console.print(
+        Panel.fit(
+            f"[bold]HOL Guard connect[/bold]\n"
+            f"{payload.get('cloud_state_label', 'Local only')} • "
+            f"{payload.get('receipt_count', 0)} receipts • "
+            f"{payload.get('pending_approvals', 0)} approvals",
+            border_style=border_style,
+        )
+    )
+    console.print(_build_cloud_summary_panel(payload))
+    sync_result = payload.get("sync_result")
+    if isinstance(sync_result, dict):
+        body = Table.grid(padding=(0, 1))
+        body.add_row("Synced at", str(sync_result.get("synced_at") or "unknown"))
+        body.add_row("Receipts stored", str(sync_result.get("receipts_stored") or 0))
+        body.add_row("Advisories stored", str(sync_result.get("advisories_stored") or 0))
+        body.add_row("Remote policies", str(sync_result.get("remote_policies_stored") or 0))
+        console.print(Panel(body, title="Connect sync", border_style="green"))
+    if payload.get("sync_error"):
+        console.print(Panel(str(payload.get("sync_error")), title="Connect failed", border_style="red"))
+    if payload.get("approval_center_url"):
+        console.print(f"Approval center: [bold]{payload.get('approval_center_url')}[/bold]")
+    console.print(_build_product_table(_coerce_dict_list(payload.get("harnesses"))))
+    console.print(_build_steps_panel(_coerce_dict_list(payload.get("next_steps"))))
 
 
 def _render_sync(console: Console, payload: dict[str, object]) -> None:
@@ -756,6 +786,39 @@ def _build_runtime_probe_panel(runtime_probe: dict[str, object]) -> Panel:
     return Panel(body, title="Runtime probe", border_style="magenta")
 
 
+def _build_cloud_summary_panel(payload: dict[str, object]) -> Panel:
+    cloud_state = str(payload.get("cloud_state") or "local_only")
+    body = Table.grid(padding=(0, 1))
+    body.add_row("State", f"[bold]{payload.get('cloud_state_label', 'Local only')}[/bold]")
+    body.add_row("Summary", str(payload.get("cloud_state_detail") or "Guard is protecting this machine locally."))
+    body.add_row("Dashboard", str(payload.get("dashboard_url") or "https://hol.org/guard"))
+    body.add_row("Connect guide", str(payload.get("connect_url") or "https://hol.org/guard/connect"))
+    if payload.get("sync_url"):
+        body.add_row("Sync endpoint", str(payload.get("sync_url")))
+    if payload.get("last_sync_at"):
+        body.add_row("Last sync", str(payload.get("last_sync_at")))
+    body.add_row("Cached advisories", str(payload.get("advisory_count") or 0))
+    if payload.get("advisory_headline"):
+        body.add_row("Latest advisory", str(payload.get("advisory_headline")))
+    if payload.get("team_policy_name"):
+        body.add_row("Team policy", str(payload.get("team_policy_name")))
+    elif payload.get("team_policy_active"):
+        body.add_row("Team policy", "active")
+    if payload.get("watchlist_enabled"):
+        body.add_row("Watchlist", "enabled")
+    if payload.get("team_alerts_enabled"):
+        body.add_row("Team alerts", "enabled")
+    return Panel(body, title="Local to cloud", border_style=_cloud_border_style(cloud_state))
+
+
+def _cloud_border_style(cloud_state: str) -> str:
+    if cloud_state == "paired_active":
+        return "green"
+    if cloud_state == "paired_waiting":
+        return "yellow"
+    return "cyan"
+
+
 def _artifact_source_text(artifact: dict[str, object]) -> str:
     url = artifact.get("url")
     if isinstance(url, str) and url:
@@ -848,6 +911,7 @@ _RENDERERS: dict[str, Any] = {
     "approvals": _render_approvals,
     "start": _render_start,
     "status": _render_status,
+    "connect": _render_connect,
     "bootstrap": _render_bootstrap,
     "detect": _render_detect,
     "doctor": _render_doctor,
