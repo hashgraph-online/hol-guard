@@ -162,8 +162,8 @@ def _render_run(console: Console, payload: dict[str, object]) -> None:
     launched = bool(payload.get("launched"))
     dry_run = bool(payload.get("dry_run"))
     artifacts = _coerce_dict_list(payload.get("artifacts"))
-    changed_artifacts = [artifact for artifact in artifacts if bool(artifact.get("changed"))]
-    summarized_artifacts = _summarize_run_artifacts(changed_artifacts)
+    visible_artifacts = [artifact for artifact in artifacts if _run_artifact_should_be_visible(artifact)]
+    summarized_artifacts = _summarize_run_artifacts(visible_artifacts)
     title = _run_title(blocked=blocked, dry_run=dry_run)
     border_style = "red" if blocked else "green"
     body = Table.grid(padding=(0, 1))
@@ -968,6 +968,12 @@ def _artifact_risk_text(*artifacts: dict[str, object]) -> str:
             if isinstance(value, str) and value:
                 return value
     return "No obvious secret-access or network signal was detected in the launch definition."
+
+
+def _run_artifact_should_be_visible(artifact: dict[str, object]) -> bool:
+    if bool(artifact.get("changed")):
+        return True
+    return str(artifact.get("policy_action") or "allow") in {"block", "sandbox-required", "require-reapproval"}
 
 
 def _build_approval_table(items: list[dict[str, object]], *, title: str | None) -> Table:
