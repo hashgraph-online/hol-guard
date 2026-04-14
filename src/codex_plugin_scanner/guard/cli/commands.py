@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 import urllib.error
 import webbrowser
@@ -542,6 +543,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             blocked_resolver=blocked_resolver,
         )
         payload["dry_run"] = bool(args.dry_run)
+        payload["rerun_command"] = _guard_rerun_command(args)
         _emit("run", payload, getattr(args, "json", False))
         if payload.get("blocked"):
             return 1
@@ -880,6 +882,24 @@ def _copilot_hook_reason(*values: object | None) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return "Guard blocked this tool call."
+
+
+def _guard_rerun_command(args: argparse.Namespace) -> str:
+    command = ["hol-guard", "run", str(args.harness)]
+    for option_name in ("home", "guard_home", "workspace"):
+        value = getattr(args, option_name, None)
+        if isinstance(value, str) and value:
+            flag = f"--{option_name.replace('_', '-')}"
+            command.extend([flag, value])
+    default_action = getattr(args, "default_action", None)
+    if isinstance(default_action, str) and default_action:
+        command.extend(["--default-action", default_action])
+    passthrough_args = getattr(args, "passthrough_args", [])
+    if isinstance(passthrough_args, list):
+        for value in passthrough_args:
+            if isinstance(value, str) and value:
+                command.extend(["--arg", value])
+    return shlex.join(command)
 
 
 def _emit_copilot_hook_response(*, policy_action: str, reason: str) -> None:

@@ -799,7 +799,14 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
     approval_center_url = payload.get("approval_center_url")
     review_hint = payload.get("review_hint")
     if blocked and dry_run:
-        review_command = "hol-guard approvals" if approval_center_url else f"hol-guard run {harness}"
+        rerun_command = payload.get("rerun_command")
+        review_command = (
+            "hol-guard approvals"
+            if approval_center_url
+            else str(rerun_command)
+            if isinstance(rerun_command, str) and rerun_command
+            else f"hol-guard run {harness}"
+        )
         review_detail = (
             str(review_hint)
             if isinstance(review_hint, str) and review_hint

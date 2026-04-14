@@ -16,6 +16,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli import render as guard_render_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
@@ -1019,6 +1020,41 @@ class TestGuardRuntime:
 
         assert "Guard found changes that need review before a real launch." not in output
         assert "Guard found artifacts that need review before a real launch." in output
+
+    def test_guard_run_renderer_prefers_context_preserving_rerun_command(self):
+        steps = guard_render_module._build_run_steps(
+            {
+                "harness": "codex",
+                "blocked": True,
+                "dry_run": True,
+                "rerun_command": (
+                    "hol-guard run codex --home /guard-home --workspace /workspace "
+                    "--default-action warn --arg '--model gpt-5'"
+                ),
+            },
+            blocked=True,
+            dry_run=True,
+        )
+
+        assert steps[0]["command"] == (
+            "hol-guard run codex --home /guard-home --workspace /workspace --default-action warn --arg '--model gpt-5'"
+        )
+
+    def test_guard_rerun_command_preserves_run_context(self):
+        command = guard_commands_module._guard_rerun_command(
+            argparse.Namespace(
+                harness="codex",
+                home="/guard-home",
+                guard_home=None,
+                workspace="/workspace",
+                default_action="warn",
+                passthrough_args=["--model gpt-5"],
+            )
+        )
+
+        assert command == (
+            "hol-guard run codex --home /guard-home --workspace /workspace --default-action warn --arg '--model gpt-5'"
+        )
 
     def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
         self, tmp_path, capsys, monkeypatch
