@@ -691,10 +691,11 @@ args = ["workspace-skill.js"]
                 "hooks": {
                     "PreToolUse": [
                         {
+                            "matcher": "write_file",
                             "hooks": [
-                                {"type": "command", "command": "python first-hook.py"},
-                                {"type": "command", "command": "python second-hook.py"},
-                            ]
+                                {"type": "command", "command": "python first-hook.py", "timeout": 5},
+                                {"type": "command", "command": "python second-hook.py", "name": "second"},
+                            ],
                         }
                     ]
                 }
@@ -719,6 +720,9 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert hook_artifact["artifact_id"] == "gemini:global:hook:pretooluse:0"
         assert hook_artifact["command"] == "python first-hook.py\npython second-hook.py"
+        assert hook_artifact["metadata"]["hook_config"]["matcher"] == "write_file"
+        assert hook_artifact["metadata"]["hook_config"]["hooks"][0]["timeout"] == 5
+        assert hook_artifact["metadata"]["hook_config"]["hooks"][1]["name"] == "second"
 
     def test_guard_detect_scopes_opencode_artifact_ids(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

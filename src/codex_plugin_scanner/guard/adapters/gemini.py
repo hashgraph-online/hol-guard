@@ -171,6 +171,7 @@ class GeminiHarnessAdapter(HarnessAdapter):
                         source_scope=scope,
                         config_path=str(settings_path),
                         command=self._hook_command(entry),
+                        metadata={"hook_config": entry},
                     )
                 )
 
