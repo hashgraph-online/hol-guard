@@ -161,7 +161,9 @@ def _render_run(console: Console, payload: dict[str, object]) -> None:
     blocked = bool(payload.get("blocked"))
     launched = bool(payload.get("launched"))
     dry_run = bool(payload.get("dry_run"))
-    summarized_artifacts = _summarize_run_artifacts(_coerce_dict_list(payload.get("artifacts")))
+    artifacts = _coerce_dict_list(payload.get("artifacts"))
+    changed_artifacts = [artifact for artifact in artifacts if bool(artifact.get("changed"))]
+    summarized_artifacts = _summarize_run_artifacts(changed_artifacts)
     title = _run_title(blocked=blocked, dry_run=dry_run)
     border_style = "red" if blocked else "green"
     body = Table.grid(padding=(0, 1))
@@ -170,7 +172,8 @@ def _render_run(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Outcome", _run_outcome_text(blocked=blocked, dry_run=dry_run, launched=launched))
     body.add_row("Artifacts", str(len(summarized_artifacts)))
     if blocked:
-        body.add_row("Needs review", str(len(summarized_artifacts)))
+        needs_review = sum(1 for artifact in summarized_artifacts if artifact["policy_action"] != "allow")
+        body.add_row("Needs review", str(needs_review))
     if payload.get("approval_center_url"):
         body.add_row("Approval center", str(payload.get("approval_center_url")))
     if payload.get("review_hint"):
@@ -842,6 +845,7 @@ def _summarize_run_artifacts(artifacts: list[dict[str, object]]) -> list[dict[st
                         "so it is asking for a fresh approval."
                     ),
                     "risk_summary": _artifact_risk_text(primary, secondary),
+                    "policy_action": str(primary.get("policy_action") or "review"),
                 }
             )
             continue
@@ -852,6 +856,7 @@ def _summarize_run_artifacts(artifacts: list[dict[str, object]]) -> list[dict[st
                 "change_summary": _artifact_change_summary(artifact),
                 "reason_summary": _artifact_reason_text(artifact),
                 "risk_summary": _artifact_risk_text(artifact),
+                "policy_action": str(artifact.get("policy_action") or "review"),
             }
         )
     return summarized

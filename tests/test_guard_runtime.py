@@ -819,6 +819,51 @@ class TestGuardRuntime:
         assert "first_seen" not in output
         assert "removed" not in output
 
+    def test_guard_run_renderer_filters_unchanged_artifacts_and_counts_review_items(self, capsys):
+        emit_guard_payload(
+            "run",
+            {
+                "harness": "codex",
+                "blocked": True,
+                "dry_run": True,
+                "launched": False,
+                "receipts_recorded": 3,
+                "artifacts": [
+                    {
+                        "artifact_id": "codex:project:stable-tool",
+                        "artifact_name": "stable-tool",
+                        "changed": False,
+                        "changed_fields": [],
+                        "policy_action": "allow",
+                        "why_now": "Guard matched an existing allow rule for this exact version.",
+                    },
+                    {
+                        "artifact_id": "codex:project:already-approved",
+                        "artifact_name": "already-approved",
+                        "changed": True,
+                        "changed_fields": ["command"],
+                        "policy_action": "allow",
+                        "why_now": "Guard matched an existing allow rule for this exact definition.",
+                    },
+                    {
+                        "artifact_id": "codex:project:review-tool",
+                        "artifact_name": "review-tool",
+                        "changed": True,
+                        "changed_fields": ["first_seen"],
+                        "policy_action": "require-reapproval",
+                        "why_now": "It is new in this codex workspace, so Guard paused it for review.",
+                    },
+                ],
+            },
+            False,
+        )
+        output = capsys.readouterr().out
+
+        assert "stable-tool" not in output
+        assert "already-approved" in output
+        assert "review-tool" in output
+        assert "Needs review 1" in output
+
     def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
         self, tmp_path, capsys, monkeypatch
     ):
