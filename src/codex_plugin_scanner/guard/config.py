@@ -79,10 +79,14 @@ def resolve_guard_home(override: str | None = None) -> Path:
     if override:
         return Path(override).expanduser().resolve()
     canonical_home = Path.home() / DEFAULT_GUARD_DIRNAME
-    if canonical_home.exists():
-        return canonical_home
     legacy_home = _existing_legacy_guard_home()
-    return legacy_home if legacy_home is not None else canonical_home
+    if legacy_home is None:
+        return canonical_home
+    if _guard_home_has_state(canonical_home):
+        return canonical_home
+    if canonical_home.exists() and _guard_home_has_state(legacy_home):
+        return legacy_home
+    return legacy_home if not canonical_home.exists() else canonical_home
 
 
 def _read_toml(path: Path) -> dict[str, object]:
@@ -103,7 +107,7 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
     home_config = _read_toml(guard_home / "config.toml")
     workspace_config = _load_workspace_guard_config(workspace)
 
-    merged: dict[str, object] = {**home_config, **workspace_config}
+    merged = _merge_config_payload(home_config, workspace_config)
     return GuardConfig(
         guard_home=guard_home,
         workspace=workspace,
@@ -182,5 +186,24 @@ def _load_workspace_guard_config(workspace: Path | None) -> dict[str, object]:
         return {}
     merged: dict[str, object] = {}
     for filename in WORKSPACE_CONFIG_FILENAMES:
-        merged.update(_read_toml(workspace / filename))
+        merged = _merge_config_payload(merged, _read_toml(workspace / filename))
     return merged
+
+
+def _merge_config_payload(base: dict[str, object], override: dict[str, object]) -> dict[str, object]:
+    merged = dict(base)
+    for key, value in override.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            nested_existing = {name: nested_value for name, nested_value in existing.items() if isinstance(name, str)}
+            nested_override = {name: nested_value for name, nested_value in value.items() if isinstance(name, str)}
+            merged[key] = _merge_config_payload(nested_existing, nested_override)
+            continue
+        merged[key] = value
+    return merged
+
+
+def _guard_home_has_state(path: Path) -> bool:
+    if not path.exists():
+        return False
+    return any(path.iterdir())

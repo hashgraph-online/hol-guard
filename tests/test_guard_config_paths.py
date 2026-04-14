@@ -29,6 +29,17 @@ def test_resolve_guard_home_falls_back_to_legacy_directory(tmp_path, monkeypatch
     assert resolve_guard_home() == legacy_home
 
 
+def test_resolve_guard_home_prefers_legacy_state_over_empty_canonical_directory(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    canonical_home = home_dir / ".hol-guard"
+    legacy_home = home_dir / ".config" / ".ai-plugin-scanner-guard"
+    canonical_home.mkdir(parents=True, exist_ok=True)
+    _write_text(legacy_home / "guard.db", "sqlite placeholder")
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+
+    assert resolve_guard_home() == legacy_home
+
+
 def test_load_guard_config_prefers_hol_guard_workspace_override(tmp_path):
     guard_home = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
@@ -40,6 +51,39 @@ def test_load_guard_config_prefers_hol_guard_workspace_override(tmp_path):
     config = load_guard_config(guard_home, workspace_dir)
 
     assert config.default_action == "block"
+
+
+def test_load_guard_config_merges_nested_workspace_tables_across_legacy_and_hol_guard_files(tmp_path):
+    guard_home = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    _write_text(
+        workspace_dir / ".ai-plugin-scanner-guard.toml",
+        "\n".join(
+            [
+                "[harnesses.codex]",
+                'default_action = "allow"',
+            ]
+        )
+        + "\n",
+    )
+    _write_text(
+        workspace_dir / ".hol-guard.toml",
+        "\n".join(
+            [
+                "[harnesses.claude-code]",
+                'default_action = "block"',
+            ]
+        )
+        + "\n",
+    )
+
+    config = load_guard_config(guard_home, workspace_dir)
+
+    assert config.harness_actions == {
+        "codex": "allow",
+        "claude-code": "block",
+    }
 
 
 def test_run_bridge_uses_resolved_guard_home_by_default(tmp_path, monkeypatch):
