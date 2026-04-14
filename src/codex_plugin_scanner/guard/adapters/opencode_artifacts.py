@@ -91,9 +91,10 @@ def append_directory_artifacts(
         for path in _iter_directory_files(directory, allowed_suffixes=allowed_suffixes, exact_name=exact_name):
             append_found_path(found_paths, path)
             relative_id = _relative_artifact_id(path, directory, strip_suffix=artifact_kind == "command")
+            artifact_name = relative_id if artifact_kind == "command" else f"{directory.name}/{relative_id}"
             artifact = GuardArtifact(
-                artifact_id=f"opencode:{scope}:{artifact_kind}:{relative_id}",
-                name=relative_id,
+                artifact_id=f"opencode:{scope}:{artifact_kind}:{artifact_name}",
+                name=artifact_name,
                 harness="opencode",
                 artifact_type="plugin" if artifact_kind == "plugin-file" else "command",
                 source_scope=scope,
@@ -110,7 +111,7 @@ def append_directory_artifacts(
         )
         for skill_path in _iter_directory_files(skill_root, exact_name="SKILL.md"):
             append_found_path(found_paths, skill_path)
-            relative_id = skill_path.parent.relative_to(skill_root).as_posix()
+            relative_id = f"{skill_root.name}/{skill_path.parent.relative_to(skill_root).as_posix()}"
             artifact = GuardArtifact(
                 artifact_id=f"opencode:{scope}:skill:{source_kind}:{relative_id}",
                 name=relative_id,

@@ -280,7 +280,7 @@ def test_guard_run_launches_opencode_with_runtime_overlay(monkeypatch, tmp_path,
     assert install_rc == 0
     assert rc == 0
     assert output["launched"] is True
-    assert captured_command == ["opencode", "run", "--dir", str(workspace_dir), "--help"]
+    assert captured_command == ["opencode", "run", "--help"]
     assert captured_env["HOME"] == str(home_dir)
     assert overlay_payload["permission"]["skill"]["*"] == "ask"
 
@@ -363,7 +363,7 @@ def test_guard_run_opencode_blocks_new_plugin_when_unknown_artifacts_require_app
     plugin_artifact = next(
         item
         for item in second_output["artifacts"]
-        if item["artifact_id"] == "opencode:project:plugin-file:env-read-plugin.mjs"
+        if item["artifact_id"] == "opencode:project:plugin-file:plugins/env-read-plugin.mjs"
     )
 
     assert first_rc == 0

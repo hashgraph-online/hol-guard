@@ -120,7 +120,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
         if context.workspace_dir is not None and passthrough_args:
-            return [self.executable, "run", "--dir", str(context.workspace_dir), *passthrough_args]
+            return [self.executable, "run", *passthrough_args]
         if context.workspace_dir is not None:
             return [self.executable, str(context.workspace_dir)]
         if passthrough_args:

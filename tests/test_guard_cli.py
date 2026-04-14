@@ -467,20 +467,20 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert "opencode:global:plugin:opencode-global-plugin" in artifacts
         assert "opencode:project:plugin:opencode-project-plugin" in artifacts
-        assert "opencode:global:plugin-file:global-local.mjs" in artifacts
-        assert "opencode:project:plugin-file:project-local.mjs" in artifacts
+        assert "opencode:global:plugin-file:plugins/global-local.mjs" in artifacts
+        assert "opencode:project:plugin-file:plugins/project-local.mjs" in artifacts
         assert "opencode:global:config-command:global-review" in artifacts
         assert "opencode:project:config-command:project-review" in artifacts
         assert "opencode:global:command:global-cmd" in artifacts
         assert "opencode:project:command:triage" in artifacts
-        assert "opencode:global:skill:opencode:global-skill" in artifacts
-        assert "opencode:project:skill:opencode:repo-skill" in artifacts
-        assert "opencode:project:skill:claude:claude-skill" in artifacts
-        assert artifacts["opencode:project:plugin-file:project-local.mjs"]["artifact_type"] == "plugin"
+        assert "opencode:global:skill:opencode:skills/global-skill" in artifacts
+        assert "opencode:project:skill:opencode:skills/repo-skill" in artifacts
+        assert "opencode:project:skill:claude:skills/claude-skill" in artifacts
+        assert artifacts["opencode:project:plugin-file:plugins/project-local.mjs"]["artifact_type"] == "plugin"
         assert artifacts["opencode:project:config-command:project-review"]["metadata"]["template"] == (
             "Review the workspace change set."
         )
-        assert artifacts["opencode:project:skill:claude:claude-skill"]["artifact_type"] == "skill"
+        assert artifacts["opencode:project:skill:claude:skills/claude-skill"]["artifact_type"] == "skill"
 
     def test_guard_detect_keeps_unique_opencode_file_artifact_ids(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -511,11 +511,11 @@ args = ["workspace-skill.js"]
         artifact_ids = {item["artifact_id"] for item in output["harnesses"][0]["artifacts"]}
 
         assert rc == 0
-        assert "opencode:project:plugin-file:shared.js" in artifact_ids
-        assert "opencode:project:plugin-file:shared.mjs" in artifact_ids
-        assert "opencode:project:plugin-file:nested/shared.mjs" in artifact_ids
-        assert "opencode:project:skill:opencode:shared" in artifact_ids
-        assert "opencode:project:skill:opencode:nested/shared" in artifact_ids
+        assert "opencode:project:plugin-file:plugin/shared.js" in artifact_ids
+        assert "opencode:project:plugin-file:plugins/shared.mjs" in artifact_ids
+        assert "opencode:project:plugin-file:plugins/nested/shared.mjs" in artifact_ids
+        assert "opencode:project:skill:opencode:skill/shared" in artifact_ids
+        assert "opencode:project:skill:opencode:skills/nested/shared" in artifact_ids
 
     def test_guard_detect_human_output_surfaces_next_steps(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
