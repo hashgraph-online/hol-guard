@@ -583,6 +583,7 @@ class TestGuardRuntime:
         assert rc == 0
         assert output["permissionDecision"] == "deny"
         assert "approve" in output["permissionDecisionReason"]
+        assert "http://127.0.0.1:4455" in output["permissionDecisionReason"]
 
     def test_guard_hook_emits_copilot_native_allow_response_for_safe_requests(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
@@ -727,7 +728,8 @@ class TestGuardRuntime:
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+        opened_urls: list[str] = []
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
 
         rc = main(
             [
@@ -741,11 +743,70 @@ class TestGuardRuntime:
                 "--json",
             ]
         )
-        output = capsys.readouterr().out
+        output = json.loads(capsys.readouterr().out)
 
         assert rc == 1
-        assert '"approval_center_url": "http://127.0.0.1:4455"' in output
-        assert '"blocked": true' in output
+        assert output["approval_center_url"] == "http://127.0.0.1:4455"
+        assert output["blocked"] is True
+        assert output["approval_delivery"]["destination"] == "browser"
+        assert opened_urls == ["http://127.0.0.1:4455"]
+
+    def test_headless_approval_resolver_skips_browser_for_hook_first_harnesses(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        store = GuardStore(home_dir)
+        config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+        artifact = GuardArtifact(
+            artifact_id="copilot:project:workspace-tools",
+            name="workspace-tools",
+            harness="copilot",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=str(workspace_dir / ".vscode" / "mcp.json"),
+            command="python",
+            args=("-m", "http.server", "9100"),
+            transport="stdio",
+        )
+        detection = HarnessDetection(
+            harness="copilot",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+        payload = {
+            "blocked": True,
+            "artifacts": [
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_name": artifact.name,
+                    "artifact_hash": artifact_hash(artifact),
+                    "policy_action": "require-reapproval",
+                    "changed_fields": ["args"],
+                    "artifact_type": artifact.artifact_type,
+                    "source_scope": artifact.source_scope,
+                    "config_path": artifact.config_path,
+                    "launch_target": "python -m http.server 9100",
+                }
+            ],
+        }
+        opened_urls: list[str] = []
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
+
+        blocked_resolver = guard_commands_module._headless_approval_resolver(
+            args=argparse.Namespace(harness="copilot"),
+            context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+            store=store,
+            config=config,
+        )
+        result = blocked_resolver(detection, payload)
+
+        assert opened_urls == []
+        assert result["approval_center_url"] == "http://127.0.0.1:4455"
+        assert result["approval_delivery"]["destination"] == "harness"
+        assert result["approval_delivery"]["prompt_channel"] == "hook"
+        assert result["approval_wait"]["resolved"] is False
 
     def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
         self, tmp_path, capsys, monkeypatch
@@ -1368,12 +1429,57 @@ class TestGuardRuntime:
         assert allowed["events"][0]["decision"] == "forward"
         assert blocked["responses"][0]["error"]["code"] == -32001
         assert "sensitive local file" in blocked["responses"][0]["error"]["message"].lower()
+        assert "http://127.0.0.1:4455" in blocked["responses"][0]["error"]["message"]
+        assert blocked["responses"][0]["error"]["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
+        assert blocked["responses"][0]["error"]["data"]["reviewHint"]
         assert blocked["events"][0]["decision"] == "block"
+        assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
         assert blocked["events"][0]["redacted_params"]["arguments"]["headers"]["Authorization"] == "*****"
         assert blocked["events"][0]["path_summary"].endswith("/.env")
         pending = store.list_approval_requests(limit=10)
         assert len(pending) == 1
         assert pending[0]["artifact_type"] == "file_read_request"
+
+    def test_stdio_proxy_handles_unknown_harness_when_queueing_sensitive_read_blocks(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
+        proxy = StdioGuardProxy(
+            command=[
+                sys.executable,
+                "-u",
+                "-c",
+                "\n".join(
+                    [
+                        "import json, sys",
+                        "for line in sys.stdin:",
+                        "    message = json.loads(line)",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                        "    sys.stdout.flush()",
+                    ]
+                ),
+            ],
+            cwd=workspace_dir,
+            guard_store=store,
+            guard_config=config,
+            approval_center_url="http://127.0.0.1:4455",
+        )
+
+        blocked = proxy.run_session(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "read_file", "arguments": {"path": ".env"}},
+                }
+            ]
+        )
+
+        assert blocked["responses"][0]["error"]["code"] == -32001
+        assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "browser"
+        assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
 
     def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers(self):
         server = HTTPServer(("127.0.0.1", 0), _RemoteProxyHandler)

@@ -22,7 +22,13 @@ from ..consumer import detect_harness, evaluate_detection
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..store import GuardStore
 
-_APPROVAL_METADATA_KEYS = ("approval_center_url", "approval_requests", "approval_wait", "review_hint")
+_APPROVAL_METADATA_KEYS = (
+    "approval_center_url",
+    "approval_delivery",
+    "approval_requests",
+    "approval_wait",
+    "review_hint",
+)
 _PAIN_SIGNAL_EVENTS = frozenset(
     {
         "changed_artifact_caught",

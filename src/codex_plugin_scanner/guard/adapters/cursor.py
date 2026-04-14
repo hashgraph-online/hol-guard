@@ -16,6 +16,8 @@ class CursorHarnessAdapter(HarnessAdapter):
         "Cursor already owns tool approval, so Guard focuses on artifact trust, provenance, and preflight review."
     )
     fallback_hint = "Resolve package-level trust in Guard and let Cursor keep its built-in tool approval flow."
+    approval_prompt_channel = "native"
+    approval_auto_open_browser = False
 
     @staticmethod
     def _scope_for(context: HarnessContext, path) -> str:
