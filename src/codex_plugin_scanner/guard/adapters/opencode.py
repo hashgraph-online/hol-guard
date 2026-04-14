@@ -30,8 +30,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         "runtime overlay keeps native skill loads on ask."
     )
     fallback_hint = (
-        "Use Guard approvals for blocked artifacts and OpenCode's native allow once or allow session flow for "
-        "skills."
+        "Use Guard approvals for blocked artifacts and OpenCode's native allow once or allow session flow for skills."
     )
 
     @staticmethod
@@ -135,4 +134,6 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             "paths": _run_command_probe([self.executable, "debug", "paths"]),
             "config": _run_command_probe([self.executable, "debug", "config"]),
         }
+
+
 __all__ = ["OpenCodeHarnessAdapter"]

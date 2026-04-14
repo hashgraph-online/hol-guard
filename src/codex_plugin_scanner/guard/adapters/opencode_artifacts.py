@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -152,8 +153,7 @@ def append_found_path(found_paths: list[str], path: Path) -> None:
 
 def skill_roots(context: HarnessContext) -> tuple[tuple[Path, str], ...]:
     roots = [
-        (context.home_dir / Path(relative_path), source_kind)
-        for relative_path, source_kind in GLOBAL_SKILL_DIRECTORIES
+        (context.home_dir / Path(relative_path), source_kind) for relative_path, source_kind in GLOBAL_SKILL_DIRECTORIES
     ]
     if context.workspace_dir is not None:
         roots.extend(
@@ -212,12 +212,7 @@ def _append_plugin_artifacts(
         plugin_options: dict[str, object] = {}
         if isinstance(item, str):
             plugin_name = item
-        elif (
-            isinstance(item, list)
-            and len(item) == 2
-            and isinstance(item[0], str)
-            and isinstance(item[1], dict)
-        ):
+        elif isinstance(item, list) and len(item) == 2 and isinstance(item[0], str) and isinstance(item[1], dict):
             plugin_name = item[0]
             plugin_options = item[1]
         if plugin_name is None:
@@ -296,10 +291,10 @@ def _iter_directory_files(
     allowed_suffixes: set[str] | None = None,
     exact_name: str | None = None,
 ) -> Iterator[Path]:
-    for root, dirnames, filenames in directory.walk():
+    for root, dirnames, filenames in os.walk(directory):
         dirnames.sort()
         for filename in sorted(filenames):
-            path = root / filename
+            path = Path(root) / filename
             if exact_name == "*.md" and path.suffix != ".md":
                 continue
             if exact_name is not None and exact_name != "*.md" and filename != exact_name:
