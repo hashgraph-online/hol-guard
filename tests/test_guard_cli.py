@@ -411,7 +411,7 @@ args = ["workspace-skill.js"]
         _write_json(
             home_dir / ".config" / "opencode" / "opencode.json",
             {
-                "plugin": ["opencode-global-plugin"],
+                "plugins": ["opencode-global-plugin"],
                 "command": {
                     "global-review": {
                         "template": "Review the current diff.",
@@ -423,7 +423,7 @@ args = ["workspace-skill.js"]
         _write_json(
             workspace_dir / "opencode.json",
             {
-                "plugin": ["opencode-project-plugin"],
+                "plugins": ["opencode-project-plugin"],
                 "command": {
                     "project-review": {
                         "template": "Review the workspace change set.",

@@ -289,7 +289,7 @@ def test_guard_run_opencode_prompt_request_uses_opencode_policy_path(monkeypatch
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_opencode_fixture(home_dir, workspace_dir)
-    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\nmode = "prompt"\n')
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "require-reapproval"\nmode = "prompt"\n')
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
 
@@ -371,6 +371,82 @@ def test_guard_run_opencode_blocks_new_plugin_when_unknown_artifacts_require_app
     assert second_output["blocked"] is True
     assert plugin_artifact["policy_action"] == "require-reapproval"
     assert plugin_artifact["artifact_type"] == "plugin"
+
+
+def test_guard_run_opencode_reapproves_changed_plugin_and_skill_content(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_opencode_fixture(home_dir, workspace_dir)
+    _write_text(
+        workspace_dir / ".opencode" / "plugins" / "env-read-plugin.mjs",
+        "export default { name: 'baseline' };\n",
+    )
+    _write_text(
+        workspace_dir / ".opencode" / "skills" / "review-skill" / "SKILL.md",
+        "---\nname: review-skill\ndescription: baseline\n---\n",
+    )
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "require-reapproval"\nmode = "prompt"\n')
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+
+    first_rc = main(
+        [
+            "guard",
+            "run",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--dry-run",
+            "--default-action",
+            "allow",
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    _write_text(
+        workspace_dir / ".opencode" / "plugins" / "env-read-plugin.mjs",
+        "export default { name: 'updated' };\n",
+    )
+    _write_text(
+        workspace_dir / ".opencode" / "skills" / "review-skill" / "SKILL.md",
+        "---\nname: review-skill\ndescription: updated\n---\n",
+    )
+
+    second_rc = main(
+        [
+            "guard",
+            "run",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--default-action",
+            "require-reapproval",
+            "--json",
+        ]
+    )
+    second_output = json.loads(capsys.readouterr().out)
+    plugin_artifact = next(
+        item
+        for item in second_output["artifacts"]
+        if item["artifact_id"] == "opencode:project:plugin-file:plugins/env-read-plugin.mjs"
+    )
+    skill_artifact = next(
+        item
+        for item in second_output["artifacts"]
+        if item["artifact_id"] == "opencode:project:skill:opencode:skills/review-skill"
+    )
+
+    assert first_rc == 0
+    assert second_rc == 1
+    assert second_output["blocked"] is True
+    assert plugin_artifact["policy_action"] == "require-reapproval"
+    assert skill_artifact["policy_action"] == "require-reapproval"
+    assert "metadata" in plugin_artifact["changed_fields"]
+    assert "metadata" in skill_artifact["changed_fields"]
 
 
 def test_guard_run_still_blocks_when_prompt_contains_negation_elsewhere(monkeypatch, tmp_path, capsys):

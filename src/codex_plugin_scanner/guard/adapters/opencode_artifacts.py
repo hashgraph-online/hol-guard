@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -99,6 +100,7 @@ def append_directory_artifacts(
                 artifact_type="plugin" if artifact_kind == "plugin-file" else "command",
                 source_scope=scope,
                 config_path=str(path),
+                metadata=_file_metadata(path),
             )
             append_artifact(artifacts, seen_artifact_ids, artifact)
     for skill_root, source_kind in skill_roots(context):
@@ -119,7 +121,7 @@ def append_directory_artifacts(
                 artifact_type="skill",
                 source_scope=scope,
                 config_path=str(skill_path),
-                metadata={"skill_source": source_kind},
+                metadata={"skill_source": source_kind, **_file_metadata(skill_path)},
             )
             append_artifact(artifacts, seen_artifact_ids, artifact)
 
@@ -209,10 +211,7 @@ def _append_plugin_artifacts(
     config_path: Path,
     payload: dict[str, object],
 ) -> None:
-    plugin_config = payload.get("plugin")
-    if not isinstance(plugin_config, list):
-        return
-    for item in plugin_config:
+    for item in _plugin_items(payload):
         plugin_name: str | None = None
         plugin_options: dict[str, object] = {}
         if isinstance(item, str):
@@ -288,6 +287,22 @@ def _publisher_from_package(package_name: str) -> str | None:
     if package_name.startswith("@") and "/" in package_name:
         return package_name.split("/", 1)[0][1:]
     return None
+
+
+def _plugin_items(payload: dict[str, object]) -> Iterator[object]:
+    for key in ("plugins", "plugin"):
+        plugin_config = payload.get(key)
+        if not isinstance(plugin_config, list):
+            continue
+        yield from plugin_config
+
+
+def _file_metadata(path: Path) -> dict[str, object]:
+    return {"content_digest": _file_digest(path)}
+
+
+def _file_digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _iter_directory_files(
