@@ -562,20 +562,9 @@ args = ["workspace-skill.js"]
             "antigravity:global:skill:skills/gravity-review",
         ]
 
-    def test_guard_detect_recognizes_cross_platform_antigravity_settings_and_ignores_generic_workspace_settings(
-        self,
-        tmp_path,
-        capsys,
-    ):
+    def test_guard_detect_recognizes_cross_platform_antigravity_settings(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _write_json(
-            workspace_dir / ".vscode" / "settings.json",
-            {
-                "workbench.colorTheme": "Default Dark+",
-                "mcpServers": {"generic-tools": {"command": "node", "args": ["generic.js"]}},
-            },
-        )
         _write_json(
             home_dir / ".config" / "Antigravity" / "User" / "settings.json",
             {
@@ -601,11 +590,86 @@ args = ["workspace-skill.js"]
 
         assert rc == 0
         assert str(home_dir / ".config" / "Antigravity" / "User" / "settings.json") in detection["config_paths"]
-        assert str(workspace_dir / ".vscode" / "settings.json") not in detection["config_paths"]
         assert [item["artifact_id"] for item in detection["artifacts"]] == [
             "antigravity:global:mcp:settings:gravity-tools"
         ]
         assert detection["artifacts"][0]["args"] == []
+
+    def test_guard_detect_ignores_generic_workspace_vscode_settings_without_antigravity_ownership(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            workspace_dir / ".vscode" / "settings.json",
+            {
+                "workbench.colorTheme": "Default Dark+",
+                "mcpServers": {"generic-tools": {"command": "node", "args": ["generic.js"]}},
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "antigravity",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        detection = output["harnesses"][0]
+
+        assert rc == 0
+        assert detection["config_paths"] == []
+        assert detection["artifacts"] == []
+
+    def test_guard_detect_includes_workspace_vscode_settings_after_antigravity_ownership(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".config" / "Antigravity" / "User" / "settings.json",
+            {
+                "antigravity.profile": "default",
+            },
+        )
+        _write_json(
+            workspace_dir / ".vscode" / "settings.json",
+            {
+                "workbench.colorTheme": "Default Dark+",
+                "mcpServers": {"workspace-tools": {"command": "node", "args": ["workspace.js"]}},
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "antigravity",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        detection = output["harnesses"][0]
+        artifact_ids = [item["artifact_id"] for item in detection["artifacts"]]
+
+        assert rc == 0
+        assert str(home_dir / ".config" / "Antigravity" / "User" / "settings.json") in detection["config_paths"]
+        assert str(workspace_dir / ".vscode" / "settings.json") in detection["config_paths"]
+        assert artifact_ids == ["antigravity:project:mcp:settings:workspace-tools"]
 
     def test_guard_detect_disambiguates_antigravity_mcp_sources(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

@@ -104,7 +104,7 @@ class AntigravityHarnessAdapter(HarnessAdapter):
         owned_settings_paths = set(settings_paths)
         if context.workspace_dir is not None:
             settings_paths.append(context.workspace_dir / ".vscode" / "settings.json")
-        has_non_settings_signal = bool(found_paths)
+        has_antigravity_signal = bool(found_paths)
         for settings_path in settings_paths:
             payload = _json_payload(settings_path)
             if not payload:
@@ -112,7 +112,7 @@ class AntigravityHarnessAdapter(HarnessAdapter):
             owns_settings = (
                 settings_path in owned_settings_paths
                 or self._contains_antigravity_settings(payload)
-                or has_non_settings_signal
+                or has_antigravity_signal
             )
             if not owns_settings:
                 continue
@@ -121,6 +121,7 @@ class AntigravityHarnessAdapter(HarnessAdapter):
             self._append_mcp_artifacts(artifacts, settings_path, payload, scope)
             if len(artifacts) > before_artifact_count or owns_settings:
                 self._append_found_path(found_paths, settings_path)
+            has_antigravity_signal = True
 
         return HarnessDetection(
             harness=self.harness,
