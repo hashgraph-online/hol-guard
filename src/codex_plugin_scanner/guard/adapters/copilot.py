@@ -12,7 +12,15 @@ from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
 
-_HOOK_EVENTS = ("preToolUse", "postToolUse")
+_MANAGED_HOOK_EVENTS = ("preToolUse", "postToolUse")
+_DETECTABLE_HOOK_EVENTS = (
+    "sessionStart",
+    "sessionEnd",
+    "userPromptSubmitted",
+    "preToolUse",
+    "postToolUse",
+    "errorOccurred",
+)
 _MANAGED_HOOK_FILENAME = "hol-guard-copilot.json"
 
 
@@ -97,7 +105,7 @@ def _managed_hook_payload(payload: dict[str, object]) -> dict[str, object]:
     normalized_payload["hooks"] = {
         str(hook_name): list(entries)
         for hook_name, entries in payload.items()
-        if hook_name != "version" and hook_name not in _HOOK_EVENTS and isinstance(entries, list)
+        if hook_name != "version" and hook_name not in _MANAGED_HOOK_EVENTS and isinstance(entries, list)
     }
     return normalized_payload
 
@@ -196,7 +204,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
         payload = _managed_hook_payload(_json_payload(hook_path))
         hooks_payload = payload["hooks"]
         hook_entry = _hook_entry(context)
-        for hook_name in _HOOK_EVENTS:
+        for hook_name in _MANAGED_HOOK_EVENTS:
             hooks_payload[hook_name] = _merge_hook_entries(hooks_payload.get(hook_name), hook_entry)
         hook_path.parent.mkdir(parents=True, exist_ok=True)
         hook_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -225,7 +233,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
         payload = _managed_hook_payload(payload)
         hooks_payload = payload["hooks"]
         bash_command, powershell_command = _hook_shell_commands(context)
-        for hook_name in _HOOK_EVENTS:
+        for hook_name in _MANAGED_HOOK_EVENTS:
             updated_entries = _remove_hook_entries(hooks_payload.get(hook_name), bash_command, powershell_command)
             if len(updated_entries) > 0:
                 hooks_payload[hook_name] = updated_entries
@@ -304,7 +312,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
     ) -> list[GuardArtifact]:
         artifacts: list[GuardArtifact] = []
         hooks_payload = _hooks_payload(payload)
-        for hook_name in _HOOK_EVENTS:
+        for hook_name in _DETECTABLE_HOOK_EVENTS:
             entries = hooks_payload.get(hook_name)
             if not isinstance(entries, list):
                 continue

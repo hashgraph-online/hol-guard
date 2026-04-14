@@ -58,6 +58,7 @@ def test_copilot_detects_documented_local_surfaces_and_redacts_secrets(tmp_path)
         {
             "version": 1,
             "hooks": {
+                "sessionStart": [{"command": "python banner.py"}],
                 "preToolUse": [{"command": "python pre.py"}],
                 "postToolUse": [{"command": "python post.py"}],
             },
@@ -76,6 +77,7 @@ def test_copilot_detects_documented_local_surfaces_and_redacts_secrets(tmp_path)
     artifacts = {item["artifact_id"]: item for item in detection["artifacts"]}
     assert "copilot:global:global-tool" in artifacts
     assert "copilot:project:workspace-tool" in artifacts
+    assert "copilot:project:hook:custom:sessionstart:0" in artifacts
     assert "copilot:project:hook:custom:pretooluse:0" in artifacts
     assert "copilot:project:hook:custom:posttooluse:0" in artifacts
     assert artifacts["copilot:global:global-tool"]["args"] == ["--token=*****", "server.js"]
