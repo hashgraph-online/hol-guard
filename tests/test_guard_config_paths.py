@@ -86,6 +86,36 @@ def test_load_guard_config_merges_nested_workspace_tables_across_legacy_and_hol_
     }
 
 
+def test_load_guard_config_new_action_alias_overrides_legacy_alias(tmp_path):
+    guard_home = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    guard_home.mkdir(parents=True, exist_ok=True)
+    _write_text(
+        workspace_dir / ".ai-plugin-scanner-guard.toml",
+        "\n".join(
+            [
+                "[harnesses.codex]",
+                'action = "block"',
+            ]
+        )
+        + "\n",
+    )
+    _write_text(
+        workspace_dir / ".hol-guard.toml",
+        "\n".join(
+            [
+                "[harnesses.codex]",
+                'default_action = "allow"',
+            ]
+        )
+        + "\n",
+    )
+
+    config = load_guard_config(guard_home, workspace_dir)
+
+    assert config.harness_actions == {"codex": "allow"}
+
+
 def test_run_bridge_uses_resolved_guard_home_by_default(tmp_path, monkeypatch):
     expected_guard_home = tmp_path / ".hol-guard"
     captured: dict[str, Path] = {}

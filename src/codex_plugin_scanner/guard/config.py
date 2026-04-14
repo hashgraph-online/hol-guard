@@ -197,6 +197,9 @@ def _merge_config_payload(base: dict[str, object], override: dict[str, object]) 
         if isinstance(existing, dict) and isinstance(value, dict):
             nested_existing = {name: nested_value for name, nested_value in existing.items() if isinstance(name, str)}
             nested_override = {name: nested_value for name, nested_value in value.items() if isinstance(name, str)}
+            if "action" in nested_override or "default_action" in nested_override:
+                nested_existing.pop("action", None)
+                nested_existing.pop("default_action", None)
             merged[key] = _merge_config_payload(nested_existing, nested_override)
             continue
         merged[key] = value
