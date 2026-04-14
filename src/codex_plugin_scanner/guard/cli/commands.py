@@ -369,10 +369,15 @@ def run_guard_command(args: argparse.Namespace) -> int:
 
     if args.guard_command == "connect":
         try:
-            sync_url = getattr(args, "sync_url", None)
-            token = getattr(args, "token", None)
+            raw_sync_url = getattr(args, "sync_url", None)
+            raw_token = getattr(args, "token", None)
+            sync_url = raw_sync_url.strip() if isinstance(raw_sync_url, str) else None
+            token = raw_token.strip() if isinstance(raw_token, str) else None
+            credentials_requested = raw_sync_url is not None or raw_token is not None
+            if credentials_requested and (not sync_url or not token):
+                raise ValueError("connect requires non-empty --sync-url and --token when saving credentials")
             if bool(sync_url) != bool(token):
-                raise ValueError("connect requires both --sync-url and --token when saving credentials")
+                raise ValueError("connect requires non-empty --sync-url and --token when saving credentials")
         except ValueError as error:
             print(str(error), file=sys.stderr)
             return 2

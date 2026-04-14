@@ -1521,6 +1521,33 @@ args = ["workspace-skill.js", "--changed"]
         assert output["dashboard_url"] == "https://hol.org/guard"
         assert output["connect_url"] == "https://hol.org/guard/connect"
 
+    def test_guard_connect_rejects_empty_credentials(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "connect",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--workspace",
+                str(workspace_dir),
+                "--sync-url",
+                "",
+                "--token",
+                "",
+            ]
+        )
+        stderr = capsys.readouterr().err
+
+        assert rc == 2
+        assert "connect requires non-empty --sync-url and --token when saving credentials" in stderr
+
     def test_guard_connect_syncs_and_surfaces_cloud_state(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -1626,6 +1653,78 @@ args = ["workspace-skill.js", "--changed"]
         assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer demo-token"
         assert _SyncRequestHandler.captured_body is not None
         assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
+
+    def test_guard_connect_save_only_clears_previous_sync_state(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _SyncRequestHandler.response_payload = {
+            "syncedAt": "2026-04-09T00:00:00Z",
+            "receiptsStored": 1,
+            "advisories": [
+                {
+                    "id": "adv-001",
+                    "publisher": "hashgraph-online",
+                    "severity": "high",
+                    "headline": "Publisher rotated to a new remote domain.",
+                }
+            ],
+        }
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            first_connect_rc = main(
+                [
+                    "guard",
+                    "connect",
+                    "--home",
+                    str(home_dir),
+                    "--guard-home",
+                    str(guard_home),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--sync-url",
+                    f"http://127.0.0.1:{server.server_port}/receipts",
+                    "--token",
+                    "demo-token",
+                    "--json",
+                ]
+            )
+            first_connect_output = json.loads(capsys.readouterr().out)
+
+            second_connect_rc = main(
+                [
+                    "guard",
+                    "connect",
+                    "--home",
+                    str(home_dir),
+                    "--guard-home",
+                    str(guard_home),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--sync-url",
+                    "https://hol.org/registry/api/v1/guard/receipts",
+                    "--token",
+                    "second-token",
+                    "--save-only",
+                    "--json",
+                ]
+            )
+            second_connect_output = json.loads(capsys.readouterr().out)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+
+        assert first_connect_rc == 0
+        assert first_connect_output["cloud_state"] == "paired_active"
+        assert first_connect_output["advisory_count"] == 1
+        assert second_connect_rc == 0
+        assert second_connect_output["cloud_state"] == "paired_waiting"
+        assert second_connect_output["advisory_count"] == 0
+        assert second_connect_output["last_sync_at"] is None
 
     def test_guard_connect_handles_invalid_sync_response(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
