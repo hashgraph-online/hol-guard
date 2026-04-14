@@ -541,6 +541,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             interactive_resolver=interactive_resolver,
             blocked_resolver=blocked_resolver,
         )
+        payload["dry_run"] = bool(args.dry_run)
         _emit("run", payload, getattr(args, "json", False))
         if payload.get("blocked"):
             return 1

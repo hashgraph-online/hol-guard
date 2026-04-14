@@ -16,6 +16,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -746,6 +747,77 @@ class TestGuardRuntime:
         assert rc == 1
         assert '"approval_center_url": "http://127.0.0.1:4455"' in output
         assert '"blocked": true' in output
+
+    def test_guard_run_dry_run_human_output_is_summary_first(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--dry-run",
+            ]
+        )
+        output = capsys.readouterr().out
+
+        assert rc == 1
+        assert "What changed" in output
+        assert "Next step" in output
+        assert "rerun without --dry-run" in output.lower()
+        assert "Fields" not in output
+        assert "first_seen" not in output
+
+    def test_guard_run_renderer_coalesces_replaced_artifacts(self, capsys):
+        emit_guard_payload(
+            "run",
+            {
+                "harness": "codex",
+                "blocked": True,
+                "dry_run": True,
+                "launched": False,
+                "receipts_recorded": 2,
+                "artifacts": [
+                    {
+                        "artifact_id": "codex:project:chrome-devtools:new",
+                        "artifact_name": "chrome-devtools",
+                        "changed": True,
+                        "changed_fields": ["first_seen"],
+                        "policy_action": "require-reapproval",
+                        "artifact_label": "MCP server",
+                        "why_now": "It is new in this codex workspace, so Guard paused it for review.",
+                        "risk_summary": "Connects to a remote server.",
+                    },
+                    {
+                        "artifact_id": "codex:project:chrome-devtools:old",
+                        "artifact_name": "chrome-devtools",
+                        "changed": True,
+                        "changed_fields": ["removed"],
+                        "policy_action": "require-reapproval",
+                        "artifact_label": "MCP server",
+                        "why_now": (
+                            "It disappeared from the harness config, so Guard paused the change until you "
+                            "confirm the removal."
+                        ),
+                    },
+                ],
+            },
+            False,
+        )
+        output = capsys.readouterr().out
+
+        assert "chrome-devtools" in output
+        assert output.lower().count("chrome-devtools") == 1
+        assert "definition" in output.lower()
+        assert "replaced" in output.lower()
+        assert "first_seen" not in output
+        assert "removed" not in output
 
     def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
         self, tmp_path, capsys, monkeypatch
