@@ -57,7 +57,10 @@ jobs:
             LAST_TAG_VERSION="${LAST_TAG#v}"
 
             # Also check GitHub releases (they may exist without corresponding git tags)
-            GH_RELEASE_VERSION=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null | sed 's/^v//')
+            # Null-safe: returns empty if no releases exist
+            # Collect all releases and pick max semver (not just first which may not be highest)
+            GH_RELEASES=$(gh release list --json tagName --jq '.[].tagName' 2>/dev/null | sed 's/^v//' | sort -V 2>/dev/null || echo "")
+            GH_RELEASE_VERSION=$(echo "$GH_RELEASES" | grep -v '^$' | tail -n1)
 
             # Use whichever version is higher
             if [[ -n "$GH_RELEASE_VERSION" && -n "$LAST_TAG_VERSION" ]]; then
