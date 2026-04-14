@@ -14,6 +14,13 @@ from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approvals import approval_center_hint, queue_blocked_approvals, wait_for_approval_requests
+from ..bridge import (
+    BridgeConfig,
+    GuardBridge,
+    HermesBackend,
+    TelegramBackend,
+    WebhookBackend,
+)
 from ..config import load_guard_config, overlay_synced_guard_policy, resolve_guard_home
 from ..consumer import artifact_hash, detect_all, detect_harness, evaluate_detection, record_policy, run_consumer_scan
 from ..daemon import GuardDaemonServer, ensure_guard_daemon
@@ -248,6 +255,19 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     sync_parser.add_argument("--home")
     sync_parser.add_argument("--guard-home")
     sync_parser.add_argument("--json", action="store_true")
+
+    # Bridge command
+    bridge_parser = guard_subparsers.add_parser("bridge", help="Start the Guard Bridge notification daemon")
+    bridge_parser.add_argument(
+        "--poll-interval", type=int, default=10, help="Polling interval in seconds (default: 10)"
+    )
+    bridge_parser.add_argument("--guard-url", default="http://127.0.0.1:4999", help="Guard daemon URL")
+    bridge_parser.add_argument("--telegram-token", help="Telegram bot token for notifications")
+    bridge_parser.add_argument("--telegram-chat-id", help="Telegram chat ID for notifications")
+    bridge_parser.add_argument("--webhook-url", help="Webhook URL for notifications")
+    bridge_parser.add_argument("--hermes-chat-id", help="Hermes chat ID for notifications")
+    bridge_parser.add_argument("--dry-run", action="store_true", help="Log notifications without sending")
+    _add_guard_common_args(bridge_parser)
 
     hook_parser = guard_subparsers.add_parser("hook", help=argparse.SUPPRESS)
     _add_guard_common_args(hook_parser)
@@ -627,6 +647,31 @@ def run_guard_command(args: argparse.Namespace) -> int:
         store.set_sync_credentials(args.sync_url, args.token, _now())
         store.add_event("sign_in", {"sync_url": args.sync_url, "source": "local-cli"}, _now())
         _emit("login", {"logged_in": True, "sync_url": args.sync_url}, getattr(args, "json", False))
+        return 0
+
+    if args.guard_command == "bridge":
+        poll_interval = getattr(args, "poll_interval", 10) or 10
+        guard_url = getattr(args, "guard_url", None)
+        dry_run = getattr(args, "dry_run", False)
+
+        # Instantiate backend based on CLI args
+        backend = None
+        telegram_token = getattr(args, "telegram_token", None)
+        telegram_chat_id = getattr(args, "telegram_chat_id", None)
+        webhook_url = getattr(args, "webhook_url", None)
+        hermes_chat_id = getattr(args, "hermes_chat_id", None)
+
+        if telegram_token and telegram_chat_id:
+            backend = TelegramBackend(telegram_token, telegram_chat_id)
+        elif webhook_url:
+            backend = WebhookBackend(webhook_url)
+        elif hermes_chat_id:
+            backend = HermesBackend(hermes_chat_id)
+        # Else defaults to StderrBackend via GuardBridge constructor
+
+        config = BridgeConfig(guard_url=guard_url, poll_interval=poll_interval, dry_run=dry_run)
+        bridge = GuardBridge(config=config, store=store, backend=backend)
+        bridge.run()
         return 0
 
     if args.guard_command == "sync":
