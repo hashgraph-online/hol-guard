@@ -83,10 +83,12 @@ default_action = "sandbox-required"
 Optional project override:
 
 ```toml
-# .ai-plugin-scanner-guard.toml
+# .hol-guard.toml
 [artifacts."codex:project:workspace_tools"]
 default_action = "block"
 ```
+
+Guard still reads the legacy `.ai-plugin-scanner-guard.toml` file if you already have one, but new local overrides should use `.hol-guard.toml`.
 
 Guard resolves decisions in this order:
 
@@ -107,8 +109,8 @@ Use these actions in config or saved decisions:
 
 `guard install <harness>` creates a local launcher shim under Guard’s home directory:
 
-- macOS/Linux: `~/.config/.ai-plugin-scanner-guard/bin/guard-<harness>`
-- Windows: `~/.config/.ai-plugin-scanner-guard/bin/guard-<harness>.cmd`
+- macOS/Linux: `~/.hol-guard/bin/guard-<harness>`
+- Windows: `~/.hol-guard/bin/guard-<harness>.cmd`
 
 Claude Code also gets Guard hook entries in `.claude/settings.local.json` when you install from a workspace.
 
