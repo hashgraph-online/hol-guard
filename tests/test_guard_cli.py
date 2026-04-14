@@ -411,7 +411,7 @@ args = ["workspace-skill.js"]
         _write_json(
             home_dir / ".config" / "opencode" / "opencode.json",
             {
-                "plugins": ["opencode-global-plugin"],
+                "plugins": [["opencode-global-plugin", {"mode": "strict", "token": "top-secret"}]],
                 "command": {
                     "global-review": {
                         "template": "Review the current diff.",
@@ -480,6 +480,8 @@ args = ["workspace-skill.js"]
         assert artifacts["opencode:project:config-command:project-review"]["metadata"]["template"] == (
             "Review the workspace change set."
         )
+        assert artifacts["opencode:global:plugin:opencode-global-plugin"]["metadata"]["mode"] == "strict"
+        assert artifacts["opencode:global:plugin:opencode-global-plugin"]["metadata"]["token"] == "*****"
         assert artifacts["opencode:project:skill:claude:skills/claude-skill"]["artifact_type"] == "skill"
 
     def test_guard_detect_keeps_unique_opencode_file_artifact_ids(self, tmp_path, capsys):
@@ -516,6 +518,41 @@ args = ["workspace-skill.js"]
         assert "opencode:project:plugin-file:plugins/nested/shared.mjs" in artifact_ids
         assert "opencode:project:skill:opencode:skill/shared" in artifact_ids
         assert "opencode:project:skill:opencode:skills/nested/shared" in artifact_ids
+
+    def test_guard_detect_handles_unreadable_opencode_plugin_files(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(workspace_dir / "opencode.json", {})
+        _write_text(workspace_dir / ".opencode" / "plugins" / "broken.mjs", "export default {};\n")
+        original_read_bytes = Path.read_bytes
+
+        def _patched_read_bytes(path: Path) -> bytes:
+            if path.name == "broken.mjs":
+                raise OSError("Permission denied")
+            return original_read_bytes(path)
+
+        monkeypatch.setattr(Path, "read_bytes", _patched_read_bytes)
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifacts = {item["artifact_id"]: item for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert (
+            artifacts["opencode:project:plugin-file:plugins/broken.mjs"]["metadata"]["content_digest_unavailable"]
+            is True
+        )
 
     def test_guard_detect_human_output_surfaces_next_steps(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

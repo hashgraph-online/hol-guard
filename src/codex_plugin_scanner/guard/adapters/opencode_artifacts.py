@@ -298,7 +298,10 @@ def _plugin_items(payload: dict[str, object]) -> Iterator[object]:
 
 
 def _file_metadata(path: Path) -> dict[str, object]:
-    return {"content_digest": _file_digest(path)}
+    try:
+        return {"content_digest": _file_digest(path)}
+    except OSError:
+        return {"content_digest_unavailable": True}
 
 
 def _file_digest(path: Path) -> str:
