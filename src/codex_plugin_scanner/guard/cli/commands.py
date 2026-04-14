@@ -368,10 +368,14 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command == "connect":
-        sync_url = getattr(args, "sync_url", None)
-        token = getattr(args, "token", None)
-        if bool(sync_url) != bool(token):
-            raise ValueError("connect requires both --sync-url and --token when saving credentials")
+        try:
+            sync_url = getattr(args, "sync_url", None)
+            token = getattr(args, "token", None)
+            if bool(sync_url) != bool(token):
+                raise ValueError("connect requires both --sync-url and --token when saving credentials")
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
         credentials_saved = False
         if isinstance(sync_url, str) and isinstance(token, str):
             store.set_sync_credentials(sync_url, token, _now())
@@ -390,7 +394,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             return 0
         try:
             sync_payload = sync_receipts(store)
-        except (RuntimeError, urllib.error.URLError, urllib.error.HTTPError) as exc:
+        except (RuntimeError, urllib.error.URLError) as exc:
             payload = build_guard_connect_payload(
                 context,
                 store,
@@ -963,6 +967,7 @@ def _normalize_hook_argument_value(value: object | None) -> object | None:
             return parsed
         return stripped
     return value
+
 
 def _record_sync_event(store: GuardStore, payload: dict[str, object]) -> None:
     store.add_event(

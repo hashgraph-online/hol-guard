@@ -227,8 +227,7 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
                 "title": "Generate a Guard Cloud token",
                 "command": connect_url,
                 "detail": (
-                    "Open the Guard connect page, copy the sync URL and short-lived token, "
-                    "then pair this runtime."
+                    "Open the Guard connect page, copy the sync URL and short-lived token, then pair this runtime."
                 ),
             },
             {
@@ -237,8 +236,7 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
                     payload.get("connect_command") or f"{GUARD_COMMAND} connect --sync-url <url> --token <token>"
                 ),
                 "detail": (
-                    "Save the credentials locally and pull down the first Guard Cloud policy bundle "
-                    "in one step."
+                    "Save the credentials locally and pull down the first Guard Cloud policy bundle in one step."
                 ),
             },
         ]
@@ -251,8 +249,7 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
                 "title": "Pull the first cloud sync",
                 "command": str(payload.get("sync_command") or f"{GUARD_COMMAND} sync"),
                 "detail": (
-                    "Finish the first sync so this machine has Guard Cloud history, advisories, "
-                    "and team defaults."
+                    "Finish the first sync so this machine has Guard Cloud history, advisories, and team defaults."
                 ),
             }
         ]
