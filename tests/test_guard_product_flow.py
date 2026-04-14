@@ -106,6 +106,34 @@ class TestGuardProductFlow:
         assert output["next_steps"][0]["command"] == "hol-guard install codex"
         assert output["next_steps"][1]["command"] == "hol-guard run codex --dry-run"
 
+    def test_guard_start_recommends_copilot_when_it_is_the_only_detected_harness(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".copilot" / "mcp-config.json",
+            {"servers": {"global-tool": {"command": "npx", "args": ["server.js"]}}},
+        )
+        monkeypatch.setattr("shutil.which", lambda _command: None)
+
+        rc = main(
+            [
+                "guard",
+                "start",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        copilot_summary = next(item for item in output["harnesses"] if item["harness"] == "copilot")
+
+        assert rc == 0
+        assert output["recommended_harness"] == "copilot"
+        assert copilot_summary["install_command"] == "hol-guard install copilot"
+        assert output["next_steps"][1]["command"] == "hol-guard run copilot --dry-run"
+
     def test_guard_start_human_output_highlights_guard_loop(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

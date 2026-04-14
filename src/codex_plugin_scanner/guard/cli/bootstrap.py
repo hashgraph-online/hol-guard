@@ -135,7 +135,9 @@ def _build_bootstrap_steps(
             {
                 "title": "Detect a supported harness",
                 "command": f"{GUARD_COMMAND} detect",
-                "detail": "Install Codex, Claude Code, Cursor, Gemini, or OpenCode first, then rerun bootstrap.",
+                "detail": (
+                    "Install Codex, Claude Code, Copilot CLI, Cursor, Gemini, or OpenCode first, then rerun bootstrap."
+                ),
             }
         ]
     install_reason = str(bootstrap_install.get("reason") or "")

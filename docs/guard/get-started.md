@@ -112,6 +112,8 @@ Use these actions in config or saved decisions:
 
 Claude Code also gets Guard hook entries in `.claude/settings.local.json` when you install from a workspace.
 
+Copilot CLI gets a Guard-owned repo hook file at `.github/hooks/hol-guard-copilot.json` when you install from a workspace. Guard only reads `~/.copilot/config.json` and `~/.copilot/mcp-config.json`; it does not auto-write user-level Copilot config.
+
 ## Harness approval model
 
 Guard uses three approval tiers:
@@ -124,6 +126,8 @@ Current strategy:
 
 - `claude-code`
   prefers Claude hooks and can hand blocked work to the approval center cleanly
+- `copilot`
+  wraps the `copilot` CLI, watches documented repo hooks and MCP config, and treats workspace `.vscode/mcp.json` as MCP artifact detection only
 - `codex`
   uses the Guard approval center today; App Server is the long-term richer in-client path
 - `cursor`
@@ -132,6 +136,8 @@ Current strategy:
   keeps OpenCode’s permission model and lets Guard manage package and provenance policy
 - `gemini`
   scans extension manifests and routes blocked changes to the approval center
+
+Guard does not claim VS Code Copilot extension-host interception in this pass, and it does not add Cisco AIBOM runtime policy logic. AIBOM can come back later only as evidence or export.
 
 ## First-party canaries
 

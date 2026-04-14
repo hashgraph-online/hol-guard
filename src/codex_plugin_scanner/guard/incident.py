@@ -9,6 +9,7 @@ from .models import GuardAction, GuardArtifact
 _HARNESS_LABELS = {
     "codex": "Codex",
     "claude-code": "Claude Code",
+    "copilot": "Copilot CLI",
     "cursor": "Cursor",
     "gemini": "Gemini",
     "opencode": "OpenCode",

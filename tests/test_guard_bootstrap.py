@@ -160,6 +160,40 @@ def test_guard_bootstrap_invalid_harness_returns_cli_error(tmp_path, capsys, mon
     assert "Unsupported harness" in stderr
 
 
+def test_guard_bootstrap_installs_copilot_when_it_is_the_detected_harness(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    (home_dir / ".copilot").mkdir(parents=True, exist_ok=True)
+    (workspace_dir / ".github" / "hooks").mkdir(parents=True, exist_ok=True)
+    _write_text(
+        home_dir / ".copilot" / "mcp-config.json",
+        '{"servers":{"global-tool":{"command":"npx","args":["server.js"]}}}\n',
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.bootstrap.ensure_guard_daemon",
+        lambda _guard_home: "http://127.0.0.1:4781",
+    )
+    monkeypatch.setattr("shutil.which", lambda _command: None)
+
+    rc = main(
+        [
+            "guard",
+            "bootstrap",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["recommended_harness"] == "copilot"
+    assert output["bootstrap_install"]["harness"] == "copilot"
+    assert output["next_steps"][0]["command"] == "hol-guard run copilot --dry-run"
+
+
 def test_guard_bootstrap_skip_install_still_rejects_invalid_harness(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

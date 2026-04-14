@@ -5,6 +5,7 @@ from __future__ import annotations
 from .base import HarnessAdapter, HarnessContext
 from .claude_code import ClaudeCodeHarnessAdapter
 from .codex import CodexHarnessAdapter
+from .copilot import CopilotHarnessAdapter
 from .cursor import CursorHarnessAdapter
 from .gemini import GeminiHarnessAdapter
 from .hermes import HermesHarnessAdapter
@@ -13,6 +14,7 @@ from .opencode import OpenCodeHarnessAdapter
 ADAPTERS: tuple[HarnessAdapter, ...] = (
     CodexHarnessAdapter(),
     ClaudeCodeHarnessAdapter(),
+    CopilotHarnessAdapter(),
     CursorHarnessAdapter(),
     GeminiHarnessAdapter(),
     HermesHarnessAdapter(),

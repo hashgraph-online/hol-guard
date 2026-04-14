@@ -15,6 +15,7 @@ _FILE_READ_TOOL_NAMES = frozenset(
         "read",
         "read_file",
         "open_file",
+        "view",
         "view_file",
         "cat_file",
     }
