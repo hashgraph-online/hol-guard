@@ -571,7 +571,10 @@ args = ["workspace-skill.js"]
         workspace_dir = tmp_path / "workspace"
         _write_json(
             workspace_dir / ".vscode" / "settings.json",
-            {"workbench.colorTheme": "Default Dark+"},
+            {
+                "workbench.colorTheme": "Default Dark+",
+                "mcpServers": {"generic-tools": {"command": "node", "args": ["generic.js"]}},
+            },
         )
         _write_json(
             home_dir / ".config" / "Antigravity" / "User" / "settings.json",
