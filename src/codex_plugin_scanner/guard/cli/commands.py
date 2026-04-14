@@ -14,7 +14,13 @@ from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approvals import approval_center_hint, queue_blocked_approvals, wait_for_approval_requests
-from ..bridge import BridgeConfig, GuardBridge, run_bridge, StderrBackend, TelegramBackend, WebhookBackend, HermesBackend
+from ..bridge import (
+    BridgeConfig,
+    GuardBridge,
+    HermesBackend,
+    TelegramBackend,
+    WebhookBackend,
+)
 from ..config import load_guard_config, overlay_synced_guard_policy, resolve_guard_home
 from ..consumer import artifact_hash, detect_all, detect_harness, evaluate_detection, record_policy, run_consumer_scan
 from ..daemon import GuardDaemonServer, ensure_guard_daemon
@@ -251,8 +257,13 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     sync_parser.add_argument("--json", action="store_true")
 
     # Bridge command
-    bridge_parser = guard_subparsers.add_parser("bridge", help="Start the Guard Bridge notification daemon")
-    bridge_parser.add_argument("--poll-interval", type=int, default=10, help="Polling interval in seconds (default: 10)")
+    bridge_parser = guard_subparsers.add_parser(
+        "bridge", help="Start the Guard Bridge notification daemon"
+    )
+    bridge_parser.add_argument(
+        "--poll-interval", type=int, default=10,
+        help="Polling interval in seconds (default: 10)"
+    )
     bridge_parser.add_argument("--guard-url", default="http://127.0.0.1:4999", help="Guard daemon URL")
     bridge_parser.add_argument("--telegram-token", help="Telegram bot token for notifications")
     bridge_parser.add_argument("--telegram-chat-id", help="Telegram chat ID for notifications")
