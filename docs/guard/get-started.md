@@ -138,11 +138,14 @@ Current strategy:
   uses the Guard approval center today; App Server is the long-term richer in-client path
 - `cursor`
   keeps Cursor’s native tool approval and lets Guard own artifact trust before tool use
+- `antigravity`
+  scans Antigravity settings, installed extensions, and Antigravity-owned MCP or skill roots before launch
 - `opencode`
   detects OpenCode MCP servers, commands, plugins, and skills before launch, and `guard install opencode` adds a
   Guard-owned runtime overlay that keeps native skill loads on ask
 - `gemini`
-  scans extension manifests and routes blocked changes to the approval center
+  scans `.gemini/settings.json`, extension manifests, hooks, MCP registrations, and Gemini skill directories before
+  launch, then routes blocked changes to the approval center
 
 Guard does not claim VS Code Copilot extension-host interception in this pass, and it does not add Cisco AIBOM runtime policy logic. AIBOM can come back later only as evidence or export.
 

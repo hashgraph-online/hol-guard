@@ -15,6 +15,7 @@ Manual verification should include:
 - `hol-guard status`
 - `hol-guard detect codex --json`
 - `hol-guard detect cursor --json`
+- `hol-guard detect antigravity --json`
 - `hol-guard detect gemini --json`
 - `hol-guard detect opencode --json`
 - `hol-guard install opencode --json`
@@ -26,6 +27,7 @@ Manual verification should include:
 - `hol-guard receipts`
 - `codex mcp list`
 - `cursor-agent mcp list`
+- `antigravity --help`
 - `gemini --help`
 - `opencode --help`
 - `opencode run --help`

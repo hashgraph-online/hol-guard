@@ -13,7 +13,7 @@ from ..daemon import load_guard_daemon_url
 from ..models import HarnessDetection
 from ..store import GuardStore
 
-HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "cursor", "gemini", "opencode")
+HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "cursor", "antigravity", "gemini", "opencode")
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
 GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
@@ -161,7 +161,7 @@ def _build_next_steps(recommended: dict[str, object] | None, payload: dict[str, 
                 "command": f"{GUARD_COMMAND} detect",
                 "detail": (
                     "Guard did not find a local harness config yet. Start by installing "
-                    "Codex, Claude Code, Copilot CLI, Cursor, Gemini, or OpenCode."
+                    "Codex, Claude Code, Copilot CLI, Cursor, Antigravity, Gemini, or OpenCode."
                 ),
             }
         ]

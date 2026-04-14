@@ -44,8 +44,10 @@ This note audits the current scanner-owned Guard approval flow in `ai-plugin-sca
   - App Server remains the future richer path
 - `cursor`
   - Guard focuses on artifact trust before native tool approval
+- `antigravity`
+  - Guard focuses on extension, MCP, and skill trust before editor launch
 - `gemini`
-  - Guard scans extensions and routes blocked changes to the approval center
+  - Guard scans settings, hooks, extensions, skills, and MCP registrations, then routes blocked changes to the approval center
 - `opencode`
   - Guard manages artifact trust while OpenCode keeps tool permission semantics
 
