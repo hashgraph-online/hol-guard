@@ -185,12 +185,12 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     alert_preferences = _coerce_payload_dict(store.get_sync_payload("alert_preferences"))
     remote_policy = _coerce_payload_dict(store.get_sync_payload("policy"))
     team_policy_pack = _coerce_payload_dict(store.get_sync_payload("team_policy_pack"))
-    last_sync_event = _latest_event(store, "sync_complete")
-    last_sync_at = _last_sync_at(last_sync_event)
+    sync_summary = _coerce_payload_dict(store.get_sync_payload("sync_summary"))
+    last_sync_at = _optional_string(sync_summary.get("synced_at"))
     remote_payload_active = bool(advisories or alert_preferences or remote_policy or team_policy_pack)
     cloud_state = _resolve_cloud_state(
         sync_configured=credentials is not None,
-        last_sync_at=last_sync_at,
+        sync_completed=bool(sync_summary),
         remote_payload_active=remote_payload_active,
     )
     return {
@@ -338,10 +338,10 @@ def _resolve_guard_urls(sync_url: str | None) -> tuple[str, str]:
     return f"{origin}/guard", f"{origin}/guard/connect"
 
 
-def _resolve_cloud_state(*, sync_configured: bool, last_sync_at: str | None, remote_payload_active: bool) -> str:
+def _resolve_cloud_state(*, sync_configured: bool, sync_completed: bool, remote_payload_active: bool) -> str:
     if not sync_configured:
         return "local_only"
-    if last_sync_at is None and not remote_payload_active:
+    if not sync_completed and not remote_payload_active:
         return "paired_waiting"
     return "paired_active"
 
@@ -370,23 +370,6 @@ def _cloud_state_detail(cloud_state: str, connect_url: str, dashboard_url: str) 
         "Receipts stay on this machine until you choose to pair Guard Cloud. "
         f"Start from {connect_url} when you want shared history, trust advisories, or team policy."
     )
-
-
-def _latest_event(store: GuardStore, event_name: str) -> dict[str, object] | None:
-    events = store.list_events(limit=1, event_name=event_name)
-    return events[0] if events else None
-
-
-def _last_sync_at(event: dict[str, object] | None) -> str | None:
-    if not isinstance(event, dict):
-        return None
-    payload = event.get("payload")
-    if isinstance(payload, dict):
-        synced_at = payload.get("synced_at")
-        if isinstance(synced_at, str) and synced_at:
-            return synced_at
-    occurred_at = event.get("occurred_at")
-    return occurred_at if isinstance(occurred_at, str) and occurred_at else None
 
 
 def _coerce_payload_dict(payload: dict[str, object] | list[object] | None) -> dict[str, object]:

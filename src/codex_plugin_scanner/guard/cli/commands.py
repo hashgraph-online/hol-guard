@@ -406,7 +406,6 @@ def run_guard_command(args: argparse.Namespace) -> int:
             )
             _emit("connect", payload, getattr(args, "json", False))
             return 1
-        _record_sync_event(store, sync_payload)
         payload = build_guard_connect_payload(
             context,
             store,
@@ -627,7 +626,6 @@ def run_guard_command(args: argparse.Namespace) -> int:
 
     if args.guard_command == "sync":
         payload = sync_receipts(store)
-        _record_sync_event(store, payload)
         _emit("sync", payload, getattr(args, "json", False))
         return 0
 
@@ -967,21 +965,6 @@ def _normalize_hook_argument_value(value: object | None) -> object | None:
             return parsed
         return stripped
     return value
-
-
-def _record_sync_event(store: GuardStore, payload: dict[str, object]) -> None:
-    store.add_event(
-        "sync_complete",
-        {
-            "synced_at": payload.get("synced_at"),
-            "receipts_stored": payload.get("receipts_stored"),
-            "advisories_stored": payload.get("advisories_stored"),
-            "exceptions_stored": payload.get("exceptions_stored"),
-            "remote_policies_stored": payload.get("remote_policies_stored"),
-            "pain_signals_uploaded": payload.get("pain_signals_uploaded"),
-        },
-        _now(),
-    )
 
 
 def _coalesce_string(*values: object | None) -> str:

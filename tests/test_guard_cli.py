@@ -1465,6 +1465,8 @@ args = ["workspace-skill.js", "--changed"]
                 ]
             )
             sync_output = json.loads(capsys.readouterr().out)
+            status_rc = main(["guard", "status", "--home", str(home_dir), "--workspace", str(workspace_dir), "--json"])
+            status_output = json.loads(capsys.readouterr().out)
         finally:
             server.shutdown()
             thread.join(timeout=5)
@@ -1472,7 +1474,10 @@ args = ["workspace-skill.js", "--changed"]
         assert login_rc == 0
         assert run_rc == 0
         assert sync_rc == 0
+        assert status_rc == 0
         assert sync_output["receipts_stored"] == 1
+        assert status_output["cloud_state"] == "paired_active"
+        assert status_output["last_sync_at"] == "2026-04-09T00:00:00Z"
         assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer demo-token"
         assert _SyncRequestHandler.captured_body is not None
         assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
