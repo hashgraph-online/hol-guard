@@ -114,6 +114,10 @@ Claude Code also gets Guard hook entries in `.claude/settings.local.json` when y
 
 Copilot CLI gets a Guard-owned repo hook file at `.github/hooks/hol-guard-copilot.json` when you install from a workspace. Guard only reads `~/.copilot/config.json` and `~/.copilot/mcp-config.json`; it does not auto-write user-level Copilot config.
 
+OpenCode gets the normal Guard shim plus a Guard-owned runtime overlay at `<guard-home>/opencode/runtime-config.json`. Guard
+injects that overlay through `OPENCODE_CONFIG_CONTENT` when you launch through Guard so native skill loads stay on ask
+without mutating your checked-in `opencode.json`.
+
 ## Harness approval model
 
 Guard uses three approval tiers:
@@ -133,7 +137,8 @@ Current strategy:
 - `cursor`
   keeps Cursor’s native tool approval and lets Guard own artifact trust before tool use
 - `opencode`
-  keeps OpenCode’s permission model and lets Guard manage package and provenance policy
+  detects OpenCode MCP servers, commands, plugins, and skills before launch, and `guard install opencode` adds a
+  Guard-owned runtime overlay that keeps native skill loads on ask
 - `gemini`
   scans extension manifests and routes blocked changes to the approval center
 

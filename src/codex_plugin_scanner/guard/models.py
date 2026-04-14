@@ -46,6 +46,18 @@ def _redact_arg(value: str) -> str:
     return value
 
 
+def _redact_metadata(value: object, key: str | None = None) -> object:
+    if key is not None and any(
+        token in key.lower() for token in ("key", "token", "auth", "secret", "password", "credential")
+    ):
+        return "*****"
+    if isinstance(value, dict):
+        return {item_key: _redact_metadata(item_value, item_key) for item_key, item_value in value.items()}
+    if isinstance(value, list):
+        return [_redact_metadata(item) for item in value]
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class GuardArtifact:
     """A local harness artifact that Guard can reason about."""
@@ -67,6 +79,7 @@ class GuardArtifact:
         payload = asdict(self)
         payload["args"] = [_redact_arg(value) for value in self.args]
         payload["url"] = _redact_url(self.url)
+        payload["metadata"] = _redact_metadata(payload.get("metadata", {}))
         return payload
 
 

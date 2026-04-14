@@ -32,10 +32,18 @@ def _serialize_artifact(artifact: GuardArtifact) -> dict[str, object]:
     return payload
 
 
+def _hash_payload(artifact: GuardArtifact) -> dict[str, object]:
+    payload = artifact.to_dict()
+    payload["metadata"] = artifact.metadata
+    metadata = payload.get("metadata")
+    payload["env_keys"] = metadata.get("env_keys", []) if isinstance(metadata, dict) else []
+    return payload
+
+
 def artifact_hash(artifact: GuardArtifact) -> str:
     """Hash a detected artifact definition."""
 
-    payload = _serialize_artifact(artifact)
+    payload = _hash_payload(artifact)
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
@@ -58,10 +66,13 @@ def diff_artifact(previous: dict[str, object] | None, current: GuardArtifact) ->
         previous_payload["env_keys"] = []
     changed_fields = [key for key, value in current_payload.items() if previous_payload.get(key) != value]
     previous_hash = previous.get("artifact_hash")
+    previous_hash_value = previous_hash if isinstance(previous_hash, str) else None
+    if previous_hash_value is not None and previous_hash_value != current_hash and not changed_fields:
+        changed_fields = ["metadata"]
     return {
         "changed": bool(changed_fields),
         "changed_fields": changed_fields,
-        "previous_hash": previous_hash if isinstance(previous_hash, str) else None,
+        "previous_hash": previous_hash_value,
         "current_hash": current_hash,
         "current_snapshot": current_payload,
     }
@@ -249,6 +260,8 @@ def evaluate_detection(
                 "risk_signals": list(risk_signals),
                 "risk_summary": risk_summary,
                 "artifact_type": artifact.artifact_type,
+                "config_path": artifact.config_path,
+                "source_scope": artifact.source_scope,
                 "artifact_label": incident["artifact_label"],
                 "source_label": incident["source_label"],
                 "trigger_summary": incident["trigger_summary"],
