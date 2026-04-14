@@ -32,6 +32,13 @@ class GeminiHarnessAdapter(HarnessAdapter):
         if candidate not in found_paths:
             found_paths.append(candidate)
 
+    @staticmethod
+    def _string_args(server_config: dict[str, object]) -> tuple[str, ...]:
+        raw_args = server_config.get("args")
+        if not isinstance(raw_args, list):
+            return ()
+        return tuple(str(value) for value in raw_args if isinstance(value, str))
+
     def detect(self, context: HarnessContext) -> HarnessDetection:
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
@@ -112,7 +119,7 @@ class GeminiHarnessAdapter(HarnessAdapter):
                         source_scope=scope,
                         config_path=str(manifest_path),
                         command=command if isinstance(command, str) else None,
-                        args=tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str)),
+                        args=self._string_args(server_config),
                         url=url if isinstance(url, str) else None,
                         transport="http" if isinstance(url, str) else "stdio",
                     )
@@ -141,7 +148,7 @@ class GeminiHarnessAdapter(HarnessAdapter):
                         source_scope=scope,
                         config_path=str(settings_path),
                         command=command if isinstance(command, str) else None,
-                        args=tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str)),
+                        args=self._string_args(server_config),
                         url=url if isinstance(url, str) else None,
                         transport="http" if isinstance(url, str) else "stdio",
                     )

@@ -20,8 +20,7 @@ class AntigravityHarnessAdapter(HarnessAdapter):
         "and routes review through the local approval center."
     )
     fallback_hint = (
-        "Use Guard review for new Antigravity artifacts before launch, then hand off to "
-        "the local editor normally."
+        "Use Guard review for new Antigravity artifacts before launch, then hand off to the local editor normally."
     )
 
     @staticmethod
@@ -36,27 +35,30 @@ class AntigravityHarnessAdapter(HarnessAdapter):
         if candidate not in found_paths:
             found_paths.append(candidate)
 
+    @staticmethod
+    def _settings_paths(context: HarnessContext) -> list[Path]:
+        return [
+            context.home_dir / "Library" / "Application Support" / "Antigravity" / "User" / "settings.json",
+            context.home_dir / ".config" / "Antigravity" / "User" / "settings.json",
+            context.home_dir / "AppData" / "Roaming" / "Antigravity" / "User" / "settings.json",
+        ]
+
+    @staticmethod
+    def _contains_antigravity_settings(payload: dict[str, object]) -> bool:
+        if isinstance(payload.get("mcpServers"), dict):
+            return True
+        return any(isinstance(key, str) and key.startswith("antigravity.") for key in payload)
+
+    @staticmethod
+    def _string_args(server_config: dict[str, object]) -> tuple[str, ...]:
+        raw_args = server_config.get("args")
+        if not isinstance(raw_args, list):
+            return ()
+        return tuple(str(value) for value in raw_args if isinstance(value, str))
+
     def detect(self, context: HarnessContext) -> HarnessDetection:
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
-
-        settings_paths = [
-            context.home_dir
-            / "Library"
-            / "Application Support"
-            / "Antigravity"
-            / "User"
-            / "settings.json"
-        ]
-        if context.workspace_dir is not None:
-            settings_paths.append(context.workspace_dir / ".vscode" / "settings.json")
-        for settings_path in settings_paths:
-            payload = _json_payload(settings_path)
-            if not payload:
-                continue
-            self._append_found_path(found_paths, settings_path)
-            scope = self._scope_for(context, settings_path)
-            self._append_mcp_artifacts(artifacts, settings_path, payload, scope)
 
         extension_index = context.home_dir / ".antigravity" / "extensions" / "extensions.json"
         extension_payload = self._extension_index_payload(extension_index)
@@ -95,6 +97,24 @@ class AntigravityHarnessAdapter(HarnessAdapter):
                         config_path=str(skill_path),
                     )
                 )
+
+        settings_paths = self._settings_paths(context)
+        if context.workspace_dir is not None:
+            settings_paths.append(context.workspace_dir / ".vscode" / "settings.json")
+        has_non_settings_signal = bool(found_paths)
+        for settings_path in settings_paths:
+            payload = _json_payload(settings_path)
+            if not payload:
+                continue
+            scope = self._scope_for(context, settings_path)
+            before_artifact_count = len(artifacts)
+            self._append_mcp_artifacts(artifacts, settings_path, payload, scope)
+            if (
+                len(artifacts) > before_artifact_count
+                or self._contains_antigravity_settings(payload)
+                or has_non_settings_signal
+            ):
+                self._append_found_path(found_paths, settings_path)
 
         return HarnessDetection(
             harness=self.harness,
@@ -137,7 +157,7 @@ class AntigravityHarnessAdapter(HarnessAdapter):
                     source_scope=scope,
                     config_path=str(config_path),
                     command=command if isinstance(command, str) else None,
-                    args=tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str)),
+                    args=self._string_args(server_config),
                     url=url if isinstance(url, str) else None,
                     transport="http" if isinstance(url, str) else "stdio",
                 )
@@ -166,9 +186,7 @@ class AntigravityHarnessAdapter(HarnessAdapter):
             if manifest_payload:
                 self._append_found_path(found_paths, manifest_path)
             publisher = (
-                manifest_payload.get("publisher")
-                if isinstance(manifest_payload.get("publisher"), str)
-                else None
+                manifest_payload.get("publisher") if isinstance(manifest_payload.get("publisher"), str) else None
             )
             if publisher is None and isinstance(metadata, dict):
                 publisher_display_name = metadata.get("publisherDisplayName")

@@ -551,8 +551,9 @@ args = ["workspace-skill.js"]
         artifact_ids = [item["artifact_id"] for item in detection["artifacts"]]
 
         assert rc == 0
-        assert str(home_dir / "Library" / "Application Support" / "Antigravity" / "User" / "settings.json") in (
-            detection["config_paths"]
+        assert (
+            str(home_dir / "Library" / "Application Support" / "Antigravity" / "User" / "settings.json")
+            in (detection["config_paths"])
         )
         assert str(home_dir / ".gemini" / "antigravity" / "mcp_config.json") in detection["config_paths"]
         assert artifact_ids == [
@@ -560,6 +561,83 @@ args = ["workspace-skill.js"]
             "antigravity:global:mcp:gravity-tools",
             "antigravity:global:skill:skills/gravity-review",
         ]
+
+    def test_guard_detect_recognizes_cross_platform_antigravity_settings_and_ignores_generic_workspace_settings(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            workspace_dir / ".vscode" / "settings.json",
+            {"workbench.colorTheme": "Default Dark+"},
+        )
+        _write_json(
+            home_dir / ".config" / "Antigravity" / "User" / "settings.json",
+            {
+                "antigravity.profile": "default",
+                "mcpServers": {"gravity-tools": {"command": "node", "args": True}},
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "antigravity",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        detection = output["harnesses"][0]
+
+        assert rc == 0
+        assert str(home_dir / ".config" / "Antigravity" / "User" / "settings.json") in detection["config_paths"]
+        assert str(workspace_dir / ".vscode" / "settings.json") not in detection["config_paths"]
+        assert [item["artifact_id"] for item in detection["artifacts"]] == ["antigravity:global:mcp:gravity-tools"]
+        assert detection["artifacts"][0]["args"] == []
+
+    def test_guard_detect_tolerates_gemini_malformed_args(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".gemini" / "extensions" / "shared" / "gemini-extension.json",
+            {
+                "name": "shared",
+                "mcpServers": {"shared-tools": {"command": "node", "args": True}},
+            },
+        )
+        _write_json(
+            home_dir / ".gemini" / "settings.json",
+            {
+                "mcpServers": {"settings-tools": {"command": "node", "args": True}},
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "gemini",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        detection = output["harnesses"][0]
+        artifacts = {item["artifact_id"]: item for item in detection["artifacts"]}
+
+        assert rc == 0
+        assert artifacts["gemini:global:shared:shared-tools"]["args"] == []
+        assert artifacts["gemini:global:mcp:settings-tools"]["args"] == []
 
     def test_guard_detect_scopes_opencode_artifact_ids(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

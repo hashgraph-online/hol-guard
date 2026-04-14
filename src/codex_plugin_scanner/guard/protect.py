@@ -550,9 +550,7 @@ def _parse_antigravity_mcp_target(raw_payload: str) -> ProtectTarget:
     if command_or_url is None and isinstance(payload.get("command"), str):
         command_or_url = payload["command"]
     source_url = (
-        command_or_url
-        if isinstance(command_or_url, str) and _is_remote_transport(command_or_url, None)
-        else None
+        command_or_url if isinstance(command_or_url, str) and _is_remote_transport(command_or_url, None) else None
     )
     return ProtectTarget(
         artifact_id=f"install:antigravity:mcp:{name}",
