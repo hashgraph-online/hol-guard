@@ -56,7 +56,25 @@ class AntigravityHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _mcp_source(config_path: Path) -> str:
-        return "bridge" if config_path.name == "mcp_config.json" else "settings"
+        if config_path.name == "mcp_config.json":
+            return "bridge"
+        normalized_path = config_path.as_posix().lower()
+        if normalized_path.endswith("/library/application support/antigravity/user/settings.json"):
+            return "settings:macos-user"
+        if normalized_path.endswith("/.config/antigravity/user/settings.json"):
+            return "settings:xdg-user"
+        if normalized_path.endswith("/appdata/roaming/antigravity/user/settings.json"):
+            return "settings:windows-user"
+        if normalized_path.endswith("/.vscode/settings.json"):
+            return "settings:workspace-vscode"
+        token_parts = []
+        for part in config_path.parts[-4:]:
+            normalized_part = "".join(
+                character if character.isalnum() else "-" for character in part.lower()
+            ).strip("-")
+            if normalized_part:
+                token_parts.append(normalized_part)
+        return f"settings:{'-'.join(token_parts)}"
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         artifacts: list[GuardArtifact] = []
