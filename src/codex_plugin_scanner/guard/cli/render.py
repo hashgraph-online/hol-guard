@@ -798,14 +798,18 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
     harness = str(payload.get("harness") or "codex")
     approval_center_url = payload.get("approval_center_url")
     review_hint = payload.get("review_hint")
+    rerun_command = payload.get("rerun_command")
+    diff_command = payload.get("diff_command")
     if blocked and dry_run:
-        rerun_command = payload.get("rerun_command")
         review_command = (
             "hol-guard approvals"
             if approval_center_url
             else str(rerun_command)
             if isinstance(rerun_command, str) and rerun_command
             else f"hol-guard run {harness}"
+        )
+        inspect_command = (
+            str(diff_command) if isinstance(diff_command, str) and diff_command else f"hol-guard diff {harness}"
         )
         review_detail = (
             str(review_hint)
@@ -820,7 +824,7 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
             },
             {
                 "title": "Inspect only the changed config entries (optional)",
-                "command": f"hol-guard diff {harness}",
+                "command": inspect_command,
                 "detail": (
                     "See the config-level diff only. This view can omit policy-only blockers "
                     "Guard still needs you to review."
@@ -831,10 +835,13 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
         command = "hol-guard approvals" if approval_center_url else f"hol-guard run {harness}"
         return [{"title": "Resolve the blocked launch", "command": command, "detail": review_hint}]
     if dry_run:
+        launch_command = (
+            str(rerun_command) if isinstance(rerun_command, str) and rerun_command else f"hol-guard run {harness}"
+        )
         return [
             {
                 "title": "Launch for real",
-                "command": f"hol-guard run {harness}",
+                "command": launch_command,
                 "detail": "Dry run finished cleanly; rerun without --dry-run when you are ready to launch.",
             }
         ]

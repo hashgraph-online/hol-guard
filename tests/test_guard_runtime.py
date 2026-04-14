@@ -1056,6 +1056,50 @@ class TestGuardRuntime:
             "hol-guard run codex --home /guard-home --workspace /workspace --default-action warn --arg '--model gpt-5'"
         )
 
+    def test_guard_diff_command_preserves_common_context(self):
+        command = guard_commands_module._guard_diff_command(
+            argparse.Namespace(
+                harness="codex",
+                home="/guard-home",
+                guard_home=None,
+                workspace="/workspace",
+            )
+        )
+
+        assert command == "hol-guard diff codex --home /guard-home --workspace /workspace"
+
+    def test_guard_run_renderer_uses_context_preserving_diff_command(self):
+        steps = guard_render_module._build_run_steps(
+            {
+                "harness": "codex",
+                "blocked": True,
+                "dry_run": True,
+                "diff_command": "hol-guard diff codex --home /guard-home --workspace /workspace",
+            },
+            blocked=True,
+            dry_run=True,
+        )
+
+        assert steps[1]["command"] == "hol-guard diff codex --home /guard-home --workspace /workspace"
+
+    def test_guard_run_renderer_uses_context_preserving_launch_command_for_clean_dry_runs(self):
+        steps = guard_render_module._build_run_steps(
+            {
+                "harness": "codex",
+                "dry_run": True,
+                "rerun_command": (
+                    "hol-guard run codex --home /guard-home --workspace /workspace "
+                    "--default-action warn --arg '--model gpt-5'"
+                ),
+            },
+            blocked=False,
+            dry_run=True,
+        )
+
+        assert steps[0]["command"] == (
+            "hol-guard run codex --home /guard-home --workspace /workspace --default-action warn --arg '--model gpt-5'"
+        )
+
     def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
         self, tmp_path, capsys, monkeypatch
     ):
