@@ -477,7 +477,43 @@ args = ["workspace-skill.js"]
         assert "opencode:project:skill:opencode:repo-skill" in artifacts
         assert "opencode:project:skill:claude:claude-skill" in artifacts
         assert artifacts["opencode:project:plugin-file:project-local"]["artifact_type"] == "plugin"
+        assert artifacts["opencode:project:config-command:project-review"]["metadata"]["template"] == (
+            "Review the workspace change set."
+        )
         assert artifacts["opencode:project:skill:claude:claude-skill"]["artifact_type"] == "skill"
+
+    def test_guard_detect_keeps_unique_opencode_file_artifact_ids(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(workspace_dir / "opencode.json", {})
+        _write_text(workspace_dir / ".opencode" / "plugins" / "shared.mjs", "export default {};\n")
+        _write_text(workspace_dir / ".opencode" / "plugins" / "nested" / "shared.mjs", "export default {};\n")
+        _write_text(workspace_dir / ".opencode" / "skills" / "shared" / "SKILL.md", "---\nname: shared\n---\n")
+        _write_text(
+            workspace_dir / ".opencode" / "skills" / "nested" / "shared" / "SKILL.md",
+            "---\nname: shared\n---\n",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = {item["artifact_id"] for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert "opencode:project:plugin-file:shared" in artifact_ids
+        assert "opencode:project:plugin-file:nested/shared" in artifact_ids
+        assert "opencode:project:skill:opencode:shared" in artifact_ids
+        assert "opencode:project:skill:opencode:nested/shared" in artifact_ids
 
     def test_guard_detect_human_output_surfaces_next_steps(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

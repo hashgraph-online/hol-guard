@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 from ..models import GuardArtifact
@@ -80,16 +81,14 @@ def append_directory_artifacts(
     for directory, scope, artifact_kind in directory_specs:
         if not directory.is_dir():
             continue
-        pattern = "*.md" if artifact_kind == "command" else "*"
-        for path in sorted(directory.rglob(pattern)):
-            if not path.is_file():
-                continue
-            if artifact_kind == "plugin-file" and path.suffix not in PLUGIN_SUFFIXES:
-                continue
+        allowed_suffixes = None if artifact_kind == "command" else PLUGIN_SUFFIXES
+        exact_name = None if artifact_kind == "plugin-file" else "*.md"
+        for path in _iter_directory_files(directory, allowed_suffixes=allowed_suffixes, exact_name=exact_name):
             append_found_path(found_paths, path)
+            relative_id = _relative_artifact_id(path, directory)
             artifact = GuardArtifact(
-                artifact_id=f"opencode:{scope}:{artifact_kind}:{path.stem}",
-                name=path.stem,
+                artifact_id=f"opencode:{scope}:{artifact_kind}:{relative_id}",
+                name=relative_id,
                 harness="opencode",
                 artifact_type="plugin" if artifact_kind == "plugin-file" else "command",
                 source_scope=scope,
@@ -104,13 +103,12 @@ def append_directory_artifacts(
             if context.workspace_dir is not None and skill_root.is_relative_to(context.workspace_dir)
             else "global"
         )
-        for skill_path in sorted(skill_root.rglob("SKILL.md")):
-            if not skill_path.is_file():
-                continue
+        for skill_path in _iter_directory_files(skill_root, exact_name="SKILL.md"):
             append_found_path(found_paths, skill_path)
+            relative_id = skill_path.parent.relative_to(skill_root).as_posix()
             artifact = GuardArtifact(
-                artifact_id=f"opencode:{scope}:skill:{source_kind}:{skill_path.parent.name}",
-                name=skill_path.parent.name,
+                artifact_id=f"opencode:{scope}:skill:{source_kind}:{relative_id}",
+                name=relative_id,
                 harness="opencode",
                 artifact_type="skill",
                 source_scope=scope,
@@ -259,6 +257,7 @@ def _append_config_command_artifacts(
             for key in ("description", "agent", "model", "subtask")
             if (value := command_payload.get(key)) is not None
         }
+        metadata["template"] = template
         artifact = GuardArtifact(
             artifact_id=f"opencode:{scope}:config-command:{name}",
             name=name,
@@ -289,3 +288,26 @@ def _publisher_from_package(package_name: str) -> str | None:
     if package_name.startswith("@") and "/" in package_name:
         return package_name.split("/", 1)[0][1:]
     return None
+
+
+def _iter_directory_files(
+    directory: Path,
+    *,
+    allowed_suffixes: set[str] | None = None,
+    exact_name: str | None = None,
+) -> Iterator[Path]:
+    for root, dirnames, filenames in directory.walk():
+        dirnames.sort()
+        for filename in sorted(filenames):
+            path = root / filename
+            if exact_name == "*.md" and path.suffix != ".md":
+                continue
+            if exact_name is not None and exact_name != "*.md" and filename != exact_name:
+                continue
+            if allowed_suffixes is not None and path.suffix not in allowed_suffixes:
+                continue
+            yield path
+
+
+def _relative_artifact_id(path: Path, root: Path) -> str:
+    return path.relative_to(root).with_suffix("").as_posix()
