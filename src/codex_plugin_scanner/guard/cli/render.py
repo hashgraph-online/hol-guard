@@ -172,7 +172,7 @@ def _render_run(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Outcome", _run_outcome_text(blocked=blocked, dry_run=dry_run, launched=launched))
     body.add_row("Artifacts", str(len(summarized_artifacts)))
     if blocked:
-        needs_review = sum(1 for artifact in summarized_artifacts if artifact["policy_action"] != "allow")
+        needs_review = sum(1 for artifact in visible_artifacts if _artifact_needs_review(artifact))
         body.add_row("Needs review", str(needs_review))
     if payload.get("approval_center_url"):
         body.add_row("Approval center", str(payload.get("approval_center_url")))
@@ -799,16 +799,25 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
     approval_center_url = payload.get("approval_center_url")
     review_hint = payload.get("review_hint")
     if blocked and dry_run:
+        review_command = "hol-guard approvals" if approval_center_url else f"hol-guard run {harness}"
+        review_detail = (
+            str(review_hint)
+            if isinstance(review_hint, str) and review_hint
+            else "Rerun without --dry-run to review the full blocker set and continue into the harness launch."
+        )
         return [
             {
-                "title": "Inspect the raw diff",
-                "command": f"hol-guard diff {harness}",
-                "detail": "See the exact artifact-level changes Guard is evaluating.",
+                "title": "Resolve the blocked launch",
+                "command": review_command,
+                "detail": review_detail,
             },
             {
-                "title": "Approve and continue",
-                "command": f"hol-guard run {harness}",
-                "detail": "Rerun without --dry-run to review these changes and continue into the harness launch.",
+                "title": "Inspect only the changed config entries (optional)",
+                "command": f"hol-guard diff {harness}",
+                "detail": (
+                    "See the config-level diff only. This view can omit policy-only blockers "
+                    "Guard still needs you to review."
+                ),
             },
         ]
     if blocked and isinstance(review_hint, str) and review_hint:
@@ -974,6 +983,10 @@ def _run_artifact_should_be_visible(artifact: dict[str, object]) -> bool:
     if bool(artifact.get("changed")):
         return True
     return str(artifact.get("policy_action") or "allow") in {"block", "sandbox-required", "require-reapproval"}
+
+
+def _artifact_needs_review(artifact: dict[str, object]) -> bool:
+    return str(artifact.get("policy_action") or "allow") != "allow"
 
 
 def _build_approval_table(items: list[dict[str, object]], *, title: str | None) -> Table:

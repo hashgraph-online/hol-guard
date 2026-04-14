@@ -891,6 +891,72 @@ class TestGuardRuntime:
         assert "blocked-tool" in output
         assert "Needs review 1" in output
 
+    def test_guard_run_renderer_counts_each_visible_blocker_even_when_rows_coalesce(self, capsys):
+        emit_guard_payload(
+            "run",
+            {
+                "harness": "codex",
+                "blocked": True,
+                "dry_run": True,
+                "launched": False,
+                "receipts_recorded": 2,
+                "artifacts": [
+                    {
+                        "artifact_id": "codex:project:chrome-devtools:new",
+                        "artifact_name": "chrome-devtools",
+                        "changed": True,
+                        "changed_fields": ["first_seen"],
+                        "policy_action": "require-reapproval",
+                        "why_now": "It is new in this codex workspace, so Guard paused it for review.",
+                    },
+                    {
+                        "artifact_id": "codex:project:chrome-devtools:old",
+                        "artifact_name": "chrome-devtools",
+                        "changed": True,
+                        "changed_fields": ["removed"],
+                        "policy_action": "require-reapproval",
+                        "why_now": (
+                            "It disappeared from the harness config, so Guard paused the change until you confirm it."
+                        ),
+                    },
+                ],
+            },
+            False,
+        )
+        output = capsys.readouterr().out
+
+        assert "Needs review 2" in output
+        assert output.lower().count("chrome-devtools") == 1
+
+    def test_guard_run_renderer_leads_blocked_dry_runs_with_full_review_path(self, capsys):
+        emit_guard_payload(
+            "run",
+            {
+                "harness": "codex",
+                "blocked": True,
+                "dry_run": True,
+                "launched": False,
+                "receipts_recorded": 1,
+                "artifacts": [
+                    {
+                        "artifact_id": "codex:project:blocked-tool",
+                        "artifact_name": "blocked-tool",
+                        "changed": False,
+                        "changed_fields": [],
+                        "policy_action": "require-reapproval",
+                        "why_now": "Guard blocked this definition because the configured policy does not trust it yet.",
+                    }
+                ],
+            },
+            False,
+        )
+        output = capsys.readouterr().out
+
+        assert "Resolve the blocked launch" in output
+        assert "hol-guard run codex" in output
+        assert "Inspect only the changed config entries (optional)" in output
+        assert "hol-guard diff codex" in output
+
     def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
         self, tmp_path, capsys, monkeypatch
     ):
