@@ -98,6 +98,46 @@ def test_guard_run_launches_with_configured_home(monkeypatch, tmp_path, capsys):
     assert captured_cwd == workspace_dir
 
 
+def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    (home_dir / ".copilot").mkdir(parents=True, exist_ok=True)
+    _write_text(
+        home_dir / ".copilot" / "mcp-config.json",
+        json.dumps({"servers": {"global-tool": {"command": "npx", "args": ["server.js"]}}}),
+    )
+    captured_command: list[str] = []
+
+    def _fake_run(command, cwd=None, check=False, env=None):
+        del cwd, check, env
+        captured_command.extend(command)
+        return _CompletedProcess(0)
+
+    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "copilot",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--arg=suggest",
+            "--arg=explain this function",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["launched"] is True
+    assert captured_command == ["copilot", "suggest", "explain this function"]
+
+
 def test_guard_run_blocks_direct_env_prompt_until_approved(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
