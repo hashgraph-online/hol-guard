@@ -83,7 +83,7 @@ class HermesBackend(NotificationBackend):
             return False
 
     def parse_command(self, text: str) -> tuple[str, str | None]:
-        match = re.match(r'/(approve|deny)\s+([a-f0-9-]+)', text)
+        match = re.match(r"/(approve|deny)\s+([a-f0-9-]+)", text)
         if match:
             return (match.group(1), match.group(2))
         return (None, None)
@@ -109,7 +109,7 @@ class TelegramBackend(NotificationBackend):
             return False
 
     def parse_command(self, text: str) -> tuple[str, str | None]:
-        match = re.match(r'/(approve|deny)\s+([a-f0-9-]+)', text)
+        match = re.match(r"/(approve|deny)\s+([a-f0-9-]+)", text)
         if match:
             return (match.group(1), match.group(2))
         return (None, None)
@@ -129,7 +129,7 @@ class WebhookBackend(NotificationBackend):
             return False
 
     def parse_command(self, text: str) -> tuple[str, str | None]:
-        match = re.match(r'/(approve|deny)\s+([a-f0-9-]+)', text)
+        match = re.match(r"/(approve|deny)\s+([a-f0-9-]+)", text)
         if match:
             return (match.group(1), match.group(2))
         return (None, None)

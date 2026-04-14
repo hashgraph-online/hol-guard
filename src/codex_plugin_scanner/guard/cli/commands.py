@@ -257,12 +257,9 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     sync_parser.add_argument("--json", action="store_true")
 
     # Bridge command
-    bridge_parser = guard_subparsers.add_parser(
-        "bridge", help="Start the Guard Bridge notification daemon"
-    )
+    bridge_parser = guard_subparsers.add_parser("bridge", help="Start the Guard Bridge notification daemon")
     bridge_parser.add_argument(
-        "--poll-interval", type=int, default=10,
-        help="Polling interval in seconds (default: 10)"
+        "--poll-interval", type=int, default=10, help="Polling interval in seconds (default: 10)"
     )
     bridge_parser.add_argument("--guard-url", default="http://127.0.0.1:4999", help="Guard daemon URL")
     bridge_parser.add_argument("--telegram-token", help="Telegram bot token for notifications")
