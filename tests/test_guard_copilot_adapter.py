@@ -256,3 +256,63 @@ def test_copilot_install_and_uninstall_preserve_existing_managed_hook_content(tm
             "preToolUse": [{"command": "python existing-pre.py"}],
         },
     }
+
+
+def test_copilot_install_and_uninstall_match_managed_hooks_after_path_changes(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = CopilotHarnessAdapter()
+    managed_hook_path = context.workspace_dir / ".github" / "hooks" / "hol-guard-copilot.json"
+    _write_json(
+        managed_hook_path,
+        {
+            "version": 1,
+            "hooks": {
+                "preToolUse": [
+                    {
+                        "type": "command",
+                        "bash": (
+                            "/opt/python/bin/python -m codex_plugin_scanner.cli guard hook "
+                            "--guard-home /tmp/old-guard --harness copilot --home /tmp/old-home "
+                            "--workspace /tmp/old-workspace"
+                        ),
+                        "powershell": (
+                            '"C:\\Python\\python.exe" -m codex_plugin_scanner.cli guard hook '
+                            '--guard-home C:\\old-guard --harness copilot --home C:\\old-home '
+                            '--workspace C:\\old-workspace'
+                        ),
+                        "cwd": ".",
+                        "timeoutSec": 30,
+                    }
+                ],
+                "postToolUse": [
+                    {
+                        "type": "command",
+                        "bash": (
+                            "/opt/python/bin/python -m codex_plugin_scanner.cli guard hook "
+                            "--guard-home /tmp/old-guard --harness copilot --home /tmp/old-home "
+                            "--workspace /tmp/old-workspace"
+                        ),
+                        "powershell": (
+                            '"C:\\Python\\python.exe" -m codex_plugin_scanner.cli guard hook '
+                            '--guard-home C:\\old-guard --harness copilot --home C:\\old-home '
+                            '--workspace C:\\old-workspace'
+                        ),
+                        "cwd": ".",
+                        "timeoutSec": 30,
+                    }
+                ],
+            },
+        },
+    )
+
+    adapter.install(context)
+    managed_payload = json.loads(managed_hook_path.read_text(encoding="utf-8"))
+
+    assert len(managed_payload["hooks"]["preToolUse"]) == 1
+    assert len(managed_payload["hooks"]["postToolUse"]) == 1
+    assert "--workspace /tmp/old-workspace" not in managed_payload["hooks"]["preToolUse"][0]["bash"]
+
+    uninstall_payload = adapter.uninstall(context)
+
+    assert uninstall_payload["active"] is False
+    assert managed_hook_path.exists() is False

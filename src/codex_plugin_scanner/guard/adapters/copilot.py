@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 import subprocess
 import sys
@@ -22,6 +23,12 @@ _DETECTABLE_HOOK_EVENTS = (
     "errorOccurred",
 )
 _MANAGED_HOOK_FILENAME = "hol-guard-copilot.json"
+_MANAGED_HOOK_COMMAND_PATTERNS = (
+    re.compile(r'(^|["\s])-m["\s]+codex_plugin_scanner\.cli(["\s]|$)'),
+    re.compile(r'(^|["\s])guard(["\s]|$)'),
+    re.compile(r'(^|["\s])hook(["\s]|$)'),
+    re.compile(r'--harness(?:["\s=]+)copilot(["\s]|$)'),
+)
 
 
 def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
@@ -59,22 +66,34 @@ def _hook_entry(context: HarnessContext) -> dict[str, object]:
     }
 
 
+def _is_managed_hook_command(command: str) -> bool:
+    normalized_command = command.lower()
+    return all(pattern.search(normalized_command) is not None for pattern in _MANAGED_HOOK_COMMAND_PATTERNS)
+
+
 def _is_managed_hook_entry(entry: object, bash_command: str, powershell_command: str) -> bool:
     if not isinstance(entry, dict):
         return False
     if entry.get("bash") == bash_command and entry.get("powershell") == powershell_command:
         return True
-    command = entry.get("command")
-    return isinstance(command, str) and command in {bash_command, powershell_command}
+    for command in (entry.get("command"), entry.get("bash"), entry.get("powershell")):
+        if not isinstance(command, str):
+            continue
+        if command in {bash_command, powershell_command}:
+            return True
+        if _is_managed_hook_command(command):
+            return True
+    return False
 
 
 def _merge_hook_entries(entries: object, hook_entry: dict[str, object]) -> list[object]:
     normalized = list(entries) if isinstance(entries, list) else []
     bash_command = str(hook_entry["bash"])
     powershell_command = str(hook_entry["powershell"])
-    if any(_is_managed_hook_entry(entry, bash_command, powershell_command) for entry in normalized):
-        return normalized
-    return [*normalized, hook_entry]
+    preserved_entries = [
+        entry for entry in normalized if not _is_managed_hook_entry(entry, bash_command, powershell_command)
+    ]
+    return [*preserved_entries, hook_entry]
 
 
 def _remove_hook_entries(entries: object, bash_command: str, powershell_command: str) -> list[object]:
