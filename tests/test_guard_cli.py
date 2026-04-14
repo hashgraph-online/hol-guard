@@ -117,6 +117,7 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
     response_code = 200
     captured_headers: ClassVar[dict[str, str]] = {}
     captured_body: ClassVar[dict[str, object] | None] = None
+    raw_response_body: ClassVar[str | None] = None
     response_payload: ClassVar[dict[str, object]] = {
         "syncedAt": "2026-04-09T00:00:00Z",
         "receiptsStored": 1,
@@ -130,7 +131,10 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
         self.send_response(self.response_code)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(json.dumps(_SyncRequestHandler.response_payload).encode("utf-8"))
+        response_body = _SyncRequestHandler.raw_response_body
+        if response_body is None:
+            response_body = json.dumps(_SyncRequestHandler.response_payload)
+        self.wfile.write(response_body.encode("utf-8"))
 
     def log_message(self, fmt: str, *args) -> None:
         return
@@ -1622,6 +1626,46 @@ args = ["workspace-skill.js", "--changed"]
         assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer demo-token"
         assert _SyncRequestHandler.captured_body is not None
         assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
+
+    def test_guard_connect_handles_invalid_sync_response(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _SyncRequestHandler.raw_response_body = "not-json"
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            connect_rc = main(
+                [
+                    "guard",
+                    "connect",
+                    "--home",
+                    str(home_dir),
+                    "--guard-home",
+                    str(guard_home),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--sync-url",
+                    f"http://127.0.0.1:{server.server_port}/receipts",
+                    "--token",
+                    "demo-token",
+                    "--json",
+                ]
+            )
+            connect_output = json.loads(capsys.readouterr().out)
+        finally:
+            _SyncRequestHandler.raw_response_body = None
+            server.shutdown()
+            thread.join(timeout=5)
+
+        assert connect_rc == 1
+        assert connect_output["sync_attempted"] is True
+        assert connect_output["sync_succeeded"] is False
+        assert connect_output["cloud_state"] == "paired_waiting"
+        assert "Expecting value" in str(connect_output["sync_error"])
 
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

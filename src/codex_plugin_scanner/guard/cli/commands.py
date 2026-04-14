@@ -394,7 +394,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             return 0
         try:
             sync_payload = sync_receipts(store)
-        except (RuntimeError, urllib.error.URLError) as exc:
+        except (RuntimeError, urllib.error.URLError, json.JSONDecodeError) as exc:
             payload = build_guard_connect_payload(
                 context,
                 store,
