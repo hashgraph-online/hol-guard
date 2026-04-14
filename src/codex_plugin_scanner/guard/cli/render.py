@@ -909,6 +909,7 @@ def _find_replaced_artifact_partner(
     artifact_name = _artifact_display_name(artifact)
     policy_action = str(artifact.get("policy_action") or "")
     artifact_label = str(artifact.get("artifact_label") or "")
+    artifact_identity = _artifact_replacement_identity(artifact)
     for partner_index in range(index + 1, len(artifacts)):
         if partner_index in used_indexes:
             continue
@@ -920,6 +921,8 @@ def _find_replaced_artifact_partner(
         if policy_action and str(partner.get("policy_action") or "") != policy_action:
             continue
         if artifact_label and str(partner.get("artifact_label") or "") != artifact_label:
+            continue
+        if _artifact_replacement_identity(partner) != artifact_identity:
             continue
         return partner_index
     return None
@@ -936,6 +939,17 @@ def _replacement_pair(
 
 def _artifact_display_name(artifact: dict[str, object]) -> str:
     return str(artifact.get("artifact_name") or artifact.get("artifact_id") or "unknown")
+
+
+def _artifact_replacement_identity(artifact: dict[str, object]) -> tuple[tuple[str, str], ...]:
+    identity_keys = ("source_scope", "config_path", "publisher")
+    identity: list[tuple[str, str]] = []
+    for key in identity_keys:
+        value = artifact.get(key)
+        if value in (None, ""):
+            continue
+        identity.append((key, str(value)))
+    return tuple(identity)
 
 
 def _artifact_change_summary(artifact: dict[str, object]) -> str:

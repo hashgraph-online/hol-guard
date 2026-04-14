@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [actions, python]
+        language: [actions, javascript-typescript, python]
     permissions:
       actions: read
       contents: read

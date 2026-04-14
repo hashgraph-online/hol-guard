@@ -824,6 +824,51 @@ class TestGuardRuntime:
         assert "first_seen" not in output
         assert "removed" not in output
 
+    def test_guard_run_renderer_keeps_same_named_artifacts_separate_across_configs(self, capsys):
+        emit_guard_payload(
+            "run",
+            {
+                "harness": "codex",
+                "blocked": True,
+                "dry_run": True,
+                "launched": False,
+                "receipts_recorded": 2,
+                "artifacts": [
+                    {
+                        "artifact_id": "codex:project:chrome-devtools:new",
+                        "artifact_name": "chrome-devtools",
+                        "changed": True,
+                        "changed_fields": ["first_seen"],
+                        "policy_action": "require-reapproval",
+                        "artifact_label": "MCP server",
+                        "source_scope": "project",
+                        "config_path": "/workspace/.codex/config.toml",
+                        "why_now": "It is new in this codex workspace, so Guard paused it for review.",
+                    },
+                    {
+                        "artifact_id": "codex:global:chrome-devtools:old",
+                        "artifact_name": "chrome-devtools",
+                        "changed": True,
+                        "changed_fields": ["removed"],
+                        "policy_action": "require-reapproval",
+                        "artifact_label": "MCP server",
+                        "source_scope": "global",
+                        "config_path": "/home/.codex/config.toml",
+                        "why_now": (
+                            "It disappeared from the global harness config, so Guard paused the change until "
+                            "you confirm the removal."
+                        ),
+                    },
+                ],
+            },
+            False,
+        )
+        output = capsys.readouterr().out
+
+        assert "chrome-devtools" in output
+        assert output.lower().count("chrome-devtools") == 2
+        assert "definition replaced" not in output.lower()
+
     def test_guard_run_renderer_filters_unchanged_artifacts_and_counts_review_items(self, capsys):
         emit_guard_payload(
             "run",
