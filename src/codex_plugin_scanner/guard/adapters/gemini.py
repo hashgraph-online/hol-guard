@@ -199,16 +199,20 @@ class GeminiHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _hook_command(entry: dict[str, object]) -> str | None:
+        commands: list[str] = []
         direct_command = entry.get("command")
         if isinstance(direct_command, str):
-            return direct_command
+            commands.append(direct_command)
         nested_hooks = entry.get("hooks")
-        if not isinstance(nested_hooks, list):
+        if isinstance(nested_hooks, list):
+            for nested_entry in nested_hooks:
+                if not isinstance(nested_entry, dict):
+                    continue
+                command = nested_entry.get("command")
+                if isinstance(command, str):
+                    commands.append(command)
+        if not commands:
             return None
-        for nested_entry in nested_hooks:
-            if not isinstance(nested_entry, dict):
-                continue
-            command = nested_entry.get("command")
-            if isinstance(command, str):
-                return command
-        return None
+        if len(commands) == 1:
+            return commands[0]
+        return "\n".join(commands)

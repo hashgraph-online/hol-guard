@@ -54,6 +54,10 @@ class AntigravityHarnessAdapter(HarnessAdapter):
             return ()
         return tuple(str(value) for value in raw_args if isinstance(value, str))
 
+    @staticmethod
+    def _mcp_source(config_path: Path) -> str:
+        return "bridge" if config_path.name == "mcp_config.json" else "settings"
+
     def detect(self, context: HarnessContext) -> HarnessDetection:
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []
@@ -152,7 +156,7 @@ class AntigravityHarnessAdapter(HarnessAdapter):
             url = server_config.get("url")
             artifacts.append(
                 GuardArtifact(
-                    artifact_id=f"antigravity:{scope}:mcp:{name}",
+                    artifact_id=f"antigravity:{scope}:mcp:{self._mcp_source(config_path)}:{name}",
                     name=name,
                     harness=self.harness,
                     artifact_type="mcp_server",

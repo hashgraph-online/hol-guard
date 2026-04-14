@@ -558,7 +558,7 @@ args = ["workspace-skill.js"]
         assert str(home_dir / ".gemini" / "antigravity" / "mcp_config.json") in detection["config_paths"]
         assert artifact_ids == [
             "antigravity:global:hashgraph.tools",
-            "antigravity:global:mcp:gravity-tools",
+            "antigravity:global:mcp:bridge:gravity-tools",
             "antigravity:global:skill:skills/gravity-review",
         ]
 
@@ -602,8 +602,48 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert str(home_dir / ".config" / "Antigravity" / "User" / "settings.json") in detection["config_paths"]
         assert str(workspace_dir / ".vscode" / "settings.json") not in detection["config_paths"]
-        assert [item["artifact_id"] for item in detection["artifacts"]] == ["antigravity:global:mcp:gravity-tools"]
+        assert [item["artifact_id"] for item in detection["artifacts"]] == [
+            "antigravity:global:mcp:settings:gravity-tools"
+        ]
         assert detection["artifacts"][0]["args"] == []
+
+    def test_guard_detect_disambiguates_antigravity_mcp_sources(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / "Library" / "Application Support" / "Antigravity" / "User" / "settings.json",
+            {
+                "antigravity.profile": "default",
+                "mcpServers": {"shared-tools": {"command": "node", "args": ["settings.js"]}},
+            },
+        )
+        _write_json(
+            home_dir / ".gemini" / "antigravity" / "mcp_config.json",
+            {
+                "mcpServers": {"shared-tools": {"command": "node", "args": ["bridge.js"]}},
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "antigravity",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = [item["artifact_id"] for item in output["harnesses"][0]["artifacts"]]
+
+        assert rc == 0
+        assert artifact_ids == [
+            "antigravity:global:mcp:bridge:shared-tools",
+            "antigravity:global:mcp:settings:shared-tools",
+        ]
 
     def test_guard_detect_tolerates_gemini_malformed_args(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -641,6 +681,44 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert artifacts["gemini:global:shared:shared-tools"]["args"] == []
         assert artifacts["gemini:global:mcp:settings-tools"]["args"] == []
+
+    def test_guard_detect_hashes_full_gemini_hook_lists(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".gemini" / "settings.json",
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "hooks": [
+                                {"type": "command", "command": "python first-hook.py"},
+                                {"type": "command", "command": "python second-hook.py"},
+                            ]
+                        }
+                    ]
+                }
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "gemini",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        hook_artifact = output["harnesses"][0]["artifacts"][0]
+
+        assert rc == 0
+        assert hook_artifact["artifact_id"] == "gemini:global:hook:pretooluse:0"
+        assert hook_artifact["command"] == "python first-hook.py\npython second-hook.py"
 
     def test_guard_detect_scopes_opencode_artifact_ids(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
