@@ -12,7 +12,9 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
 
 from .models import GuardAction, GuardMode
 
-DEFAULT_GUARD_DIRNAME = ".ai-plugin-scanner-guard"
+DEFAULT_GUARD_DIRNAME = ".hol-guard"
+LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner-guard", ".holguard")
+WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
 
@@ -76,9 +78,11 @@ def resolve_guard_home(override: str | None = None) -> Path:
 
     if override:
         return Path(override).expanduser().resolve()
-    xdg_home = Path.home() / ".config" / DEFAULT_GUARD_DIRNAME
-    legacy_home = Path.home() / DEFAULT_GUARD_DIRNAME
-    return xdg_home if xdg_home.exists() else legacy_home
+    canonical_home = Path.home() / DEFAULT_GUARD_DIRNAME
+    if canonical_home.exists():
+        return canonical_home
+    legacy_home = _existing_legacy_guard_home()
+    return legacy_home if legacy_home is not None else canonical_home
 
 
 def _read_toml(path: Path) -> dict[str, object]:
@@ -97,7 +101,7 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
 
     guard_home.mkdir(parents=True, exist_ok=True)
     home_config = _read_toml(guard_home / "config.toml")
-    workspace_config = _read_toml(workspace / ".ai-plugin-scanner-guard.toml") if workspace else {}
+    workspace_config = _load_workspace_guard_config(workspace)
 
     merged: dict[str, object] = {**home_config, **workspace_config}
     return GuardConfig(
@@ -163,3 +167,20 @@ def _coerce_action_value(value: object, fallback: GuardAction) -> GuardAction:
     if isinstance(value, str) and value in VALID_GUARD_ACTIONS:
         return value
     return fallback
+
+
+def _existing_legacy_guard_home() -> Path | None:
+    for relative_path in LEGACY_GUARD_DIRNAMES:
+        candidate = Path.home() / relative_path
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _load_workspace_guard_config(workspace: Path | None) -> dict[str, object]:
+    if workspace is None:
+        return {}
+    merged: dict[str, object] = {}
+    for filename in WORKSPACE_CONFIG_FILENAMES:
+        merged.update(_read_toml(workspace / filename))
+    return merged

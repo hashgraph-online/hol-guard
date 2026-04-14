@@ -9,11 +9,11 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 import requests
 
+from ..config import resolve_guard_home
 from ..store import GuardStore
 
 
@@ -267,7 +267,7 @@ def run_bridge(
     """Run the Guard Bridge daemon."""
     config = BridgeConfig(guard_url=guard_url, poll_interval=poll_interval, dry_run=dry_run)
     if store is None:
-        store = GuardStore(Path.home() / ".holguard")
+        store = GuardStore(resolve_guard_home())
 
     bridge = GuardBridge(config=config, store=store, backend=backend)
     bridge.run()
