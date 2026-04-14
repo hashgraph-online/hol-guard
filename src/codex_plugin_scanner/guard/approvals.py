@@ -173,14 +173,16 @@ def approval_center_hint(
 
 
 def approval_prompt_flow(harness: str) -> dict[str, object]:
-    adapter = get_adapter(harness)
-    flow = adapter.approval_flow()
+    try:
+        flow = get_adapter(harness).approval_flow()
+    except ValueError:
+        flow = {}
     return {
         "tier": str(flow.get("tier") or "approval-center"),
         "summary": str(flow.get("summary") or ""),
         "fallback_hint": str(flow.get("fallback_hint") or ""),
         "prompt_channel": str(flow.get("prompt_channel") or "browser"),
-        "auto_open_browser": bool(flow.get("auto_open_browser")),
+        "auto_open_browser": bool(flow.get("auto_open_browser", True)),
     }
 
 

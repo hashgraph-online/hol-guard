@@ -743,11 +743,12 @@ class TestGuardRuntime:
                 "--json",
             ]
         )
-        output = capsys.readouterr().out
+        output = json.loads(capsys.readouterr().out)
 
         assert rc == 1
-        assert '"approval_center_url": "http://127.0.0.1:4455"' in output
-        assert '"blocked": true' in output
+        assert output["approval_center_url"] == "http://127.0.0.1:4455"
+        assert output["blocked"] is True
+        assert output["approval_delivery"]["destination"] == "browser"
         assert opened_urls == ["http://127.0.0.1:4455"]
 
     def test_headless_approval_resolver_skips_browser_for_hook_first_harnesses(self, tmp_path, monkeypatch):
@@ -1438,6 +1439,47 @@ class TestGuardRuntime:
         pending = store.list_approval_requests(limit=10)
         assert len(pending) == 1
         assert pending[0]["artifact_type"] == "file_read_request"
+
+    def test_stdio_proxy_handles_unknown_harness_when_queueing_sensitive_read_blocks(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
+        proxy = StdioGuardProxy(
+            command=[
+                sys.executable,
+                "-u",
+                "-c",
+                "\n".join(
+                    [
+                        "import json, sys",
+                        "for line in sys.stdin:",
+                        "    message = json.loads(line)",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                        "    sys.stdout.flush()",
+                    ]
+                ),
+            ],
+            cwd=workspace_dir,
+            guard_store=store,
+            guard_config=config,
+            approval_center_url="http://127.0.0.1:4455",
+        )
+
+        blocked = proxy.run_session(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "read_file", "arguments": {"path": ".env"}},
+                }
+            ]
+        )
+
+        assert blocked["responses"][0]["error"]["code"] == -32001
+        assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "browser"
+        assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
 
     def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers(self):
         server = HTTPServer(("127.0.0.1", 0), _RemoteProxyHandler)
