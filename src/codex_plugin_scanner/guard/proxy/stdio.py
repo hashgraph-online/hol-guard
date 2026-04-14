@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from ..approvals import approval_prompt_flow, queue_blocked_approvals
+from ..approvals import approval_delivery_payload, approval_prompt_flow, queue_blocked_approvals
 from ..consumer import artifact_hash
 from ..models import HarnessDetection
 from ..receipts import build_receipt
@@ -204,13 +204,7 @@ class StdioGuardProxy:
                                 )
                                 approval_flow = approval_prompt_flow(self.harness)
                                 event["approval_center_url"] = self.approval_center_url
-                                event["approval_delivery"] = {
-                                    "destination": (
-                                        "browser" if bool(approval_flow["auto_open_browser"]) else "harness"
-                                    ),
-                                    "prompt_channel": str(approval_flow["prompt_channel"]),
-                                    "summary": str(approval_flow["summary"]),
-                                }
+                                event["approval_delivery"] = approval_delivery_payload(approval_flow)
                                 event["review_hint"] = (
                                     f"{approval_flow['summary']} Open {self.approval_center_url} to review the "
                                     "blocked request."

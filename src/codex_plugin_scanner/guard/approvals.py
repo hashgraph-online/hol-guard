@@ -184,6 +184,15 @@ def approval_prompt_flow(harness: str) -> dict[str, object]:
     }
 
 
+def approval_delivery_payload(flow: dict[str, object]) -> dict[str, object]:
+    auto_open_browser = bool(flow.get("auto_open_browser"))
+    return {
+        "destination": "browser" if auto_open_browser else "harness",
+        "prompt_channel": str(flow.get("prompt_channel") or "browser"),
+        "summary": str(flow.get("summary") or ""),
+    }
+
+
 def wait_for_approval_requests(
     *,
     store: GuardStore,

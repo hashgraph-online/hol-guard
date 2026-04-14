@@ -13,7 +13,13 @@ from pathlib import Path
 from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
-from ..approvals import approval_center_hint, approval_prompt_flow, queue_blocked_approvals, wait_for_approval_requests
+from ..approvals import (
+    approval_center_hint,
+    approval_delivery_payload,
+    approval_prompt_flow,
+    queue_blocked_approvals,
+    wait_for_approval_requests,
+)
 from ..bridge import (
     BridgeConfig,
     GuardBridge,
@@ -876,13 +882,7 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 
 def _approval_delivery_payload(harness: str) -> dict[str, object]:
-    flow = approval_prompt_flow(harness)
-    auto_open_browser = bool(flow["auto_open_browser"])
-    return {
-        "destination": "browser" if auto_open_browser else "harness",
-        "prompt_channel": str(flow["prompt_channel"]),
-        "summary": str(flow["summary"]),
-    }
+    return approval_delivery_payload(approval_prompt_flow(harness))
 
 
 def _copilot_hook_reason(*values: object | None) -> str:
