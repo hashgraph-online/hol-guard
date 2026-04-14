@@ -28,12 +28,12 @@ PROJECT_SKILL_DIRECTORIES = (
 
 def config_paths(context: HarnessContext) -> tuple[Path, ...]:
     paths: list[Path] = []
-    configured_path = configured_config_path(context)
-    if configured_path is not None:
-        paths.append(configured_path)
     paths.extend(context.home_dir / ".config" / "opencode" / name for name in CONFIG_FILENAMES)
     if context.workspace_dir is not None:
         paths.extend(context.workspace_dir / name for name in CONFIG_FILENAMES)
+    configured_path = configured_config_path(context)
+    if configured_path is not None:
+        paths.append(configured_path)
     deduped_paths: list[Path] = []
     seen_paths: set[str] = set()
     for path in paths:
@@ -47,6 +47,18 @@ def config_paths(context: HarnessContext) -> tuple[Path, ...]:
 
 def configured_config_path(context: HarnessContext) -> Path | None:
     raw_path = os.getenv("OPENCODE_CONFIG")
+    if not raw_path:
+        return None
+    candidate = Path(raw_path).expanduser()
+    if candidate.is_absolute():
+        return candidate
+    if context.workspace_dir is not None:
+        return context.workspace_dir / candidate
+    return Path.cwd() / candidate
+
+
+def configured_config_dir(context: HarnessContext) -> Path | None:
+    raw_path = os.getenv("OPENCODE_CONFIG_DIR")
     if not raw_path:
         return None
     candidate = Path(raw_path).expanduser()
@@ -106,6 +118,20 @@ def append_directory_artifacts(
                 (context.workspace_dir / ".opencode" / "commands", "project", "command"),
                 (context.workspace_dir / ".opencode" / "plugins", "project", "plugin-file"),
                 (context.workspace_dir / ".opencode" / "plugin", "project", "plugin-file"),
+            ]
+        )
+    configured_dir = configured_config_dir(context)
+    if configured_dir is not None:
+        scope = (
+            "project"
+            if context.workspace_dir is not None and configured_dir.is_relative_to(context.workspace_dir)
+            else "global"
+        )
+        directory_specs.extend(
+            [
+                (configured_dir / "commands", scope, "command"),
+                (configured_dir / "plugins", scope, "plugin-file"),
+                (configured_dir / "plugin", scope, "plugin-file"),
             ]
         )
     for directory, scope, artifact_kind in directory_specs:

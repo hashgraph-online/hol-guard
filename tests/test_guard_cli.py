@@ -550,6 +550,64 @@ args = ["workspace-skill.js"]
         assert "opencode:project:plugin:env-plugin" in artifact_ids
         assert str(custom_config_path) in detection["config_paths"]
 
+    def test_guard_detect_prefers_project_opencode_config_over_environment_override(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        custom_config_path = workspace_dir / "custom" / "guard-opencode.json"
+        _write_json(custom_config_path, {"plugins": [["shared-plugin", {"mode": "custom"}]]})
+        _write_json(workspace_dir / "opencode.json", {"plugins": [["shared-plugin", {"mode": "project"}]]})
+        monkeypatch.setenv("OPENCODE_CONFIG", str(custom_config_path))
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifacts = {item["artifact_id"]: item for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert artifacts["opencode:project:plugin:shared-plugin"]["metadata"]["mode"] == "project"
+
+    def test_guard_detect_reads_opencode_config_dir_from_environment_override(self, monkeypatch, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        custom_config_dir = workspace_dir / "custom-dir"
+        _write_text(custom_config_dir / "plugins" / "env-plugin.mjs", "export default {};\n")
+        _write_text(custom_config_dir / "commands" / "env-command.md", "# env command\n")
+        monkeypatch.setenv("OPENCODE_CONFIG_DIR", str(custom_config_dir))
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = {item["artifact_id"] for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert "opencode:project:plugin-file:plugins/env-plugin.mjs" in artifact_ids
+        assert "opencode:project:command:env-command" in artifact_ids
+
     def test_guard_detect_handles_unreadable_opencode_plugin_files(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
