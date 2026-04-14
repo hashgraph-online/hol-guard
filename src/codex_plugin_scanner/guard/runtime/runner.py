@@ -78,6 +78,7 @@ def guard_run(
     environment["HOME"] = str(context.home_dir)
     if os.name == "nt":
         environment["USERPROFILE"] = str(context.home_dir)
+    environment.update(adapter.launch_environment(context))
     try:
         result = subprocess.run(command, cwd=context.workspace_dir or Path.cwd(), check=False, env=environment)
     except FileNotFoundError as error:
@@ -95,7 +96,7 @@ def _detection_with_prompt_artifacts(
     context: HarnessContext,
     passthrough_args: list[str],
 ) -> HarnessDetection:
-    prompt_artifact = _prompt_env_artifact(detection.harness, context, passthrough_args)
+    prompt_artifact = _prompt_env_artifact(detection, context, passthrough_args)
     if prompt_artifact is None:
         return detection
     return HarnessDetection(
@@ -109,7 +110,7 @@ def _detection_with_prompt_artifacts(
 
 
 def _prompt_env_artifact(
-    harness: str,
+    detection: HarnessDetection,
     context: HarnessContext,
     passthrough_args: list[str],
 ) -> GuardArtifact | None:
@@ -120,12 +121,12 @@ def _prompt_env_artifact(
     prompt_hash = hashlib.sha256(normalized_prompt.encode("utf-8")).hexdigest()
     prompt_summary = "Prompt asks the harness to read a local .env file directly."
     return GuardArtifact(
-        artifact_id=f"{harness}:session:prompt-env-read:{prompt_hash}",
+        artifact_id=f"{detection.harness}:session:prompt-env-read:{prompt_hash}",
         name="direct .env prompt access",
-        harness=harness,
+        harness=detection.harness,
         artifact_type="prompt_request",
         source_scope="session",
-        config_path=str(_prompt_policy_path(context)),
+        config_path=str(_prompt_policy_path(detection, context)),
         metadata={
             "prompt_signals": ["asks the harness to read a local .env file directly"],
             "prompt_summary": prompt_summary,
@@ -137,10 +138,42 @@ def _requests_direct_env_read(prompt_text: str) -> bool:
     return _ENV_PROMPT_PATTERN.search(prompt_text) is not None
 
 
-def _prompt_policy_path(context: HarnessContext) -> Path:
+def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) -> Path:
+    config_candidates = _prompt_config_candidates(detection, context)
+    if context.workspace_dir is not None:
+        for config_path in config_candidates:
+            candidate = Path(config_path)
+            if candidate.is_relative_to(context.workspace_dir):
+                return candidate
+    if config_candidates:
+        return Path(config_candidates[0])
+    if detection.harness == "opencode":
+        if context.workspace_dir is not None:
+            return context.workspace_dir / "opencode.json"
+        return context.home_dir / ".config" / "opencode" / "opencode.json"
     if context.workspace_dir is not None:
         return context.workspace_dir / ".codex" / "config.toml"
     return context.home_dir / ".codex" / "config.toml"
+
+
+def _prompt_config_candidates(detection: HarnessDetection, context: HarnessContext) -> tuple[str, ...]:
+    if detection.harness == "opencode":
+        configured_path = os.getenv("OPENCODE_CONFIG")
+        configured_candidate = None
+        if configured_path:
+            candidate = Path(configured_path).expanduser()
+            if not candidate.is_absolute():
+                if context.workspace_dir is not None:
+                    candidate = context.workspace_dir / candidate
+                else:
+                    candidate = Path.cwd() / candidate
+            configured_candidate = str(candidate)
+        return tuple(
+            config_path
+            for config_path in detection.config_paths
+            if Path(config_path).name in {"opencode.json", "opencode.jsonc"} or config_path == configured_candidate
+        )
+    return detection.config_paths
 
 
 def sync_receipts(store: GuardStore) -> dict[str, object]:

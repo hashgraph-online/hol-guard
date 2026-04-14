@@ -104,6 +104,10 @@ class HarnessAdapter:
             command.append(str(context.workspace_dir))
         return [*command, *passthrough_args]
 
+    def launch_environment(self, context: HarnessContext) -> dict[str, str]:
+        del context
+        return {}
+
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         return None
 
