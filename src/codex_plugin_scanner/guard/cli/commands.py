@@ -545,6 +545,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
         payload["dry_run"] = bool(args.dry_run)
         payload["rerun_command"] = _guard_rerun_command(args)
         payload["diff_command"] = _guard_diff_command(args)
+        payload["approvals_command"] = _guard_approvals_command(args)
         _emit("run", payload, getattr(args, "json", False))
         if payload.get("blocked"):
             return 1
@@ -901,6 +902,12 @@ def _guard_rerun_command(args: argparse.Namespace) -> str:
 
 def _guard_diff_command(args: argparse.Namespace) -> str:
     command = ["hol-guard", "diff", str(args.harness)]
+    _append_guard_context_args(command, args)
+    return shlex.join(command)
+
+
+def _guard_approvals_command(args: argparse.Namespace) -> str:
+    command = ["hol-guard", "approvals"]
     _append_guard_context_args(command, args)
     return shlex.join(command)
 

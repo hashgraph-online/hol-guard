@@ -1100,6 +1100,32 @@ class TestGuardRuntime:
             "hol-guard run codex --home /guard-home --workspace /workspace --default-action warn --arg '--model gpt-5'"
         )
 
+    def test_guard_approvals_command_preserves_common_context(self):
+        command = guard_commands_module._guard_approvals_command(
+            argparse.Namespace(
+                harness="codex",
+                home="/guard-home",
+                guard_home="/guard-db",
+                workspace="/workspace",
+            )
+        )
+
+        assert command == "hol-guard approvals --home /guard-home --guard-home /guard-db --workspace /workspace"
+
+    def test_guard_run_renderer_uses_context_preserving_approvals_command_for_blocked_launches(self):
+        steps = guard_render_module._build_run_steps(
+            {
+                "harness": "codex",
+                "approval_center_url": "http://127.0.0.1:4455",
+                "approvals_command": "hol-guard approvals --home /guard-home --workspace /workspace",
+                "review_hint": "Open the approval center and resolve the pending request.",
+            },
+            blocked=True,
+            dry_run=False,
+        )
+
+        assert steps[0]["command"] == "hol-guard approvals --home /guard-home --workspace /workspace"
+
     def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
         self, tmp_path, capsys, monkeypatch
     ):

@@ -800,9 +800,12 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
     review_hint = payload.get("review_hint")
     rerun_command = payload.get("rerun_command")
     diff_command = payload.get("diff_command")
+    approvals_command = payload.get("approvals_command")
     if blocked and dry_run:
         review_command = (
-            "hol-guard approvals"
+            str(approvals_command)
+            if approval_center_url and isinstance(approvals_command, str) and approvals_command
+            else "hol-guard approvals"
             if approval_center_url
             else str(rerun_command)
             if isinstance(rerun_command, str) and rerun_command
@@ -832,7 +835,15 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
             },
         ]
     if blocked and isinstance(review_hint, str) and review_hint:
-        command = "hol-guard approvals" if approval_center_url else f"hol-guard run {harness}"
+        command = (
+            str(approvals_command)
+            if approval_center_url and isinstance(approvals_command, str) and approvals_command
+            else "hol-guard approvals"
+            if approval_center_url
+            else str(rerun_command)
+            if isinstance(rerun_command, str) and rerun_command
+            else f"hol-guard run {harness}"
+        )
         return [{"title": "Resolve the blocked launch", "command": command, "detail": review_hint}]
     if dry_run:
         launch_command = (
