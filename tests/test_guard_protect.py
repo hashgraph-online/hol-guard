@@ -173,6 +173,58 @@ class TestGuardProtect:
         assert output["targets"][0]["artifact_type"] == "mcp_server"
         assert "remote server" in output["verdict"]["reason"].lower()
 
+    def test_guard_protect_intercepts_opencode_plugin_and_skill_installs(self, tmp_path, capsys) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+
+        plugin_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "opencode",
+                "plugin",
+                "install",
+                "fixture-plugin",
+                "--url",
+                "https://example.invalid/opencode-plugin.tgz",
+            ]
+        )
+        plugin_output = json.loads(capsys.readouterr().out)
+
+        skill_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "opencode",
+                "skill",
+                "install",
+                "fixture-skill",
+                "--url",
+                "https://example.invalid/opencode-skill.tgz",
+            ]
+        )
+        skill_output = json.loads(capsys.readouterr().out)
+
+        assert plugin_rc == 2
+        assert plugin_output["executed"] is False
+        assert plugin_output["targets"][0]["artifact_type"] == "plugin"
+        assert plugin_output["targets"][0]["artifact_id"] == "install:opencode:fixture-plugin"
+        assert skill_rc == 2
+        assert skill_output["executed"] is False
+        assert skill_output["targets"][0]["artifact_type"] == "skill"
+        assert skill_output["targets"][0]["artifact_id"] == "install:opencode:fixture-skill"
+
     def test_guard_protect_uses_configurable_execution_timeout(
         self,
         tmp_path,

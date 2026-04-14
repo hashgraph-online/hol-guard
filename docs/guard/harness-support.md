@@ -26,9 +26,12 @@ Current Guard support in this repo:
   - supports wrapper-mode management state
   - falls back to the local approval center when Guard blocks a launch
 - `opencode`
-  - detects global and project config plus workspace commands
-  - supports wrapper-mode management state
-  - respects OpenCode permission rules and uses Guard for package-level policy
+  - detects global and project config, MCP servers, config-defined commands, markdown commands, npm plugins, local
+    plugin files, and OpenCode-compatible skill directories
+  - supports wrapper-mode management state plus a Guard-owned runtime overlay for native skill approval prompts
+  - supports wrapper-mode `guard run opencode`
+  - blocks newly introduced OpenCode MCP, plugin, and skill artifacts before launch when local Guard policy requires
+    approval
 
 Approval tiers:
 

@@ -34,6 +34,8 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         "Guard uses Claude hooks first and falls back to the local approval center when the shell cannot prompt."
     )
     fallback_hint = "Claude is the best current harness for deferred Guard approvals."
+    approval_prompt_channel = "hook"
+    approval_auto_open_browser = False
 
     @staticmethod
     def _scope_for(context: HarnessContext, path: Path) -> str:
