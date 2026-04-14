@@ -80,6 +80,63 @@ args = ["workspace-skill.js"]
     )
 
     _write_json(
+        home_dir / "Library" / "Application Support" / "Antigravity" / "User" / "settings.json",
+        {
+            "workbench.colorTheme": "Default Dark+",
+        },
+    )
+    antigravity_extension_root = home_dir / ".antigravity" / "extensions" / "hashgraph.antigravity-tools-1.0.0"
+    _write_json(
+        home_dir / ".antigravity" / "extensions" / "extensions.json",
+        [
+            {
+                "identifier": {"id": "hashgraph.antigravity-tools"},
+                "location": {"path": str(antigravity_extension_root)},
+                "metadata": {"publisherDisplayName": "Hashgraph"},
+            }
+        ],
+    )
+    _write_json(
+        antigravity_extension_root / "package.json",
+        {
+            "name": "antigravity-tools",
+            "publisher": "hashgraph",
+            "displayName": "Antigravity Tools",
+        },
+    )
+    _write_json(
+        home_dir / ".gemini" / "antigravity" / "mcp_config.json",
+        {
+            "mcpServers": {
+                "gravity-tools": {"command": "node", "args": ["gravity.js"]},
+            }
+        },
+    )
+    _write_text(
+        home_dir / ".gemini" / "antigravity" / "skills" / "gravity-review" / "SKILL.md",
+        "---\nname: gravity-review\ndescription: Gravity skill\n---\n",
+    )
+
+    _write_json(
+        home_dir / ".gemini" / "settings.json",
+        {
+            "mcpServers": {
+                "gemini-tools": {"command": "node", "args": ["gemini.js"]},
+            },
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "hooks": [{"type": "command", "command": "python global-gemini-hook.py"}],
+                    }
+                ]
+            },
+        },
+    )
+    _write_text(
+        home_dir / ".gemini" / "skills" / "gemini-review" / "SKILL.md",
+        "---\nname: gemini-review\ndescription: Gemini skill\n---\n",
+    )
+    _write_json(
         home_dir / ".gemini" / "extensions" / "hashnet" / "gemini-extension.json",
         {
             "name": "hashnet",
@@ -90,6 +147,25 @@ args = ["workspace-skill.js"]
         },
     )
     _write_text(home_dir / ".gemini" / "extensions" / "hashnet" / "GEMINI.md", "context\n")
+    _write_json(
+        workspace_dir / ".gemini" / "settings.json",
+        {
+            "mcpServers": {
+                "workspace-gemini": {"command": "node", "args": ["workspace-gemini.js"]},
+            },
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "hooks": [{"type": "command", "command": "python workspace-gemini-hook.py"}],
+                    }
+                ]
+            },
+        },
+    )
+    _write_text(
+        workspace_dir / ".gemini" / "skills" / "workspace-review" / "SKILL.md",
+        "---\nname: workspace-review\ndescription: Workspace Gemini skill\n---\n",
+    )
 
     _write_json(
         home_dir / ".config" / "opencode" / "opencode.json",
@@ -169,7 +245,7 @@ class TestGuardCli:
         harnesses = {item["harness"]: item for item in output["harnesses"]}
 
         assert rc == 0
-        assert {"codex", "claude-code", "cursor", "gemini", "opencode"} <= harnesses.keys()
+        assert {"codex", "claude-code", "cursor", "antigravity", "gemini", "opencode"} <= harnesses.keys()
         assert harnesses["codex"]["artifacts"][0]["source_scope"] == "global"
         assert harnesses["claude-code"]["artifacts"][0]["artifact_type"] in {"mcp_server", "hook", "agent"}
 
@@ -334,11 +410,57 @@ args = ["workspace-skill.js"]
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _write_json(
+            home_dir / ".gemini" / "settings.json",
+            {
+                "mcpServers": {
+                    "shared-settings": {"command": "node", "args": ["global-settings.js"]},
+                },
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "hooks": [{"type": "command", "command": "python global-hook.py"}],
+                        }
+                    ]
+                },
+            },
+        )
+        _write_text(
+            home_dir / ".gemini" / "skills" / "shared-skill" / "SKILL.md",
+            "---\nname: shared-skill\ndescription: Global Gemini skill\n---\n",
+        )
+        _write_json(
             home_dir / ".gemini" / "extensions" / "shared" / "gemini-extension.json",
             {
                 "name": "shared",
                 "mcpServers": {"shared-tools": {"command": "node", "args": ["global.js"]}},
             },
+        )
+        _write_json(
+            home_dir / ".gemini" / "antigravity" / "mcp_config.json",
+            {
+                "mcpServers": {
+                    "should-belong-to-antigravity": {"command": "node", "args": ["antigravity.js"]},
+                }
+            },
+        )
+        _write_json(
+            workspace_dir / ".gemini" / "settings.json",
+            {
+                "mcpServers": {
+                    "shared-settings": {"command": "node", "args": ["project-settings.js"]},
+                },
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "hooks": [{"type": "command", "command": "python project-hook.py"}],
+                        }
+                    ]
+                },
+            },
+        )
+        _write_text(
+            workspace_dir / ".gemini" / "skills" / "shared-skill" / "SKILL.md",
+            "---\nname: shared-skill\ndescription: Project Gemini skill\n---\n",
         )
         _write_json(
             workspace_dir / ".gemini" / "extensions" / "shared" / "gemini-extension.json",
@@ -367,8 +489,76 @@ args = ["workspace-skill.js"]
         assert artifact_ids == [
             "gemini:global:shared",
             "gemini:global:shared:shared-tools",
+            "gemini:global:mcp:shared-settings",
+            "gemini:global:hook:pretooluse:0",
+            "gemini:global:skill:skills/shared-skill",
             "gemini:project:shared",
             "gemini:project:shared:shared-tools",
+            "gemini:project:mcp:shared-settings",
+            "gemini:project:hook:pretooluse:0",
+            "gemini:project:skill:skills/shared-skill",
+        ]
+
+    def test_guard_detect_reports_antigravity_extensions_skills_and_mcp(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        antigravity_extension_root = home_dir / ".antigravity" / "extensions" / "hashgraph.tools-1.0.0"
+        _write_json(
+            home_dir / "Library" / "Application Support" / "Antigravity" / "User" / "settings.json",
+            {"workbench.colorTheme": "Solarized Dark"},
+        )
+        _write_json(
+            home_dir / ".antigravity" / "extensions" / "extensions.json",
+            [
+                {
+                    "identifier": {"id": "hashgraph.tools"},
+                    "location": {"path": str(antigravity_extension_root)},
+                    "metadata": {"publisherDisplayName": "Hashgraph"},
+                }
+            ],
+        )
+        _write_json(
+            antigravity_extension_root / "package.json",
+            {"name": "tools", "publisher": "hashgraph", "displayName": "Hashgraph Tools"},
+        )
+        _write_json(
+            home_dir / ".gemini" / "antigravity" / "mcp_config.json",
+            {
+                "mcpServers": {
+                    "gravity-tools": {"command": "node", "args": ["gravity.js"]},
+                }
+            },
+        )
+        _write_text(
+            home_dir / ".gemini" / "antigravity" / "skills" / "gravity-review" / "SKILL.md",
+            "---\nname: gravity-review\ndescription: Gravity review skill\n---\n",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "antigravity",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        detection = output["harnesses"][0]
+        artifact_ids = [item["artifact_id"] for item in detection["artifacts"]]
+
+        assert rc == 0
+        assert str(home_dir / "Library" / "Application Support" / "Antigravity" / "User" / "settings.json") in (
+            detection["config_paths"]
+        )
+        assert str(home_dir / ".gemini" / "antigravity" / "mcp_config.json") in detection["config_paths"]
+        assert artifact_ids == [
+            "antigravity:global:hashgraph.tools",
+            "antigravity:global:mcp:gravity-tools",
+            "antigravity:global:skill:skills/gravity-review",
         ]
 
     def test_guard_detect_scopes_opencode_artifact_ids(self, tmp_path, capsys):
@@ -1628,7 +1818,7 @@ args = ["workspace-skill.js", "--changed"]
         assert rc == 0
         assert output["auto_detected"] is True
         harnesses = {item["harness"] for item in output["managed_installs"]}
-        assert {"codex", "claude-code", "cursor", "gemini", "opencode"} <= harnesses
+        assert {"codex", "claude-code", "cursor", "antigravity", "gemini", "opencode"} <= harnesses
 
     def test_guard_install_creates_opencode_runtime_overlay(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
