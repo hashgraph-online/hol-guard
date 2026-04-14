@@ -235,6 +235,27 @@ baseline_file = "baseline.txt"
         assert f"Using config: {plugin_dir / '.plugin-scanner.toml'}" in captured.err
         assert f"Using baseline: {baseline_path}" in captured.err
 
+    def test_text_scan_reports_missing_baseline_in_provenance(self, tmp_path, capsys):
+        plugin_dir = tmp_path / "good-plugin"
+        shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
+        baseline_path = plugin_dir / "baseline.txt"
+        (plugin_dir / ".plugin-scanner.toml").write_text(
+            """
+[scanner]
+profile = "default"
+baseline_file = "baseline.txt"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        rc = main([str(plugin_dir)])
+        captured = capsys.readouterr()
+
+        assert rc == 0
+        assert f"Baseline not found: {baseline_path}" in captured.err
+        assert f"Using baseline: {baseline_path}" not in captured.err
+
     def test_min_score_exact_boundary(self):
         # At exact boundary should pass (>=)
         rc = main([str(FIXTURES / "good-plugin"), "--min-score", str(EXPECTED_GOOD_PLUGIN_SCORE)])
@@ -346,6 +367,15 @@ baseline_file = "baseline.txt"
         assert rc == 1
         assert f"Score {expected_score} is below threshold 50" in captured.err
         assert "hint:" in captured.err
+
+    def test_json_min_score_failures_do_not_emit_text_hint(self, capsys):
+        rc = main(["scan", str(FIXTURES / "bad-plugin"), "--min-score", "50", "--format", "json"])
+        captured = capsys.readouterr()
+        parsed = json.loads(captured.out)
+
+        assert rc == 1
+        assert parsed["score"] == scan_plugin(FIXTURES / "bad-plugin").score
+        assert "hint:" not in captured.err
 
     def test_doctor_bundle(self, tmp_path):
         bundle = tmp_path / "doctor.json"

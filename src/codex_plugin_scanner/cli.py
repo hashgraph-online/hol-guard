@@ -323,7 +323,10 @@ def _run_scan(args: argparse.Namespace) -> int:
     min_score = args.min_score
     if result.score < min_score:
         print(f"Score {result.score} is below threshold {min_score}", file=sys.stderr)
-        emit_hint("review the highest-severity findings above, then rerun with --format json if you need automation.")
+        if output_format == "text":
+            emit_hint(
+                "review the highest-severity findings above, then rerun with --format json if you need automation."
+            )
         return 1
     if should_fail_for_severity(result, args.fail_on_severity):
         print(

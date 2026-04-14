@@ -5,11 +5,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from .models import GRADE_LABELS, Severity
+from .models import GRADE_LABELS, ScanResult, Severity
 from .version import __version__
 
 
-def build_plain_text(result) -> str:
+def build_plain_text(result: ScanResult) -> str:
     """Render a scan result as human-readable text."""
 
     if getattr(result, "scope", "plugin") == "repository":
@@ -146,8 +146,10 @@ def emit_scan_provenance(*, profile: str, config_path: Path | None, baseline_pat
     lines = [f"Policy profile: {profile}"]
     if config_path is not None:
         lines.append(f"Using config: {config_path}")
-    if baseline_path is not None:
+    if baseline_path is not None and baseline_path.exists():
         lines.append(f"Using baseline: {baseline_path}")
+    elif baseline_path is not None:
+        lines.append(f"Baseline not found: {baseline_path}")
     print("\n".join(lines), file=sys.stderr)
 
 

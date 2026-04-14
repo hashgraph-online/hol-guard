@@ -360,12 +360,15 @@ def main() -> int:
             cisco_mcp_scan=cisco_mcp_scan,
             cisco_policy=cisco_policy,
         )
-        raw_result, result, resolved_profile, policy_eval, _effective_score, _config_path, _baseline_path = (
-            _scan_with_policy(
-            args,
-            Path(plugin_dir).resolve(),
-            )
-        )
+        (
+            raw_result,
+            result,
+            resolved_profile,
+            policy_eval,
+            _effective_score,
+            _config_path,
+            _baseline_path,
+        ) = _scan_with_policy(args, Path(plugin_dir).resolve())
         scan_scope = getattr(result, "scope", "plugin")
         if scan_scope == "repository":
             local_plugin_count = len(result.plugin_results)
