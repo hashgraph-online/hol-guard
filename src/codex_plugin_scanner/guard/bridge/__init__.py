@@ -14,7 +14,6 @@ from typing import Any
 
 import requests
 
-from ..daemon.server import GuardDaemonServer
 from ..store import GuardStore
 
 
@@ -239,7 +238,7 @@ class GuardBridge:
 
                     message = _format_notification(req)
                     if self.config.dry_run:
-                        print(f"[Guard Bridge] DRYRUN: would send notification", file=sys.stderr)
+                        print("[Guard Bridge] DRYRUN: would send notification", file=sys.stderr)
                         self._seen_ids.add(req.request_id)  # Track even in dry-run
                     else:
                         success = self.backend.send_notification(req, message)
