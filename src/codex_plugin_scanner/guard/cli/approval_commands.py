@@ -6,7 +6,7 @@ import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..approvals import apply_approval_resolution
+from ..approvals import apply_approval_resolution, build_runtime_snapshot
 from ..daemon import load_guard_daemon_url
 from ..store import GuardStore
 
@@ -42,11 +42,11 @@ def run_approval_command(
     workspace: Path | None,
 ) -> dict[str, object]:
     if getattr(args, "approvals_command", None) is None:
-        return {
-            "generated_at": _now(),
-            "approval_center_url": load_guard_daemon_url(store.guard_home),
-            "items": store.list_approval_requests(limit=200),
-        }
+        return build_runtime_snapshot(
+            store=store,
+            approval_center_url=load_guard_daemon_url(store.guard_home),
+            now=_now(),
+        )
     item = apply_approval_resolution(
         store=store,
         request_id=args.request_id,

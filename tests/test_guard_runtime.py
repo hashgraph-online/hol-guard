@@ -724,12 +724,16 @@ class TestGuardRuntime:
         assert second_output["blocked"] is False
         assert all(item["policy_action"] == "allow" for item in second_output["artifacts"])
 
-    def test_guard_run_headless_blocks_with_review_hint(self, tmp_path, capsys, monkeypatch):
+    def test_guard_run_headless_blocks_with_review_hint_without_opening_browser(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_open_approval_center",
+            lambda _url: (_ for _ in ()).throw(AssertionError("approval center should not open automatically")),
+        )
 
         rc = main(
             [
@@ -1172,7 +1176,6 @@ class TestGuardRuntime:
 
         store = GuardStore(home_dir)
         monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
         monkeypatch.setattr(
             guard_runner_module.subprocess,
             "run",
@@ -1283,7 +1286,6 @@ class TestGuardRuntime:
         ]
         call_count = {"detect": 0}
         monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
         monkeypatch.setattr(
             guard_runner_module.subprocess,
             "run",
@@ -1504,7 +1506,6 @@ class TestGuardRuntime:
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
 
         blocked_event = {
             "event": "PreToolUse",

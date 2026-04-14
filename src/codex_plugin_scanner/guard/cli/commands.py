@@ -956,7 +956,6 @@ def _headless_approval_resolver(
             approval_center_url=approval_center_url,
             queued=queued,
         )
-        _open_approval_center(approval_center_url)
         if approval_flow["tier"] != "native-or-center":
             payload["approval_wait"] = {
                 "resolved": False,
@@ -977,7 +976,7 @@ def _headless_approval_resolver(
                 payload["review_hint"] = "Approval received. Guard is resuming the harness launch."
         else:
             payload["review_hint"] = (
-                f"Approval is still pending. Open {approval_center_url} and resolve request "
+                f"Approval is still pending in the Guard approval center at {approval_center_url}. Resolve request "
                 f"{', '.join(str(item) for item in wait_result.get('pending_request_ids', []))}."
             )
         return payload

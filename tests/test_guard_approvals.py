@@ -10,7 +10,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import bridge as guard_bridge_module
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
+from codex_plugin_scanner.guard.bridge import BridgeConfig, GuardBridge
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -342,6 +344,42 @@ class TestGuardApprovals:
         assert approvals_payload["items"][0]["request_id"] == "req-456"
         assert decision_payload["resolved"] is True
         assert store.get_approval_request("req-456")["status"] == "resolved"
+
+    def test_guard_daemon_runtime_snapshot_exposes_runtime_and_pending_queue(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-runtime",
+                harness="codex",
+                artifact_id="codex:project:workspace_skill",
+                artifact_name="workspace_skill",
+                artifact_hash="hash-runtime",
+                policy_action="require-reapproval",
+                recommended_scope="workspace",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                review_command="hol-guard approvals approve req-runtime",
+                approval_url="http://127.0.0.1/pending",
+                workspace=str(tmp_path / "workspace"),
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+                snapshot_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert snapshot_payload["approval_center_url"] == f"http://127.0.0.1:{daemon.port}"
+        assert snapshot_payload["pending_count"] == 1
+        assert snapshot_payload["items"][0]["request_id"] == "req-runtime"
+        assert snapshot_payload["runtime_state"]["daemon_port"] == daemon.port
+        assert snapshot_payload["runtime_state"]["approval_center_url"] == f"http://127.0.0.1:{daemon.port}"
+        assert snapshot_payload["runtime_state"]["session_id"]
 
     def test_guard_daemon_v1_endpoints_expose_requests_diff_receipts_and_policy(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -906,6 +944,48 @@ class TestGuardApprovals:
         assert approve_rc == 0
         assert approve_output["resolved"] is True
         assert store.resolve_policy("codex", "codex:project:workspace_skill", "hash-789") == "allow"
+
+    def test_guard_bridge_resolves_requests_against_guard_daemon_api(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+        bridge = GuardBridge(
+            config=BridgeConfig(guard_url="http://127.0.0.1:4455", dry_run=False),
+            store=store,
+        )
+        post_calls: list[tuple[str, dict[str, object]]] = []
+
+        def fake_get(url: str, timeout: int):
+            assert url == "http://127.0.0.1:4455/v1/requests/req-bridge"
+            assert timeout == 10
+            return SimpleNamespace(
+                status_code=200,
+                json=lambda: {
+                    "request_id": "req-bridge",
+                    "recommended_scope": "workspace",
+                    "workspace": str(tmp_path / "workspace"),
+                },
+            )
+
+        def fake_post(url: str, json: dict[str, object], timeout: int):
+            post_calls.append((url, json))
+            assert timeout == 30
+            return SimpleNamespace(status_code=200, json=lambda: {"resolved": True})
+
+        monkeypatch.setattr(guard_bridge_module.requests, "get", fake_get)
+        monkeypatch.setattr(guard_bridge_module.requests, "post", fake_post)
+
+        resolved = bridge._execute_resolution("approve", "req-bridge")
+
+        assert resolved is True
+        assert post_calls == [
+            (
+                "http://127.0.0.1:4455/v1/requests/req-bridge/approve",
+                {
+                    "scope": "workspace",
+                    "workspace": str(tmp_path / "workspace"),
+                    "reason": "resolved from Guard Bridge",
+                },
+            )
+        ]
 
     def test_guard_approvals_cli_rejects_workspace_scope_without_workspace(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
