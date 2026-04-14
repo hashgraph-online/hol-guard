@@ -69,9 +69,9 @@ class AntigravityHarnessAdapter(HarnessAdapter):
             return "settings:workspace-vscode"
         token_parts = []
         for part in config_path.parts[-4:]:
-            normalized_part = "".join(
-                character if character.isalnum() else "-" for character in part.lower()
-            ).strip("-")
+            normalized_part = "".join(character if character.isalnum() else "-" for character in part.lower()).strip(
+                "-"
+            )
             if normalized_part:
                 token_parts.append(normalized_part)
         return f"settings:{'-'.join(token_parts)}"
