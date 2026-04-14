@@ -675,6 +675,16 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     approval_center_url=approval_center_url,
                     queued=queued,
                 )
+            if _should_emit_copilot_hook_response(args):
+                _emit_copilot_hook_response(
+                    policy_action=policy_action,
+                    reason=_copilot_hook_reason(
+                        response_payload.get("why_now"),
+                        response_payload.get("review_hint"),
+                        response_payload.get("risk_headline"),
+                    ),
+                )
+                return 0
             _emit("hook", response_payload, getattr(args, "json", False))
             return 1 if policy_action in {"block", "require-reapproval"} else 0
         artifact_id = _coalesce_string(
@@ -723,6 +733,12 @@ def run_guard_command(args: argparse.Namespace) -> int:
             user_override=_optional_string(payload.get("user_override")),
         )
         store.add_receipt(receipt)
+        if _should_emit_copilot_hook_response(args):
+            _emit_copilot_hook_response(
+                policy_action=policy_action,
+                reason=_copilot_hook_reason(payload.get("permission_decision_reason")),
+            )
+            return 0
         _emit(
             "hook",
             {
@@ -740,6 +756,28 @@ def run_guard_command(args: argparse.Namespace) -> int:
 
 def _emit(command: str, payload: dict[str, object], as_json: bool) -> None:
     emit_guard_payload(command, payload, as_json)
+
+
+def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
+    return args.harness == "copilot" and not getattr(args, "json", False)
+
+
+def _copilot_hook_reason(*values: object | None) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "Guard blocked this tool call."
+
+
+def _emit_copilot_hook_response(*, policy_action: str, reason: str) -> None:
+    if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+        payload = {
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }
+    else:
+        payload = {"permissionDecision": "allow"}
+    print(json.dumps(payload, separators=(",", ":")))
 
 
 def _headless_approval_resolver(
@@ -805,12 +843,66 @@ def _open_approval_center(approval_center_url: str) -> None:
 
 def _load_hook_payload(event_file: str | None) -> dict[str, object]:
     if event_file:
-        return json.loads(Path(event_file).read_text(encoding="utf-8"))
+        payload = json.loads(Path(event_file).read_text(encoding="utf-8"))
+        return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
     raw = sys.stdin.read().strip()
     if not raw:
         return {}
     payload = json.loads(raw)
-    return payload if isinstance(payload, dict) else {}
+    return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
+
+
+def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
+    normalized = dict(payload)
+    for source_key, target_key in (
+        ("artifactId", "artifact_id"),
+        ("artifactHash", "artifact_hash"),
+        ("artifactName", "artifact_name"),
+        ("changedCapabilities", "changed_capabilities"),
+        ("policyAction", "policy_action"),
+        ("sourceScope", "source_scope"),
+        ("toolName", "tool_name"),
+        ("userOverride", "user_override"),
+    ):
+        if target_key not in normalized and source_key in payload:
+            normalized[target_key] = payload[source_key]
+    arguments = _normalize_hook_arguments(
+        normalized.get("tool_input"),
+        normalized.get("arguments"),
+        payload.get("toolArgs"),
+        payload.get("toolInput"),
+    )
+    if arguments is not None:
+        normalized["tool_input"] = arguments
+        normalized["arguments"] = arguments
+    return normalized
+
+
+def _normalize_hook_arguments(*values: object | None) -> object | None:
+    for value in values:
+        normalized = _normalize_hook_argument_value(value)
+        if normalized is not None:
+            return normalized
+    return None
+
+
+def _normalize_hook_argument_value(value: object | None) -> object | None:
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            return stripped
+        if isinstance(parsed, (dict, list, str)):
+            return parsed
+        return stripped
+    return value
 
 
 def _coalesce_string(*values: object | None) -> str:
@@ -876,6 +968,10 @@ def _runtime_policy_path(harness: str, home_dir: Path, workspace: Path | None) -
         if workspace is not None:
             return workspace / ".codex" / "config.toml"
         return home_dir / ".codex" / "config.toml"
+    if harness == "copilot":
+        if workspace is not None:
+            return workspace / ".github" / "hooks" / "hol-guard-copilot.json"
+        return home_dir / ".copilot" / "config.json"
     if workspace is not None:
         return workspace / ".mcp.json"
     return home_dir / ".mcp.json"

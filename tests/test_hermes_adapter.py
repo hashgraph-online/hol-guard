@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.hermes import (
     HermesHarnessAdapter,
@@ -87,7 +85,7 @@ class TestSkillDiscovery:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        skill = [a for a in detection.artifacts if a.artifact_type == "skill"][0]
+        skill = next(a for a in detection.artifacts if a.artifact_type == "skill")
         assert len(skill.args) == 1
         assert "curl" in skill.args[0]
 
@@ -100,8 +98,8 @@ class TestSkillDiscovery:
         adapter = HermesHarnessAdapter()
         d1 = adapter.detect(_ctx(tmp_path))
         d2 = adapter.detect(_ctx(tmp_path))
-        h1 = [a for a in d1.artifacts if a.artifact_type == "skill"][0].metadata["content_hash"]
-        h2 = [a for a in d2.artifacts if a.artifact_type == "skill"][0].metadata["content_hash"]
+        h1 = next(a for a in d1.artifacts if a.artifact_type == "skill").metadata["content_hash"]
+        h2 = next(a for a in d2.artifacts if a.artifact_type == "skill").metadata["content_hash"]
         assert h1 == h2
         assert len(h1) == 16
 
@@ -112,7 +110,7 @@ class TestSkillDiscovery:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        skill = [a for a in detection.artifacts if a.artifact_type == "skill"][0]
+        skill = next(a for a in detection.artifacts if a.artifact_type == "skill")
         assert "mcporter" in skill.metadata.get("related_skills", "")
 
 
@@ -248,7 +246,7 @@ class TestMCPDiscovery:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert mcp.transport == "http"
         assert mcp.url == "https://mcp.example.com/v1/mcp"
 
@@ -268,7 +266,7 @@ class TestMCPDiscovery:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert mcp.args == ("valid",)
 
     def test_handles_non_dict_env(self, tmp_path: Path):
@@ -280,7 +278,7 @@ class TestMCPDiscovery:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert mcp.metadata["env_keys"] == []
 
     def test_both_yaml_and_json_mcp_configs(self, tmp_path: Path):
@@ -317,28 +315,34 @@ class TestYAMLNestedParsing:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert "GITHUB_TOKEN" in mcp.metadata["env_keys"]
 
     def test_yaml_parses_headers_block(self, tmp_path: Path):
         _write(
             tmp_path / ".hermes" / "config.yaml",
-            'mcp_servers:\n  remote:\n    url: "https://mcp.example.com/mcp"\n    headers:\n      Authorization: "Bearer sk-proj-token1234567890"\n',
+            (
+                'mcp_servers:\n  remote:\n    url: "https://mcp.example.com/mcp"\n'
+                '    headers:\n      Authorization: "Bearer sk-proj-token1234567890"\n'
+            ),
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert "Authorization" in mcp.metadata["header_keys"]
         assert "Authorization" in mcp.metadata["auth_header_keys"]
 
     def test_yaml_parses_sampling_block(self, tmp_path: Path):
         _write(
             tmp_path / ".hermes" / "config.yaml",
-            'mcp_servers:\n  ai-server:\n    command: "npx"\n    sampling:\n      enabled: true\n      model: "gpt-4"\n',
+            (
+                'mcp_servers:\n  ai-server:\n    command: "npx"\n'
+                '    sampling:\n      enabled: true\n      model: "gpt-4"\n'
+            ),
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert mcp.metadata["sampling_enabled"] is True
         assert mcp.metadata["sampling_model"] == "gpt-4"
 
@@ -349,13 +353,16 @@ class TestYAMLNestedParsing:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert "OPENAI_API_KEY" in mcp.metadata.get("env_value_secret_keys", [])
 
     def test_yaml_disabled_server_skipped(self, tmp_path: Path):
         _write(
             tmp_path / ".hermes" / "config.yaml",
-            'mcp_servers:\n  disabled-srv:\n    command: "npx"\n    enabled: false\n  active-srv:\n    command: "uvx"\n',
+            (
+                'mcp_servers:\n  disabled-srv:\n    command: "npx"\n'
+                '    enabled: false\n  active-srv:\n    command: "uvx"\n'
+            ),
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
@@ -385,7 +392,7 @@ class TestMCPSecuritySignals:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert "GITHUB_PERSONAL_ACCESS_TOKEN" in mcp.metadata["env_keys"]
 
     def test_secret_env_values_flagged(self, tmp_path: Path):
@@ -400,7 +407,7 @@ class TestMCPSecuritySignals:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert "OPENAI_API_KEY" in mcp.metadata.get("env_value_secret_keys", [])
 
     def test_auth_headers_detected(self, tmp_path: Path):
@@ -418,7 +425,7 @@ class TestMCPSecuritySignals:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert "Authorization" in mcp.metadata["auth_header_keys"]
         assert "X-Custom-Auth" in mcp.metadata["auth_header_keys"]
         assert mcp.metadata["has_auth_headers"] is True
@@ -436,7 +443,7 @@ class TestMCPSecuritySignals:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert mcp.metadata["sampling_enabled"] is True
         assert mcp.metadata["sampling_model"] == "gpt-4"
 
@@ -453,7 +460,7 @@ class TestMCPSecuritySignals:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         signals = artifact_risk_signals(mcp)
         assert "can send or receive network traffic" in signals
         assert "receives environment variables that may contain secrets" in signals
@@ -466,7 +473,7 @@ class TestMCPSecuritySignals:
         )
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
-        mcp = [a for a in detection.artifacts if a.artifact_type == "mcp_server"][0]
+        mcp = next(a for a in detection.artifacts if a.artifact_type == "mcp_server")
         assert mcp.artifact_id == "hermes:mcp:json:srv"
         assert mcp.metadata["source"] == "json"
 
@@ -561,7 +568,7 @@ class TestFixtureIntegration:
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
 
-        malicious = [a for a in detection.artifacts if a.name == "malicious"][0]
+        malicious = next(a for a in detection.artifacts if a.name == "malicious")
         signals = artifact_risk_signals(malicious)
         assert "can send or receive network traffic" in signals
         assert "mentions sensitive local files" in signals
@@ -573,10 +580,10 @@ class TestFixtureIntegration:
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
 
-        api_ref = [
+        api_ref = next(
             a for a in detection.artifacts
             if a.artifact_type == "skill_file" and "api-setup" in a.name
-        ][0]
+        )
         signals = artifact_risk_signals(api_ref)
         assert "can send or receive network traffic" in signals
 
@@ -587,7 +594,7 @@ class TestFixtureIntegration:
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
 
-        benign = [a for a in detection.artifacts if a.name == "benign"][0]
+        benign = next(a for a in detection.artifacts if a.name == "benign")
         signals = artifact_risk_signals(benign)
         assert len(signals) == 0
 
@@ -598,10 +605,10 @@ class TestFixtureIntegration:
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
 
-        yaml_exfil = [
+        yaml_exfil = next(
             a for a in detection.artifacts
             if a.artifact_type == "mcp_server" and a.name == "yaml-exfiltrator"
-        ][0]
+        )
         signals = artifact_risk_signals(yaml_exfil)
         assert "can send or receive network traffic" in signals
         assert "runs through a shell wrapper" in signals
@@ -613,10 +620,10 @@ class TestFixtureIntegration:
         adapter = HermesHarnessAdapter()
         detection = adapter.detect(_ctx(tmp_path))
 
-        deploy_script = [
+        deploy_script = next(
             a for a in detection.artifacts
             if a.artifact_type == "skill_file" and "deploy.sh" in a.name
-        ][0]
+        )
         # Raw .sh content should be in args for risk scanning.
         assert len(deploy_script.args) == 1
         assert "curl" in deploy_script.args[0]

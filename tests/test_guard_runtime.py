@@ -489,6 +489,129 @@ class TestGuardRuntime:
         assert rc == 0
         assert output["artifact_id"] == "claude-code:project:workspace-tools"
 
+    def test_guard_hook_uses_copilot_repo_hook_runtime_path(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "tool_name": "read_file",
+            "tool_input": {"path": str(home_dir / ".env")},
+            "policy_action": "require-reapproval",
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "copilot",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "file_read_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert output["path_summary"] == str(home_dir / ".env")
+
+    def test_guard_hook_normalizes_copilot_camel_case_payload(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "toolName": "view",
+            "toolArgs": json.dumps({"path": str(home_dir / ".env")}),
+            "sourceScope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "copilot",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "file_read_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert output["path_summary"] == str(home_dir / ".env")
+
+    def test_guard_hook_emits_copilot_native_deny_response(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "toolName": "view",
+            "toolArgs": json.dumps({"path": str(home_dir / ".env")}),
+            "sourceScope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "copilot",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["permissionDecision"] == "deny"
+        assert "approve" in output["permissionDecisionReason"]
+
+    def test_guard_hook_emits_copilot_native_allow_response_for_safe_requests(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "toolName": "view",
+            "toolArgs": json.dumps({"path": str(workspace_dir / "README.md")}),
+            "sourceScope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "copilot",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output == {"permissionDecision": "allow"}
+
     def test_guard_run_returns_structured_error_when_executable_missing(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

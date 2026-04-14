@@ -20,7 +20,7 @@
 
 | If you want to... | Install | Start with |
 | :--- | :--- | :--- |
-| protect Codex, Claude Code, Cursor, Gemini, or OpenCode before tools run | `hol-guard` | `hol-guard start` |
+| protect Codex, Claude Code, Copilot CLI, Cursor, Gemini, or OpenCode before tools run | `hol-guard` | `hol-guard start` |
 | lint and verify packages in CI before release | `plugin-scanner` | `plugin-scanner verify .` |
 
 ## Guard Quickstart
@@ -71,6 +71,8 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
 
 - `claude-code`
   Guard prefers Claude hooks first, then the local approval center when the shell cannot prompt.
+- `copilot`
+  Guard can wrap the `copilot` CLI, detect `~/.copilot/config.json`, `~/.copilot/mcp-config.json`, workspace `.vscode/mcp.json`, and install repo-local `.github/hooks/hol-guard-copilot.json` hook entries for documented `preToolUse` and `postToolUse` events.
 - `codex`
   Guard owns artifact approval today through the local approval center. App Server is the future path for richer in-client approvals.
 - `cursor`
@@ -179,6 +181,8 @@ pip install "plugin-scanner[cisco]"
 
 On Guard surfaces, the Cisco extra adds optional offline evidence to `hol-guard scan`, `hol-guard preflight`, and `hol-guard explain <path>`. Use `--cisco-mode {auto,on,off}` to control that consumer-mode evidence path for local artifact scans. `hol-guard run` and Guard runtime prompt/file-read protection remain native Guard behavior in this pass.
 
+Guard does not add Cisco AIBOM runtime integration in this pass. If AIBOM support returns later, it should stay on evidence or export surfaces rather than Guard blocking or approval logic.
+
 ### Cisco package status
 
 Credit to [Cisco AI Defense](https://github.com/cisco-ai-defense) for open-sourcing the packages below.
@@ -188,7 +192,7 @@ Credit to [Cisco AI Defense](https://github.com/cisco-ai-defense) for open-sourc
 | `cisco-ai-skill-scanner` | shipped by default | Included in the lean baseline install. |
 | `cisco-ai-mcp-scanner` | shipped via `[cisco]` | Recommended for full Cisco coverage on Python 3.11+, including repo-controlled CI and Docker. |
 | `cisco-ai-a2a-scanner` | deferred | Requires live A2A endpoints and is not added in this pass. |
-| `cisco-aibom` | deferred | Artifact-oriented output with heavier deps and no scoring value in this pass. |
+| `cisco-aibom` | deferred | No Guard runtime integration in this pass. Revisit later only for evidence or export workflows. |
 
 If you want both tools in one shell during local development:
 

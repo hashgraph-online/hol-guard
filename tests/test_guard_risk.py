@@ -224,14 +224,18 @@ def test_secret_file_path_classifier_stays_precise(tmp_path):
 def test_file_read_request_classifier_is_argument_aware(tmp_path):
     env_request = extract_sensitive_file_read_request("read_file", {"path": ".env.local"})
     claude_request = extract_sensitive_file_read_request("Read", {"file_path": "~/.ssh/config"}, home_dir=tmp_path)
+    copilot_request = extract_sensitive_file_read_request("view", {"path": ".env"})
 
     assert is_file_read_tool_name("read_file") is True
     assert is_file_read_tool_name("Read") is True
+    assert is_file_read_tool_name("view") is True
     assert is_file_read_tool_name("write_file") is False
     assert env_request is not None
     assert env_request.path_match.path_class == "local .env file"
     assert claude_request is not None
     assert claude_request.path_match.path_class == "SSH client config"
+    assert copilot_request is not None
+    assert copilot_request.path_match.path_class == "local .env file"
     assert extract_sensitive_file_read_request("read_file", {"path": "README.md"}) is None
     assert extract_sensitive_file_read_request("write_file", {"path": ".env"}) is None
 

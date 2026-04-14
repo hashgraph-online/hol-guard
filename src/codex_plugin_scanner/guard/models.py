@@ -40,7 +40,7 @@ def _redact_arg(value: str) -> str:
     if "authorization:" in lower_value or "api-key:" in lower_value or "bearer " in lower_value:
         prefix, _, _ = value.partition(":")
         return f"{prefix}: *****"
-    if any(token in lower_value for token in ("apikey=", "api_key=", "token=", "secret=")):
+    if any(token in lower_value for token in ("apikey=", "api_key=", "api-key=", "token=", "secret=")):
         key, _, _ = value.partition("=")
         return f"{key}=*****"
     return value
