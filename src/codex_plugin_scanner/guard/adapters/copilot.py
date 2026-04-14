@@ -90,6 +90,16 @@ def _hooks_payload(payload: dict[str, object]) -> dict[str, object]:
     return payload
 
 
+def _hook_command_variants(entry: dict[str, object]) -> tuple[tuple[str, str], ...]:
+    variants: list[tuple[str, str]] = []
+    for shell_name in ("command", "bash", "powershell"):
+        command = entry.get(shell_name)
+        if not isinstance(command, str):
+            continue
+        variants.append((shell_name, command))
+    return tuple(variants)
+
+
 def _managed_hook_payload(payload: dict[str, object]) -> dict[str, object]:
     normalized_payload: dict[str, object] = {"version": 1, "hooks": {}}
     version = payload.get("version")
@@ -319,20 +329,19 @@ class CopilotHarnessAdapter(HarnessAdapter):
             for index, entry in enumerate(entries):
                 if not isinstance(entry, dict):
                     continue
-                command = entry.get("command")
-                if not isinstance(command, str):
-                    command = entry.get("bash")
-                if not isinstance(command, str):
-                    command = entry.get("powershell")
-                artifacts.append(
-                    GuardArtifact(
-                        artifact_id=f"copilot:project:hook:{config_path.stem}:{hook_name.lower()}:{index}",
-                        name=hook_name,
-                        harness=self.harness,
-                        artifact_type="hook",
-                        source_scope="project",
-                        config_path=str(config_path),
-                        command=command if isinstance(command, str) else None,
+                for shell_name, command in _hook_command_variants(entry):
+                    artifacts.append(
+                        GuardArtifact(
+                            artifact_id=(
+                                f"copilot:project:hook:{config_path.stem}:{hook_name.lower()}:{index}:{shell_name}"
+                            ),
+                            name=hook_name,
+                            harness=self.harness,
+                            artifact_type="hook",
+                            source_scope="project",
+                            config_path=str(config_path),
+                            command=command,
+                            metadata={"shell": shell_name},
+                        )
                     )
-                )
         return artifacts

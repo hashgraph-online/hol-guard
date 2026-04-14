@@ -464,7 +464,7 @@ args = ["workspace-skill.js"]
         assert output["harnesses"][0]["harness"] == "copilot"
         assert "copilot:global:global-tool" in artifacts
         assert "copilot:project:workspace-tool" in artifacts
-        assert "copilot:project:hook:custom:pretooluse:0" in artifacts
+        assert "copilot:project:hook:custom:pretooluse:0:command" in artifacts
 
     def test_guard_scan_emits_consumer_contract(self, capsys):
         rc = main(

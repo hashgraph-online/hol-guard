@@ -77,9 +77,9 @@ def test_copilot_detects_documented_local_surfaces_and_redacts_secrets(tmp_path)
     artifacts = {item["artifact_id"]: item for item in detection["artifacts"]}
     assert "copilot:global:global-tool" in artifacts
     assert "copilot:project:workspace-tool" in artifacts
-    assert "copilot:project:hook:custom:sessionstart:0" in artifacts
-    assert "copilot:project:hook:custom:pretooluse:0" in artifacts
-    assert "copilot:project:hook:custom:posttooluse:0" in artifacts
+    assert "copilot:project:hook:custom:sessionstart:0:command" in artifacts
+    assert "copilot:project:hook:custom:pretooluse:0:command" in artifacts
+    assert "copilot:project:hook:custom:posttooluse:0:command" in artifacts
     assert artifacts["copilot:global:global-tool"]["args"] == ["--token=*****", "server.js"]
     assert artifacts["copilot:global:global-tool"]["url"] == "https://example.com/mcp?token=%2A%2A%2A%2A%2A&label=demo"
     assert artifacts["copilot:project:workspace-tool"]["command"] == "python"
@@ -117,6 +117,40 @@ def test_copilot_detect_ignores_hook_json_without_hook_entries(tmp_path):
 
     assert str(unrelated_hook) not in detection.config_paths
     assert [artifact.artifact_id for artifact in detection.artifacts] == ["copilot:project:workspace-tool"]
+
+
+def test_copilot_detect_records_bash_and_powershell_hook_commands_separately(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = CopilotHarnessAdapter()
+    _write_json(
+        context.workspace_dir / ".github" / "hooks" / "custom.json",
+        {
+            "version": 1,
+            "hooks": {
+                "preToolUse": [
+                    {
+                        "bash": "python guard-hook.py",
+                        "powershell": "pwsh -File guard-hook.ps1",
+                    }
+                ]
+            },
+        },
+    )
+
+    detection = adapter.detect(context).to_dict()
+    artifacts = {item["artifact_id"]: item for item in detection["artifacts"]}
+
+    assert "copilot:project:hook:custom:pretooluse:0:bash" in artifacts
+    assert "copilot:project:hook:custom:pretooluse:0:powershell" in artifacts
+    assert artifacts["copilot:project:hook:custom:pretooluse:0:bash"]["command"] == "python guard-hook.py"
+    assert artifacts["copilot:project:hook:custom:pretooluse:0:bash"]["metadata"] == {"shell": "bash"}
+    assert (
+        artifacts["copilot:project:hook:custom:pretooluse:0:powershell"]["command"]
+        == "pwsh -File guard-hook.ps1"
+    )
+    assert artifacts["copilot:project:hook:custom:pretooluse:0:powershell"]["metadata"] == {
+        "shell": "powershell"
+    }
 
 
 def test_copilot_install_and_uninstall_manage_guard_owned_hook_file_idempotently(tmp_path):
