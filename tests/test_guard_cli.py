@@ -1478,6 +1478,146 @@ args = ["workspace-skill.js", "--changed"]
         assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
         assert len(_SyncRequestHandler.captured_body["inventory"]) >= 1
 
+    def test_guard_connect_save_only_surfaces_waiting_state(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "connect",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--workspace",
+                str(workspace_dir),
+                "--sync-url",
+                "https://hol.org/registry/api/v1/guard/receipts",
+                "--token",
+                "demo-token",
+                "--save-only",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["credentials_saved"] is True
+        assert output["sync_attempted"] is False
+        assert output["cloud_state"] == "paired_waiting"
+        assert output["sync_configured"] is True
+        assert output["dashboard_url"] == "https://hol.org/guard"
+        assert output["connect_url"] == "https://hol.org/guard/connect"
+
+    def test_guard_connect_syncs_and_surfaces_cloud_state(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+        _SyncRequestHandler.response_payload = {
+            "syncedAt": "2026-04-09T00:00:00Z",
+            "receiptsStored": 1,
+            "advisories": [
+                {
+                    "id": "adv-001",
+                    "publisher": "hashgraph-online",
+                    "severity": "high",
+                    "headline": "Publisher rotated to a new remote domain.",
+                }
+            ],
+            "policy": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "allow",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+                "updatedAt": "2026-04-09T00:00:00Z",
+            },
+            "alertPreferences": {
+                "emailEnabled": True,
+                "digestMode": "daily",
+                "watchlistEnabled": True,
+                "advisoriesEnabled": True,
+                "repeatedWarningsEnabled": True,
+                "teamAlertsEnabled": True,
+                "updatedAt": "2026-04-09T00:00:00Z",
+            },
+            "teamPolicyPack": {
+                "name": "Security team default",
+                "sharedHarnessDefaults": {"codex": "enforce"},
+                "allowedPublishers": ["hashgraph-online"],
+                "blockedArtifacts": [],
+                "alertChannel": "email",
+                "updatedAt": "2026-04-09T00:00:00Z",
+                "auditTrail": [],
+            },
+        }
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            run_rc = main(
+                [
+                    "guard",
+                    "run",
+                    "codex",
+                    "--home",
+                    str(home_dir),
+                    "--guard-home",
+                    str(guard_home),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--dry-run",
+                    "--default-action",
+                    "allow",
+                    "--json",
+                ]
+            )
+            json.loads(capsys.readouterr().out)
+
+            connect_rc = main(
+                [
+                    "guard",
+                    "connect",
+                    "--home",
+                    str(home_dir),
+                    "--guard-home",
+                    str(guard_home),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--sync-url",
+                    f"http://127.0.0.1:{server.server_port}/receipts",
+                    "--token",
+                    "demo-token",
+                    "--json",
+                ]
+            )
+            connect_output = json.loads(capsys.readouterr().out)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+
+        assert run_rc == 0
+        assert connect_rc == 0
+        assert connect_output["credentials_saved"] is True
+        assert connect_output["sync_attempted"] is True
+        assert connect_output["sync_succeeded"] is True
+        assert connect_output["cloud_state"] == "paired_active"
+        assert connect_output["dashboard_url"] == f"http://127.0.0.1:{server.server_port}/guard"
+        assert connect_output["advisory_count"] == 1
+        assert connect_output["team_policy_active"] is True
+        assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer demo-token"
+        assert _SyncRequestHandler.captured_body is not None
+        assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
+
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

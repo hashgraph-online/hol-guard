@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import urllib.error
 import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -28,7 +29,7 @@ from ..store import GuardStore
 from .approval_commands import add_approval_parser, run_approval_command
 from .bootstrap import DEFAULT_ALIAS_NAME, build_guard_bootstrap_payload
 from .install_commands import apply_managed_install
-from .product import build_guard_start_payload, build_guard_status_payload
+from .product import build_guard_connect_payload, build_guard_start_payload, build_guard_status_payload
 from .prompt import build_prompt_artifacts, resolve_interactive_decisions
 from .render import emit_guard_payload
 
@@ -75,7 +76,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         required=True,
         metavar=(
             "{start,status,bootstrap,detect,install,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
-            "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,login,sync}"
+            "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,login,sync}"
         ),
     )
 
@@ -86,6 +87,16 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     status_parser = guard_subparsers.add_parser("status", help="Show current Guard protection status")
     _add_guard_common_args(status_parser)
     status_parser.add_argument("--json", action="store_true")
+
+    connect_parser = guard_subparsers.add_parser(
+        "connect",
+        help="Pair local Guard with Guard Cloud and show the next local-to-cloud actions",
+    )
+    _add_guard_common_args(connect_parser)
+    connect_parser.add_argument("--sync-url")
+    connect_parser.add_argument("--token")
+    connect_parser.add_argument("--save-only", action="store_true")
+    connect_parser.add_argument("--json", action="store_true")
 
     bootstrap_parser = guard_subparsers.add_parser(
         "bootstrap",
@@ -356,6 +367,54 @@ def run_guard_command(args: argparse.Namespace) -> int:
         _emit("status", payload, getattr(args, "json", False))
         return 0
 
+    if args.guard_command == "connect":
+        sync_url = getattr(args, "sync_url", None)
+        token = getattr(args, "token", None)
+        if bool(sync_url) != bool(token):
+            raise ValueError("connect requires both --sync-url and --token when saving credentials")
+        credentials_saved = False
+        if isinstance(sync_url, str) and isinstance(token, str):
+            store.set_sync_credentials(sync_url, token, _now())
+            store.add_event("sign_in", {"sync_url": sync_url, "source": "local-cli-connect"}, _now())
+            credentials_saved = True
+        if not credentials_saved or bool(getattr(args, "save_only", False)):
+            payload = build_guard_connect_payload(
+                context,
+                store,
+                config,
+                credentials_saved=credentials_saved,
+                sync_attempted=False,
+                sync_succeeded=False,
+            )
+            _emit("connect", payload, getattr(args, "json", False))
+            return 0
+        try:
+            sync_payload = sync_receipts(store)
+        except (RuntimeError, urllib.error.URLError, urllib.error.HTTPError) as exc:
+            payload = build_guard_connect_payload(
+                context,
+                store,
+                config,
+                credentials_saved=credentials_saved,
+                sync_attempted=True,
+                sync_succeeded=False,
+                sync_error=str(exc),
+            )
+            _emit("connect", payload, getattr(args, "json", False))
+            return 1
+        _record_sync_event(store, sync_payload)
+        payload = build_guard_connect_payload(
+            context,
+            store,
+            config,
+            credentials_saved=credentials_saved,
+            sync_attempted=True,
+            sync_succeeded=True,
+        )
+        payload["sync_result"] = sync_payload
+        _emit("connect", payload, getattr(args, "json", False))
+        return 0
+
     if args.guard_command == "bootstrap":
         try:
             payload = build_guard_bootstrap_payload(
@@ -564,6 +623,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
 
     if args.guard_command == "sync":
         payload = sync_receipts(store)
+        _record_sync_event(store, payload)
         _emit("sync", payload, getattr(args, "json", False))
         return 0
 
@@ -903,6 +963,20 @@ def _normalize_hook_argument_value(value: object | None) -> object | None:
             return parsed
         return stripped
     return value
+
+def _record_sync_event(store: GuardStore, payload: dict[str, object]) -> None:
+    store.add_event(
+        "sync_complete",
+        {
+            "synced_at": payload.get("synced_at"),
+            "receipts_stored": payload.get("receipts_stored"),
+            "advisories_stored": payload.get("advisories_stored"),
+            "exceptions_stored": payload.get("exceptions_stored"),
+            "remote_policies_stored": payload.get("remote_policies_stored"),
+            "pain_signals_uploaded": payload.get("pain_signals_uploaded"),
+        },
+        _now(),
+    )
 
 
 def _coalesce_string(*values: object | None) -> str:
