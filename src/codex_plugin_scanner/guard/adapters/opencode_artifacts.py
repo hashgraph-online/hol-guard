@@ -13,11 +13,13 @@ CONFIG_FILENAMES = ("opencode.json", "opencode.jsonc")
 PLUGIN_SUFFIXES = {".js", ".ts", ".mjs", ".cjs"}
 GLOBAL_SKILL_DIRECTORIES = (
     (".config/opencode/skills", "opencode"),
+    (".config/opencode/skill", "opencode"),
     (".claude/skills", "claude"),
     (".agents/skills", "agents"),
 )
 PROJECT_SKILL_DIRECTORIES = (
     (".opencode/skills", "opencode"),
+    (".opencode/skill", "opencode"),
     (".claude/skills", "claude"),
     (".agents/skills", "agents"),
 )
@@ -71,12 +73,14 @@ def append_directory_artifacts(
     directory_specs: list[tuple[Path, str, str]] = [
         (context.home_dir / ".config" / "opencode" / "commands", "global", "command"),
         (context.home_dir / ".config" / "opencode" / "plugins", "global", "plugin-file"),
+        (context.home_dir / ".config" / "opencode" / "plugin", "global", "plugin-file"),
     ]
     if context.workspace_dir is not None:
         directory_specs.extend(
             [
                 (context.workspace_dir / ".opencode" / "commands", "project", "command"),
                 (context.workspace_dir / ".opencode" / "plugins", "project", "plugin-file"),
+                (context.workspace_dir / ".opencode" / "plugin", "project", "plugin-file"),
             ]
         )
     for directory, scope, artifact_kind in directory_specs:
@@ -86,7 +90,7 @@ def append_directory_artifacts(
         exact_name = None if artifact_kind == "plugin-file" else "*.md"
         for path in _iter_directory_files(directory, allowed_suffixes=allowed_suffixes, exact_name=exact_name):
             append_found_path(found_paths, path)
-            relative_id = _relative_artifact_id(path, directory)
+            relative_id = _relative_artifact_id(path, directory, strip_suffix=artifact_kind == "command")
             artifact = GuardArtifact(
                 artifact_id=f"opencode:{scope}:{artifact_kind}:{relative_id}",
                 name=relative_id,
@@ -304,5 +308,6 @@ def _iter_directory_files(
             yield path
 
 
-def _relative_artifact_id(path: Path, root: Path) -> str:
-    return path.relative_to(root).with_suffix("").as_posix()
+def _relative_artifact_id(path: Path, root: Path, *, strip_suffix: bool) -> str:
+    relative_path = path.relative_to(root)
+    return (relative_path.with_suffix("") if strip_suffix else relative_path).as_posix()

@@ -467,8 +467,8 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert "opencode:global:plugin:opencode-global-plugin" in artifacts
         assert "opencode:project:plugin:opencode-project-plugin" in artifacts
-        assert "opencode:global:plugin-file:global-local" in artifacts
-        assert "opencode:project:plugin-file:project-local" in artifacts
+        assert "opencode:global:plugin-file:global-local.mjs" in artifacts
+        assert "opencode:project:plugin-file:project-local.mjs" in artifacts
         assert "opencode:global:config-command:global-review" in artifacts
         assert "opencode:project:config-command:project-review" in artifacts
         assert "opencode:global:command:global-cmd" in artifacts
@@ -476,7 +476,7 @@ args = ["workspace-skill.js"]
         assert "opencode:global:skill:opencode:global-skill" in artifacts
         assert "opencode:project:skill:opencode:repo-skill" in artifacts
         assert "opencode:project:skill:claude:claude-skill" in artifacts
-        assert artifacts["opencode:project:plugin-file:project-local"]["artifact_type"] == "plugin"
+        assert artifacts["opencode:project:plugin-file:project-local.mjs"]["artifact_type"] == "plugin"
         assert artifacts["opencode:project:config-command:project-review"]["metadata"]["template"] == (
             "Review the workspace change set."
         )
@@ -486,9 +486,10 @@ args = ["workspace-skill.js"]
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _write_json(workspace_dir / "opencode.json", {})
+        _write_text(workspace_dir / ".opencode" / "plugin" / "shared.js", "export default {};\n")
         _write_text(workspace_dir / ".opencode" / "plugins" / "shared.mjs", "export default {};\n")
         _write_text(workspace_dir / ".opencode" / "plugins" / "nested" / "shared.mjs", "export default {};\n")
-        _write_text(workspace_dir / ".opencode" / "skills" / "shared" / "SKILL.md", "---\nname: shared\n---\n")
+        _write_text(workspace_dir / ".opencode" / "skill" / "shared" / "SKILL.md", "---\nname: shared\n---\n")
         _write_text(
             workspace_dir / ".opencode" / "skills" / "nested" / "shared" / "SKILL.md",
             "---\nname: shared\n---\n",
@@ -510,8 +511,9 @@ args = ["workspace-skill.js"]
         artifact_ids = {item["artifact_id"] for item in output["harnesses"][0]["artifacts"]}
 
         assert rc == 0
-        assert "opencode:project:plugin-file:shared" in artifact_ids
-        assert "opencode:project:plugin-file:nested/shared" in artifact_ids
+        assert "opencode:project:plugin-file:shared.js" in artifact_ids
+        assert "opencode:project:plugin-file:shared.mjs" in artifact_ids
+        assert "opencode:project:plugin-file:nested/shared.mjs" in artifact_ids
         assert "opencode:project:skill:opencode:shared" in artifact_ids
         assert "opencode:project:skill:opencode:nested/shared" in artifact_ids
 

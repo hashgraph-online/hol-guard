@@ -363,7 +363,7 @@ def test_guard_run_opencode_blocks_new_plugin_when_unknown_artifacts_require_app
     plugin_artifact = next(
         item
         for item in second_output["artifacts"]
-        if item["artifact_id"] == "opencode:project:plugin-file:env-read-plugin"
+        if item["artifact_id"] == "opencode:project:plugin-file:env-read-plugin.mjs"
     )
 
     assert first_rc == 0
@@ -399,9 +399,7 @@ def test_guard_run_still_blocks_when_prompt_contains_negation_elsewhere(monkeypa
         ]
     )
     output = json.loads(capsys.readouterr().out)
-    prompt_artifact = next(
-        item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request"
-    )
+    prompt_artifact = next(item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request")
 
     assert rc == 1
     assert output["blocked"] is True
@@ -435,9 +433,7 @@ def test_guard_run_blocks_env_content_request_without_read_verb(monkeypatch, tmp
         ]
     )
     output = json.loads(capsys.readouterr().out)
-    prompt_artifact = next(
-        item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request"
-    )
+    prompt_artifact = next(item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request")
 
     assert rc == 1
     assert output["blocked"] is True
