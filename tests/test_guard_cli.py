@@ -405,6 +405,80 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert artifact_ids == ["opencode:global:shared-tools", "opencode:project:shared-tools"]
 
+    def test_guard_detect_reports_opencode_plugins_skills_and_commands(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".config" / "opencode" / "opencode.json",
+            {
+                "plugin": ["opencode-global-plugin"],
+                "command": {
+                    "global-review": {
+                        "template": "Review the current diff.",
+                        "description": "Global review command",
+                    }
+                },
+            },
+        )
+        _write_json(
+            workspace_dir / "opencode.json",
+            {
+                "plugin": ["opencode-project-plugin"],
+                "command": {
+                    "project-review": {
+                        "template": "Review the workspace change set.",
+                        "description": "Project review command",
+                    }
+                },
+            },
+        )
+        _write_text(home_dir / ".config" / "opencode" / "plugins" / "global-local.mjs", "export default {};\n")
+        _write_text(workspace_dir / ".opencode" / "plugins" / "project-local.mjs", "export default {};\n")
+        _write_text(home_dir / ".config" / "opencode" / "commands" / "global-cmd.md", "# global\n")
+        _write_text(workspace_dir / ".opencode" / "commands" / "triage.md", "# triage\n")
+        _write_text(
+            home_dir / ".config" / "opencode" / "skills" / "global-skill" / "SKILL.md",
+            "---\nname: global-skill\ndescription: Global skill\n---\n",
+        )
+        _write_text(
+            workspace_dir / ".opencode" / "skills" / "repo-skill" / "SKILL.md",
+            "---\nname: repo-skill\ndescription: Repo skill\n---\n",
+        )
+        _write_text(
+            workspace_dir / ".claude" / "skills" / "claude-skill" / "SKILL.md",
+            "---\nname: claude-skill\ndescription: Claude-compatible skill\n---\n",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifacts = {item["artifact_id"]: item for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert "opencode:global:plugin:opencode-global-plugin" in artifacts
+        assert "opencode:project:plugin:opencode-project-plugin" in artifacts
+        assert "opencode:global:plugin-file:global-local" in artifacts
+        assert "opencode:project:plugin-file:project-local" in artifacts
+        assert "opencode:global:config-command:global-review" in artifacts
+        assert "opencode:project:config-command:project-review" in artifacts
+        assert "opencode:global:command:global-cmd" in artifacts
+        assert "opencode:project:command:triage" in artifacts
+        assert "opencode:global:skill:opencode:global-skill" in artifacts
+        assert "opencode:project:skill:opencode:repo-skill" in artifacts
+        assert "opencode:project:skill:claude:claude-skill" in artifacts
+        assert artifacts["opencode:project:plugin-file:project-local"]["artifact_type"] == "plugin"
+        assert artifacts["opencode:project:skill:claude:claude-skill"]["artifact_type"] == "skill"
+
     def test_guard_detect_human_output_surfaces_next_steps(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -1328,6 +1402,33 @@ args = ["workspace-skill.js", "--changed"]
         assert output["auto_detected"] is True
         harnesses = {item["harness"] for item in output["managed_installs"]}
         assert {"codex", "claude-code", "cursor", "gemini", "opencode"} <= harnesses
+
+    def test_guard_install_creates_opencode_runtime_overlay(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(workspace_dir / "opencode.json", {"name": "workspace-opencode"})
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        manifest = output["managed_install"]["manifest"]
+        runtime_config_path = Path(str(manifest["runtime_config_path"]))
+        runtime_payload = json.loads(runtime_config_path.read_text(encoding="utf-8"))
+
+        assert rc == 0
+        assert output["managed_install"]["active"] is True
+        assert manifest["shim_command"] == "guard-opencode"
+        assert runtime_payload["permission"]["skill"]["*"] == "ask"
 
     def test_guard_uninstall_auto_detects_managed_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

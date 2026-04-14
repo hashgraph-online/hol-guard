@@ -249,6 +249,8 @@ def evaluate_detection(
                 "risk_signals": list(risk_signals),
                 "risk_summary": risk_summary,
                 "artifact_type": artifact.artifact_type,
+                "config_path": artifact.config_path,
+                "source_scope": artifact.source_scope,
                 "artifact_label": incident["artifact_label"],
                 "source_label": incident["source_label"],
                 "trigger_summary": incident["trigger_summary"],
