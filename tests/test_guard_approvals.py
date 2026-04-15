@@ -169,6 +169,33 @@ class TestGuardApprovals:
         }
         assert store.get_sync_payload("policy") is None
 
+    def test_browser_connect_completion_rolls_back_if_credentials_persist_fails(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+        request = store.create_guard_connect_request(
+            sync_url="https://new.example/registry/api/v1",
+            allowed_origin="https://hol.org",
+            now="2026-04-10T01:00:00+00:00",
+            lifetime_seconds=600,
+        )
+
+        def fail_credentials_write(connection, sync_url: str, token: str, now: str) -> None:
+            raise RuntimeError("credentials unavailable")
+
+        monkeypatch.setattr(store, "_set_sync_credentials_in_connection", fail_credentials_write)
+
+        with pytest.raises(RuntimeError, match="credentials unavailable"):
+            store.complete_guard_connect_request(
+                request_id=str(request["request_id"]),
+                pairing_secret=str(request["pairing_secret"]),
+                token="new-token",
+                now="2026-04-10T01:05:00+00:00",
+            )
+
+        request_after_failure = store.get_guard_connect_request(str(request["request_id"]))
+        assert request_after_failure is not None
+        assert request_after_failure["status"] == "pending"
+        assert store.get_sync_credentials() is None
+
     def test_guard_store_keeps_request_id_when_duplicate_pending_request_is_requeued(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         original = GuardApprovalRequest(
