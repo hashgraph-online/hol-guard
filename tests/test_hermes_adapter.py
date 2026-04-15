@@ -90,6 +90,35 @@ def test_install_overlay_skips_disabled_mcp_servers(tmp_path: Path):
     assert "yaml:disabled-server" not in manifest["servers"]
 
 
+def test_install_overlay_keeps_colliding_fallback_server_names_unique(tmp_path: Path):
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        (
+            'mcp_servers:\n'
+            '  foo:\n'
+            '    command: "npx"\n'
+            '    args: ["-y", "@modelcontextprotocol/server-yaml-primary"]\n'
+            '  json-foo:\n'
+            '    command: "npx"\n'
+            '    args: ["-y", "@modelcontextprotocol/server-yaml-fallback"]\n'
+        ),
+    )
+    _write(
+        tmp_path / ".hermes" / "mcp_servers.json",
+        json.dumps({"foo": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-json"]}}),
+    )
+    adapter = HermesHarnessAdapter()
+
+    manifest = adapter.install(_ctx(tmp_path))
+    overlay_payload = json.loads(Path(str(manifest["mcp_overlay_path"])).read_text(encoding="utf-8"))
+    overlay_names = set(overlay_payload.keys())
+
+    assert "foo" in overlay_names
+    assert "json-foo" in overlay_names
+    assert any(name.startswith("json-foo-") for name in overlay_names)
+    assert len(overlay_names) == 3
+
+
 def test_install_is_idempotent_and_repairs_missing_overlay(tmp_path: Path):
     _write(
         tmp_path / ".hermes" / "config.yaml",

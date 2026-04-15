@@ -102,8 +102,6 @@ class StdioGuardProxy:
 
     def run_stream(self, *, input_stream: Any, output_stream: Any, error_stream: Any) -> int:
         process = self._start_process()
-        responses: list[dict[str, Any]] = []
-        events: list[dict[str, Any]] = []
 
         try:
             for raw_line in input_stream:
@@ -118,8 +116,8 @@ class StdioGuardProxy:
                 response = self._forward_message(
                     process=process,
                     message=message,
-                    responses=responses,
-                    events=events,
+                    responses=[],
+                    events=[],
                 )
                 output_stream.write(json.dumps(response, separators=(",", ":")) + "\n")
                 output_stream.flush()

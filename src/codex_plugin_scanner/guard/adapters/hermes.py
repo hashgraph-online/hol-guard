@@ -926,7 +926,12 @@ def _overlay_name(server_key: str, server: dict[str, object], names_in_use: set[
     if candidate not in names_in_use:
         names_in_use.add(candidate)
         return candidate
-    scoped_candidate = server_key.replace(":", "-")
+    base_candidate = server_key.replace(":", "-")
+    scoped_candidate = base_candidate
+    suffix = 2
+    while scoped_candidate in names_in_use:
+        scoped_candidate = f"{base_candidate}-{suffix}"
+        suffix += 1
     names_in_use.add(scoped_candidate)
     return scoped_candidate
 
