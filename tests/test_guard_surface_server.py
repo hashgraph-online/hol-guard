@@ -144,6 +144,32 @@ class TestGuardSurfaceServer:
                 payload={"artifact_id": "codex:project:workspace_skill"},
             )
 
+    def test_surface_runtime_rejects_invalid_block_payload_without_persisting_operation(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store)
+        session = runtime.start_session(
+            harness="codex",
+            surface="cli",
+            workspace=str(tmp_path / "workspace"),
+            client_name="hol-guard",
+        )
+
+        with pytest.raises(ValueError, match="invalid_detection_payload"):
+            runtime.queue_blocked_operation(
+                session_id=str(session["session_id"]),
+                operation_type="run",
+                harness="codex",
+                metadata={"command": "hol-guard run codex"},
+                detection={},
+                evaluation={"blocked": True},
+                approval_center_url="http://127.0.0.1:4455",
+                approval_surface_policy="native-or-center",
+                open_key=None,
+                opener=lambda url: True,
+            )
+
+        assert store.list_guard_operations(session_id=str(session["session_id"])) == []
+
     def test_guard_daemon_initializes_surface_client_and_tracks_attachments(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

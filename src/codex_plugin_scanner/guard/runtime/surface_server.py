@@ -219,18 +219,21 @@ class GuardSurfaceRuntime:
         open_key: str | None,
         opener: Callable[[str], object],
     ) -> dict[str, object]:
+        if self.store.get_guard_session(session_id) is None:
+            raise ValueError(f"Unknown guard session: {session_id}")
+        parsed_detection = _parse_detection(detection)
+        queued = queue_blocked_approvals(
+            detection=parsed_detection,
+            evaluation=evaluation,
+            store=self.store,
+            approval_center_url=approval_center_url,
+            now=_now(),
+        )
         operation = self.start_operation(
             session_id=session_id,
             operation_type=operation_type,
             harness=harness,
             metadata=metadata,
-        )
-        queued = queue_blocked_approvals(
-            detection=_parse_detection(detection),
-            evaluation=evaluation,
-            store=self.store,
-            approval_center_url=approval_center_url,
-            now=_now(),
         )
         self.add_item(
             operation_id=str(operation["operation_id"]),

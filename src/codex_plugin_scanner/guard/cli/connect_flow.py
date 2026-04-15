@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import time
+import urllib.error
 import urllib.parse
 from pathlib import Path
 
@@ -23,7 +25,7 @@ def run_guard_connect_command(
     opener,
     wait_timeout_seconds: int,
 ) -> dict[str, object]:
-    daemon_url = ensure_guard_daemon(guard_home)
+    ensure_guard_daemon(guard_home)
     daemon_client = load_guard_surface_daemon_client(guard_home)
     normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
     connect_request = daemon_client.create_connect_request(
@@ -32,7 +34,7 @@ def run_guard_connect_command(
     )
     browser_url = build_guard_connect_browser_url(
         connect_url=normalized_connect_url,
-        daemon_url=daemon_url,
+        daemon_url=daemon_client.daemon_url,
         request_id=str(connect_request["request_id"]),
         pairing_secret=str(connect_request["pairing_secret"]),
     )
@@ -50,7 +52,10 @@ def run_guard_connect_command(
             "sync_url": sync_url,
             "status": "waiting_for_browser",
         }
-    sync_payload = sync_receipts(store)
+    try:
+        sync_payload = sync_receipts(store)
+    except (OSError, json.JSONDecodeError, urllib.error.URLError) as error:
+        raise RuntimeError(f"Guard paired successfully but sync failed: {error}") from error
     return {
         "connected": True,
         "browser_opened": browser_opened,

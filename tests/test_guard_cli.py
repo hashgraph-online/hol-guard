@@ -17,6 +17,7 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli import connect_flow as guard_connect_flow_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
@@ -2438,6 +2439,89 @@ args = ["workspace-skill.js", "--changed"]
 
         assert exc_info.value.code == 2
         assert "Guard URLs must be absolute http(s) URLs." in capsys.readouterr().err
+
+    def test_guard_connect_uses_recovered_daemon_url_for_browser_pairing(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+        opened_urls: list[str] = []
+
+        class FakeDaemonClient:
+            def __init__(self) -> None:
+                self.daemon_url = "http://127.0.0.1:4781"
+
+            def create_connect_request(self, *, sync_url: str, allowed_origin: str) -> dict[str, object]:
+                return {
+                    "request_id": "req-123",
+                    "pairing_secret": "pair-secret",
+                    "sync_url": sync_url,
+                    "allowed_origin": allowed_origin,
+                }
+
+        monkeypatch.setattr(
+            guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4779"
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "load_guard_surface_daemon_client",
+            lambda guard_home: FakeDaemonClient(),
+        )
+        monkeypatch.setattr(guard_connect_flow_module, "wait_for_connect_completion", lambda **kwargs: None)
+
+        payload = guard_connect_flow_module.run_guard_connect_command(
+            guard_home=tmp_path / "guard-home",
+            store=store,
+            sync_url="https://hol.org/registry/api/v1",
+            connect_url="https://hol.org/guard/connect",
+            opener=lambda url: opened_urls.append(url) or True,
+            wait_timeout_seconds=1,
+        )
+
+        parsed = urllib.parse.urlparse(opened_urls[0])
+        query = urllib.parse.parse_qs(parsed.query)
+        assert payload["status"] == "waiting_for_browser"
+        assert query["guardDaemon"] == ["http://127.0.0.1:4781"]
+
+    def test_guard_connect_wraps_sync_transport_failures(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+
+        class FakeDaemonClient:
+            daemon_url = "http://127.0.0.1:4781"
+
+            def create_connect_request(self, *, sync_url: str, allowed_origin: str) -> dict[str, object]:
+                return {
+                    "request_id": "req-123",
+                    "pairing_secret": "pair-secret",
+                    "sync_url": sync_url,
+                    "allowed_origin": allowed_origin,
+                }
+
+        monkeypatch.setattr(
+            guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "load_guard_surface_daemon_client",
+            lambda guard_home: FakeDaemonClient(),
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "wait_for_connect_completion",
+            lambda **kwargs: {"status": "completed", "request_id": "req-123", "completed_at": "2026-04-15T00:00:00Z"},
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "sync_receipts",
+            lambda current_store: (_ for _ in ()).throw(urllib.error.URLError("offline")),
+        )
+
+        with pytest.raises(RuntimeError, match="Guard paired successfully but sync failed"):
+            guard_connect_flow_module.run_guard_connect_command(
+                guard_home=tmp_path / "guard-home",
+                store=store,
+                sync_url="https://hol.org/registry/api/v1",
+                connect_url="https://hol.org/guard/connect",
+                opener=lambda url: True,
+                wait_timeout_seconds=1,
+            )
 
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
