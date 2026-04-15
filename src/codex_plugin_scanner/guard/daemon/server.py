@@ -600,7 +600,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if ":" in host and not host.startswith("["):
             host = f"[{host}]"
         default_port = 80 if parsed.scheme == "http" else 443
-        port_suffix = f":{parsed.port}" if parsed.port not in {None, default_port} else ""
+        try:
+            port = parsed.port
+        except ValueError:
+            return None
+        port_suffix = f":{port}" if port not in {None, default_port} else ""
         return f"{parsed.scheme}://{host}{port_suffix}"
 
     @staticmethod

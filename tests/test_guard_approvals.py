@@ -9,6 +9,8 @@ import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import bridge as guard_bridge_module
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
@@ -128,6 +130,20 @@ class TestGuardApprovals:
         assert client.auth_token == "fresh-token"
         assert cleared == [guard_home]
         assert restarted == [guard_home]
+
+    def test_guard_surface_daemon_client_wraps_transport_failures(self, monkeypatch):
+        client = daemon_client_module.GuardSurfaceDaemonClient("http://127.0.0.1:4781", "auth-token")
+
+        def raise_transport_error(request, timeout):
+            raise urllib.error.URLError("offline")
+
+        monkeypatch.setattr(daemon_client_module.urllib.request, "urlopen", raise_transport_error)
+
+        with pytest.raises(RuntimeError, match="Guard daemon request failed"):
+            client.create_connect_request(
+                sync_url="https://hol.org/registry/api/v1",
+                allowed_origin="https://hol.org",
+            )
 
     def test_browser_connect_completion_clears_stale_cloud_state(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -921,6 +937,40 @@ class TestGuardApprovals:
                 status = error.code
             else:
                 raise AssertionError("expected HTTPError for spoofed localhost origin")
+        finally:
+            daemon.stop()
+
+        assert status == 403
+        assert payload["error"] == "forbidden_origin"
+
+    def test_guard_daemon_rejects_malformed_origin_post_requests(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
+                data=json.dumps(
+                    {
+                        "harness": "codex",
+                        "scope": "harness",
+                        "action": "allow",
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": "http://localhost:abc",
+                },
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for malformed origin")
         finally:
             daemon.stop()
 
