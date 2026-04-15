@@ -97,6 +97,17 @@ class _RemoteProxyHandler(BaseHTTPRequestHandler):
         return
 
 
+class _LineOnlyInput:
+    def __init__(self, lines: list[str]) -> None:
+        self._lines = lines
+
+    def __iter__(self):
+        return iter(self._lines)
+
+    def read(self) -> str:
+        raise AssertionError("read() should not be used for streamed MCP proxy input")
+
+
 class TestGuardRuntime:
     def test_guard_store_initializes_runtime_tables_and_receipt_columns(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -872,6 +883,89 @@ class TestGuardRuntime:
         assert result["approval_delivery"]["destination"] == "harness"
         assert result["approval_delivery"]["prompt_channel"] == "native"
         assert result["approval_wait"]["resolved"] is False
+
+    def test_hermes_mcp_proxy_streams_stdio_messages_without_waiting_for_eof(self, tmp_path, monkeypatch, capsys):
+        guard_home = tmp_path / "guard-home"
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        store = GuardStore(guard_home)
+        store.set_managed_install(
+            "hermes",
+            True,
+            str(workspace),
+            {
+                "servers": {
+                    "yaml:demo": {
+                        "transport": "stdio",
+                        "command": "python",
+                        "args": ["-m", "demo"],
+                    }
+                }
+            },
+            "2026-04-15T00:00:00+00:00",
+        )
+        captured_messages: list[dict[str, object]] = []
+
+        class _FakeProxy:
+            def __init__(self, **kwargs) -> None:
+                self.kwargs = kwargs
+
+            def run_stream(self, *, input_stream, output_stream, error_stream) -> int:
+                for line in input_stream:
+                    payload = json.loads(line)
+                    captured_messages.append(payload)
+                    output_stream.write(
+                        json.dumps({"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}) + "\n"
+                    )
+                    output_stream.flush()
+                return 0
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module, "StdioGuardProxy", _FakeProxy)
+        monkeypatch.setattr(sys, "stdin", _LineOnlyInput(['{"jsonrpc":"2.0","id":7,"method":"tools/list"}\n']))
+
+        rc = guard_commands_module._run_hermes_mcp_proxy(
+            args=argparse.Namespace(server="yaml:demo"),
+            context=HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=guard_home),
+            store=store,
+            config=load_guard_config(guard_home),
+        )
+        output = capsys.readouterr()
+
+        assert rc == 0
+        assert captured_messages == [{"jsonrpc": "2.0", "id": 7, "method": "tools/list"}]
+        assert '"id": 7' in output.out
+
+    def test_hermes_mcp_proxy_rejects_invalid_json(self, tmp_path, monkeypatch, capsys):
+        guard_home = tmp_path / "guard-home"
+        store = GuardStore(guard_home)
+        store.set_managed_install(
+            "hermes",
+            True,
+            None,
+            {
+                "servers": {
+                    "yaml:demo": {
+                        "transport": "http",
+                        "url": "https://mcp.example.com/v1/mcp",
+                    }
+                }
+            },
+            "2026-04-15T00:00:00+00:00",
+        )
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(sys, "stdin", io.StringIO("{not-json}\n"))
+
+        rc = guard_commands_module._run_hermes_mcp_proxy(
+            args=argparse.Namespace(server="yaml:demo"),
+            context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
+            store=store,
+            config=load_guard_config(guard_home),
+        )
+        output = capsys.readouterr()
+
+        assert rc == 2
+        assert "invalid JSON" in output.err
 
     def test_guard_run_dry_run_human_output_is_summary_first(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

@@ -53,6 +53,8 @@ _SCANNABLE_NAMES = {".env", "Makefile", "Dockerfile", "Procfile"}
 
 # Maximum bytes read from any single file for risk analysis.
 _MAX_FILE_READ = 64 * 1024
+_HERMES_MANAGED_APPROVAL_TIER = "native-or-center"
+_HERMES_MANAGED_PROMPT_CHANNEL = "native"
 
 
 class HermesHarnessAdapter(HarnessAdapter):
@@ -171,12 +173,12 @@ class HermesHarnessAdapter(HarnessAdapter):
         same_channel = isinstance(capabilities, dict) and bool(capabilities.get("same_channel"))
         if same_channel:
             return {
-                "tier": "native-or-center",
+                "tier": _HERMES_MANAGED_APPROVAL_TIER,
                 "summary": (
                     "Guard uses the managed Hermes same-channel seam first and falls back to the approval center."
                 ),
                 "fallback_hint": "Use the Guard approval center if Hermes does not surface the pending request inline.",
-                "prompt_channel": "native",
+                "prompt_channel": _HERMES_MANAGED_PROMPT_CHANNEL,
                 "auto_open_browser": False,
             }
         return {
@@ -874,6 +876,8 @@ def _load_mcp_server_sources(hermes_home: Path) -> dict[str, dict[str, object]]:
     yaml_path = hermes_home / "config.yaml"
     if yaml_path.is_file():
         for name, config in _parse_mcp_from_yaml(yaml_path).items():
+            if config.get("enabled", True) is False:
+                continue
             sources[f"yaml:{name}"] = {
                 "name": name,
                 "source": "yaml",
@@ -883,6 +887,8 @@ def _load_mcp_server_sources(hermes_home: Path) -> dict[str, dict[str, object]]:
     json_path = hermes_home / "mcp_servers.json"
     if json_path.is_file():
         for name, config in _parse_mcp_from_json(json_path).items():
+            if config.get("enabled", True) is False:
+                continue
             sources[f"json:{name}"] = {
                 "name": name,
                 "source": "json",

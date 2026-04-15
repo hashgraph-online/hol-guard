@@ -220,29 +220,64 @@ def extract_sensitive_tool_action_request(
     normalized_tool_name = _normalize_tool_name(tool_name)
     if normalized_tool_name is None:
         return None
+    requested_tool_name = str(tool_name).strip()
     for command_text in _candidate_command_texts(arguments):
-        docker_command = _normalize_docker_command(command_text)
-        if docker_command is not None:
-            return ToolActionRequestMatch(
-                tool_name=str(tool_name).strip(),
-                normalized_tool_name=normalized_tool_name,
-                command_text=command_text,
-                action_class="docker-sensitive command",
-                reason=(
-                    "Guard treats Docker login, build, run, push, and compose actions as sensitive because they "
-                    "can expose credentials or execute privileged container workflows."
-                ),
-            )
-        docker_config_path = _docker_config_path_from_command(command_text, cwd=cwd, home_dir=home_dir)
-        if docker_config_path is not None:
-            return ToolActionRequestMatch(
-                tool_name=str(tool_name).strip(),
-                normalized_tool_name=normalized_tool_name,
-                command_text=command_text,
-                action_class="Docker client config access",
-                reason=_SENSITIVE_PATH_REASONS["Docker client config"],
-            )
+        docker_sensitive_request = _docker_sensitive_tool_action_request(
+            tool_name=requested_tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+        )
+        if docker_sensitive_request is not None:
+            return docker_sensitive_request
+        docker_config_request = _docker_config_tool_action_request(
+            tool_name=requested_tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            cwd=cwd,
+            home_dir=home_dir,
+        )
+        if docker_config_request is not None:
+            return docker_config_request
     return None
+
+
+def _docker_sensitive_tool_action_request(
+    *,
+    tool_name: str,
+    normalized_tool_name: str,
+    command_text: str,
+) -> ToolActionRequestMatch | None:
+    if _normalize_docker_command(command_text) is None:
+        return None
+    return ToolActionRequestMatch(
+        tool_name=tool_name,
+        normalized_tool_name=normalized_tool_name,
+        command_text=command_text,
+        action_class="docker-sensitive command",
+        reason=(
+            "Guard treats Docker login, build, run, push, and compose actions as sensitive because they can expose "
+            "credentials or execute privileged container workflows."
+        ),
+    )
+
+
+def _docker_config_tool_action_request(
+    *,
+    tool_name: str,
+    normalized_tool_name: str,
+    command_text: str,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> ToolActionRequestMatch | None:
+    if _docker_config_path_from_command(command_text, cwd=cwd, home_dir=home_dir) is None:
+        return None
+    return ToolActionRequestMatch(
+        tool_name=tool_name,
+        normalized_tool_name=normalized_tool_name,
+        command_text=command_text,
+        action_class="Docker client config access",
+        reason=_SENSITIVE_PATH_REASONS["Docker client config"],
+    )
 
 
 def build_tool_action_request_artifact(

@@ -1232,6 +1232,22 @@ def _managed_install_for(store: GuardStore, harness: str) -> dict[str, object] |
     return managed_install
 
 
+def _managed_manifest_server(
+    managed_install: dict[str, object],
+    server_name: str,
+) -> dict[str, object] | None:
+    manifest = managed_install.get("manifest")
+    if not isinstance(manifest, dict):
+        return None
+    servers = manifest.get("servers")
+    if not isinstance(servers, dict):
+        return None
+    server = servers.get(server_name)
+    if not isinstance(server, dict):
+        return None
+    return server
+
+
 def _run_hermes_mcp_proxy(
     *,
     args: argparse.Namespace,
@@ -1247,18 +1263,13 @@ def _run_hermes_mcp_proxy(
     if not isinstance(manifest, dict):
         print("Hermes managed install manifest is missing.", file=sys.stderr)
         return 2
-    servers = manifest.get("servers")
-    if not isinstance(servers, dict):
+    if not isinstance(manifest.get("servers"), dict):
         print("Hermes managed install has no MCP server manifest.", file=sys.stderr)
         return 2
-    server = servers.get(args.server)
-    if not isinstance(server, dict):
+    server = _managed_manifest_server(managed_install, str(args.server))
+    if server is None:
         print(f"Unknown Hermes MCP server: {args.server}", file=sys.stderr)
         return 2
-    raw_messages = [line for line in sys.stdin.read().splitlines() if line.strip()]
-    messages = [json.loads(line) for line in raw_messages]
-    if len(messages) == 0:
-        return 0
     approval_center_url = ensure_guard_daemon(context.guard_home)
     transport = str(server.get("transport") or "stdio")
     if transport == "http":
@@ -1267,7 +1278,15 @@ def _run_hermes_mcp_proxy(
             print(f"Hermes MCP server {args.server} is missing a remote URL.", file=sys.stderr)
             return 2
         proxy = RemoteGuardProxy(base_url=base_url, allow_insecure_localhost=True)
-        for message in messages:
+        for raw_line in sys.stdin:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                message = json.loads(line)
+            except json.JSONDecodeError as exc:
+                print(f"Guard Hermes MCP proxy received invalid JSON: {exc}", file=sys.stderr)
+                return 2
             response = proxy.forward("", message)
             print(json.dumps(response, separators=(",", ":")))
         return 0
@@ -1283,10 +1302,11 @@ def _run_hermes_mcp_proxy(
         approval_center_url=approval_center_url,
         harness="hermes",
     )
-    result = proxy.run_session(messages)
-    for response in result["responses"]:
-        print(json.dumps(response, separators=(",", ":")))
-    return int(result["return_code"]) if isinstance(result.get("return_code"), int) else 0
+    return proxy.run_stream(
+        input_stream=sys.stdin,
+        output_stream=sys.stdout,
+        error_stream=sys.stderr,
+    )
 
 
 def _server_command(server: dict[str, object]) -> list[str]:

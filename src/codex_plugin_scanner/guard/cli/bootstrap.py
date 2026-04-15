@@ -90,11 +90,7 @@ def _build_bootstrap_install(
         }
     adapter = get_adapter(requested_harness)
     managed_install = store.get_managed_install(requested_harness)
-    if (
-        requested_harness != "hermes"
-        and managed_install is not None
-        and bool(managed_install.get("active"))
-    ):
+    if requested_harness != "hermes" and managed_install is not None and bool(managed_install.get("active")):
         return {
             "installed": False,
             "harness": requested_harness,
@@ -170,13 +166,13 @@ def _build_bootstrap_steps(
     if harness is None:
         return [
             {
-                    "title": "Detect a supported harness",
-                    "command": f"{GUARD_COMMAND} detect",
-                    "detail": (
-                        "Install Codex, Claude Code, Copilot CLI, Hermes, Cursor, Gemini, or OpenCode first, "
-                        "then rerun bootstrap."
-                    ),
-                }
+                "title": "Detect a supported harness",
+                "command": f"{GUARD_COMMAND} detect",
+                "detail": (
+                    "Install Codex, Claude Code, Copilot CLI, Hermes, Cursor, Gemini, or OpenCode first, "
+                    "then rerun bootstrap."
+                ),
+            }
         ]
     install_reason = str(bootstrap_install.get("reason") or "")
     install_title = (
