@@ -166,10 +166,31 @@ def approval_center_hint(
     return (
         f"Guard queued {count} approval request{'s' if count != 1 else ''} for {harness}. "
         f"{flow['summary']} "
-        f"Open {approval_center_url} to review them. "
+        f"Review them in the Guard approval center at {approval_center_url}. "
         f"{risk_summary} "
         f"{flow['fallback_hint']}"
     )
+
+
+def build_runtime_snapshot(
+    *,
+    store: GuardStore,
+    approval_center_url: str | None,
+    now: str | None = None,
+    request_limit: int = 200,
+    receipt_limit: int = 25,
+) -> dict[str, object]:
+    pending_requests = store.list_approval_requests(limit=request_limit)
+    latest_receipts = store.list_receipts(limit=receipt_limit)
+    return {
+        "generated_at": now or _now(),
+        "approval_center_url": approval_center_url,
+        "runtime_state": store.get_runtime_state(),
+        "pending_count": store.count_approval_requests(),
+        "receipt_count": store.count_receipts(),
+        "items": pending_requests,
+        "latest_receipts": latest_receipts,
+    }
 
 
 def approval_prompt_flow(harness: str) -> dict[str, object]:

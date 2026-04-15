@@ -2,7 +2,8 @@ import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
   GuardPolicyDecision,
-  GuardReceipt
+  GuardReceipt,
+  GuardRuntimeSnapshot
 } from "./guard-types";
 import {
   getDemoDiff,
@@ -27,6 +28,30 @@ export async function fetchRequests(): Promise<GuardApprovalRequest[]> {
   }
   const payload = await readJson<{ items: GuardApprovalRequest[] }>("/v1/requests");
   return payload.items;
+}
+
+export async function fetchRuntimeSnapshot(): Promise<GuardRuntimeSnapshot> {
+  if (isGuardDemoMode()) {
+    const demoRequests = getDemoRequests();
+    const demoReceipts = getDemoReceipts();
+    return {
+      generated_at: new Date().toISOString(),
+      approval_center_url: "http://127.0.0.1:4455",
+      runtime_state: {
+        session_id: "demo-runtime",
+        daemon_host: "127.0.0.1",
+        daemon_port: 4455,
+        started_at: new Date().toISOString(),
+        last_heartbeat_at: new Date().toISOString(),
+        approval_center_url: "http://127.0.0.1:4455"
+      },
+      pending_count: demoRequests.length,
+      receipt_count: demoReceipts.length,
+      items: demoRequests,
+      latest_receipts: demoReceipts.slice(0, 10)
+    };
+  }
+  return readJson<GuardRuntimeSnapshot>("/v1/runtime");
 }
 
 export async function fetchRequest(requestId: string): Promise<GuardApprovalRequest> {

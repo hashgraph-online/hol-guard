@@ -76,6 +76,8 @@ def _build_guard_product_payload(
     recommended = _recommended_harness(harnesses)
     receipt_count = store.count_receipts()
     managed_harnesses = sum(1 for item in harnesses if item["managed"] is True)
+    runtime_state = store.get_runtime_state()
+    approval_center_url = load_guard_daemon_url(context.guard_home)
     payload: dict[str, object] = {
         "generated_at": _now(),
         "guard_home": str(context.guard_home),
@@ -83,7 +85,9 @@ def _build_guard_product_payload(
         "sync_configured": store.get_sync_credentials() is not None,
         "receipt_count": receipt_count,
         "pending_approvals": store.count_approval_requests(),
-        "approval_center_url": load_guard_daemon_url(context.guard_home),
+        "approval_center_url": approval_center_url,
+        "runtime_state": runtime_state,
+        "runtime_status": _resolve_runtime_status(runtime_state, approval_center_url),
         "managed_harnesses": managed_harnesses,
         "recommended_harness": recommended["harness"] if recommended is not None else None,
         "harnesses": harnesses,
@@ -175,6 +179,14 @@ def _build_next_steps(recommended: dict[str, object] | None, payload: dict[str, 
         )
     )
     return steps
+
+
+def _resolve_runtime_status(runtime_state: dict[str, object] | None, approval_center_url: str | None) -> str:
+    if approval_center_url:
+        return "active"
+    if runtime_state is not None:
+        return "stale"
+    return "offline"
 
 
 def _build_cloud_context(store: GuardStore) -> dict[str, object]:

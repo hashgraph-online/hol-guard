@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
+import subprocess
 import sys
 import urllib.error
 import webbrowser
@@ -547,6 +549,10 @@ def run_guard_command(args: argparse.Namespace) -> int:
             interactive_resolver=interactive_resolver,
             blocked_resolver=blocked_resolver,
         )
+        payload["dry_run"] = bool(args.dry_run)
+        payload["rerun_command"] = _guard_rerun_command(args)
+        payload["diff_command"] = _guard_diff_command(args)
+        payload["approvals_command"] = _guard_approvals_command(args)
         _emit("run", payload, getattr(args, "json", False))
         if payload.get("blocked"):
             return 1
@@ -897,6 +903,46 @@ def _copilot_hook_reason(*values: object | None) -> str:
     return "Guard blocked this tool call. Open the Guard approval center to review the request."
 
 
+def _guard_rerun_command(args: argparse.Namespace) -> str:
+    command = ["hol-guard", "run", str(args.harness)]
+    _append_guard_context_args(command, args)
+    default_action = getattr(args, "default_action", None)
+    if isinstance(default_action, str) and default_action:
+        command.extend(["--default-action", default_action])
+    passthrough_args = getattr(args, "passthrough_args", [])
+    if isinstance(passthrough_args, list):
+        for value in passthrough_args:
+            if isinstance(value, str) and value:
+                command.extend(["--arg", value])
+    return _shell_join(command)
+
+
+def _guard_diff_command(args: argparse.Namespace) -> str:
+    command = ["hol-guard", "diff", str(args.harness)]
+    _append_guard_context_args(command, args)
+    return _shell_join(command)
+
+
+def _guard_approvals_command(args: argparse.Namespace) -> str:
+    command = ["hol-guard", "approvals"]
+    _append_guard_context_args(command, args)
+    return _shell_join(command)
+
+
+def _shell_join(command: list[str]) -> str:
+    if sys.platform.startswith("win"):
+        return subprocess.list2cmdline(command)
+    return shlex.join(command)
+
+
+def _append_guard_context_args(command: list[str], args: argparse.Namespace) -> None:
+    for option_name in ("home", "guard_home", "workspace"):
+        value = getattr(args, option_name, None)
+        if isinstance(value, str) and value:
+            flag = f"--{option_name.replace('_', '-')}"
+            command.extend([flag, value])
+
+
 def _emit_copilot_hook_response(*, policy_action: str, reason: str) -> None:
     if policy_action in {"block", "sandbox-required", "require-reapproval"}:
         payload = {
@@ -934,8 +980,6 @@ def _headless_approval_resolver(
             queued=queued,
         )
         payload["approval_delivery"] = _approval_delivery_payload(args.harness)
-        if bool(approval_flow["auto_open_browser"]):
-            _open_approval_center(approval_center_url)
         if str(approval_flow["tier"]) != "native-or-center":
             payload["approval_wait"] = {
                 "resolved": False,
@@ -956,7 +1000,7 @@ def _headless_approval_resolver(
                 payload["review_hint"] = "Approval received. Guard is resuming the harness launch."
         else:
             payload["review_hint"] = (
-                f"Approval is still pending. Open {approval_center_url} and resolve request "
+                f"Approval is still pending in the Guard approval center at {approval_center_url}. Resolve request "
                 f"{', '.join(str(item) for item in wait_result.get('pending_request_ids', []))}."
             )
         return payload

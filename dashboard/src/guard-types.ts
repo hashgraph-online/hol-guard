@@ -31,6 +31,25 @@ export type GuardApprovalRequest = {
   resolved_at: string | null;
 };
 
+export type GuardRuntimeState = {
+  session_id: string;
+  daemon_host: string;
+  daemon_port: number;
+  started_at: string;
+  last_heartbeat_at: string;
+  approval_center_url: string;
+};
+
+export type GuardRuntimeSnapshot = {
+  generated_at: string;
+  approval_center_url: string | null;
+  runtime_state: GuardRuntimeState | null;
+  pending_count: number;
+  receipt_count: number;
+  items: GuardApprovalRequest[];
+  latest_receipts: GuardReceipt[];
+};
+
 export type GuardReceipt = {
   receipt_id: string;
   harness: string;

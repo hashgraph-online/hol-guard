@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -297,6 +299,7 @@ class TestGuardProductFlow:
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+        daemon = GuardDaemonServer(GuardStore(home_dir), host="127.0.0.1", port=0)
 
         install_rc = main(
             [
@@ -338,18 +341,22 @@ args = ["workspace-skill.js", "--changed"]
             + "\n",
         )
 
-        status_rc = main(
-            [
-                "guard",
-                "status",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--json",
-            ]
-        )
-        status_output = json.loads(capsys.readouterr().out)
+        daemon.start()
+        try:
+            status_rc = main(
+                [
+                    "guard",
+                    "status",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--json",
+                ]
+            )
+            status_output = json.loads(capsys.readouterr().out)
+        finally:
+            daemon.stop()
         codex_summary = next(item for item in status_output["harnesses"] if item["harness"] == "codex")
 
         assert install_rc == 0
@@ -357,6 +364,9 @@ args = ["workspace-skill.js", "--changed"]
         assert status_rc == 0
         assert status_output["managed_harnesses"] == 1
         assert status_output["receipt_count"] >= 1
+        assert status_output["runtime_status"] == "active"
+        assert status_output["runtime_state"]["daemon_port"] == daemon.port
+        assert status_output["approval_center_url"] == f"http://127.0.0.1:{daemon.port}"
         assert codex_summary["managed"] is True
         assert codex_summary["review_count"] >= 1
         assert codex_summary["next_action"] == "review"

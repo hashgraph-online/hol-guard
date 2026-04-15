@@ -33,6 +33,7 @@ import type {
   GuardArtifactDiff,
   GuardPolicyDecision,
   GuardReceipt,
+  GuardRuntimeSnapshot,
   DecisionScope
 } from "./guard-types";
 
@@ -56,11 +57,16 @@ type ReceiptsState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardReceipt[] };
+type RuntimeState =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; snapshot: GuardRuntimeSnapshot };
 type LayoutProps = {
   view: "queue" | "receipts";
   requests: RequestState;
   detail: DetailState;
   receipts: ReceiptsState;
+  runtime: RuntimeState;
   activeRequestId: string | null;
   resolutionMessage: string | null;
   onGoHome: () => void;
@@ -91,6 +97,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     <div className="flex min-h-screen flex-col bg-transparent text-brand-dark">
       <ShellHeader queuedCount={queuedItems.length} activeHarness={activeHarness} view={props.view} />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <RuntimeBanner runtime={props.runtime} />
         {props.view === "receipts" ? (
           <ReceiptsWorkspace receipts={props.receipts} />
         ) : (
@@ -107,6 +114,54 @@ export function ApprovalCenterLayout(props: LayoutProps) {
       </main>
       <ShellFooter />
     </div>
+  );
+}
+
+function RuntimeBanner(props: { runtime: RuntimeState }) {
+  if (props.runtime.kind === "loading") {
+    return <div className="mb-6 guard-skeleton h-20 w-full" />;
+  }
+  if (props.runtime.kind === "error") {
+    return (
+      <Surface className="mb-6" tone="warning">
+        <SectionLabel>Local runtime</SectionLabel>
+        <p className="mt-2 text-sm text-brand-dark/80">{props.runtime.message}</p>
+      </Surface>
+    );
+  }
+  const { snapshot } = props.runtime;
+  const sessionId = snapshot.runtime_state?.session_id.slice(0, 8) ?? "offline";
+  const lastHeartbeat = snapshot.runtime_state?.last_heartbeat_at
+    ? new Date(snapshot.runtime_state.last_heartbeat_at).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+      })
+    : "offline";
+  return (
+    <Surface className="mb-6" tone="accent">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <SectionLabel>Local runtime</SectionLabel>
+          <h2 className="mt-1 text-lg font-semibold tracking-tight text-brand-dark">
+            One Guard session, shared across the CLI and approval center
+          </h2>
+          <p className="mt-1 text-sm text-brand-dark/75">
+            Keep this window open while approvals arrive. The CLI now points back here instead of spawning a new tab
+            for each blocked request.
+          </p>
+        </div>
+        <KeyValueGrid
+          columns={2}
+          items={[
+            ["Session", sessionId],
+            ["Queue", `${snapshot.pending_count} pending`],
+            ["Receipts", `${snapshot.receipt_count} stored`],
+            ["Heartbeat", lastHeartbeat],
+            ["URL", snapshot.approval_center_url ?? "offline"]
+          ]}
+        />
+      </div>
+    </Surface>
   );
 }
 
