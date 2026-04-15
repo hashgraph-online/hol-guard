@@ -21,8 +21,12 @@ Current Guard support in this repo:
   - detects global and project `mcp.json`
   - supports wrapper-mode management state
   - leaves native Cursor tool approval in place and focuses Guard on artifact trust
+- `antigravity`
+  - detects Antigravity user settings, installed extension profiles, and Antigravity-owned MCP and skill roots
+  - supports wrapper-mode management state
+  - uses the local approval center for blocked artifact changes today
 - `gemini`
-  - detects local extension manifests and embedded MCP server declarations
+  - detects `.gemini/settings.json`, local extension manifests, embedded MCP declarations, hooks, and Gemini skill directories
   - supports wrapper-mode management state
   - falls back to the local approval center when Guard blocks a launch
 - `opencode`
