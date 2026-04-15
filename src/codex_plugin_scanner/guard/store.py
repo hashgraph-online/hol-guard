@@ -6,9 +6,10 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
+from uuid import uuid4
 
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
 from .store_approvals import (
@@ -28,6 +29,22 @@ from .store_approvals import (
 )
 from .store_approvals import (
     resolve_approval_request as persist_approval_resolution,
+)
+from .store_connect import (
+    build_connect_request as build_pending_connect_request,
+)
+from .store_connect import (
+    complete_connect_request as persist_connect_request_completion,
+)
+from .store_connect import (
+    connect_request_schema_statement,
+    hash_pairing_secret,
+)
+from .store_connect import (
+    create_connect_request as persist_connect_request,
+)
+from .store_connect import (
+    get_connect_request as load_connect_request,
 )
 
 
@@ -188,6 +205,66 @@ class GuardStore:
               updated_at text not null
             )
             """,
+            """
+            create table if not exists guard_sessions (
+              session_id text primary key,
+              harness text not null,
+              surface text not null,
+              status text not null,
+              client_name text not null,
+              client_title text,
+              client_version text,
+              workspace text,
+              capabilities_json text not null default '[]',
+              created_at text not null,
+              updated_at text not null
+            )
+            """,
+            """
+            create table if not exists guard_operations (
+              operation_id text primary key,
+              session_id text not null,
+              harness text not null,
+              operation_type text not null,
+              status text not null,
+              approval_request_ids_json text not null default '[]',
+              resume_token text,
+              metadata_json text not null default '{}',
+              created_at text not null,
+              updated_at text not null
+            )
+            """,
+            """
+            create table if not exists guard_operation_items (
+              item_id text primary key,
+              operation_id text not null,
+              item_type text not null,
+              lifecycle text not null,
+              payload_json text not null default '{}',
+              created_at text not null
+            )
+            """,
+            """
+            create table if not exists guard_client_attachments (
+              client_id text primary key,
+              surface text not null,
+              session_id text,
+              metadata_json text not null default '{}',
+              lease_id text not null default '',
+              lease_expires_at text,
+              attached_at text not null,
+              last_seen_at text not null
+            )
+            """,
+            """
+            create table if not exists guard_surface_opens (
+              surface text not null,
+              open_key text not null,
+              opened_at text not null,
+              primary key (surface, open_key)
+            )
+            """,
+            connect_request_schema_statement(),
             approval_schema_statement(),
         )
         with self._connect() as connection:
@@ -211,6 +288,8 @@ class GuardStore:
             self._ensure_approval_column(connection, "launch_summary", "text")
             self._ensure_approval_column(connection, "risk_headline", "text")
             self._ensure_approval_column(connection, "workspace", "text")
+            self._ensure_attachment_column(connection, "lease_id", "text not null default ''")
+            self._ensure_attachment_column(connection, "lease_expires_at", "text")
 
     @staticmethod
     def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
@@ -235,6 +314,14 @@ class GuardStore:
         if column_name in existing:
             return
         connection.execute(f"alter table approval_requests add column {column_name} {column_type}")
+
+    @staticmethod
+    def _ensure_attachment_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
+        rows = connection.execute("pragma table_info(guard_client_attachments)").fetchall()
+        existing = {str(row["name"]) for row in rows}
+        if column_name in existing:
+            return
+        connection.execute(f"alter table guard_client_attachments add column {column_name} {column_type}")
 
     def list_table_names(self) -> list[str]:
         with self._connect() as connection:
@@ -1043,31 +1130,8 @@ class GuardStore:
         return items
 
     def set_sync_credentials(self, sync_url: str, token: str, now: str) -> None:
-        payload = {"sync_url": sync_url, "token": token}
         with self._connect() as connection:
-            previous_row = connection.execute(
-                "select payload_json from sync_state where state_key = 'credentials'"
-            ).fetchone()
-            credentials_changed = False
-            if previous_row is None:
-                credentials_changed = True
-            else:
-                previous_payload = json.loads(str(previous_row["payload_json"]))
-                credentials_changed = previous_payload != payload
-            connection.execute(
-                """
-                insert into sync_state (state_key, payload_json, updated_at)
-                values ('credentials', ?, ?)
-                on conflict(state_key) do update set
-                  payload_json = excluded.payload_json,
-                  updated_at = excluded.updated_at
-                """,
-                (json.dumps(payload), now),
-            )
-            if credentials_changed:
-                connection.execute("delete from sync_state where state_key != 'credentials'")
-                connection.execute("delete from publisher_cache")
-                connection.execute("delete from policy_decisions where source in ('cloud-sync', 'team-policy')")
+            self._set_sync_credentials_in_connection(connection, sync_url, token, now)
 
     def set_sync_payload(self, state_key: str, payload: dict[str, object] | list[object], now: str) -> None:
         with self._connect() as connection:
@@ -1183,6 +1247,527 @@ class GuardStore:
             return None
         return {"sync_url": sync_url, "token": token}
 
+    def create_guard_connect_request(
+        self,
+        *,
+        sync_url: str,
+        allowed_origin: str,
+        now: str,
+        lifetime_seconds: int = 300,
+    ) -> dict[str, object]:
+        request_id = f"connect-{uuid4().hex}"
+        payload, pairing_secret = build_pending_connect_request(
+            request_id=request_id,
+            sync_url=sync_url,
+            allowed_origin=allowed_origin,
+            now=now,
+            lifetime_seconds=lifetime_seconds,
+        )
+        with self._connect() as connection:
+            persist_connect_request(
+                connection,
+                request_id=request_id,
+                sync_url=sync_url,
+                allowed_origin=allowed_origin,
+                pairing_secret_hash=hash_pairing_secret(pairing_secret),
+                created_at=str(payload["created_at"]),
+                expires_at=str(payload["expires_at"]),
+            )
+        return {**payload, "pairing_secret": pairing_secret}
+
+    def get_guard_connect_request(self, request_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return load_connect_request(connection, request_id)
+
+    def complete_guard_connect_request(
+        self,
+        *,
+        request_id: str,
+        pairing_secret: str,
+        token: str,
+        now: str,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            request = persist_connect_request_completion(
+                connection,
+                request_id=request_id,
+                pairing_secret=pairing_secret,
+                completed_at=now,
+            )
+            self._set_sync_credentials_in_connection(connection, str(request["sync_url"]), token, now)
+            connection.execute(
+                """
+                insert into guard_events (event_name, payload_json, occurred_at)
+                values (?, ?, ?)
+                """,
+                ("sign_in", json.dumps({"sync_url": request["sync_url"], "source": "browser-connect"}), now),
+            )
+        return request
+
+    def _set_sync_credentials_in_connection(
+        self,
+        connection: sqlite3.Connection,
+        sync_url: str,
+        token: str,
+        now: str,
+    ) -> None:
+        payload = {"sync_url": sync_url, "token": token}
+        previous_row = connection.execute(
+            "select payload_json from sync_state where state_key = 'credentials'"
+        ).fetchone()
+        credentials_changed = False
+        if previous_row is None:
+            credentials_changed = True
+        else:
+            previous_payload = json.loads(str(previous_row["payload_json"]))
+            credentials_changed = previous_payload != payload
+        connection.execute(
+            """
+            insert into sync_state (state_key, payload_json, updated_at)
+            values ('credentials', ?, ?)
+            on conflict(state_key) do update set
+              payload_json = excluded.payload_json,
+              updated_at = excluded.updated_at
+            """,
+            (json.dumps(payload), now),
+        )
+        if credentials_changed:
+            connection.execute("delete from sync_state where state_key != 'credentials'")
+            connection.execute("delete from publisher_cache")
+            connection.execute("delete from policy_decisions where source in ('cloud-sync', 'team-policy')")
+
+    def upsert_guard_session(
+        self,
+        *,
+        session_id: str,
+        harness: str,
+        surface: str,
+        status: str,
+        client_name: str,
+        client_title: str | None,
+        client_version: str | None,
+        workspace: str | None,
+        capabilities: list[str],
+        now: str,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into guard_sessions (
+                  session_id,
+                  harness,
+                  surface,
+                  status,
+                  client_name,
+                  client_title,
+                  client_version,
+                  workspace,
+                  capabilities_json,
+                  created_at,
+                  updated_at
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(session_id) do update set
+                  harness = excluded.harness,
+                  surface = excluded.surface,
+                  status = excluded.status,
+                  client_name = excluded.client_name,
+                  client_title = excluded.client_title,
+                  client_version = excluded.client_version,
+                  workspace = excluded.workspace,
+                  capabilities_json = excluded.capabilities_json,
+                  updated_at = excluded.updated_at
+                """,
+                (
+                    session_id,
+                    harness,
+                    surface,
+                    status,
+                    client_name,
+                    client_title,
+                    client_version,
+                    workspace,
+                    json.dumps(capabilities),
+                    now,
+                    now,
+                ),
+            )
+        session = self.get_guard_session(session_id)
+        if session is None:
+            raise RuntimeError(f"Guard session {session_id} was not persisted.")
+        return session
+
+    def get_guard_session(self, session_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select session_id, harness, surface, status, client_name, client_title, client_version, workspace,
+                       capabilities_json, created_at, updated_at
+                from guard_sessions
+                where session_id = ?
+                """,
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "session_id": str(row["session_id"]),
+            "harness": str(row["harness"]),
+            "surface": str(row["surface"]),
+            "status": str(row["status"]),
+            "client_name": str(row["client_name"]),
+            "client_title": str(row["client_title"]) if row["client_title"] is not None else None,
+            "client_version": str(row["client_version"]) if row["client_version"] is not None else None,
+            "workspace": str(row["workspace"]) if row["workspace"] is not None else None,
+            "capabilities": json.loads(str(row["capabilities_json"])),
+            "created_at": str(row["created_at"]),
+            "updated_at": str(row["updated_at"]),
+        }
+
+    def list_guard_sessions(self, status: str | None = None, limit: int = 100) -> list[dict[str, object]]:
+        query = """
+            select session_id, harness, surface, status, client_name, client_title, client_version, workspace,
+                   capabilities_json, created_at, updated_at
+            from guard_sessions
+        """
+        params: list[object] = []
+        if status is not None:
+            query += " where status = ?"
+            params.append(status)
+        query += " order by updated_at desc, session_id desc limit ?"
+        params.append(limit)
+        with self._connect() as connection:
+            rows = connection.execute(query, tuple(params)).fetchall()
+        return [
+            {
+                "session_id": str(row["session_id"]),
+                "harness": str(row["harness"]),
+                "surface": str(row["surface"]),
+                "status": str(row["status"]),
+                "client_name": str(row["client_name"]),
+                "client_title": str(row["client_title"]) if row["client_title"] is not None else None,
+                "client_version": str(row["client_version"]) if row["client_version"] is not None else None,
+                "workspace": str(row["workspace"]) if row["workspace"] is not None else None,
+                "capabilities": json.loads(str(row["capabilities_json"])),
+                "created_at": str(row["created_at"]),
+                "updated_at": str(row["updated_at"]),
+            }
+            for row in rows
+        ]
+
+    def upsert_guard_operation(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        harness: str,
+        operation_type: str,
+        status: str,
+        approval_request_ids: list[str],
+        resume_token: str | None,
+        metadata: dict[str, object],
+        now: str,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into guard_operations (
+                  operation_id,
+                  session_id,
+                  harness,
+                  operation_type,
+                  status,
+                  approval_request_ids_json,
+                  resume_token,
+                  metadata_json,
+                  created_at,
+                  updated_at
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(operation_id) do update set
+                  session_id = excluded.session_id,
+                  harness = excluded.harness,
+                  operation_type = excluded.operation_type,
+                  status = excluded.status,
+                  approval_request_ids_json = excluded.approval_request_ids_json,
+                  resume_token = excluded.resume_token,
+                  metadata_json = excluded.metadata_json,
+                  updated_at = excluded.updated_at
+                """,
+                (
+                    operation_id,
+                    session_id,
+                    harness,
+                    operation_type,
+                    status,
+                    json.dumps(approval_request_ids),
+                    resume_token,
+                    json.dumps(metadata),
+                    now,
+                    now,
+                ),
+            )
+        operation = self.get_guard_operation(operation_id)
+        if operation is None:
+            raise RuntimeError(f"Guard operation {operation_id} was not persisted.")
+        return operation
+
+    def get_guard_operation(self, operation_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select operation_id, session_id, harness, operation_type, status, approval_request_ids_json,
+                       resume_token, metadata_json, created_at, updated_at
+                from guard_operations
+                where operation_id = ?
+                """,
+                (operation_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "operation_id": str(row["operation_id"]),
+            "session_id": str(row["session_id"]),
+            "harness": str(row["harness"]),
+            "operation_type": str(row["operation_type"]),
+            "status": str(row["status"]),
+            "approval_request_ids": json.loads(str(row["approval_request_ids_json"])),
+            "resume_token": str(row["resume_token"]) if row["resume_token"] is not None else None,
+            "metadata": json.loads(str(row["metadata_json"])),
+            "created_at": str(row["created_at"]),
+            "updated_at": str(row["updated_at"]),
+        }
+
+    def list_guard_operations(self, session_id: str | None = None, limit: int = 100) -> list[dict[str, object]]:
+        query = """
+            select operation_id, session_id, harness, operation_type, status, approval_request_ids_json,
+                   resume_token, metadata_json, created_at, updated_at
+            from guard_operations
+        """
+        params: list[object] = []
+        if session_id is not None:
+            query += " where session_id = ?"
+            params.append(session_id)
+        query += " order by updated_at desc, operation_id desc limit ?"
+        params.append(limit)
+        with self._connect() as connection:
+            rows = connection.execute(query, tuple(params)).fetchall()
+        return [
+            {
+                "operation_id": str(row["operation_id"]),
+                "session_id": str(row["session_id"]),
+                "harness": str(row["harness"]),
+                "operation_type": str(row["operation_type"]),
+                "status": str(row["status"]),
+                "approval_request_ids": json.loads(str(row["approval_request_ids_json"])),
+                "resume_token": str(row["resume_token"]) if row["resume_token"] is not None else None,
+                "metadata": json.loads(str(row["metadata_json"])),
+                "created_at": str(row["created_at"]),
+                "updated_at": str(row["updated_at"]),
+            }
+            for row in rows
+        ]
+
+    def add_guard_operation_item(
+        self,
+        *,
+        item_id: str,
+        operation_id: str,
+        item_type: str,
+        lifecycle: str,
+        payload: dict[str, object],
+        now: str,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into guard_operation_items (
+                  item_id, operation_id, item_type, lifecycle, payload_json, created_at
+                )
+                values (?, ?, ?, ?, ?, ?)
+                """,
+                (item_id, operation_id, item_type, lifecycle, json.dumps(payload), now),
+            )
+        items = self.list_guard_operation_items(operation_id)
+        for item in items:
+            if item["item_id"] == item_id:
+                return item
+        raise RuntimeError(f"Guard operation item {item_id} was not persisted.")
+
+    def list_guard_operation_items(self, operation_id: str) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                select item_id, operation_id, item_type, lifecycle, payload_json, created_at
+                from guard_operation_items
+                where operation_id = ?
+                order by created_at asc, item_id asc
+                """,
+                (operation_id,),
+            ).fetchall()
+        return [
+            {
+                "item_id": str(row["item_id"]),
+                "operation_id": str(row["operation_id"]),
+                "item_type": str(row["item_type"]),
+                "lifecycle": str(row["lifecycle"]),
+                "payload": json.loads(str(row["payload_json"])),
+                "created_at": str(row["created_at"]),
+            }
+            for row in rows
+        ]
+
+    def attach_guard_client(
+        self,
+        *,
+        client_id: str,
+        surface: str,
+        session_id: str | None,
+        metadata: dict[str, object],
+        lease_seconds: int,
+        now: str,
+    ) -> dict[str, object]:
+        lease_id = uuid4().hex
+        lease_expires_at = _lease_expiry(now, lease_seconds)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into guard_client_attachments (
+                  client_id, surface, session_id, metadata_json, lease_id, lease_expires_at, attached_at, last_seen_at
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict(client_id) do update set
+                  surface = excluded.surface,
+                  session_id = excluded.session_id,
+                  metadata_json = excluded.metadata_json,
+                  lease_id = excluded.lease_id,
+                  lease_expires_at = excluded.lease_expires_at,
+                  last_seen_at = excluded.last_seen_at
+                """,
+                (client_id, surface, session_id, json.dumps(metadata), lease_id, lease_expires_at, now, now),
+            )
+        item = self.get_guard_client_attachment(client_id)
+        if item is not None:
+            return item
+        raise RuntimeError(f"Guard client attachment {client_id} was not persisted.")
+
+    def renew_guard_client_attachment(
+        self,
+        *,
+        client_id: str,
+        lease_id: str,
+        lease_seconds: int,
+        now: str,
+    ) -> dict[str, object] | None:
+        lease_expires_at = _lease_expiry(now, lease_seconds)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                update guard_client_attachments
+                set last_seen_at = ?, lease_expires_at = ?
+                where client_id = ? and lease_id = ?
+                """,
+                (now, lease_expires_at, client_id, lease_id),
+            )
+        if cursor.rowcount <= 0:
+            return None
+        return self.get_guard_client_attachment(client_id)
+
+    def get_guard_client_attachment(self, client_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select
+                  client_id, surface, session_id, metadata_json,
+                  lease_id, lease_expires_at, attached_at, last_seen_at
+                from guard_client_attachments
+                where client_id = ?
+                """,
+                (client_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "client_id": str(row["client_id"]),
+            "surface": str(row["surface"]),
+            "session_id": str(row["session_id"]) if row["session_id"] is not None else None,
+            "metadata": json.loads(str(row["metadata_json"])),
+            "lease_id": str(row["lease_id"]),
+            "lease_expires_at": str(row["lease_expires_at"]) if row["lease_expires_at"] is not None else None,
+            "attached_at": str(row["attached_at"]),
+            "last_seen_at": str(row["last_seen_at"]),
+        }
+
+    def list_guard_client_attachments(
+        self,
+        *,
+        surface: str | None = None,
+        session_id: str | None = None,
+        active_within_seconds: int = 60,
+    ) -> list[dict[str, object]]:
+        query = """
+            select client_id, surface, session_id, metadata_json, lease_id, lease_expires_at, attached_at, last_seen_at
+            from guard_client_attachments
+        """
+        params: list[object] = []
+        filters: list[str] = []
+        if surface is not None:
+            filters.append("surface = ?")
+            params.append(surface)
+        if session_id is not None:
+            filters.append("session_id = ?")
+            params.append(session_id)
+        if filters:
+            query += " where " + " and ".join(filters)
+        query += " order by last_seen_at desc, client_id asc"
+        with self._connect() as connection:
+            rows = connection.execute(query, tuple(params)).fetchall()
+        cutoff = datetime.now(timezone.utc).timestamp() - max(active_within_seconds, 0)
+        items: list[dict[str, object]] = []
+        for row in rows:
+            lease_expires_at = row["lease_expires_at"]
+            if lease_expires_at is not None:
+                expires_at = datetime.fromisoformat(str(lease_expires_at)).timestamp()
+                if expires_at < datetime.now(timezone.utc).timestamp():
+                    continue
+            else:
+                last_seen = datetime.fromisoformat(str(row["last_seen_at"])).timestamp()
+                if last_seen < cutoff:
+                    continue
+            items.append(
+                {
+                    "client_id": str(row["client_id"]),
+                    "surface": str(row["surface"]),
+                    "session_id": str(row["session_id"]) if row["session_id"] is not None else None,
+                    "metadata": json.loads(str(row["metadata_json"])),
+                    "lease_id": str(row["lease_id"]),
+                    "lease_expires_at": str(row["lease_expires_at"]) if row["lease_expires_at"] is not None else None,
+                    "attached_at": str(row["attached_at"]),
+                    "last_seen_at": str(row["last_seen_at"]),
+                }
+            )
+        return items
+
+    def record_guard_surface_open(self, *, surface: str, open_key: str, now: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into guard_surface_opens (surface, open_key, opened_at)
+                values (?, ?, ?)
+                on conflict(surface, open_key) do update set
+                  opened_at = excluded.opened_at
+                """,
+                (surface, open_key, now),
+            )
+
+    def has_guard_surface_open(self, *, surface: str, open_key: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "select 1 from guard_surface_opens where surface = ? and open_key = ?",
+                (surface, open_key),
+            ).fetchone()
+        return row is not None
+
     @staticmethod
     def _advisory_cache_key(advisory: dict[str, object]) -> str:
         advisory_id = advisory.get("id")
@@ -1202,3 +1787,7 @@ def _path_within_workspace(config_path: str, workspace: str) -> bool:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _lease_expiry(now: str, lease_seconds: int) -> str:
+    return (datetime.fromisoformat(now) + timedelta(seconds=max(lease_seconds, 1))).isoformat()

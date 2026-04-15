@@ -9,6 +9,8 @@ import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import bridge as guard_bridge_module
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
@@ -16,6 +18,7 @@ from codex_plugin_scanner.guard.bridge import BridgeConfig, GuardBridge
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon import client as daemon_client_module
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.models import (
     GuardApprovalRequest,
@@ -92,6 +95,106 @@ class TestGuardApprovals:
         assert resolved["status"] == "resolved"
         assert resolved["resolution_action"] == "allow"
         assert resolved["resolution_scope"] == "artifact"
+
+    def test_guard_surface_daemon_client_recovers_missing_auth_token(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+        cleared: list[Path] = []
+        restarted: list[Path] = []
+        auth_token_calls = {"count": 0}
+
+        monkeypatch.setattr(
+            daemon_client_module,
+            "load_guard_daemon_url",
+            lambda _guard_home: "http://127.0.0.1:4781",
+        )
+
+        def fake_load_auth_token(_guard_home: Path) -> str | None:
+            auth_token_calls["count"] += 1
+            return "fresh-token" if auth_token_calls["count"] > 1 else None
+
+        monkeypatch.setattr(daemon_client_module, "load_guard_daemon_auth_token", fake_load_auth_token)
+        monkeypatch.setattr(
+            daemon_client_module,
+            "clear_guard_daemon_state",
+            lambda path: cleared.append(path),
+        )
+        monkeypatch.setattr(
+            daemon_client_module,
+            "ensure_guard_daemon",
+            lambda path: restarted.append(path) or "http://127.0.0.1:4781",
+        )
+
+        client = daemon_client_module.load_guard_surface_daemon_client(guard_home)
+
+        assert client.daemon_url == "http://127.0.0.1:4781"
+        assert client.auth_token == "fresh-token"
+        assert cleared == [guard_home]
+        assert restarted == [guard_home]
+
+    def test_guard_surface_daemon_client_wraps_transport_failures(self, monkeypatch):
+        client = daemon_client_module.GuardSurfaceDaemonClient("http://127.0.0.1:4781", "auth-token")
+
+        def raise_transport_error(request, timeout):
+            raise urllib.error.URLError("offline")
+
+        monkeypatch.setattr(daemon_client_module.urllib.request, "urlopen", raise_transport_error)
+
+        with pytest.raises(RuntimeError, match="Guard daemon request failed"):
+            client.create_connect_request(
+                sync_url="https://hol.org/registry/api/v1",
+                allowed_origin="https://hol.org",
+            )
+
+    def test_browser_connect_completion_clears_stale_cloud_state(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_credentials("https://old.example/registry/api/v1", "old-token", "2026-04-10T00:00:00+00:00")
+        store.set_sync_payload("policy", {"mode": "enforce"}, "2026-04-10T00:00:00+00:00")
+        request = store.create_guard_connect_request(
+            sync_url="https://new.example/registry/api/v1",
+            allowed_origin="https://hol.org",
+            now="2026-04-10T01:00:00+00:00",
+            lifetime_seconds=600,
+        )
+
+        store.complete_guard_connect_request(
+            request_id=str(request["request_id"]),
+            pairing_secret=str(request["pairing_secret"]),
+            token="new-token",
+            now="2026-04-10T01:05:00+00:00",
+        )
+
+        assert store.get_sync_credentials() == {
+            "sync_url": "https://new.example/registry/api/v1",
+            "token": "new-token",
+        }
+        assert store.get_sync_payload("policy") is None
+
+    def test_browser_connect_completion_rolls_back_if_credentials_persist_fails(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+        request = store.create_guard_connect_request(
+            sync_url="https://new.example/registry/api/v1",
+            allowed_origin="https://hol.org",
+            now="2026-04-10T01:00:00+00:00",
+            lifetime_seconds=600,
+        )
+
+        def fail_credentials_write(connection, sync_url: str, token: str, now: str) -> None:
+            raise RuntimeError("credentials unavailable")
+
+        monkeypatch.setattr(store, "_set_sync_credentials_in_connection", fail_credentials_write)
+
+        with pytest.raises(RuntimeError, match="credentials unavailable"):
+            store.complete_guard_connect_request(
+                request_id=str(request["request_id"]),
+                pairing_secret=str(request["pairing_secret"]),
+                token="new-token",
+                now="2026-04-10T01:05:00+00:00",
+            )
+
+        request_after_failure = store.get_guard_connect_request(str(request["request_id"]))
+        assert request_after_failure is not None
+        assert request_after_failure["status"] == "pending"
+        assert store.get_sync_credentials() is None
 
     def test_guard_store_keeps_request_id_when_duplicate_pending_request_is_requeued(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -867,6 +970,40 @@ class TestGuardApprovals:
         assert status == 403
         assert payload["error"] == "forbidden_origin"
 
+    def test_guard_daemon_rejects_malformed_origin_post_requests(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
+                data=json.dumps(
+                    {
+                        "harness": "codex",
+                        "scope": "harness",
+                        "action": "allow",
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": "http://localhost:abc",
+                },
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for malformed origin")
+        finally:
+            daemon.stop()
+
+        assert status == 403
+        assert payload["error"] == "forbidden_origin"
+
     def test_guard_daemon_detail_page_serves_dashboard_shell(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         target_artifact = "codex:project:workspace_skill"
@@ -938,9 +1075,7 @@ class TestGuardApprovals:
             with urllib.request.urlopen(asset_url, timeout=5) as response:
                 body = response.read().decode("utf-8")
                 content_type = response.headers.get("Content-Type")
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{daemon.port}/brand/Logo_Whole.png", timeout=5
-            ) as response:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/brand/Logo_Whole.png", timeout=5) as response:
                 logo_bytes = response.read()
                 logo_type = response.headers.get("Content-Type")
         finally:

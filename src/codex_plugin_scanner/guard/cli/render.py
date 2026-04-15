@@ -436,6 +436,20 @@ def _render_login(console: Console, payload: dict[str, object]) -> None:
 
 
 def _render_connect(console: Console, payload: dict[str, object]) -> None:
+    if "connected" in payload or "browser_opened" in payload or "status" in payload:
+        body = Table.grid(padding=(0, 1))
+        body.add_row("Connected", _bool_label(bool(payload.get("connected"))))
+        body.add_row("Browser opened", _bool_label(bool(payload.get("browser_opened"))))
+        body.add_row("Status", str(payload.get("status") or "unknown"))
+        body.add_row("Connect URL", str(payload.get("connect_url") or "unknown"))
+        body.add_row("Sync endpoint", str(payload.get("sync_url") or "unknown"))
+        sync_payload = payload.get("sync")
+        if isinstance(sync_payload, dict):
+            body.add_row("Receipts stored", str(sync_payload.get("receipts_stored") or 0))
+            body.add_row("Inventory sent", str(sync_payload.get("inventory") or 0))
+        console.print(Panel(body, title="Guard connect", border_style="green"))
+        return
+
     border_style = _cloud_border_style(str(payload.get("cloud_state") or "local_only"))
     console.print(
         Panel.fit(

@@ -71,10 +71,18 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
     return None
 
 
-def write_guard_daemon_state(guard_home: Path, port: int) -> None:
+def load_guard_daemon_auth_token(guard_home: Path) -> str | None:
+    payload = _load_state(guard_home)
+    if payload is None:
+        return None
+    token = payload.get("auth_token")
+    return token if isinstance(token, str) and token.strip() else None
+
+
+def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str) -> None:
     state_path = _state_path(guard_home)
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps({"port": port}, indent=2), encoding="utf-8")
+    state_path.write_text(json.dumps({"port": port, "auth_token": auth_token}, indent=2), encoding="utf-8")
 
 
 def clear_guard_daemon_state(guard_home: Path) -> None:

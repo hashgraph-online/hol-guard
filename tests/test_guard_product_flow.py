@@ -137,7 +137,7 @@ class TestGuardProductFlow:
         assert copilot_summary["install_command"] == "hol-guard install copilot"
         assert output["next_steps"][1]["command"] == "hol-guard run copilot --dry-run"
 
-    def test_guard_connect_json_surfaces_local_only_state(self, tmp_path, capsys):
+    def test_guard_status_json_surfaces_local_only_state(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         guard_home = tmp_path / "guard-home"
@@ -146,7 +146,7 @@ class TestGuardProductFlow:
         rc = main(
             [
                 "guard",
-                "connect",
+                "status",
                 "--home",
                 str(home_dir),
                 "--guard-home",
@@ -163,7 +163,7 @@ class TestGuardProductFlow:
         assert output["sync_configured"] is False
         assert output["connect_url"] == "https://hol.org/guard/connect"
         assert output["dashboard_url"] == "https://hol.org/guard"
-        assert output["next_steps"][0]["command"] == "https://hol.org/guard/connect"
+        assert output["connect_command"] == "hol-guard connect"
 
     def test_guard_start_human_output_highlights_guard_loop(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -185,7 +185,7 @@ class TestGuardProductFlow:
         assert rc == 0
         assert "Install Guard for codex" in output
         assert "Run Guard before launch" in output
-        assert "Optional sync later" in output
+        assert "Optional cloud connect" in output
 
     def test_hol_guard_direct_entrypoint_runs_without_nested_guard_command(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
