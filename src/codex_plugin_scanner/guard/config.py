@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -83,6 +84,10 @@ def resolve_guard_home(override: str | None = None) -> Path:
     legacy_home = _existing_legacy_guard_home()
     if legacy_home is None:
         return canonical_home
+    if _guard_home_has_sync_credentials(canonical_home):
+        return canonical_home
+    if _guard_home_has_sync_credentials(legacy_home):
+        return legacy_home
     if _guard_home_has_state(canonical_home):
         return canonical_home
     if canonical_home.exists() and _guard_home_has_state(legacy_home):
@@ -212,3 +217,15 @@ def _guard_home_has_state(path: Path) -> bool:
     if not path.exists():
         return False
     return any(path.iterdir())
+
+
+def _guard_home_has_sync_credentials(path: Path) -> bool:
+    database_path = path / "guard.db"
+    if not database_path.is_file():
+        return False
+    try:
+        with sqlite3.connect(f"file:{database_path}?mode=ro", uri=True) as connection:
+            row = connection.execute("select 1 from sync_state where state_key = 'credentials' limit 1").fetchone()
+    except sqlite3.Error:
+        return False
+    return row is not None

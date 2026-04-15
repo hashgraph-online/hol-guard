@@ -6,6 +6,7 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard import bridge as bridge_module
 from codex_plugin_scanner.guard.config import load_guard_config, resolve_guard_home
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -35,6 +36,18 @@ def test_resolve_guard_home_prefers_legacy_state_over_empty_canonical_directory(
     legacy_home = home_dir / ".config" / ".ai-plugin-scanner-guard"
     canonical_home.mkdir(parents=True, exist_ok=True)
     _write_text(legacy_home / "guard.db", "sqlite placeholder")
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+
+    assert resolve_guard_home() == legacy_home
+
+
+def test_resolve_guard_home_prefers_legacy_credentials_over_empty_canonical_database(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    canonical_home = home_dir / ".hol-guard"
+    legacy_home = home_dir / ".ai-plugin-scanner-guard"
+    GuardStore(canonical_home)
+    legacy_store = GuardStore(legacy_home)
+    legacy_store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "legacy-token", "2026-04-15T00:00:00Z")
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
     assert resolve_guard_home() == legacy_home

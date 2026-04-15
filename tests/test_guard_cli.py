@@ -2273,7 +2273,14 @@ args = ["workspace-skill.js", "--changed"]
         assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer demo-token"
         assert _SyncRequestHandler.captured_body is not None
         assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
-        assert len(_SyncRequestHandler.captured_body["inventory"]) >= 1
+        assert "inventory" not in _SyncRequestHandler.captured_body
+        first_receipt = _SyncRequestHandler.captured_body["receipts"][0]
+        assert "artifactId" in first_receipt
+        assert "artifact_id" not in first_receipt
+        assert "receiptId" in first_receipt
+        assert "artifactSlug" in first_receipt
+        assert "artifactHash" in first_receipt
+        assert "recommendation" in first_receipt
 
     def test_guard_connect_pairs_browser_session_and_syncs(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
@@ -2413,6 +2420,7 @@ args = ["workspace-skill.js", "--changed"]
         assert connect_output["browser_opened"] is True
         assert opened_urls and opened_urls[0].startswith("https://hol.org/guard/connect?")
         assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer session-token-123"
+        assert _SyncRequestHandler.captured_headers["user-agent"].startswith("hol-guard/")
         assert store.get_sync_credentials() == {
             "sync_url": f"http://127.0.0.1:{server.server_port}/receipts",
             "token": "session-token-123",
@@ -2469,7 +2477,7 @@ args = ["workspace-skill.js", "--changed"]
         payload = guard_connect_flow_module.run_guard_connect_command(
             guard_home=tmp_path / "guard-home",
             store=store,
-            sync_url="https://hol.org/registry/api/v1",
+            sync_url="https://hol.org/api/guard/receipts/sync",
             connect_url="https://hol.org/guard/connect",
             opener=lambda url: opened_urls.append(url) or True,
             wait_timeout_seconds=1,
@@ -2508,7 +2516,7 @@ args = ["workspace-skill.js", "--changed"]
         payload = guard_connect_flow_module.run_guard_connect_command(
             guard_home=tmp_path / "guard-home",
             store=store,
-            sync_url="https://hol.org/registry/api/v1",
+            sync_url="https://hol.org/api/guard/receipts/sync",
             connect_url="https://hol.org/guard/connect?tenant=enterprise&invite=abc123",
             opener=lambda url: opened_urls.append(url) or True,
             wait_timeout_seconds=1,
@@ -2559,11 +2567,57 @@ args = ["workspace-skill.js", "--changed"]
             guard_connect_flow_module.run_guard_connect_command(
                 guard_home=tmp_path / "guard-home",
                 store=store,
-                sync_url="https://hol.org/registry/api/v1",
+                sync_url="https://hol.org/api/guard/receipts/sync",
                 connect_url="https://hol.org/guard/connect",
                 opener=lambda url: True,
                 wait_timeout_seconds=1,
             )
+
+    def test_guard_connect_reports_paid_plan_limit_without_failing_pairing(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+
+        class FakeDaemonClient:
+            daemon_url = "http://127.0.0.1:4781"
+
+            def create_connect_request(self, *, sync_url: str, allowed_origin: str) -> dict[str, object]:
+                return {
+                    "request_id": "req-123",
+                    "pairing_secret": "pair-secret",
+                    "sync_url": sync_url,
+                    "allowed_origin": allowed_origin,
+                }
+
+        monkeypatch.setattr(
+            guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "load_guard_surface_daemon_client",
+            lambda guard_home: FakeDaemonClient(),
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "wait_for_connect_completion",
+            lambda **kwargs: {"status": "completed", "request_id": "req-123", "completed_at": "2026-04-15T00:00:00Z"},
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "sync_receipts",
+            lambda current_store: (_ for _ in ()).throw(RuntimeError("Guard Cloud sync requires a paid Guard plan")),
+        )
+
+        payload = guard_connect_flow_module.run_guard_connect_command(
+            guard_home=tmp_path / "guard-home",
+            store=store,
+            sync_url="https://hol.org/api/guard/receipts/sync",
+            connect_url="https://hol.org/guard/connect",
+            opener=lambda url: True,
+            wait_timeout_seconds=1,
+        )
+
+        assert payload["connected"] is True
+        assert payload["status"] == "paired_without_cloud_sync"
+        assert payload["sync_message"] == "Guard Cloud sync requires a paid Guard plan"
 
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

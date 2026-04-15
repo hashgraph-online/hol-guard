@@ -12,7 +12,7 @@ from ..daemon import ensure_guard_daemon, load_guard_surface_daemon_client
 from ..runtime import sync_receipts
 from ..store import GuardStore
 
-DEFAULT_GUARD_SYNC_URL = "https://hol.org/registry/api/v1"
+DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
 
 
@@ -54,6 +54,20 @@ def run_guard_connect_command(
         }
     try:
         sync_payload = sync_receipts(store)
+    except RuntimeError as error:
+        sync_message = str(error)
+        if _is_plan_limited_sync_error(sync_message):
+            return {
+                "connected": True,
+                "browser_opened": browser_opened,
+                "connect_url": browser_url,
+                "sync_url": sync_url,
+                "status": "paired_without_cloud_sync",
+                "request_id": str(completion["request_id"]),
+                "completed_at": completion.get("completed_at"),
+                "sync_message": sync_message,
+            }
+        raise RuntimeError(f"Guard paired successfully but sync failed: {sync_message}") from error
     except (OSError, json.JSONDecodeError, urllib.error.URLError) as error:
         raise RuntimeError(f"Guard paired successfully but sync failed: {error}") from error
     return {
@@ -76,6 +90,11 @@ def resolve_connect_url(connect_url: str) -> tuple[str, str]:
     normalized_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, ""))
     allowed_origin = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
     return normalized_url, allowed_origin
+
+
+def _is_plan_limited_sync_error(message: str) -> bool:
+    normalized = message.strip().lower()
+    return "guard cloud sync requires a paid guard plan" in normalized
 
 
 def build_guard_connect_browser_url(

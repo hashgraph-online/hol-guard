@@ -447,6 +447,9 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
         if isinstance(sync_payload, dict):
             body.add_row("Receipts stored", str(sync_payload.get("receipts_stored") or 0))
             body.add_row("Inventory sent", str(sync_payload.get("inventory") or 0))
+        sync_message = payload.get("sync_message")
+        if isinstance(sync_message, str) and sync_message.strip():
+            body.add_row("Sync note", sync_message)
         console.print(Panel(body, title="Guard connect", border_style="green"))
         return
 
