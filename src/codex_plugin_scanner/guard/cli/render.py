@@ -160,13 +160,22 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
 def _render_run(console: Console, payload: dict[str, object]) -> None:
     blocked = bool(payload.get("blocked"))
     launched = bool(payload.get("launched"))
-    title = "Blocked before launch" if blocked else "Launch allowed"
+    dry_run = bool(payload.get("dry_run"))
+    artifacts = _coerce_dict_list(payload.get("artifacts"))
+    visible_artifacts = [artifact for artifact in artifacts if _run_artifact_should_be_visible(artifact)]
+    summarized_artifacts = _summarize_run_artifacts(visible_artifacts)
+    title = _run_title(blocked=blocked, dry_run=dry_run)
     border_style = "red" if blocked else "green"
     body = Table.grid(padding=(0, 1))
     approval_delivery = payload.get("approval_delivery")
     body.add_row("Harness", f"[bold]{payload.get('harness', 'unknown')}[/bold]")
+    body.add_row("Mode", "dry run" if dry_run else "launch")
+    body.add_row("Outcome", _run_outcome_text(blocked=blocked, dry_run=dry_run, launched=launched))
+    body.add_row("Artifacts", str(len(summarized_artifacts)))
+    if blocked:
+        needs_review = sum(1 for artifact in visible_artifacts if _artifact_needs_review(artifact))
+        body.add_row("Needs review", str(needs_review))
     body.add_row("Receipts", str(payload.get("receipts_recorded", 0)))
-    body.add_row("Launched", _bool_label(launched))
     if isinstance(approval_delivery, dict) and approval_delivery.get("summary"):
         body.add_row("Prompt route", str(approval_delivery.get("summary")))
     if payload.get("approval_center_url"):
@@ -176,7 +185,11 @@ def _render_run(console: Console, payload: dict[str, object]) -> None:
     if launched:
         body.add_row("Command", _command_text(payload.get("launch_command")))
     console.print(Panel(body, title=title, border_style=border_style))
-    console.print(_build_artifact_result_table(_coerce_dict_list(payload.get("artifacts"))))
+    if summarized_artifacts:
+        console.print(_build_run_artifact_table(summarized_artifacts))
+    steps = _build_run_steps(payload, blocked=blocked, dry_run=dry_run)
+    if steps:
+        console.print(_build_steps_panel(steps))
     approval_requests = _coerce_dict_list(payload.get("approval_requests"))
     if approval_requests:
         console.print(_build_approval_table(approval_requests, title="Queued approvals"))
@@ -751,6 +764,278 @@ def _build_artifact_result_table(artifacts: list[dict[str, object]]) -> Table:
             str(artifact.get("risk_summary") or "no obvious secret/network signal"),
         )
     return table
+
+
+def _build_run_artifact_table(artifacts: list[dict[str, str]]) -> Table:
+    table = Table(title="What changed", box=box.SIMPLE_HEAVY, show_header=True)
+    table.add_column("Artifact", style="bold")
+    table.add_column("Guard saw")
+    table.add_column("Reason")
+    table.add_column("Risk")
+    for artifact in artifacts:
+        table.add_row(
+            artifact["artifact_name"],
+            artifact["change_summary"],
+            artifact["reason_summary"],
+            artifact["risk_summary"],
+        )
+    return table
+
+
+def _run_title(*, blocked: bool, dry_run: bool) -> str:
+    if blocked and dry_run:
+        return "Dry run paused for review"
+    if blocked:
+        return "Blocked before launch"
+    if dry_run:
+        return "Dry run complete"
+    return "Launch allowed"
+
+
+def _run_outcome_text(*, blocked: bool, dry_run: bool, launched: bool) -> str:
+    if blocked and dry_run:
+        return "Guard found artifacts that need review before a real launch."
+    if blocked:
+        return "Guard paused the launch until you review the artifacts that need attention."
+    if dry_run:
+        return "Guard reviewed the current config without launching the harness."
+    if launched:
+        return "Guard approved the launch and handed control to the harness."
+    return "Guard finished the check without launching the harness."
+
+
+def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool) -> list[dict[str, str]]:
+    harness = str(payload.get("harness") or "codex")
+    approval_center_url = payload.get("approval_center_url")
+    review_hint = payload.get("review_hint")
+    rerun_command = payload.get("rerun_command")
+    diff_command = payload.get("diff_command")
+    approvals_command = payload.get("approvals_command")
+    if blocked and dry_run:
+        review_command = (
+            str(approvals_command)
+            if approval_center_url and isinstance(approvals_command, str) and approvals_command
+            else "hol-guard approvals"
+            if approval_center_url
+            else str(rerun_command)
+            if isinstance(rerun_command, str) and rerun_command
+            else f"hol-guard run {harness}"
+        )
+        inspect_command = (
+            str(diff_command) if isinstance(diff_command, str) and diff_command else f"hol-guard diff {harness}"
+        )
+        review_detail = (
+            str(review_hint)
+            if isinstance(review_hint, str) and review_hint
+            else "Rerun without --dry-run to review the full blocker set and continue into the harness launch."
+        )
+        return [
+            {
+                "title": "Resolve the blocked launch",
+                "command": review_command,
+                "detail": review_detail,
+            },
+            {
+                "title": "Inspect only the changed config entries (optional)",
+                "command": inspect_command,
+                "detail": (
+                    "See the config-level diff only. This view can omit policy-only blockers "
+                    "Guard still needs you to review."
+                ),
+            },
+        ]
+    if blocked and isinstance(review_hint, str) and review_hint:
+        command = (
+            str(approvals_command)
+            if approval_center_url and isinstance(approvals_command, str) and approvals_command
+            else "hol-guard approvals"
+            if approval_center_url
+            else str(rerun_command)
+            if isinstance(rerun_command, str) and rerun_command
+            else f"hol-guard run {harness}"
+        )
+        return [{"title": "Resolve the blocked launch", "command": command, "detail": review_hint}]
+    if dry_run:
+        launch_command = (
+            str(rerun_command) if isinstance(rerun_command, str) and rerun_command else f"hol-guard run {harness}"
+        )
+        return [
+            {
+                "title": "Launch for real",
+                "command": launch_command,
+                "detail": "Dry run finished cleanly; rerun without --dry-run when you are ready to launch.",
+            }
+        ]
+    return []
+
+
+def _summarize_run_artifacts(artifacts: list[dict[str, object]]) -> list[dict[str, str]]:
+    summarized: list[dict[str, str]] = []
+    used_indexes: set[int] = set()
+    for index, artifact in enumerate(artifacts):
+        if index in used_indexes:
+            continue
+        partner_index = _find_replaced_artifact_partner(artifacts, index, used_indexes)
+        if partner_index is not None:
+            used_indexes.add(index)
+            used_indexes.add(partner_index)
+            primary, secondary = _replacement_pair(artifact, artifacts[partner_index])
+            summarized.append(
+                {
+                    "artifact_name": _artifact_display_name(primary),
+                    "change_summary": "definition replaced",
+                    "reason_summary": (
+                        "Guard saw the previous definition disappear and a new definition with the same name appear, "
+                        "so it is asking for a fresh approval."
+                    ),
+                    "risk_summary": _artifact_risk_text(primary, secondary),
+                    "policy_action": str(primary.get("policy_action") or "review"),
+                }
+            )
+            continue
+        used_indexes.add(index)
+        summarized.append(
+            {
+                "artifact_name": _artifact_display_name(artifact),
+                "change_summary": _artifact_change_summary(artifact),
+                "reason_summary": _artifact_reason_text(artifact),
+                "risk_summary": _artifact_risk_text(artifact),
+                "policy_action": str(artifact.get("policy_action") or "review"),
+            }
+        )
+    return summarized
+
+
+def _find_replaced_artifact_partner(
+    artifacts: list[dict[str, object]],
+    index: int,
+    used_indexes: set[int],
+) -> int | None:
+    artifact = artifacts[index]
+    fields = set(_coerce_string_list(artifact.get("changed_fields")))
+    if fields not in ({"first_seen"}, {"removed"}):
+        return None
+    target_fields = {"removed"} if fields == {"first_seen"} else {"first_seen"}
+    artifact_name = _artifact_display_name(artifact)
+    policy_action = str(artifact.get("policy_action") or "")
+    artifact_label = str(artifact.get("artifact_label") or "")
+    artifact_identity = _artifact_replacement_identity(artifact)
+    for partner_index in range(index + 1, len(artifacts)):
+        if partner_index in used_indexes:
+            continue
+        partner = artifacts[partner_index]
+        if _artifact_display_name(partner) != artifact_name:
+            continue
+        if set(_coerce_string_list(partner.get("changed_fields"))) != target_fields:
+            continue
+        if policy_action and str(partner.get("policy_action") or "") != policy_action:
+            continue
+        if artifact_label and str(partner.get("artifact_label") or "") != artifact_label:
+            continue
+        if _artifact_replacement_identity(partner) != artifact_identity:
+            continue
+        return partner_index
+    return None
+
+
+def _replacement_pair(
+    first: dict[str, object],
+    second: dict[str, object],
+) -> tuple[dict[str, object], dict[str, object]]:
+    if set(_coerce_string_list(first.get("changed_fields"))) == {"first_seen"}:
+        return first, second
+    return second, first
+
+
+def _artifact_display_name(artifact: dict[str, object]) -> str:
+    return str(artifact.get("artifact_name") or artifact.get("artifact_id") or "unknown")
+
+
+def _artifact_replacement_identity(artifact: dict[str, object]) -> tuple[tuple[str, str], ...]:
+    identity_keys = ("source_scope", "config_path", "publisher")
+    identity: list[tuple[str, str]] = []
+    for key in identity_keys:
+        value = artifact.get(key)
+        if value in (None, ""):
+            continue
+        identity.append((key, str(value)))
+    return tuple(identity)
+
+
+def _artifact_change_summary(artifact: dict[str, object]) -> str:
+    fields = set(_coerce_string_list(artifact.get("changed_fields")))
+    if fields == {"first_seen"}:
+        return "new artifact"
+    if fields == {"removed"}:
+        return "removed from config"
+    if "prompt_request" in fields:
+        return "prompt requested secret access"
+    if "file_read_request" in fields:
+        return "protected file read requested"
+    if "command" in fields or "args" in fields:
+        return "launch command changed"
+    if "url" in fields or "transport" in fields:
+        return "connection target changed"
+    if "publisher" in fields or "source_scope" in fields:
+        return "publisher or source changed"
+    if "env_keys" in fields:
+        return "environment access changed"
+    labels = [_field_label(field) for field in _coerce_string_list(artifact.get("changed_fields"))]
+    if not labels:
+        return "no material change"
+    if len(labels) == 1:
+        return f"{labels[0]} changed"
+    if len(labels) == 2:
+        return f"{labels[0]} and {labels[1]} changed"
+    return "multiple settings changed"
+
+
+def _field_label(field: str) -> str:
+    labels = {
+        "artifact_type": "artifact type",
+        "args": "launch arguments",
+        "command": "launch command",
+        "config_path": "config location",
+        "env_keys": "environment access",
+        "publisher": "publisher",
+        "source_scope": "source scope",
+        "transport": "transport",
+        "url": "remote endpoint",
+    }
+    return labels.get(field, field.replace("_", " "))
+
+
+def _artifact_reason_text(artifact: dict[str, object]) -> str:
+    reason = artifact.get("why_now")
+    if isinstance(reason, str) and reason:
+        return reason
+    policy_action = str(artifact.get("policy_action") or "review")
+    if policy_action == "allow":
+        return "Guard matched an existing allow rule for this exact definition."
+    if policy_action == "block":
+        return "Guard blocked this definition because the configured policy does not trust it yet."
+    if policy_action == "sandbox-required":
+        return "Guard requires extra isolation before this launch can continue."
+    return "Guard found a meaningful config change and paused the launch for review."
+
+
+def _artifact_risk_text(*artifacts: dict[str, object]) -> str:
+    for artifact in artifacts:
+        for key in ("risk_summary", "risk_headline"):
+            value = artifact.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return "No obvious secret-access or network signal was detected in the launch definition."
+
+
+def _run_artifact_should_be_visible(artifact: dict[str, object]) -> bool:
+    if bool(artifact.get("changed")):
+        return True
+    return str(artifact.get("policy_action") or "allow") in {"block", "sandbox-required", "require-reapproval"}
+
+
+def _artifact_needs_review(artifact: dict[str, object]) -> bool:
+    return str(artifact.get("policy_action") or "allow") in {"block", "sandbox-required", "require-reapproval"}
 
 
 def _build_approval_table(items: list[dict[str, object]], *, title: str | None) -> Table:

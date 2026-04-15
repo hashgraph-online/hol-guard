@@ -183,3 +183,19 @@ class GuardApprovalRequest:
         payload["changed_fields"] = list(self.changed_fields)
         payload["risk_signals"] = list(self.risk_signals)
         return payload
+
+
+@dataclass(frozen=True, slots=True)
+class GuardRuntimeState:
+    """Current local Guard runtime session exposed to thin clients."""
+
+    session_id: str
+    daemon_host: str
+    daemon_port: int
+    started_at: str
+    last_heartbeat_at: str
+
+    def to_dict(self) -> dict[str, object]:
+        payload = asdict(self)
+        payload["approval_center_url"] = f"http://{self.daemon_host}:{self.daemon_port}"
+        return payload

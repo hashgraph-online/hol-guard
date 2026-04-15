@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 
-from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, PolicyDecision
+from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
 from .store_approvals import (
     add_approval_request as persist_approval_request,
 )
@@ -167,6 +167,16 @@ class GuardStore:
               event_name text not null,
               payload_json text not null,
               occurred_at text not null
+            )
+            """,
+            """
+            create table if not exists guard_runtime_state (
+              state_key text primary key,
+              session_id text not null,
+              daemon_host text not null,
+              daemon_port integer not null,
+              started_at text not null,
+              last_heartbeat_at text not null
             )
             """,
             """
@@ -701,6 +711,74 @@ class GuardStore:
         with self._connect() as connection:
             row = connection.execute(query, params).fetchone()
         return int(row["total"]) if row is not None else 0
+
+    def upsert_runtime_state(
+        self,
+        *,
+        session_id: str,
+        daemon_host: str,
+        daemon_port: int,
+        started_at: str,
+        last_heartbeat_at: str,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into guard_runtime_state (
+                  state_key, session_id, daemon_host, daemon_port, started_at, last_heartbeat_at
+                )
+                values ('runtime', ?, ?, ?, ?, ?)
+                on conflict(state_key) do update set
+                  session_id = excluded.session_id,
+                  daemon_host = excluded.daemon_host,
+                  daemon_port = excluded.daemon_port,
+                  started_at = excluded.started_at,
+                  last_heartbeat_at = excluded.last_heartbeat_at
+                """,
+                (session_id, daemon_host, daemon_port, started_at, last_heartbeat_at),
+            )
+
+    def touch_runtime_state(self, *, session_id: str, last_heartbeat_at: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                update guard_runtime_state
+                set last_heartbeat_at = ?
+                where state_key = 'runtime'
+                  and session_id = ?
+                """,
+                (last_heartbeat_at, session_id),
+            )
+
+    def get_runtime_state(self) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select session_id, daemon_host, daemon_port, started_at, last_heartbeat_at
+                from guard_runtime_state
+                where state_key = 'runtime'
+                """
+            ).fetchone()
+        if row is None:
+            return None
+        return GuardRuntimeState(
+            session_id=str(row["session_id"]),
+            daemon_host=str(row["daemon_host"]),
+            daemon_port=int(row["daemon_port"]),
+            started_at=str(row["started_at"]),
+            last_heartbeat_at=str(row["last_heartbeat_at"]),
+        ).to_dict()
+
+    def clear_runtime_state(self, *, session_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                delete from guard_runtime_state
+                where state_key = 'runtime'
+                  and session_id = ?
+                """,
+                (session_id,),
+            )
 
     def add_approval_request(self, request: GuardApprovalRequest, now: str) -> str:
         with self._connect() as connection:

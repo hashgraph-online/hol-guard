@@ -6,7 +6,7 @@ import {
   fetchPolicy,
   fetchReceipts,
   fetchRequest,
-  fetchRequests,
+  fetchRuntimeSnapshot,
   resolveRequest
 } from "./guard-api";
 import { ApprovalCenterLayout } from "./approval-center-layout";
@@ -14,7 +14,8 @@ import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
   GuardPolicyDecision,
-  GuardReceipt
+  GuardReceipt,
+  GuardRuntimeSnapshot
 } from "./guard-types";
 
 type RequestState =
@@ -38,6 +39,11 @@ type ReceiptsState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardReceipt[] };
+
+type RuntimeState =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; snapshot: GuardRuntimeSnapshot };
 
 function usePathname(): string {
   const [pathname, setPathname] = useState(window.location.pathname);
@@ -97,26 +103,36 @@ export function App() {
   const [requests, setRequests] = useState<RequestState>({ kind: "loading" });
   const [detail, setDetail] = useState<DetailState>({ kind: "idle" });
   const [receipts, setReceipts] = useState<ReceiptsState>({ kind: "loading" });
+  const [runtime, setRuntime] = useState<RuntimeState>({ kind: "loading" });
   const [resolutionMessage, setResolutionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetchRequests()
-      .then((items) => {
-        if (!cancelled) {
-          setRequests({ kind: "ready", items });
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setRequests({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Unable to load the local approval queue."
-          });
-        }
-      });
+    let pollId: number | undefined;
+    const loadRuntimeSnapshot = () => {
+      fetchRuntimeSnapshot()
+        .then((snapshot) => {
+          if (!cancelled) {
+            setRuntime({ kind: "ready", snapshot });
+            setRequests({ kind: "ready", items: snapshot.items });
+          }
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            const message =
+              error instanceof Error ? error.message : "Unable to load the local approval queue.";
+            setRuntime({ kind: "error", message });
+            setRequests({ kind: "error", message });
+          }
+        });
+    };
+    loadRuntimeSnapshot();
+    pollId = window.setInterval(loadRuntimeSnapshot, 4000);
     return () => {
       cancelled = true;
+      if (pollId !== undefined) {
+        window.clearInterval(pollId);
+      }
     };
   }, []);
 
@@ -167,6 +183,7 @@ export function App() {
       requests={requests}
       detail={detail}
       receipts={receipts}
+      runtime={runtime}
       activeRequestId={activeRequestId}
       resolutionMessage={resolutionMessage}
       onGoHome={() => navigate("/")}
@@ -175,8 +192,9 @@ export function App() {
         await resolveRequest(payload);
         setResolutionMessage("Decision saved. Return to the harness and rerun the same command.");
         navigate("/");
-        const [nextRequests, nextReceipts] = await Promise.all([fetchRequests(), fetchReceipts()]);
-        setRequests({ kind: "ready", items: nextRequests });
+        const [nextSnapshot, nextReceipts] = await Promise.all([fetchRuntimeSnapshot(), fetchReceipts()]);
+        setRuntime({ kind: "ready", snapshot: nextSnapshot });
+        setRequests({ kind: "ready", items: nextSnapshot.items });
         setReceipts({ kind: "ready", items: nextReceipts });
       }}
     />

@@ -205,14 +205,22 @@ class GuardBridge:
             return []
 
     def _execute_resolution(self, action: str, request_id: str) -> bool:
-        """Execute approve/deny via hol-guard CLI."""
+        """Resolve requests through the Guard daemon contract."""
+        guard_url = self.config.guard_url or "http://127.0.0.1:4999"
+        action_path = "approve" if action == "approve" else "block"
         try:
-            result = subprocess.run(
-                ["hol-guard", "approvals", action, request_id],
-                capture_output=True,
+            response = requests.post(
+                f"{guard_url}/v1/requests/{request_id}/{action_path}",
+                json={
+                    "scope": "artifact",
+                    "reason": "resolved from Guard Bridge",
+                },
                 timeout=30,
             )
-            return result.returncode == 0
+            if response.status_code != 200:
+                return False
+            payload = response.json()
+            return bool(payload.get("resolved"))
         except Exception:
             return False
 

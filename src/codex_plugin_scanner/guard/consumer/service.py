@@ -285,6 +285,7 @@ def evaluate_detection(
             blocked = True
         artifact_name = previous.get("name")
         source_scope = previous.get("source_scope")
+        config_path = previous.get("config_path")
         removed_artifact_type_value = previous.get("artifact_type")
         removed_artifact_type = (
             str(removed_artifact_type_value) if isinstance(removed_artifact_type_value, str) else "artifact"
@@ -296,7 +297,7 @@ def evaluate_detection(
             artifact_name=str(artifact_name) if isinstance(artifact_name, str) else artifact_id,
             artifact_type=removed_artifact_type,
             source_scope=str(source_scope) if isinstance(source_scope, str) else None,
-            config_path=str(previous.get("config_path")) if isinstance(previous.get("config_path"), str) else None,
+            config_path=str(config_path) if isinstance(config_path, str) else None,
             changed_fields=["removed"],
             policy_action=policy_action,
             launch_target=None,
@@ -354,6 +355,8 @@ def evaluate_detection(
                 "artifact_hash": previous_hash,
                 "removed": True,
                 "artifact_type": removed_artifact_type,
+                "config_path": str(config_path) if isinstance(config_path, str) else None,
+                "source_scope": str(source_scope) if isinstance(source_scope, str) else None,
                 "artifact_label": incident["artifact_label"],
                 "source_label": incident["source_label"],
                 "trigger_summary": incident["trigger_summary"],
