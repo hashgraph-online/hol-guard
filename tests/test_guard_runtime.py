@@ -382,6 +382,8 @@ class TestGuardRuntime:
         assert artifact["policy_action"] == "require-reapproval"
         assert artifact["artifact_hash"] == removed_hash
         assert artifact["removed"] is True
+        assert artifact["source_scope"] == "global"
+        assert artifact["config_path"] == str(tmp_path / "home" / ".codex" / "config.toml")
         assert artifact["artifact_label"] == "MCP server"
         assert artifact["source_label"] == "global Codex config"
         assert "global-tools" in str(artifact["trigger_summary"])
