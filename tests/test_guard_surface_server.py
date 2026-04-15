@@ -7,7 +7,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
+import pytest
 
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -112,6 +113,16 @@ class TestGuardSurfaceServer:
         assert sessions[0]["session_id"] == session["session_id"]
         assert operations[0]["operation_id"] == operation["operation_id"]
         assert items[0]["payload"]["artifact_id"] == "codex:project:workspace_skill"
+
+    def test_surface_runtime_rejects_unknown_session_for_new_operation(self, tmp_path) -> None:
+        runtime = GuardSurfaceRuntime(GuardStore(tmp_path / "guard-home"))
+
+        with pytest.raises(ValueError, match="Unknown guard session"):
+            runtime.start_operation(
+                session_id="missing-session",
+                operation_type="run",
+                harness="codex",
+            )
 
     def test_guard_daemon_initializes_surface_client_and_tracks_attachments(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

@@ -1317,16 +1317,8 @@ class GuardStore:
                 pairing_secret=pairing_secret,
                 completed_at=now,
             )
-            connection.execute(
-                """
-                insert into sync_state (state_key, payload_json, updated_at)
-                values ('credentials', ?, ?)
-                on conflict(state_key) do update set
-                  payload_json = excluded.payload_json,
-                  updated_at = excluded.updated_at
-                """,
-                (json.dumps({"sync_url": request["sync_url"], "token": token}), now),
-            )
+        self.set_sync_credentials(str(request["sync_url"]), token, now)
+        with self._connect() as connection:
             connection.execute(
                 """
                 insert into guard_events (event_name, payload_json, occurred_at)

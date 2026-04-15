@@ -186,6 +186,8 @@ class GuardSurfaceRuntime:
         harness: str,
         metadata: dict[str, object] | None = None,
     ) -> dict[str, object]:
+        if self.store.get_guard_session(session_id) is None:
+            raise ValueError(f"Unknown guard session: {session_id}")
         operation = self.store.upsert_guard_operation(
             operation_id=uuid.uuid4().hex,
             session_id=session_id,

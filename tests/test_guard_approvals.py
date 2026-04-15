@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.bridge import BridgeConfig, GuardBridge
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon import client as daemon_client_module
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.models import (
     GuardApprovalRequest,
@@ -92,6 +93,65 @@ class TestGuardApprovals:
         assert resolved["status"] == "resolved"
         assert resolved["resolution_action"] == "allow"
         assert resolved["resolution_scope"] == "artifact"
+
+    def test_guard_surface_daemon_client_recovers_missing_auth_token(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+        cleared: list[Path] = []
+        restarted: list[Path] = []
+        auth_token_calls = {"count": 0}
+
+        monkeypatch.setattr(
+            daemon_client_module,
+            "load_guard_daemon_url",
+            lambda _guard_home: "http://127.0.0.1:4781",
+        )
+
+        def fake_load_auth_token(_guard_home: Path) -> str | None:
+            auth_token_calls["count"] += 1
+            return "fresh-token" if auth_token_calls["count"] > 1 else None
+
+        monkeypatch.setattr(daemon_client_module, "load_guard_daemon_auth_token", fake_load_auth_token)
+        monkeypatch.setattr(
+            daemon_client_module,
+            "clear_guard_daemon_state",
+            lambda path: cleared.append(path),
+        )
+        monkeypatch.setattr(
+            daemon_client_module,
+            "ensure_guard_daemon",
+            lambda path: restarted.append(path) or "http://127.0.0.1:4781",
+        )
+
+        client = daemon_client_module.load_guard_surface_daemon_client(guard_home)
+
+        assert client.daemon_url == "http://127.0.0.1:4781"
+        assert client.auth_token == "fresh-token"
+        assert cleared == [guard_home]
+        assert restarted == [guard_home]
+
+    def test_browser_connect_completion_clears_stale_cloud_state(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_credentials("https://old.example/registry/api/v1", "old-token", "2026-04-10T00:00:00+00:00")
+        store.set_sync_payload("policy", {"mode": "enforce"}, "2026-04-10T00:00:00+00:00")
+        request = store.create_guard_connect_request(
+            sync_url="https://new.example/registry/api/v1",
+            allowed_origin="https://hol.org",
+            now="2026-04-10T01:00:00+00:00",
+            lifetime_seconds=600,
+        )
+
+        store.complete_guard_connect_request(
+            request_id=str(request["request_id"]),
+            pairing_secret=str(request["pairing_secret"]),
+            token="new-token",
+            now="2026-04-10T01:05:00+00:00",
+        )
+
+        assert store.get_sync_credentials() == {
+            "sync_url": "https://new.example/registry/api/v1",
+            "token": "new-token",
+        }
+        assert store.get_sync_payload("policy") is None
 
     def test_guard_store_keeps_request_id_when_duplicate_pending_request_is_requeued(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -938,9 +998,7 @@ class TestGuardApprovals:
             with urllib.request.urlopen(asset_url, timeout=5) as response:
                 body = response.read().decode("utf-8")
                 content_type = response.headers.get("Content-Type")
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{daemon.port}/brand/Logo_Whole.png", timeout=5
-            ) as response:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/brand/Logo_Whole.png", timeout=5) as response:
                 logo_bytes = response.read()
                 logo_type = response.headers.get("Content-Type")
         finally:
