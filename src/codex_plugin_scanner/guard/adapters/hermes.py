@@ -986,7 +986,7 @@ def _manifest_servers(source_configs: dict[str, dict[str, object]]) -> dict[str,
             "config_path": str(server.get("config_path") or ""),
             "transport": "http" if isinstance(server.get("url"), str) else "stdio",
             "command": server.get("command") if isinstance(server.get("command"), str) else None,
-            "args": [str(value) for value in args if isinstance(value, str)] if isinstance(args, list) else [],
+            "args": _manifest_args(args),
             "url": server.get("url") if isinstance(server.get("url"), str) else None,
             "env": (
                 {str(key): value for key, value in env.items() if isinstance(key, str) and isinstance(value, str)}
@@ -1000,6 +1000,12 @@ def _manifest_servers(source_configs: dict[str, dict[str, object]]) -> dict[str,
             ),
         }
     return servers
+
+
+def _manifest_args(args: object) -> list[str]:
+    if not isinstance(args, list):
+        return []
+    return [str(value) for value in args if isinstance(value, (str, int, float, bool))]
 
 
 def _install_state(

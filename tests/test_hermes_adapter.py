@@ -94,11 +94,11 @@ def test_install_overlay_keeps_colliding_fallback_server_names_unique(tmp_path: 
     _write(
         tmp_path / ".hermes" / "config.yaml",
         (
-            'mcp_servers:\n'
-            '  foo:\n'
+            "mcp_servers:\n"
+            "  foo:\n"
             '    command: "npx"\n'
             '    args: ["-y", "@modelcontextprotocol/server-yaml-primary"]\n'
-            '  json-foo:\n'
+            "  json-foo:\n"
             '    command: "npx"\n'
             '    args: ["-y", "@modelcontextprotocol/server-yaml-fallback"]\n'
         ),
@@ -117,6 +117,18 @@ def test_install_overlay_keeps_colliding_fallback_server_names_unique(tmp_path: 
     assert "json-foo" in overlay_names
     assert any(name.startswith("json-foo-") for name in overlay_names)
     assert len(overlay_names) == 3
+
+
+def test_install_manifest_stringifies_numeric_mcp_args(tmp_path: Path):
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        'mcp_servers:\n  port-server:\n    command: "python"\n    args: ["-m", "http.server", 8080]\n',
+    )
+    adapter = HermesHarnessAdapter()
+
+    manifest = adapter.install(_ctx(tmp_path))
+
+    assert manifest["servers"]["yaml:port-server"]["args"] == ["-m", "http.server", "8080"]
 
 
 def test_install_is_idempotent_and_repairs_missing_overlay(tmp_path: Path):

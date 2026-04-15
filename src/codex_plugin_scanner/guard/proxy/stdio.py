@@ -303,13 +303,22 @@ class StdioGuardProxy:
 
         process.stdin.write(json.dumps(message) + "\n")
         process.stdin.flush()
-        line = process.stdout.readline()
-        if not line:
-            raise RuntimeError("Guard stdio proxy did not receive a response from the MCP server.")
-        response = json.loads(line)
+        response = self._read_response(process=process, message_id=message.get("id"))
         responses.append(response)
         events.append(event)
         return response
+
+    def _read_response(self, *, process: subprocess.Popen[str], message_id: Any) -> dict[str, Any]:
+        assert process.stdout is not None
+        while True:
+            line = process.stdout.readline()
+            if not line:
+                raise RuntimeError("Guard stdio proxy did not receive a response from the MCP server.")
+            response = json.loads(line)
+            if message_id is None:
+                return response
+            if response.get("id") == message_id:
+                return response
 
     def _policy_path(self) -> Path:
         if self.cwd is not None:

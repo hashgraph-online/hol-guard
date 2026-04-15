@@ -2077,6 +2077,35 @@ class TestGuardRuntime:
         assert blocked["responses"][0]["error"]["code"] == -32001
         assert blocked["events"][0]["decision"] == "block"
 
+    def test_stdio_proxy_waits_for_matching_response_id(self):
+        proxy = StdioGuardProxy(
+            command=[
+                sys.executable,
+                "-u",
+                "-c",
+                "\n".join(
+                    [
+                        "import json, sys",
+                        "for line in sys.stdin:",
+                        "    message = json.loads(line)",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'method': 'tools/progress', 'params': {'step': 1}}))",
+                        "    result = {'echo': message.get('method')}",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}))",
+                        "    sys.stdout.flush()",
+                    ]
+                ),
+            ],
+        )
+
+        result = proxy.run_session(
+            [
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            ]
+        )
+
+        assert result["responses"][0]["id"] == 1
+        assert result["responses"][0]["result"]["echo"] == "initialize"
+
     def test_stdio_proxy_blocks_sensitive_file_reads_without_forwarding(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
