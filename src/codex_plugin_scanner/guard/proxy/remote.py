@@ -22,7 +22,7 @@ class RemoteGuardProxy:
         is_localhost = parsed.hostname in {"127.0.0.1", "localhost"}
         if parsed.scheme != "https" and not (allow_insecure_localhost and is_localhost):
             raise ValueError("Guard remote proxy requires HTTPS unless localhost mode is explicitly enabled.")
-        self.base_url = base_url.rstrip("/") + "/"
+        self.base_url = base_url
         self.events: list[dict[str, Any]] = []
 
     def forward(
@@ -30,16 +30,19 @@ class RemoteGuardProxy:
         path: str,
         payload: dict[str, Any],
         headers: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
+        expect_response: bool = True,
+    ) -> dict[str, Any] | None:
         request_headers = {"Content-Type": "application/json", **(headers or {})}
+        target_url = self.base_url if not path else urljoin(self.base_url.rstrip("/") + "/", path.lstrip("/"))
         request = urllib.request.Request(
-            urljoin(self.base_url, path.lstrip("/")),
+            target_url,
             data=json.dumps(payload).encode("utf-8"),
             headers=request_headers,
             method="POST",
         )
         with urllib.request.urlopen(request, timeout=10) as response:
-            response_payload = json.loads(response.read().decode("utf-8"))
+            raw_response = response.read().decode("utf-8")
+        response_payload = json.loads(raw_response) if expect_response and raw_response.strip() else None
         self.events.append(
             {
                 "path": path,

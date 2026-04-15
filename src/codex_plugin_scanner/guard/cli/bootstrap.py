@@ -30,6 +30,8 @@ def build_guard_bootstrap_payload(
     payload = build_guard_start_payload(context, store, config)
     daemon_url = ensure_guard_daemon(context.guard_home)
     recommended_harness = _resolve_harness(payload, requested_harness)
+    if recommended_harness is not None:
+        payload["recommended_harness"] = recommended_harness
     bootstrap_install = _build_bootstrap_install(
         requested_harness=recommended_harness,
         skip_install=skip_install,
@@ -86,12 +88,43 @@ def _build_bootstrap_install(
             "harness": requested_harness,
             "reason": "skipped_by_flag",
         }
+    adapter = get_adapter(requested_harness)
     managed_install = store.get_managed_install(requested_harness)
-    if managed_install is not None and bool(managed_install.get("active")):
+    if requested_harness != "hermes" and managed_install is not None and bool(managed_install.get("active")):
         return {
             "installed": False,
             "harness": requested_harness,
             "reason": "already_managed",
+            "managed_install": managed_install,
+        }
+    if requested_harness == "hermes":
+        manifest = adapter.install(context)
+        store.set_managed_install(
+            requested_harness,
+            True,
+            str(context.workspace_dir) if context.workspace_dir is not None else None,
+            manifest,
+            _now(),
+        )
+        managed_install = store.get_managed_install(requested_harness)
+        install_state = str(manifest.get("install_state") or "installed")
+        if install_state == "already_managed":
+            return {
+                "installed": False,
+                "harness": requested_harness,
+                "reason": "already_managed",
+                "managed_install": managed_install,
+            }
+        if install_state == "repaired_managed_install":
+            return {
+                "installed": True,
+                "harness": requested_harness,
+                "reason": "repaired_managed_install",
+                "managed_install": managed_install,
+            }
+        return {
+            "installed": True,
+            "harness": requested_harness,
             "managed_install": managed_install,
         }
     install_payload = apply_managed_install(
@@ -136,7 +169,8 @@ def _build_bootstrap_steps(
                 "title": "Detect a supported harness",
                 "command": f"{GUARD_COMMAND} detect",
                 "detail": (
-                    "Install Codex, Claude Code, Copilot CLI, Cursor, Gemini, or OpenCode first, then rerun bootstrap."
+                    "Install Codex, Claude Code, Copilot CLI, Hermes, Cursor, Gemini, or OpenCode first, "
+                    "then rerun bootstrap."
                 ),
             }
         ]

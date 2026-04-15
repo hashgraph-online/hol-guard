@@ -29,6 +29,11 @@ Current Guard support in this repo:
   - detects `.gemini/settings.json`, local extension manifests, embedded MCP declarations, hooks, and Gemini skill directories
   - supports wrapper-mode management state
   - falls back to the local approval center when Guard blocks a launch
+- `hermes`
+  - detects Hermes skills plus MCP servers from `~/.hermes/config.yaml` and `~/.hermes/mcp_servers.json`
+  - supports `hol-guard hermes bootstrap` and a Guard-managed Hermes overlay bundle under Guard home
+  - rewrites managed Hermes MCP entries through Guard’s existing proxy path and uses native-or-center delivery when the managed bundle is present
+  - blocks sensitive file reads and Docker-sensitive native pre-tool actions through the existing Guard hook path
 - `opencode`
   - detects global and project config, MCP servers, config-defined commands, markdown commands, npm plugins, local
     plugin files, and OpenCode-compatible skill directories

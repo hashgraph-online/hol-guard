@@ -10,10 +10,12 @@ import ast
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
 from ..models import GuardArtifact, HarnessDetection
-from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload
+from ..shims import install_guard_shim, remove_guard_shim
+from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
 
 # Optional: PyYAML is preferred when available for robust YAML parsing.
 # The adapter works without it via a line-based fallback parser.
@@ -51,6 +53,8 @@ _SCANNABLE_NAMES = {".env", "Makefile", "Dockerfile", "Procfile"}
 
 # Maximum bytes read from any single file for risk analysis.
 _MAX_FILE_READ = 64 * 1024
+_HERMES_MANAGED_APPROVAL_TIER = "native-or-center"
+_HERMES_MANAGED_PROMPT_CHANNEL = "native"
 
 
 class HermesHarnessAdapter(HarnessAdapter):
@@ -63,6 +67,127 @@ class HermesHarnessAdapter(HarnessAdapter):
         "Guard can scan Hermes skills before execution and hand blocked artifacts to the local approval center."
     )
     fallback_hint = "Configure Hermes to use Guard-launched sessions for skill execution."
+
+    def install(self, context: HarnessContext) -> dict[str, object]:
+        shim_manifest = install_guard_shim(self.harness, context)
+        managed_root = _managed_root(context)
+        manifest_path = managed_root / "manifest.json"
+        overlay_path = managed_root / "mcp-overlay.json"
+        pretool_path = managed_root / "pretool-hook.json"
+        managed_root.mkdir(parents=True, exist_ok=True)
+        existing_manifest = _json_payload(manifest_path)
+        install_state = _install_state(
+            existing_manifest=existing_manifest,
+            overlay_path=overlay_path,
+            pretool_path=pretool_path,
+        )
+        source_configs = _load_mcp_server_sources(context.home_dir / ".hermes")
+        overlay_servers = _overlay_servers(context=context, source_configs=source_configs)
+        overlay_path.write_text(json.dumps(overlay_servers, indent=2) + "\n", encoding="utf-8")
+        pretool_path.write_text(
+            json.dumps(_pretool_payload(context=context), indent=2) + "\n",
+            encoding="utf-8",
+        )
+        manifest = {
+            "harness": self.harness,
+            "active": True,
+            "config_path": str(overlay_path),
+            **shim_manifest,
+            "install_state": install_state,
+            "managed_root": str(managed_root),
+            "managed_manifest_path": str(manifest_path),
+            "mcp_overlay_path": str(overlay_path),
+            "pretool_hook_path": str(pretool_path),
+            "capabilities": {
+                "same_channel": True,
+                "pretool": True,
+                "mcp_proxy": True,
+            },
+            "servers": _manifest_servers(source_configs),
+            "notes": [
+                "Guard generated a Hermes MCP overlay and pre-tool hook bundle.",
+                *[str(note) for note in shim_manifest.get("notes", [])],
+            ],
+        }
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        return manifest
+
+    def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        shim_manifest = remove_guard_shim(self.harness, context)
+        managed_root = _managed_root(context)
+        manifest_path = managed_root / "manifest.json"
+        manifest = _json_payload(manifest_path)
+        removed_paths: list[str] = []
+        for key in ("managed_manifest_path", "mcp_overlay_path", "pretool_hook_path"):
+            value = manifest.get(key)
+            if not isinstance(value, str) or not value:
+                continue
+            path = Path(value)
+            if path.exists():
+                path.unlink()
+                removed_paths.append(str(path))
+        if manifest_path.exists():
+            manifest_path.unlink()
+            removed_paths.append(str(manifest_path))
+        return {
+            "harness": self.harness,
+            "active": False,
+            "config_path": str(managed_root / "mcp-overlay.json"),
+            **shim_manifest,
+            "removed_paths": removed_paths,
+            "notes": [
+                "Guard removed the managed Hermes overlay bundle and kept user Hermes config untouched.",
+                *[str(note) for note in shim_manifest.get("notes", [])],
+            ],
+        }
+
+    def launch_environment(self, context: HarnessContext) -> dict[str, str]:
+        manifest = _json_payload(_managed_root(context) / "manifest.json")
+        overlay_path = manifest.get("mcp_overlay_path")
+        pretool_path = manifest.get("pretool_hook_path")
+        if not isinstance(overlay_path, str) or not isinstance(pretool_path, str):
+            return {}
+        return {
+            "HERMES_GUARD_MCP_OVERLAY_PATH": overlay_path,
+            "HERMES_GUARD_PRETOOL_PATH": pretool_path,
+        }
+
+    def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
+        manifest = _json_payload(_managed_root(context) / "manifest.json")
+        overlay_path = manifest.get("mcp_overlay_path")
+        pretool_path = manifest.get("pretool_hook_path")
+        return {
+            "command": _run_command_probe([self.executable, "--help"]) if _command_available(self.executable) else None,
+            "managed_install_present": bool(manifest),
+            "managed_install_ready": (
+                isinstance(overlay_path, str)
+                and Path(overlay_path).exists()
+                and isinstance(pretool_path, str)
+                and Path(pretool_path).exists()
+            ),
+        }
+
+    def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
+        manifest = managed_install.get("manifest") if isinstance(managed_install, dict) else None
+        capabilities = manifest.get("capabilities") if isinstance(manifest, dict) else None
+        same_channel = isinstance(capabilities, dict) and bool(capabilities.get("same_channel"))
+        if same_channel:
+            return {
+                "tier": _HERMES_MANAGED_APPROVAL_TIER,
+                "summary": (
+                    "Guard uses the managed Hermes same-channel seam first and falls back to the approval center."
+                ),
+                "fallback_hint": "Use the Guard approval center if Hermes does not surface the pending request inline.",
+                "prompt_channel": _HERMES_MANAGED_PROMPT_CHANNEL,
+                "auto_open_browser": False,
+            }
+        return {
+            "tier": "approval-center",
+            "summary": "Guard keeps Hermes approvals in the local approval center without forcing a browser open.",
+            "fallback_hint": "Resolve pending Hermes requests from the Guard approval center or `hol-guard approvals`.",
+            "prompt_channel": "native-fallback",
+            "auto_open_browser": False,
+        }
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         hermes_home = context.home_dir / ".hermes"
@@ -740,3 +865,165 @@ def _parse_mcp_from_json(json_path: Path) -> dict[str, dict[str, object]]:
     if not isinstance(payload, dict):
         return {}
     return {name: config for name, config in payload.items() if isinstance(name, str) and isinstance(config, dict)}
+
+
+def _managed_root(context: HarnessContext) -> Path:
+    return context.guard_home / "hermes"
+
+
+def _load_mcp_server_sources(hermes_home: Path) -> dict[str, dict[str, object]]:
+    sources: dict[str, dict[str, object]] = {}
+    yaml_path = hermes_home / "config.yaml"
+    if yaml_path.is_file():
+        for name, config in _parse_mcp_from_yaml(yaml_path).items():
+            if config.get("enabled", True) is False:
+                continue
+            sources[f"yaml:{name}"] = {
+                "name": name,
+                "source": "yaml",
+                "config_path": str(yaml_path),
+                **config,
+            }
+    json_path = hermes_home / "mcp_servers.json"
+    if json_path.is_file():
+        for name, config in _parse_mcp_from_json(json_path).items():
+            if config.get("enabled", True) is False:
+                continue
+            sources[f"json:{name}"] = {
+                "name": name,
+                "source": "json",
+                "config_path": str(json_path),
+                **config,
+            }
+    return sources
+
+
+def _overlay_servers(
+    *,
+    context: HarnessContext,
+    source_configs: dict[str, dict[str, object]],
+) -> dict[str, dict[str, object]]:
+    overlay: dict[str, dict[str, object]] = {}
+    names_in_use: set[str] = set()
+    for server_key, server in source_configs.items():
+        overlay_name = _overlay_name(server_key, server, names_in_use)
+        overlay[overlay_name] = {
+            "command": str(Path(sys.executable)),
+            "args": _mcp_proxy_command(context=context, server_key=server_key),
+            "transport": "stdio",
+            "metadata": {
+                "guard_server_key": server_key,
+                "guard_transport": "remote" if isinstance(server.get("url"), str) else "stdio",
+                "guard_config_path": str(server.get("config_path") or ""),
+            },
+        }
+    return overlay
+
+
+def _overlay_name(server_key: str, server: dict[str, object], names_in_use: set[str]) -> str:
+    raw_name = server.get("name")
+    candidate = str(raw_name) if isinstance(raw_name, str) and raw_name else server_key
+    if candidate not in names_in_use:
+        names_in_use.add(candidate)
+        return candidate
+    base_candidate = server_key.replace(":", "-")
+    scoped_candidate = base_candidate
+    suffix = 2
+    while scoped_candidate in names_in_use:
+        scoped_candidate = f"{base_candidate}-{suffix}"
+        suffix += 1
+    names_in_use.add(scoped_candidate)
+    return scoped_candidate
+
+
+def _mcp_proxy_command(*, context: HarnessContext, server_key: str) -> list[str]:
+    command = [
+        "-m",
+        "codex_plugin_scanner.cli",
+        "hermes",
+        "mcp-proxy",
+        "--guard-home",
+        str(context.guard_home),
+    ]
+    if context.home_dir.resolve() != Path.home().resolve():
+        command.extend(["--home", str(context.home_dir)])
+    if context.workspace_dir is not None:
+        command.extend(["--workspace", str(context.workspace_dir)])
+    command.extend(["--server", server_key, "--stdio"])
+    return command
+
+
+def _pretool_payload(*, context: HarnessContext) -> dict[str, object]:
+    command = [
+        str(Path(sys.executable)),
+        "-m",
+        "codex_plugin_scanner.cli",
+        "hermes",
+        "pretool",
+        "--guard-home",
+        str(context.guard_home),
+        "--json",
+    ]
+    if context.home_dir.resolve() != Path.home().resolve():
+        command.extend(["--home", str(context.home_dir)])
+    if context.workspace_dir is not None:
+        command.extend(["--workspace", str(context.workspace_dir)])
+    return {
+        "command": command,
+        "harness": "hermes",
+    }
+
+
+def _manifest_servers(source_configs: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
+    servers: dict[str, dict[str, object]] = {}
+    for server_key, server in source_configs.items():
+        args = server.get("args")
+        env = server.get("env")
+        headers = server.get("headers")
+        servers[server_key] = {
+            "name": str(server.get("name") or server_key),
+            "source": str(server.get("source") or "unknown"),
+            "config_path": str(server.get("config_path") or ""),
+            "transport": "http" if isinstance(server.get("url"), str) else "stdio",
+            "command": server.get("command") if isinstance(server.get("command"), str) else None,
+            "args": _manifest_args(args),
+            "url": server.get("url") if isinstance(server.get("url"), str) else None,
+            "env": _manifest_env(env),
+            "headers": (
+                {str(key): value for key, value in headers.items() if isinstance(key, str) and isinstance(value, str)}
+                if isinstance(headers, dict)
+                else {}
+            ),
+        }
+    return servers
+
+
+def _manifest_args(args: object) -> list[str]:
+    if not isinstance(args, list):
+        return []
+    return [str(value) for value in args if isinstance(value, (str, int, float, bool))]
+
+
+def _manifest_env(env: object) -> dict[str, str]:
+    if not isinstance(env, dict):
+        return {}
+    return {
+        str(key): str(value)
+        for key, value in env.items()
+        if isinstance(key, str) and isinstance(value, (str, int, float, bool))
+    }
+
+
+def _install_state(
+    *,
+    existing_manifest: dict[str, object],
+    overlay_path: Path,
+    pretool_path: Path,
+) -> str:
+    if len(existing_manifest) == 0:
+        return "installed"
+    overlay_exists = overlay_path.exists()
+    pretool_exists = pretool_path.exists()
+    if overlay_exists and pretool_exists:
+        return "already_managed"
+    return "repaired_managed_install"

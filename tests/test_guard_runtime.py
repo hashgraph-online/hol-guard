@@ -97,6 +97,27 @@ class _RemoteProxyHandler(BaseHTTPRequestHandler):
         return
 
 
+class _LineOnlyInput:
+    def __init__(self, lines: list[str]) -> None:
+        self._lines = lines
+
+    def __iter__(self):
+        return iter(self._lines)
+
+    def read(self) -> str:
+        raise AssertionError("read() should not be used for streamed MCP proxy input")
+
+
+class _FlushTrackingOutput(io.StringIO):
+    def __init__(self) -> None:
+        super().__init__()
+        self.flush_count = 0
+
+    def flush(self) -> None:
+        self.flush_count += 1
+        super().flush()
+
+
 class TestGuardRuntime:
     def test_guard_store_initializes_runtime_tables_and_receipt_columns(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -812,6 +833,432 @@ class TestGuardRuntime:
         assert result["approval_delivery"]["destination"] == "harness"
         assert result["approval_delivery"]["prompt_channel"] == "hook"
         assert result["approval_wait"]["resolved"] is False
+
+    def test_headless_approval_resolver_treats_managed_hermes_as_native_or_center(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        store = GuardStore(home_dir)
+        config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+        artifact = GuardArtifact(
+            artifact_id="hermes:global:github",
+            name="github",
+            harness="hermes",
+            artifact_type="mcp_server",
+            source_scope="global",
+            config_path=str(home_dir / ".hermes" / "config.yaml"),
+            command="npx",
+            args=("-y", "@modelcontextprotocol/server-github"),
+            transport="stdio",
+        )
+        detection = HarnessDetection(
+            harness="hermes",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+        payload = {
+            "blocked": True,
+            "artifacts": [
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_name": artifact.name,
+                    "artifact_hash": artifact_hash(artifact),
+                    "policy_action": "require-reapproval",
+                    "changed_fields": ["args"],
+                    "artifact_type": artifact.artifact_type,
+                    "source_scope": artifact.source_scope,
+                    "config_path": artifact.config_path,
+                    "launch_target": "npx -y @modelcontextprotocol/server-github",
+                }
+            ],
+        }
+        store.set_managed_install(
+            "hermes",
+            True,
+            str(workspace_dir),
+            {"capabilities": {"same_channel": True}},
+            "2026-04-15T00:00:00+00:00",
+        )
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+        blocked_resolver = guard_commands_module._headless_approval_resolver(
+            args=argparse.Namespace(harness="hermes"),
+            context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+            store=store,
+            config=config,
+        )
+        result = blocked_resolver(detection, payload)
+
+        assert result["approval_delivery"]["destination"] == "harness"
+        assert result["approval_delivery"]["prompt_channel"] == "native"
+        assert result["approval_wait"]["resolved"] is False
+
+    def test_hermes_mcp_proxy_streams_stdio_messages_without_waiting_for_eof(self, tmp_path, monkeypatch, capsys):
+        guard_home = tmp_path / "guard-home"
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        store = GuardStore(guard_home)
+        store.set_managed_install(
+            "hermes",
+            True,
+            str(workspace),
+            {
+                "servers": {
+                    "yaml:demo": {
+                        "transport": "stdio",
+                        "command": "python",
+                        "args": ["-m", "demo"],
+                    }
+                }
+            },
+            "2026-04-15T00:00:00+00:00",
+        )
+        captured_messages: list[dict[str, object]] = []
+
+        class _FakeProxy:
+            def __init__(self, **kwargs) -> None:
+                self.kwargs = kwargs
+
+            def run_stream(self, *, input_stream, output_stream, error_stream) -> int:
+                for line in input_stream:
+                    payload = json.loads(line)
+                    captured_messages.append(payload)
+                    output_stream.write(
+                        json.dumps({"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}) + "\n"
+                    )
+                    output_stream.flush()
+                return 0
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module, "StdioGuardProxy", _FakeProxy)
+        monkeypatch.setattr(sys, "stdin", _LineOnlyInput(['{"jsonrpc":"2.0","id":7,"method":"tools/list"}\n']))
+
+        rc = guard_commands_module._run_hermes_mcp_proxy(
+            args=argparse.Namespace(server="yaml:demo"),
+            context=HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=guard_home),
+            store=store,
+            config=load_guard_config(guard_home),
+        )
+        output = capsys.readouterr()
+
+        assert rc == 0
+        assert captured_messages == [{"jsonrpc": "2.0", "id": 7, "method": "tools/list"}]
+        assert '"id": 7' in output.out
+
+    def test_hermes_mcp_proxy_passes_manifest_env_to_stdio_proxy(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        store = GuardStore(guard_home)
+        store.set_managed_install(
+            "hermes",
+            True,
+            str(workspace),
+            {
+                "servers": {
+                    "yaml:demo": {
+                        "transport": "stdio",
+                        "command": "python",
+                        "args": ["-m", "demo"],
+                        "env": {"GITHUB_TOKEN": "ghp_test_token"},
+                    }
+                }
+            },
+            "2026-04-15T00:00:00+00:00",
+        )
+        captured_init: list[dict[str, object]] = []
+
+        class _FakeProxy:
+            def __init__(self, **kwargs) -> None:
+                captured_init.append(kwargs)
+
+            def run_stream(self, *, input_stream, output_stream, error_stream) -> int:
+                return 0
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module, "StdioGuardProxy", _FakeProxy)
+        monkeypatch.setattr(sys, "stdin", _LineOnlyInput([]))
+
+        rc = guard_commands_module._run_hermes_mcp_proxy(
+            args=argparse.Namespace(server="yaml:demo"),
+            context=HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=guard_home),
+            store=store,
+            config=load_guard_config(guard_home),
+        )
+
+        assert rc == 0
+        assert captured_init[0]["env"] == {"GITHUB_TOKEN": "ghp_test_token"}
+
+    def test_hermes_mcp_proxy_rejects_invalid_json(self, tmp_path, monkeypatch, capsys):
+        guard_home = tmp_path / "guard-home"
+        store = GuardStore(guard_home)
+        store.set_managed_install(
+            "hermes",
+            True,
+            None,
+            {
+                "servers": {
+                    "yaml:demo": {
+                        "transport": "http",
+                        "url": "https://mcp.example.com/v1/mcp",
+                    }
+                }
+            },
+            "2026-04-15T00:00:00+00:00",
+        )
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(sys, "stdin", io.StringIO("{not-json}\n"))
+
+        rc = guard_commands_module._run_hermes_mcp_proxy(
+            args=argparse.Namespace(server="yaml:demo"),
+            context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
+            store=store,
+            config=load_guard_config(guard_home),
+        )
+        output = capsys.readouterr()
+
+        assert rc == 2
+        assert "invalid JSON" in output.err
+
+    def test_hermes_mcp_proxy_forwards_remote_headers_and_flushes_stdout(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+        store = GuardStore(guard_home)
+        store.set_managed_install(
+            "hermes",
+            True,
+            None,
+            {
+                "servers": {
+                    "yaml:demo": {
+                        "transport": "http",
+                        "url": "https://mcp.example.com/v1/mcp",
+                        "headers": {"Authorization": "Bearer test-token"},
+                    }
+                }
+            },
+            "2026-04-15T00:00:00+00:00",
+        )
+        captured_headers: list[dict[str, str]] = []
+        output_stream = _FlushTrackingOutput()
+
+        class _FakeRemoteProxy:
+            def __init__(self, *, base_url: str, allow_insecure_localhost: bool = False) -> None:
+                self.base_url = base_url
+                self.allow_insecure_localhost = allow_insecure_localhost
+
+            def forward(
+                self,
+                path: str,
+                payload: dict[str, object],
+                headers: dict[str, str] | None = None,
+                expect_response: bool = True,
+            ) -> dict[str, object]:
+                captured_headers.append(headers or {})
+                assert expect_response is True
+                return {"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module, "RemoteGuardProxy", _FakeRemoteProxy)
+        monkeypatch.setattr(sys, "stdin", io.StringIO('{"jsonrpc":"2.0","id":9,"method":"tools/list"}\n'))
+        monkeypatch.setattr(sys, "stdout", output_stream)
+
+        rc = guard_commands_module._run_hermes_mcp_proxy(
+            args=argparse.Namespace(server="yaml:demo"),
+            context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
+            store=store,
+            config=load_guard_config(guard_home),
+        )
+
+        assert rc == 0
+        assert captured_headers == [{"Authorization": "Bearer test-token"}]
+        assert '"id":9' in output_stream.getvalue()
+        assert output_stream.flush_count >= 1
+
+    def test_hermes_mcp_proxy_skips_http_notification_responses(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+        store = GuardStore(guard_home)
+        store.set_managed_install(
+            "hermes",
+            True,
+            None,
+            {
+                "servers": {
+                    "yaml:demo": {
+                        "transport": "http",
+                        "url": "https://mcp.example.com/v1/mcp",
+                    }
+                }
+            },
+            "2026-04-15T00:00:00+00:00",
+        )
+        captured_expect_response: list[bool] = []
+        output_stream = _FlushTrackingOutput()
+
+        class _FakeRemoteProxy:
+            def __init__(self, *, base_url: str, allow_insecure_localhost: bool = False) -> None:
+                self.base_url = base_url
+                self.allow_insecure_localhost = allow_insecure_localhost
+
+            def forward(
+                self,
+                path: str,
+                payload: dict[str, object],
+                headers: dict[str, str] | None = None,
+                expect_response: bool = True,
+            ) -> dict[str, object] | None:
+                captured_expect_response.append(expect_response)
+                return None
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module, "RemoteGuardProxy", _FakeRemoteProxy)
+        monkeypatch.setattr(
+            sys,
+            "stdin",
+            io.StringIO('{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}\n'),
+        )
+        monkeypatch.setattr(sys, "stdout", output_stream)
+
+        rc = guard_commands_module._run_hermes_mcp_proxy(
+            args=argparse.Namespace(server="yaml:demo"),
+            context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
+            store=store,
+            config=load_guard_config(guard_home),
+        )
+
+        assert rc == 0
+        assert captured_expect_response == [False]
+        assert output_stream.getvalue() == ""
+
+    def test_hermes_mcp_proxy_http_transport_does_not_require_guard_daemon(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+        store = GuardStore(guard_home)
+        store.set_managed_install(
+            "hermes",
+            True,
+            None,
+            {
+                "servers": {
+                    "yaml:demo": {
+                        "transport": "http",
+                        "url": "https://mcp.example.com/v1/mcp",
+                    }
+                }
+            },
+            "2026-04-15T00:00:00+00:00",
+        )
+        output_stream = _FlushTrackingOutput()
+
+        class _FakeRemoteProxy:
+            def __init__(self, *, base_url: str, allow_insecure_localhost: bool = False) -> None:
+                self.base_url = base_url
+                self.allow_insecure_localhost = allow_insecure_localhost
+
+            def forward(
+                self,
+                path: str,
+                payload: dict[str, object],
+                headers: dict[str, str] | None = None,
+                expect_response: bool = True,
+            ) -> dict[str, object]:
+                return {"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}
+
+        def _raise_daemon_error(_guard_home):
+            raise RuntimeError("daemon unavailable")
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", _raise_daemon_error)
+        monkeypatch.setattr(guard_commands_module, "RemoteGuardProxy", _FakeRemoteProxy)
+        monkeypatch.setattr(sys, "stdin", io.StringIO('{"jsonrpc":"2.0","id":9,"method":"tools/list"}\n'))
+        monkeypatch.setattr(sys, "stdout", output_stream)
+
+        rc = guard_commands_module._run_hermes_mcp_proxy(
+            args=argparse.Namespace(server="yaml:demo"),
+            context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
+            store=store,
+            config=load_guard_config(guard_home),
+        )
+
+        assert rc == 0
+        assert '"id":9' in output_stream.getvalue()
+
+    def test_approval_surface_policy_disables_auto_open_when_flow_forbids_browser(self):
+        assert (
+            guard_commands_module._approval_surface_policy_for_flow(
+                "auto-open-once",
+                {"tier": "approval-center", "auto_open_browser": False, "prompt_channel": "native-fallback"},
+            )
+            == "never-auto-open"
+        )
+
+    def test_hermes_pretool_uses_managed_same_channel_policy_for_blocked_operations(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        _write_text(home_dir / "config.toml", 'mode = "prompt"\napproval_surface_policy = "auto-open-once"\n')
+        GuardStore(home_dir).set_managed_install(
+            "hermes",
+            True,
+            str(workspace_dir),
+            {"capabilities": {"same_channel": True}},
+            "2026-04-15T00:00:00+00:00",
+        )
+
+        captured_surface_policy: list[str] = []
+
+        class _FakeDaemonClient:
+            def start_session(self, **kwargs) -> dict[str, object]:
+                return {"session_id": "session-1"}
+
+            def queue_blocked_operation(self, **kwargs) -> dict[str, object]:
+                captured_surface_policy.append(str(kwargs["approval_surface_policy"]))
+                return {
+                    "operation": {"operation_id": "operation-1"},
+                    "approval_requests": [{"request_id": "request-1"}],
+                }
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(
+            guard_commands_module,
+            "load_guard_surface_daemon_client",
+            lambda _guard_home: _FakeDaemonClient(),
+        )
+        monkeypatch.setattr(
+            sys,
+            "stdin",
+            io.StringIO(
+                json.dumps(
+                    {
+                        "event": "PreToolUse",
+                        "tool_name": "shell",
+                        "tool_input": {"command": "docker login ghcr.io", "docker_mode": True},
+                        "source_scope": "project",
+                    }
+                )
+            ),
+        )
+
+        rc = main(
+            [
+                "hermes",
+                "pretool",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert captured_surface_policy == ["notify-only"]
+        assert output["approval_delivery"]["destination"] == "harness"
+        assert output["approval_delivery"]["prompt_channel"] == "native"
 
     def test_guard_run_dry_run_human_output_is_summary_first(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -1820,6 +2267,101 @@ class TestGuardRuntime:
         assert blocked["responses"][0]["error"]["code"] == -32001
         assert blocked["events"][0]["decision"] == "block"
 
+    def test_stdio_proxy_waits_for_matching_response_id(self):
+        proxy = StdioGuardProxy(
+            command=[
+                sys.executable,
+                "-u",
+                "-c",
+                "\n".join(
+                    [
+                        "import json, sys",
+                        "for line in sys.stdin:",
+                        "    message = json.loads(line)",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'method': 'tools/progress', 'params': {'step': 1}}))",
+                        "    result = {'echo': message.get('method')}",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}))",
+                        "    sys.stdout.flush()",
+                    ]
+                ),
+            ],
+        )
+
+        result = proxy.run_session(
+            [
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            ]
+        )
+
+        assert result["responses"][0]["id"] == 1
+        assert result["responses"][0]["result"]["echo"] == "initialize"
+
+    def test_stdio_proxy_stream_does_not_wait_for_notification_replies(self):
+        proxy = StdioGuardProxy(
+            command=[
+                sys.executable,
+                "-u",
+                "-c",
+                "\n".join(
+                    [
+                        "import json, sys",
+                        "for line in sys.stdin:",
+                        "    message = json.loads(line)",
+                        "    if message.get('id') is None:",
+                        "        continue",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                        "    sys.stdout.flush()",
+                    ]
+                ),
+            ],
+        )
+        output_stream = _FlushTrackingOutput()
+
+        exit_code = proxy.run_stream(
+            input_stream=_LineOnlyInput(
+                [
+                    '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}\n',
+                    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n',
+                ]
+            ),
+            output_stream=output_stream,
+            error_stream=io.StringIO(),
+        )
+
+        assert exit_code == 0
+        assert '"id":1' in output_stream.getvalue()
+
+    def test_stdio_proxy_stream_forwards_interleaved_notifications(self):
+        proxy = StdioGuardProxy(
+            command=[
+                sys.executable,
+                "-u",
+                "-c",
+                "\n".join(
+                    [
+                        "import json, sys",
+                        "for line in sys.stdin:",
+                        "    message = json.loads(line)",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'method': 'tools/progress', 'params': {'step': 1}}))",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                        "    sys.stdout.flush()",
+                    ]
+                ),
+            ],
+        )
+        output_stream = _FlushTrackingOutput()
+
+        exit_code = proxy.run_stream(
+            input_stream=_LineOnlyInput(['{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n']),
+            output_stream=output_stream,
+            error_stream=io.StringIO(),
+        )
+        output_lines = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+
+        assert exit_code == 0
+        assert output_lines[0]["method"] == "tools/progress"
+        assert output_lines[1]["id"] == 1
+
     def test_stdio_proxy_blocks_sensitive_file_reads_without_forwarding(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
@@ -1935,6 +2477,94 @@ class TestGuardRuntime:
         assert blocked["responses"][0]["error"]["code"] == -32001
         assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "browser"
         assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
+    def test_stdio_proxy_uses_native_delivery_for_managed_hermes(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        store.set_managed_install(
+            "hermes",
+            True,
+            str(workspace_dir),
+            {"capabilities": {"same_channel": True}},
+            "2026-04-15T00:00:00+00:00",
+        )
+        config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
+        proxy = StdioGuardProxy(
+            command=[
+                sys.executable,
+                "-u",
+                "-c",
+                "\n".join(
+                    [
+                        "import json, sys",
+                        "for line in sys.stdin:",
+                        "    message = json.loads(line)",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                        "    sys.stdout.flush()",
+                    ]
+                ),
+            ],
+            cwd=workspace_dir,
+            guard_store=store,
+            guard_config=config,
+            approval_center_url="http://127.0.0.1:4455",
+            harness="hermes",
+        )
+
+        blocked = proxy.run_session(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "read_file", "arguments": {"path": ".env"}},
+                }
+            ]
+        )
+
+        assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "harness"
+        assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["prompt_channel"] == "native"
+        assert blocked["events"][0]["approval_delivery"]["destination"] == "harness"
+
+    def test_hermes_pretool_blocks_docker_sensitive_command_requests(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        _write_text(home_dir / "config.toml", 'mode = "prompt"\n')
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(
+            sys,
+            "stdin",
+            io.StringIO(
+                json.dumps(
+                    {
+                        "event": "PreToolUse",
+                        "tool_name": "shell",
+                        "tool_input": {"command": "docker login ghcr.io", "docker_mode": True},
+                        "source_scope": "project",
+                    }
+                )
+            ),
+        )
+
+        rc = main(
+            [
+                "hermes",
+                "pretool",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert output["approval_delivery"]["destination"] == "harness"
+        assert "docker" in output["risk_summary"].lower()
     def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers(self):
         server = HTTPServer(("127.0.0.1", 0), _RemoteProxyHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -1957,6 +2587,53 @@ class TestGuardRuntime:
         assert response["result"]["ok"] is True
         assert _RemoteProxyHandler.captured_headers["authorization"] == "Bearer secret-token"
         assert proxy.events[0]["headers"]["Authorization"] == "*****"
+
+    def test_remote_proxy_allows_notification_requests_without_response_body(self, monkeypatch):
+        class _EmptyResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self) -> bytes:
+                return b""
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda request, timeout: _EmptyResponse())
+        proxy = RemoteGuardProxy(base_url="https://mcp.example.com/v1/mcp")
+
+        response = proxy.forward(
+            "",
+            {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+            expect_response=False,
+        )
+
+        assert response is None
+
+    def test_remote_proxy_preserves_exact_base_url_when_forwarding_empty_path(self, monkeypatch):
+        captured_urls: list[str] = []
+
+        class _FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self) -> bytes:
+                return b'{"jsonrpc":"2.0","id":1,"result":{"ok":true}}'
+
+        def _fake_urlopen(request, timeout):
+            captured_urls.append(request.full_url)
+            return _FakeResponse()
+
+        monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+        proxy = RemoteGuardProxy(base_url="https://mcp.example.com/v1/mcp")
+
+        response = proxy.forward("", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+
+        assert response["result"]["ok"] is True
+        assert captured_urls == ["https://mcp.example.com/v1/mcp"]
 
     def test_guard_daemon_serves_health_and_receipt_state(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
