@@ -6,6 +6,8 @@ import json
 import subprocess
 import sys
 import threading
+import urllib.parse
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import ClassVar
@@ -16,6 +18,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
+from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -467,6 +470,8 @@ args = ["workspace-skill.js"]
         assert "Consumer scan" in output
         assert "Artifact" in output
         assert "good-plugin" in output
+        assert "Recommended action" in output
+        assert '"policy_recommendation"' not in output
 
     def test_guard_run_persists_receipts_and_policy(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -633,7 +638,11 @@ args = ["workspace-skill.js"]
                 "highest_severity": "critical",
             },
         }
-        monkeypatch.setattr(guard_commands_module, "run_consumer_scan", lambda path, intended_harness=None: payload)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "run_consumer_scan",
+            lambda path, intended_harness=None, options=None: payload,
+        )
 
         rc = main(
             [
@@ -652,6 +661,81 @@ args = ["workspace-skill.js"]
         assert output["install_verdict"]["action"] == "review"
         assert output["install_target"]["intended_harness"] == "codex"
         assert output["threat_intelligence"]["verdict_source"] == "local-scan"
+
+    def test_guard_preflight_human_output_stays_summary_first(self, tmp_path, capsys, monkeypatch):
+        target = tmp_path / "incoming-plugin"
+        target.mkdir(parents=True)
+        payload = {
+            "schema_version": "guard-consumer.v2",
+            "generated_at": "2026-04-11T00:00:00+00:00",
+            "install_target": {
+                "path": str(target),
+                "intended_harness": "codex",
+            },
+            "artifact_snapshot": {
+                "path": str(target),
+                "artifact_hash": "abc123",
+            },
+            "capability_manifest": {
+                "ecosystems": ["codex"],
+                "packages": [],
+                "category_names": ["Security"],
+            },
+            "artifact_diff": {
+                "changed": False,
+                "changed_fields": [],
+            },
+            "provenance_record": {
+                "scope": "plugin",
+                "plugin_dir": str(target),
+                "trust_score": None,
+            },
+            "trust_evidence_bundle": {
+                "findings": ["Posts environment secrets to a remote host."],
+                "severity_counts": {"critical": 1, "high": 0, "medium": 0, "low": 0, "info": 0},
+                "integrations": [],
+            },
+            "policy_recommendation": {
+                "action": "review",
+                "reason": "Install-time scan found risky network and secret access behavior.",
+            },
+            "install_verdict": {
+                "action": "review",
+                "reason": "Install-time scan found risky network and secret access behavior.",
+                "can_install": False,
+            },
+            "abom_entry": {
+                "artifact_id": "preflight:incoming-plugin",
+                "artifact_type": "plugin",
+            },
+            "threat_intelligence": {
+                "verdict_source": "local-scan",
+                "highest_severity": "critical",
+                "finding_count": 1,
+            },
+        }
+        monkeypatch.setattr(
+            guard_commands_module,
+            "run_consumer_scan",
+            lambda path, intended_harness=None, options=None: payload,
+        )
+
+        rc = main(
+            [
+                "guard",
+                "preflight",
+                str(target),
+                "--harness",
+                "codex",
+            ]
+        )
+        output = capsys.readouterr().out
+
+        assert rc == 0
+        assert "Install-time preflight" in output
+        assert "Install verdict" in output
+        assert "Highest severity" in output
+        assert '"install_verdict"' not in output
 
     def test_guard_policies_and_exceptions_show_persisted_rules(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -1362,6 +1446,135 @@ args = ["workspace-skill.js", "--changed"]
         assert _SyncRequestHandler.captured_body is not None
         assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
         assert len(_SyncRequestHandler.captured_body["inventory"]) >= 1
+
+    def test_guard_connect_pairs_browser_session_and_syncs(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+        _SyncRequestHandler.response_payload = {
+            "syncedAt": "2026-04-09T00:00:00Z",
+            "receiptsStored": 1,
+        }
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        store = GuardStore(home_dir)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda guard_home: f"http://127.0.0.1:{daemon.port}",
+        )
+
+        opened_urls: list[str] = []
+
+        def open_browser(url: str) -> bool:
+            opened_urls.append(url)
+            parsed = urllib.parse.urlparse(url)
+            query = urllib.parse.parse_qs(parsed.query)
+            fragment = urllib.parse.parse_qs(parsed.fragment)
+            request_id = query["guardPairRequest"][-1]
+            daemon_url = query["guardDaemon"][-1]
+            pairing_secret = fragment["guardPairSecret"][-1]
+
+            def complete_pairing() -> None:
+                request = urllib.request.Request(
+                    f"{daemon_url}/v1/connect/complete",
+                    data=urllib.parse.urlencode(
+                        {
+                            "request_id": request_id,
+                            "pairing_secret": pairing_secret,
+                            "token": "session-token-123",
+                        }
+                    ).encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Origin": "https://hol.org",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=5):
+                    pass
+
+            threading.Thread(target=complete_pairing, daemon=True).start()
+            return True
+
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", open_browser)
+
+        try:
+            run_rc = main(
+                [
+                    "guard",
+                    "run",
+                    "codex",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--dry-run",
+                    "--default-action",
+                    "allow",
+                    "--json",
+                ]
+            )
+            json.loads(capsys.readouterr().out)
+
+            connect_rc = main(
+                [
+                    "guard",
+                    "connect",
+                    "--home",
+                    str(home_dir),
+                    "--sync-url",
+                    f"http://127.0.0.1:{server.server_port}/receipts",
+                    "--connect-url",
+                    "https://hol.org/guard/connect",
+                    "--json",
+                ]
+            )
+            connect_output = json.loads(capsys.readouterr().out)
+        finally:
+            daemon.stop()
+            server.shutdown()
+            thread.join(timeout=5)
+
+        assert run_rc == 0
+        assert connect_rc == 0
+        assert connect_output["connected"] is True
+        assert connect_output["sync"]["receipts_stored"] == 1
+        assert connect_output["browser_opened"] is True
+        assert opened_urls and opened_urls[0].startswith("https://hol.org/guard/connect?")
+        assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer session-token-123"
+        assert store.get_sync_credentials() == {
+            "sync_url": f"http://127.0.0.1:{server.server_port}/receipts",
+            "token": "session-token-123",
+        }
+
+    def test_guard_connect_rejects_invalid_sync_url(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(
+                [
+                    "guard",
+                    "connect",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--sync-url",
+                    "not-a-url",
+                ]
+            )
+
+        assert exc_info.value.code == 2
+        assert "Guard URLs must be absolute http(s) URLs." in capsys.readouterr().err
 
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

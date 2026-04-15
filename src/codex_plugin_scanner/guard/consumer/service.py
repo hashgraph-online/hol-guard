@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ...models import ScanOptions
 from ..adapters import get_adapter, list_adapters
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
@@ -420,7 +421,11 @@ def _first_seen_changed_fields(artifact: GuardArtifact) -> list[str]:
     return ["first_seen"]
 
 
-def run_consumer_scan(target: Path, intended_harness: str | None = None) -> dict[str, object]:
+def run_consumer_scan(
+    target: Path,
+    intended_harness: str | None = None,
+    options: ScanOptions | None = None,
+) -> dict[str, object]:
     """Expose the consumer-mode scan contract."""
 
-    return build_consumer_mode_contract(target, intended_harness=intended_harness)
+    return build_consumer_mode_contract(target, intended_harness=intended_harness, options=options)

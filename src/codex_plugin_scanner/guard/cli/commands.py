@@ -5,16 +5,25 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import urllib.parse
 import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approvals import approval_center_hint, queue_blocked_approvals, wait_for_approval_requests
 from ..config import load_guard_config, overlay_synced_guard_policy, resolve_guard_home
-from ..consumer import artifact_hash, detect_all, detect_harness, evaluate_detection, record_policy, run_consumer_scan
-from ..daemon import GuardDaemonServer, ensure_guard_daemon
+from ..consumer import (
+    artifact_hash,
+    detect_all,
+    detect_harness,
+    evaluate_detection,
+    record_policy,
+    run_consumer_scan,
+)
+from ..daemon import GuardDaemonServer, ensure_guard_daemon, load_guard_surface_daemon_client
 from ..incident import build_incident_context
 from ..models import GuardArtifact, HarnessDetection
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS
@@ -23,9 +32,15 @@ from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_summary
 from ..runtime import guard_run, sync_receipts
 from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
+from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from .approval_commands import add_approval_parser, run_approval_command
 from .bootstrap import DEFAULT_ALIAS_NAME, build_guard_bootstrap_payload
+from .connect_flow import (
+    DEFAULT_GUARD_CONNECT_URL,
+    DEFAULT_GUARD_SYNC_URL,
+    run_guard_connect_command,
+)
 from .install_commands import apply_managed_install
 from .product import build_guard_start_payload, build_guard_status_payload
 from .prompt import build_prompt_artifacts, resolve_interactive_decisions
@@ -74,7 +89,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         required=True,
         metavar=(
             "{start,status,bootstrap,detect,install,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
-            "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,login,sync}"
+            "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,login,connect,sync}"
         ),
     )
 
@@ -145,11 +160,13 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     preflight_parser.add_argument("--harness")
     preflight_parser.add_argument("--enforce", action="store_true")
     preflight_parser.add_argument("--json", action="store_true")
+    _add_guard_cisco_mode_arg(preflight_parser)
 
     scan_parser = guard_subparsers.add_parser("scan", help="Run a consumer-mode scan for a local artifact")
     scan_parser.add_argument("target", nargs="?", default=".")
     scan_parser.add_argument("--consumer-mode", action="store_true")
     scan_parser.add_argument("--json", action="store_true")
+    _add_guard_cisco_mode_arg(scan_parser)
 
     diff_parser = guard_subparsers.add_parser("diff", help="Compare current harness artifacts to stored snapshots")
     diff_parser.add_argument("harness")
@@ -171,10 +188,16 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
 
     add_approval_parser(guard_subparsers, _add_guard_common_args)
 
-    explain_parser = guard_subparsers.add_parser("explain", help="Show the latest evidence for a local artifact")
+    explain_parser = guard_subparsers.add_parser(
+        "explain",
+        help=(
+            "Show the latest evidence for a local artifact or local path with offline Cisco MCP evidence when available"
+        ),
+    )
     explain_parser.add_argument("target")
     _add_guard_common_args(explain_parser)
     explain_parser.add_argument("--json", action="store_true")
+    _add_guard_cisco_mode_arg(explain_parser)
 
     for name, action in (("allow", "allow"), ("deny", "block")):
         policy_parser = guard_subparsers.add_parser(name, help=f"{name.title()} a harness artifact")
@@ -218,11 +241,22 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     doctor_parser.add_argument("--json", action="store_true")
 
     login_parser = guard_subparsers.add_parser("login", help="Store Guard sync endpoint credentials")
-    login_parser.add_argument("--sync-url", required=True)
+    login_parser.add_argument("--sync-url", required=True, type=_guard_http_url)
     login_parser.add_argument("--token", required=True)
     login_parser.add_argument("--home")
     login_parser.add_argument("--guard-home")
     login_parser.add_argument("--json", action="store_true")
+
+    connect_parser = guard_subparsers.add_parser(
+        "connect",
+        help="Open the browser, pair this runtime to HOL Guard, and send the first sync",
+    )
+    connect_parser.add_argument("--sync-url", default=DEFAULT_GUARD_SYNC_URL, type=_guard_http_url)
+    connect_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
+    connect_parser.add_argument("--wait-timeout-seconds", type=int, default=180)
+    connect_parser.add_argument("--home")
+    connect_parser.add_argument("--guard-home")
+    connect_parser.add_argument("--json", action="store_true")
 
     sync_parser = guard_subparsers.add_parser("sync", help="Sync receipts to the configured Guard endpoint")
     sync_parser.add_argument("--home")
@@ -257,16 +291,40 @@ def _add_guard_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace")
 
 
+def _add_guard_cisco_mode_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--cisco-mode",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="Control offline Cisco MCP evidence for local consumer-mode artifact scans.",
+    )
+
+
+def _guard_http_url(value: str) -> str:
+    parsed = urllib.parse.urlparse(value.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise argparse.ArgumentTypeError("Guard URLs must be absolute http(s) URLs.")
+    return value
+
+
+def _build_cisco_scan_options(mode: str) -> ScanOptions:
+    return ScanOptions(cisco_skill_scan=mode, cisco_mcp_scan=mode)
+
+
 def run_guard_command(args: argparse.Namespace) -> int:
     """Execute a Guard subcommand."""
 
     if args.guard_command == "scan":
-        payload = run_consumer_scan(Path(args.target).resolve())
+        payload = run_consumer_scan(Path(args.target).resolve(), options=_build_cisco_scan_options(args.cisco_mode))
         _emit("scan", payload, args.json or args.consumer_mode)
         return 0
 
     if args.guard_command == "preflight":
-        payload = run_consumer_scan(Path(args.target).resolve(), intended_harness=getattr(args, "harness", None))
+        payload = run_consumer_scan(
+            Path(args.target).resolve(),
+            intended_harness=getattr(args, "harness", None),
+            options=_build_cisco_scan_options(args.cisco_mode),
+        )
         _emit("preflight", payload, getattr(args, "json", False))
         if getattr(args, "enforce", False):
             install_verdict = payload.get("install_verdict")
@@ -478,7 +536,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command == "explain":
-        payload = _build_explain_payload(store, args.target)
+        payload = _build_explain_payload(store, args.target, options=_build_cisco_scan_options(args.cisco_mode))
         _emit("explain", payload, getattr(args, "json", False))
         return 0
 
@@ -517,6 +575,25 @@ def run_guard_command(args: argparse.Namespace) -> int:
         store.add_event("sign_in", {"sync_url": args.sync_url, "source": "local-cli"}, _now())
         _emit("login", {"logged_in": True, "sync_url": args.sync_url}, getattr(args, "json", False))
         return 0
+
+    if args.guard_command == "connect":
+        try:
+            payload = run_guard_connect_command(
+                guard_home=guard_home,
+                store=store,
+                sync_url=args.sync_url,
+                connect_url=args.connect_url,
+                opener=webbrowser.open,
+                wait_timeout_seconds=args.wait_timeout_seconds,
+            )
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        except RuntimeError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        _emit("connect", payload, getattr(args, "json", False))
+        return 0 if bool(payload.get("connected")) else 1
 
     if args.guard_command == "sync":
         payload = sync_receipts(store)
@@ -601,9 +678,25 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 "path_summary": _runtime_requested_path(runtime_artifact),
             }
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+                approval_flow = get_adapter(args.harness).approval_flow()
                 approval_center_url = ensure_guard_daemon(guard_home)
-                queued = queue_blocked_approvals(
-                    detection=_runtime_detection(args.harness, runtime_artifact),
+                daemon_client = load_guard_surface_daemon_client(guard_home)
+                session = daemon_client.start_session(
+                    harness=args.harness,
+                    surface="harness-adapter",
+                    workspace=str(workspace) if workspace else None,
+                    client_name=f"{args.harness}-hook",
+                    client_title=f"{args.harness} hook",
+                    client_version="1.0.0",
+                    capabilities=["approval-resolution", "receipt-view"],
+                )
+                response_payload["session_id"] = str(session["session_id"])
+                blocked_operation = daemon_client.queue_blocked_operation(
+                    session_id=str(session["session_id"]),
+                    operation_type="tool_call",
+                    harness=args.harness,
+                    metadata={"tool_name": str(payload.get("tool_name", "")), "event": str(payload.get("event", ""))},
+                    detection=_runtime_detection(args.harness, runtime_artifact).to_dict(),
                     evaluation={
                         "artifacts": [
                             {
@@ -619,10 +712,22 @@ def run_guard_command(args: argparse.Namespace) -> int:
                             }
                         ]
                     },
-                    store=store,
                     approval_center_url=approval_center_url,
-                    now=_now(),
+                    approval_surface_policy=_approval_surface_policy_for_flow(
+                        config.approval_surface_policy,
+                        approval_flow,
+                    ),
+                    open_key=artifact_id,
                 )
+                operation = (
+                    blocked_operation["operation"] if isinstance(blocked_operation.get("operation"), dict) else {}
+                )
+                queued = (
+                    blocked_operation["approval_requests"]
+                    if isinstance(blocked_operation.get("approval_requests"), list)
+                    else []
+                )
+                response_payload["operation_id"] = str(operation["operation_id"])
                 response_payload["approval_requests"] = queued
                 response_payload["approval_center_url"] = approval_center_url
                 response_payload["review_hint"] = approval_center_hint(
@@ -708,13 +813,61 @@ def _headless_approval_resolver(
     def resolve(detection, payload):
         approval_flow = get_adapter(args.harness).approval_flow()
         approval_center_url = ensure_guard_daemon(context.guard_home)
-        queued = queue_blocked_approvals(
-            detection=detection,
-            evaluation=payload,
-            store=store,
-            approval_center_url=approval_center_url,
-            now=_now(),
+        try:
+            daemon_client = load_guard_surface_daemon_client(context.guard_home)
+        except RuntimeError:
+            queued = queue_blocked_approvals(
+                detection=detection,
+                evaluation=payload,
+                store=store,
+                approval_center_url=approval_center_url,
+                now=_now(),
+            )
+            payload["approval_requests"] = queued
+            payload["approval_center_url"] = approval_center_url
+            payload["review_hint"] = approval_center_hint(
+                context=context,
+                harness=args.harness,
+                approval_center_url=approval_center_url,
+                queued=queued,
+            )
+            payload["approval_wait"] = {
+                "resolved": False,
+                "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
+                "items": [],
+            }
+            return payload
+        session = daemon_client.start_session(
+            harness=args.harness,
+            surface="cli",
+            workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
+            client_name="hol-guard",
+            client_title="HOL Guard CLI",
+            client_version="2.0.0",
+            capabilities=["approval-resolution", "receipt-view"],
         )
+        blocked_operation = daemon_client.queue_blocked_operation(
+            session_id=str(session["session_id"]),
+            operation_type="run",
+            harness=args.harness,
+            metadata={"command": f"hol-guard run {args.harness}"},
+            detection=detection.to_dict(),
+            evaluation=payload,
+            approval_center_url=approval_center_url,
+            approval_surface_policy=_approval_surface_policy_for_flow(
+                config.approval_surface_policy,
+                approval_flow,
+            ),
+            open_key=None,
+        )
+        operation = blocked_operation["operation"] if isinstance(blocked_operation.get("operation"), dict) else {}
+        queued = (
+            blocked_operation["approval_requests"]
+            if isinstance(blocked_operation.get("approval_requests"), list)
+            else []
+        )
+        payload["session_id"] = str(session["session_id"])
+        payload["operation_id"] = str(operation["operation_id"])
         payload["approval_requests"] = queued
         payload["approval_center_url"] = approval_center_url
         payload["review_hint"] = approval_center_hint(
@@ -723,7 +876,6 @@ def _headless_approval_resolver(
             approval_center_url=approval_center_url,
             queued=queued,
         )
-        _open_approval_center(approval_center_url)
         if approval_flow["tier"] != "native-or-center":
             payload["approval_wait"] = {
                 "resolved": False,
@@ -741,8 +893,22 @@ def _headless_approval_resolver(
             resolved_items = [item for item in wait_result.get("items", []) if isinstance(item, dict)]
             payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)
             if not payload["blocked"]:
+                daemon_client.update_operation_status(
+                    operation_id=str(operation["operation_id"]),
+                    status="completed",
+                )
                 payload["review_hint"] = "Approval received. Guard is resuming the harness launch."
+            else:
+                daemon_client.update_operation_status(
+                    operation_id=str(operation["operation_id"]),
+                    status="blocked",
+                )
         else:
+            daemon_client.update_operation_status(
+                operation_id=str(operation["operation_id"]),
+                status="waiting_on_approval",
+                approval_request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
+            )
             payload["review_hint"] = (
                 f"Approval is still pending. Open {approval_center_url} and resolve request "
                 f"{', '.join(str(item) for item in wait_result.get('pending_request_ids', []))}."
@@ -752,11 +918,21 @@ def _headless_approval_resolver(
     return resolve
 
 
-def _open_approval_center(approval_center_url: str) -> None:
-    try:
-        webbrowser.open(approval_center_url)
-    except Exception:
-        return
+def _open_approval_center(approval_center_url: str, *, store: GuardStore, config, open_key: str | None = None) -> None:
+    surface_runtime = GuardSurfaceRuntime(store)
+    surface_runtime.ensure_surface(
+        surface="approval-center",
+        approval_center_url=approval_center_url,
+        approval_surface_policy=config.approval_surface_policy,
+        open_key=open_key or approval_center_url,
+        opener=webbrowser.open,
+    )
+
+
+def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[str, str]) -> str:
+    if approval_flow.get("tier") == "approval-center":
+        return config_policy
+    return "notify-only"
 
 
 def _load_hook_payload(event_file: str | None) -> dict[str, object]:
@@ -954,10 +1130,14 @@ def _build_abom_payload(store: GuardStore) -> dict[str, object]:
     }
 
 
-def _build_explain_payload(store: GuardStore, target: str) -> dict[str, object]:
+def _build_explain_payload(
+    store: GuardStore,
+    target: str,
+    options: ScanOptions | None = None,
+) -> dict[str, object]:
     target_path = Path(target).expanduser()
     if target_path.exists():
-        return run_consumer_scan(target_path.resolve())
+        return run_consumer_scan(target_path.resolve(), options=options)
     inventory_item = store.find_inventory_item(target)
     if inventory_item is None:
         raise ValueError(f"Guard does not know artifact {target}.")

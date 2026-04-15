@@ -140,11 +140,11 @@ def _build_next_steps(recommended: dict[str, object] | None) -> list[dict[str, s
     steps.append(_approvals_step())
     steps.append(
         {
-            "title": "Optional sync later",
-            "command": f"{GUARD_COMMAND} login --sync-url <url> --token <token>",
+            "title": "Optional cloud connect",
+            "command": f"{GUARD_COMMAND} connect",
             "detail": (
-                "Keep receipts local by default, then connect sync only when you want "
-                "shared history or premium trust checks."
+                "Keep receipts local by default, then use one command to pair cloud sync "
+                "when you want shared history or premium trust checks."
             ),
         }
     )

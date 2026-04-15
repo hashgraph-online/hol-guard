@@ -126,7 +126,7 @@ class TestGuardProductFlow:
         assert rc == 0
         assert "Install Guard for codex" in output
         assert "Run Guard before launch" in output
-        assert "Optional sync later" in output
+        assert "Optional cloud connect" in output
 
     def test_hol_guard_direct_entrypoint_runs_without_nested_guard_command(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

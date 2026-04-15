@@ -417,6 +417,19 @@ def _render_login(console: Console, payload: dict[str, object]) -> None:
     )
 
 
+def _render_connect(console: Console, payload: dict[str, object]) -> None:
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Connected", _bool_label(bool(payload.get("connected"))))
+    body.add_row("Browser opened", _bool_label(bool(payload.get("browser_opened"))))
+    body.add_row("Connect URL", str(payload.get("connect_url") or "unknown"))
+    body.add_row("Sync endpoint", str(payload.get("sync_url") or "unknown"))
+    if isinstance(payload.get("sync"), dict):
+        sync_payload = payload["sync"]
+        body.add_row("Receipts stored", str(sync_payload.get("receipts_stored") or 0))
+        body.add_row("Inventory sent", str(sync_payload.get("inventory") or 0))
+    console.print(Panel(body, title="Guard connect", border_style="green"))
+
+
 def _render_sync(console: Console, payload: dict[str, object]) -> None:
     body = Table.grid(padding=(0, 1))
     body.add_row("Synced at", str(payload.get("synced_at") or "unknown"))
@@ -435,29 +448,113 @@ def _render_hook(console: Console, payload: dict[str, object]) -> None:
     console.print(Panel(body, title="Guard hook event", border_style="cyan"))
 
 
-def _render_scan(console: Console, payload: dict[str, object]) -> None:
+def _cisco_status_text(status: str) -> Text:
+    styles = {
+        "enabled": "green",
+        "skipped": "yellow",
+        "unavailable": "yellow",
+        "failed": "red",
+    }
+    return Text(status, style=styles.get(status, "white"))
+
+
+def _render_cisco_evidence(console: Console, payload: dict[str, object]) -> None:
+    cisco_evidence = payload.get("cisco_evidence")
+    if not isinstance(cisco_evidence, dict):
+        return
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Mode", str(cisco_evidence.get("mode", "offline-only")).replace("-", " "))
+    body.add_row("Status", _cisco_status_text(str(cisco_evidence.get("status", "skipped"))))
+    body.add_row("Findings", str(cisco_evidence.get("finding_count", 0)))
+    body.add_row("Targets", str(cisco_evidence.get("target_count", 0)))
+    body.add_row("Summary", str(cisco_evidence.get("summary", "No Cisco MCP evidence collected.")))
+    for integration in _coerce_dict_list(cisco_evidence.get("integrations")):
+        body.add_row(
+            str(integration.get("name", "cisco-mcp-scanner")),
+            str(integration.get("message", "No Cisco MCP detail available.")),
+        )
+    console.print(Panel(body, title="Cisco static scan evidence", border_style="blue"))
+
+
+def _build_consumer_summary_table(payload: dict[str, object]) -> Table:
     recommendation = payload.get("policy_recommendation")
-    ecosystems = []
-    if isinstance(payload.get("capability_manifest"), dict):
-        ecosystems = _coerce_string_list(payload["capability_manifest"].get("ecosystems"))
+    manifest = payload.get("capability_manifest")
+    threat_intelligence = payload.get("threat_intelligence")
+    evidence_bundle = payload.get("trust_evidence_bundle")
+    provenance_record = payload.get("provenance_record")
     artifact_snapshot = payload.get("artifact_snapshot")
     artifact_path = "."
     if isinstance(artifact_snapshot, dict):
         artifact_path = str(artifact_snapshot.get("path") or artifact_snapshot.get("artifact_path") or ".")
+    artifact_name = Path(artifact_path).name or artifact_path
+    ecosystems = _coerce_string_list(manifest.get("ecosystems")) if isinstance(manifest, dict) else []
+    categories = _coerce_string_list(manifest.get("category_names")) if isinstance(manifest, dict) else []
+    packages = _coerce_dict_list(manifest.get("packages")) if isinstance(manifest, dict) else []
+    severity_counts = (
+        evidence_bundle.get("severity_counts")
+        if isinstance(evidence_bundle, dict) and isinstance(evidence_bundle.get("severity_counts"), dict)
+        else {}
+    )
     body = Table.grid(padding=(0, 1))
+    body.add_row("Name", artifact_name)
     body.add_row("Artifact", artifact_path)
     body.add_row("Ecosystems", ", ".join(ecosystems) or "unknown")
+    if categories:
+        body.add_row("Categories", ", ".join(categories))
+    if packages:
+        body.add_row("Packages", str(len(packages)))
     if isinstance(recommendation, dict):
         body.add_row("Recommended action", _action_text(str(recommendation.get("action", "review"))))
-    console.print(Panel(body, title="Consumer scan", border_style="cyan"))
-    console.print(
-        Syntax(
-            json.dumps(payload, indent=2),
-            "json",
-            theme="ansi_dark",
-            word_wrap=True,
+        body.add_row("Reason", str(recommendation.get("reason") or "No recommendation detail provided."))
+    if isinstance(threat_intelligence, dict):
+        body.add_row("Highest severity", str(threat_intelligence.get("highest_severity") or "info"))
+        body.add_row("Finding count", str(threat_intelligence.get("finding_count") or 0))
+    elif severity_counts:
+        body.add_row(
+            "Findings",
+            ", ".join(f"{key}:{value}" for key, value in severity_counts.items() if value) or "none",
         )
-    )
+    if isinstance(provenance_record, dict) and provenance_record.get("trust_score") is not None:
+        body.add_row("Trust score", str(provenance_record.get("trust_score")))
+    return body
+
+
+def _render_consumer_evidence_panels(console: Console, payload: dict[str, object]) -> None:
+    evidence_bundle = payload.get("trust_evidence_bundle")
+    if isinstance(evidence_bundle, dict):
+        severity_counts = evidence_bundle.get("severity_counts")
+        integrations = _coerce_dict_list(evidence_bundle.get("integrations"))
+        summary = Table.grid(padding=(0, 1))
+        if isinstance(severity_counts, dict):
+            summary.add_row(
+                "By severity",
+                ", ".join(f"{key}:{value}" for key, value in severity_counts.items() if value) or "none",
+            )
+        if integrations:
+            summary.add_row(
+                "Integrations",
+                ", ".join(
+                    str(item.get("name") or "integration") for item in integrations if item.get("name") is not None
+                )
+                or "none",
+            )
+        if summary.row_count > 0:
+            console.print(Panel(summary, title="Evidence summary", border_style="yellow"))
+        findings = _coerce_string_list(evidence_bundle.get("findings"))
+        if findings:
+            console.print(
+                Panel(
+                    "\n".join(f"• {item}" for item in findings[:5]),
+                    title="Evidence highlights",
+                    border_style="yellow",
+                )
+            )
+
+
+def _render_scan(console: Console, payload: dict[str, object]) -> None:
+    console.print(Panel(_build_consumer_summary_table(payload), title="Consumer scan", border_style="cyan"))
+    _render_consumer_evidence_panels(console, payload)
+    _render_cisco_evidence(console, payload)
 
 
 def _render_preflight(console: Console, payload: dict[str, object]) -> None:
@@ -477,7 +574,9 @@ def _render_preflight(console: Console, payload: dict[str, object]) -> None:
         body.add_row("Highest severity", str(threat_intelligence.get("highest_severity") or "info"))
         body.add_row("Findings", str(threat_intelligence.get("finding_count") or 0))
     console.print(Panel(body, title="Install-time preflight", border_style="cyan"))
-    _render_scan(console, payload)
+    console.print(Panel(_build_consumer_summary_table(payload), title="Artifact scan", border_style="blue"))
+    _render_consumer_evidence_panels(console, payload)
+    _render_cisco_evidence(console, payload)
 
 
 def _render_protect(console: Console, payload: dict[str, object]) -> None:
@@ -779,6 +878,7 @@ _RENDERERS: dict[str, Any] = {
     "allow": _render_decision,
     "deny": _render_decision,
     "login": _render_login,
+    "connect": _render_connect,
     "sync": _render_sync,
     "hook": _render_hook,
     "protect": _render_protect,
