@@ -946,6 +946,50 @@ class TestGuardRuntime:
         assert captured_messages == [{"jsonrpc": "2.0", "id": 7, "method": "tools/list"}]
         assert '"id": 7' in output.out
 
+    def test_hermes_mcp_proxy_passes_manifest_env_to_stdio_proxy(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        store = GuardStore(guard_home)
+        store.set_managed_install(
+            "hermes",
+            True,
+            str(workspace),
+            {
+                "servers": {
+                    "yaml:demo": {
+                        "transport": "stdio",
+                        "command": "python",
+                        "args": ["-m", "demo"],
+                        "env": {"GITHUB_TOKEN": "ghp_test_token"},
+                    }
+                }
+            },
+            "2026-04-15T00:00:00+00:00",
+        )
+        captured_init: list[dict[str, object]] = []
+
+        class _FakeProxy:
+            def __init__(self, **kwargs) -> None:
+                captured_init.append(kwargs)
+
+            def run_stream(self, *, input_stream, output_stream, error_stream) -> int:
+                return 0
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module, "StdioGuardProxy", _FakeProxy)
+        monkeypatch.setattr(sys, "stdin", _LineOnlyInput([]))
+
+        rc = guard_commands_module._run_hermes_mcp_proxy(
+            args=argparse.Namespace(server="yaml:demo"),
+            context=HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=guard_home),
+            store=store,
+            config=load_guard_config(guard_home),
+        )
+
+        assert rc == 0
+        assert captured_init[0]["env"] == {"GITHUB_TOKEN": "ghp_test_token"}
+
     def test_hermes_mcp_proxy_rejects_invalid_json(self, tmp_path, monkeypatch, capsys):
         guard_home = tmp_path / "guard-home"
         store = GuardStore(guard_home)
@@ -2260,6 +2304,31 @@ class TestGuardRuntime:
         assert response["result"]["ok"] is True
         assert _RemoteProxyHandler.captured_headers["authorization"] == "Bearer secret-token"
         assert proxy.events[0]["headers"]["Authorization"] == "*****"
+
+    def test_remote_proxy_preserves_exact_base_url_when_forwarding_empty_path(self, monkeypatch):
+        captured_urls: list[str] = []
+
+        class _FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self) -> bytes:
+                return b'{"jsonrpc":"2.0","id":1,"result":{"ok":true}}'
+
+        def _fake_urlopen(request, timeout):
+            captured_urls.append(request.full_url)
+            return _FakeResponse()
+
+        monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+        proxy = RemoteGuardProxy(base_url="https://mcp.example.com/v1/mcp")
+
+        response = proxy.forward("", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+
+        assert response["result"]["ok"] is True
+        assert captured_urls == ["https://mcp.example.com/v1/mcp"]
 
     def test_guard_daemon_serves_health_and_receipt_state(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

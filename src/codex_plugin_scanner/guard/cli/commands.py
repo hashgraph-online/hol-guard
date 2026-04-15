@@ -1255,6 +1255,13 @@ def _server_headers(server: dict[str, object]) -> dict[str, str]:
     return {str(key): value for key, value in headers.items() if isinstance(key, str) and isinstance(value, str)}
 
 
+def _server_env(server: dict[str, object]) -> dict[str, str]:
+    env = server.get("env")
+    if not isinstance(env, dict):
+        return {}
+    return {str(key): value for key, value in env.items() if isinstance(key, str) and isinstance(value, str)}
+
+
 def _run_hermes_mcp_proxy(
     *,
     args: argparse.Namespace,
@@ -1308,6 +1315,7 @@ def _run_hermes_mcp_proxy(
         guard_config=config,
         approval_center_url=approval_center_url,
         harness="hermes",
+        env=_server_env(server),
     )
     return proxy.run_stream(
         input_stream=sys.stdin,

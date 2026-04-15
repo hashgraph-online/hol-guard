@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -79,6 +80,7 @@ class StdioGuardProxy:
         guard_config: object | None = None,
         approval_center_url: str | None = None,
         harness: str = "guard-proxy",
+        env: dict[str, str] | None = None,
     ) -> None:
         self.command = command
         self.blocked_tools = blocked_tools or set()
@@ -87,6 +89,7 @@ class StdioGuardProxy:
         self.guard_config = guard_config
         self.approval_center_url = approval_center_url
         self.harness = harness
+        self.env = env or {}
 
     def run_session(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         responses, events, return_code = self._run_messages(messages)
@@ -158,9 +161,10 @@ class StdioGuardProxy:
             self.command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=None,
             text=True,
             cwd=self.cwd,
+            env={**os.environ, **self.env},
         )
 
     def _forward_message(
