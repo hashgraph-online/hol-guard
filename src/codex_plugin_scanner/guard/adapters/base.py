@@ -113,6 +113,60 @@ class HarnessAdapter:
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         return None
 
+    def attach_session(
+        self,
+        context: HarnessContext,
+        *,
+        session_id: str,
+        client_name: str,
+    ) -> dict[str, object]:
+        return {
+            "harness": self.harness,
+            "session_id": session_id,
+            "client_name": client_name,
+            "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
+        }
+
+    def start_operation(
+        self,
+        context: HarnessContext,
+        *,
+        session_id: str,
+        operation_type: str,
+    ) -> dict[str, object]:
+        return {
+            "harness": self.harness,
+            "session_id": session_id,
+            "operation_type": operation_type,
+            "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
+        }
+
+    def request_approval(
+        self,
+        context: HarnessContext,
+        *,
+        request_ids: list[str],
+    ) -> dict[str, object]:
+        return {
+            "harness": self.harness,
+            "request_ids": request_ids,
+            "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
+        }
+
+    def continue_after_approval(
+        self,
+        context: HarnessContext,
+        *,
+        operation_id: str,
+        approved: bool,
+    ) -> dict[str, object]:
+        return {
+            "harness": self.harness,
+            "operation_id": operation_id,
+            "status": "completed" if approved else "blocked",
+            "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
+        }
+
     def diagnostic_warnings(
         self,
         detection: HarnessDetection,

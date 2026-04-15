@@ -1048,9 +1048,14 @@ class TestGuardRuntime:
                 self.allow_insecure_localhost = allow_insecure_localhost
 
             def forward(
-                self, path: str, payload: dict[str, object], headers: dict[str, str] | None = None
+                self,
+                path: str,
+                payload: dict[str, object],
+                headers: dict[str, str] | None = None,
+                expect_response: bool = True,
             ) -> dict[str, object]:
                 captured_headers.append(headers or {})
+                assert expect_response is True
                 return {"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}
 
         monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
@@ -1069,6 +1074,61 @@ class TestGuardRuntime:
         assert captured_headers == [{"Authorization": "Bearer test-token"}]
         assert '"id":9' in output_stream.getvalue()
         assert output_stream.flush_count >= 1
+
+    def test_hermes_mcp_proxy_skips_http_notification_responses(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+        store = GuardStore(guard_home)
+        store.set_managed_install(
+            "hermes",
+            True,
+            None,
+            {
+                "servers": {
+                    "yaml:demo": {
+                        "transport": "http",
+                        "url": "https://mcp.example.com/v1/mcp",
+                    }
+                }
+            },
+            "2026-04-15T00:00:00+00:00",
+        )
+        captured_expect_response: list[bool] = []
+        output_stream = _FlushTrackingOutput()
+
+        class _FakeRemoteProxy:
+            def __init__(self, *, base_url: str, allow_insecure_localhost: bool = False) -> None:
+                self.base_url = base_url
+                self.allow_insecure_localhost = allow_insecure_localhost
+
+            def forward(
+                self,
+                path: str,
+                payload: dict[str, object],
+                headers: dict[str, str] | None = None,
+                expect_response: bool = True,
+            ) -> dict[str, object] | None:
+                captured_expect_response.append(expect_response)
+                return None
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module, "RemoteGuardProxy", _FakeRemoteProxy)
+        monkeypatch.setattr(
+            sys,
+            "stdin",
+            io.StringIO('{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}\n'),
+        )
+        monkeypatch.setattr(sys, "stdout", output_stream)
+
+        rc = guard_commands_module._run_hermes_mcp_proxy(
+            args=argparse.Namespace(server="yaml:demo"),
+            context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
+            store=store,
+            config=load_guard_config(guard_home),
+        )
+
+        assert rc == 0
+        assert captured_expect_response == [False]
+        assert output_stream.getvalue() == ""
 
     def test_guard_run_dry_run_human_output_is_summary_first(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -2287,7 +2347,6 @@ class TestGuardRuntime:
         assert blocked["responses"][0]["error"]["code"] == -32001
         assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "browser"
         assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
-
     def test_stdio_proxy_uses_native_delivery_for_managed_hermes(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         workspace_dir = tmp_path / "workspace"
@@ -2376,7 +2435,6 @@ class TestGuardRuntime:
         assert output["policy_action"] == "require-reapproval"
         assert output["approval_delivery"]["destination"] == "harness"
         assert "docker" in output["risk_summary"].lower()
-
     def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers(self):
         server = HTTPServer(("127.0.0.1", 0), _RemoteProxyHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -2399,6 +2457,28 @@ class TestGuardRuntime:
         assert response["result"]["ok"] is True
         assert _RemoteProxyHandler.captured_headers["authorization"] == "Bearer secret-token"
         assert proxy.events[0]["headers"]["Authorization"] == "*****"
+
+    def test_remote_proxy_allows_notification_requests_without_response_body(self, monkeypatch):
+        class _EmptyResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self) -> bytes:
+                return b""
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda request, timeout: _EmptyResponse())
+        proxy = RemoteGuardProxy(base_url="https://mcp.example.com/v1/mcp")
+
+        response = proxy.forward(
+            "",
+            {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+            expect_response=False,
+        )
+
+        assert response is None
 
     def test_remote_proxy_preserves_exact_base_url_when_forwarding_empty_path(self, monkeypatch):
         captured_urls: list[str] = []

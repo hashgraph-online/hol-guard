@@ -63,7 +63,6 @@ def _make_fake_codex(fake_bin: Path, marker_path: Path) -> Path:
     fake_codex.chmod(fake_codex.stat().st_mode | 0o755)
     return fake_codex
 
-
 def _build_opencode_fixture(home_dir: Path, workspace_dir: Path) -> None:
     _write_json(
         home_dir / ".config" / "opencode" / "opencode.json",
@@ -78,8 +77,6 @@ def _build_opencode_fixture(home_dir: Path, workspace_dir: Path) -> None:
     )
     _write_json(workspace_dir / "opencode.json", {"name": "guard-opencode"})
     _write_text(workspace_dir / ".opencode" / "commands" / "hello.md", "# hello\n")
-
-
 def test_guard_run_launches_with_configured_home(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -116,7 +113,6 @@ def test_guard_run_launches_with_configured_home(monkeypatch, tmp_path, capsys):
     assert output["launched"] is True
     assert captured_env["HOME"] == str(home_dir)
     assert captured_cwd == workspace_dir
-
 
 def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
@@ -156,8 +152,6 @@ def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path,
     assert rc == 0
     assert output["launched"] is True
     assert captured_command == ["copilot", "suggest", "explain this function"]
-
-
 def test_guard_run_blocks_direct_env_prompt_until_approved(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -230,8 +224,6 @@ def test_guard_run_blocks_direct_env_prompt_until_approved(monkeypatch, tmp_path
     assert second_output["blocked"] is False
     assert second_output["launched"] is True
     assert marker_path.read_text(encoding="utf-8").strip() == "Please read the .env file directly and summarize it"
-
-
 def test_guard_run_launches_opencode_with_runtime_overlay(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

@@ -212,7 +212,7 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
         "sync_url": sync_url,
         "dashboard_url": dashboard_url,
         "connect_url": connect_url,
-        "connect_command": f"{GUARD_COMMAND} connect --sync-url <url> --token <token>",
+        "connect_command": f"{GUARD_COMMAND} connect",
         "sync_command": f"{GUARD_COMMAND} sync",
         "last_sync_at": last_sync_at,
         "advisory_count": len(advisories),
@@ -236,19 +236,19 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
     if cloud_state == "local_only":
         steps = [
             {
-                "title": "Generate a Guard Cloud token",
-                "command": connect_url,
+                "title": "Run Guard connect",
+                "command": str(payload.get("connect_command") or f"{GUARD_COMMAND} connect"),
                 "detail": (
-                    "Open the Guard connect page, copy the sync URL and short-lived token, then pair this runtime."
+                    "Start the local pairing flow, open the browser automatically, and wait for Guard Cloud to pair "
+                    "this machine."
                 ),
             },
             {
-                "title": "Pair this runtime",
-                "command": str(
-                    payload.get("connect_command") or f"{GUARD_COMMAND} connect --sync-url <url> --token <token>"
-                ),
+                "title": "Complete browser sign-in",
+                "command": connect_url,
                 "detail": (
-                    "Save the credentials locally and pull down the first Guard Cloud policy bundle in one step."
+                    "Sign in on the Guard connect page if prompted. Guard will resume and run the first sync once the "
+                    "browser pairing finishes."
                 ),
             },
         ]
@@ -258,10 +258,11 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
     if cloud_state == "paired_waiting":
         steps = [
             {
-                "title": "Pull the first cloud sync",
+                "title": "Finish the first cloud sync",
                 "command": str(payload.get("sync_command") or f"{GUARD_COMMAND} sync"),
                 "detail": (
-                    "Finish the first sync so this machine has Guard Cloud history, advisories, and team defaults."
+                    "Older pairing flows may still need one explicit sync before this machine has cloud history, "
+                    "advisories, and team defaults."
                 ),
             }
         ]
@@ -316,11 +317,11 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
 def _connect_or_dashboard_step(cloud_state: str, connect_url: str, dashboard_url: str) -> dict[str, str]:
     if cloud_state == "local_only":
         return {
-            "title": "Optional sync later",
-            "command": connect_url,
+            "title": "Optional cloud connect",
+            "command": f"{GUARD_COMMAND} connect",
             "detail": (
-                "Keep receipts local by default, then use the Guard connect page when you want "
-                "shared history, trust checks, or team policy."
+                "Keep receipts local by default, then run one command when you want shared history, "
+                "trust checks, or team policy."
             ),
         }
     return {
@@ -380,7 +381,7 @@ def _cloud_state_detail(cloud_state: str, connect_url: str, dashboard_url: str) 
         )
     return (
         "Receipts stay on this machine until you choose to pair Guard Cloud. "
-        f"Start from {connect_url} when you want shared history, trust advisories, or team policy."
+        f"Run `{GUARD_COMMAND} connect` when you want shared history, trust advisories, or team policy."
     )
 
 

@@ -30,7 +30,8 @@ class RemoteGuardProxy:
         path: str,
         payload: dict[str, Any],
         headers: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
+        expect_response: bool = True,
+    ) -> dict[str, Any] | None:
         request_headers = {"Content-Type": "application/json", **(headers or {})}
         target_url = self.base_url if not path else urljoin(self.base_url.rstrip("/") + "/", path.lstrip("/"))
         request = urllib.request.Request(
@@ -40,7 +41,8 @@ class RemoteGuardProxy:
             method="POST",
         )
         with urllib.request.urlopen(request, timeout=10) as response:
-            response_payload = json.loads(response.read().decode("utf-8"))
+            raw_response = response.read().decode("utf-8")
+        response_payload = json.loads(raw_response) if expect_response and raw_response.strip() else None
         self.events.append(
             {
                 "path": path,
