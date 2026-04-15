@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -27,6 +28,55 @@ def _ctx(tmp_path: Path) -> HarnessContext:
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def test_install_generates_guard_managed_overlay_and_pretool_files(tmp_path: Path):
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        (
+            'mcp_servers:\n'
+            '  github:\n'
+            '    command: "npx"\n'
+            '    args: ["-y", "@modelcontextprotocol/server-github"]\n'
+            '  remote-docs:\n'
+            '    url: "https://mcp.example.com/v1/mcp"\n'
+        ),
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    manifest = adapter.install(context)
+    overlay_path = Path(str(manifest["mcp_overlay_path"]))
+    pretool_path = Path(str(manifest["pretool_hook_path"]))
+    overlay_payload = json.loads(overlay_path.read_text(encoding="utf-8"))
+
+    assert manifest["install_state"] == "installed"
+    assert overlay_path.exists() is True
+    assert pretool_path.exists() is True
+    assert overlay_payload["github"]["command"] == str(Path(sys.executable))
+    assert overlay_payload["github"]["args"][-3:] == ["--server", "yaml:github", "--stdio"]
+    assert overlay_payload["remote-docs"]["command"] == str(Path(sys.executable))
+    assert overlay_payload["remote-docs"]["args"][-3:] == ["--server", "yaml:remote-docs", "--stdio"]
+
+
+def test_install_is_idempotent_and_repairs_missing_overlay(tmp_path: Path):
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        'mcp_servers:\n  github:\n    command: "npx"\n    args: ["-y", "@modelcontextprotocol/server-github"]\n',
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    first_manifest = adapter.install(context)
+    second_manifest = adapter.install(context)
+    overlay_path = Path(str(first_manifest["mcp_overlay_path"]))
+    overlay_path.unlink()
+    repaired_manifest = adapter.install(context)
+
+    assert first_manifest["install_state"] == "installed"
+    assert second_manifest["install_state"] == "already_managed"
+    assert repaired_manifest["install_state"] == "repaired_managed_install"
+    assert overlay_path.exists() is True
 
 
 # ------------------------------------------------------------------

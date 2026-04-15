@@ -36,10 +36,16 @@ from ..incident import build_incident_context
 from ..models import GuardArtifact, HarnessDetection
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS
 from ..protect import build_protect_payload
+from ..proxy import RemoteGuardProxy, StdioGuardProxy
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_summary
 from ..runtime import guard_run, sync_receipts
-from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
+from ..runtime.secret_file_requests import (
+    build_file_read_request_artifact,
+    build_tool_action_request_artifact,
+    extract_sensitive_file_read_request,
+    extract_sensitive_tool_action_request,
+)
 from ..store import GuardStore
 from .approval_commands import add_approval_parser, run_approval_command
 from .bootstrap import DEFAULT_ALIAS_NAME, build_guard_bootstrap_payload
@@ -294,8 +300,13 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     daemon_parser.add_argument("--serve", action="store_true")
     daemon_parser.add_argument("--port", type=int)
     daemon_parser.add_argument("--json", action="store_true")
+    hermes_mcp_proxy_parser = guard_subparsers.add_parser("hermes-mcp-proxy", help=argparse.SUPPRESS)
+    _add_guard_common_args(hermes_mcp_proxy_parser)
+    hermes_mcp_proxy_parser.add_argument("--server", required=True)
+    hermes_mcp_proxy_parser.add_argument("--stdio", action="store_true")
+    hidden_commands = {"hook", "daemon", "hermes-mcp-proxy"}
     guard_subparsers._choices_actions = [
-        action for action in guard_subparsers._choices_actions if action.dest not in {"hook", "daemon"}
+        action for action in guard_subparsers._choices_actions if action.dest not in hidden_commands
     ]
 
 
@@ -493,6 +504,9 @@ def run_guard_command(args: argparse.Namespace) -> int:
             return 2
         _emit("install", payload, getattr(args, "json", False))
         return 0
+
+    if args.guard_command == "hermes-mcp-proxy":
+        return _run_hermes_mcp_proxy(args=args, context=context, store=store, config=config)
 
     if args.guard_command == "uninstall":
         try:
@@ -701,7 +715,8 @@ def run_guard_command(args: argparse.Namespace) -> int:
 
     if args.guard_command == "hook":
         payload = _load_hook_payload(getattr(args, "event_file", None))
-        runtime_artifact = _hook_file_read_artifact(
+        managed_install = _managed_install_for(store, args.harness)
+        runtime_artifact = _hook_runtime_artifact(
             harness=args.harness,
             payload=payload,
             home_dir=context.home_dir,
@@ -723,7 +738,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             )
             if policy_action not in VALID_GUARD_ACTIONS:
                 policy_action = SAFE_CHANGED_HASH_ACTION
-            changed_capabilities = ["file_read_request"]
+            changed_capabilities = [runtime_artifact.artifact_type]
             risk_signals = list(artifact_risk_signals(runtime_artifact))
             risk_summary = artifact_risk_summary(runtime_artifact)
             incident = build_incident_context(
@@ -798,8 +813,12 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     harness=args.harness,
                     approval_center_url=approval_center_url,
                     queued=queued,
+                    managed_install=managed_install,
                 )
-                response_payload["approval_delivery"] = _approval_delivery_payload(args.harness)
+                response_payload["approval_delivery"] = _approval_delivery_payload(
+                    args.harness,
+                    managed_install=managed_install,
+                )
             if _should_emit_copilot_hook_response(args):
                 _emit_copilot_hook_response(
                     policy_action=policy_action,
@@ -887,8 +906,12 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
     return args.harness == "copilot" and not getattr(args, "json", False)
 
 
-def _approval_delivery_payload(harness: str) -> dict[str, object]:
-    return approval_delivery_payload(approval_prompt_flow(harness))
+def _approval_delivery_payload(
+    harness: str,
+    *,
+    managed_install: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return approval_delivery_payload(approval_prompt_flow(harness, managed_install=managed_install))
 
 
 def _copilot_hook_reason(*values: object | None) -> str:
@@ -962,7 +985,8 @@ def _headless_approval_resolver(
     config,
 ):
     def resolve(detection, payload):
-        approval_flow = approval_prompt_flow(args.harness)
+        managed_install = _managed_install_for(store, args.harness)
+        approval_flow = approval_prompt_flow(args.harness, managed_install=managed_install)
         approval_center_url = ensure_guard_daemon(context.guard_home)
         queued = queue_blocked_approvals(
             detection=detection,
@@ -978,8 +1002,9 @@ def _headless_approval_resolver(
             harness=args.harness,
             approval_center_url=approval_center_url,
             queued=queued,
+            managed_install=managed_install,
         )
-        payload["approval_delivery"] = _approval_delivery_payload(args.harness)
+        payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
         if str(approval_flow["tier"]) != "native-or-center":
             payload["approval_wait"] = {
                 "resolved": False,
@@ -1109,7 +1134,7 @@ def _string_list(value: object | None) -> list[str]:
     return [str(item) for item in value if isinstance(item, str) and item.strip()]
 
 
-def _hook_file_read_artifact(
+def _hook_runtime_artifact(
     *,
     harness: str,
     payload: dict[str, object],
@@ -1122,18 +1147,34 @@ def _hook_file_read_artifact(
         cwd=workspace,
         home_dir=home_dir,
     )
-    if request is None:
-        return None
     source_scope = _coalesce_string(payload.get("source_scope"), "project")
-    return build_file_read_request_artifact(
+    config_path = str(_runtime_policy_path(harness, home_dir, workspace))
+    if request is not None:
+        return build_file_read_request_artifact(
+            harness=harness,
+            request=request,
+            config_path=config_path,
+            source_scope=source_scope,
+        )
+    tool_request = extract_sensitive_tool_action_request(
+        payload.get("tool_name"),
+        payload.get("tool_input", payload.get("arguments")),
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+    if tool_request is None:
+        return None
+    return build_tool_action_request_artifact(
         harness=harness,
-        request=request,
-        config_path=str(_runtime_policy_path(harness, home_dir, workspace)),
+        request=tool_request,
+        config_path=config_path,
         source_scope=source_scope,
     )
 
 
 def _runtime_policy_path(harness: str, home_dir: Path, workspace: Path | None) -> Path:
+    if harness == "hermes":
+        return home_dir / ".hermes" / "config.yaml"
     if harness == "claude-code":
         if workspace is not None:
             return workspace / ".claude" / "settings.local.json"
@@ -1164,6 +1205,8 @@ def _runtime_detection(harness: str, artifact: GuardArtifact) -> HarnessDetectio
 def _runtime_capabilities_summary(artifact: GuardArtifact) -> str:
     tool_name = artifact.metadata.get("tool_name")
     if isinstance(tool_name, str) and tool_name:
+        if artifact.artifact_type == "tool_action_request":
+            return f"tool action request • {tool_name}"
         return f"file read request • {tool_name}"
     return "file read request"
 
@@ -1180,6 +1223,81 @@ def _runtime_requested_path(artifact: GuardArtifact) -> str | None:
     if isinstance(normalized_path, str) and normalized_path:
         return normalized_path
     return None
+
+
+def _managed_install_for(store: GuardStore, harness: str) -> dict[str, object] | None:
+    managed_install = store.get_managed_install(harness)
+    if managed_install is None or not bool(managed_install.get("active")):
+        return None
+    return managed_install
+
+
+def _run_hermes_mcp_proxy(
+    *,
+    args: argparse.Namespace,
+    context: HarnessContext,
+    store: GuardStore,
+    config,
+) -> int:
+    managed_install = _managed_install_for(store, "hermes")
+    if managed_install is None:
+        print("Guard is not managing Hermes in this Guard home.", file=sys.stderr)
+        return 2
+    manifest = managed_install.get("manifest")
+    if not isinstance(manifest, dict):
+        print("Hermes managed install manifest is missing.", file=sys.stderr)
+        return 2
+    servers = manifest.get("servers")
+    if not isinstance(servers, dict):
+        print("Hermes managed install has no MCP server manifest.", file=sys.stderr)
+        return 2
+    server = servers.get(args.server)
+    if not isinstance(server, dict):
+        print(f"Unknown Hermes MCP server: {args.server}", file=sys.stderr)
+        return 2
+    raw_messages = [line for line in sys.stdin.read().splitlines() if line.strip()]
+    messages = [json.loads(line) for line in raw_messages]
+    if len(messages) == 0:
+        return 0
+    approval_center_url = ensure_guard_daemon(context.guard_home)
+    transport = str(server.get("transport") or "stdio")
+    if transport == "http":
+        base_url = server.get("url")
+        if not isinstance(base_url, str) or not base_url:
+            print(f"Hermes MCP server {args.server} is missing a remote URL.", file=sys.stderr)
+            return 2
+        proxy = RemoteGuardProxy(base_url=base_url, allow_insecure_localhost=True)
+        for message in messages:
+            response = proxy.forward("", message)
+            print(json.dumps(response, separators=(",", ":")))
+        return 0
+    command = _server_command(server)
+    if len(command) == 0:
+        print(f"Hermes MCP server {args.server} is missing a launch command.", file=sys.stderr)
+        return 2
+    proxy = StdioGuardProxy(
+        command=command,
+        cwd=context.workspace_dir,
+        guard_store=store,
+        guard_config=config,
+        approval_center_url=approval_center_url,
+        harness="hermes",
+    )
+    result = proxy.run_session(messages)
+    for response in result["responses"]:
+        print(json.dumps(response, separators=(",", ":")))
+    return int(result["return_code"]) if isinstance(result.get("return_code"), int) else 0
+
+
+def _server_command(server: dict[str, object]) -> list[str]:
+    command = server.get("command")
+    args = server.get("args")
+    command_parts: list[str] = []
+    if isinstance(command, str) and command:
+        command_parts.append(command)
+    if isinstance(args, list):
+        command_parts.extend(str(value) for value in args if isinstance(value, str) and value)
+    return command_parts
 
 
 def _validate_policy_scope(

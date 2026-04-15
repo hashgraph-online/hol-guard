@@ -202,7 +202,11 @@ class StdioGuardProxy:
                                     store=self.guard_store,
                                     approval_center_url=self.approval_center_url,
                                 )
-                                approval_flow = approval_prompt_flow(self.harness)
+                                managed_install = self.guard_store.get_managed_install(self.harness)
+                                approval_flow = approval_prompt_flow(
+                                    self.harness,
+                                    managed_install=managed_install,
+                                )
                                 event["approval_center_url"] = self.approval_center_url
                                 event["approval_delivery"] = approval_delivery_payload(approval_flow)
                                 event["review_hint"] = (

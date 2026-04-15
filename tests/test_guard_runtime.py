@@ -813,6 +813,66 @@ class TestGuardRuntime:
         assert result["approval_delivery"]["prompt_channel"] == "hook"
         assert result["approval_wait"]["resolved"] is False
 
+    def test_headless_approval_resolver_treats_managed_hermes_as_native_or_center(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        store = GuardStore(home_dir)
+        config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+        artifact = GuardArtifact(
+            artifact_id="hermes:global:github",
+            name="github",
+            harness="hermes",
+            artifact_type="mcp_server",
+            source_scope="global",
+            config_path=str(home_dir / ".hermes" / "config.yaml"),
+            command="npx",
+            args=("-y", "@modelcontextprotocol/server-github"),
+            transport="stdio",
+        )
+        detection = HarnessDetection(
+            harness="hermes",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+        payload = {
+            "blocked": True,
+            "artifacts": [
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "artifact_name": artifact.name,
+                    "artifact_hash": artifact_hash(artifact),
+                    "policy_action": "require-reapproval",
+                    "changed_fields": ["args"],
+                    "artifact_type": artifact.artifact_type,
+                    "source_scope": artifact.source_scope,
+                    "config_path": artifact.config_path,
+                    "launch_target": "npx -y @modelcontextprotocol/server-github",
+                }
+            ],
+        }
+        store.set_managed_install(
+            "hermes",
+            True,
+            str(workspace_dir),
+            {"capabilities": {"same_channel": True}},
+            "2026-04-15T00:00:00+00:00",
+        )
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+        blocked_resolver = guard_commands_module._headless_approval_resolver(
+            args=argparse.Namespace(harness="hermes"),
+            context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+            store=store,
+            config=config,
+        )
+        result = blocked_resolver(detection, payload)
+
+        assert result["approval_delivery"]["destination"] == "harness"
+        assert result["approval_delivery"]["prompt_channel"] == "native"
+        assert result["approval_wait"]["resolved"] is False
+
     def test_guard_run_dry_run_human_output_is_summary_first(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -1935,6 +1995,95 @@ class TestGuardRuntime:
         assert blocked["responses"][0]["error"]["code"] == -32001
         assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "browser"
         assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
+
+    def test_stdio_proxy_uses_native_delivery_for_managed_hermes(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        store.set_managed_install(
+            "hermes",
+            True,
+            str(workspace_dir),
+            {"capabilities": {"same_channel": True}},
+            "2026-04-15T00:00:00+00:00",
+        )
+        config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
+        proxy = StdioGuardProxy(
+            command=[
+                sys.executable,
+                "-u",
+                "-c",
+                "\n".join(
+                    [
+                        "import json, sys",
+                        "for line in sys.stdin:",
+                        "    message = json.loads(line)",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                        "    sys.stdout.flush()",
+                    ]
+                ),
+            ],
+            cwd=workspace_dir,
+            guard_store=store,
+            guard_config=config,
+            approval_center_url="http://127.0.0.1:4455",
+            harness="hermes",
+        )
+
+        blocked = proxy.run_session(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "read_file", "arguments": {"path": ".env"}},
+                }
+            ]
+        )
+
+        assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "harness"
+        assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["prompt_channel"] == "native"
+        assert blocked["events"][0]["approval_delivery"]["destination"] == "harness"
+
+    def test_hermes_pretool_blocks_docker_sensitive_command_requests(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        _write_text(home_dir / "config.toml", 'mode = "prompt"\n')
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(
+            sys,
+            "stdin",
+            io.StringIO(
+                json.dumps(
+                    {
+                        "event": "PreToolUse",
+                        "tool_name": "shell",
+                        "tool_input": {"command": "docker login ghcr.io", "docker_mode": True},
+                        "source_scope": "project",
+                    }
+                )
+            ),
+        )
+
+        rc = main(
+            [
+                "hermes",
+                "pretool",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert output["approval_delivery"]["destination"] == "harness"
+        assert "docker" in output["risk_summary"].lower()
 
     def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers(self):
         server = HTTPServer(("127.0.0.1", 0), _RemoteProxyHandler)

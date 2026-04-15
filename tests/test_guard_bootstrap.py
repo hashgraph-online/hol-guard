@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from codex_plugin_scanner.cli import main
@@ -218,3 +219,83 @@ def test_guard_bootstrap_skip_install_still_rejects_invalid_harness(tmp_path, ca
 
     assert rc == 2
     assert "Unsupported harness" in stderr
+
+
+def test_hol_guard_hermes_bootstrap_alias_installs_hermes(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        home_dir / ".hermes" / "config.yaml",
+        'mcp_servers:\n  github:\n    command: "npx"\n    args: ["-y", "@modelcontextprotocol/server-github"]\n',
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.bootstrap.ensure_guard_daemon",
+        lambda _guard_home: "http://127.0.0.1:4781",
+    )
+    monkeypatch.setattr(sys, "argv", ["hol-guard"])
+
+    rc = main(
+        [
+            "hermes",
+            "bootstrap",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["recommended_harness"] == "hermes"
+    assert output["bootstrap_install"]["harness"] == "hermes"
+    assert output["next_steps"][0]["command"] == "hol-guard run hermes --dry-run"
+
+
+def test_guard_bootstrap_repairs_managed_hermes_install_when_overlay_is_missing(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        home_dir / ".hermes" / "config.yaml",
+        'mcp_servers:\n  github:\n    command: "npx"\n    args: ["-y", "@modelcontextprotocol/server-github"]\n',
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.bootstrap.ensure_guard_daemon",
+        lambda _guard_home: "http://127.0.0.1:4781",
+    )
+
+    first_rc = main(
+        [
+            "guard",
+            "bootstrap",
+            "hermes",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    first_output = json.loads(capsys.readouterr().out)
+    overlay_path = Path(first_output["bootstrap_install"]["managed_install"]["manifest"]["mcp_overlay_path"])
+    overlay_path.unlink()
+
+    second_rc = main(
+        [
+            "guard",
+            "bootstrap",
+            "hermes",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    second_output = json.loads(capsys.readouterr().out)
+
+    assert first_rc == 0
+    assert second_rc == 0
+    assert second_output["bootstrap_install"]["reason"] == "repaired_managed_install"
+    assert overlay_path.exists() is True
