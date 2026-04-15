@@ -766,7 +766,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 "path_summary": _runtime_requested_path(runtime_artifact),
             }
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
-                approval_flow = get_adapter(args.harness).approval_flow()
+                approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
                 approval_center_url = ensure_guard_daemon(guard_home)
                 runtime_detection = _runtime_detection(args.harness, runtime_artifact)
                 evaluation_payload = {
@@ -1150,10 +1150,14 @@ def _open_approval_center(approval_center_url: str, *, store: GuardStore, config
     )
 
 
-def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[str, str]) -> str:
-    if approval_flow.get("tier") == "approval-center":
-        return config_policy
-    return "notify-only"
+def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[str, object]) -> str:
+    if approval_flow.get("tier") != "approval-center":
+        return "notify-only"
+    if approval_flow.get("auto_open_browser") is False:
+        return "never-auto-open"
+    if approval_flow.get("prompt_channel") == "native-fallback":
+        return "never-auto-open"
+    return config_policy
 
 
 def _load_hook_payload(event_file: str | None) -> dict[str, object]:

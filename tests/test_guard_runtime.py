@@ -1130,6 +1130,85 @@ class TestGuardRuntime:
         assert captured_expect_response == [False]
         assert output_stream.getvalue() == ""
 
+    def test_approval_surface_policy_disables_auto_open_when_flow_forbids_browser(self):
+        assert (
+            guard_commands_module._approval_surface_policy_for_flow(
+                "auto-open-once",
+                {"tier": "approval-center", "auto_open_browser": False, "prompt_channel": "native-fallback"},
+            )
+            == "never-auto-open"
+        )
+
+    def test_hermes_pretool_uses_managed_same_channel_policy_for_blocked_operations(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        _write_text(home_dir / "config.toml", 'mode = "prompt"\napproval_surface_policy = "auto-open-once"\n')
+        GuardStore(home_dir).set_managed_install(
+            "hermes",
+            True,
+            str(workspace_dir),
+            {"capabilities": {"same_channel": True}},
+            "2026-04-15T00:00:00+00:00",
+        )
+
+        captured_surface_policy: list[str] = []
+
+        class _FakeDaemonClient:
+            def start_session(self, **kwargs) -> dict[str, object]:
+                return {"session_id": "session-1"}
+
+            def queue_blocked_operation(self, **kwargs) -> dict[str, object]:
+                captured_surface_policy.append(str(kwargs["approval_surface_policy"]))
+                return {
+                    "operation": {"operation_id": "operation-1"},
+                    "approval_requests": [{"request_id": "request-1"}],
+                }
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(
+            guard_commands_module,
+            "load_guard_surface_daemon_client",
+            lambda _guard_home: _FakeDaemonClient(),
+        )
+        monkeypatch.setattr(
+            sys,
+            "stdin",
+            io.StringIO(
+                json.dumps(
+                    {
+                        "event": "PreToolUse",
+                        "tool_name": "shell",
+                        "tool_input": {"command": "docker login ghcr.io", "docker_mode": True},
+                        "source_scope": "project",
+                    }
+                )
+            ),
+        )
+
+        rc = main(
+            [
+                "hermes",
+                "pretool",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert captured_surface_policy == ["notify-only"]
+        assert output["approval_delivery"]["destination"] == "harness"
+        assert output["approval_delivery"]["prompt_channel"] == "native"
+
     def test_guard_run_dry_run_human_output_is_summary_first(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
