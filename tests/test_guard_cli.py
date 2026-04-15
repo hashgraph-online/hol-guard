@@ -2619,7 +2619,7 @@ args = ["workspace-skill.js", "--changed"]
         assert payload["status"] == "paired_without_cloud_sync"
         assert payload["sync_message"] == "Guard Cloud sync requires a paid Guard plan"
 
-    def test_guard_connect_reports_guard_plan_upgrade_variants_without_failing_pairing(self, tmp_path, monkeypatch):
+    def test_guard_connect_reports_guard_plan_required_without_failing_pairing(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
 
         class FakeDaemonClient:
@@ -2649,7 +2649,7 @@ args = ["workspace-skill.js", "--changed"]
         monkeypatch.setattr(
             guard_connect_flow_module,
             "sync_receipts",
-            lambda current_store: (_ for _ in ()).throw(RuntimeError("Upgrade your Guard plan to keep Guard sync on.")),
+            lambda current_store: (_ for _ in ()).throw(RuntimeError("Guard plan required")),
         )
 
         payload = guard_connect_flow_module.run_guard_connect_command(
@@ -2663,7 +2663,7 @@ args = ["workspace-skill.js", "--changed"]
 
         assert payload["connected"] is True
         assert payload["status"] == "paired_without_cloud_sync"
-        assert payload["sync_message"] == "Upgrade your Guard plan to keep Guard sync on."
+        assert payload["sync_message"] == "Guard plan required"
 
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

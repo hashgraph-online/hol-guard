@@ -101,11 +101,10 @@ def _is_plan_limited_sync_error(message: str) -> bool:
     """Match the stable plan-limit phrases returned by Guard Cloud sync today."""
 
     normalized = message.strip().lower()
-    has_guard_sync_context = "guard" in normalized and "sync" in normalized
     has_plan_limit_phrase = any(phrase in normalized for phrase in _PLAN_LIMITED_SYNC_PHRASES)
-    return has_guard_sync_context and (
-        has_plan_limit_phrase or ("guard plan" in normalized and "upgrade" in normalized)
-    )
+    if "guard" in normalized and has_plan_limit_phrase:
+        return True
+    return "guard" in normalized and "sync" in normalized and "guard plan" in normalized and "upgrade" in normalized
 
 
 def build_guard_connect_browser_url(
