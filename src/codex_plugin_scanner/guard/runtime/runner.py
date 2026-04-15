@@ -246,7 +246,8 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         "remote_policies_stored": len(remote_decisions),
         "pain_signals_uploaded": pain_signals_uploaded,
         "receipts": len(receipts),
-        "inventory": len(inventory),
+        "inventory": 0,
+        "inventory_tracked": len(inventory),
     }
     store.set_sync_payload("sync_summary", summary, now)
     return summary

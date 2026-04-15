@@ -2268,6 +2268,8 @@ args = ["workspace-skill.js", "--changed"]
         assert sync_rc == 0
         assert status_rc == 0
         assert sync_output["receipts_stored"] == 1
+        assert sync_output["inventory"] == 0
+        assert sync_output["inventory_tracked"] >= 1
         assert status_output["cloud_state"] == "paired_active"
         assert status_output["last_sync_at"] == "2026-04-09T00:00:00Z"
         assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer demo-token"
@@ -2417,6 +2419,8 @@ args = ["workspace-skill.js", "--changed"]
         assert connect_rc == 0
         assert connect_output["connected"] is True
         assert connect_output["sync"]["receipts_stored"] == 1
+        assert connect_output["sync"]["inventory"] == 0
+        assert connect_output["sync"]["inventory_tracked"] >= 1
         assert connect_output["browser_opened"] is True
         assert opened_urls and opened_urls[0].startswith("https://hol.org/guard/connect?")
         assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer session-token-123"
