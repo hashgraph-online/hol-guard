@@ -46,17 +46,40 @@ jobs:
         env:
           GITHUB_REF: ${{ github.ref }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BASE_VERSION=$(python3 -c "import tomllib; p=tomllib.load(open('pyproject.toml','rb')); print(p['project']['version'])")
           VERSION="$BASE_VERSION"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
-            LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n1)
-            if [[ -n "$LAST_TAG" ]]; then
-              IFS=. read -r MAJOR MINOR PATCH <<< "${LAST_TAG#v}"
+            # Check git tags first
+            LAST_TAG=$(git tag --list 'v*' --sort=-version:refname 2>/dev/null | head -n1)
+            LAST_TAG_VERSION="${LAST_TAG#v}"
+
+            # Also check GitHub releases (they may exist without corresponding git tags)
+            # GH_TOKEN provided via env block above
+            # Null-safe: returns empty if no releases exist
+            # Fetch all releases (--limit 100) and pick max semver
+            # Filter to strict semver tags (vX.Y.Z) to exclude non-semver like "nightly" or "rc"
+            GH_RELEASES=$(gh release list --limit 100 --json tagName --jq '.[].tagName' 2>/dev/null | \
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V 2>/dev/null || echo "")
+            GH_RELEASE_VERSION=$(echo "$GH_RELEASES" | grep -v '^$' | tail -n1)
+
+            # Use whichever version is higher
+            if [[ -n "$GH_RELEASE_VERSION" && -n "$LAST_TAG_VERSION" ]]; then
+              COMPARE=$(printf '%s\n%s\n' "$LAST_TAG_VERSION" "$GH_RELEASE_VERSION" | sort -V | tail -n1)
+              HIGHEST="$COMPARE"
+            elif [[ -n "$GH_RELEASE_VERSION" ]]; then
+              HIGHEST="$GH_RELEASE_VERSION"
+            elif [[ -n "$LAST_TAG_VERSION" ]]; then
+              HIGHEST="$LAST_TAG_VERSION"
+            fi
+
+            if [[ -n "$HIGHEST" ]]; then
+              IFS=. read -r MAJOR MINOR PATCH <<< "$HIGHEST"
               if [[ -z "$MAJOR" || -z "$MINOR" || -z "$PATCH" ]]; then
-                echo "Unsupported release tag format: $LAST_TAG" >&2
+                echo "Unsupported release tag format: $HIGHEST" >&2
                 exit 1
               fi
               VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
@@ -304,6 +327,7 @@ jobs:
           VERSION="${{ needs.build.outputs.version }}"
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
+            --target main \
             --notes-file ${{ steps.changelog.outputs.notes_path }} \
             "${RELEASE_ASSETS[@]}"
 
