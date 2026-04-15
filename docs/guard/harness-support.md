@@ -11,18 +11,31 @@ Current Guard support in this repo:
   - detects global and project settings, hooks, `.mcp.json`, and workspace agents
   - supports local hook install and uninstall in `.claude/settings.local.json`
   - is the best current harness for graceful approval deferral
+- `copilot`
+  - detects read-only user config in `~/.copilot/config.json` and `~/.copilot/mcp-config.json`
+  - detects workspace `.vscode/mcp.json` as documented MCP artifact input only
+  - detects repo-local Copilot CLI hooks from `.github/hooks/*.json`
+  - installs and removes Guard-owned repo hooks in `.github/hooks/hol-guard-copilot.json`
+  - supports wrapper-mode `guard run copilot`
 - `cursor`
   - detects global and project `mcp.json`
   - supports wrapper-mode management state
   - leaves native Cursor tool approval in place and focuses Guard on artifact trust
+- `antigravity`
+  - detects Antigravity user settings, installed extension profiles, and Antigravity-owned MCP and skill roots
+  - supports wrapper-mode management state
+  - uses the local approval center for blocked artifact changes today
 - `gemini`
-  - detects local extension manifests and embedded MCP server declarations
+  - detects `.gemini/settings.json`, local extension manifests, embedded MCP declarations, hooks, and Gemini skill directories
   - supports wrapper-mode management state
   - falls back to the local approval center when Guard blocks a launch
 - `opencode`
-  - detects global and project config plus workspace commands
-  - supports wrapper-mode management state
-  - respects OpenCode permission rules and uses Guard for package-level policy
+  - detects global and project config, MCP servers, config-defined commands, markdown commands, npm plugins, local
+    plugin files, and OpenCode-compatible skill directories
+  - supports wrapper-mode management state plus a Guard-owned runtime overlay for native skill approval prompts
+  - supports wrapper-mode `guard run opencode`
+  - blocks newly introduced OpenCode MCP, plugin, and skill artifacts before launch when local Guard policy requires
+    approval
 
 Approval tiers:
 
@@ -31,3 +44,10 @@ Approval tiers:
 3. terminal approval resolution through `hol-guard approvals`
 
 The harness adapters are designed to prefer discovery and reversible overlay behavior over invasive config mutation.
+
+Explicit non-support:
+
+- Guard does not claim VS Code Copilot extension-host interception.
+- Guard does not add `guard run vscode-copilot`.
+- Guard treats `~/.copilot/*` as read-only detection input and does not auto-write user-level Copilot config.
+- Guard does not add Cisco AIBOM runtime or policy integration in this pass. If revisited later, AIBOM belongs on evidence or export surfaces.

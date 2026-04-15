@@ -83,6 +83,63 @@ args = ["workspace-skill.js"]
     )
 
     _write_json(
+        home_dir / "Library" / "Application Support" / "Antigravity" / "User" / "settings.json",
+        {
+            "workbench.colorTheme": "Default Dark+",
+        },
+    )
+    antigravity_extension_root = home_dir / ".antigravity" / "extensions" / "hashgraph.antigravity-tools-1.0.0"
+    _write_json(
+        home_dir / ".antigravity" / "extensions" / "extensions.json",
+        [
+            {
+                "identifier": {"id": "hashgraph.antigravity-tools"},
+                "location": {"path": str(antigravity_extension_root)},
+                "metadata": {"publisherDisplayName": "Hashgraph"},
+            }
+        ],
+    )
+    _write_json(
+        antigravity_extension_root / "package.json",
+        {
+            "name": "antigravity-tools",
+            "publisher": "hashgraph",
+            "displayName": "Antigravity Tools",
+        },
+    )
+    _write_json(
+        home_dir / ".gemini" / "antigravity" / "mcp_config.json",
+        {
+            "mcpServers": {
+                "gravity-tools": {"command": "node", "args": ["gravity.js"]},
+            }
+        },
+    )
+    _write_text(
+        home_dir / ".gemini" / "antigravity" / "skills" / "gravity-review" / "SKILL.md",
+        "---\nname: gravity-review\ndescription: Gravity skill\n---\n",
+    )
+
+    _write_json(
+        home_dir / ".gemini" / "settings.json",
+        {
+            "mcpServers": {
+                "gemini-tools": {"command": "node", "args": ["gemini.js"]},
+            },
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "hooks": [{"type": "command", "command": "python global-gemini-hook.py"}],
+                    }
+                ]
+            },
+        },
+    )
+    _write_text(
+        home_dir / ".gemini" / "skills" / "gemini-review" / "SKILL.md",
+        "---\nname: gemini-review\ndescription: Gemini skill\n---\n",
+    )
+    _write_json(
         home_dir / ".gemini" / "extensions" / "hashnet" / "gemini-extension.json",
         {
             "name": "hashnet",
@@ -93,6 +150,25 @@ args = ["workspace-skill.js"]
         },
     )
     _write_text(home_dir / ".gemini" / "extensions" / "hashnet" / "GEMINI.md", "context\n")
+    _write_json(
+        workspace_dir / ".gemini" / "settings.json",
+        {
+            "mcpServers": {
+                "workspace-gemini": {"command": "node", "args": ["workspace-gemini.js"]},
+            },
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "hooks": [{"type": "command", "command": "python workspace-gemini-hook.py"}],
+                    }
+                ]
+            },
+        },
+    )
+    _write_text(
+        workspace_dir / ".gemini" / "skills" / "workspace-review" / "SKILL.md",
+        "---\nname: workspace-review\ndescription: Workspace Gemini skill\n---\n",
+    )
 
     _write_json(
         home_dir / ".config" / "opencode" / "opencode.json",
@@ -120,6 +196,7 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
     response_code = 200
     captured_headers: ClassVar[dict[str, str]] = {}
     captured_body: ClassVar[dict[str, object] | None] = None
+    raw_response_body: ClassVar[str | None] = None
     response_payload: ClassVar[dict[str, object]] = {
         "syncedAt": "2026-04-09T00:00:00Z",
         "receiptsStored": 1,
@@ -133,7 +210,10 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
         self.send_response(self.response_code)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(json.dumps(_SyncRequestHandler.response_payload).encode("utf-8"))
+        response_body = _SyncRequestHandler.raw_response_body
+        if response_body is None:
+            response_body = json.dumps(_SyncRequestHandler.response_payload)
+        self.wfile.write(response_body.encode("utf-8"))
 
     def log_message(self, fmt: str, *args) -> None:
         return
@@ -168,7 +248,7 @@ class TestGuardCli:
         harnesses = {item["harness"]: item for item in output["harnesses"]}
 
         assert rc == 0
-        assert {"codex", "claude-code", "cursor", "gemini", "opencode"} <= harnesses.keys()
+        assert {"codex", "claude-code", "cursor", "antigravity", "gemini", "opencode"} <= harnesses.keys()
         assert harnesses["codex"]["artifacts"][0]["source_scope"] == "global"
         assert harnesses["claude-code"]["artifacts"][0]["artifact_type"] in {"mcp_server", "hook", "agent"}
 
@@ -333,11 +413,57 @@ args = ["workspace-skill.js"]
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _write_json(
+            home_dir / ".gemini" / "settings.json",
+            {
+                "mcpServers": {
+                    "shared-settings": {"command": "node", "args": ["global-settings.js"]},
+                },
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "hooks": [{"type": "command", "command": "python global-hook.py"}],
+                        }
+                    ]
+                },
+            },
+        )
+        _write_text(
+            home_dir / ".gemini" / "skills" / "shared-skill" / "SKILL.md",
+            "---\nname: shared-skill\ndescription: Global Gemini skill\n---\n",
+        )
+        _write_json(
             home_dir / ".gemini" / "extensions" / "shared" / "gemini-extension.json",
             {
                 "name": "shared",
                 "mcpServers": {"shared-tools": {"command": "node", "args": ["global.js"]}},
             },
+        )
+        _write_json(
+            home_dir / ".gemini" / "antigravity" / "mcp_config.json",
+            {
+                "mcpServers": {
+                    "should-belong-to-antigravity": {"command": "node", "args": ["antigravity.js"]},
+                }
+            },
+        )
+        _write_json(
+            workspace_dir / ".gemini" / "settings.json",
+            {
+                "mcpServers": {
+                    "shared-settings": {"command": "node", "args": ["project-settings.js"]},
+                },
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "hooks": [{"type": "command", "command": "python project-hook.py"}],
+                        }
+                    ]
+                },
+            },
+        )
+        _write_text(
+            workspace_dir / ".gemini" / "skills" / "shared-skill" / "SKILL.md",
+            "---\nname: shared-skill\ndescription: Project Gemini skill\n---\n",
         )
         _write_json(
             workspace_dir / ".gemini" / "extensions" / "shared" / "gemini-extension.json",
@@ -366,9 +492,343 @@ args = ["workspace-skill.js"]
         assert artifact_ids == [
             "gemini:global:shared",
             "gemini:global:shared:shared-tools",
+            "gemini:global:mcp:shared-settings",
+            "gemini:global:hook:pretooluse:0",
+            "gemini:global:skill:skills/shared-skill",
             "gemini:project:shared",
             "gemini:project:shared:shared-tools",
+            "gemini:project:mcp:shared-settings",
+            "gemini:project:hook:pretooluse:0",
+            "gemini:project:skill:skills/shared-skill",
         ]
+
+    def test_guard_detect_reports_antigravity_extensions_skills_and_mcp(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        antigravity_extension_root = home_dir / ".antigravity" / "extensions" / "hashgraph.tools-1.0.0"
+        _write_json(
+            home_dir / "Library" / "Application Support" / "Antigravity" / "User" / "settings.json",
+            {"workbench.colorTheme": "Solarized Dark"},
+        )
+        _write_json(
+            home_dir / ".antigravity" / "extensions" / "extensions.json",
+            [
+                {
+                    "identifier": {"id": "hashgraph.tools"},
+                    "location": {"path": str(antigravity_extension_root)},
+                    "metadata": {"publisherDisplayName": "Hashgraph"},
+                }
+            ],
+        )
+        _write_json(
+            antigravity_extension_root / "package.json",
+            {"name": "tools", "publisher": "hashgraph", "displayName": "Hashgraph Tools"},
+        )
+        _write_json(
+            home_dir / ".gemini" / "antigravity" / "mcp_config.json",
+            {
+                "mcpServers": {
+                    "gravity-tools": {"command": "node", "args": ["gravity.js"]},
+                }
+            },
+        )
+        _write_text(
+            home_dir / ".gemini" / "antigravity" / "skills" / "gravity-review" / "SKILL.md",
+            "---\nname: gravity-review\ndescription: Gravity review skill\n---\n",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "antigravity",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        detection = output["harnesses"][0]
+        artifact_ids = [item["artifact_id"] for item in detection["artifacts"]]
+
+        assert rc == 0
+        assert (
+            str(home_dir / "Library" / "Application Support" / "Antigravity" / "User" / "settings.json")
+            in (detection["config_paths"])
+        )
+        assert str(home_dir / ".gemini" / "antigravity" / "mcp_config.json") in detection["config_paths"]
+        assert artifact_ids == [
+            "antigravity:global:hashgraph.tools",
+            "antigravity:global:mcp:bridge:gravity-tools",
+            "antigravity:global:skill:skills/gravity-review",
+        ]
+
+    def test_guard_detect_recognizes_cross_platform_antigravity_settings(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".config" / "Antigravity" / "User" / "settings.json",
+            {
+                "antigravity.profile": "default",
+                "mcpServers": {"gravity-tools": {"command": "node", "args": True}},
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "antigravity",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        detection = output["harnesses"][0]
+
+        assert rc == 0
+        assert str(home_dir / ".config" / "Antigravity" / "User" / "settings.json") in detection["config_paths"]
+        assert [item["artifact_id"] for item in detection["artifacts"]] == [
+            "antigravity:global:mcp:settings:xdg-user:gravity-tools"
+        ]
+        assert detection["artifacts"][0]["args"] == []
+
+    def test_guard_detect_ignores_generic_workspace_vscode_settings_without_antigravity_ownership(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            workspace_dir / ".vscode" / "settings.json",
+            {
+                "workbench.colorTheme": "Default Dark+",
+                "mcpServers": {"generic-tools": {"command": "node", "args": ["generic.js"]}},
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "antigravity",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        detection = output["harnesses"][0]
+
+        assert rc == 0
+        assert detection["config_paths"] == []
+        assert detection["artifacts"] == []
+
+    def test_guard_detect_includes_workspace_vscode_settings_after_antigravity_ownership(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".config" / "Antigravity" / "User" / "settings.json",
+            {
+                "antigravity.profile": "default",
+            },
+        )
+        _write_json(
+            workspace_dir / ".vscode" / "settings.json",
+            {
+                "workbench.colorTheme": "Default Dark+",
+                "mcpServers": {"workspace-tools": {"command": "node", "args": ["workspace.js"]}},
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "antigravity",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        detection = output["harnesses"][0]
+        artifact_ids = [item["artifact_id"] for item in detection["artifacts"]]
+
+        assert rc == 0
+        assert str(home_dir / ".config" / "Antigravity" / "User" / "settings.json") in detection["config_paths"]
+        assert str(workspace_dir / ".vscode" / "settings.json") in detection["config_paths"]
+        assert artifact_ids == ["antigravity:project:mcp:settings:workspace-vscode:workspace-tools"]
+
+    def test_guard_detect_disambiguates_antigravity_mcp_sources(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / "Library" / "Application Support" / "Antigravity" / "User" / "settings.json",
+            {
+                "antigravity.profile": "default",
+                "mcpServers": {"shared-tools": {"command": "node", "args": ["settings.js"]}},
+            },
+        )
+        _write_json(
+            home_dir / ".gemini" / "antigravity" / "mcp_config.json",
+            {
+                "mcpServers": {"shared-tools": {"command": "node", "args": ["bridge.js"]}},
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "antigravity",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = [item["artifact_id"] for item in output["harnesses"][0]["artifacts"]]
+
+        assert rc == 0
+        assert artifact_ids == [
+            "antigravity:global:mcp:bridge:shared-tools",
+            "antigravity:global:mcp:settings:macos-user:shared-tools",
+        ]
+
+    def test_guard_detect_disambiguates_antigravity_settings_paths_with_same_server_name(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / "Library" / "Application Support" / "Antigravity" / "User" / "settings.json",
+            {
+                "antigravity.profile": "default",
+                "mcpServers": {"shared-tools": {"command": "node", "args": ["macos.js"]}},
+            },
+        )
+        _write_json(
+            home_dir / ".config" / "Antigravity" / "User" / "settings.json",
+            {
+                "antigravity.profile": "default",
+                "mcpServers": {"shared-tools": {"command": "node", "args": ["linux.js"]}},
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "antigravity",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = [item["artifact_id"] for item in output["harnesses"][0]["artifacts"]]
+
+        assert rc == 0
+        assert artifact_ids == [
+            "antigravity:global:mcp:settings:macos-user:shared-tools",
+            "antigravity:global:mcp:settings:xdg-user:shared-tools",
+        ]
+
+    def test_guard_detect_tolerates_gemini_malformed_args(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".gemini" / "extensions" / "shared" / "gemini-extension.json",
+            {
+                "name": "shared",
+                "mcpServers": {"shared-tools": {"command": "node", "args": True}},
+            },
+        )
+        _write_json(
+            home_dir / ".gemini" / "settings.json",
+            {
+                "mcpServers": {"settings-tools": {"command": "node", "args": True}},
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "gemini",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        detection = output["harnesses"][0]
+        artifacts = {item["artifact_id"]: item for item in detection["artifacts"]}
+
+        assert rc == 0
+        assert artifacts["gemini:global:shared:shared-tools"]["args"] == []
+        assert artifacts["gemini:global:mcp:settings-tools"]["args"] == []
+
+    def test_guard_detect_hashes_full_gemini_hook_lists(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".gemini" / "settings.json",
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "write_file",
+                            "hooks": [
+                                {"type": "command", "command": "python first-hook.py", "timeout": 5},
+                                {"type": "command", "command": "python second-hook.py", "name": "second"},
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "gemini",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        hook_artifact = output["harnesses"][0]["artifacts"][0]
+
+        assert rc == 0
+        assert hook_artifact["artifact_id"] == "gemini:global:hook:pretooluse:0"
+        assert hook_artifact["command"] == "python first-hook.py\npython second-hook.py"
+        assert hook_artifact["metadata"]["hook_config"]["matcher"] == "write_file"
+        assert hook_artifact["metadata"]["hook_config"]["hooks"][0]["timeout"] == 5
+        assert hook_artifact["metadata"]["hook_config"]["hooks"][1]["name"] == "second"
 
     def test_guard_detect_scopes_opencode_artifact_ids(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -408,6 +868,303 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert artifact_ids == ["opencode:global:shared-tools", "opencode:project:shared-tools"]
 
+    def test_guard_detect_reports_opencode_plugins_skills_and_commands(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".config" / "opencode" / "opencode.json",
+            {
+                "plugins": [["opencode-global-plugin", {"mode": "strict", "token": "top-secret"}]],
+                "command": {
+                    "global-review": {
+                        "template": "Review the current diff.",
+                        "description": "Global review command",
+                    }
+                },
+            },
+        )
+        _write_json(
+            workspace_dir / "opencode.json",
+            {
+                "plugins": ["opencode-project-plugin"],
+                "command": {
+                    "project-review": {
+                        "template": "Review the workspace change set.",
+                        "description": "Project review command",
+                    }
+                },
+            },
+        )
+        _write_text(home_dir / ".config" / "opencode" / "plugins" / "global-local.mjs", "export default {};\n")
+        _write_text(workspace_dir / ".opencode" / "plugins" / "project-local.mjs", "export default {};\n")
+        _write_text(home_dir / ".config" / "opencode" / "commands" / "global-cmd.md", "# global\n")
+        _write_text(workspace_dir / ".opencode" / "commands" / "triage.md", "# triage\n")
+        _write_text(
+            home_dir / ".config" / "opencode" / "skills" / "global-skill" / "SKILL.md",
+            "---\nname: global-skill\ndescription: Global skill\n---\n",
+        )
+        _write_text(
+            workspace_dir / ".opencode" / "skills" / "repo-skill" / "SKILL.md",
+            "---\nname: repo-skill\ndescription: Repo skill\n---\n",
+        )
+        _write_text(
+            workspace_dir / ".claude" / "skills" / "claude-skill" / "SKILL.md",
+            "---\nname: claude-skill\ndescription: Claude-compatible skill\n---\n",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifacts = {item["artifact_id"]: item for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert "opencode:global:plugin:opencode-global-plugin" in artifacts
+        assert "opencode:project:plugin:opencode-project-plugin" in artifacts
+        assert "opencode:global:plugin-file:plugins/global-local.mjs" in artifacts
+        assert "opencode:project:plugin-file:plugins/project-local.mjs" in artifacts
+        assert "opencode:global:config-command:global-review" in artifacts
+        assert "opencode:project:config-command:project-review" in artifacts
+        assert "opencode:global:command:global-cmd" in artifacts
+        assert "opencode:project:command:triage" in artifacts
+        assert "opencode:global:skill:opencode:skills/global-skill" in artifacts
+        assert "opencode:project:skill:opencode:skills/repo-skill" in artifacts
+        assert "opencode:project:skill:claude:skills/claude-skill" in artifacts
+        assert artifacts["opencode:project:plugin-file:plugins/project-local.mjs"]["artifact_type"] == "plugin"
+        assert artifacts["opencode:project:config-command:project-review"]["metadata"]["template"] == (
+            "Review the workspace change set."
+        )
+        assert artifacts["opencode:global:plugin:opencode-global-plugin"]["metadata"]["mode"] == "strict"
+        assert artifacts["opencode:global:plugin:opencode-global-plugin"]["metadata"]["token"] == "*****"
+        assert artifacts["opencode:project:skill:claude:skills/claude-skill"]["artifact_type"] == "skill"
+
+    def test_guard_detect_keeps_unique_opencode_file_artifact_ids(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(workspace_dir / "opencode.json", {})
+        _write_text(workspace_dir / ".opencode" / "plugin" / "shared.js", "export default {};\n")
+        _write_text(workspace_dir / ".opencode" / "plugins" / "shared.mjs", "export default {};\n")
+        _write_text(workspace_dir / ".opencode" / "plugins" / "nested" / "shared.mjs", "export default {};\n")
+        _write_text(workspace_dir / ".opencode" / "skill" / "shared" / "SKILL.md", "---\nname: shared\n---\n")
+        _write_text(
+            workspace_dir / ".opencode" / "skills" / "nested" / "shared" / "SKILL.md",
+            "---\nname: shared\n---\n",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = {item["artifact_id"] for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert "opencode:project:plugin-file:plugin/shared.js" in artifact_ids
+        assert "opencode:project:plugin-file:plugins/shared.mjs" in artifact_ids
+        assert "opencode:project:plugin-file:plugins/nested/shared.mjs" in artifact_ids
+        assert "opencode:project:skill:opencode:skill/shared" in artifact_ids
+        assert "opencode:project:skill:opencode:skills/nested/shared" in artifact_ids
+
+    def test_guard_detect_reads_opencode_config_from_environment_override(self, monkeypatch, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        custom_config_path = workspace_dir / "custom" / "guard-opencode.json"
+        _write_json(custom_config_path, {"plugins": ["env-plugin"]})
+        monkeypatch.setenv("OPENCODE_CONFIG", str(custom_config_path))
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        detection = output["harnesses"][0]
+        artifact_ids = [item["artifact_id"] for item in detection["artifacts"]]
+
+        assert rc == 0
+        assert "opencode:project:plugin:env-plugin" in artifact_ids
+        assert str(custom_config_path) in detection["config_paths"]
+
+    def test_guard_detect_prefers_project_opencode_config_over_environment_override(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        custom_config_path = workspace_dir / "custom" / "guard-opencode.json"
+        _write_json(custom_config_path, {"plugins": [["shared-plugin", {"mode": "custom"}]]})
+        _write_json(workspace_dir / "opencode.json", {"plugins": [["shared-plugin", {"mode": "project"}]]})
+        monkeypatch.setenv("OPENCODE_CONFIG", str(custom_config_path))
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifacts = {item["artifact_id"]: item for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert artifacts["opencode:project:plugin:shared-plugin"]["metadata"]["mode"] == "project"
+
+    def test_guard_detect_reads_opencode_config_dir_from_environment_override(self, monkeypatch, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        custom_config_dir = workspace_dir / "custom-dir"
+        _write_text(custom_config_dir / "plugins" / "env-plugin.mjs", "export default {};\n")
+        _write_text(custom_config_dir / "commands" / "env-command.md", "# env command\n")
+        monkeypatch.setenv("OPENCODE_CONFIG_DIR", str(custom_config_dir))
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifact_ids = {item["artifact_id"] for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert "opencode:project:plugin-file:plugins/env-plugin.mjs" in artifact_ids
+        assert "opencode:project:command:env-command" in artifact_ids
+
+    def test_guard_detect_prefers_opencode_environment_config_over_global_config(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        custom_config_path = workspace_dir / "custom" / "guard-opencode.json"
+        _write_json(
+            home_dir / ".config" / "opencode" / "opencode.json",
+            {"plugins": [["shared-plugin", {"mode": "global"}]]},
+        )
+        _write_json(custom_config_path, {"plugins": [["shared-plugin", {"mode": "custom"}]]})
+        monkeypatch.setenv("OPENCODE_CONFIG", str(custom_config_path))
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifacts = {item["artifact_id"]: item for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert artifacts["opencode:project:plugin:shared-plugin"]["metadata"]["mode"] == "custom"
+
+    def test_guard_detect_prefers_opencode_config_dir_over_default_plugin_file(self, monkeypatch, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        custom_config_dir = workspace_dir / "custom-dir"
+        _write_json(workspace_dir / "opencode.json", {})
+        _write_text(workspace_dir / ".opencode" / "plugins" / "shared.mjs", "export default { name: 'default' };\n")
+        _write_text(custom_config_dir / "plugins" / "shared.mjs", "export default { name: 'override' };\n")
+        monkeypatch.setenv("OPENCODE_CONFIG_DIR", str(custom_config_dir))
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifacts = {item["artifact_id"]: item for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert artifacts["opencode:project:plugin-file:plugins/shared.mjs"]["config_path"] == str(
+            custom_config_dir / "plugins" / "shared.mjs"
+        )
+
+    def test_guard_detect_handles_unreadable_opencode_plugin_files(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(workspace_dir / "opencode.json", {})
+        _write_text(workspace_dir / ".opencode" / "plugins" / "broken.mjs", "export default {};\n")
+        original_read_bytes = Path.read_bytes
+
+        def _patched_read_bytes(path: Path) -> bytes:
+            if path.name == "broken.mjs":
+                raise OSError("Permission denied")
+            return original_read_bytes(path)
+
+        monkeypatch.setattr(Path, "read_bytes", _patched_read_bytes)
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifacts = {item["artifact_id"]: item for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert (
+            artifacts["opencode:project:plugin-file:plugins/broken.mjs"]["metadata"]["content_digest_unavailable"]
+            is True
+        )
+
     def test_guard_detect_human_output_surfaces_next_steps(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -430,6 +1187,44 @@ args = ["workspace-skill.js"]
         assert "HOL Guard local harness status" in output
         assert "global_tools" in output
         assert "Run `hol-guard doctor <harness>`" in output
+
+    def test_guard_detect_reports_copilot_surfaces(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(home_dir / ".copilot" / "config.json", {"trusted_repositories": ["demo"]})
+        _write_json(
+            home_dir / ".copilot" / "mcp-config.json",
+            {"servers": {"global-tool": {"command": "npx", "args": ["server.js"]}}},
+        )
+        _write_json(
+            workspace_dir / ".vscode" / "mcp.json",
+            {"servers": {"workspace-tool": {"command": "python", "args": ["server.py"]}}},
+        )
+        _write_json(
+            workspace_dir / ".github" / "hooks" / "custom.json",
+            {"version": 1, "hooks": {"preToolUse": [{"command": "python pre.py"}]}},
+        )
+
+        rc = main(
+            [
+                "guard",
+                "detect",
+                "copilot",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        artifacts = {item["artifact_id"] for item in output["harnesses"][0]["artifacts"]}
+
+        assert rc == 0
+        assert output["harnesses"][0]["harness"] == "copilot"
+        assert "copilot:global:global-tool" in artifacts
+        assert "copilot:project:workspace-tool" in artifacts
+        assert "copilot:project:hook:custom:pretooluse:0:command" in artifacts
 
     def test_guard_scan_emits_consumer_contract(self, capsys):
         rc = main(
@@ -1296,7 +2091,34 @@ args = ["workspace-skill.js", "--changed"]
         assert rc == 0
         assert output["auto_detected"] is True
         harnesses = {item["harness"] for item in output["managed_installs"]}
-        assert {"codex", "claude-code", "cursor", "gemini", "opencode"} <= harnesses
+        assert {"codex", "claude-code", "cursor", "antigravity", "gemini", "opencode"} <= harnesses
+
+    def test_guard_install_creates_opencode_runtime_overlay(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(workspace_dir / "opencode.json", {"name": "workspace-opencode"})
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        manifest = output["managed_install"]["manifest"]
+        runtime_config_path = Path(str(manifest["runtime_config_path"]))
+        runtime_payload = json.loads(runtime_config_path.read_text(encoding="utf-8"))
+
+        assert rc == 0
+        assert output["managed_install"]["active"] is True
+        assert manifest["shim_command"] == "guard-opencode"
+        assert runtime_payload["permission"]["skill"]["*"] == "ask"
 
     def test_guard_uninstall_auto_detects_managed_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -1434,6 +2256,8 @@ args = ["workspace-skill.js", "--changed"]
                 ]
             )
             sync_output = json.loads(capsys.readouterr().out)
+            status_rc = main(["guard", "status", "--home", str(home_dir), "--workspace", str(workspace_dir), "--json"])
+            status_output = json.loads(capsys.readouterr().out)
         finally:
             server.shutdown()
             thread.join(timeout=5)
@@ -1441,7 +2265,10 @@ args = ["workspace-skill.js", "--changed"]
         assert login_rc == 0
         assert run_rc == 0
         assert sync_rc == 0
+        assert status_rc == 0
         assert sync_output["receipts_stored"] == 1
+        assert status_output["cloud_state"] == "paired_active"
+        assert status_output["last_sync_at"] == "2026-04-09T00:00:00Z"
         assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer demo-token"
         assert _SyncRequestHandler.captured_body is not None
         assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
@@ -1455,6 +2282,43 @@ args = ["workspace-skill.js", "--changed"]
         _SyncRequestHandler.response_payload = {
             "syncedAt": "2026-04-09T00:00:00Z",
             "receiptsStored": 1,
+            "advisories": [
+                {
+                    "id": "adv-001",
+                    "publisher": "hashgraph-online",
+                    "severity": "high",
+                    "headline": "Publisher rotated to a new remote domain.",
+                }
+            ],
+            "policy": {
+                "mode": "enforce",
+                "defaultAction": "warn",
+                "unknownPublisherAction": "review",
+                "changedHashAction": "allow",
+                "newNetworkDomainAction": "warn",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+                "updatedAt": "2026-04-09T00:00:00Z",
+            },
+            "alertPreferences": {
+                "emailEnabled": True,
+                "digestMode": "daily",
+                "watchlistEnabled": True,
+                "advisoriesEnabled": True,
+                "repeatedWarningsEnabled": True,
+                "teamAlertsEnabled": True,
+                "updatedAt": "2026-04-09T00:00:00Z",
+            },
+            "teamPolicyPack": {
+                "name": "Security team default",
+                "sharedHarnessDefaults": {"codex": "enforce"},
+                "allowedPublishers": ["hashgraph-online"],
+                "blockedArtifacts": [],
+                "alertChannel": "email",
+                "updatedAt": "2026-04-09T00:00:00Z",
+                "auditTrail": [],
+            },
         }
 
         server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
@@ -1504,7 +2368,6 @@ args = ["workspace-skill.js", "--changed"]
             return True
 
         monkeypatch.setattr(guard_commands_module.webbrowser, "open", open_browser)
-
         try:
             run_rc = main(
                 [

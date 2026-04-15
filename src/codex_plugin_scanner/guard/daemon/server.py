@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from ..approvals import apply_approval_resolution
+from ..approvals import apply_approval_resolution, build_runtime_snapshot
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
@@ -24,6 +24,9 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     store: GuardStore
     runtime: GuardSurfaceRuntime
     auth_token: str
+    runtime_host: str
+    runtime_session_id: str
+    runtime_started_at: str
 
 
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -59,6 +62,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
+        store.touch_runtime_state(
+            session_id=self.server.runtime_session_id,  # type: ignore[attr-defined]
+            last_heartbeat_at=_now(),
+        )
         parsed = urlparse(self.path)
         path_parts = [part for part in parsed.path.split("/") if part]
         if parsed.path == "/healthz":
@@ -69,6 +76,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "approvals": store.count_approval_requests(),
                     "tables": store.list_table_names(),
                 }
+            )
+            return
+        if parsed.path == "/v1/runtime":
+            self._write_json(
+                build_runtime_snapshot(
+                    store=store,
+                    approval_center_url=f"http://{self.server.runtime_host}:{self.server.server_port}",  # type: ignore[attr-defined]
+                )
             )
             return
         if parsed.path == "/v1/sessions":
@@ -161,6 +176,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
+        self.server.store.touch_runtime_state(  # type: ignore[attr-defined]
+            session_id=self.server.runtime_session_id,  # type: ignore[attr-defined]
+            last_heartbeat_at=_now(),
+        )
         parsed = urlparse(self.path)
         if parsed.path != "/v1/connect/complete" and not self._origin_is_allowed():
             self._write_json({"error": "forbidden_origin"}, status=403)
@@ -711,6 +730,9 @@ class GuardDaemonServer:
         self._server.store = store
         self._server.runtime = GuardSurfaceRuntime(store)
         self._server.auth_token = uuid.uuid4().hex
+        self._server.runtime_host = host
+        self._server.runtime_session_id = uuid.uuid4().hex
+        self._server.runtime_started_at = _now()
         self.port = int(self._server.server_address[1])
         self._thread: threading.Thread | None = None
 
@@ -718,20 +740,36 @@ class GuardDaemonServer:
         if self._thread is not None:
             return
         write_guard_daemon_state(self._server.store.guard_home, self.port, self._server.auth_token)
+        self._server.store.upsert_runtime_state(
+            session_id=self._server.runtime_session_id,
+            daemon_host=self._server.runtime_host,
+            daemon_port=self.port,
+            started_at=self._server.runtime_started_at,
+            last_heartbeat_at=_now(),
+        )
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
 
     def serve(self) -> None:
         write_guard_daemon_state(self._server.store.guard_home, self.port, self._server.auth_token)
+        self._server.store.upsert_runtime_state(
+            session_id=self._server.runtime_session_id,
+            daemon_host=self._server.runtime_host,
+            daemon_port=self.port,
+            started_at=self._server.runtime_started_at,
+            last_heartbeat_at=_now(),
+        )
         try:
             self._server.serve_forever()
         finally:
             clear_guard_daemon_state(self._server.store.guard_home)
+            self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
 
     def stop(self) -> None:
         self._server.shutdown()
         self._server.server_close()
         clear_guard_daemon_state(self._server.store.guard_home)
+        self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
         if self._thread is not None:
             self._thread.join(timeout=5)
             self._thread = None

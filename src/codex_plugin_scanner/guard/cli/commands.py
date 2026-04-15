@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
+import subprocess
 import sys
+import urllib.error
 import urllib.parse
 import webbrowser
 from datetime import datetime, timedelta, timezone
@@ -13,7 +16,20 @@ from pathlib import Path
 from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
-from ..approvals import approval_center_hint, queue_blocked_approvals, wait_for_approval_requests
+from ..approvals import (
+    approval_center_hint,
+    approval_delivery_payload,
+    approval_prompt_flow,
+    queue_blocked_approvals,
+    wait_for_approval_requests,
+)
+from ..bridge import (
+    BridgeConfig,
+    GuardBridge,
+    HermesBackend,
+    TelegramBackend,
+    WebhookBackend,
+)
 from ..config import load_guard_config, overlay_synced_guard_policy, resolve_guard_home
 from ..consumer import (
     artifact_hash,
@@ -89,7 +105,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         required=True,
         metavar=(
             "{start,status,bootstrap,detect,install,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
-            "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,login,connect,sync}"
+            "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,login,sync,bridge}"
         ),
     )
 
@@ -251,17 +267,29 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         "connect",
         help="Open the browser, pair this runtime to HOL Guard, and send the first sync",
     )
+    _add_guard_common_args(connect_parser)
     connect_parser.add_argument("--sync-url", default=DEFAULT_GUARD_SYNC_URL, type=_guard_http_url)
     connect_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
     connect_parser.add_argument("--wait-timeout-seconds", type=int, default=180)
-    connect_parser.add_argument("--home")
-    connect_parser.add_argument("--guard-home")
     connect_parser.add_argument("--json", action="store_true")
 
     sync_parser = guard_subparsers.add_parser("sync", help="Sync receipts to the configured Guard endpoint")
     sync_parser.add_argument("--home")
     sync_parser.add_argument("--guard-home")
     sync_parser.add_argument("--json", action="store_true")
+
+    # Bridge command
+    bridge_parser = guard_subparsers.add_parser("bridge", help="Start the Guard Bridge notification daemon")
+    bridge_parser.add_argument(
+        "--poll-interval", type=int, default=10, help="Polling interval in seconds (default: 10)"
+    )
+    bridge_parser.add_argument("--guard-url", default="http://127.0.0.1:4999", help="Guard daemon URL")
+    bridge_parser.add_argument("--telegram-token", help="Telegram bot token for notifications")
+    bridge_parser.add_argument("--telegram-chat-id", help="Telegram chat ID for notifications")
+    bridge_parser.add_argument("--webhook-url", help="Webhook URL for notifications")
+    bridge_parser.add_argument("--hermes-chat-id", help="Hermes chat ID for notifications")
+    bridge_parser.add_argument("--dry-run", action="store_true", help="Log notifications without sending")
+    _add_guard_common_args(bridge_parser)
 
     hook_parser = guard_subparsers.add_parser("hook", help=argparse.SUPPRESS)
     _add_guard_common_args(hook_parser)
@@ -296,7 +324,7 @@ def _add_guard_cisco_mode_arg(parser: argparse.ArgumentParser) -> None:
         "--cisco-mode",
         choices=("auto", "on", "off"),
         default="auto",
-        help="Control offline Cisco MCP evidence for local consumer-mode artifact scans.",
+        help="Control optional Cisco scanner evidence for local consumer-mode artifact scans.",
     )
 
 
@@ -311,19 +339,35 @@ def _build_cisco_scan_options(mode: str) -> ScanOptions:
     return ScanOptions(cisco_skill_scan=mode, cisco_mcp_scan=mode)
 
 
+def _resolve_cisco_scan_options(mode: str) -> ScanOptions | None:
+    if mode == "auto":
+        return None
+    return _build_cisco_scan_options(mode)
+
+
+def _run_consumer_scan_with_mode(
+    target: Path,
+    *,
+    intended_harness: str | None = None,
+    cisco_mode: str,
+) -> dict[str, object]:
+    options = _resolve_cisco_scan_options(cisco_mode)
+    if options is None:
+        return run_consumer_scan(target, intended_harness=intended_harness)
+    return run_consumer_scan(target, intended_harness=intended_harness, options=options)
 def run_guard_command(args: argparse.Namespace) -> int:
     """Execute a Guard subcommand."""
 
     if args.guard_command == "scan":
-        payload = run_consumer_scan(Path(args.target).resolve(), options=_build_cisco_scan_options(args.cisco_mode))
+        payload = _run_consumer_scan_with_mode(Path(args.target).resolve(), cisco_mode=args.cisco_mode)
         _emit("scan", payload, args.json or args.consumer_mode)
         return 0
 
     if args.guard_command == "preflight":
-        payload = run_consumer_scan(
+        payload = _run_consumer_scan_with_mode(
             Path(args.target).resolve(),
             intended_harness=getattr(args, "harness", None),
-            options=_build_cisco_scan_options(args.cisco_mode),
+            cisco_mode=args.cisco_mode,
         )
         _emit("preflight", payload, getattr(args, "json", False))
         if getattr(args, "enforce", False):
@@ -468,6 +512,10 @@ def run_guard_command(args: argparse.Namespace) -> int:
             interactive_resolver=interactive_resolver,
             blocked_resolver=blocked_resolver,
         )
+        payload["dry_run"] = bool(args.dry_run)
+        payload["rerun_command"] = _guard_rerun_command(args)
+        payload["diff_command"] = _guard_diff_command(args)
+        payload["approvals_command"] = _guard_approvals_command(args)
         _emit("run", payload, getattr(args, "json", False))
         if payload.get("blocked"):
             return 1
@@ -536,7 +584,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command == "explain":
-        payload = _build_explain_payload(store, args.target, options=_build_cisco_scan_options(args.cisco_mode))
+        payload = _build_explain_payload_with_mode(store, args.target, cisco_mode=args.cisco_mode)
         _emit("explain", payload, getattr(args, "json", False))
         return 0
 
@@ -594,6 +642,29 @@ def run_guard_command(args: argparse.Namespace) -> int:
             return 1
         _emit("connect", payload, getattr(args, "json", False))
         return 0 if bool(payload.get("connected")) else 1
+
+    if args.guard_command == "bridge":
+        poll_interval = getattr(args, "poll_interval", 10) or 10
+        guard_url = getattr(args, "guard_url", None)
+        dry_run = getattr(args, "dry_run", False)
+
+        backend = None
+        telegram_token = getattr(args, "telegram_token", None)
+        telegram_chat_id = getattr(args, "telegram_chat_id", None)
+        webhook_url = getattr(args, "webhook_url", None)
+        hermes_chat_id = getattr(args, "hermes_chat_id", None)
+
+        if telegram_token and telegram_chat_id:
+            backend = TelegramBackend(telegram_token, telegram_chat_id)
+        elif webhook_url:
+            backend = WebhookBackend(webhook_url)
+        elif hermes_chat_id:
+            backend = HermesBackend(hermes_chat_id)
+
+        config = BridgeConfig(guard_url=guard_url, poll_interval=poll_interval, dry_run=dry_run)
+        bridge = GuardBridge(config=config, store=store, backend=backend)
+        bridge.run()
+        return 0
 
     if args.guard_command == "sync":
         payload = sync_receipts(store)
@@ -680,54 +751,69 @@ def run_guard_command(args: argparse.Namespace) -> int:
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
                 approval_flow = get_adapter(args.harness).approval_flow()
                 approval_center_url = ensure_guard_daemon(guard_home)
-                daemon_client = load_guard_surface_daemon_client(guard_home)
-                session = daemon_client.start_session(
-                    harness=args.harness,
-                    surface="harness-adapter",
-                    workspace=str(workspace) if workspace else None,
-                    client_name=f"{args.harness}-hook",
-                    client_title=f"{args.harness} hook",
-                    client_version="1.0.0",
-                    capabilities=["approval-resolution", "receipt-view"],
-                )
-                response_payload["session_id"] = str(session["session_id"])
-                blocked_operation = daemon_client.queue_blocked_operation(
-                    session_id=str(session["session_id"]),
-                    operation_type="tool_call",
-                    harness=args.harness,
-                    metadata={"tool_name": str(payload.get("tool_name", "")), "event": str(payload.get("event", ""))},
-                    detection=_runtime_detection(args.harness, runtime_artifact).to_dict(),
-                    evaluation={
-                        "artifacts": [
-                            {
-                                "artifact_id": artifact_id,
-                                "artifact_name": artifact_name,
-                                "artifact_hash": runtime_artifact_hash,
-                                "policy_action": policy_action,
-                                "changed_fields": changed_capabilities,
-                                "artifact_type": runtime_artifact.artifact_type,
-                                "source_scope": runtime_artifact.source_scope,
-                                "config_path": runtime_artifact.config_path,
-                                "launch_target": _runtime_request_summary(runtime_artifact),
-                            }
-                        ]
-                    },
-                    approval_center_url=approval_center_url,
-                    approval_surface_policy=_approval_surface_policy_for_flow(
-                        config.approval_surface_policy,
-                        approval_flow,
-                    ),
-                    open_key=artifact_id,
-                )
-                operation = (
-                    blocked_operation["operation"] if isinstance(blocked_operation.get("operation"), dict) else {}
-                )
-                queued = (
-                    blocked_operation["approval_requests"]
-                    if isinstance(blocked_operation.get("approval_requests"), list)
-                    else []
-                )
-                response_payload["operation_id"] = str(operation["operation_id"])
+                runtime_detection = _runtime_detection(args.harness, runtime_artifact)
+                evaluation_payload = {
+                    "artifacts": [
+                        {
+                            "artifact_id": artifact_id,
+                            "artifact_name": artifact_name,
+                            "artifact_hash": runtime_artifact_hash,
+                            "policy_action": policy_action,
+                            "changed_fields": changed_capabilities,
+                            "artifact_type": runtime_artifact.artifact_type,
+                            "source_scope": runtime_artifact.source_scope,
+                            "config_path": runtime_artifact.config_path,
+                            "launch_target": _runtime_request_summary(runtime_artifact),
+                        }
+                    ]
+                }
+                try:
+                    daemon_client = load_guard_surface_daemon_client(guard_home)
+                except RuntimeError:
+                    queued = queue_blocked_approvals(
+                        detection=runtime_detection,
+                        evaluation=evaluation_payload,
+                        store=store,
+                        approval_center_url=approval_center_url,
+                        now=_now(),
+                    )
+                else:
+                    session = daemon_client.start_session(
+                        harness=args.harness,
+                        surface="harness-adapter",
+                        workspace=str(workspace) if workspace else None,
+                        client_name=f"{args.harness}-hook",
+                        client_title=f"{args.harness} hook",
+                        client_version="1.0.0",
+                        capabilities=["approval-resolution", "receipt-view"],
+                    )
+                    response_payload["session_id"] = str(session["session_id"])
+                    blocked_operation = daemon_client.queue_blocked_operation(
+                        session_id=str(session["session_id"]),
+                        operation_type="tool_call",
+                        harness=args.harness,
+                        metadata={
+                            "tool_name": str(payload.get("tool_name", "")),
+                            "event": str(payload.get("event", "")),
+                        },
+                        detection=runtime_detection.to_dict(),
+                        evaluation=evaluation_payload,
+                        approval_center_url=approval_center_url,
+                        approval_surface_policy=_approval_surface_policy_for_flow(
+                            config.approval_surface_policy,
+                            approval_flow,
+                        ),
+                        open_key=artifact_id,
+                    )
+                    operation = (
+                        blocked_operation["operation"] if isinstance(blocked_operation.get("operation"), dict) else {}
+                    )
+                    queued = (
+                        blocked_operation["approval_requests"]
+                        if isinstance(blocked_operation.get("approval_requests"), list)
+                        else []
+                    )
+                    response_payload["operation_id"] = str(operation["operation_id"])
                 response_payload["approval_requests"] = queued
                 response_payload["approval_center_url"] = approval_center_url
                 response_payload["review_hint"] = approval_center_hint(
@@ -736,6 +822,17 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     approval_center_url=approval_center_url,
                     queued=queued,
                 )
+                response_payload["approval_delivery"] = _approval_delivery_payload(args.harness)
+            if _should_emit_copilot_hook_response(args):
+                _emit_copilot_hook_response(
+                    policy_action=policy_action,
+                    reason=_copilot_hook_reason(
+                        response_payload.get("why_now"),
+                        response_payload.get("review_hint"),
+                        response_payload.get("risk_headline"),
+                    ),
+                )
+                return 0
             _emit("hook", response_payload, getattr(args, "json", False))
             return 1 if policy_action in {"block", "require-reapproval"} else 0
         artifact_id = _coalesce_string(
@@ -784,6 +881,12 @@ def run_guard_command(args: argparse.Namespace) -> int:
             user_override=_optional_string(payload.get("user_override")),
         )
         store.add_receipt(receipt)
+        if _should_emit_copilot_hook_response(args):
+            _emit_copilot_hook_response(
+                policy_action=policy_action,
+                reason=_copilot_hook_reason(payload.get("permission_decision_reason")),
+            )
+            return 0
         _emit(
             "hook",
             {
@@ -803,6 +906,77 @@ def _emit(command: str, payload: dict[str, object], as_json: bool) -> None:
     emit_guard_payload(command, payload, as_json)
 
 
+def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
+    return args.harness == "copilot" and not getattr(args, "json", False)
+
+
+def _approval_delivery_payload(harness: str) -> dict[str, object]:
+    return approval_delivery_payload(approval_prompt_flow(harness))
+
+
+def _copilot_hook_reason(*values: object | None) -> str:
+    messages: list[str] = []
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            candidate = value.strip()
+            if candidate not in messages:
+                messages.append(candidate)
+    if messages:
+        return " ".join(messages)
+    return "Guard blocked this tool call. Open the Guard approval center to review the request."
+
+
+def _guard_rerun_command(args: argparse.Namespace) -> str:
+    command = ["hol-guard", "run", str(args.harness)]
+    _append_guard_context_args(command, args)
+    default_action = getattr(args, "default_action", None)
+    if isinstance(default_action, str) and default_action:
+        command.extend(["--default-action", default_action])
+    passthrough_args = getattr(args, "passthrough_args", [])
+    if isinstance(passthrough_args, list):
+        for value in passthrough_args:
+            if isinstance(value, str) and value:
+                command.extend(["--arg", value])
+    return _shell_join(command)
+
+
+def _guard_diff_command(args: argparse.Namespace) -> str:
+    command = ["hol-guard", "diff", str(args.harness)]
+    _append_guard_context_args(command, args)
+    return _shell_join(command)
+
+
+def _guard_approvals_command(args: argparse.Namespace) -> str:
+    command = ["hol-guard", "approvals"]
+    _append_guard_context_args(command, args)
+    return _shell_join(command)
+
+
+def _shell_join(command: list[str]) -> str:
+    if sys.platform.startswith("win"):
+        return subprocess.list2cmdline(command)
+    return shlex.join(command)
+
+
+def _append_guard_context_args(command: list[str], args: argparse.Namespace) -> None:
+    for option_name in ("home", "guard_home", "workspace"):
+        value = getattr(args, option_name, None)
+        if isinstance(value, str) and value:
+            flag = f"--{option_name.replace('_', '-')}"
+            command.extend([flag, value])
+
+
+def _emit_copilot_hook_response(*, policy_action: str, reason: str) -> None:
+    if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+        payload = {
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }
+    else:
+        payload = {"permissionDecision": "allow"}
+    print(json.dumps(payload, separators=(",", ":")))
+
+
 def _headless_approval_resolver(
     *,
     args: argparse.Namespace,
@@ -811,7 +985,7 @@ def _headless_approval_resolver(
     config,
 ):
     def resolve(detection, payload):
-        approval_flow = get_adapter(args.harness).approval_flow()
+        approval_flow = approval_prompt_flow(args.harness)
         approval_center_url = ensure_guard_daemon(context.guard_home)
         try:
             daemon_client = load_guard_surface_daemon_client(context.guard_home)
@@ -831,11 +1005,30 @@ def _headless_approval_resolver(
                 approval_center_url=approval_center_url,
                 queued=queued,
             )
-            payload["approval_wait"] = {
-                "resolved": False,
-                "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
-                "items": [],
-            }
+            payload["approval_delivery"] = _approval_delivery_payload(args.harness)
+            if str(approval_flow["tier"]) != "native-or-center":
+                payload["approval_wait"] = {
+                    "resolved": False,
+                    "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
+                    "items": [],
+                }
+                return payload
+            wait_result = wait_for_approval_requests(
+                store=store,
+                request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
+                timeout_seconds=config.approval_wait_timeout_seconds,
+            )
+            payload["approval_wait"] = wait_result
+            if bool(wait_result.get("resolved")):
+                resolved_items = [item for item in wait_result.get("items", []) if isinstance(item, dict)]
+                payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)
+                if not payload["blocked"]:
+                    payload["review_hint"] = "Approval received. Guard is resuming the harness launch."
+            else:
+                payload["review_hint"] = (
+                    f"Approval is still pending in the Guard approval center at {approval_center_url}. Resolve request "
+                    f"{', '.join(str(item) for item in wait_result.get('pending_request_ids', []))}."
+                )
             return payload
         session = daemon_client.start_session(
             harness=args.harness,
@@ -876,7 +1069,8 @@ def _headless_approval_resolver(
             approval_center_url=approval_center_url,
             queued=queued,
         )
-        if approval_flow["tier"] != "native-or-center":
+        payload["approval_delivery"] = _approval_delivery_payload(args.harness)
+        if str(approval_flow["tier"]) != "native-or-center":
             payload["approval_wait"] = {
                 "resolved": False,
                 "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
@@ -910,7 +1104,7 @@ def _headless_approval_resolver(
                 approval_request_ids=[str(item["request_id"]) for item in queued if "request_id" in item],
             )
             payload["review_hint"] = (
-                f"Approval is still pending. Open {approval_center_url} and resolve request "
+                f"Approval is still pending in the Guard approval center at {approval_center_url}. Resolve request "
                 f"{', '.join(str(item) for item in wait_result.get('pending_request_ids', []))}."
             )
         return payload
@@ -937,12 +1131,66 @@ def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[st
 
 def _load_hook_payload(event_file: str | None) -> dict[str, object]:
     if event_file:
-        return json.loads(Path(event_file).read_text(encoding="utf-8"))
+        payload = json.loads(Path(event_file).read_text(encoding="utf-8"))
+        return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
     raw = sys.stdin.read().strip()
     if not raw:
         return {}
     payload = json.loads(raw)
-    return payload if isinstance(payload, dict) else {}
+    return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
+
+
+def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
+    normalized = dict(payload)
+    for source_key, target_key in (
+        ("artifactId", "artifact_id"),
+        ("artifactHash", "artifact_hash"),
+        ("artifactName", "artifact_name"),
+        ("changedCapabilities", "changed_capabilities"),
+        ("policyAction", "policy_action"),
+        ("sourceScope", "source_scope"),
+        ("toolName", "tool_name"),
+        ("userOverride", "user_override"),
+    ):
+        if target_key not in normalized and source_key in payload:
+            normalized[target_key] = payload[source_key]
+    arguments = _normalize_hook_arguments(
+        normalized.get("tool_input"),
+        normalized.get("arguments"),
+        payload.get("toolArgs"),
+        payload.get("toolInput"),
+    )
+    if arguments is not None:
+        normalized["tool_input"] = arguments
+        normalized["arguments"] = arguments
+    return normalized
+
+
+def _normalize_hook_arguments(*values: object | None) -> object | None:
+    for value in values:
+        normalized = _normalize_hook_argument_value(value)
+        if normalized is not None:
+            return normalized
+    return None
+
+
+def _normalize_hook_argument_value(value: object | None) -> object | None:
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            return stripped
+        if isinstance(parsed, (dict, list, str)):
+            return parsed
+        return stripped
+    return value
 
 
 def _coalesce_string(*values: object | None) -> str:
@@ -1008,6 +1256,10 @@ def _runtime_policy_path(harness: str, home_dir: Path, workspace: Path | None) -
         if workspace is not None:
             return workspace / ".codex" / "config.toml"
         return home_dir / ".codex" / "config.toml"
+    if harness == "copilot":
+        if workspace is not None:
+            return workspace / ".github" / "hooks" / "hol-guard-copilot.json"
+        return home_dir / ".copilot" / "config.json"
     if workspace is not None:
         return workspace / ".mcp.json"
     return home_dir / ".mcp.json"
@@ -1151,6 +1403,13 @@ def _build_explain_payload(
         "latest_diff": latest_diff,
         "advisories": advisories,
     }
+
+
+def _build_explain_payload_with_mode(store: GuardStore, target: str, cisco_mode: str) -> dict[str, object]:
+    options = _resolve_cisco_scan_options(cisco_mode)
+    if options is None:
+        return _build_explain_payload(store, target)
+    return _build_explain_payload(store, target, options=options)
 
 
 def _matching_advisories(store: GuardStore, publisher: object) -> list[dict[str, object]]:

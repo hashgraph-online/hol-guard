@@ -76,6 +76,8 @@ class HarnessAdapter:
     approval_tier = "approval-center"
     approval_summary = "Guard pauses the launch and routes approval through the local approval center."
     fallback_hint = "Use `hol-guard approvals` if you want to resolve it from the terminal."
+    approval_prompt_channel = "browser"
+    approval_auto_open_browser = True
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         raise NotImplementedError
@@ -104,8 +106,66 @@ class HarnessAdapter:
             command.append(str(context.workspace_dir))
         return [*command, *passthrough_args]
 
+    def launch_environment(self, context: HarnessContext) -> dict[str, str]:
+        del context
+        return {}
+
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         return None
+
+    def attach_session(
+        self,
+        context: HarnessContext,
+        *,
+        session_id: str,
+        client_name: str,
+    ) -> dict[str, object]:
+        return {
+            "harness": self.harness,
+            "session_id": session_id,
+            "client_name": client_name,
+            "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
+        }
+
+    def start_operation(
+        self,
+        context: HarnessContext,
+        *,
+        session_id: str,
+        operation_type: str,
+    ) -> dict[str, object]:
+        return {
+            "harness": self.harness,
+            "session_id": session_id,
+            "operation_type": operation_type,
+            "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
+        }
+
+    def request_approval(
+        self,
+        context: HarnessContext,
+        *,
+        request_ids: list[str],
+    ) -> dict[str, object]:
+        return {
+            "harness": self.harness,
+            "request_ids": request_ids,
+            "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
+        }
+
+    def continue_after_approval(
+        self,
+        context: HarnessContext,
+        *,
+        operation_id: str,
+        approved: bool,
+    ) -> dict[str, object]:
+        return {
+            "harness": self.harness,
+            "operation_id": operation_id,
+            "status": "completed" if approved else "blocked",
+            "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
+        }
 
     def diagnostic_warnings(
         self,
@@ -121,11 +181,13 @@ class HarnessAdapter:
             warnings.append(f"{self.executable} diagnostics timed out before Guard could confirm runtime state.")
         return warnings
 
-    def approval_flow(self) -> dict[str, str]:
+    def approval_flow(self) -> dict[str, object]:
         return {
             "tier": self.approval_tier,
             "summary": self.approval_summary,
             "fallback_hint": self.fallback_hint,
+            "prompt_channel": self.approval_prompt_channel,
+            "auto_open_browser": self.approval_auto_open_browser,
         }
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:

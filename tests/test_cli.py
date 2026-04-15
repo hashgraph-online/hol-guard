@@ -1,21 +1,23 @@
 """Tests for CLI output formatting and argument parsing."""
 
+import contextlib
 import json
 import shutil
 import sys
 import tempfile
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 
 from codex_plugin_scanner import cli as cli_module
 from codex_plugin_scanner.cli import format_json, format_text, main
+from codex_plugin_scanner.models import IntegrationResult
 from codex_plugin_scanner.rules import get_rule_spec as original_get_rule_spec
 from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
 NONEXISTENT_PLUGIN_DIR = Path("/nonexistent/plugin-dir").resolve()
 EXPECTED_GOOD_PLUGIN_SCORE = 91
-EXPECTED_BAD_PLUGIN_SCORE = 38
 
 
 class TestFormatJson:
@@ -65,7 +67,7 @@ class TestFormatText:
     def test_contains_header(self):
         result = scan_plugin(FIXTURES / "good-plugin")
         output = format_text(result)
-        assert "Codex Plugin Scanner" in output
+        assert "Plugin Scanner" in output
         assert f"{result.score}/100" in output
         assert "Excellent" in output
 
@@ -83,11 +85,61 @@ class TestFormatText:
     def test_bad_plugin_output(self):
         result = scan_plugin(FIXTURES / "bad-plugin")
         output = format_text(result)
-        assert f"{EXPECTED_BAD_PLUGIN_SCORE}/100" in output
+        assert f"{result.score}/100" in output
         assert "Failing" in output
+
+    def test_integration_block_supports_multiple_integrations(self):
+        result = scan_plugin(FIXTURES / "good-plugin")
+        result = replace(
+            result,
+            integrations=(
+                IntegrationResult(name="cisco-skill-scanner", status="enabled", message="Skill scan complete"),
+                IntegrationResult(name="cisco-mcp-scanner", status="enabled", message="MCP scan complete"),
+            ),
+        )
+
+        output = format_text(result)
+
+        assert "cisco-skill-scanner" in output
+        assert "cisco-mcp-scanner" in output
 
 
 class TestMain:
+    def test_scanner_program_detection_excludes_retired_codex_alias(self):
+        assert cli_module._is_scanner_program("plugin-scanner") is True
+        assert cli_module._is_scanner_program("plugin-ecosystem-scanner") is True
+        assert cli_module._is_scanner_program("codex-plugin-scanner") is False
+
+    def test_parser_accepts_cisco_mcp_scan(self):
+        parser = cli_module._build_parser("plugin-scanner", program_mode="scanner")
+        args = parser.parse_args(["scan", str(FIXTURES / "good-plugin"), "--cisco-mcp-scan", "on"])
+
+        assert args.cisco_mcp_scan == "on"
+
+    def test_scan_help_explains_cisco_mcp_extra_requirement(self, capsys):
+        parser = cli_module._build_parser("plugin-scanner", program_mode="scanner")
+
+        with contextlib.suppress(SystemExit):
+            parser.parse_args(["scan", "--help"])
+
+        output = capsys.readouterr().out
+
+        assert "--cisco-mcp-scan" in output
+        assert "[cisco]" in output
+        assert "Python 3.11+" in output
+
+    def test_scan_help_lists_common_workflows(self, capsys):
+        parser = cli_module._build_parser("plugin-scanner", program_mode="scanner")
+
+        with contextlib.suppress(SystemExit):
+            parser.parse_args(["scan", "--help"])
+
+        output = capsys.readouterr().out
+
+        assert "Common workflows:" in output
+        assert "plugin-scanner scan ./my-plugin" in output
+        assert "Use --format json or --json in CI" in output
+
     def test_returns_0_for_good_plugin(self):
         rc = main([str(FIXTURES / "good-plugin")])
         assert rc == 0
@@ -140,7 +192,7 @@ class TestMain:
         assert rc == 0
 
     def test_min_score_just_above(self):
-        rc = main([str(FIXTURES / "bad-plugin"), "--min-score", "39"])
+        rc = main([str(FIXTURES / "bad-plugin"), "--min-score", "40"])
         assert rc == 1
 
     def test_version_flag(self, capsys):
@@ -159,10 +211,55 @@ class TestMain:
         assert "opencode" in output
 
     def test_text_mode_with_min_score_failure(self, capsys):
+        expected_score = scan_plugin(FIXTURES / "bad-plugin").score
         main([str(FIXTURES / "bad-plugin"), "--min-score", "50"])
         captured = capsys.readouterr()
         # Should still produce text output
-        assert f"{EXPECTED_BAD_PLUGIN_SCORE}/100" in captured.out
+        assert f"{expected_score}/100" in captured.out
+
+    def test_text_scan_emits_provenance_to_stderr(self, tmp_path, capsys):
+        plugin_dir = tmp_path / "good-plugin"
+        shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
+        baseline_path = plugin_dir / "baseline.txt"
+        baseline_path.write_text("README_MISSING\n", encoding="utf-8")
+        (plugin_dir / ".plugin-scanner.toml").write_text(
+            """
+[scanner]
+profile = "default"
+baseline_file = "baseline.txt"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        rc = main([str(plugin_dir)])
+        captured = capsys.readouterr()
+
+        assert rc == 0
+        assert "Policy profile: default" in captured.err
+        assert f"Using config: {plugin_dir / '.plugin-scanner.toml'}" in captured.err
+        assert f"Using baseline: {baseline_path}" in captured.err
+
+    def test_text_scan_reports_missing_baseline_in_provenance(self, tmp_path, capsys):
+        plugin_dir = tmp_path / "good-plugin"
+        shutil.copytree(FIXTURES / "good-plugin", plugin_dir)
+        baseline_path = plugin_dir / "baseline.txt"
+        (plugin_dir / ".plugin-scanner.toml").write_text(
+            """
+[scanner]
+profile = "default"
+baseline_file = "baseline.txt"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+
+        rc = main([str(plugin_dir)])
+        captured = capsys.readouterr()
+
+        assert rc == 0
+        assert f"Baseline not found: {baseline_path}" in captured.err
+        assert f"Using baseline: {baseline_path}" not in captured.err
 
     def test_min_score_exact_boundary(self):
         # At exact boundary should pass (>=)
@@ -180,6 +277,14 @@ class TestMain:
         output = capsys.readouterr().out
         assert rc == 0
         assert '"rule_id": "CODEXIGNORE_MISSING"' in output
+
+    def test_lint_explain_unknown_rule_includes_hint(self, capsys):
+        rc = main(["lint", "--explain", "NOT_A_REAL_RULE"])
+        captured = capsys.readouterr()
+
+        assert rc == 1
+        assert "Unknown rule id: NOT_A_REAL_RULE" in captured.err
+        assert "lint --list-rules" in captured.err
 
     def test_lint_fails_for_strict_profile(self):
         rc = main(["lint", str(FIXTURES / "bad-plugin"), "--profile", "strict-security"])
@@ -258,6 +363,24 @@ class TestMain:
         captured = capsys.readouterr()
         assert rc == 1
         assert 'Policy profile "strict-security" failed.' in captured.err
+
+    def test_scan_reports_min_score_failures_with_hint(self, capsys):
+        rc = main(["scan", str(FIXTURES / "bad-plugin"), "--min-score", "50"])
+        captured = capsys.readouterr()
+        expected_score = scan_plugin(FIXTURES / "bad-plugin").score
+
+        assert rc == 1
+        assert f"Score {expected_score} is below threshold 50" in captured.err
+        assert "hint:" in captured.err
+
+    def test_json_min_score_failures_do_not_emit_text_hint(self, capsys):
+        rc = main(["scan", str(FIXTURES / "bad-plugin"), "--min-score", "50", "--format", "json"])
+        captured = capsys.readouterr()
+        parsed = json.loads(captured.out)
+
+        assert rc == 1
+        assert parsed["score"] == scan_plugin(FIXTURES / "bad-plugin").score
+        assert "hint:" not in captured.err
 
     def test_doctor_bundle(self, tmp_path):
         bundle = tmp_path / "doctor.json"

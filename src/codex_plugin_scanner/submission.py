@@ -13,7 +13,8 @@ from .checks.manifest import load_manifest
 from .models import GRADE_LABELS, ScanResult
 
 REQUEST_TIMEOUT_SECONDS = 30
-SUBMISSION_URL_MARKER_PREFIX = "<!-- codex-plugin-scanner-plugin-url: "
+SUBMISSION_URL_MARKER_PREFIX = "<!-- plugin-scanner-plugin-url: "
+LEGACY_SUBMISSION_URL_MARKER_PREFIX = "<!-- codex-plugin-scanner-plugin-url: "
 SUBMISSION_URL_MARKER_SUFFIX = " -->"
 
 
@@ -47,6 +48,10 @@ def _submission_url_marker(plugin_url: str) -> str:
     return f"{SUBMISSION_URL_MARKER_PREFIX}{plugin_url}{SUBMISSION_URL_MARKER_SUFFIX}"
 
 
+def _legacy_submission_url_marker(plugin_url: str) -> str:
+    return f"{LEGACY_SUBMISSION_URL_MARKER_PREFIX}{plugin_url}{SUBMISSION_URL_MARKER_SUFFIX}"
+
+
 def _parse_submission_issue(
     issue: dict[str, object],
     *,
@@ -75,7 +80,7 @@ def _request_json(
     request = Request(url, data=data, method=method)
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("Authorization", f"Bearer {token}")
-    request.add_header("User-Agent", "codex-plugin-scanner")
+    request.add_header("User-Agent", "plugin-scanner")
     if data is not None:
         request.add_header("Content-Type", "application/json")
     with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
@@ -116,7 +121,7 @@ def resolve_submission_metadata(
         (description or "").strip()
         or str(interface.get("shortDescription") or "").strip()
         or str(manifest.get("description") or "").strip()
-        or f"{resolved_name} scored {result.score}/100 with codex-plugin-scanner."
+        or f"{resolved_name} scored {result.score}/100 with plugin-scanner."
     )
     resolved_author = (
         (author or "").strip()
@@ -224,32 +229,33 @@ def find_existing_submission_issue(
 ) -> SubmissionIssue | None:
     """Find an existing open submission issue for the same plugin URL."""
 
-    marker = _submission_url_marker(plugin_url)
-    query = urlencode(
-        {
-            "q": f'repo:{repo} is:issue is:open "{marker}" in:body',
-            "per_page": "10",
-        }
-    )
-    issues = _request_json(
-        "GET",
-        f"{api_base_url.rstrip('/')}/search/issues?{query}",
-        token,
-    )
-    if not isinstance(issues, dict):
-        return None
+    markers = (_submission_url_marker(plugin_url), _legacy_submission_url_marker(plugin_url))
+    for marker in markers:
+        query = urlencode(
+            {
+                "q": f'repo:{repo} is:issue is:open "{marker}" in:body',
+                "per_page": "10",
+            }
+        )
+        issues = _request_json(
+            "GET",
+            f"{api_base_url.rstrip('/')}/search/issues?{query}",
+            token,
+        )
+        if not isinstance(issues, dict):
+            return None
 
-    items = issues.get("items")
-    if not isinstance(items, list):
-        return None
+        items = issues.get("items")
+        if not isinstance(items, list):
+            return None
 
-    for issue in items:
-        if not isinstance(issue, dict):
-            continue
-        body = str(issue.get("body") or "")
-        if issue.get("pull_request") or marker not in body:
-            continue
-        return _parse_submission_issue(issue, repo=repo, created=False)
+        for issue in items:
+            if not isinstance(issue, dict):
+                continue
+            body = str(issue.get("body") or "")
+            if issue.get("pull_request") or marker not in body:
+                continue
+            return _parse_submission_issue(issue, repo=repo, created=False)
     return None
 
 

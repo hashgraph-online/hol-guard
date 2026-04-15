@@ -50,6 +50,27 @@ def test_artifact_risk_signals_detect_secret_and_network_patterns():
     assert "secrets" in summary.lower()
 
 
+def test_artifact_risk_signals_detect_direct_env_prompt_requests():
+    artifact = GuardArtifact(
+        artifact_id="codex:session:prompt-env-read:abc123",
+        name="direct .env prompt access",
+        harness="codex",
+        artifact_type="prompt_request",
+        source_scope="session",
+        config_path="/workspace",
+        metadata={
+            "prompt_signals": ["asks the harness to read a local .env file directly"],
+            "prompt_summary": "Prompt asks the harness to read a local .env file directly.",
+        },
+    )
+
+    signals = artifact_risk_signals(artifact)
+    summary = artifact_risk_summary(artifact)
+
+    assert "asks the harness to read a local .env file directly" in signals
+    assert summary == "Prompt asks the harness to read a local .env file directly."
+
+
 def test_queue_blocked_approvals_includes_risk_summary_and_signals(tmp_path):
     store = GuardStore(tmp_path / "guard-home")
     artifact = GuardArtifact(
@@ -203,14 +224,18 @@ def test_secret_file_path_classifier_stays_precise(tmp_path):
 def test_file_read_request_classifier_is_argument_aware(tmp_path):
     env_request = extract_sensitive_file_read_request("read_file", {"path": ".env.local"})
     claude_request = extract_sensitive_file_read_request("Read", {"file_path": "~/.ssh/config"}, home_dir=tmp_path)
+    copilot_request = extract_sensitive_file_read_request("view", {"path": ".env"})
 
     assert is_file_read_tool_name("read_file") is True
     assert is_file_read_tool_name("Read") is True
+    assert is_file_read_tool_name("view") is True
     assert is_file_read_tool_name("write_file") is False
     assert env_request is not None
     assert env_request.path_match.path_class == "local .env file"
     assert claude_request is not None
     assert claude_request.path_match.path_class == "SSH client config"
+    assert copilot_request is not None
+    assert copilot_request.path_match.path_class == "local .env file"
     assert extract_sensitive_file_read_request("read_file", {"path": "README.md"}) is None
     assert extract_sensitive_file_read_request("write_file", {"path": ".env"}) is None
 

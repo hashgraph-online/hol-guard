@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -100,11 +102,68 @@ class TestGuardProductFlow:
         assert rc == 0
         assert output["recommended_harness"] == "codex"
         assert output["sync_configured"] is False
+        assert output["cloud_state"] == "local_only"
         assert output["receipt_count"] == 0
         assert codex_summary["managed"] is False
         assert codex_summary["next_action"] == "install"
         assert output["next_steps"][0]["command"] == "hol-guard install codex"
         assert output["next_steps"][1]["command"] == "hol-guard run codex --dry-run"
+
+    def test_guard_start_recommends_copilot_when_it_is_the_only_detected_harness(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".copilot" / "mcp-config.json",
+            {"servers": {"global-tool": {"command": "npx", "args": ["server.js"]}}},
+        )
+        monkeypatch.setattr("shutil.which", lambda _command: None)
+
+        rc = main(
+            [
+                "guard",
+                "start",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        copilot_summary = next(item for item in output["harnesses"] if item["harness"] == "copilot")
+
+        assert rc == 0
+        assert output["recommended_harness"] == "copilot"
+        assert copilot_summary["install_command"] == "hol-guard install copilot"
+        assert output["next_steps"][1]["command"] == "hol-guard run copilot --dry-run"
+
+    def test_guard_status_json_surfaces_local_only_state(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        guard_home = tmp_path / "guard-home"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "status",
+                "--home",
+                str(home_dir),
+                "--guard-home",
+                str(guard_home),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["cloud_state"] == "local_only"
+        assert output["sync_configured"] is False
+        assert output["connect_url"] == "https://hol.org/guard/connect"
+        assert output["dashboard_url"] == "https://hol.org/guard"
+        assert output["connect_command"] == "hol-guard connect"
 
     def test_guard_start_human_output_highlights_guard_loop(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -240,6 +299,7 @@ class TestGuardProductFlow:
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+        daemon = GuardDaemonServer(GuardStore(home_dir), host="127.0.0.1", port=0)
 
         install_rc = main(
             [
@@ -281,18 +341,22 @@ args = ["workspace-skill.js", "--changed"]
             + "\n",
         )
 
-        status_rc = main(
-            [
-                "guard",
-                "status",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--json",
-            ]
-        )
-        status_output = json.loads(capsys.readouterr().out)
+        daemon.start()
+        try:
+            status_rc = main(
+                [
+                    "guard",
+                    "status",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--json",
+                ]
+            )
+            status_output = json.loads(capsys.readouterr().out)
+        finally:
+            daemon.stop()
         codex_summary = next(item for item in status_output["harnesses"] if item["harness"] == "codex")
 
         assert install_rc == 0
@@ -300,6 +364,9 @@ args = ["workspace-skill.js", "--changed"]
         assert status_rc == 0
         assert status_output["managed_harnesses"] == 1
         assert status_output["receipt_count"] >= 1
+        assert status_output["runtime_status"] == "active"
+        assert status_output["runtime_state"]["daemon_port"] == daemon.port
+        assert status_output["approval_center_url"] == f"http://127.0.0.1:{daemon.port}"
         assert codex_summary["managed"] is True
         assert codex_summary["review_count"] >= 1
         assert codex_summary["next_action"] == "review"

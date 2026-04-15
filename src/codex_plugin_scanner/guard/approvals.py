@@ -159,16 +159,61 @@ def approval_center_hint(
     approval_center_url: str,
     queued: list[dict[str, object]],
 ) -> str:
-    adapter = get_adapter(harness)
-    flow = adapter.approval_flow()
+    del context
+    flow = approval_prompt_flow(harness)
     count = len(queued)
     risk_summary = _queue_risk_summary(queued)
     return (
         f"Guard queued {count} approval request{'s' if count != 1 else ''} for {harness}. "
-        f"Open {approval_center_url} to review them. "
+        f"{flow['summary']} "
+        f"Review them in the Guard approval center at {approval_center_url}. "
         f"{risk_summary} "
         f"{flow['fallback_hint']}"
     )
+
+
+def build_runtime_snapshot(
+    *,
+    store: GuardStore,
+    approval_center_url: str | None,
+    now: str | None = None,
+    request_limit: int = 200,
+    receipt_limit: int = 25,
+) -> dict[str, object]:
+    pending_requests = store.list_approval_requests(limit=request_limit)
+    latest_receipts = store.list_receipts(limit=receipt_limit)
+    return {
+        "generated_at": now or _now(),
+        "approval_center_url": approval_center_url,
+        "runtime_state": store.get_runtime_state(),
+        "pending_count": store.count_approval_requests(),
+        "receipt_count": store.count_receipts(),
+        "items": pending_requests,
+        "latest_receipts": latest_receipts,
+    }
+
+
+def approval_prompt_flow(harness: str) -> dict[str, object]:
+    try:
+        flow = get_adapter(harness).approval_flow()
+    except ValueError:
+        flow = {}
+    return {
+        "tier": str(flow.get("tier") or "approval-center"),
+        "summary": str(flow.get("summary") or ""),
+        "fallback_hint": str(flow.get("fallback_hint") or ""),
+        "prompt_channel": str(flow.get("prompt_channel") or "browser"),
+        "auto_open_browser": bool(flow.get("auto_open_browser", True)),
+    }
+
+
+def approval_delivery_payload(flow: dict[str, object]) -> dict[str, object]:
+    auto_open_browser = bool(flow.get("auto_open_browser"))
+    return {
+        "destination": "browser" if auto_open_browser else "harness",
+        "prompt_channel": str(flow.get("prompt_channel") or "browser"),
+        "summary": str(flow.get("summary") or ""),
+    }
 
 
 def wait_for_approval_requests(

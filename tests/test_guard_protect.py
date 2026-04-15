@@ -173,6 +173,175 @@ class TestGuardProtect:
         assert output["targets"][0]["artifact_type"] == "mcp_server"
         assert "remote server" in output["verdict"]["reason"].lower()
 
+    def test_guard_protect_intercepts_opencode_plugin_and_skill_installs(self, tmp_path, capsys) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+
+        plugin_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "opencode",
+                "plugin",
+                "install",
+                "fixture-plugin",
+                "--url",
+                "https://example.invalid/opencode-plugin.tgz",
+            ]
+        )
+        plugin_output = json.loads(capsys.readouterr().out)
+
+        skill_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "opencode",
+                "skill",
+                "install",
+                "fixture-skill",
+                "--url",
+                "https://example.invalid/opencode-skill.tgz",
+            ]
+        )
+        skill_output = json.loads(capsys.readouterr().out)
+
+        assert plugin_rc == 2
+        assert plugin_output["executed"] is False
+        assert plugin_output["targets"][0]["artifact_type"] == "plugin"
+        assert plugin_output["targets"][0]["artifact_id"] == "install:opencode:fixture-plugin"
+        assert skill_rc == 2
+        assert skill_output["executed"] is False
+        assert skill_output["targets"][0]["artifact_type"] == "skill"
+        assert skill_output["targets"][0]["artifact_id"] == "install:opencode:fixture-skill"
+
+    def test_guard_protect_intercepts_gemini_skill_installs_and_mcp_additions(self, tmp_path, capsys) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+
+        skill_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "gemini",
+                "skills",
+                "install",
+                "https://example.invalid/skills/review-skill.git",
+                "--scope",
+                "user",
+            ]
+        )
+        skill_output = json.loads(capsys.readouterr().out)
+
+        mcp_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "gemini",
+                "mcp",
+                "add",
+                "remote-risk",
+                "https://evil.example/mcp",
+                "--transport",
+                "http",
+                "--scope",
+                "user",
+            ]
+        )
+        mcp_output = json.loads(capsys.readouterr().out)
+
+        assert skill_rc == 2
+        assert skill_output["executed"] is False
+        assert skill_output["targets"][0]["artifact_type"] == "skill"
+        assert skill_output["targets"][0]["artifact_id"] == "install:gemini:skill:review-skill"
+        assert mcp_rc == 2
+        assert mcp_output["executed"] is False
+        assert mcp_output["targets"][0]["artifact_type"] == "mcp_server"
+        assert mcp_output["targets"][0]["artifact_id"] == "install:gemini:mcp:remote-risk"
+
+    def test_guard_protect_keeps_gemini_stdio_mcp_targets_local(self) -> None:
+        request = protect.parse_protect_command(
+            [
+                "gemini",
+                "mcp",
+                "add",
+                "stdio-risk",
+                "https://example.invalid/not-a-remote-endpoint",
+                "--transport",
+                "stdio",
+            ]
+        )
+
+        assert request.targets[0].source_url is None
+        assert "registers a remote server endpoint" not in protect._request_risk_signals(request)
+
+    def test_guard_protect_intercepts_antigravity_extension_and_mcp_registration(self, tmp_path, capsys) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+
+        extension_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "antigravity",
+                "--install-extension",
+                "hashgraph.tools",
+            ]
+        )
+        extension_output = json.loads(capsys.readouterr().out)
+
+        mcp_rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "antigravity",
+                "--add-mcp",
+                '{"name":"remote-risk","url":"https://evil.example/mcp"}',
+            ]
+        )
+        mcp_output = json.loads(capsys.readouterr().out)
+
+        assert extension_rc == 2
+        assert extension_output["executed"] is False
+        assert extension_output["targets"][0]["artifact_type"] == "extension"
+        assert extension_output["targets"][0]["artifact_id"] == "install:antigravity:extension:hashgraph.tools"
+        assert mcp_rc == 2
+        assert mcp_output["executed"] is False
+        assert mcp_output["targets"][0]["artifact_type"] == "mcp_server"
+        assert mcp_output["targets"][0]["artifact_id"] == "install:antigravity:mcp:remote-risk"
+
     def test_guard_protect_uses_configurable_execution_timeout(
         self,
         tmp_path,

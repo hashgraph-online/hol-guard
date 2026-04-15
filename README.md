@@ -20,7 +20,7 @@
 
 | If you want to... | Install | Start with |
 | :--- | :--- | :--- |
-| protect Codex, Claude Code, Cursor, Gemini, or OpenCode before tools run | `hol-guard` | `hol-guard start` |
+| protect Codex, Claude Code, Copilot CLI, Cursor, Gemini, or OpenCode before tools run | `hol-guard` | `hol-guard start` |
 | lint and verify packages in CI before release | `plugin-scanner` | `plugin-scanner verify .` |
 
 ## Guard Quickstart
@@ -71,6 +71,8 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
 
 - `claude-code`
   Guard prefers Claude hooks first, then the local approval center when the shell cannot prompt.
+- `copilot`
+  Guard can wrap the `copilot` CLI, detect `~/.copilot/config.json`, `~/.copilot/mcp-config.json`, workspace `.vscode/mcp.json`, and install repo-local `.github/hooks/hol-guard-copilot.json` hook entries for documented `preToolUse` and `postToolUse` events.
 - `codex`
   Guard owns artifact approval today through the local approval center. App Server is the future path for richer in-client approvals.
 - `cursor`
@@ -139,13 +141,15 @@ This keeps the quality grade and the trust score separate. Signals like `SECURIT
 ```bash
 git clone https://github.com/hashgraph-online/ai-plugin-scanner.git
 cd ai-plugin-scanner
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync --extra dev --extra cisco
 pytest -q
 ```
 
+Use `uv sync --extra dev --python 3.10` when you need the lean baseline path without the Cisco MCP extra.
+
 ## Install The Package You Need
+
+### Lean baseline install
 
 Guard package:
 
@@ -159,13 +163,36 @@ Scanner package:
 pip install plugin-scanner
 ```
 
-Cisco-backed scanner analysis is optional:
+The lean baseline keeps Python 3.10 support intact and always includes the shipped `cisco-ai-skill-scanner` integration.
+
+### Full Cisco coverage
+
+Install the Cisco extra on Python 3.11+ when you want static MCP coverage in addition to the baseline skill scanner:
+
+```bash
+pip install "hol-guard[cisco]"
+```
 
 ```bash
 pip install "plugin-scanner[cisco]"
 ```
 
-The `cisco` extra installs the published `cisco-ai-skill-scanner` package from PyPI so the scanner remains publishable on PyPI and the optional Cisco analysis path works with standard package metadata.
+`cisco-ai-mcp-scanner` stays in the optional `cisco` extra because it is Python 3.11+ only and adds a heavier YARA-backed install surface than the lean baseline should require.
+
+On Guard surfaces, the Cisco extra adds optional offline evidence to `hol-guard scan`, `hol-guard preflight`, and `hol-guard explain <path>`. Use `--cisco-mode {auto,on,off}` to control that consumer-mode evidence path for local artifact scans. `hol-guard run` and Guard runtime prompt/file-read protection remain native Guard behavior in this pass.
+
+Guard does not add Cisco AIBOM runtime integration in this pass. If AIBOM support returns later, it should stay on evidence or export surfaces rather than Guard blocking or approval logic.
+
+### Cisco package status
+
+Credit to [Cisco AI Defense](https://github.com/cisco-ai-defense) for open-sourcing the packages below.
+
+| Package | Status in this repo | Notes |
+| :--- | :--- | :--- |
+| `cisco-ai-skill-scanner` | shipped by default | Included in the lean baseline install. |
+| `cisco-ai-mcp-scanner` | shipped via `[cisco]` | Recommended for full Cisco coverage on Python 3.11+, including repo-controlled CI and Docker. |
+| `cisco-ai-a2a-scanner` | deferred | Requires live A2A endpoints and is not added in this pass. |
+| `cisco-aibom` | deferred | No Guard runtime integration in this pass. Revisit later only for evidence or export workflows. |
 
 If you want both tools in one shell during local development:
 
@@ -174,7 +201,7 @@ pipx install hol-guard
 pipx install plugin-scanner
 ```
 
-Container-first environments can use the published image instead:
+Container-first environments can use the published image instead. The repo-controlled image installs a lock-derived Cisco dependency set on Python 3.12 so the container has full static Cisco coverage by default.
 
 ```bash
 docker run --rm \
@@ -216,7 +243,7 @@ The scanner evaluates only the surfaces a plugin actually exposes, then normaliz
 | Category | Max Points | Coverage |
 | :--- | :--- | :--- |
 | Manifest Validation | 31 | `plugin.json`, required fields, semver, kebab-case, recommended metadata, interface metadata, interface links and assets, safe declared paths |
-| Security | 24 | `SECURITY.md`, `LICENSE`, hardcoded secret detection, dangerous MCP commands, MCP transport hardening, risky approval defaults |
+| Security | 36 | `SECURITY.md`, `LICENSE`, hardcoded secret detection, dangerous MCP commands, MCP transport hardening, risky approval defaults, Cisco MCP scan status, elevated MCP findings, MCP analyzability |
 | Operational Security | 20 | SHA-pinned GitHub Actions, `write-all`, privileged untrusted checkout patterns, Dependabot, dependency lockfiles |
 | Best Practices | 15 | `README.md`, skills directory, `SKILL.md` frontmatter, committed `.env`, `.codexignore` |
 | Marketplace | 15 | `.agents/plugins/marketplace.json` validity, legacy `marketplace.json` compatibility, policy fields, safe source paths |
@@ -249,6 +276,9 @@ plugin-scanner ./my-plugin --fail-on-severity high
 
 # Require Cisco skill scanning with a strict policy
 plugin-scanner ./my-plugin --cisco-skill-scan on --cisco-policy strict
+
+# Require optional Cisco MCP static analysis
+plugin-scanner ./my-plugin --cisco-mcp-scan on
 ```
 
 ## Quality Suite Commands
@@ -374,6 +404,7 @@ The scanner currently detects or validates:
 - Publishability issues in `interface` metadata, HTTPS links, and declared asset paths
 - Workflow hardening gaps including unpinned third-party actions, `write-all`, privileged checkout patterns, missing Dependabot, and missing lockfiles
 - Skill-level issues surfaced by Cisco `skill-scanner` when the optional integration is installed
+- Static MCP findings surfaced by Cisco `mcp-scanner` when the optional `cisco` extra is installed
 
 ## CI And Automation
 
@@ -402,6 +433,8 @@ jobs:
 
 For a multi-plugin repo, the same workflow can stay pointed at `plugin_dir: "."` as long as the repository has `.agents/plugins/marketplace.json` with local `./plugins/...` entries.
 
+For repo-controlled validation in this repository, Linux jobs that target full coverage install the `cisco` extra on Python 3.12, while the baseline matrix keeps Python 3.10 compatibility explicit.
+
 Local pre-commit style hook:
 
 ```yaml
@@ -422,6 +455,7 @@ repos:
 The Marketplace action lives in the dedicated repository [hashgraph-online/ai-plugin-scanner-action](https://github.com/hashgraph-online/ai-plugin-scanner-action).
 
 This repository no longer vendors a local action bundle. Use the standalone action repository for `action.yml`, release notes, and action-specific documentation. The legacy alias [hashgraph-online/hol-codex-plugin-scanner-action](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action) remains available for existing workflows.
+When you run the scanner in your own job instead of the packaged action, install `plugin-scanner[cisco]` on Python 3.11+ and set `CISCO_MCP_SCAN=auto` or `CISCO_MCP_SCAN=on` for full Cisco MCP coverage.
 
 ### Plugin Author Submission Flow
 
@@ -512,12 +546,14 @@ The registry payload mirrors the submission data used by HOL ecosystem automatio
 ## Development
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,cisco]"
 ruff check src tests
 ruff format --check src
 pytest -q
 python -m build
 ```
+
+Use `pip install -e ".[dev]"` or `uv sync --extra dev --python 3.10` when you need the lean baseline path without the Cisco MCP extra.
 
 ## Repository Workflows
 
@@ -614,6 +650,7 @@ Plugins that pass the scanner with a high score are candidates for listing in th
 - [OpenAI Codex Plugin Documentation](https://developers.openai.com/codex/plugins)
 - [Model Context Protocol Documentation](https://modelcontextprotocol.io)
 - [Cisco AI Skill Scanner](https://pypi.org/project/cisco-ai-skill-scanner/)
+- [Cisco AI MCP Scanner](https://pypi.org/project/cisco-ai-mcp-scanner/)
 - [HOL GitHub Organization](https://github.com/hashgraph-online)
 
 ## License

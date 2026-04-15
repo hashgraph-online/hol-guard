@@ -82,10 +82,12 @@ default_action = "sandbox-required"
 Optional project override:
 
 ```toml
-# .ai-plugin-scanner-guard.toml
+# .hol-guard.toml
 [artifacts."codex:project:workspace_tools"]
 default_action = "block"
 ```
+
+Guard still reads the legacy `.ai-plugin-scanner-guard.toml` file if you already have one, but new local overrides should use `.hol-guard.toml`.
 
 Guard resolves decisions in this order:
 
@@ -106,10 +108,16 @@ Use these actions in config or saved decisions:
 
 `guard install <harness>` creates a local launcher shim under Guard’s home directory:
 
-- macOS/Linux: `~/.config/.ai-plugin-scanner-guard/bin/guard-<harness>`
-- Windows: `~/.config/.ai-plugin-scanner-guard/bin/guard-<harness>.cmd`
+- macOS/Linux: `~/.hol-guard/bin/guard-<harness>`
+- Windows: `~/.hol-guard/bin/guard-<harness>.cmd`
 
 Claude Code also gets Guard hook entries in `.claude/settings.local.json` when you install from a workspace.
+
+Copilot CLI gets a Guard-owned repo hook file at `.github/hooks/hol-guard-copilot.json` when you install from a workspace. Guard only reads `~/.copilot/config.json` and `~/.copilot/mcp-config.json`; it does not auto-write user-level Copilot config.
+
+OpenCode gets the normal Guard shim plus a Guard-owned runtime overlay at `<guard-home>/opencode/runtime-config.json`. Guard
+injects that overlay through `OPENCODE_CONFIG_CONTENT` when you launch through Guard so native skill loads stay on ask
+without mutating your checked-in `opencode.json`.
 
 ## Harness approval model
 
@@ -123,14 +131,22 @@ Current strategy:
 
 - `claude-code`
   prefers Claude hooks and can hand blocked work to the approval center cleanly
+- `copilot`
+  wraps the `copilot` CLI, watches documented repo hooks and MCP config, and treats workspace `.vscode/mcp.json` as MCP artifact detection only
 - `codex`
   uses the Guard approval center today; App Server is the long-term richer in-client path
 - `cursor`
   keeps Cursor’s native tool approval and lets Guard own artifact trust before tool use
+- `antigravity`
+  scans Antigravity settings, installed extensions, and Antigravity-owned MCP or skill roots before launch
 - `opencode`
-  keeps OpenCode’s permission model and lets Guard manage package and provenance policy
+  detects OpenCode MCP servers, commands, plugins, and skills before launch, and `guard install opencode` adds a
+  Guard-owned runtime overlay that keeps native skill loads on ask
 - `gemini`
-  scans extension manifests and routes blocked changes to the approval center
+  scans `.gemini/settings.json`, extension manifests, hooks, MCP registrations, and Gemini skill directories before
+  launch, then routes blocked changes to the approval center
+
+Guard does not claim VS Code Copilot extension-host interception in this pass, and it does not add Cisco AIBOM runtime policy logic. AIBOM can come back later only as evidence or export.
 
 ## First-party canaries
 
