@@ -988,11 +988,7 @@ def _manifest_servers(source_configs: dict[str, dict[str, object]]) -> dict[str,
             "command": server.get("command") if isinstance(server.get("command"), str) else None,
             "args": _manifest_args(args),
             "url": server.get("url") if isinstance(server.get("url"), str) else None,
-            "env": (
-                {str(key): value for key, value in env.items() if isinstance(key, str) and isinstance(value, str)}
-                if isinstance(env, dict)
-                else {}
-            ),
+            "env": _manifest_env(env),
             "headers": (
                 {str(key): value for key, value in headers.items() if isinstance(key, str) and isinstance(value, str)}
                 if isinstance(headers, dict)
@@ -1006,6 +1002,16 @@ def _manifest_args(args: object) -> list[str]:
     if not isinstance(args, list):
         return []
     return [str(value) for value in args if isinstance(value, (str, int, float, bool))]
+
+
+def _manifest_env(env: object) -> dict[str, str]:
+    if not isinstance(env, dict):
+        return {}
+    return {
+        str(key): str(value)
+        for key, value in env.items()
+        if isinstance(key, str) and isinstance(value, (str, int, float, bool))
+    }
 
 
 def _install_state(

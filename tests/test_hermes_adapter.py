@@ -65,6 +65,27 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(tmp_path: Pat
     assert manifest["servers"]["yaml:remote-docs"]["headers"] == {"Authorization": "Bearer test-token"}
 
 
+def test_install_stringifies_typed_env_values_in_managed_manifest(tmp_path: Path):
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        (
+            "mcp_servers:\n"
+            "  remote-docs:\n"
+            '    command: "python"\n'
+            '    args: ["-m", "demo"]\n'
+            "    env:\n"
+            "      PORT: 8080\n"
+            "      DEBUG: true\n"
+        ),
+    )
+    context = _ctx(tmp_path)
+    adapter = HermesHarnessAdapter()
+
+    manifest = adapter.install(context)
+
+    assert manifest["servers"]["yaml:remote-docs"]["env"] == {"PORT": "8080", "DEBUG": "True"}
+
+
 def test_install_overlay_skips_disabled_mcp_servers(tmp_path: Path):
     _write(
         tmp_path / ".hermes" / "config.yaml",

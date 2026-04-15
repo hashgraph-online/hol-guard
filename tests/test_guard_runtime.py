@@ -1130,6 +1130,57 @@ class TestGuardRuntime:
         assert captured_expect_response == [False]
         assert output_stream.getvalue() == ""
 
+    def test_hermes_mcp_proxy_http_transport_does_not_require_guard_daemon(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+        store = GuardStore(guard_home)
+        store.set_managed_install(
+            "hermes",
+            True,
+            None,
+            {
+                "servers": {
+                    "yaml:demo": {
+                        "transport": "http",
+                        "url": "https://mcp.example.com/v1/mcp",
+                    }
+                }
+            },
+            "2026-04-15T00:00:00+00:00",
+        )
+        output_stream = _FlushTrackingOutput()
+
+        class _FakeRemoteProxy:
+            def __init__(self, *, base_url: str, allow_insecure_localhost: bool = False) -> None:
+                self.base_url = base_url
+                self.allow_insecure_localhost = allow_insecure_localhost
+
+            def forward(
+                self,
+                path: str,
+                payload: dict[str, object],
+                headers: dict[str, str] | None = None,
+                expect_response: bool = True,
+            ) -> dict[str, object]:
+                return {"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}
+
+        def _raise_daemon_error(_guard_home):
+            raise RuntimeError("daemon unavailable")
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", _raise_daemon_error)
+        monkeypatch.setattr(guard_commands_module, "RemoteGuardProxy", _FakeRemoteProxy)
+        monkeypatch.setattr(sys, "stdin", io.StringIO('{"jsonrpc":"2.0","id":9,"method":"tools/list"}\n'))
+        monkeypatch.setattr(sys, "stdout", output_stream)
+
+        rc = guard_commands_module._run_hermes_mcp_proxy(
+            args=argparse.Namespace(server="yaml:demo"),
+            context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
+            store=store,
+            config=load_guard_config(guard_home),
+        )
+
+        assert rc == 0
+        assert '"id":9' in output_stream.getvalue()
+
     def test_approval_surface_policy_disables_auto_open_when_flow_forbids_browser(self):
         assert (
             guard_commands_module._approval_surface_policy_for_flow(
