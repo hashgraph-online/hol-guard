@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -83,8 +84,12 @@ def resolve_guard_home(override: str | None = None) -> Path:
     legacy_home = _existing_legacy_guard_home()
     if legacy_home is None:
         return canonical_home
+    if _guard_home_has_sync_credentials(canonical_home):
+        return canonical_home
     if _guard_home_has_state(canonical_home):
         return canonical_home
+    if _guard_home_has_sync_credentials(legacy_home):
+        return legacy_home
     if canonical_home.exists() and _guard_home_has_state(legacy_home):
         return legacy_home
     return legacy_home if not canonical_home.exists() else canonical_home
@@ -211,4 +216,51 @@ def _merge_config_payload(base: dict[str, object], override: dict[str, object]) 
 def _guard_home_has_state(path: Path) -> bool:
     if not path.exists():
         return False
-    return any(path.iterdir())
+    entries = list(path.iterdir())
+    if not entries:
+        return False
+    if any(entry.name != "guard.db" for entry in entries):
+        return True
+    database_path = path / "guard.db"
+    if not database_path.is_file():
+        return True
+    try:
+        with sqlite3.connect(f"file:{database_path}?mode=ro", uri=True) as connection:
+            tables = {str(row[0]) for row in connection.execute("select name from sqlite_master where type = 'table'")}
+            for table_name in (
+                "harness_installations",
+                "artifact_snapshots",
+                "artifact_hashes",
+                "artifact_diffs",
+                "artifact_inventory",
+                "policy_decisions",
+                "runtime_receipts",
+                "publisher_cache",
+                "guard_events",
+                "managed_installs",
+                "guard_sessions",
+                "guard_operations",
+                "guard_operation_items",
+                "guard_client_attachments",
+                "guard_surface_opens",
+                "approval_requests",
+            ):
+                if table_name not in tables:
+                    continue
+                if connection.execute(f"select 1 from {table_name} limit 1").fetchone() is not None:
+                    return True
+    except sqlite3.Error:
+        return True
+    return False
+
+
+def _guard_home_has_sync_credentials(path: Path) -> bool:
+    database_path = path / "guard.db"
+    if not database_path.is_file():
+        return False
+    try:
+        with sqlite3.connect(f"file:{database_path}?mode=ro", uri=True) as connection:
+            row = connection.execute("select 1 from sync_state where state_key = 'credentials' limit 1").fetchone()
+    except sqlite3.Error:
+        return False
+    return row is not None

@@ -446,7 +446,13 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
         sync_payload = payload.get("sync")
         if isinstance(sync_payload, dict):
             body.add_row("Receipts stored", str(sync_payload.get("receipts_stored") or 0))
-            body.add_row("Inventory sent", str(sync_payload.get("inventory") or 0))
+            body.add_row(
+                "Inventory tracked",
+                str(sync_payload.get("inventory_tracked", sync_payload.get("inventory")) or 0),
+            )
+        sync_message = payload.get("sync_message")
+        if isinstance(sync_message, str) and sync_message.strip():
+            body.add_row("Sync note", sync_message)
         console.print(Panel(body, title="Guard connect", border_style="green"))
         return
 
@@ -481,7 +487,7 @@ def _render_sync(console: Console, payload: dict[str, object]) -> None:
     body = Table.grid(padding=(0, 1))
     body.add_row("Synced at", str(payload.get("synced_at") or "unknown"))
     body.add_row("Receipts sent", str(payload.get("receipts") or 0))
-    body.add_row("Inventory sent", str(payload.get("inventory") or 0))
+    body.add_row("Inventory tracked", str(payload.get("inventory_tracked", payload.get("inventory")) or 0))
     body.add_row("Receipts stored", str(payload.get("receipts_stored") or 0))
     body.add_row("Advisories stored", str(payload.get("advisories_stored") or 0))
     console.print(Panel(body, title="Guard sync complete", border_style="green"))

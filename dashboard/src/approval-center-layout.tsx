@@ -146,8 +146,8 @@ function RuntimeBanner(props: { runtime: RuntimeState }) {
             One Guard session, shared across the CLI and approval center
           </h2>
           <p className="mt-1 text-sm text-brand-dark/75">
-            Keep this window open while approvals arrive. The CLI now points back here instead of spawning a new tab
-            for each blocked request.
+            Keep this page open to review new approval requests as they arrive. Guard will bring each decision here so
+            you stay in one place, with links to more detail whenever you need it.
           </p>
         </div>
         <KeyValueGrid

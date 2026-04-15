@@ -683,7 +683,11 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command == "sync":
-        payload = sync_receipts(store)
+        try:
+            payload = sync_receipts(store)
+        except RuntimeError as error:
+            print(str(error), file=sys.stderr)
+            return 1
         _emit("sync", payload, getattr(args, "json", False))
         return 0
 

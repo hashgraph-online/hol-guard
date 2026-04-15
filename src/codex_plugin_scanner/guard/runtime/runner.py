@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import subprocess
 import urllib.error
 import urllib.parse
@@ -15,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ...version import __version__
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
@@ -39,6 +41,7 @@ _PAIN_SIGNAL_EVENTS = frozenset(
 )
 _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
 _ENV_PROMPT_PATTERN = re.compile(r"(?<![\w-])\.env(?:\.[\w.-]+)?\b")
+_GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 
 
 def guard_run(
@@ -188,20 +191,21 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     credentials = store.get_sync_credentials()
     if credentials is None:
         raise RuntimeError("Guard is not logged in.")
+    sync_url = _normalized_receipts_sync_url(str(credentials["sync_url"]))
     receipts = store.list_receipts(limit=200)
     inventory = store.list_inventory()
-    body = json.dumps({"receipts": receipts, "inventory": inventory}).encode("utf-8")
+    body = json.dumps({"receipts": _cloud_sync_receipts_payload(receipts)}).encode("utf-8")
     request = urllib.request.Request(
-        str(credentials["sync_url"]),
+        sync_url,
         data=body,
         method="POST",
-        headers={
-            "Authorization": f"Bearer {credentials['token']}",
-            "Content-Type": "application/json",
-        },
+        headers=_guard_sync_headers(str(credentials["token"])),
     )
-    with urllib.request.urlopen(request, timeout=10) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(_sync_http_error_message(error)) from error
     now = _sync_timestamp(payload)
     advisories = payload.get("advisories")
     advisories_stored = 0
@@ -242,7 +246,8 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         "remote_policies_stored": len(remote_decisions),
         "pain_signals_uploaded": pain_signals_uploaded,
         "receipts": len(receipts),
-        "inventory": len(inventory),
+        "inventory": 0,
+        "inventory_tracked": len(inventory),
     }
     store.set_sync_payload("sync_summary", summary, now)
     return summary
@@ -252,6 +257,7 @@ def sync_pain_signals(store: GuardStore) -> int:
     credentials = store.get_sync_credentials()
     if credentials is None:
         return 0
+    normalized_sync_url = _normalized_receipts_sync_url(str(credentials["sync_url"]))
     cursor_payload = store.get_sync_payload("pain_signal_cursor")
     last_event_id = _last_uploaded_event_id(cursor_payload)
     uploaded_count = 0
@@ -268,13 +274,10 @@ def sync_pain_signals(store: GuardStore) -> int:
         signal_items = [payload for item in candidates if (payload := _pain_signal_item(item)) is not None]
         if signal_items:
             request = urllib.request.Request(
-                _pain_signal_sync_url(str(credentials["sync_url"])),
+                _pain_signal_sync_url(normalized_sync_url),
                 data=json.dumps({"items": signal_items}).encode("utf-8"),
                 method="POST",
-                headers={
-                    "Authorization": f"Bearer {credentials['token']}",
-                    "Content-Type": "application/json",
-                },
+                headers=_guard_sync_headers(str(credentials["token"])),
             )
             try:
                 with urllib.request.urlopen(request, timeout=10):
@@ -288,7 +291,7 @@ def sync_pain_signals(store: GuardStore) -> int:
                         _now(),
                     )
                     return uploaded_count
-                raise
+                raise RuntimeError(_sync_http_error_message(error)) from error
             uploaded_count += len(signal_items)
         current_event_id = last_processed_event_id
         store.set_sync_payload(
@@ -365,6 +368,34 @@ def _build_remote_policy_decisions(payload: dict[str, object]) -> list[PolicyDec
                     )
                 )
     return decisions
+
+
+def _guard_sync_headers(token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": _GUARD_SYNC_USER_AGENT,
+    }
+
+
+def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
+    try:
+        raw_body = error.read().decode("utf-8")
+    except OSError:
+        raw_body = ""
+    try:
+        payload = json.loads(raw_body) if raw_body else None
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, dict):
+        message = payload.get("error")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+    normalized_body = raw_body.strip()
+    if normalized_body:
+        return normalized_body
+    return f"HTTP Error {error.code}: {error.reason}"
 
 
 def _remote_harness(value: object, *, allow_wildcard: bool = True) -> str | None:
@@ -475,6 +506,105 @@ def _pain_signal_sync_url(sync_url: str) -> str:
             parsed.fragment,
         )
     )
+
+
+def _normalized_receipts_sync_url(sync_url: str) -> str:
+    parsed = urllib.parse.urlsplit(sync_url)
+    if parsed.path.rstrip("/") == "/registry/api/v1":
+        return urllib.parse.urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                "/api/guard/receipts/sync",
+                parsed.query,
+                "",
+            )
+        )
+    return sync_url
+
+
+def _cloud_sync_receipts_payload(receipts: list[dict[str, object]]) -> list[dict[str, object]]:
+    device_id, device_name = _guard_device_metadata()
+    return [_cloud_sync_receipt_payload(receipt, device_id=device_id, device_name=device_name) for receipt in receipts]
+
+
+def _cloud_sync_receipt_payload(
+    receipt: dict[str, object],
+    *,
+    device_id: str,
+    device_name: str,
+) -> dict[str, object]:
+    receipt_fingerprint = _cloud_sync_receipt_fingerprint(receipt)
+    artifact_id = _optional_string(receipt.get("artifact_id")) or f"guard:local-receipt:{receipt_fingerprint[:24]}"
+    artifact_name = _optional_string(receipt.get("artifact_name")) or artifact_id
+    policy_decision = _optional_string(receipt.get("policy_decision")) or "review"
+    changed_capabilities = [str(item) for item in receipt.get("changed_capabilities", []) if isinstance(item, str)]
+    capabilities_summary = _optional_string(receipt.get("capabilities_summary"))
+    if changed_capabilities:
+        capabilities = changed_capabilities
+    elif capabilities_summary is not None:
+        capabilities = [capabilities_summary]
+    else:
+        capabilities = []
+    payload: dict[str, object] = {
+        "receiptId": _optional_string(receipt.get("receipt_id")) or f"guard-receipt-{receipt_fingerprint}",
+        "artifactId": artifact_id,
+        "artifactName": artifact_name,
+        "artifactType": _cloud_sync_artifact_type(artifact_id),
+        "artifactSlug": _cloud_sync_artifact_slug(artifact_name, artifact_id),
+        "artifactHash": _optional_string(receipt.get("artifact_hash"))
+        or hashlib.sha256(artifact_id.encode("utf-8")).hexdigest(),
+        "capabilities": capabilities,
+        "capturedAt": _optional_string(receipt.get("timestamp")) or _now(),
+        "changedSinceLastApproval": bool(changed_capabilities)
+        or policy_decision in {"require-reapproval", "sandbox-required"},
+        "deviceId": device_id,
+        "deviceName": device_name,
+        "harness": _optional_string(receipt.get("harness")) or "unknown",
+        "policyDecision": policy_decision,
+        "recommendation": _cloud_sync_recommendation(policy_decision),
+        "summary": _optional_string(receipt.get("provenance_summary"))
+        or capabilities_summary
+        or f"Guard recorded a {policy_decision} decision.",
+    }
+    publisher = _optional_string(receipt.get("publisher"))
+    if publisher is not None:
+        payload["publisher"] = publisher
+    return payload
+
+
+def _cloud_sync_receipt_fingerprint(receipt: dict[str, object]) -> str:
+    encoded_receipt = json.dumps(receipt, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded_receipt.encode("utf-8")).hexdigest()
+
+
+def _cloud_sync_artifact_type(artifact_id: str) -> str:
+    if artifact_id.startswith("skill:") or ":skill:" in artifact_id:
+        return "skill"
+    return "plugin"
+
+
+def _cloud_sync_artifact_slug(artifact_name: str, artifact_id: str) -> str:
+    base_value = artifact_name.strip() or artifact_id.strip() or "artifact"
+    slug = re.sub(r"[^a-z0-9]+", "-", base_value.lower()).strip("-")
+    if slug:
+        return slug
+    fallback = re.sub(r"[^a-z0-9]+", "-", artifact_id.lower()).strip("-")
+    return fallback or "artifact"
+
+
+def _cloud_sync_recommendation(policy_decision: str) -> str:
+    if policy_decision == "block":
+        return "block"
+    if policy_decision in {"review", "require-reapproval", "sandbox-required"}:
+        return "review"
+    return "monitor"
+
+
+def _guard_device_metadata() -> tuple[str, str]:
+    device_name = socket.gethostname().strip() or "Local machine"
+    device_id = hashlib.sha256(device_name.encode("utf-8")).hexdigest()[:24]
+    return device_id, device_name
 
 
 def _record_synced_alert_events(
