@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import subprocess
 import sys
 import threading
 import urllib.request
@@ -1163,6 +1164,37 @@ class TestGuardRuntime:
         assert command == (
             "hol-guard run codex --home /guard-home --workspace /workspace --default-action warn --arg '--model gpt-5'"
         )
+
+    def test_guard_rerun_command_uses_windows_safe_quoting(self, monkeypatch):
+        monkeypatch.setattr(guard_commands_module.sys, "platform", "win32")
+        command = guard_commands_module._guard_rerun_command(
+            argparse.Namespace(
+                harness="codex",
+                home=r"C:\Guard Home",
+                guard_home=None,
+                workspace=r"C:\Workspace Root",
+                default_action="warn",
+                passthrough_args=["--model gpt-5"],
+            )
+        )
+
+        expected = subprocess.list2cmdline(
+            [
+                "hol-guard",
+                "run",
+                "codex",
+                "--home",
+                r"C:\Guard Home",
+                "--workspace",
+                r"C:\Workspace Root",
+                "--default-action",
+                "warn",
+                "--arg",
+                "--model gpt-5",
+            ]
+        )
+
+        assert command == expected
 
     def test_guard_diff_command_preserves_common_context(self):
         command = guard_commands_module._guard_diff_command(

@@ -413,6 +413,26 @@ class TestGuardApprovals:
         assert snapshot_payload["pending_count"] == 205
         assert len(snapshot_payload["items"]) == 200
 
+    def test_guard_store_clears_runtime_state_only_for_matching_session(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.upsert_runtime_state(
+            session_id="session-active",
+            daemon_host="127.0.0.1",
+            daemon_port=4455,
+            started_at="2026-04-11T00:00:00+00:00",
+            last_heartbeat_at="2026-04-11T00:00:00+00:00",
+        )
+
+        store.clear_runtime_state(session_id="session-stale")
+        active_state = store.get_runtime_state()
+
+        assert active_state is not None
+        assert active_state["session_id"] == "session-active"
+
+        store.clear_runtime_state(session_id="session-active")
+
+        assert store.get_runtime_state() is None
+
     def test_guard_daemon_v1_endpoints_expose_requests_diff_receipts_and_policy(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         artifact = GuardArtifact(

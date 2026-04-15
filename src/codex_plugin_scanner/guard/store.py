@@ -768,9 +768,16 @@ class GuardStore:
             last_heartbeat_at=str(row["last_heartbeat_at"]),
         ).to_dict()
 
-    def clear_runtime_state(self) -> None:
+    def clear_runtime_state(self, *, session_id: str) -> None:
         with self._connect() as connection:
-            connection.execute("delete from guard_runtime_state where state_key = 'runtime'")
+            connection.execute(
+                """
+                delete from guard_runtime_state
+                where state_key = 'runtime'
+                  and session_id = ?
+                """,
+                (session_id,),
+            )
 
     def add_approval_request(self, request: GuardApprovalRequest, now: str) -> str:
         with self._connect() as connection:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import shlex
+import subprocess
 import sys
 import urllib.error
 import webbrowser
@@ -913,18 +914,24 @@ def _guard_rerun_command(args: argparse.Namespace) -> str:
         for value in passthrough_args:
             if isinstance(value, str) and value:
                 command.extend(["--arg", value])
-    return shlex.join(command)
+    return _shell_join(command)
 
 
 def _guard_diff_command(args: argparse.Namespace) -> str:
     command = ["hol-guard", "diff", str(args.harness)]
     _append_guard_context_args(command, args)
-    return shlex.join(command)
+    return _shell_join(command)
 
 
 def _guard_approvals_command(args: argparse.Namespace) -> str:
     command = ["hol-guard", "approvals"]
     _append_guard_context_args(command, args)
+    return _shell_join(command)
+
+
+def _shell_join(command: list[str]) -> str:
+    if sys.platform.startswith("win"):
+        return subprocess.list2cmdline(command)
     return shlex.join(command)
 
 

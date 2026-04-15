@@ -357,13 +357,13 @@ class GuardDaemonServer:
             self._server.serve_forever()
         finally:
             clear_guard_daemon_state(self._server.store.guard_home)
-            self._server.store.clear_runtime_state()
+            self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
 
     def stop(self) -> None:
         self._server.shutdown()
         self._server.server_close()
         clear_guard_daemon_state(self._server.store.guard_home)
-        self._server.store.clear_runtime_state()
+        self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
         if self._thread is not None:
             self._thread.join(timeout=5)
             self._thread = None
