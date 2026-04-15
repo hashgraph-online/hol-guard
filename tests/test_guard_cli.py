@@ -6,6 +6,8 @@ import json
 import subprocess
 import sys
 import threading
+import urllib.parse
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import ClassVar
@@ -15,7 +17,9 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.cli import connect_flow as guard_connect_flow_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
+from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -1430,7 +1434,11 @@ args = ["workspace-skill.js"]
                 "highest_severity": "critical",
             },
         }
-        monkeypatch.setattr(guard_commands_module, "run_consumer_scan", lambda path, intended_harness=None: payload)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "run_consumer_scan",
+            lambda path, intended_harness=None, options=None: payload,
+        )
 
         rc = main(
             [
@@ -2267,71 +2275,9 @@ args = ["workspace-skill.js", "--changed"]
         assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
         assert len(_SyncRequestHandler.captured_body["inventory"]) >= 1
 
-    def test_guard_connect_save_only_surfaces_waiting_state(self, tmp_path, capsys):
+    def test_guard_connect_pairs_browser_session_and_syncs(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        guard_home = tmp_path / "guard-home"
-        _build_guard_fixture(home_dir, workspace_dir)
-
-        rc = main(
-            [
-                "guard",
-                "connect",
-                "--home",
-                str(home_dir),
-                "--guard-home",
-                str(guard_home),
-                "--workspace",
-                str(workspace_dir),
-                "--sync-url",
-                "https://hol.org/registry/api/v1/guard/receipts",
-                "--token",
-                "demo-token",
-                "--save-only",
-                "--json",
-            ]
-        )
-        output = json.loads(capsys.readouterr().out)
-
-        assert rc == 0
-        assert output["credentials_saved"] is True
-        assert output["sync_attempted"] is False
-        assert output["cloud_state"] == "paired_waiting"
-        assert output["sync_configured"] is True
-        assert output["dashboard_url"] == "https://hol.org/guard"
-        assert output["connect_url"] == "https://hol.org/guard/connect"
-
-    def test_guard_connect_rejects_empty_credentials(self, tmp_path, capsys):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        guard_home = tmp_path / "guard-home"
-        _build_guard_fixture(home_dir, workspace_dir)
-
-        rc = main(
-            [
-                "guard",
-                "connect",
-                "--home",
-                str(home_dir),
-                "--guard-home",
-                str(guard_home),
-                "--workspace",
-                str(workspace_dir),
-                "--sync-url",
-                "",
-                "--token",
-                "",
-            ]
-        )
-        stderr = capsys.readouterr().err
-
-        assert rc == 2
-        assert "connect requires non-empty --sync-url and --token when saving credentials" in stderr
-
-    def test_guard_connect_syncs_and_surfaces_cloud_state(self, tmp_path, capsys):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        guard_home = tmp_path / "guard-home"
         _build_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
         _SyncRequestHandler.response_payload = {
@@ -2379,6 +2325,50 @@ args = ["workspace-skill.js", "--changed"]
         server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
+
+        store = GuardStore(home_dir)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda guard_home: f"http://127.0.0.1:{daemon.port}",
+        )
+
+        opened_urls: list[str] = []
+
+        def open_browser(url: str) -> bool:
+            opened_urls.append(url)
+            parsed = urllib.parse.urlparse(url)
+            query = urllib.parse.parse_qs(parsed.query)
+            fragment = urllib.parse.parse_qs(parsed.fragment)
+            request_id = query["guardPairRequest"][-1]
+            daemon_url = query["guardDaemon"][-1]
+            pairing_secret = fragment["guardPairSecret"][-1]
+
+            def complete_pairing() -> None:
+                request = urllib.request.Request(
+                    f"{daemon_url}/v1/connect/complete",
+                    data=urllib.parse.urlencode(
+                        {
+                            "request_id": request_id,
+                            "pairing_secret": pairing_secret,
+                            "token": "session-token-123",
+                        }
+                    ).encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Origin": "https://hol.org",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=5):
+                    pass
+
+            threading.Thread(target=complete_pairing, daemon=True).start()
+            return True
+
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", open_browser)
         try:
             run_rc = main(
                 [
@@ -2387,8 +2377,6 @@ args = ["workspace-skill.js", "--changed"]
                     "codex",
                     "--home",
                     str(home_dir),
-                    "--guard-home",
-                    str(guard_home),
                     "--workspace",
                     str(workspace_dir),
                     "--dry-run",
@@ -2405,146 +2393,177 @@ args = ["workspace-skill.js", "--changed"]
                     "connect",
                     "--home",
                     str(home_dir),
-                    "--guard-home",
-                    str(guard_home),
-                    "--workspace",
-                    str(workspace_dir),
                     "--sync-url",
                     f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--token",
-                    "demo-token",
+                    "--connect-url",
+                    "https://hol.org/guard/connect",
                     "--json",
                 ]
             )
             connect_output = json.loads(capsys.readouterr().out)
         finally:
+            daemon.stop()
             server.shutdown()
             thread.join(timeout=5)
 
         assert run_rc == 0
         assert connect_rc == 0
-        assert connect_output["credentials_saved"] is True
-        assert connect_output["sync_attempted"] is True
-        assert connect_output["sync_succeeded"] is True
-        assert connect_output["cloud_state"] == "paired_active"
-        assert connect_output["dashboard_url"] == f"http://127.0.0.1:{server.server_port}/guard"
-        assert connect_output["advisory_count"] == 1
-        assert connect_output["team_policy_active"] is True
-        assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer demo-token"
-        assert _SyncRequestHandler.captured_body is not None
-        assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
-
-    def test_guard_connect_save_only_clears_previous_sync_state(self, tmp_path, capsys):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        guard_home = tmp_path / "guard-home"
-        _build_guard_fixture(home_dir, workspace_dir)
-        _SyncRequestHandler.response_payload = {
-            "syncedAt": "2026-04-09T00:00:00Z",
-            "receiptsStored": 1,
-            "advisories": [
-                {
-                    "id": "adv-001",
-                    "publisher": "hashgraph-online",
-                    "severity": "high",
-                    "headline": "Publisher rotated to a new remote domain.",
-                }
-            ],
+        assert connect_output["connected"] is True
+        assert connect_output["sync"]["receipts_stored"] == 1
+        assert connect_output["browser_opened"] is True
+        assert opened_urls and opened_urls[0].startswith("https://hol.org/guard/connect?")
+        assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer session-token-123"
+        assert store.get_sync_credentials() == {
+            "sync_url": f"http://127.0.0.1:{server.server_port}/receipts",
+            "token": "session-token-123",
         }
 
-        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            first_connect_rc = main(
-                [
-                    "guard",
-                    "connect",
-                    "--home",
-                    str(home_dir),
-                    "--guard-home",
-                    str(guard_home),
-                    "--workspace",
-                    str(workspace_dir),
-                    "--sync-url",
-                    f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--token",
-                    "demo-token",
-                    "--json",
-                ]
-            )
-            first_connect_output = json.loads(capsys.readouterr().out)
-
-            second_connect_rc = main(
-                [
-                    "guard",
-                    "connect",
-                    "--home",
-                    str(home_dir),
-                    "--guard-home",
-                    str(guard_home),
-                    "--workspace",
-                    str(workspace_dir),
-                    "--sync-url",
-                    "https://hol.org/registry/api/v1/guard/receipts",
-                    "--token",
-                    "second-token",
-                    "--save-only",
-                    "--json",
-                ]
-            )
-            second_connect_output = json.loads(capsys.readouterr().out)
-        finally:
-            server.shutdown()
-            thread.join(timeout=5)
-
-        assert first_connect_rc == 0
-        assert first_connect_output["cloud_state"] == "paired_active"
-        assert first_connect_output["advisory_count"] == 1
-        assert second_connect_rc == 0
-        assert second_connect_output["cloud_state"] == "paired_waiting"
-        assert second_connect_output["advisory_count"] == 0
-        assert second_connect_output["last_sync_at"] is None
-
-    def test_guard_connect_handles_invalid_sync_response(self, tmp_path, capsys):
+    def test_guard_connect_rejects_invalid_sync_url(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        guard_home = tmp_path / "guard-home"
         _build_guard_fixture(home_dir, workspace_dir)
-        _SyncRequestHandler.raw_response_body = "not-json"
 
-        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            connect_rc = main(
+        with pytest.raises(SystemExit) as exc_info:
+            main(
                 [
                     "guard",
                     "connect",
                     "--home",
                     str(home_dir),
-                    "--guard-home",
-                    str(guard_home),
                     "--workspace",
                     str(workspace_dir),
                     "--sync-url",
-                    f"http://127.0.0.1:{server.server_port}/receipts",
-                    "--token",
-                    "demo-token",
-                    "--json",
+                    "not-a-url",
                 ]
             )
-            connect_output = json.loads(capsys.readouterr().out)
-        finally:
-            _SyncRequestHandler.raw_response_body = None
-            server.shutdown()
-            thread.join(timeout=5)
 
-        assert connect_rc == 1
-        assert connect_output["sync_attempted"] is True
-        assert connect_output["sync_succeeded"] is False
-        assert connect_output["cloud_state"] == "paired_waiting"
-        assert "Expecting value" in str(connect_output["sync_error"])
+        assert exc_info.value.code == 2
+        assert "Guard URLs must be absolute http(s) URLs." in capsys.readouterr().err
+
+    def test_guard_connect_uses_recovered_daemon_url_for_browser_pairing(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+        opened_urls: list[str] = []
+
+        class FakeDaemonClient:
+            def __init__(self) -> None:
+                self.daemon_url = "http://127.0.0.1:4781"
+
+            def create_connect_request(self, *, sync_url: str, allowed_origin: str) -> dict[str, object]:
+                return {
+                    "request_id": "req-123",
+                    "pairing_secret": "pair-secret",
+                    "sync_url": sync_url,
+                    "allowed_origin": allowed_origin,
+                }
+
+        monkeypatch.setattr(
+            guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4779"
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "load_guard_surface_daemon_client",
+            lambda guard_home: FakeDaemonClient(),
+        )
+        monkeypatch.setattr(guard_connect_flow_module, "wait_for_connect_completion", lambda **kwargs: None)
+
+        payload = guard_connect_flow_module.run_guard_connect_command(
+            guard_home=tmp_path / "guard-home",
+            store=store,
+            sync_url="https://hol.org/registry/api/v1",
+            connect_url="https://hol.org/guard/connect",
+            opener=lambda url: opened_urls.append(url) or True,
+            wait_timeout_seconds=1,
+        )
+
+        parsed = urllib.parse.urlparse(opened_urls[0])
+        query = urllib.parse.parse_qs(parsed.query)
+        assert payload["status"] == "waiting_for_browser"
+        assert query["guardDaemon"] == ["http://127.0.0.1:4781"]
+
+    def test_guard_connect_preserves_custom_connect_query_params(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+        opened_urls: list[str] = []
+
+        class FakeDaemonClient:
+            daemon_url = "http://127.0.0.1:4781"
+
+            def create_connect_request(self, *, sync_url: str, allowed_origin: str) -> dict[str, object]:
+                return {
+                    "request_id": "req-123",
+                    "pairing_secret": "pair-secret",
+                    "sync_url": sync_url,
+                    "allowed_origin": allowed_origin,
+                }
+
+        monkeypatch.setattr(
+            guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "load_guard_surface_daemon_client",
+            lambda guard_home: FakeDaemonClient(),
+        )
+        monkeypatch.setattr(guard_connect_flow_module, "wait_for_connect_completion", lambda **kwargs: None)
+
+        payload = guard_connect_flow_module.run_guard_connect_command(
+            guard_home=tmp_path / "guard-home",
+            store=store,
+            sync_url="https://hol.org/registry/api/v1",
+            connect_url="https://hol.org/guard/connect?tenant=enterprise&invite=abc123",
+            opener=lambda url: opened_urls.append(url) or True,
+            wait_timeout_seconds=1,
+        )
+
+        parsed = urllib.parse.urlparse(opened_urls[0])
+        query = urllib.parse.parse_qs(parsed.query)
+        assert payload["status"] == "waiting_for_browser"
+        assert query["tenant"] == ["enterprise"]
+        assert query["invite"] == ["abc123"]
+        assert query["guardPairRequest"] == ["req-123"]
+        assert query["guardDaemon"] == ["http://127.0.0.1:4781"]
+
+    def test_guard_connect_wraps_sync_transport_failures(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+
+        class FakeDaemonClient:
+            daemon_url = "http://127.0.0.1:4781"
+
+            def create_connect_request(self, *, sync_url: str, allowed_origin: str) -> dict[str, object]:
+                return {
+                    "request_id": "req-123",
+                    "pairing_secret": "pair-secret",
+                    "sync_url": sync_url,
+                    "allowed_origin": allowed_origin,
+                }
+
+        monkeypatch.setattr(
+            guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "load_guard_surface_daemon_client",
+            lambda guard_home: FakeDaemonClient(),
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "wait_for_connect_completion",
+            lambda **kwargs: {"status": "completed", "request_id": "req-123", "completed_at": "2026-04-15T00:00:00Z"},
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "sync_receipts",
+            lambda current_store: (_ for _ in ()).throw(urllib.error.URLError("offline")),
+        )
+
+        with pytest.raises(RuntimeError, match="Guard paired successfully but sync failed"):
+            guard_connect_flow_module.run_guard_connect_command(
+                guard_home=tmp_path / "guard-home",
+                store=store,
+                sync_url="https://hol.org/registry/api/v1",
+                connect_url="https://hol.org/guard/connect",
+                opener=lambda url: True,
+                wait_timeout_seconds=1,
+            )
 
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

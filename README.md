@@ -455,7 +455,6 @@ repos:
 The Marketplace action lives in the dedicated repository [hashgraph-online/ai-plugin-scanner-action](https://github.com/hashgraph-online/ai-plugin-scanner-action).
 
 This repository no longer vendors a local action bundle. Use the standalone action repository for `action.yml`, release notes, and action-specific documentation. The legacy alias [hashgraph-online/hol-codex-plugin-scanner-action](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action) remains available for existing workflows.
-
 When you run the scanner in your own job instead of the packaged action, install `plugin-scanner[cisco]` on Python 3.11+ and set `CISCO_MCP_SCAN=auto` or `CISCO_MCP_SCAN=on` for full Cisco MCP coverage.
 
 ### Plugin Author Submission Flow

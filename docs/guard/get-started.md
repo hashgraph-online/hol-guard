@@ -52,11 +52,10 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard status
    ```
 
-8. Sign in later only if you want shared history:
+8. Connect cloud sync later only if you want shared history:
 
    ```bash
-   hol-guard login --sync-url <url> --token <token>
-   hol-guard sync
+   hol-guard connect
    ```
 
 ## Fine-tune local policy
