@@ -433,6 +433,34 @@ class TestGuardApprovals:
 
         assert store.get_runtime_state() is None
 
+    def test_guard_store_touches_runtime_state_only_for_matching_session(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.upsert_runtime_state(
+            session_id="session-active",
+            daemon_host="127.0.0.1",
+            daemon_port=4455,
+            started_at="2026-04-11T00:00:00+00:00",
+            last_heartbeat_at="2026-04-11T00:00:00+00:00",
+        )
+
+        store.touch_runtime_state(
+            session_id="session-stale",
+            last_heartbeat_at="2026-04-11T01:00:00+00:00",
+        )
+        unchanged_state = store.get_runtime_state()
+
+        assert unchanged_state is not None
+        assert unchanged_state["last_heartbeat_at"] == "2026-04-11T00:00:00+00:00"
+
+        store.touch_runtime_state(
+            session_id="session-active",
+            last_heartbeat_at="2026-04-11T01:00:00+00:00",
+        )
+        updated_state = store.get_runtime_state()
+
+        assert updated_state is not None
+        assert updated_state["last_heartbeat_at"] == "2026-04-11T01:00:00+00:00"
+
     def test_guard_daemon_v1_endpoints_expose_requests_diff_receipts_and_policy(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         artifact = GuardArtifact(

@@ -39,7 +39,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
-        store.touch_runtime_state(last_heartbeat_at=_now())
+        store.touch_runtime_state(
+            session_id=self.server.runtime_session_id,  # type: ignore[attr-defined]
+            last_heartbeat_at=_now(),
+        )
         parsed = urlparse(self.path)
         path_parts = [part for part in parsed.path.split("/") if part]
         if parsed.path == "/healthz":
@@ -128,7 +131,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
-        self.server.store.touch_runtime_state(last_heartbeat_at=_now())  # type: ignore[attr-defined]
+        self.server.store.touch_runtime_state(  # type: ignore[attr-defined]
+            session_id=self.server.runtime_session_id,  # type: ignore[attr-defined]
+            last_heartbeat_at=_now(),
+        )
         if not self._origin_is_allowed():
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
