@@ -27,6 +27,17 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-aibom" not in cisco_extra
 
 
+def test_pyproject_exposes_guard_and_scanner_commands_without_codex_alias() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    scripts = project["scripts"]
+
+    assert scripts["hol-guard"] == "codex_plugin_scanner.cli:main"
+    assert scripts["plugin-scanner"] == "codex_plugin_scanner.cli:main"
+    assert scripts["plugin-guard"] == "codex_plugin_scanner.cli:main"
+    assert scripts["plugin-ecosystem-scanner"] == "codex_plugin_scanner.cli:main"
+    assert "codex-plugin-scanner" not in scripts
+
+
 def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
@@ -60,3 +71,14 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "cisco-ai-mcp-scanner==" in docker_requirements
     assert "--hash=sha256:" in docker_requirements
     assert "uv sync --extra dev --extra cisco" in contributing
+
+
+def test_publish_workflow_builds_only_guard_and_scanner_packages() -> None:
+    publish_workflow = (ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
+
+    assert "Build Guard package (hol-guard)" in publish_workflow
+    assert "Build scanner package (plugin-scanner)" in publish_workflow
+    assert "Build codex compatibility alias" not in publish_workflow
+    assert 'name = "codex-plugin-scanner"' not in publish_workflow
+    assert 'codex-plugin-scanner = "codex_plugin_scanner.cli:main"' not in publish_workflow
+    assert 'uv tool install codex-plugin-scanner==' not in publish_workflow

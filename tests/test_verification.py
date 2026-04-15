@@ -177,7 +177,7 @@ import sys
 init = json.loads(sys.stdin.readline())
 assert init["method"] == "initialize"
 assert init["params"]["protocolVersion"]
-assert init["params"]["clientInfo"]["name"] == "codex-plugin-scanner"
+assert init["params"]["clientInfo"]["name"] == "plugin-scanner"
 sys.stdout.write(json.dumps({
     "jsonrpc": "2.0",
     "id": init["id"],

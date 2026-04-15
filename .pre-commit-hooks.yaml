@@ -1,10 +1,10 @@
 repos:
-  - repo: https://github.com/hashgraph-online/codex-plugin-scanner
+  - repo: https://github.com/hashgraph-online/ai-plugin-scanner
     rev: v1.1.0
     hooks:
-      - id: codex-plugin-scanner
-        name: Codex Plugin Scanner
-        description: "Scan a Codex plugin directory for security and best practices."
-        entry: codex-plugin-scanner
+      - id: plugin-scanner
+        name: Plugin Scanner
+        description: "Scan a plugin directory for security and best practices."
+        entry: plugin-scanner
         language: python
         pass_filenames: false

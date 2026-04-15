@@ -1,4 +1,4 @@
-"""Codex Plugin Scanner - core scanning engine."""
+"""Plugin Scanner core scanning engine."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Codex Plugin Scanner - CLI entry point."""
+"""Plugin Scanner CLI entry point."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def _is_guard_program(program_name: str) -> bool:
 
 def _is_scanner_program(program_name: str) -> bool:
     normalized_name = Path(program_name).stem.lower()
-    return normalized_name in {"plugin-scanner", "codex-plugin-scanner", "plugin-ecosystem-scanner"}
+    return normalized_name in {"plugin-scanner", "plugin-ecosystem-scanner"}
 
 
 def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentParser:

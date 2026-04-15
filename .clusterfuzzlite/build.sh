@@ -1,6 +1,6 @@
 #!/bin/bash -eu
 
-cd "$SRC/codex-plugin-scanner"
+cd "$SRC/ai-plugin-scanner"
 export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 
 for fuzzer in fuzzers/*_fuzzer.py; do

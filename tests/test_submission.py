@@ -29,7 +29,7 @@ def test_resolve_submission_metadata_prefers_manifest_fields() -> None:
     )
 
     assert metadata.plugin_name == "Example Good Plugin"
-    assert metadata.plugin_url == "https://github.com/hashgraph-online/codex-plugin-scanner"
+    assert metadata.plugin_url == "https://github.com/hashgraph-online/ai-plugin-scanner"
     assert metadata.description == "Reusable security-first plugin fixture"
     assert metadata.author == "Hashgraph Online"
     assert metadata.category == "Community Plugins"
@@ -79,7 +79,7 @@ def test_submission_payload_and_issue_body_include_registry_data() -> None:
     assert payload["grade"] == "A"
     assert payload["pluginUrl"] == metadata.plugin_url
     assert "## Registry Payload" in body
-    assert "<!-- codex-plugin-scanner-plugin-url: https://github.com/hashgraph-online/example-good-plugin -->" in body
+    assert "<!-- plugin-scanner-plugin-url: https://github.com/hashgraph-online/example-good-plugin -->" in body
     assert '"pluginName": "Example Good Plugin"' in body
     assert metadata.plugin_url in body
 
@@ -111,7 +111,7 @@ def test_find_existing_submission_issue_uses_search_api_and_exact_marker(monkeyp
                     "html_url": "https://github.com/hashgraph-online/awesome-codex-plugins/issues/42",
                     "body": (
                         "## Plugin Submission\n"
-                        "<!-- codex-plugin-scanner-plugin-url: "
+                        "<!-- plugin-scanner-plugin-url: "
                         "https://github.com/hashgraph-online/example-good-plugin -->\n"
                     ),
                 },
@@ -120,7 +120,7 @@ def test_find_existing_submission_issue_uses_search_api_and_exact_marker(monkeyp
                     "html_url": "https://github.com/hashgraph-online/awesome-codex-plugins/issues/99",
                     "body": (
                         "## Plugin Submission\n"
-                        "<!-- codex-plugin-scanner-plugin-url: "
+                        "<!-- plugin-scanner-plugin-url: "
                         "https://github.com/hashgraph-online/example-good-plugin-extra -->\n"
                     ),
                 },

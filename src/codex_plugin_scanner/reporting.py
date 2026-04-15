@@ -233,7 +233,7 @@ def format_markdown(result: ScanResult) -> str:
     """Render a scan result as a markdown report."""
 
     lines = [
-        "# Codex Plugin Scanner Report",
+        "# Plugin Scanner Report",
         "",
         f"- {'Repository' if result.scope == 'repository' else 'Plugin'}: `{result.plugin_dir}`",
         f"- Score: **{result.score}/100**",
@@ -354,8 +354,8 @@ def format_sarif(result: ScanResult) -> str:
             {
                 "tool": {
                     "driver": {
-                        "name": "codex-plugin-scanner",
-                        "informationUri": "https://github.com/hashgraph-online/codex-plugin-scanner",
+                        "name": "plugin-scanner",
+                        "informationUri": "https://github.com/hashgraph-online/ai-plugin-scanner",
                         "version": __version__,
                         "rules": rules,
                     }

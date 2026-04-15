@@ -520,7 +520,7 @@ def _check_mcp_stdio(servers: dict) -> tuple[list[VerificationCase], list[Runtim
                 "params": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
-                    "clientInfo": {"name": "codex-plugin-scanner", "version": __version__},
+                    "clientInfo": {"name": "plugin-scanner", "version": __version__},
                 },
             }
             proc.stdin.write(json.dumps(initialize_request) + "\n")

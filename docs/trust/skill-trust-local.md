@@ -2,7 +2,7 @@
 
 ## Scope
 
-`codex-plugin-scanner` uses the published HCS-28 baseline adapter catalog for bundled Codex skills. The scanner does not define a private skill trust profile. Instead, it computes local bundled-skill evidence using the HCS-28 adapter ids, weights, contribution modes, and aggregation rules.
+`plugin-scanner` uses the published HCS-28 baseline adapter catalog for bundled Codex skills. The scanner does not define a private skill trust profile. Instead, it computes local bundled-skill evidence using the HCS-28 adapter ids, weights, contribution modes, and aggregation rules.
 
 ## Normative provenance
 
