@@ -256,6 +256,7 @@ def sync_pain_signals(store: GuardStore) -> int:
     credentials = store.get_sync_credentials()
     if credentials is None:
         return 0
+    normalized_sync_url = _normalized_receipts_sync_url(str(credentials["sync_url"]))
     cursor_payload = store.get_sync_payload("pain_signal_cursor")
     last_event_id = _last_uploaded_event_id(cursor_payload)
     uploaded_count = 0
@@ -272,7 +273,7 @@ def sync_pain_signals(store: GuardStore) -> int:
         signal_items = [payload for item in candidates if (payload := _pain_signal_item(item)) is not None]
         if signal_items:
             request = urllib.request.Request(
-                _pain_signal_sync_url(str(credentials["sync_url"])),
+                _pain_signal_sync_url(normalized_sync_url),
                 data=json.dumps({"items": signal_items}).encode("utf-8"),
                 method="POST",
                 headers=_guard_sync_headers(str(credentials["token"])),
