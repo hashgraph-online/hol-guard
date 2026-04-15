@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .antigravity import AntigravityHarnessAdapter
 from .base import HarnessAdapter, HarnessContext
 from .claude_code import ClaudeCodeHarnessAdapter
 from .codex import CodexHarnessAdapter
@@ -16,6 +17,7 @@ ADAPTERS: tuple[HarnessAdapter, ...] = (
     ClaudeCodeHarnessAdapter(),
     CopilotHarnessAdapter(),
     CursorHarnessAdapter(),
+    AntigravityHarnessAdapter(),
     GeminiHarnessAdapter(),
     HermesHarnessAdapter(),
     OpenCodeHarnessAdapter(),
