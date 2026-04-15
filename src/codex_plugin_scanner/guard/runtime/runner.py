@@ -514,7 +514,7 @@ def _normalized_receipts_sync_url(sync_url: str) -> str:
                 parsed.scheme,
                 parsed.netloc,
                 "/api/guard/receipts/sync",
-                "",
+                parsed.query,
                 "",
             )
         )
