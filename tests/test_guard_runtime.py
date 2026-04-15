@@ -2106,6 +2106,72 @@ class TestGuardRuntime:
         assert result["responses"][0]["id"] == 1
         assert result["responses"][0]["result"]["echo"] == "initialize"
 
+    def test_stdio_proxy_stream_does_not_wait_for_notification_replies(self):
+        proxy = StdioGuardProxy(
+            command=[
+                sys.executable,
+                "-u",
+                "-c",
+                "\n".join(
+                    [
+                        "import json, sys",
+                        "for line in sys.stdin:",
+                        "    message = json.loads(line)",
+                        "    if message.get('id') is None:",
+                        "        continue",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                        "    sys.stdout.flush()",
+                    ]
+                ),
+            ],
+        )
+        output_stream = _FlushTrackingOutput()
+
+        exit_code = proxy.run_stream(
+            input_stream=_LineOnlyInput(
+                [
+                    '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}\n',
+                    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n',
+                ]
+            ),
+            output_stream=output_stream,
+            error_stream=io.StringIO(),
+        )
+
+        assert exit_code == 0
+        assert '"id":1' in output_stream.getvalue()
+
+    def test_stdio_proxy_stream_forwards_interleaved_notifications(self):
+        proxy = StdioGuardProxy(
+            command=[
+                sys.executable,
+                "-u",
+                "-c",
+                "\n".join(
+                    [
+                        "import json, sys",
+                        "for line in sys.stdin:",
+                        "    message = json.loads(line)",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'method': 'tools/progress', 'params': {'step': 1}}))",
+                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                        "    sys.stdout.flush()",
+                    ]
+                ),
+            ],
+        )
+        output_stream = _FlushTrackingOutput()
+
+        exit_code = proxy.run_stream(
+            input_stream=_LineOnlyInput(['{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n']),
+            output_stream=output_stream,
+            error_stream=io.StringIO(),
+        )
+        output_lines = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+
+        assert exit_code == 0
+        assert output_lines[0]["method"] == "tools/progress"
+        assert output_lines[1]["id"] == 1
+
     def test_stdio_proxy_blocks_sensitive_file_reads_without_forwarding(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)

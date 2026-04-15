@@ -118,9 +118,11 @@ class StdioGuardProxy:
                     message=message,
                     responses=[],
                     events=[],
+                    output_stream=output_stream,
                 )
-                output_stream.write(json.dumps(response, separators=(",", ":")) + "\n")
-                output_stream.flush()
+                if response is not None:
+                    output_stream.write(json.dumps(response, separators=(",", ":")) + "\n")
+                    output_stream.flush()
             assert process.stdin is not None
             process.stdin.close()
             process.wait(timeout=5)
@@ -144,6 +146,7 @@ class StdioGuardProxy:
                     message=message,
                     responses=responses,
                     events=events,
+                    output_stream=None,
                 )
             assert process.stdin is not None
             process.stdin.close()
@@ -172,7 +175,8 @@ class StdioGuardProxy:
         message: dict[str, Any],
         responses: list[dict[str, Any]],
         events: list[dict[str, Any]],
-    ) -> dict[str, Any]:
+        output_stream: Any | None = None,
+    ) -> dict[str, Any] | None:
         assert process.stdin is not None
         assert process.stdout is not None
 
@@ -303,22 +307,37 @@ class StdioGuardProxy:
 
         process.stdin.write(json.dumps(message) + "\n")
         process.stdin.flush()
-        response = self._read_response(process=process, message_id=message.get("id"))
+        response = self._read_response(
+            process=process,
+            message_id=message.get("id"),
+            output_stream=output_stream,
+        )
+        if response is None:
+            return None
         responses.append(response)
         events.append(event)
         return response
 
-    def _read_response(self, *, process: subprocess.Popen[str], message_id: Any) -> dict[str, Any]:
+    def _read_response(
+        self,
+        *,
+        process: subprocess.Popen[str],
+        message_id: Any,
+        output_stream: Any | None = None,
+    ) -> dict[str, Any] | None:
+        if message_id is None:
+            return None
         assert process.stdout is not None
         while True:
             line = process.stdout.readline()
             if not line:
                 raise RuntimeError("Guard stdio proxy did not receive a response from the MCP server.")
             response = json.loads(line)
-            if message_id is None:
-                return response
             if response.get("id") == message_id:
                 return response
+            if output_stream is not None:
+                output_stream.write(json.dumps(response, separators=(",", ":")) + "\n")
+                output_stream.flush()
 
     def _policy_path(self) -> Path:
         if self.cwd is not None:
