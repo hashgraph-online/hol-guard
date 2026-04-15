@@ -20,13 +20,14 @@
 
 | If you want to... | Install | Start with |
 | :--- | :--- | :--- |
-| protect Codex, Claude Code, Copilot CLI, Cursor, Gemini, or OpenCode before tools run | `hol-guard` | `hol-guard start` |
+| protect Codex, Claude Code, Copilot CLI, Hermes, Cursor, Gemini, or OpenCode before tools run | `hol-guard` | `hol-guard start` |
 | lint and verify packages in CI before release | `plugin-scanner` | `plugin-scanner verify .` |
 
 ## Guard Quickstart
 
 ```bash
 pipx run hol-guard bootstrap
+pipx run hol-guard hermes bootstrap
 pipx run hol-guard run codex --dry-run
 pipx run hol-guard run codex
 pipx run hol-guard approvals
@@ -51,6 +52,8 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
   Shows the next step for the harnesses Guard found.
 - `hol-guard bootstrap`
   Detects the best local harness, starts the approval center, and installs Guard in front of it.
+- `hol-guard hermes bootstrap`
+  Installs the Guard-managed Hermes overlay bundle directly.
 - `hol-guard status`
   Shows what Guard is watching now.
 - `hol-guard install <harness>`
@@ -79,6 +82,8 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
   Guard respects Cursor’s native tool approval and focuses on artifact trust before launch.
 - `opencode`
   Guard authors package-level policy while OpenCode keeps native allow or deny rules.
+- `hermes`
+  Guard installs a managed Hermes overlay bundle, routes MCP servers through Guard proxies, and prefers native-or-center delivery for blocked requests.
 - `gemini`
   Guard scans extensions and falls back to the local approval center for blocked changes.
 

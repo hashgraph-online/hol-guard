@@ -158,9 +158,10 @@ def approval_center_hint(
     harness: str,
     approval_center_url: str,
     queued: list[dict[str, object]],
+    managed_install: dict[str, object] | None = None,
 ) -> str:
     del context
-    flow = approval_prompt_flow(harness)
+    flow = approval_prompt_flow(harness, managed_install=managed_install)
     count = len(queued)
     risk_summary = _queue_risk_summary(queued)
     return (
@@ -193,9 +194,13 @@ def build_runtime_snapshot(
     }
 
 
-def approval_prompt_flow(harness: str) -> dict[str, object]:
+def approval_prompt_flow(
+    harness: str,
+    *,
+    managed_install: dict[str, object] | None = None,
+) -> dict[str, object]:
     try:
-        flow = get_adapter(harness).approval_flow()
+        flow = get_adapter(harness).approval_flow(managed_install=managed_install)
     except ValueError:
         flow = {}
     return {
