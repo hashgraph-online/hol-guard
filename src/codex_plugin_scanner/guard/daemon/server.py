@@ -433,11 +433,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if item_type is None or not isinstance(item_payload, dict):
             self._write_json({"error": "missing_required_fields"}, status=400)
             return
-        item = self.server.runtime.add_item(  # type: ignore[attr-defined]
-            operation_id=operation_id,
-            item_type=item_type,
-            payload=item_payload,
-        )
+        try:
+            item = self.server.runtime.add_item(  # type: ignore[attr-defined]
+                operation_id=operation_id,
+                item_type=item_type,
+                payload=item_payload,
+            )
+        except ValueError as error:
+            self._write_json({"error": str(error)}, status=400)
+            return
         self._write_json({"item": item})
 
     def _handle_operation_status(self, operation_id: str, payload: dict[str, object]) -> None:
@@ -446,13 +450,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "missing_required_fields"}, status=400)
             return
         request_ids = payload.get("approval_request_ids")
-        operation = self.server.runtime.update_operation_status(  # type: ignore[attr-defined]
-            operation_id=operation_id,
-            status=status,
-            approval_request_ids=[str(item) for item in request_ids if isinstance(item, str)]
-            if isinstance(request_ids, list)
-            else [],
-        )
+        try:
+            operation = self.server.runtime.update_operation_status(  # type: ignore[attr-defined]
+                operation_id=operation_id,
+                status=status,
+                approval_request_ids=[str(item) for item in request_ids if isinstance(item, str)]
+                if isinstance(request_ids, list)
+                else [],
+            )
+        except ValueError as error:
+            self._write_json({"error": str(error)}, status=400)
+            return
         self._write_json({"operation": operation})
 
     def _handle_session_resume(self, session_id: str) -> None:

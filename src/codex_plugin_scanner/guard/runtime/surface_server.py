@@ -305,6 +305,8 @@ class GuardSurfaceRuntime:
         return operation
 
     def add_item(self, *, operation_id: str, item_type: str, payload: dict[str, object]) -> dict[str, object]:
+        if self.store.get_guard_operation(operation_id) is None:
+            raise ValueError(f"Unknown guard operation: {operation_id}")
         item = self.store.add_guard_operation_item(
             item_id=uuid.uuid4().hex,
             operation_id=operation_id,

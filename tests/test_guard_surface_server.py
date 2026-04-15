@@ -134,6 +134,16 @@ class TestGuardSurfaceServer:
                 session_id="missing-session",
             )
 
+    def test_surface_runtime_rejects_unknown_operation_for_item(self, tmp_path) -> None:
+        runtime = GuardSurfaceRuntime(GuardStore(tmp_path / "guard-home"))
+
+        with pytest.raises(ValueError, match="Unknown guard operation"):
+            runtime.add_item(
+                operation_id="missing-operation",
+                item_type="approval_requested",
+                payload={"artifact_id": "codex:project:workspace_skill"},
+            )
+
     def test_guard_daemon_initializes_surface_client_and_tracks_attachments(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -448,6 +458,56 @@ class TestGuardSurfaceServer:
         assert completed_payload["operation"]["status"] == "completed"
         assert store.get_guard_operation(str(operation_payload["operation_id"]))["status"] == "completed"
 
+    def test_guard_daemon_operation_item_rejects_unknown_operation_with_json_error(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            initialize_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                data=json.dumps(
+                    {
+                        "client_name": "hol-guard-cli",
+                        "surface": "cli",
+                        "supported_protocol_versions": ["1.1"],
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(initialize_request, timeout=5) as response:
+                initialize_payload = json.loads(response.read().decode("utf-8"))
+
+            item_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/operations/missing-operation/items",
+                data=json.dumps(
+                    {
+                        "item_type": "approval_requested",
+                        "payload": {"request_ids": ["req-1"]},
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": initialize_payload["auth_token"],
+                },
+                method="POST",
+            )
+            item_error = None
+            try:
+                urllib.request.urlopen(item_request, timeout=5)
+            except urllib.error.HTTPError as error:
+                item_error = error
+        finally:
+            daemon.stop()
+
+        assert item_error is not None
+        assert item_error.code == 400
+        assert json.loads(item_error.read().decode("utf-8")) == {
+            "error": "Unknown guard operation: missing-operation",
+        }
+        assert store.list_guard_operation_items("missing-operation") == []
+
     def test_guard_daemon_operation_start_rejects_unknown_session_with_json_error(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -499,6 +559,50 @@ class TestGuardSurfaceServer:
             "error": "Unknown guard session: missing-session",
         }
         assert store.list_guard_operations(session_id="missing-session") == []
+
+    def test_guard_daemon_operation_status_rejects_unknown_operation_with_json_error(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            initialize_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                data=json.dumps(
+                    {
+                        "client_name": "hol-guard-cli",
+                        "surface": "cli",
+                        "supported_protocol_versions": ["1.1"],
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(initialize_request, timeout=5) as response:
+                initialize_payload = json.loads(response.read().decode("utf-8"))
+
+            status_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/operations/missing-operation/status",
+                data=json.dumps({"status": "completed"}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": initialize_payload["auth_token"],
+                },
+                method="POST",
+            )
+            status_error = None
+            try:
+                urllib.request.urlopen(status_request, timeout=5)
+            except urllib.error.HTTPError as error:
+                status_error = error
+        finally:
+            daemon.stop()
+
+        assert status_error is not None
+        assert status_error.code == 400
+        assert json.loads(status_error.read().decode("utf-8")) == {
+            "error": "Unknown guard operation: missing-operation",
+        }
 
     def test_guard_daemon_block_endpoint_queues_approvals_and_applies_auto_open_once(
         self, tmp_path, monkeypatch
