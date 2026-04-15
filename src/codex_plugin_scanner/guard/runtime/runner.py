@@ -579,7 +579,7 @@ def _cloud_sync_receipt_fingerprint(receipt: dict[str, object]) -> str:
 
 
 def _cloud_sync_artifact_type(artifact_id: str) -> str:
-    if artifact_id.startswith("skill:"):
+    if artifact_id.startswith("skill:") or ":skill:" in artifact_id:
         return "skill"
     return "plugin"
 
