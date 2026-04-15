@@ -355,6 +355,8 @@ def _run_consumer_scan_with_mode(
     if options is None:
         return run_consumer_scan(target, intended_harness=intended_harness)
     return run_consumer_scan(target, intended_harness=intended_harness, options=options)
+
+
 def run_guard_command(args: argparse.Namespace) -> int:
     """Execute a Guard subcommand."""
 

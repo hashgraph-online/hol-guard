@@ -124,6 +124,16 @@ class TestGuardSurfaceServer:
                 harness="codex",
             )
 
+    def test_surface_runtime_rejects_unknown_session_for_client_attachment(self, tmp_path) -> None:
+        runtime = GuardSurfaceRuntime(GuardStore(tmp_path / "guard-home"))
+
+        with pytest.raises(ValueError, match="Unknown guard session"):
+            runtime.attach_client(
+                client_id="approval-center-web",
+                surface="approval-center",
+                session_id="missing-session",
+            )
+
     def test_guard_daemon_initializes_surface_client_and_tracks_attachments(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -269,6 +279,58 @@ class TestGuardSurfaceServer:
         assert active_resume_payload["session"]["status"] == "active"
         assert active_resume_payload["operations"][0]["operation_id"] == operation_payload["operation_id"]
 
+    def test_guard_daemon_attach_rejects_unknown_session_without_persisting_attachment(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            initialize_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                data=json.dumps(
+                    {
+                        "client_name": "approval-center-web",
+                        "surface": "approval-center",
+                        "supported_protocol_versions": ["1.1"],
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(initialize_request, timeout=5) as response:
+                initialize_payload = json.loads(response.read().decode("utf-8"))
+
+            attach_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/clients/attach",
+                data=json.dumps(
+                    {
+                        "client_id": initialize_payload["client_id"],
+                        "surface": "approval-center",
+                        "session_id": "missing-session",
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": initialize_payload["auth_token"],
+                },
+                method="POST",
+            )
+            attach_error = None
+            try:
+                urllib.request.urlopen(attach_request, timeout=5)
+            except urllib.error.HTTPError as error:
+                attach_error = error
+        finally:
+            daemon.stop()
+
+        assert attach_error is not None
+        assert attach_error.code == 400
+        assert json.loads(attach_error.read().decode("utf-8")) == {
+            "attached": False,
+            "error": "Unknown guard session: missing-session",
+        }
+        assert store.list_guard_client_attachments(surface="approval-center") == []
+
     def test_guard_daemon_session_and_operation_endpoints_drive_runtime(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -385,6 +447,58 @@ class TestGuardSurfaceServer:
         assert waiting_payload["operation"]["status"] == "waiting_on_approval"
         assert completed_payload["operation"]["status"] == "completed"
         assert store.get_guard_operation(str(operation_payload["operation_id"]))["status"] == "completed"
+
+    def test_guard_daemon_operation_start_rejects_unknown_session_with_json_error(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            initialize_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                data=json.dumps(
+                    {
+                        "client_name": "hol-guard-cli",
+                        "surface": "cli",
+                        "supported_protocol_versions": ["1.1"],
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(initialize_request, timeout=5) as response:
+                initialize_payload = json.loads(response.read().decode("utf-8"))
+
+            operation_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/operations/start",
+                data=json.dumps(
+                    {
+                        "session_id": "missing-session",
+                        "operation_type": "run",
+                        "harness": "codex",
+                        "metadata": {"command": "hol-guard run codex"},
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": initialize_payload["auth_token"],
+                },
+                method="POST",
+            )
+            operation_error = None
+            try:
+                urllib.request.urlopen(operation_request, timeout=5)
+            except urllib.error.HTTPError as error:
+                operation_error = error
+        finally:
+            daemon.stop()
+
+        assert operation_error is not None
+        assert operation_error.code == 400
+        assert json.loads(operation_error.read().decode("utf-8")) == {
+            "error": "Unknown guard session: missing-session",
+        }
+        assert store.list_guard_operations(session_id="missing-session") == []
 
     def test_guard_daemon_block_endpoint_queues_approvals_and_applies_auto_open_once(
         self, tmp_path, monkeypatch

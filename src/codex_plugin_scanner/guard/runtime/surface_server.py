@@ -126,6 +126,8 @@ class GuardSurfaceRuntime:
         metadata: dict[str, object] | None = None,
         lease_seconds: int = 60,
     ) -> dict[str, object]:
+        if session_id is not None and self.store.get_guard_session(session_id) is None:
+            raise ValueError(f"Unknown guard session: {session_id}")
         attachment = self.store.attach_guard_client(
             client_id=client_id,
             surface=surface,
