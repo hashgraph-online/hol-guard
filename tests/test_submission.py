@@ -140,7 +140,44 @@ def test_find_existing_submission_issue_uses_search_api_and_exact_marker(monkeyp
     assert issue.created is False
     assert captured["method"] == "GET"
     assert "/search/issues?" in captured["url"]
+    assert "plugin-scanner-plugin-url" in captured["url"]
     assert captured["token"] == "token-123"
+
+
+def test_find_existing_submission_issue_falls_back_to_legacy_marker_search(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake_request_json(method: str, url: str, token: str, payload=None):
+        calls.append(url)
+        if len(calls) == 1:
+            return {"items": []}
+        return {
+            "items": [
+                {
+                    "number": 42,
+                    "html_url": "https://github.com/hashgraph-online/awesome-codex-plugins/issues/42",
+                    "body": (
+                        "## Plugin Submission\n"
+                        "<!-- codex-plugin-scanner-plugin-url: "
+                        "https://github.com/hashgraph-online/example-good-plugin -->\n"
+                    ),
+                }
+            ]
+        }
+
+    monkeypatch.setattr("codex_plugin_scanner.submission._request_json", fake_request_json)
+
+    issue = find_existing_submission_issue(
+        "hashgraph-online/awesome-codex-plugins",
+        "https://github.com/hashgraph-online/example-good-plugin",
+        "token-123",
+    )
+
+    assert issue is not None
+    assert issue.number == 42
+    assert len(calls) == 2
+    assert "plugin-scanner-plugin-url" in calls[0]
+    assert "codex-plugin-scanner-plugin-url" in calls[1]
 
 
 def test_create_submission_issue_retries_without_labels_on_invalid_labels(monkeypatch) -> None:

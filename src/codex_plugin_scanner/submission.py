@@ -230,31 +230,32 @@ def find_existing_submission_issue(
     """Find an existing open submission issue for the same plugin URL."""
 
     markers = (_submission_url_marker(plugin_url), _legacy_submission_url_marker(plugin_url))
-    query = urlencode(
-        {
-            "q": f'repo:{repo} is:issue is:open "{plugin_url}" in:body',
-            "per_page": "10",
-        }
-    )
-    issues = _request_json(
-        "GET",
-        f"{api_base_url.rstrip('/')}/search/issues?{query}",
-        token,
-    )
-    if not isinstance(issues, dict):
-        return None
+    for marker in markers:
+        query = urlencode(
+            {
+                "q": f'repo:{repo} is:issue is:open "{marker}" in:body',
+                "per_page": "10",
+            }
+        )
+        issues = _request_json(
+            "GET",
+            f"{api_base_url.rstrip('/')}/search/issues?{query}",
+            token,
+        )
+        if not isinstance(issues, dict):
+            return None
 
-    items = issues.get("items")
-    if not isinstance(items, list):
-        return None
+        items = issues.get("items")
+        if not isinstance(items, list):
+            return None
 
-    for issue in items:
-        if not isinstance(issue, dict):
-            continue
-        body = str(issue.get("body") or "")
-        if issue.get("pull_request") or not any(marker in body for marker in markers):
-            continue
-        return _parse_submission_issue(issue, repo=repo, created=False)
+        for issue in items:
+            if not isinstance(issue, dict):
+                continue
+            body = str(issue.get("body") or "")
+            if issue.get("pull_request") or marker not in body:
+                continue
+            return _parse_submission_issue(issue, repo=repo, created=False)
     return None
 
 
