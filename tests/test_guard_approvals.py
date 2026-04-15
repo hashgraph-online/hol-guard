@@ -131,6 +131,41 @@ class TestGuardApprovals:
         assert cleared == [guard_home]
         assert restarted == [guard_home]
 
+    def test_guard_surface_daemon_client_recovers_missing_daemon_url(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+        cleared: list[Path] = []
+        restarted: list[Path] = []
+        daemon_url_calls = {"count": 0}
+        auth_token_calls = {"count": 0}
+
+        def fake_load_daemon_url(_guard_home: Path) -> str | None:
+            daemon_url_calls["count"] += 1
+            return "http://127.0.0.1:4781" if daemon_url_calls["count"] > 1 else None
+
+        def fake_load_auth_token(_guard_home: Path) -> str | None:
+            auth_token_calls["count"] += 1
+            return "fresh-token" if auth_token_calls["count"] > 1 else None
+
+        monkeypatch.setattr(daemon_client_module, "load_guard_daemon_url", fake_load_daemon_url)
+        monkeypatch.setattr(daemon_client_module, "load_guard_daemon_auth_token", fake_load_auth_token)
+        monkeypatch.setattr(
+            daemon_client_module,
+            "clear_guard_daemon_state",
+            lambda path: cleared.append(path),
+        )
+        monkeypatch.setattr(
+            daemon_client_module,
+            "ensure_guard_daemon",
+            lambda path: restarted.append(path) or "http://127.0.0.1:4781",
+        )
+
+        client = daemon_client_module.load_guard_surface_daemon_client(guard_home)
+
+        assert client.daemon_url == "http://127.0.0.1:4781"
+        assert client.auth_token == "fresh-token"
+        assert cleared == [guard_home]
+        assert restarted == [guard_home]
+
     def test_guard_surface_daemon_client_wraps_transport_failures(self, monkeypatch):
         client = daemon_client_module.GuardSurfaceDaemonClient("http://127.0.0.1:4781", "auth-token")
 

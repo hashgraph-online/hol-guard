@@ -164,12 +164,11 @@ class GuardSurfaceDaemonClient:
 def load_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClient:
     daemon_url = load_guard_daemon_url(guard_home)
     auth_token = load_guard_daemon_auth_token(guard_home)
-    if daemon_url is None:
-        raise RuntimeError(f"Guard daemon state is incomplete for {guard_home}.")
-    if auth_token is None:
+    if daemon_url is None or auth_token is None:
         clear_guard_daemon_state(guard_home)
         daemon_url = ensure_guard_daemon(guard_home)
+        daemon_url = load_guard_daemon_url(guard_home) or daemon_url
         auth_token = load_guard_daemon_auth_token(guard_home)
-    if auth_token is None:
+    if daemon_url is None or auth_token is None:
         raise RuntimeError(f"Guard daemon state is incomplete for {guard_home}.")
     return GuardSurfaceDaemonClient(daemon_url, auth_token)
