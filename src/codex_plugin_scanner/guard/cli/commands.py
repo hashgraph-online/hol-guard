@@ -1248,6 +1248,13 @@ def _managed_manifest_server(
     return server
 
 
+def _server_headers(server: dict[str, object]) -> dict[str, str]:
+    headers = server.get("headers")
+    if not isinstance(headers, dict):
+        return {}
+    return {str(key): value for key, value in headers.items() if isinstance(key, str) and isinstance(value, str)}
+
+
 def _run_hermes_mcp_proxy(
     *,
     args: argparse.Namespace,
@@ -1287,8 +1294,8 @@ def _run_hermes_mcp_proxy(
             except json.JSONDecodeError as exc:
                 print(f"Guard Hermes MCP proxy received invalid JSON: {exc}", file=sys.stderr)
                 return 2
-            response = proxy.forward("", message)
-            print(json.dumps(response, separators=(",", ":")))
+            response = proxy.forward("", message, headers=_server_headers(server))
+            print(json.dumps(response, separators=(",", ":")), flush=True)
         return 0
     command = _server_command(server)
     if len(command) == 0:

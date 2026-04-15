@@ -40,6 +40,8 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(tmp_path: Pat
             '    args: ["-y", "@modelcontextprotocol/server-github"]\n'
             "  remote-docs:\n"
             '    url: "https://mcp.example.com/v1/mcp"\n'
+            "    headers:\n"
+            '      Authorization: "Bearer test-token"\n'
         ),
     )
     context = _ctx(tmp_path)
@@ -57,6 +59,7 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(tmp_path: Pat
     assert overlay_payload["github"]["args"][-3:] == ["--server", "yaml:github", "--stdio"]
     assert overlay_payload["remote-docs"]["command"] == str(Path(sys.executable))
     assert overlay_payload["remote-docs"]["args"][-3:] == ["--server", "yaml:remote-docs", "--stdio"]
+    assert manifest["servers"]["yaml:remote-docs"]["headers"] == {"Authorization": "Bearer test-token"}
 
 
 def test_install_overlay_skips_disabled_mcp_servers(tmp_path: Path):

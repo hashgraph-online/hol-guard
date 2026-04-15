@@ -108,6 +108,16 @@ class _LineOnlyInput:
         raise AssertionError("read() should not be used for streamed MCP proxy input")
 
 
+class _FlushTrackingOutput(io.StringIO):
+    def __init__(self) -> None:
+        super().__init__()
+        self.flush_count = 0
+
+    def flush(self) -> None:
+        self.flush_count += 1
+        super().flush()
+
+
 class TestGuardRuntime:
     def test_guard_store_initializes_runtime_tables_and_receipt_columns(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -966,6 +976,55 @@ class TestGuardRuntime:
 
         assert rc == 2
         assert "invalid JSON" in output.err
+
+    def test_hermes_mcp_proxy_forwards_remote_headers_and_flushes_stdout(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+        store = GuardStore(guard_home)
+        store.set_managed_install(
+            "hermes",
+            True,
+            None,
+            {
+                "servers": {
+                    "yaml:demo": {
+                        "transport": "http",
+                        "url": "https://mcp.example.com/v1/mcp",
+                        "headers": {"Authorization": "Bearer test-token"},
+                    }
+                }
+            },
+            "2026-04-15T00:00:00+00:00",
+        )
+        captured_headers: list[dict[str, str]] = []
+        output_stream = _FlushTrackingOutput()
+
+        class _FakeRemoteProxy:
+            def __init__(self, *, base_url: str, allow_insecure_localhost: bool = False) -> None:
+                self.base_url = base_url
+                self.allow_insecure_localhost = allow_insecure_localhost
+
+            def forward(
+                self, path: str, payload: dict[str, object], headers: dict[str, str] | None = None
+            ) -> dict[str, object]:
+                captured_headers.append(headers or {})
+                return {"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}
+
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(guard_commands_module, "RemoteGuardProxy", _FakeRemoteProxy)
+        monkeypatch.setattr(sys, "stdin", io.StringIO('{"jsonrpc":"2.0","id":9,"method":"tools/list"}\n'))
+        monkeypatch.setattr(sys, "stdout", output_stream)
+
+        rc = guard_commands_module._run_hermes_mcp_proxy(
+            args=argparse.Namespace(server="yaml:demo"),
+            context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
+            store=store,
+            config=load_guard_config(guard_home),
+        )
+
+        assert rc == 0
+        assert captured_headers == [{"Authorization": "Bearer test-token"}]
+        assert '"id":9' in output_stream.getvalue()
+        assert output_stream.flush_count >= 1
 
     def test_guard_run_dry_run_human_output_is_summary_first(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

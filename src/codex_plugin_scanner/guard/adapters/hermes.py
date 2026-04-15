@@ -973,6 +973,7 @@ def _manifest_servers(source_configs: dict[str, dict[str, object]]) -> dict[str,
     servers: dict[str, dict[str, object]] = {}
     for server_key, server in source_configs.items():
         args = server.get("args")
+        headers = server.get("headers")
         servers[server_key] = {
             "name": str(server.get("name") or server_key),
             "source": str(server.get("source") or "unknown"),
@@ -981,6 +982,11 @@ def _manifest_servers(source_configs: dict[str, dict[str, object]]) -> dict[str,
             "command": server.get("command") if isinstance(server.get("command"), str) else None,
             "args": [str(value) for value in args if isinstance(value, str)] if isinstance(args, list) else [],
             "url": server.get("url") if isinstance(server.get("url"), str) else None,
+            "headers": (
+                {str(key): value for key, value in headers.items() if isinstance(key, str) and isinstance(value, str)}
+                if isinstance(headers, dict)
+                else {}
+            ),
         }
     return servers
 
