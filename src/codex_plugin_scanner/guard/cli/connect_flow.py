@@ -73,7 +73,7 @@ def resolve_connect_url(connect_url: str) -> tuple[str, str]:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("Guard connect URL must be an absolute http(s) URL.")
     path = parsed.path or "/guard/connect"
-    normalized_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
+    normalized_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, ""))
     allowed_origin = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
     return normalized_url, allowed_origin
 

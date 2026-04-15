@@ -2480,6 +2480,48 @@ args = ["workspace-skill.js", "--changed"]
         assert payload["status"] == "waiting_for_browser"
         assert query["guardDaemon"] == ["http://127.0.0.1:4781"]
 
+    def test_guard_connect_preserves_custom_connect_query_params(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+        opened_urls: list[str] = []
+
+        class FakeDaemonClient:
+            daemon_url = "http://127.0.0.1:4781"
+
+            def create_connect_request(self, *, sync_url: str, allowed_origin: str) -> dict[str, object]:
+                return {
+                    "request_id": "req-123",
+                    "pairing_secret": "pair-secret",
+                    "sync_url": sync_url,
+                    "allowed_origin": allowed_origin,
+                }
+
+        monkeypatch.setattr(
+            guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "load_guard_surface_daemon_client",
+            lambda guard_home: FakeDaemonClient(),
+        )
+        monkeypatch.setattr(guard_connect_flow_module, "wait_for_connect_completion", lambda **kwargs: None)
+
+        payload = guard_connect_flow_module.run_guard_connect_command(
+            guard_home=tmp_path / "guard-home",
+            store=store,
+            sync_url="https://hol.org/registry/api/v1",
+            connect_url="https://hol.org/guard/connect?tenant=enterprise&invite=abc123",
+            opener=lambda url: opened_urls.append(url) or True,
+            wait_timeout_seconds=1,
+        )
+
+        parsed = urllib.parse.urlparse(opened_urls[0])
+        query = urllib.parse.parse_qs(parsed.query)
+        assert payload["status"] == "waiting_for_browser"
+        assert query["tenant"] == ["enterprise"]
+        assert query["invite"] == ["abc123"]
+        assert query["guardPairRequest"] == ["req-123"]
+        assert query["guardDaemon"] == ["http://127.0.0.1:4781"]
+
     def test_guard_connect_wraps_sync_transport_failures(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
 
