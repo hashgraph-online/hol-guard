@@ -13,7 +13,7 @@ from ..daemon import load_guard_daemon_url
 from ..models import HarnessDetection
 from ..store import GuardStore
 
-HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "cursor", "antigravity", "gemini", "opencode")
+HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "hermes", "cursor", "antigravity", "gemini", "opencode")
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
 GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
@@ -104,8 +104,8 @@ def _summarize_harness(
     config: GuardConfig,
 ) -> dict[str, object]:
     evaluation = evaluate_detection(detection, store, config, default_action="allow", persist=False)
-    approval_flow = get_adapter(detection.harness).approval_flow()
     managed_install = store.get_managed_install(detection.harness)
+    approval_flow = get_adapter(detection.harness).approval_flow(managed_install=managed_install)
     review_count = sum(1 for artifact in evaluation["artifacts"] if bool(artifact["changed"]))
     managed = bool(managed_install and managed_install.get("active"))
     shim_path = None
@@ -165,7 +165,7 @@ def _build_next_steps(recommended: dict[str, object] | None, payload: dict[str, 
                 "command": f"{GUARD_COMMAND} detect",
                 "detail": (
                     "Guard did not find a local harness config yet. Start by installing "
-                    "Codex, Claude Code, Copilot CLI, Cursor, Antigravity, Gemini, or OpenCode."
+                    "Codex, Claude Code, Copilot CLI, Hermes, Cursor, Antigravity, Gemini, or OpenCode."
                 ),
             }
         ]

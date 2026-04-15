@@ -331,6 +331,62 @@ def test_guard_run_merges_existing_opencode_config_content(monkeypatch, tmp_path
     assert overlay_payload["permission"]["skill"]["*"] == "ask"
 
 
+def test_guard_run_launches_hermes_with_guard_overlay_paths(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        home_dir / ".hermes" / "config.yaml",
+        'mcp_servers:\n  github:\n    command: "npx"\n    args: ["-y", "@modelcontextprotocol/server-github"]\n',
+    )
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
+    captured_env: dict[str, str] = {}
+    captured_command: list[str] = []
+
+    def _fake_run(command, cwd=None, check=False, env=None):
+        del cwd, check
+        captured_command.extend(command)
+        captured_env.update(env or {})
+        return _CompletedProcess(0)
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "hermes",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "hermes",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--arg=chat",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert install_rc == 0
+    assert rc == 0
+    assert output["launched"] is True
+    assert captured_command == ["hermes", "chat"]
+    assert captured_env["HOME"] == str(home_dir)
+    assert captured_env["HERMES_GUARD_MCP_OVERLAY_PATH"].endswith("mcp-overlay.json")
+    assert captured_env["HERMES_GUARD_PRETOOL_PATH"].endswith("pretool-hook.json")
+
+
 def test_guard_run_opencode_prompt_request_uses_opencode_policy_path(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

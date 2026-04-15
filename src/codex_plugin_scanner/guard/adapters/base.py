@@ -181,7 +181,8 @@ class HarnessAdapter:
             warnings.append(f"{self.executable} diagnostics timed out before Guard could confirm runtime state.")
         return warnings
 
-    def approval_flow(self) -> dict[str, object]:
+    def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
+        del managed_install
         return {
             "tier": self.approval_tier,
             "summary": self.approval_summary,
