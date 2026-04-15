@@ -53,6 +53,18 @@ def test_resolve_guard_home_prefers_legacy_credentials_over_empty_canonical_data
     assert resolve_guard_home() == legacy_home
 
 
+def test_resolve_guard_home_keeps_canonical_state_when_legacy_only_has_credentials(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    canonical_home = home_dir / ".hol-guard"
+    legacy_home = home_dir / ".ai-plugin-scanner-guard"
+    _write_text(canonical_home / "guard.db", "sqlite placeholder")
+    legacy_store = GuardStore(legacy_home)
+    legacy_store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "legacy-token", "2026-04-15T00:00:00Z")
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+
+    assert resolve_guard_home() == canonical_home
+
+
 def test_load_guard_config_prefers_hol_guard_workspace_override(tmp_path):
     guard_home = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
