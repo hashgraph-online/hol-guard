@@ -15,7 +15,7 @@ def build_plain_text(result: ScanResult) -> str:
     if getattr(result, "scope", "plugin") == "repository":
         trust_total = result.trust_report.total if getattr(result, "trust_report", None) else 0.0
         lines = [
-            f"🔗 Codex Plugin Scanner v{__version__}",
+            f"🔗 Plugin Scanner v{__version__}",
             f"Scanning repository: {result.plugin_dir}",
             f"Marketplace: {result.marketplace_file or 'not found'}",
             f"Local plugins scanned: {len(result.plugin_results)}",
@@ -37,7 +37,7 @@ def build_plain_text(result: ScanResult) -> str:
     else:
         trust_total = result.trust_report.total if getattr(result, "trust_report", None) else 0.0
         lines = [
-            f"🔗 Codex Plugin Scanner v{__version__}",
+            f"🔗 Plugin Scanner v{__version__}",
             f"Scanning: {result.plugin_dir}",
             f"Trust: {trust_total}/100",
             "",

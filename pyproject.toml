@@ -52,7 +52,6 @@ publish = [
 hol-guard = "codex_plugin_scanner.cli:main"
 plugin-scanner = "codex_plugin_scanner.cli:main"
 plugin-guard = "codex_plugin_scanner.cli:main"
-codex-plugin-scanner = "codex_plugin_scanner.cli:main"
 plugin-ecosystem-scanner = "codex_plugin_scanner.cli:main"
 
 [project.urls]
