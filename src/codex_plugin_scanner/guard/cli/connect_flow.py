@@ -14,6 +14,11 @@ from ..store import GuardStore
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
+_PLAN_LIMITED_SYNC_PHRASES = (
+    "paid guard plan",
+    "guard plan required",
+    "guard plan upgrade",
+)
 
 
 def run_guard_connect_command(
@@ -93,8 +98,14 @@ def resolve_connect_url(connect_url: str) -> tuple[str, str]:
 
 
 def _is_plan_limited_sync_error(message: str) -> bool:
+    """Match the stable plan-limit phrases returned by Guard Cloud sync today."""
+
     normalized = message.strip().lower()
-    return "guard cloud sync requires a paid guard plan" in normalized
+    has_guard_sync_context = "guard" in normalized and "sync" in normalized
+    has_plan_limit_phrase = any(phrase in normalized for phrase in _PLAN_LIMITED_SYNC_PHRASES)
+    return has_guard_sync_context and (
+        has_plan_limit_phrase or ("guard plan" in normalized and "upgrade" in normalized)
+    )
 
 
 def build_guard_connect_browser_url(

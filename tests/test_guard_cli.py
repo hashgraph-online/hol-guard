@@ -2619,6 +2619,52 @@ args = ["workspace-skill.js", "--changed"]
         assert payload["status"] == "paired_without_cloud_sync"
         assert payload["sync_message"] == "Guard Cloud sync requires a paid Guard plan"
 
+    def test_guard_connect_reports_guard_plan_upgrade_variants_without_failing_pairing(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+
+        class FakeDaemonClient:
+            daemon_url = "http://127.0.0.1:4781"
+
+            def create_connect_request(self, *, sync_url: str, allowed_origin: str) -> dict[str, object]:
+                return {
+                    "request_id": "req-124",
+                    "pairing_secret": "pair-secret",
+                    "sync_url": sync_url,
+                    "allowed_origin": allowed_origin,
+                }
+
+        monkeypatch.setattr(
+            guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "load_guard_surface_daemon_client",
+            lambda guard_home: FakeDaemonClient(),
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "wait_for_connect_completion",
+            lambda **kwargs: {"status": "completed", "request_id": "req-124", "completed_at": "2026-04-15T00:00:00Z"},
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "sync_receipts",
+            lambda current_store: (_ for _ in ()).throw(RuntimeError("Upgrade your Guard plan to keep Guard sync on.")),
+        )
+
+        payload = guard_connect_flow_module.run_guard_connect_command(
+            guard_home=tmp_path / "guard-home",
+            store=store,
+            sync_url="https://hol.org/api/guard/receipts/sync",
+            connect_url="https://hol.org/guard/connect",
+            opener=lambda url: True,
+            wait_timeout_seconds=1,
+        )
+
+        assert payload["connected"] is True
+        assert payload["status"] == "paired_without_cloud_sync"
+        assert payload["sync_message"] == "Upgrade your Guard plan to keep Guard sync on."
+
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

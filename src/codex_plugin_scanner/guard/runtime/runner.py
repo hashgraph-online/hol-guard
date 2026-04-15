@@ -532,14 +532,20 @@ def _cloud_sync_receipt_payload(
     device_id: str,
     device_name: str,
 ) -> dict[str, object]:
-    artifact_id = _optional_string(receipt.get("artifact_id")) or "unknown"
+    receipt_fingerprint = _cloud_sync_receipt_fingerprint(receipt)
+    artifact_id = _optional_string(receipt.get("artifact_id")) or f"guard:local-receipt:{receipt_fingerprint[:24]}"
     artifact_name = _optional_string(receipt.get("artifact_name")) or artifact_id
     policy_decision = _optional_string(receipt.get("policy_decision")) or "review"
     changed_capabilities = [str(item) for item in receipt.get("changed_capabilities", []) if isinstance(item, str)]
     capabilities_summary = _optional_string(receipt.get("capabilities_summary"))
-    capabilities = changed_capabilities or ([capabilities_summary] if capabilities_summary is not None else [])
+    if changed_capabilities:
+        capabilities = changed_capabilities
+    elif capabilities_summary is not None:
+        capabilities = [capabilities_summary]
+    else:
+        capabilities = []
     payload: dict[str, object] = {
-        "receiptId": _optional_string(receipt.get("receipt_id")) or artifact_id,
+        "receiptId": _optional_string(receipt.get("receipt_id")) or f"guard-receipt-{receipt_fingerprint}",
         "artifactId": artifact_id,
         "artifactName": artifact_name,
         "artifactType": _cloud_sync_artifact_type(artifact_id),
@@ -563,6 +569,11 @@ def _cloud_sync_receipt_payload(
     if publisher is not None:
         payload["publisher"] = publisher
     return payload
+
+
+def _cloud_sync_receipt_fingerprint(receipt: dict[str, object]) -> str:
+    encoded_receipt = json.dumps(receipt, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded_receipt.encode("utf-8")).hexdigest()
 
 
 def _cloud_sync_artifact_type(artifact_id: str) -> str:
