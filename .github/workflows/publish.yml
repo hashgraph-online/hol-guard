@@ -141,29 +141,6 @@ jobs:
           PY
           uv run --no-sync python -m build
           mv pyproject.toml.bak pyproject.toml
-      - name: Build codex compatibility alias (codex-plugin-scanner)
-        run: |
-          cp pyproject.toml pyproject.toml.bak
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("pyproject.toml")
-          text = path.read_text(encoding="utf-8")
-          text = text.replace('name = "hol-guard"', 'name = "codex-plugin-scanner"', 1)
-          text = text.replace(
-              'description = "Protect local AI harnesses with HOL Guard and run scanner checks for Codex, Claude, Cursor, Gemini, and OpenCode."',
-              'description = "Compatibility alias for teams still pinned to the codex-plugin-scanner package name."',
-              1,
-          )
-          start = text.index("[project.scripts]")
-          end = text.index("\n\n[project.urls]")
-          scripts = "[project.scripts]\n" \
-              'codex-plugin-scanner = "codex_plugin_scanner.cli:main"'
-          text = text[:start] + scripts + text[end:]
-          path.write_text(text, encoding="utf-8")
-          PY
-          uv run --no-sync python -m build
-          mv pyproject.toml.bak pyproject.toml
       - name: Verify distributions
         run: uv run --no-sync twine check dist/*
       - name: Upload artifacts
@@ -264,10 +241,6 @@ jobs:
 
           \`\`\`bash
           uv tool install plugin-scanner==${VERSION}
-          \`\`\`
-
-          \`\`\`bash
-          uv tool install codex-plugin-scanner==${VERSION}
           \`\`\`
 
           Full Cisco coverage on Python 3.11+:

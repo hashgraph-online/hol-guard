@@ -1,4 +1,4 @@
-"""Codex Plugin Scanner - types and data classes."""
+"""Plugin Scanner types and data classes."""
 
 from __future__ import annotations
 

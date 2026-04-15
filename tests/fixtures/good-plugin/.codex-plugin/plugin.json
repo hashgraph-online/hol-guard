@@ -6,8 +6,8 @@
     "name": "Hashgraph Online",
     "email": "dev@hol.org"
   },
-  "homepage": "https://github.com/hashgraph-online/codex-plugin-scanner",
-  "repository": "https://github.com/hashgraph-online/codex-plugin-scanner",
+  "homepage": "https://github.com/hashgraph-online/ai-plugin-scanner",
+  "repository": "https://github.com/hashgraph-online/ai-plugin-scanner",
   "license": "Apache-2.0",
   "keywords": ["codex", "plugin", "security"],
   "interface": {
@@ -18,7 +18,7 @@
     "developerName": "Hashgraph Online",
     "category": "Developer Tools",
     "capabilities": ["Read", "Write"],
-    "websiteURL": "https://github.com/hashgraph-online/codex-plugin-scanner",
+    "websiteURL": "https://github.com/hashgraph-online/ai-plugin-scanner",
     "privacyPolicyURL": "https://example.com/privacy",
     "termsOfServiceURL": "https://example.com/terms",
     "defaultPrompt": [

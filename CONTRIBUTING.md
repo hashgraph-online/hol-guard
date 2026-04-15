@@ -6,7 +6,6 @@ This repository ships:
 
 - `hol-guard` for local harness protection
 - `plugin-scanner` for CI and maintainer checks across supported AI plugin ecosystems
-- `codex-plugin-scanner` as a compatibility package alias
 
 ## Before You Start
 

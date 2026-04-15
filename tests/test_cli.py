@@ -67,7 +67,7 @@ class TestFormatText:
     def test_contains_header(self):
         result = scan_plugin(FIXTURES / "good-plugin")
         output = format_text(result)
-        assert "Codex Plugin Scanner" in output
+        assert "Plugin Scanner" in output
         assert f"{result.score}/100" in output
         assert "Excellent" in output
 
@@ -105,6 +105,11 @@ class TestFormatText:
 
 
 class TestMain:
+    def test_scanner_program_detection_excludes_retired_codex_alias(self):
+        assert cli_module._is_scanner_program("plugin-scanner") is True
+        assert cli_module._is_scanner_program("plugin-ecosystem-scanner") is True
+        assert cli_module._is_scanner_program("codex-plugin-scanner") is False
+
     def test_parser_accepts_cisco_mcp_scan(self):
         parser = cli_module._build_parser("plugin-scanner", program_mode="scanner")
         args = parser.parse_args(["scan", str(FIXTURES / "good-plugin"), "--cisco-mcp-scan", "on"])

@@ -15,7 +15,7 @@ CATEGORY_WEIGHTS: dict[str, int] = {
     "code-quality": 10,
 }
 
-_DOC_ROOT = "https://github.com/hashgraph-online/codex-plugin-scanner/blob/main/docs/rules"
+_DOC_ROOT = "https://github.com/hashgraph-online/ai-plugin-scanner/blob/main/docs/rules"
 
 
 def _rule(
