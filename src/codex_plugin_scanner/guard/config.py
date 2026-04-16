@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import sqlite3
+import tempfile
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -30,6 +31,10 @@ GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
+
+
+class GuardHomeMigrationError(RuntimeError):
+    """Raised when legacy Guard state cannot be migrated safely."""
 
 
 def _coerce_action_map(payload: object) -> dict[str, GuardAction]:
@@ -101,7 +106,10 @@ def resolve_guard_home(override: str | None = None) -> Path:
     if _guard_home_has_state(canonical_home):
         return canonical_home
     if _guard_home_has_sync_credentials(legacy_home) or _guard_home_has_state(legacy_home):
-        _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
+        try:
+            _migrate_guard_home_transactionally(source=legacy_home, destination=canonical_home)
+        except GuardHomeMigrationError:
+            return legacy_home
         return canonical_home
     return canonical_home
 
@@ -224,6 +232,18 @@ def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
         shutil.copy2(entry, target)
 
 
+def _migrate_guard_home_transactionally(*, source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=destination.parent, prefix=f"{destination.name}-migration-") as temp_dir:
+        staging_root = Path(temp_dir)
+        _migrate_guard_home_state(source=source, destination=staging_root)
+        if destination.exists():
+            for entry in staging_root.iterdir():
+                shutil.move(str(entry), destination / entry.name)
+            return
+        shutil.move(str(staging_root), str(destination))
+
+
 def _copy_guard_database(*, source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_destination = destination.with_name(f"{destination.name}.migrating")
@@ -243,6 +263,7 @@ def _copy_guard_database(*, source: Path, destination: Path) -> None:
     except (TimeoutError, sqlite3.Error):
         if temporary_destination.exists():
             temporary_destination.unlink()
+        raise GuardHomeMigrationError("guard.db migration failed") from None
 
 
 def _raise_when_backup_deadline_elapsed(deadline: float) -> None:

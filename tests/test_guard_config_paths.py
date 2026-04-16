@@ -8,6 +8,7 @@ from pathlib import Path
 from codex_plugin_scanner.guard import bridge as bridge_module
 from codex_plugin_scanner.guard import config as guard_config_module
 from codex_plugin_scanner.guard.config import (
+    GuardHomeMigrationError,
     _copy_guard_database,
     _migrate_guard_home_state,
     load_guard_config,
@@ -145,7 +146,11 @@ def test_copy_guard_database_does_not_fallback_to_raw_copy_on_sqlite_error(tmp_p
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("raw copy fallback should not run")),
     )
 
-    _copy_guard_database(source=source, destination=destination)
+    try:
+        _copy_guard_database(source=source, destination=destination)
+        raise AssertionError("expected GuardHomeMigrationError")
+    except GuardHomeMigrationError:
+        pass
 
     assert not destination.exists()
 
@@ -175,9 +180,30 @@ def test_copy_guard_database_aborts_when_backup_deadline_elapses(tmp_path, monke
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("raw copy fallback should not run")),
     )
 
-    _copy_guard_database(source=source, destination=destination)
+    try:
+        _copy_guard_database(source=source, destination=destination)
+        raise AssertionError("expected GuardHomeMigrationError")
+    except GuardHomeMigrationError:
+        pass
 
     assert not destination.exists()
+
+
+def test_resolve_guard_home_falls_back_to_legacy_home_when_database_migration_fails(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    canonical_home = home_dir / ".hol-guard"
+    legacy_home = home_dir / ".ai-plugin-scanner-guard"
+    _write_text(legacy_home / "guard.db", "legacy-db")
+    _write_text(legacy_home / "config.toml", 'default_action = "warn"\n')
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+
+    def _fail_copy(*, source: Path, destination: Path) -> None:
+        raise GuardHomeMigrationError("guard.db migration failed")
+
+    monkeypatch.setattr(guard_config_module, "_copy_guard_database", _fail_copy)
+
+    assert resolve_guard_home() == legacy_home
+    assert not canonical_home.exists()
 
 
 def test_resolve_guard_home_keeps_canonical_state_when_legacy_only_has_credentials(tmp_path, monkeypatch):
