@@ -81,39 +81,22 @@ def run_guard_connect_command(
             connected=False,
         )
     runtime_session = _start_guard_runtime_session(daemon_client)
+    runtime_sync_error: str | None = None
     try:
         runtime_sync_summary = sync_runtime_session(store, session=runtime_session)
     except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
-        sync_message = str(error)
-        pending_sync = {
+        runtime_sync_error = str(error)
+        runtime_sync_summary = {
             "runtime_session_id": str(runtime_session.get("session_id") or runtime_session.get("sessionId") or ""),
             "runtime_session_synced_at": None,
             "runtime_sessions_visible": 0,
             "runtime_session_sync_pending": True,
-            "runtime_session_sync_reason": sync_message,
+            "runtime_session_sync_reason": runtime_sync_error,
         }
-        pending_state = _record_connect_result(
-            daemon_client=daemon_client,
-            store=store,
-            request_id=str(connect_request["request_id"]),
-            status="connected",
-            milestone="first_sync_pending",
-            reason=sync_message,
-            sync=pending_sync,
-        )
-        return build_connect_payload(
-            state=pending_state,
-            browser_opened=browser_opened,
-            connect_url=browser_url,
-            sync_url=sync_url,
-            connected=True,
-            sync=pending_sync,
-            sync_message=sync_message,
-        )
     try:
         sync_payload = sync_receipts(store)
     except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
-        sync_message = str(error)
+        sync_message = runtime_sync_error or str(error)
         pending_state = _record_connect_result(
             daemon_client=daemon_client,
             store=store,
@@ -129,11 +112,33 @@ def run_guard_connect_command(
             connect_url=browser_url,
             sync_url=sync_url,
             connected=True,
+            sync=runtime_sync_summary,
             sync_message=sync_message,
         )
     sync_payload["runtime_session_synced_at"] = runtime_sync_summary["runtime_session_synced_at"]
     sync_payload["runtime_session_id"] = runtime_sync_summary["runtime_session_id"]
     sync_payload["runtime_sessions_visible"] = runtime_sync_summary["runtime_sessions_visible"]
+    if runtime_sync_error is not None:
+        sync_payload["runtime_session_sync_pending"] = True
+        sync_payload["runtime_session_sync_reason"] = runtime_sync_error
+        pending_state = _record_connect_result(
+            daemon_client=daemon_client,
+            store=store,
+            request_id=str(connect_request["request_id"]),
+            status="connected",
+            milestone="first_sync_pending",
+            reason=runtime_sync_error,
+            sync=sync_payload,
+        )
+        return build_connect_payload(
+            state=pending_state,
+            browser_opened=browser_opened,
+            connect_url=browser_url,
+            sync_url=sync_url,
+            connected=True,
+            sync=sync_payload,
+            sync_message=runtime_sync_error,
+        )
     final_state = _record_connect_result(
         daemon_client=daemon_client,
         store=store,

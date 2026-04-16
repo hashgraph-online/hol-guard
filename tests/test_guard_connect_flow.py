@@ -209,9 +209,19 @@ def test_guard_connect_keeps_pairing_when_runtime_sync_fails(
         threading.Thread(target=complete_pairing, daemon=True).start()
         return True
 
+    sync_receipts_calls: list[bool] = []
+
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.connect_flow.sync_runtime_session",
         lambda current_store, *, session: (_ for _ in ()).throw(RuntimeError("runtime_sync_unreachable")),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.sync_receipts",
+        lambda current_store: sync_receipts_calls.append(True) or {
+            "synced_at": "2026-04-15T00:00:02Z",
+            "receipts_stored": 0,
+            "inventory_tracked": 0,
+        },
     )
 
     try:
@@ -236,6 +246,7 @@ def test_guard_connect_keeps_pairing_when_runtime_sync_fails(
     assert payload["sync"]["runtime_session_synced_at"] is None
     assert payload["sync"]["runtime_sessions_visible"] == 0
     assert payload["sync"]["runtime_session_id"]
+    assert sync_receipts_calls == [True]
 
 
 def test_guard_store_backfills_missing_connect_state_on_pairing_completion(tmp_path) -> None:
