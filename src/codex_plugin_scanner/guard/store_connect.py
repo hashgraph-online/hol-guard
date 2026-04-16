@@ -245,7 +245,8 @@ def mark_connect_pairing_completed(
     connection.execute(
         """
         update guard_connect_states
-        set milestone = 'first_sync_pending',
+        set status = 'connected',
+            milestone = 'first_sync_pending',
             reason = 'waiting_for_first_sync',
             updated_at = ?,
             completed_at = ?,
