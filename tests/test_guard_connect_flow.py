@@ -179,3 +179,29 @@ def test_guard_store_backfills_missing_connect_state_on_pairing_completion(tmp_p
     assert completed_state["status"] == "waiting"
     assert completed_state["milestone"] == "first_sync_pending"
     assert completed_state["proof"]["pairing_completed_at"] == "2026-04-15T00:00:01+00:00"
+
+
+def test_guard_store_keeps_first_sync_pending_state_after_request_expiry(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    created_request = store.create_guard_connect_request(
+        sync_url="https://hol.org/registry/api/v1",
+        allowed_origin="https://hol.org",
+        now="2026-04-15T00:00:00+00:00",
+        lifetime_seconds=60,
+    )
+    store.complete_guard_connect_request(
+        request_id=str(created_request["request_id"]),
+        pairing_secret=str(created_request["pairing_secret"]),
+        token="session-token-123",
+        now="2026-04-15T00:00:30+00:00",
+    )
+
+    pending_state = store.get_guard_connect_state(
+        str(created_request["request_id"]),
+        now="2026-04-15T00:05:00+00:00",
+    )
+
+    assert pending_state is not None
+    assert pending_state["status"] == "waiting"
+    assert pending_state["milestone"] == "first_sync_pending"
+    assert pending_state["reason"] == "waiting_for_first_sync"

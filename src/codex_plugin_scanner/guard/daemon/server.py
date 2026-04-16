@@ -53,6 +53,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
         parsed = urlparse(self.path)
+        self._touch_runtime_heartbeat(parsed.path)
         path_parts = [part for part in parsed.path.split("/") if part]
         if parsed.path == "/healthz":
             self._write_json(
@@ -166,6 +167,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        self._touch_runtime_heartbeat(parsed.path)
         if parsed.path != "/v1/connect/complete" and not self._origin_is_allowed():
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
@@ -603,6 +605,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _header_token_is_valid(self) -> bool:
         return self.headers.get("X-Guard-Token") == self.server.auth_token  # type: ignore[attr-defined]
+
+    def _touch_runtime_heartbeat(self, path: str) -> None:
+        if path != "/healthz" and not path.startswith("/v1/"):
+            return
+        runtime_state = self.server.store.get_runtime_state()  # type: ignore[attr-defined]
+        if runtime_state is None:
+            return
+        self.server.store.touch_runtime_state(  # type: ignore[attr-defined]
+            session_id=str(runtime_state["session_id"]),
+            last_heartbeat_at=_now(),
+        )
 
     @staticmethod
     def _optional_int(value: object) -> int | None:

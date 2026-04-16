@@ -176,7 +176,7 @@ def load_connect_state(
     if row is None:
         return None
     payload = _build_connect_state_payload(row)
-    if now is not None and payload["status"] == "waiting":
+    if now is not None and payload["status"] == "waiting" and payload["milestone"] == "waiting_for_browser":
         expires_at = _parse_timestamp(str(payload["expires_at"]))
         if expires_at <= _parse_timestamp(now):
             connection.execute(
