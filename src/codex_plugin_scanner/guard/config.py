@@ -16,6 +16,7 @@ from .models import GuardAction, GuardMode
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
 LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner-guard", ".holguard")
+NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset({"daemon-state.json"})
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
@@ -194,6 +195,8 @@ def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     replace_database = not _guard_home_has_sync_credentials(destination) and not _guard_home_has_state(destination)
     for entry in source.iterdir():
+        if entry.name in NON_MIGRATED_GUARD_RUNTIME_FILES:
+            continue
         target = destination / entry.name
         if target.exists():
             if entry.is_dir() and target.is_dir():

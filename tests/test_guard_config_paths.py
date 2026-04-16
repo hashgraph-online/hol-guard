@@ -71,6 +71,18 @@ def test_migrate_guard_home_state_merges_nested_legacy_directories(tmp_path):
     assert (canonical_home / "bin" / "legacy.txt").read_text(encoding="utf-8") == "legacy"
 
 
+def test_migrate_guard_home_state_skips_legacy_daemon_runtime_state(tmp_path):
+    canonical_home = tmp_path / ".hol-guard"
+    legacy_home = tmp_path / ".ai-plugin-scanner-guard"
+    _write_text(legacy_home / "daemon-state.json", '{"port": 1, "auth_token": "legacy"}')
+    _write_text(legacy_home / "config.toml", 'default_action = "warn"\n')
+
+    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
+
+    assert not (canonical_home / "daemon-state.json").exists()
+    assert (canonical_home / "config.toml").read_text(encoding="utf-8") == 'default_action = "warn"\n'
+
+
 def test_resolve_guard_home_keeps_canonical_state_when_legacy_only_has_credentials(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     canonical_home = home_dir / ".hol-guard"
