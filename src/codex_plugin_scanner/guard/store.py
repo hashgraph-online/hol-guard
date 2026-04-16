@@ -38,13 +38,30 @@ from .store_connect import (
 )
 from .store_connect import (
     connect_request_schema_statement,
+    connect_state_schema_statement,
     hash_pairing_secret,
+    verify_connect_request_access,
 )
 from .store_connect import (
     create_connect_request as persist_connect_request,
 )
 from .store_connect import (
+    create_connect_state as persist_connect_state,
+)
+from .store_connect import (
     get_connect_request as load_connect_request,
+)
+from .store_connect import (
+    get_connect_state as load_connect_state,
+)
+from .store_connect import (
+    get_latest_connect_state as load_latest_connect_state,
+)
+from .store_connect import (
+    mark_connect_pairing_completed as persist_connect_pairing_completed,
+)
+from .store_connect import (
+    mark_connect_result as persist_connect_result,
 )
 
 
@@ -264,6 +281,7 @@ class GuardStore:
               primary key (surface, open_key)
             )
             """,
+            connect_state_schema_statement(),
             connect_request_schema_statement(),
             approval_schema_statement(),
         )
@@ -1273,11 +1291,33 @@ class GuardStore:
                 created_at=str(payload["created_at"]),
                 expires_at=str(payload["expires_at"]),
             )
+            persist_connect_state(
+                connection,
+                request_id=request_id,
+                sync_url=sync_url,
+                allowed_origin=allowed_origin,
+                created_at=str(payload["created_at"]),
+                expires_at=str(payload["expires_at"]),
+                updated_at=now,
+            )
         return {**payload, "pairing_secret": pairing_secret}
 
     def get_guard_connect_request(self, request_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
             return load_connect_request(connection, request_id)
+
+    def get_guard_connect_state(
+        self,
+        request_id: str,
+        *,
+        now: str,
+    ) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return load_connect_state(connection, request_id, now=now)
+
+    def get_latest_guard_connect_state(self, *, now: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return load_latest_connect_state(connection, now=now)
 
     def complete_guard_connect_request(
         self,
@@ -1294,6 +1334,16 @@ class GuardStore:
                 pairing_secret=pairing_secret,
                 completed_at=now,
             )
+            if load_connect_state(connection, request_id, now=now) is None:
+                persist_connect_state(
+                    connection,
+                    request_id=request_id,
+                    sync_url=str(request["sync_url"]),
+                    allowed_origin=str(request["allowed_origin"]),
+                    created_at=str(request["created_at"]),
+                    expires_at=str(request["expires_at"]),
+                    updated_at=now,
+                )
             self._set_sync_credentials_in_connection(connection, str(request["sync_url"]), token, now)
             connection.execute(
                 """
@@ -1301,6 +1351,11 @@ class GuardStore:
                 values (?, ?, ?)
                 """,
                 ("sign_in", json.dumps({"sync_url": request["sync_url"], "source": "browser-connect"}), now),
+            )
+            persist_connect_pairing_completed(
+                connection,
+                request_id=request_id,
+                completed_at=now,
             )
         return request
 
@@ -1335,6 +1390,40 @@ class GuardStore:
             connection.execute("delete from sync_state where state_key != 'credentials'")
             connection.execute("delete from publisher_cache")
             connection.execute("delete from policy_decisions where source in ('cloud-sync', 'team-policy')")
+
+    def record_guard_connect_result(
+        self,
+        *,
+        request_id: str,
+        status: str,
+        milestone: str,
+        now: str,
+        reason: str | None = None,
+        sync_payload: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            return persist_connect_result(
+                connection,
+                request_id=request_id,
+                status=status,
+                milestone=milestone,
+                updated_at=now,
+                reason=reason,
+                sync_payload=sync_payload,
+            )
+
+    def verify_guard_connect_access(
+        self,
+        *,
+        request_id: str,
+        pairing_secret: str,
+    ) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return verify_connect_request_access(
+                connection,
+                request_id=request_id,
+                pairing_secret=pairing_secret,
+            )
 
     def upsert_guard_session(
         self,

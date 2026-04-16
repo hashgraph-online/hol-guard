@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -13,6 +14,14 @@ from .manager import (
     load_guard_daemon_auth_token,
     load_guard_daemon_url,
 )
+
+
+class GuardDaemonRequestError(RuntimeError):
+    """Raised when the Guard daemon returns a non-retryable request failure."""
+
+
+class GuardDaemonTransportError(GuardDaemonRequestError):
+    """Raised when the Guard daemon request fails due to transport issues."""
 
 
 class GuardSurfaceDaemonClient:
@@ -137,6 +146,54 @@ class GuardSurfaceDaemonClient:
             },
         )
 
+    def get_connect_state(self, *, request_id: str) -> dict[str, object]:
+        query = urllib.parse.urlencode({"request_id": request_id})
+        request = urllib.request.Request(
+            f"{self.daemon_url}/v1/connect/state?{query}",
+            headers={
+                "X-Guard-Token": self.auth_token,
+            },
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            try:
+                payload = json.loads(error.read().decode("utf-8"))
+                message = payload.get("error", str(error))
+            except (OSError, json.JSONDecodeError):
+                message = str(error)
+            raise GuardDaemonRequestError(f"Guard daemon request failed: {message}") from error
+        except (OSError, urllib.error.URLError) as error:
+            raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
+        state = payload.get("state")
+        if isinstance(state, dict):
+            return state
+        return payload
+
+    def report_connect_result(
+        self,
+        *,
+        request_id: str,
+        status: str,
+        milestone: str,
+        reason: str | None = None,
+        sync: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        payload = {
+            "request_id": request_id,
+            "status": status,
+            "milestone": milestone,
+            "reason": reason,
+            "sync": sync or {},
+        }
+        response = self._post("/v1/connect/result", payload)
+        state = response.get("state")
+        if isinstance(state, dict):
+            return state
+        return response
+
     def _post(self, path: str, payload: dict[str, object]) -> dict[str, object]:
         request = urllib.request.Request(
             f"{self.daemon_url}{path}",
@@ -156,9 +213,9 @@ class GuardSurfaceDaemonClient:
                 message = payload.get("error", str(error))
             except (OSError, json.JSONDecodeError):
                 message = str(error)
-            raise RuntimeError(f"Guard daemon request failed: {message}") from error
+            raise GuardDaemonRequestError(f"Guard daemon request failed: {message}") from error
         except (OSError, urllib.error.URLError) as error:
-            raise RuntimeError(f"Guard daemon request failed: {error}") from error
+            raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
 
 
 def load_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClient:
