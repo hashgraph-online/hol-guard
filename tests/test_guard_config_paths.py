@@ -37,6 +37,7 @@ def test_resolve_guard_home_migrates_legacy_directory_into_canonical_home(tmp_pa
 
     assert resolve_guard_home() == home_dir / ".hol-guard"
 
+
 def test_migrate_guard_home_state_copies_guard_db_with_sqlite_backup(tmp_path):
     canonical_home = tmp_path / ".hol-guard"
     legacy_home = tmp_path / ".config" / ".ai-plugin-scanner-guard"
@@ -47,6 +48,7 @@ def test_migrate_guard_home_state_copies_guard_db_with_sqlite_backup(tmp_path):
     with sqlite3.connect(canonical_home / "guard.db") as connection:
         row = connection.execute("select value from migration_probe").fetchone()
     assert row == ("legacy",)
+
 
 def test_resolve_guard_home_migrates_legacy_credentials_into_canonical_database(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
@@ -89,6 +91,22 @@ def test_migrate_guard_home_state_skips_legacy_daemon_runtime_state(tmp_path):
 
     assert not (canonical_home / "daemon-state.json").exists()
     assert (canonical_home / "config.toml").read_text(encoding="utf-8") == 'default_action = "warn"\n'
+
+
+def test_migrate_guard_home_state_skips_legacy_sqlite_sidecars(tmp_path):
+    canonical_home = tmp_path / ".hol-guard"
+    legacy_home = tmp_path / ".ai-plugin-scanner-guard"
+    _create_sqlite_guard_db(legacy_home / "guard.db")
+    _write_text(legacy_home / "guard.db-wal", "wal")
+    _write_text(legacy_home / "guard.db-shm", "shm")
+    _write_text(legacy_home / "guard.db-journal", "journal")
+
+    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
+
+    assert (canonical_home / "guard.db").is_file()
+    assert not (canonical_home / "guard.db-wal").exists()
+    assert not (canonical_home / "guard.db-shm").exists()
+    assert not (canonical_home / "guard.db-journal").exists()
 
 
 def test_resolve_guard_home_keeps_canonical_state_when_legacy_only_has_credentials(tmp_path, monkeypatch):

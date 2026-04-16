@@ -16,7 +16,14 @@ from .models import GuardAction, GuardMode
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
 LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner-guard", ".holguard")
-NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset({"daemon-state.json"})
+NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset(
+    {
+        "daemon-state.json",
+        "guard.db-journal",
+        "guard.db-shm",
+        "guard.db-wal",
+    }
+)
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
@@ -217,9 +224,10 @@ def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
 def _copy_guard_database(*, source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_connection, sqlite3.connect(
-            destination
-        ) as destination_connection:
+        with (
+            sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_connection,
+            sqlite3.connect(destination) as destination_connection,
+        ):
             source_connection.backup(destination_connection)
     except sqlite3.Error:
         shutil.copy2(source, destination)
