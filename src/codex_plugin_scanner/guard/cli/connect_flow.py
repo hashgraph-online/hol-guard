@@ -8,17 +8,12 @@ import urllib.error
 import urllib.parse
 from pathlib import Path
 
-from ..daemon import ensure_guard_daemon, load_guard_surface_daemon_client
+from ..daemon import GuardSurfaceDaemonClient, ensure_guard_daemon, load_guard_surface_daemon_client
 from ..runtime import sync_receipts
 from ..store import GuardStore
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
-_PLAN_LIMITED_SYNC_PHRASES = (
-    "paid guard plan",
-    "guard plan required",
-    "guard plan upgrade",
-)
 
 
 def run_guard_connect_command(
@@ -83,23 +78,7 @@ def run_guard_connect_command(
         )
     try:
         sync_payload = sync_receipts(store)
-    except RuntimeError as error:
-        sync_message = str(error)
-        pending_state = daemon_client.report_connect_result(
-            request_id=str(connect_request["request_id"]),
-            status="connected",
-            milestone="first_sync_pending",
-            reason=sync_message,
-        )
-        return build_connect_payload(
-            state=pending_state,
-            browser_opened=browser_opened,
-            connect_url=browser_url,
-            sync_url=sync_url,
-            connected=True,
-            sync_message=sync_message,
-        )
-    except (OSError, json.JSONDecodeError, urllib.error.URLError) as error:
+    except (RuntimeError, OSError, json.JSONDecodeError, urllib.error.URLError) as error:
         sync_message = str(error)
         pending_state = daemon_client.report_connect_result(
             request_id=str(connect_request["request_id"]),
@@ -141,14 +120,6 @@ def resolve_connect_url(connect_url: str) -> tuple[str, str]:
     return normalized_url, allowed_origin
 
 
-def _is_plan_limited_sync_error(message: str) -> bool:
-    normalized = message.strip().lower()
-    has_plan_limit_phrase = any(phrase in normalized for phrase in _PLAN_LIMITED_SYNC_PHRASES)
-    if "guard" in normalized and has_plan_limit_phrase:
-        return True
-    return "guard" in normalized and "sync" in normalized and "guard plan" in normalized and "upgrade" in normalized
-
-
 def build_guard_connect_browser_url(
     *,
     connect_url: str,
@@ -178,7 +149,7 @@ def build_guard_connect_browser_url(
 
 def wait_for_connect_transition(
     *,
-    daemon_client,
+    daemon_client: GuardSurfaceDaemonClient,
     request_id: str,
     timeout_seconds: int,
     poll_interval_seconds: float = 0.25,

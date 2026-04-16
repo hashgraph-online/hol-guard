@@ -196,6 +196,9 @@ def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
     for entry in source.iterdir():
         target = destination / entry.name
         if target.exists():
+            if entry.is_dir() and target.is_dir():
+                _migrate_guard_home_state(source=entry, destination=target)
+                continue
             if replace_database and entry.name == "guard.db" and entry.is_file():
                 shutil.copy2(entry, target)
             continue

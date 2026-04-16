@@ -149,14 +149,16 @@ class GuardSurfaceDaemonClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=5) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+                payload = self._decode_json_response(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             try:
-                payload = json.loads(error.read().decode("utf-8"))
+                payload = self._decode_json_response(error.read().decode("utf-8"))
                 message = payload.get("error", str(error))
             except (OSError, json.JSONDecodeError):
                 message = str(error)
             raise RuntimeError(f"Guard daemon request failed: {message}") from error
+        except (OSError, urllib.error.URLError, json.JSONDecodeError) as error:
+            raise RuntimeError(f"Guard daemon request failed: {error}") from error
         state = payload.get("state")
         if isinstance(state, dict):
             return state
@@ -196,16 +198,23 @@ class GuardSurfaceDaemonClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=5) as response:
-                return json.loads(response.read().decode("utf-8"))
+                return self._decode_json_response(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             try:
-                payload = json.loads(error.read().decode("utf-8"))
+                payload = self._decode_json_response(error.read().decode("utf-8"))
                 message = payload.get("error", str(error))
             except (OSError, json.JSONDecodeError):
                 message = str(error)
             raise RuntimeError(f"Guard daemon request failed: {message}") from error
-        except (OSError, urllib.error.URLError) as error:
+        except (OSError, urllib.error.URLError, json.JSONDecodeError) as error:
             raise RuntimeError(f"Guard daemon request failed: {error}") from error
+
+    @staticmethod
+    def _decode_json_response(raw_payload: str) -> dict[str, object]:
+        payload = json.loads(raw_payload)
+        if not isinstance(payload, dict):
+            raise json.JSONDecodeError("Guard daemon returned a non-object response", raw_payload, 0)
+        return payload
 
 
 def load_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClient:

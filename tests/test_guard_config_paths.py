@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard import bridge as bridge_module
-from codex_plugin_scanner.guard.config import load_guard_config, resolve_guard_home
+from codex_plugin_scanner.guard.config import _migrate_guard_home_state, load_guard_config, resolve_guard_home
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -57,6 +57,18 @@ def test_resolve_guard_home_migrates_legacy_credentials_into_canonical_database(
         "token": "legacy-token",
         "sync_url": "https://hol.org/api/guard/receipts/sync",
     }
+
+
+def test_migrate_guard_home_state_merges_nested_legacy_directories(tmp_path):
+    canonical_home = tmp_path / ".hol-guard"
+    legacy_home = tmp_path / ".ai-plugin-scanner-guard"
+    _write_text(canonical_home / "bin" / "keep.txt", "canonical")
+    _write_text(legacy_home / "bin" / "legacy.txt", "legacy")
+
+    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
+
+    assert (canonical_home / "bin" / "keep.txt").read_text(encoding="utf-8") == "canonical"
+    assert (canonical_home / "bin" / "legacy.txt").read_text(encoding="utf-8") == "legacy"
 
 
 def test_resolve_guard_home_keeps_canonical_state_when_legacy_only_has_credentials(tmp_path, monkeypatch):
