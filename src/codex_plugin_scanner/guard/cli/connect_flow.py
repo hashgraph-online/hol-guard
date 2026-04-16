@@ -87,6 +87,8 @@ def run_guard_connect_command(
         sync_message = str(error)
         pending_sync = {
             "runtime_session_id": str(runtime_session.get("session_id") or runtime_session.get("sessionId") or ""),
+            "runtime_session_synced_at": None,
+            "runtime_sessions_visible": 0,
             "runtime_session_sync_pending": True,
             "runtime_session_sync_reason": sync_message,
         }

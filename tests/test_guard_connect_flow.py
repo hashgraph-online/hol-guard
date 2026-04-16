@@ -233,6 +233,8 @@ def test_guard_connect_keeps_pairing_when_runtime_sync_fails(
     assert payload["sync_message"] == "runtime_sync_unreachable"
     assert payload["sync"]["runtime_session_sync_pending"] is True
     assert payload["sync"]["runtime_session_sync_reason"] == "runtime_sync_unreachable"
+    assert payload["sync"]["runtime_session_synced_at"] is None
+    assert payload["sync"]["runtime_sessions_visible"] == 0
     assert payload["sync"]["runtime_session_id"]
 
 
