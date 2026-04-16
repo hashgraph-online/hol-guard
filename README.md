@@ -164,6 +164,18 @@ Guard package:
 pip install hol-guard
 ```
 
+If you installed `hol-guard` before `v2.0.19`, do one explicit package-manager upgrade first so the `hol-guard update` command exists in your local launcher:
+
+```bash
+python -m pip install --upgrade hol-guard
+```
+
+If you installed through `pipx`, use:
+
+```bash
+pipx upgrade hol-guard
+```
+
 Scanner package:
 
 ```bash

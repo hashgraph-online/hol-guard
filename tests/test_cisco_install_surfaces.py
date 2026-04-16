@@ -49,6 +49,9 @@ def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
     assert "deferred" in readme
     assert "cisco-ai-a2a-scanner" in readme
     assert "cisco-aibom" in readme
+    assert "If you installed `hol-guard` before `v2.0.19`" in readme
+    assert "python -m pip install --upgrade hol-guard" in readme
+    assert "pipx upgrade hol-guard" in readme
 
 
 def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
@@ -78,7 +81,19 @@ def test_publish_workflow_builds_only_guard_and_scanner_packages() -> None:
 
     assert "Build Guard package (hol-guard)" in publish_workflow
     assert "Build scanner package (plugin-scanner)" in publish_workflow
+    assert "Smoke-test hol-guard self-update from built wheel" in publish_workflow
+    assert 'tempfile.mkdtemp(prefix="hol-guard-publish-smoke-")' in publish_workflow
+    assert '[str(hol_guard), "update", "--dry-run", "--json"]' in publish_workflow
+    assert 'assert payload["status"] == "planned", payload' in publish_workflow
     assert "Build codex compatibility alias" not in publish_workflow
     assert 'name = "codex-plugin-scanner"' not in publish_workflow
     assert 'codex-plugin-scanner = "codex_plugin_scanner.cli:main"' not in publish_workflow
     assert 'uv tool install codex-plugin-scanner==' not in publish_workflow
+
+
+def test_guard_get_started_documents_one_time_upgrade_for_legacy_installs() -> None:
+    get_started = (ROOT / "docs/guard/get-started.md").read_text(encoding="utf-8")
+
+    assert "predates `v2.0.19`" in get_started
+    assert "python -m pip install --upgrade hol-guard" in get_started
+    assert "pipx upgrade hol-guard" in get_started

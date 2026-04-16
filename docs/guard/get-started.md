@@ -3,6 +3,18 @@
 Install `hol-guard` when you want local harness protection.
 Install `plugin-scanner` separately when you want maintainer or CI checks for plugin packages.
 
+If your local `hol-guard` install predates `v2.0.19`, run one package-manager upgrade first so the built-in `hol-guard update` command is available:
+
+```bash
+python -m pip install --upgrade hol-guard
+```
+
+Or, if you installed with `pipx`:
+
+```bash
+pipx upgrade hol-guard
+```
+
 Use it when you want to protect a harness before local MCP servers, skills, hooks, or plugin surfaces run.
 
 ## The everyday flow

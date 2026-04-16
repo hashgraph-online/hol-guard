@@ -143,6 +143,43 @@ jobs:
           mv pyproject.toml.bak pyproject.toml
       - name: Verify distributions
         run: uv run --no-sync twine check dist/*
+      - name: Smoke-test hol-guard self-update from built wheel
+        run: |
+          python3 - <<'PY'
+          import glob
+          import json
+          import subprocess
+          import tempfile
+          import venv
+          from pathlib import Path
+
+          wheel = sorted(glob.glob("dist/hol_guard-*.whl"))
+          if not wheel:
+            raise SystemExit("missing hol-guard wheel in dist/")
+
+          root = Path(tempfile.mkdtemp(prefix="hol-guard-publish-smoke-"))
+          venv_dir = root / "venv"
+          venv.EnvBuilder(with_pip=True).create(venv_dir)
+
+          python = venv_dir / "bin" / "python"
+          hol_guard = venv_dir / "bin" / "hol-guard"
+
+          subprocess.run([str(python), "-m", "pip", "install", wheel[-1]], check=True)
+          version = subprocess.check_output([str(hol_guard), "--version"], text=True).strip()
+          result = subprocess.run(
+              [str(hol_guard), "update", "--dry-run", "--json"],
+              capture_output=True,
+              text=True,
+              check=False,
+          )
+          if result.returncode != 0:
+            raise SystemExit(result.stderr)
+          payload = json.loads(result.stdout)
+          assert payload["status"] == "planned", payload
+          assert payload["command"], payload
+          print(version)
+          print(json.dumps(payload, indent=2))
+          PY
       - name: Upload artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
         with:
