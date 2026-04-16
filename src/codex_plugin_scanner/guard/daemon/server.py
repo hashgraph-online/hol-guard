@@ -289,9 +289,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         surface = self._optional_string(payload.get("surface")) or "cli"
         capabilities = payload.get("capabilities")
         capability_items = (
-            tuple(str(item) for item in capabilities if isinstance(item, str))
-            if isinstance(capabilities, list)
-            else ()
+            tuple(str(item) for item in capabilities if isinstance(item, str)) if isinstance(capabilities, list) else ()
         )
         supported_versions = payload.get("supported_protocol_versions")
         try:
@@ -301,9 +299,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 version=self._optional_string(payload.get("version")),
                 surface=surface,
                 capabilities=capability_items,
-                supported_protocol_versions=tuple(
-                    str(item) for item in supported_versions if isinstance(item, str)
-                )
+                supported_protocol_versions=tuple(str(item) for item in supported_versions if isinstance(item, str))
                 if isinstance(supported_versions, list)
                 else (),
             )

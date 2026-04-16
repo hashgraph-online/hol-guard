@@ -389,9 +389,7 @@ def build_connect_request(
     lifetime_seconds: int = 300,
 ) -> tuple[dict[str, object], str]:
     pairing_secret = secrets.token_urlsafe(24)
-    expires_at = (
-        _parse_timestamp(now) + timedelta(seconds=max(30, lifetime_seconds))
-    ).isoformat()
+    expires_at = (_parse_timestamp(now) + timedelta(seconds=max(30, lifetime_seconds))).isoformat()
     payload = {
         "request_id": request_id,
         "sync_url": sync_url,
