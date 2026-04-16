@@ -6,9 +6,11 @@ import json
 import time
 import urllib.error
 import urllib.parse
+from datetime import datetime, timezone
 from pathlib import Path
 
-from ..daemon import GuardSurfaceDaemonClient, ensure_guard_daemon, load_guard_surface_daemon_client
+from ..daemon import ensure_guard_daemon, load_guard_surface_daemon_client
+from ..daemon.client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
 from ..runtime import sync_receipts
 from ..store import GuardStore
 
@@ -78,9 +80,11 @@ def run_guard_connect_command(
         )
     try:
         sync_payload = sync_receipts(store)
-    except (RuntimeError, OSError, json.JSONDecodeError, urllib.error.URLError) as error:
+    except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
         sync_message = str(error)
-        pending_state = daemon_client.report_connect_result(
+        pending_state = _record_connect_result(
+            daemon_client=daemon_client,
+            store=store,
             request_id=str(connect_request["request_id"]),
             status="connected",
             milestone="first_sync_pending",
@@ -94,7 +98,9 @@ def run_guard_connect_command(
             connected=True,
             sync_message=sync_message,
         )
-    final_state = daemon_client.report_connect_result(
+    final_state = _record_connect_result(
+        daemon_client=daemon_client,
+        store=store,
         request_id=str(connect_request["request_id"]),
         status="connected",
         milestone="first_sync_succeeded",
@@ -156,7 +162,13 @@ def wait_for_connect_transition(
 ) -> dict[str, object] | None:
     deadline = time.monotonic() + max(1, timeout_seconds)
     while time.monotonic() < deadline:
-        state = daemon_client.get_connect_state(request_id=request_id)
+        try:
+            state = daemon_client.get_connect_state(request_id=request_id)
+        except GuardDaemonTransportError:
+            time.sleep(poll_interval_seconds)
+            continue
+        if not isinstance(state, dict):
+            raise GuardDaemonRequestError("Guard daemon request failed: invalid connect state response")
         if str(state.get("status")) in {"connected", "retry_required", "expired"}:
             return state
         if str(state.get("milestone")) == "first_sync_pending":
@@ -208,6 +220,35 @@ def build_connect_payload(
     if sync_message is not None and sync_message.strip():
         payload["sync_message"] = sync_message
     return payload
+
+
+def _record_connect_result(
+    *,
+    daemon_client: GuardSurfaceDaemonClient,
+    store: GuardStore,
+    request_id: str,
+    status: str,
+    milestone: str,
+    reason: str | None = None,
+    sync: dict[str, object] | None = None,
+) -> dict[str, object]:
+    try:
+        return daemon_client.report_connect_result(
+            request_id=request_id,
+            status=status,
+            milestone=milestone,
+            reason=reason,
+            sync=sync,
+        )
+    except RuntimeError:
+        return store.record_guard_connect_result(
+            request_id=request_id,
+            status=status,
+            milestone=milestone,
+            now=datetime.now(timezone.utc).isoformat(),
+            reason=reason,
+            sync_payload=sync,
+        )
 
 
 def _resolve_first_sync_milestone(state: dict[str, object]) -> str:

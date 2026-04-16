@@ -155,10 +155,10 @@ def create_connect_state(
             json.dumps(proof),
         ),
     )
-    return get_connect_state(connection, request_id, now=updated_at) or {}
+    return load_connect_state(connection, request_id, now=updated_at) or {}
 
 
-def get_connect_state(
+def load_connect_state(
     connection: sqlite3.Connection,
     request_id: str,
     *,
@@ -176,7 +176,7 @@ def get_connect_state(
     if row is None:
         return None
     payload = _build_connect_state_payload(row)
-    if now is not None and payload["status"] == "waiting":
+    if now is not None and payload["status"] == "waiting" and payload["milestone"] == "waiting_for_browser":
         expires_at = _parse_timestamp(str(payload["expires_at"]))
         if expires_at <= _parse_timestamp(now):
             connection.execute(
@@ -213,13 +213,31 @@ def get_connect_state(
     return payload
 
 
+def get_latest_connect_state(
+    connection: sqlite3.Connection,
+    *,
+    now: str | None = None,
+) -> dict[str, object] | None:
+    row = connection.execute(
+        """
+        select request_id
+        from guard_connect_states
+        order by updated_at desc
+        limit 1
+        """
+    ).fetchone()
+    if row is None:
+        return None
+    return load_connect_state(connection, str(row["request_id"]), now=now)
+
+
 def mark_connect_pairing_completed(
     connection: sqlite3.Connection,
     *,
     request_id: str,
     completed_at: str,
 ) -> dict[str, object]:
-    state = get_connect_state(connection, request_id, now=completed_at)
+    state = load_connect_state(connection, request_id, now=completed_at)
     if state is None:
         raise ValueError("connect_state_not_found")
     proof = _coerce_proof(state.get("proof"))
@@ -236,7 +254,7 @@ def mark_connect_pairing_completed(
         """,
         (completed_at, completed_at, json.dumps(proof), request_id),
     )
-    return get_connect_state(connection, request_id, now=completed_at) or {}
+    return load_connect_state(connection, request_id, now=completed_at) or {}
 
 
 def mark_connect_result(
@@ -253,7 +271,7 @@ def mark_connect_result(
         raise ValueError("invalid_connect_state_status")
     if milestone not in CONNECT_STATE_MILESTONE_VALUES:
         raise ValueError("invalid_connect_state_milestone")
-    state = get_connect_state(connection, request_id, now=updated_at)
+    state = load_connect_state(connection, request_id, now=updated_at)
     if state is None:
         raise ValueError("connect_state_not_found")
     proof = _coerce_proof(state.get("proof"))
@@ -282,7 +300,10 @@ def mark_connect_result(
             request_id,
         ),
     )
-    return get_connect_state(connection, request_id, now=updated_at) or {}
+    return load_connect_state(connection, request_id, now=updated_at) or {}
+
+
+get_connect_state = load_connect_state
 
 
 def verify_connect_request_access(
@@ -452,7 +473,8 @@ def _resolve_poll_after_ms(payload: dict[str, object]) -> int:
 
 
 def _parse_timestamp(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value)
+    normalized_value = value[:-1] + "+00:00" if value.endswith("Z") else value
+    parsed = datetime.fromisoformat(normalized_value)
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)

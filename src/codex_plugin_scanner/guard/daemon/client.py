@@ -16,6 +16,14 @@ from .manager import (
 )
 
 
+class GuardDaemonRequestError(RuntimeError):
+    """Raised when the Guard daemon returns a non-retryable request failure."""
+
+
+class GuardDaemonTransportError(GuardDaemonRequestError):
+    """Raised when the Guard daemon request fails due to transport issues."""
+
+
 class GuardSurfaceDaemonClient:
     """Small authenticated client for the local Guard daemon."""
 
@@ -156,9 +164,11 @@ class GuardSurfaceDaemonClient:
                 message = payload.get("error", str(error))
             except (OSError, json.JSONDecodeError):
                 message = str(error)
-            raise RuntimeError(f"Guard daemon request failed: {message}") from error
-        except (OSError, urllib.error.URLError, json.JSONDecodeError) as error:
-            raise RuntimeError(f"Guard daemon request failed: {error}") from error
+            raise GuardDaemonRequestError(f"Guard daemon request failed: {message}") from error
+        except GuardDaemonRequestError:
+            raise
+        except (OSError, urllib.error.URLError) as error:
+            raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
         state = payload.get("state")
         if isinstance(state, dict):
             return state
@@ -205,15 +215,20 @@ class GuardSurfaceDaemonClient:
                 message = payload.get("error", str(error))
             except (OSError, json.JSONDecodeError):
                 message = str(error)
-            raise RuntimeError(f"Guard daemon request failed: {message}") from error
-        except (OSError, urllib.error.URLError, json.JSONDecodeError) as error:
-            raise RuntimeError(f"Guard daemon request failed: {error}") from error
+            raise GuardDaemonRequestError(f"Guard daemon request failed: {message}") from error
+        except GuardDaemonRequestError:
+            raise
+        except (OSError, urllib.error.URLError) as error:
+            raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
 
     @staticmethod
     def _decode_json_response(raw_payload: str) -> dict[str, object]:
-        payload = json.loads(raw_payload)
+        try:
+            payload = json.loads(raw_payload)
+        except json.JSONDecodeError as error:
+            raise GuardDaemonRequestError(f"Guard daemon request failed: {error}") from error
         if not isinstance(payload, dict):
-            raise json.JSONDecodeError("Guard daemon returned a non-object response", raw_payload, 0)
+            raise GuardDaemonRequestError("Guard daemon request failed: invalid daemon response")
         return payload
 
 

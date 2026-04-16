@@ -55,6 +55,9 @@ from .store_connect import (
     get_connect_state as load_connect_state,
 )
 from .store_connect import (
+    get_latest_connect_state as load_latest_connect_state,
+)
+from .store_connect import (
     mark_connect_pairing_completed as persist_connect_pairing_completed,
 )
 from .store_connect import (
@@ -278,6 +281,7 @@ class GuardStore:
               primary key (surface, open_key)
             )
             """,
+            connect_state_schema_statement(),
             connect_request_schema_statement(),
             connect_state_schema_statement(),
             approval_schema_statement(),
@@ -1312,6 +1316,10 @@ class GuardStore:
         with self._connect() as connection:
             return load_connect_state(connection, request_id, now=now)
 
+    def get_latest_guard_connect_state(self, *, now: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return load_latest_connect_state(connection, now=now)
+
     def complete_guard_connect_request(
         self,
         *,
@@ -1327,6 +1335,16 @@ class GuardStore:
                 pairing_secret=pairing_secret,
                 completed_at=now,
             )
+            if load_connect_state(connection, request_id, now=now) is None:
+                persist_connect_state(
+                    connection,
+                    request_id=request_id,
+                    sync_url=str(request["sync_url"]),
+                    allowed_origin=str(request["allowed_origin"]),
+                    created_at=str(request["created_at"]),
+                    expires_at=str(request["expires_at"]),
+                    updated_at=now,
+                )
             self._set_sync_credentials_in_connection(connection, str(request["sync_url"]), token, now)
             connection.execute(
                 """

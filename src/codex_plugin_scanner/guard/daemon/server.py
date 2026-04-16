@@ -24,9 +24,6 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     store: GuardStore
     runtime: GuardSurfaceRuntime
     auth_token: str
-    runtime_host: str
-    runtime_session_id: str
-    runtime_started_at: str
 
 
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -58,11 +55,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
-        store.touch_runtime_state(
-            session_id=self.server.runtime_session_id,  # type: ignore[attr-defined]
-            last_heartbeat_at=_now(),
-        )
         parsed = urlparse(self.path)
+        self._touch_runtime_heartbeat(parsed.path)
         path_parts = [part for part in parsed.path.split("/") if part]
         if parsed.path == "/healthz":
             self._write_json(
@@ -74,16 +68,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 }
             )
             return
+        if parsed.path == "/v1/sessions":
+            self._write_json({"items": store.list_guard_sessions(limit=200)})
+            return
         if parsed.path == "/v1/runtime":
             self._write_json(
                 build_runtime_snapshot(
                     store=store,
-                    approval_center_url=f"http://{self.server.runtime_host}:{self.server.server_port}",  # type: ignore[attr-defined]
+                    approval_center_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
                 )
             )
-            return
-        if parsed.path == "/v1/sessions":
-            self._write_json({"items": store.list_guard_sessions(limit=200)})
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
             self._handle_session_resume(path_parts[2])
@@ -175,11 +169,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
-        self.server.store.touch_runtime_state(  # type: ignore[attr-defined]
-            session_id=self.server.runtime_session_id,  # type: ignore[attr-defined]
-            last_heartbeat_at=_now(),
-        )
         parsed = urlparse(self.path)
+        self._touch_runtime_heartbeat(parsed.path)
         if parsed.path != "/v1/connect/complete" and not self._origin_is_allowed():
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
@@ -617,6 +608,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _header_token_is_valid(self) -> bool:
         return self.headers.get("X-Guard-Token") == self.server.auth_token  # type: ignore[attr-defined]
+
+    def _touch_runtime_heartbeat(self, path: str) -> None:
+        if path != "/healthz" and not path.startswith("/v1/"):
+            return
+        self.server.store.touch_runtime_state(  # type: ignore[attr-defined]
+            session_id=self.server.runtime_session_id,  # type: ignore[attr-defined]
+            last_heartbeat_at=_now(),
+        )
 
     @staticmethod
     def _optional_int(value: object) -> int | None:
