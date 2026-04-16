@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detectio
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import client as daemon_client_module
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.models import (
     GuardApprovalRequest,
     GuardArtifact,
@@ -550,6 +551,33 @@ class TestGuardApprovals:
 
         assert snapshot_payload["pending_count"] == 205
         assert len(snapshot_payload["items"]) == 200
+
+    def test_guard_daemon_updates_runtime_heartbeat_while_serving_requests(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+        heartbeat_values = [
+            "2026-04-11T00:00:00+00:00",
+            "2026-04-11T00:00:00+00:00",
+            "2026-04-11T00:05:00+00:00",
+        ]
+
+        def next_heartbeat() -> str:
+            if len(heartbeat_values) > 1:
+                return heartbeat_values.pop(0)
+            return heartbeat_values[0]
+
+        monkeypatch.setattr(daemon_server_module, "_now", next_heartbeat)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=5):
+                pass
+            runtime_state = store.get_runtime_state()
+        finally:
+            daemon.stop()
+
+        assert runtime_state is not None
+        assert runtime_state["last_heartbeat_at"] == "2026-04-11T00:05:00+00:00"
 
     def test_guard_store_clears_runtime_state_only_for_matching_session(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

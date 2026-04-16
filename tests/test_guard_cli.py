@@ -2418,8 +2418,9 @@ args = ["workspace-skill.js", "--changed"]
         assert run_rc == 0
         assert connect_rc == 0
         assert connect_output["connected"] is True
+        assert connect_output["status"] == "connected"
+        assert connect_output["milestone"] == "first_sync_succeeded"
         assert connect_output["sync"]["receipts_stored"] == 1
-        assert connect_output["sync"]["inventory"] == 0
         assert connect_output["sync"]["inventory_tracked"] >= 1
         assert connect_output["browser_opened"] is True
         assert opened_urls and opened_urls[0].startswith("https://hol.org/guard/connect?")
@@ -2429,6 +2430,79 @@ args = ["workspace-skill.js", "--changed"]
             "sync_url": f"http://127.0.0.1:{server.server_port}/receipts",
             "token": "session-token-123",
         }
+
+    def test_guard_connect_returns_retry_required_when_first_sync_fails(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        store = GuardStore(home_dir)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda guard_home: f"http://127.0.0.1:{daemon.port}",
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.cli.connect_flow.sync_receipts",
+            lambda current_store: (_ for _ in ()).throw(RuntimeError("sync_unreachable")),
+        )
+
+        def open_browser(url: str) -> bool:
+            parsed = urllib.parse.urlparse(url)
+            query = urllib.parse.parse_qs(parsed.query)
+            fragment = urllib.parse.parse_qs(parsed.fragment)
+            request_id = query["guardPairRequest"][-1]
+            daemon_url = query["guardDaemon"][-1]
+            pairing_secret = fragment["guardPairSecret"][-1]
+
+            def complete_pairing() -> None:
+                request = urllib.request.Request(
+                    f"{daemon_url}/v1/connect/complete",
+                    data=urllib.parse.urlencode(
+                        {
+                            "request_id": request_id,
+                            "pairing_secret": pairing_secret,
+                            "token": "session-token-123",
+                        }
+                    ).encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Origin": "https://hol.org",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=5):
+                    pass
+
+            threading.Thread(target=complete_pairing, daemon=True).start()
+            return True
+
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", open_browser)
+        try:
+            connect_rc = main(
+                [
+                    "guard",
+                    "connect",
+                    "--home",
+                    str(home_dir),
+                    "--sync-url",
+                    "https://hol.org/registry/api/v1",
+                    "--connect-url",
+                    "https://hol.org/guard/connect",
+                    "--json",
+                ]
+            )
+            connect_output = json.loads(capsys.readouterr().out)
+        finally:
+            daemon.stop()
+
+        assert connect_rc == 1
+        assert connect_output["connected"] is False
+        assert connect_output["status"] == "retry_required"
+        assert connect_output["milestone"] == "first_sync_failed"
+        assert connect_output["reason"] == "sync_unreachable"
 
     def test_guard_connect_rejects_invalid_sync_url(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -2476,7 +2550,7 @@ args = ["workspace-skill.js", "--changed"]
             "load_guard_surface_daemon_client",
             lambda guard_home: FakeDaemonClient(),
         )
-        monkeypatch.setattr(guard_connect_flow_module, "wait_for_connect_completion", lambda **kwargs: None)
+        monkeypatch.setattr(guard_connect_flow_module, "wait_for_connect_transition", lambda **kwargs: None)
 
         payload = guard_connect_flow_module.run_guard_connect_command(
             guard_home=tmp_path / "guard-home",
@@ -2489,7 +2563,8 @@ args = ["workspace-skill.js", "--changed"]
 
         parsed = urllib.parse.urlparse(opened_urls[0])
         query = urllib.parse.parse_qs(parsed.query)
-        assert payload["status"] == "waiting_for_browser"
+        assert payload["status"] == "waiting"
+        assert payload["milestone"] == "waiting_for_browser"
         assert query["guardDaemon"] == ["http://127.0.0.1:4781"]
 
     def test_guard_connect_preserves_custom_connect_query_params(self, tmp_path, monkeypatch):
@@ -2515,7 +2590,7 @@ args = ["workspace-skill.js", "--changed"]
             "load_guard_surface_daemon_client",
             lambda guard_home: FakeDaemonClient(),
         )
-        monkeypatch.setattr(guard_connect_flow_module, "wait_for_connect_completion", lambda **kwargs: None)
+        monkeypatch.setattr(guard_connect_flow_module, "wait_for_connect_transition", lambda **kwargs: None)
 
         payload = guard_connect_flow_module.run_guard_connect_command(
             guard_home=tmp_path / "guard-home",
@@ -2528,13 +2603,63 @@ args = ["workspace-skill.js", "--changed"]
 
         parsed = urllib.parse.urlparse(opened_urls[0])
         query = urllib.parse.parse_qs(parsed.query)
-        assert payload["status"] == "waiting_for_browser"
+        assert payload["status"] == "waiting"
+        assert payload["milestone"] == "waiting_for_browser"
         assert query["tenant"] == ["enterprise"]
         assert query["invite"] == ["abc123"]
         assert query["guardPairRequest"] == ["req-123"]
         assert query["guardDaemon"] == ["http://127.0.0.1:4781"]
 
-    def test_guard_connect_wraps_sync_transport_failures(self, tmp_path, monkeypatch):
+    def test_guard_connect_wait_recovers_from_transient_daemon_poll_failures(self, monkeypatch):
+        class FakeDaemonClient:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def get_connect_state(self, *, request_id: str) -> dict[str, object]:
+                self.calls += 1
+                if self.calls == 1:
+                    raise guard_connect_flow_module.GuardDaemonTransportError("daemon restarting")
+                return {
+                    "request_id": request_id,
+                    "status": "connected",
+                    "milestone": "first_sync_succeeded",
+                    "completed_at": "2026-04-15T00:00:00Z",
+                    "proof": {"receipts_stored": 3},
+                }
+
+        monotonic_values = iter((0.0, 0.0, 0.2))
+        monkeypatch.setattr(guard_connect_flow_module.time, "monotonic", lambda: next(monotonic_values))
+        monkeypatch.setattr(guard_connect_flow_module.time, "sleep", lambda seconds: None)
+
+        state = guard_connect_flow_module.wait_for_connect_transition(
+            daemon_client=FakeDaemonClient(),
+            request_id="req-123",
+            timeout_seconds=1,
+            poll_interval_seconds=0,
+        )
+
+        assert state is not None
+        assert state["status"] == "connected"
+        assert state["milestone"] == "first_sync_succeeded"
+
+    def test_guard_connect_wait_surfaces_permanent_daemon_poll_failures(self, monkeypatch):
+        class FakeDaemonClient:
+            def get_connect_state(self, *, request_id: str) -> dict[str, object]:
+                raise guard_connect_flow_module.GuardDaemonRequestError("unauthorized")
+
+        monotonic_values = iter((0.0, 0.0))
+        monkeypatch.setattr(guard_connect_flow_module.time, "monotonic", lambda: next(monotonic_values))
+        monkeypatch.setattr(guard_connect_flow_module.time, "sleep", lambda seconds: None)
+
+        with pytest.raises(guard_connect_flow_module.GuardDaemonRequestError, match="unauthorized"):
+            guard_connect_flow_module.wait_for_connect_transition(
+                daemon_client=FakeDaemonClient(),
+                request_id="req-123",
+                timeout_seconds=1,
+                poll_interval_seconds=0,
+            )
+
+    def test_guard_connect_marks_retry_required_for_sync_transport_failures(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
 
         class FakeDaemonClient:
@@ -2548,6 +2673,24 @@ args = ["workspace-skill.js", "--changed"]
                     "allowed_origin": allowed_origin,
                 }
 
+            def report_connect_result(
+                self,
+                *,
+                request_id: str,
+                status: str,
+                milestone: str,
+                reason: str | None = None,
+                sync: dict[str, object] | None = None,
+            ) -> dict[str, object]:
+                return {
+                    "request_id": request_id,
+                    "status": status,
+                    "milestone": milestone,
+                    "reason": reason,
+                    "completed_at": "2026-04-15T00:00:00Z",
+                    "proof": sync or {},
+                }
+
         monkeypatch.setattr(
             guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
         )
@@ -2558,8 +2701,14 @@ args = ["workspace-skill.js", "--changed"]
         )
         monkeypatch.setattr(
             guard_connect_flow_module,
-            "wait_for_connect_completion",
-            lambda **kwargs: {"status": "completed", "request_id": "req-123", "completed_at": "2026-04-15T00:00:00Z"},
+            "wait_for_connect_transition",
+            lambda **kwargs: {
+                "status": "waiting",
+                "milestone": "first_sync_pending",
+                "request_id": "req-123",
+                "completed_at": "2026-04-15T00:00:00Z",
+                "proof": {},
+            },
         )
         monkeypatch.setattr(
             guard_connect_flow_module,
@@ -2567,17 +2716,103 @@ args = ["workspace-skill.js", "--changed"]
             lambda current_store: (_ for _ in ()).throw(urllib.error.URLError("offline")),
         )
 
-        with pytest.raises(RuntimeError, match="Guard paired successfully but sync failed"):
-            guard_connect_flow_module.run_guard_connect_command(
-                guard_home=tmp_path / "guard-home",
-                store=store,
-                sync_url="https://hol.org/api/guard/receipts/sync",
-                connect_url="https://hol.org/guard/connect",
-                opener=lambda url: True,
-                wait_timeout_seconds=1,
-            )
+        payload = guard_connect_flow_module.run_guard_connect_command(
+            guard_home=tmp_path / "guard-home",
+            store=store,
+            sync_url="https://hol.org/api/guard/receipts/sync",
+            connect_url="https://hol.org/guard/connect",
+            opener=lambda url: True,
+            wait_timeout_seconds=1,
+        )
 
-    def test_guard_connect_reports_paid_plan_limit_without_failing_pairing(self, tmp_path, monkeypatch):
+        assert payload["connected"] is False
+        assert payload["status"] == "retry_required"
+        assert payload["milestone"] == "first_sync_failed"
+        assert payload["reason"] == "<urlopen error offline>"
+
+    def test_guard_connect_persists_success_when_daemon_result_write_fails(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+
+        class FakeDaemonClient:
+            daemon_url = "http://127.0.0.1:4781"
+
+            def __init__(self) -> None:
+                self.request_id = ""
+
+            def create_connect_request(self, *, sync_url: str, allowed_origin: str) -> dict[str, object]:
+                request = store.create_guard_connect_request(
+                    sync_url=sync_url,
+                    allowed_origin=allowed_origin,
+                    now="2026-04-15T00:00:00Z",
+                )
+                self.request_id = str(request["request_id"])
+                return request
+
+            def report_connect_result(
+                self,
+                *,
+                request_id: str,
+                status: str,
+                milestone: str,
+                reason: str | None = None,
+                sync: dict[str, object] | None = None,
+            ) -> dict[str, object]:
+                raise RuntimeError("daemon restarted")
+
+        fake_daemon_client = FakeDaemonClient()
+        monkeypatch.setattr(
+            guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "load_guard_surface_daemon_client",
+            lambda guard_home: fake_daemon_client,
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "wait_for_connect_transition",
+            lambda **kwargs: {
+                "status": "waiting",
+                "milestone": "first_sync_pending",
+                "request_id": fake_daemon_client.request_id,
+                "completed_at": "2026-04-15T00:00:00Z",
+                "proof": {},
+            },
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "sync_receipts",
+            lambda current_store: {
+                "receipts_stored": 3,
+                "inventory_tracked": 1,
+                "first_synced_at": "2026-04-15T00:00:01Z",
+            },
+        )
+
+        payload = guard_connect_flow_module.run_guard_connect_command(
+            guard_home=tmp_path / "guard-home",
+            store=store,
+            sync_url="https://hol.org/api/guard/receipts/sync",
+            connect_url="https://hol.org/guard/connect",
+            opener=lambda url: True,
+            wait_timeout_seconds=1,
+        )
+
+        persisted_state = store.get_guard_connect_state(
+            request_id=fake_daemon_client.request_id,
+            now="2026-04-15T00:00:02Z",
+        )
+
+        assert payload["connected"] is True
+        assert payload["status"] == "connected"
+        assert payload["milestone"] == "first_sync_succeeded"
+        assert payload["sync"]["receipts_stored"] == 3
+        assert persisted_state is not None
+        assert persisted_state["status"] == "connected"
+        assert persisted_state["milestone"] == "first_sync_succeeded"
+        assert persisted_state["proof"]["receipts_stored"] == 3
+
+    def test_guard_connect_marks_retry_required_for_paid_plan_limit(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
 
         class FakeDaemonClient:
@@ -2591,6 +2826,24 @@ args = ["workspace-skill.js", "--changed"]
                     "allowed_origin": allowed_origin,
                 }
 
+            def report_connect_result(
+                self,
+                *,
+                request_id: str,
+                status: str,
+                milestone: str,
+                reason: str | None = None,
+                sync: dict[str, object] | None = None,
+            ) -> dict[str, object]:
+                return {
+                    "request_id": request_id,
+                    "status": status,
+                    "milestone": milestone,
+                    "reason": reason,
+                    "completed_at": "2026-04-15T00:00:00Z",
+                    "proof": sync or {},
+                }
+
         monkeypatch.setattr(
             guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
         )
@@ -2601,8 +2854,14 @@ args = ["workspace-skill.js", "--changed"]
         )
         monkeypatch.setattr(
             guard_connect_flow_module,
-            "wait_for_connect_completion",
-            lambda **kwargs: {"status": "completed", "request_id": "req-123", "completed_at": "2026-04-15T00:00:00Z"},
+            "wait_for_connect_transition",
+            lambda **kwargs: {
+                "status": "waiting",
+                "milestone": "first_sync_pending",
+                "request_id": "req-123",
+                "completed_at": "2026-04-15T00:00:00Z",
+                "proof": {},
+            },
         )
         monkeypatch.setattr(
             guard_connect_flow_module,
@@ -2619,11 +2878,12 @@ args = ["workspace-skill.js", "--changed"]
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is True
-        assert payload["status"] == "paired_without_cloud_sync"
-        assert payload["sync_message"] == "Guard Cloud sync requires a paid Guard plan"
+        assert payload["connected"] is False
+        assert payload["status"] == "retry_required"
+        assert payload["milestone"] == "first_sync_failed"
+        assert payload["reason"] == "Guard Cloud sync requires a paid Guard plan"
 
-    def test_guard_connect_reports_guard_plan_required_without_failing_pairing(self, tmp_path, monkeypatch):
+    def test_guard_connect_marks_retry_required_for_guard_plan_required(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
 
         class FakeDaemonClient:
@@ -2637,6 +2897,24 @@ args = ["workspace-skill.js", "--changed"]
                     "allowed_origin": allowed_origin,
                 }
 
+            def report_connect_result(
+                self,
+                *,
+                request_id: str,
+                status: str,
+                milestone: str,
+                reason: str | None = None,
+                sync: dict[str, object] | None = None,
+            ) -> dict[str, object]:
+                return {
+                    "request_id": request_id,
+                    "status": status,
+                    "milestone": milestone,
+                    "reason": reason,
+                    "completed_at": "2026-04-15T00:00:00Z",
+                    "proof": sync or {},
+                }
+
         monkeypatch.setattr(
             guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
         )
@@ -2647,8 +2925,14 @@ args = ["workspace-skill.js", "--changed"]
         )
         monkeypatch.setattr(
             guard_connect_flow_module,
-            "wait_for_connect_completion",
-            lambda **kwargs: {"status": "completed", "request_id": "req-124", "completed_at": "2026-04-15T00:00:00Z"},
+            "wait_for_connect_transition",
+            lambda **kwargs: {
+                "status": "waiting",
+                "milestone": "first_sync_pending",
+                "request_id": "req-124",
+                "completed_at": "2026-04-15T00:00:00Z",
+                "proof": {},
+            },
         )
         monkeypatch.setattr(
             guard_connect_flow_module,
@@ -2665,9 +2949,10 @@ args = ["workspace-skill.js", "--changed"]
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is True
-        assert payload["status"] == "paired_without_cloud_sync"
-        assert payload["sync_message"] == "Guard plan required"
+        assert payload["connected"] is False
+        assert payload["status"] == "retry_required"
+        assert payload["milestone"] == "first_sync_failed"
+        assert payload["reason"] == "Guard plan required"
 
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
