@@ -14,6 +14,7 @@ from pathlib import Path
 
 DEFAULT_GUARD_DAEMON_PORT = 4781
 GUARD_DAEMON_PORT_RANGE = 1000
+REQUIRED_DAEMON_TABLES = frozenset({"guard_connect_states"})
 
 
 def ensure_guard_daemon(guard_home: Path) -> str:
@@ -64,9 +65,9 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
     url = f"http://127.0.0.1:{port}"
     try:
         with urllib.request.urlopen(f"{url}/healthz", timeout=1) as response:
-            if response.status == 200:
+            if response.status == 200 and _healthz_payload_is_current(response.read().decode("utf-8")):
                 return url
-    except (OSError, urllib.error.URLError):
+    except (OSError, ValueError, urllib.error.URLError):
         return None
     return None
 
@@ -137,3 +138,14 @@ def _candidate_ports(guard_home: Path) -> list[int]:
         candidate_offset = (offset + step) % GUARD_DAEMON_PORT_RANGE
         ports.append(DEFAULT_GUARD_DAEMON_PORT + candidate_offset)
     return ports
+
+
+def _healthz_payload_is_current(raw_payload: str) -> bool:
+    payload = json.loads(raw_payload)
+    if not isinstance(payload, dict):
+        return False
+    tables = payload.get("tables")
+    if not isinstance(tables, list):
+        return False
+    table_names = {table for table in tables if isinstance(table, str)}
+    return REQUIRED_DAEMON_TABLES.issubset(table_names)

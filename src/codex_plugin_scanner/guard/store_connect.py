@@ -245,7 +245,8 @@ def mark_connect_pairing_completed(
     connection.execute(
         """
         update guard_connect_states
-        set milestone = 'first_sync_pending',
+        set status = 'connected',
+            milestone = 'first_sync_pending',
             reason = 'waiting_for_first_sync',
             updated_at = ?,
             completed_at = ?,
@@ -277,8 +278,10 @@ def mark_connect_result(
     proof = _coerce_proof(state.get("proof"))
     if sync_payload is not None:
         proof["first_synced_at"] = sync_payload.get("synced_at")
-        proof["receipts_stored"] = int(sync_payload.get("receipts_stored") or 0)
-        proof["inventory_items"] = int(sync_payload.get("inventory") or 0)
+        proof["receipts_stored"] = _coerce_non_negative_int(sync_payload.get("receipts_stored"))
+        proof["inventory_items"] = _coerce_non_negative_int(
+            sync_payload.get("inventory_tracked", sync_payload.get("inventory"))
+        )
     connection.execute(
         """
         update guard_connect_states
@@ -415,6 +418,19 @@ def build_connect_state_response(
     response["poll_after_ms"] = poll_after_ms if poll_after_ms is not None else _resolve_poll_after_ms(response)
     response["proof"] = _coerce_proof(response.get("proof"))
     return response
+
+
+def _coerce_non_negative_int(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, str) and value.strip():
+        try:
+            return max(0, int(value.strip()))
+        except ValueError:
+            return 0
+    return 0
 
 
 def _hash_secret(value: str) -> str:

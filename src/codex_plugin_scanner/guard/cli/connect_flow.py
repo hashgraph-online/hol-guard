@@ -14,7 +14,7 @@ from ..daemon.client import GuardDaemonRequestError, GuardDaemonTransportError, 
 from ..runtime import sync_receipts
 from ..store import GuardStore
 
-DEFAULT_GUARD_SYNC_URL = "https://hol.org/registry/api/v1"
+DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
 
 
@@ -81,20 +81,22 @@ def run_guard_connect_command(
     try:
         sync_payload = sync_receipts(store)
     except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
-        failed_state = _record_connect_result(
+        sync_message = str(error)
+        pending_state = _record_connect_result(
             daemon_client=daemon_client,
             store=store,
             request_id=str(connect_request["request_id"]),
-            status="retry_required",
-            milestone="first_sync_failed",
-            reason=str(error),
+            status="connected",
+            milestone="first_sync_pending",
+            reason=sync_message,
         )
         return build_connect_payload(
-            state=failed_state,
+            state=pending_state,
             browser_opened=browser_opened,
             connect_url=browser_url,
             sync_url=sync_url,
-            connected=False,
+            connected=True,
+            sync_message=sync_message,
         )
     final_state = _record_connect_result(
         daemon_client=daemon_client,
@@ -183,6 +185,7 @@ def build_connect_payload(
     sync_url: str,
     connected: bool,
     sync: dict[str, object] | None = None,
+    sync_message: str | None = None,
 ) -> dict[str, object]:
     milestones = [
         {
@@ -214,6 +217,8 @@ def build_connect_payload(
     }
     if sync is not None:
         payload["sync"] = sync
+    if sync_message is not None and sync_message.strip():
+        payload["sync_message"] = sync_message
     return payload
 
 

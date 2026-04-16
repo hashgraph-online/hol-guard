@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import shutil
 import sqlite3
+import tempfile
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -15,9 +18,23 @@ from .models import GuardAction, GuardMode
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
 LEGACY_GUARD_DIRNAMES = (".config/.ai-plugin-scanner-guard", ".ai-plugin-scanner-guard", ".holguard")
+NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset(
+    {
+        "daemon-state.json",
+        "guard.db-journal",
+        "guard.db-shm",
+        "guard.db-wal",
+    }
+)
+GUARD_DB_BACKUP_TIMEOUT_SECONDS = 5.0
+GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
+
+
+class GuardHomeMigrationError(RuntimeError):
+    """Raised when legacy Guard state cannot be migrated safely."""
 
 
 def _coerce_action_map(payload: object) -> dict[str, GuardAction]:
@@ -88,11 +105,13 @@ def resolve_guard_home(override: str | None = None) -> Path:
         return canonical_home
     if _guard_home_has_state(canonical_home):
         return canonical_home
-    if _guard_home_has_sync_credentials(legacy_home):
-        return legacy_home
-    if canonical_home.exists() and _guard_home_has_state(legacy_home):
-        return legacy_home
-    return legacy_home if not canonical_home.exists() else canonical_home
+    if _guard_home_has_sync_credentials(legacy_home) or _guard_home_has_state(legacy_home):
+        try:
+            _migrate_guard_home_transactionally(source=legacy_home, destination=canonical_home)
+        except GuardHomeMigrationError:
+            return legacy_home
+        return canonical_home
+    return canonical_home
 
 
 def _read_toml(path: Path) -> dict[str, object]:
@@ -186,6 +205,80 @@ def _existing_legacy_guard_home() -> Path | None:
         if candidate.exists():
             return candidate
     return None
+
+
+def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
+    if not source.exists():
+        return
+    destination.mkdir(parents=True, exist_ok=True)
+    replace_database = not _guard_home_has_sync_credentials(destination) and not _guard_home_has_state(destination)
+    for entry in source.iterdir():
+        if entry.name in NON_MIGRATED_GUARD_RUNTIME_FILES:
+            continue
+        target = destination / entry.name
+        if target.exists():
+            if entry.is_dir() and target.is_dir():
+                _migrate_guard_home_state(source=entry, destination=target)
+                continue
+            if replace_database and entry.name == "guard.db" and entry.is_file():
+                _copy_guard_database(source=entry, destination=target)
+            continue
+        if entry.is_dir():
+            shutil.copytree(entry, target)
+            continue
+        if entry.name == "guard.db" and entry.is_file():
+            _copy_guard_database(source=entry, destination=target)
+            continue
+        shutil.copy2(entry, target)
+
+
+def _migrate_guard_home_transactionally(*, source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with tempfile.TemporaryDirectory(dir=destination.parent, prefix=f"{destination.name}-migration-") as temp_dir:
+            staging_root = Path(temp_dir) / destination.name
+            _migrate_guard_home_state(source=source, destination=staging_root)
+            if destination.exists():
+                _remove_guard_home_destination(destination)
+            shutil.move(str(staging_root), str(destination))
+    except OSError:
+        raise GuardHomeMigrationError("guard home migration failed") from None
+
+
+def _remove_guard_home_destination(path: Path) -> None:
+    for entry in path.iterdir():
+        if entry.is_dir():
+            shutil.rmtree(entry)
+            continue
+        entry.unlink()
+    path.rmdir()
+
+
+def _copy_guard_database(*, source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_destination = destination.with_name(f"{destination.name}.migrating")
+    deadline = time.monotonic() + GUARD_DB_BACKUP_TIMEOUT_SECONDS
+    try:
+        with (
+            sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_connection,
+            sqlite3.connect(temporary_destination) as destination_connection,
+        ):
+            source_connection.backup(
+                destination_connection,
+                pages=128,
+                progress=lambda *_: _raise_when_backup_deadline_elapsed(deadline),
+                sleep=GUARD_DB_BACKUP_SLEEP_SECONDS,
+            )
+        temporary_destination.replace(destination)
+    except (TimeoutError, sqlite3.Error):
+        if temporary_destination.exists():
+            temporary_destination.unlink()
+        raise GuardHomeMigrationError("guard.db migration failed") from None
+
+
+def _raise_when_backup_deadline_elapsed(deadline: float) -> None:
+    if time.monotonic() >= deadline:
+        raise TimeoutError("guard.db migration timed out")
 
 
 def _load_workspace_guard_config(workspace: Path | None) -> dict[str, object]:
