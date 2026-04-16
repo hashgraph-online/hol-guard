@@ -1334,6 +1334,16 @@ class GuardStore:
                 pairing_secret=pairing_secret,
                 completed_at=now,
             )
+            if load_connect_state(connection, request_id, now=now) is None:
+                persist_connect_state(
+                    connection,
+                    request_id=request_id,
+                    sync_url=str(request["sync_url"]),
+                    allowed_origin=str(request["allowed_origin"]),
+                    created_at=str(request["created_at"]),
+                    expires_at=str(request["expires_at"]),
+                    updated_at=now,
+                )
             self._set_sync_credentials_in_connection(connection, str(request["sync_url"]), token, now)
             connection.execute(
                 """

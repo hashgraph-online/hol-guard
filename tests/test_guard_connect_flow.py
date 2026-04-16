@@ -147,3 +147,35 @@ def test_guard_connect_returns_retry_required_when_first_sync_fails(
     assert payload["milestone"] == "first_sync_failed"
     assert payload["reason"] == "sync_unreachable"
     assert payload["request_id"].startswith("connect-")
+
+
+def test_guard_store_backfills_missing_connect_state_on_pairing_completion(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    created_request = store.create_guard_connect_request(
+        sync_url="https://hol.org/registry/api/v1",
+        allowed_origin="https://hol.org",
+        now="2026-04-15T00:00:00+00:00",
+    )
+
+    with store._connect() as connection:
+        connection.execute(
+            "delete from guard_connect_states where request_id = ?",
+            (created_request["request_id"],),
+        )
+
+    completed_request = store.complete_guard_connect_request(
+        request_id=str(created_request["request_id"]),
+        pairing_secret=str(created_request["pairing_secret"]),
+        token="session-token-123",
+        now="2026-04-15T00:00:01+00:00",
+    )
+    completed_state = store.get_guard_connect_state(
+        str(created_request["request_id"]),
+        now="2026-04-15T00:00:01+00:00",
+    )
+
+    assert completed_request["status"] == "completed"
+    assert completed_state is not None
+    assert completed_state["status"] == "waiting"
+    assert completed_state["milestone"] == "first_sync_pending"
+    assert completed_state["proof"]["pairing_completed_at"] == "2026-04-15T00:00:01+00:00"
