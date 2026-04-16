@@ -85,20 +85,27 @@ def run_guard_connect_command(
         runtime_sync_summary = sync_runtime_session(store, session=runtime_session)
     except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
         sync_message = str(error)
-        failed_state = _record_connect_result(
+        pending_sync = {
+            "runtime_session_id": str(runtime_session.get("session_id") or runtime_session.get("sessionId") or ""),
+            "runtime_session_sync_pending": True,
+            "runtime_session_sync_reason": sync_message,
+        }
+        pending_state = _record_connect_result(
             daemon_client=daemon_client,
             store=store,
             request_id=str(connect_request["request_id"]),
-            status="retry_required",
-            milestone="first_sync_failed",
+            status="connected",
+            milestone="first_sync_pending",
             reason=sync_message,
+            sync=pending_sync,
         )
         return build_connect_payload(
-            state=failed_state,
+            state=pending_state,
             browser_opened=browser_opened,
             connect_url=browser_url,
             sync_url=sync_url,
-            connected=False,
+            connected=True,
+            sync=pending_sync,
             sync_message=sync_message,
         )
     try:
