@@ -6,12 +6,13 @@ import json
 import time
 import urllib.error
 import urllib.parse
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ..daemon import ensure_guard_daemon, load_guard_surface_daemon_client
 from ..daemon.client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
-from ..runtime import sync_receipts
+from ..runtime import sync_receipts, sync_runtime_session
 from ..store import GuardStore
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
@@ -70,13 +71,35 @@ def run_guard_connect_command(
             sync_url=sync_url,
             connected=False,
         )
-    if str(transition.get("status")) == "retry_required":
+    pairing_completed_at = str(transition.get("completed_at") or "").strip()
+    if str(transition.get("status")) == "retry_required" and not pairing_completed_at:
         return build_connect_payload(
             state=transition,
             browser_opened=browser_opened,
             connect_url=browser_url,
             sync_url=sync_url,
             connected=False,
+        )
+    runtime_session = _start_guard_runtime_session(daemon_client)
+    try:
+        runtime_sync_summary = sync_runtime_session(store, session=runtime_session)
+    except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
+        sync_message = str(error)
+        failed_state = _record_connect_result(
+            daemon_client=daemon_client,
+            store=store,
+            request_id=str(connect_request["request_id"]),
+            status="retry_required",
+            milestone="first_sync_failed",
+            reason=sync_message,
+        )
+        return build_connect_payload(
+            state=failed_state,
+            browser_opened=browser_opened,
+            connect_url=browser_url,
+            sync_url=sync_url,
+            connected=False,
+            sync_message=sync_message,
         )
     try:
         sync_payload = sync_receipts(store)
@@ -89,6 +112,9 @@ def run_guard_connect_command(
             status="connected",
             milestone="first_sync_pending",
             reason=sync_message,
+            sync={
+                **runtime_sync_summary,
+            },
         )
         return build_connect_payload(
             state=pending_state,
@@ -98,6 +124,9 @@ def run_guard_connect_command(
             connected=True,
             sync_message=sync_message,
         )
+    sync_payload["runtime_session_synced_at"] = runtime_sync_summary["runtime_session_synced_at"]
+    sync_payload["runtime_session_id"] = runtime_sync_summary["runtime_session_id"]
+    sync_payload["runtime_sessions_visible"] = runtime_sync_summary["runtime_sessions_visible"]
     final_state = _record_connect_result(
         daemon_client=daemon_client,
         store=store,
@@ -260,3 +289,32 @@ def _resolve_first_sync_milestone(state: dict[str, object]) -> str:
     if milestone == "first_sync_pending":
         return "waiting"
     return "pending"
+
+
+def _start_guard_runtime_session(daemon_client: GuardSurfaceDaemonClient) -> dict[str, object]:
+    start_session = getattr(daemon_client, "start_session", None)
+    if callable(start_session):
+        return start_session(
+            harness="hol-guard",
+            surface="cli",
+            workspace=str(Path.cwd()),
+            client_name="hol-guard",
+            client_title="HOL Guard CLI",
+            client_version=None,
+            capabilities=["approval-resolution", "receipt-view", "runtime-sync"],
+        )
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "sessionId": f"guard-session-{uuid.uuid4().hex}",
+        "harness": "hol-guard",
+        "surface": "cli",
+        "status": "active",
+        "clientName": "hol-guard",
+        "clientTitle": "HOL Guard CLI",
+        "clientVersion": None,
+        "workspace": str(Path.cwd()),
+        "capabilities": ["approval-resolution", "receipt-view", "runtime-sync"],
+        "operations": [],
+        "createdAt": now,
+        "updatedAt": now,
+    }
