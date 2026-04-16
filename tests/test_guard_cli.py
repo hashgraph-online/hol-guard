@@ -18,6 +18,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import connect_flow as guard_connect_flow_module
+from codex_plugin_scanner.guard.cli import update_commands as guard_update_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
@@ -2120,6 +2121,74 @@ args = ["workspace-skill.js", "--changed"]
         assert output["managed_install"]["active"] is True
         assert manifest["shim_command"] == "guard-opencode"
         assert runtime_payload["permission"]["skill"]["*"] == "ask"
+
+    def test_guard_update_runs_pip_upgrade_in_current_environment(self, monkeypatch, capsys):
+        commands: list[list[str]] = []
+
+        def fake_run(command: list[str], **_: object):
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout="updated", stderr="")
+
+        monkeypatch.setattr(guard_update_commands_module.subprocess, "run", fake_run)
+        monkeypatch.setattr(guard_update_commands_module.sys, "prefix", "/opt/guard-venv")
+        monkeypatch.setattr(guard_update_commands_module.sys, "executable", "/opt/guard-venv/bin/python")
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.18")
+
+        rc = main(["guard", "update", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["installer"] == "pip"
+        assert commands == [["/opt/guard-venv/bin/python", "-m", "pip", "install", "--upgrade", "hol-guard"]]
+        assert output["status"] == "updated"
+        assert output["stdout"] == "updated"
+
+    def test_guard_update_uses_pipx_when_running_from_pipx(self, monkeypatch, capsys):
+        commands: list[list[str]] = []
+
+        def fake_run(command: list[str], **_: object):
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, stdout="pipx-updated", stderr="")
+
+        monkeypatch.setattr(guard_update_commands_module.subprocess, "run", fake_run)
+        monkeypatch.setattr(guard_update_commands_module.sys, "prefix", "/Users/test/.local/pipx/venvs/hol-guard")
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.18")
+
+        rc = main(["guard", "update", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["installer"] == "pipx"
+        assert commands == [["pipx", "upgrade", "hol-guard"]]
+        assert output["status"] == "updated"
+
+    def test_guard_update_dry_run_emits_planned_command(self, monkeypatch, capsys):
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+
+        rc = main(["guard", "update", "--dry-run", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["status"] == "planned"
+        assert output["dry_run"] is True
+        assert output["command"]
+
+    def test_guard_update_skips_editable_installs(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            guard_update_commands_module,
+            "_direct_url_payload",
+            lambda: {"dir_info": {"editable": True}, "url": "file:///Users/test/ai-plugin-scanner"},
+        )
+
+        rc = main(["guard", "update", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["status"] == "skipped"
+        assert output["editable_install"] is True
+        assert "disabled for editable installs" in output["error"]
 
     def test_guard_uninstall_auto_detects_managed_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
