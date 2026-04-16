@@ -16,6 +16,14 @@ from .manager import (
 )
 
 
+class GuardDaemonRequestError(RuntimeError):
+    """Raised when the Guard daemon returns a non-retryable request failure."""
+
+
+class GuardDaemonTransportError(GuardDaemonRequestError):
+    """Raised when the Guard daemon request fails due to transport issues."""
+
+
 class GuardSurfaceDaemonClient:
     """Small authenticated client for the local Guard daemon."""
 
@@ -156,9 +164,9 @@ class GuardSurfaceDaemonClient:
                 message = payload.get("error", str(error))
             except (OSError, json.JSONDecodeError):
                 message = str(error)
-            raise RuntimeError(f"Guard daemon request failed: {message}") from error
+            raise GuardDaemonRequestError(f"Guard daemon request failed: {message}") from error
         except (OSError, urllib.error.URLError) as error:
-            raise RuntimeError(f"Guard daemon request failed: {error}") from error
+            raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
         state = payload.get("state")
         if isinstance(state, dict):
             return state
@@ -205,9 +213,9 @@ class GuardSurfaceDaemonClient:
                 message = payload.get("error", str(error))
             except (OSError, json.JSONDecodeError):
                 message = str(error)
-            raise RuntimeError(f"Guard daemon request failed: {message}") from error
+            raise GuardDaemonRequestError(f"Guard daemon request failed: {message}") from error
         except (OSError, urllib.error.URLError) as error:
-            raise RuntimeError(f"Guard daemon request failed: {error}") from error
+            raise GuardDaemonTransportError(f"Guard daemon request failed: {error}") from error
 
 
 def load_guard_surface_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClient:

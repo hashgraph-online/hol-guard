@@ -2618,7 +2618,7 @@ args = ["workspace-skill.js", "--changed"]
             def get_connect_state(self, *, request_id: str) -> dict[str, object]:
                 self.calls += 1
                 if self.calls == 1:
-                    raise RuntimeError("daemon restarting")
+                    raise guard_connect_flow_module.GuardDaemonTransportError("daemon restarting")
                 return {
                     "request_id": request_id,
                     "status": "connected",
@@ -2641,6 +2641,23 @@ args = ["workspace-skill.js", "--changed"]
         assert state is not None
         assert state["status"] == "connected"
         assert state["milestone"] == "first_sync_succeeded"
+
+    def test_guard_connect_wait_surfaces_permanent_daemon_poll_failures(self, monkeypatch):
+        class FakeDaemonClient:
+            def get_connect_state(self, *, request_id: str) -> dict[str, object]:
+                raise guard_connect_flow_module.GuardDaemonRequestError("unauthorized")
+
+        monotonic_values = iter((0.0, 0.0))
+        monkeypatch.setattr(guard_connect_flow_module.time, "monotonic", lambda: next(monotonic_values))
+        monkeypatch.setattr(guard_connect_flow_module.time, "sleep", lambda seconds: None)
+
+        with pytest.raises(guard_connect_flow_module.GuardDaemonRequestError, match="unauthorized"):
+            guard_connect_flow_module.wait_for_connect_transition(
+                daemon_client=FakeDaemonClient(),
+                request_id="req-123",
+                timeout_seconds=1,
+                poll_interval_seconds=0,
+            )
 
     def test_guard_connect_marks_retry_required_for_sync_transport_failures(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
