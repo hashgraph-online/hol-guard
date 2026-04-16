@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import sqlite3
+import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -24,6 +25,8 @@ NON_MIGRATED_GUARD_RUNTIME_FILES = frozenset(
         "guard.db-wal",
     }
 )
+GUARD_DB_BACKUP_TIMEOUT_SECONDS = 5.0
+GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
@@ -223,14 +226,28 @@ def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
 
 def _copy_guard_database(*, source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary_destination = destination.with_name(f"{destination.name}.migrating")
+    deadline = time.monotonic() + GUARD_DB_BACKUP_TIMEOUT_SECONDS
     try:
         with (
             sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_connection,
-            sqlite3.connect(destination) as destination_connection,
+            sqlite3.connect(temporary_destination) as destination_connection,
         ):
-            source_connection.backup(destination_connection)
-    except sqlite3.Error:
-        shutil.copy2(source, destination)
+            source_connection.backup(
+                destination_connection,
+                pages=128,
+                progress=lambda *_: _raise_when_backup_deadline_elapsed(deadline),
+                sleep=GUARD_DB_BACKUP_SLEEP_SECONDS,
+            )
+        temporary_destination.replace(destination)
+    except (TimeoutError, sqlite3.Error):
+        if temporary_destination.exists():
+            temporary_destination.unlink()
+
+
+def _raise_when_backup_deadline_elapsed(deadline: float) -> None:
+    if time.monotonic() >= deadline:
+        raise TimeoutError("guard.db migration timed out")
 
 
 def _load_workspace_guard_config(workspace: Path | None) -> dict[str, object]:
