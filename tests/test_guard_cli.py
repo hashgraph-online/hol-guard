@@ -2468,6 +2468,19 @@ args = ["workspace-skill.js", "--changed"]
                     "allowed_origin": allowed_origin,
                 }
 
+            def get_connect_state(self, *, request_id: str) -> dict[str, object]:
+                return {
+                    "request_id": request_id,
+                    "status": "waiting",
+                    "milestone": "waiting_for_browser",
+                    "completed_at": None,
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "proof": {},
+                }
+
+            def report_connect_result(self, **kwargs) -> dict[str, object]:
+                raise AssertionError("report_connect_result should not be called when the browser never completes")
+
         monkeypatch.setattr(
             guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4779"
         )
@@ -2476,8 +2489,6 @@ args = ["workspace-skill.js", "--changed"]
             "load_guard_surface_daemon_client",
             lambda guard_home: FakeDaemonClient(),
         )
-        monkeypatch.setattr(guard_connect_flow_module, "wait_for_connect_completion", lambda **kwargs: None)
-
         payload = guard_connect_flow_module.run_guard_connect_command(
             guard_home=tmp_path / "guard-home",
             store=store,
@@ -2489,7 +2500,8 @@ args = ["workspace-skill.js", "--changed"]
 
         parsed = urllib.parse.urlparse(opened_urls[0])
         query = urllib.parse.parse_qs(parsed.query)
-        assert payload["status"] == "waiting_for_browser"
+        assert payload["status"] == "waiting"
+        assert payload["milestone"] == "waiting_for_browser"
         assert query["guardDaemon"] == ["http://127.0.0.1:4781"]
 
     def test_guard_connect_preserves_custom_connect_query_params(self, tmp_path, monkeypatch):
@@ -2507,6 +2519,19 @@ args = ["workspace-skill.js", "--changed"]
                     "allowed_origin": allowed_origin,
                 }
 
+            def get_connect_state(self, *, request_id: str) -> dict[str, object]:
+                return {
+                    "request_id": request_id,
+                    "status": "waiting",
+                    "milestone": "waiting_for_browser",
+                    "completed_at": None,
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "proof": {},
+                }
+
+            def report_connect_result(self, **kwargs) -> dict[str, object]:
+                raise AssertionError("report_connect_result should not be called when the browser never completes")
+
         monkeypatch.setattr(
             guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
         )
@@ -2515,8 +2540,6 @@ args = ["workspace-skill.js", "--changed"]
             "load_guard_surface_daemon_client",
             lambda guard_home: FakeDaemonClient(),
         )
-        monkeypatch.setattr(guard_connect_flow_module, "wait_for_connect_completion", lambda **kwargs: None)
-
         payload = guard_connect_flow_module.run_guard_connect_command(
             guard_home=tmp_path / "guard-home",
             store=store,
@@ -2528,7 +2551,8 @@ args = ["workspace-skill.js", "--changed"]
 
         parsed = urllib.parse.urlparse(opened_urls[0])
         query = urllib.parse.parse_qs(parsed.query)
-        assert payload["status"] == "waiting_for_browser"
+        assert payload["status"] == "waiting"
+        assert payload["milestone"] == "waiting_for_browser"
         assert query["tenant"] == ["enterprise"]
         assert query["invite"] == ["abc123"]
         assert query["guardPairRequest"] == ["req-123"]
@@ -2548,6 +2572,31 @@ args = ["workspace-skill.js", "--changed"]
                     "allowed_origin": allowed_origin,
                 }
 
+            def get_connect_state(self, *, request_id: str) -> dict[str, object]:
+                return {
+                    "request_id": request_id,
+                    "status": "connected",
+                    "milestone": "first_sync_pending",
+                    "completed_at": "2026-04-15T00:00:00Z",
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "proof": {
+                        "pairing_completed_at": "2026-04-15T00:00:00Z",
+                    },
+                }
+
+            def report_connect_result(self, *, request_id: str, status: str, milestone: str, reason=None, sync=None):
+                return {
+                    "request_id": request_id,
+                    "status": status,
+                    "milestone": milestone,
+                    "completed_at": "2026-04-15T00:00:00Z",
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "reason": reason,
+                    "proof": {
+                        "pairing_completed_at": "2026-04-15T00:00:00Z",
+                    },
+                }
+
         monkeypatch.setattr(
             guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
         )
@@ -2558,24 +2607,23 @@ args = ["workspace-skill.js", "--changed"]
         )
         monkeypatch.setattr(
             guard_connect_flow_module,
-            "wait_for_connect_completion",
-            lambda **kwargs: {"status": "completed", "request_id": "req-123", "completed_at": "2026-04-15T00:00:00Z"},
-        )
-        monkeypatch.setattr(
-            guard_connect_flow_module,
             "sync_receipts",
             lambda current_store: (_ for _ in ()).throw(urllib.error.URLError("offline")),
         )
 
-        with pytest.raises(RuntimeError, match="Guard paired successfully but sync failed"):
-            guard_connect_flow_module.run_guard_connect_command(
-                guard_home=tmp_path / "guard-home",
-                store=store,
-                sync_url="https://hol.org/api/guard/receipts/sync",
-                connect_url="https://hol.org/guard/connect",
-                opener=lambda url: True,
-                wait_timeout_seconds=1,
-            )
+        payload = guard_connect_flow_module.run_guard_connect_command(
+            guard_home=tmp_path / "guard-home",
+            store=store,
+            sync_url="https://hol.org/api/guard/receipts/sync",
+            connect_url="https://hol.org/guard/connect",
+            opener=lambda url: True,
+            wait_timeout_seconds=1,
+        )
+
+        assert payload["connected"] is True
+        assert payload["status"] == "connected"
+        assert payload["milestone"] == "first_sync_pending"
+        assert payload["sync_message"] == "<urlopen error offline>"
 
     def test_guard_connect_reports_paid_plan_limit_without_failing_pairing(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
@@ -2591,6 +2639,31 @@ args = ["workspace-skill.js", "--changed"]
                     "allowed_origin": allowed_origin,
                 }
 
+            def get_connect_state(self, *, request_id: str) -> dict[str, object]:
+                return {
+                    "request_id": request_id,
+                    "status": "connected",
+                    "milestone": "first_sync_pending",
+                    "completed_at": "2026-04-15T00:00:00Z",
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "proof": {
+                        "pairing_completed_at": "2026-04-15T00:00:00Z",
+                    },
+                }
+
+            def report_connect_result(self, *, request_id: str, status: str, milestone: str, reason=None, sync=None):
+                return {
+                    "request_id": request_id,
+                    "status": status,
+                    "milestone": milestone,
+                    "completed_at": "2026-04-15T00:00:00Z",
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "reason": reason,
+                    "proof": {
+                        "pairing_completed_at": "2026-04-15T00:00:00Z",
+                    },
+                }
+
         monkeypatch.setattr(
             guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
         )
@@ -2598,11 +2671,6 @@ args = ["workspace-skill.js", "--changed"]
             guard_connect_flow_module,
             "load_guard_surface_daemon_client",
             lambda guard_home: FakeDaemonClient(),
-        )
-        monkeypatch.setattr(
-            guard_connect_flow_module,
-            "wait_for_connect_completion",
-            lambda **kwargs: {"status": "completed", "request_id": "req-123", "completed_at": "2026-04-15T00:00:00Z"},
         )
         monkeypatch.setattr(
             guard_connect_flow_module,
@@ -2620,7 +2688,8 @@ args = ["workspace-skill.js", "--changed"]
         )
 
         assert payload["connected"] is True
-        assert payload["status"] == "paired_without_cloud_sync"
+        assert payload["status"] == "connected"
+        assert payload["milestone"] == "first_sync_pending"
         assert payload["sync_message"] == "Guard Cloud sync requires a paid Guard plan"
 
     def test_guard_connect_reports_guard_plan_required_without_failing_pairing(self, tmp_path, monkeypatch):
@@ -2637,6 +2706,31 @@ args = ["workspace-skill.js", "--changed"]
                     "allowed_origin": allowed_origin,
                 }
 
+            def get_connect_state(self, *, request_id: str) -> dict[str, object]:
+                return {
+                    "request_id": request_id,
+                    "status": "connected",
+                    "milestone": "first_sync_pending",
+                    "completed_at": "2026-04-15T00:00:00Z",
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "proof": {
+                        "pairing_completed_at": "2026-04-15T00:00:00Z",
+                    },
+                }
+
+            def report_connect_result(self, *, request_id: str, status: str, milestone: str, reason=None, sync=None):
+                return {
+                    "request_id": request_id,
+                    "status": status,
+                    "milestone": milestone,
+                    "completed_at": "2026-04-15T00:00:00Z",
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "reason": reason,
+                    "proof": {
+                        "pairing_completed_at": "2026-04-15T00:00:00Z",
+                    },
+                }
+
         monkeypatch.setattr(
             guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
         )
@@ -2644,11 +2738,6 @@ args = ["workspace-skill.js", "--changed"]
             guard_connect_flow_module,
             "load_guard_surface_daemon_client",
             lambda guard_home: FakeDaemonClient(),
-        )
-        monkeypatch.setattr(
-            guard_connect_flow_module,
-            "wait_for_connect_completion",
-            lambda **kwargs: {"status": "completed", "request_id": "req-124", "completed_at": "2026-04-15T00:00:00Z"},
         )
         monkeypatch.setattr(
             guard_connect_flow_module,
@@ -2666,7 +2755,8 @@ args = ["workspace-skill.js", "--changed"]
         )
 
         assert payload["connected"] is True
-        assert payload["status"] == "paired_without_cloud_sync"
+        assert payload["status"] == "connected"
+        assert payload["milestone"] == "first_sync_pending"
         assert payload["sync_message"] == "Guard plan required"
 
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):

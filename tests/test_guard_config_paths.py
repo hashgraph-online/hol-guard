@@ -21,16 +21,15 @@ def test_resolve_guard_home_defaults_to_hol_guard_directory(tmp_path, monkeypatc
     assert resolve_guard_home() == home_dir / ".hol-guard"
 
 
-def test_resolve_guard_home_falls_back_to_legacy_directory(tmp_path, monkeypatch):
+def test_resolve_guard_home_migrates_legacy_directory_into_canonical_home(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     legacy_home = home_dir / ".config" / ".ai-plugin-scanner-guard"
     legacy_home.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
-    assert resolve_guard_home() == legacy_home
+    assert resolve_guard_home() == home_dir / ".hol-guard"
 
-
-def test_resolve_guard_home_prefers_legacy_state_over_empty_canonical_directory(tmp_path, monkeypatch):
+def test_resolve_guard_home_copies_legacy_state_into_canonical_directory(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     canonical_home = home_dir / ".hol-guard"
     legacy_home = home_dir / ".config" / ".ai-plugin-scanner-guard"
@@ -38,10 +37,10 @@ def test_resolve_guard_home_prefers_legacy_state_over_empty_canonical_directory(
     _write_text(legacy_home / "guard.db", "sqlite placeholder")
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
-    assert resolve_guard_home() == legacy_home
+    assert resolve_guard_home() == canonical_home
+    assert (canonical_home / "guard.db").read_text(encoding="utf-8") == "sqlite placeholder"
 
-
-def test_resolve_guard_home_prefers_legacy_credentials_over_empty_canonical_database(tmp_path, monkeypatch):
+def test_resolve_guard_home_migrates_legacy_credentials_into_canonical_database(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     canonical_home = home_dir / ".hol-guard"
     legacy_home = home_dir / ".ai-plugin-scanner-guard"
@@ -50,7 +49,14 @@ def test_resolve_guard_home_prefers_legacy_credentials_over_empty_canonical_data
     legacy_store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "legacy-token", "2026-04-15T00:00:00Z")
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
-    assert resolve_guard_home() == legacy_home
+    resolved_home = resolve_guard_home()
+
+    assert resolved_home == canonical_home
+    canonical_store = GuardStore(canonical_home)
+    assert canonical_store.get_sync_credentials() == {
+        "token": "legacy-token",
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+    }
 
 
 def test_resolve_guard_home_keeps_canonical_state_when_legacy_only_has_credentials(tmp_path, monkeypatch):

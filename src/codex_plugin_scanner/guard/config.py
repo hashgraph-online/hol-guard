@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import sqlite3
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -88,11 +89,10 @@ def resolve_guard_home(override: str | None = None) -> Path:
         return canonical_home
     if _guard_home_has_state(canonical_home):
         return canonical_home
-    if _guard_home_has_sync_credentials(legacy_home):
-        return legacy_home
-    if canonical_home.exists() and _guard_home_has_state(legacy_home):
-        return legacy_home
-    return legacy_home if not canonical_home.exists() else canonical_home
+    if _guard_home_has_sync_credentials(legacy_home) or _guard_home_has_state(legacy_home):
+        _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
+        return canonical_home
+    return canonical_home
 
 
 def _read_toml(path: Path) -> dict[str, object]:
@@ -186,6 +186,23 @@ def _existing_legacy_guard_home() -> Path | None:
         if candidate.exists():
             return candidate
     return None
+
+
+def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
+    if not source.exists():
+        return
+    destination.mkdir(parents=True, exist_ok=True)
+    replace_database = not _guard_home_has_sync_credentials(destination) and not _guard_home_has_state(destination)
+    for entry in source.iterdir():
+        target = destination / entry.name
+        if target.exists():
+            if replace_database and entry.name == "guard.db" and entry.is_file():
+                shutil.copy2(entry, target)
+            continue
+        if entry.is_dir():
+            shutil.copytree(entry, target)
+            continue
+        shutil.copy2(entry, target)
 
 
 def _load_workspace_guard_config(workspace: Path | None) -> dict[str, object]:

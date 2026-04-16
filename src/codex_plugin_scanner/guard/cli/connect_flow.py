@@ -44,47 +44,91 @@ def run_guard_connect_command(
         pairing_secret=str(connect_request["pairing_secret"]),
     )
     browser_opened = bool(opener(browser_url))
-    completion = wait_for_connect_completion(
-        store=store,
+    transition = wait_for_connect_transition(
+        daemon_client=daemon_client,
         request_id=str(connect_request["request_id"]),
         timeout_seconds=wait_timeout_seconds,
     )
-    if completion is None:
-        return {
-            "connected": False,
-            "browser_opened": browser_opened,
-            "connect_url": browser_url,
-            "sync_url": sync_url,
-            "status": "waiting_for_browser",
-        }
+    if transition is None:
+        return build_connect_payload(
+            state={
+                "request_id": str(connect_request["request_id"]),
+                "status": "waiting",
+                "milestone": "waiting_for_browser",
+                "reason": "waiting_for_browser",
+                "completed_at": None,
+                "expires_at": connect_request.get("expires_at"),
+                "proof": {},
+            },
+            browser_opened=browser_opened,
+            connect_url=browser_url,
+            sync_url=sync_url,
+            connected=False,
+        )
+    if str(transition.get("status")) == "expired":
+        return build_connect_payload(
+            state=transition,
+            browser_opened=browser_opened,
+            connect_url=browser_url,
+            sync_url=sync_url,
+            connected=False,
+        )
+    if str(transition.get("status")) == "retry_required":
+        return build_connect_payload(
+            state=transition,
+            browser_opened=browser_opened,
+            connect_url=browser_url,
+            sync_url=sync_url,
+            connected=False,
+        )
     try:
         sync_payload = sync_receipts(store)
     except RuntimeError as error:
         sync_message = str(error)
-        if _is_plan_limited_sync_error(sync_message):
-            return {
-                "connected": True,
-                "browser_opened": browser_opened,
-                "connect_url": browser_url,
-                "sync_url": sync_url,
-                "status": "paired_without_cloud_sync",
-                "request_id": str(completion["request_id"]),
-                "completed_at": completion.get("completed_at"),
-                "sync_message": sync_message,
-            }
-        raise RuntimeError(f"Guard paired successfully but sync failed: {sync_message}") from error
+        pending_state = daemon_client.report_connect_result(
+            request_id=str(connect_request["request_id"]),
+            status="connected",
+            milestone="first_sync_pending",
+            reason=sync_message,
+        )
+        return build_connect_payload(
+            state=pending_state,
+            browser_opened=browser_opened,
+            connect_url=browser_url,
+            sync_url=sync_url,
+            connected=True,
+            sync_message=sync_message,
+        )
     except (OSError, json.JSONDecodeError, urllib.error.URLError) as error:
-        raise RuntimeError(f"Guard paired successfully but sync failed: {error}") from error
-    return {
-        "connected": True,
-        "browser_opened": browser_opened,
-        "connect_url": browser_url,
-        "sync_url": sync_url,
-        "status": str(completion["status"]),
-        "request_id": str(completion["request_id"]),
-        "completed_at": completion.get("completed_at"),
-        "sync": sync_payload,
-    }
+        sync_message = str(error)
+        pending_state = daemon_client.report_connect_result(
+            request_id=str(connect_request["request_id"]),
+            status="connected",
+            milestone="first_sync_pending",
+            reason=sync_message,
+        )
+        return build_connect_payload(
+            state=pending_state,
+            browser_opened=browser_opened,
+            connect_url=browser_url,
+            sync_url=sync_url,
+            connected=True,
+            sync_message=sync_message,
+        )
+    final_state = daemon_client.report_connect_result(
+        request_id=str(connect_request["request_id"]),
+        status="connected",
+        milestone="first_sync_succeeded",
+        sync=sync_payload,
+    )
+    return build_connect_payload(
+        state=final_state,
+        browser_opened=browser_opened,
+        connect_url=browser_url,
+        sync_url=sync_url,
+        connected=True,
+        sync=sync_payload,
+    )
 
 
 def resolve_connect_url(connect_url: str) -> tuple[str, str]:
@@ -98,8 +142,6 @@ def resolve_connect_url(connect_url: str) -> tuple[str, str]:
 
 
 def _is_plan_limited_sync_error(message: str) -> bool:
-    """Match the stable plan-limit phrases returned by Guard Cloud sync today."""
-
     normalized = message.strip().lower()
     has_plan_limit_phrase = any(phrase in normalized for phrase in _PLAN_LIMITED_SYNC_PHRASES)
     if "guard" in normalized and has_plan_limit_phrase:
@@ -134,17 +176,75 @@ def build_guard_connect_browser_url(
     )
 
 
-def wait_for_connect_completion(
+def wait_for_connect_transition(
     *,
-    store: GuardStore,
+    daemon_client,
     request_id: str,
     timeout_seconds: int,
     poll_interval_seconds: float = 0.25,
 ) -> dict[str, object] | None:
     deadline = time.monotonic() + max(1, timeout_seconds)
     while time.monotonic() < deadline:
-        request = store.get_guard_connect_request(request_id)
-        if request is not None and str(request.get("status")) == "completed":
-            return request
+        state = daemon_client.get_connect_state(request_id=request_id)
+        if str(state.get("status")) in {"connected", "retry_required", "expired"}:
+            return state
+        if str(state.get("milestone")) == "first_sync_pending":
+            return state
         time.sleep(poll_interval_seconds)
     return None
+
+
+def build_connect_payload(
+    *,
+    state: dict[str, object],
+    browser_opened: bool,
+    connect_url: str,
+    sync_url: str,
+    connected: bool,
+    sync: dict[str, object] | None = None,
+    sync_message: str | None = None,
+) -> dict[str, object]:
+    milestones = [
+        {
+            "label": "browser_opened",
+            "status": "completed" if browser_opened else "pending",
+        },
+        {
+            "label": "pairing_completed",
+            "status": "completed" if state.get("completed_at") else "pending",
+        },
+        {
+            "label": "first_sync",
+            "status": _resolve_first_sync_milestone(state),
+        },
+    ]
+    payload = {
+        "connected": connected,
+        "browser_opened": browser_opened,
+        "connect_url": connect_url,
+        "sync_url": sync_url,
+        "status": str(state.get("status") or "waiting"),
+        "milestone": str(state.get("milestone") or "waiting_for_browser"),
+        "reason": state.get("reason"),
+        "request_id": state.get("request_id"),
+        "completed_at": state.get("completed_at"),
+        "expires_at": state.get("expires_at"),
+        "proof": dict(state.get("proof")) if isinstance(state.get("proof"), dict) else {},
+        "milestones": milestones,
+    }
+    if sync is not None:
+        payload["sync"] = sync
+    if sync_message is not None and sync_message.strip():
+        payload["sync_message"] = sync_message
+    return payload
+
+
+def _resolve_first_sync_milestone(state: dict[str, object]) -> str:
+    milestone = str(state.get("milestone") or "")
+    if milestone == "first_sync_succeeded":
+        return "completed"
+    if milestone == "first_sync_failed":
+        return "failed"
+    if milestone == "first_sync_pending":
+        return "waiting"
+    return "pending"

@@ -443,6 +443,43 @@ class TestGuardApprovals:
         assert launched_commands
         assert launched_commands[0][-2:] == ["--port", str(expected_port)]
 
+    def test_load_guard_daemon_url_rejects_stale_runtime_without_connect_state_support(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self) -> FakeResponse:
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "ok": True,
+                        "tables": [
+                            "approval_requests",
+                            "guard_connect_requests",
+                            "sync_state",
+                        ],
+                    }
+                ).encode("utf-8")
+
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_load_state",
+            lambda _guard_home: {"port": 5530, "auth_token": "token-123"},
+        )
+        monkeypatch.setattr(
+            daemon_manager_module.urllib.request,
+            "urlopen",
+            lambda request, timeout=1: FakeResponse(),
+        )
+
+        assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
+
     def test_guard_daemon_serves_approval_queue_and_resolves_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         store.add_approval_request(

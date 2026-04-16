@@ -44,12 +44,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path == "/v1/connect/complete":
+        if parsed.path in {"/v1/connect/complete", "/v1/connect/state"}:
             origin = self._normalize_origin(self.headers.get("Origin"))
             if origin is None:
                 self._write_empty(status=400)
                 return
-            self._write_empty(status=200, extra_headers=self._cors_headers(origin))
+            self._write_empty(
+                status=200,
+                extra_headers=self._cors_headers(origin, allow_methods="GET, POST, OPTIONS"),
+            )
             return
         self._write_empty(status=404)
 
@@ -97,6 +100,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/requests":
             self._write_json({"items": store.list_approval_requests(limit=200)})
+            return
+        if parsed.path == "/v1/connect/state":
+            self._handle_connect_state_read(parsed.query)
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "requests"]:
             approval = store.get_approval_request(path_parts[2])
@@ -217,6 +223,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/connect/complete":
             self._handle_connect_complete(payload)
+            return
+        if parsed.path == "/v1/connect/result":
+            if not self._header_token_is_valid():
+                self._write_json({"error": "unauthorized"}, status=401)
+                return
+            self._handle_connect_result_update(payload)
             return
         if parsed.path == "/v1/operations/block":
             if not self._header_token_is_valid():
@@ -532,6 +544,72 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             extra_headers=self._cors_headers(origin),
         )
 
+    def _handle_connect_state_read(self, query: str) -> None:
+        params = parse_qs(query)
+        request_id = self._optional_string(params.get("request_id", [None])[-1])
+        pairing_secret = self._optional_string(params.get("pairing_secret", [None])[-1])
+        origin = self._normalize_origin(self.headers.get("Origin"))
+        if request_id is None:
+            self._write_json({"error": "missing_required_fields"}, status=400)
+            return
+        if self._header_token_is_valid():
+            state = self.server.store.get_guard_connect_state(request_id, now=_now())  # type: ignore[attr-defined]
+            if state is None:
+                self._write_json({"error": "not_found"}, status=404)
+                return
+            self._write_json({"state": state})
+            return
+        if origin is None or pairing_secret is None:
+            self._write_json({"error": "unauthorized"}, status=401)
+            return
+        access = self.server.store.verify_guard_connect_access(  # type: ignore[attr-defined]
+            request_id=request_id,
+            pairing_secret=pairing_secret,
+        )
+        if access is None:
+            self._write_json({"error": "forbidden"}, status=403, extra_headers=self._cors_headers(origin))
+            return
+        if origin != str(access["allowed_origin"]):
+            self._write_json(
+                {"error": "forbidden_origin"},
+                status=403,
+                extra_headers=self._cors_headers(origin),
+            )
+            return
+        state = self.server.store.get_guard_connect_state(request_id, now=_now())  # type: ignore[attr-defined]
+        if state is None:
+            self._write_json({"error": "not_found"}, status=404, extra_headers=self._cors_headers(origin))
+            return
+        self._write_json({"state": state}, extra_headers=self._cors_headers(origin))
+
+    def _handle_connect_result_update(self, payload: dict[str, object]) -> None:
+        request_id = self._optional_string(payload.get("request_id"))
+        status = self._optional_string(payload.get("status"))
+        milestone = self._optional_string(payload.get("milestone"))
+        reason = self._optional_string(payload.get("reason"))
+        sync_payload = payload.get("sync")
+        if request_id is None or status is None or milestone is None:
+            self._write_json({"error": "missing_required_fields"}, status=400)
+            return
+        normalized_sync_payload = dict(sync_payload) if isinstance(sync_payload, dict) else None
+        try:
+            state = self.server.store.record_guard_connect_result(  # type: ignore[attr-defined]
+                request_id=request_id,
+                status=status,
+                milestone=milestone,
+                now=_now(),
+                reason=reason,
+                sync_payload=normalized_sync_payload,
+            )
+        except ValueError as error:
+            error_code = str(error)
+            status_code = 400
+            if error_code == "connect_state_not_found":
+                status_code = 404
+            self._write_json({"error": error_code}, status=status_code)
+            return
+        self._write_json({"state": state})
+
     def _token_is_valid(self, query: str) -> bool:
         params = parse_qs(query)
         token = params.get("token", [None])[-1]
@@ -608,10 +686,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return f"{parsed.scheme}://{host}{port_suffix}"
 
     @staticmethod
-    def _cors_headers(origin: str) -> dict[str, str]:
+    def _cors_headers(origin: str, *, allow_methods: str = "POST, OPTIONS") -> dict[str, str]:
         return {
             "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Methods": allow_methods,
             "Access-Control-Allow-Headers": "Content-Type",
             "Vary": "Origin",
         }
