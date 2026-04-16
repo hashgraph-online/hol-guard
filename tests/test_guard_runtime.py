@@ -160,6 +160,8 @@ class TestGuardRuntime:
         )
 
         assert summary["runtime_session_id"] == "session-live"
+        assert summary["synced_at"] is None
+        assert summary["runtime_session_synced_at"] is None
         assert summary["runtime_session_sync_skipped"] is True
         assert summary["runtime_session_sync_reason"] == "runtime_session_endpoint_unavailable"
 
