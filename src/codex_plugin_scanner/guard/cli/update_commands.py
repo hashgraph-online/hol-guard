@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import importlib.metadata
 import json
 import subprocess
@@ -22,7 +23,14 @@ def run_guard_update(*, dry_run: bool) -> tuple[dict[str, object], int]:
     direct_url = _direct_url_payload()
     if direct_url is not None:
         payload["direct_url"] = direct_url
-        payload["editable_install"] = bool(direct_url.get("dir_info", {}).get("editable"))
+        is_editable = bool(direct_url.get("dir_info", {}).get("editable"))
+        payload["editable_install"] = is_editable
+        if is_editable:
+            payload["status"] = "skipped"
+            payload["error"] = (
+                "Automatic update is disabled for editable installs. Re-run your local install workflow instead."
+            )
+            return payload, 0
     if dry_run:
         payload["status"] = "planned"
         return payload, 0
@@ -33,7 +41,7 @@ def run_guard_update(*, dry_run: bool) -> tuple[dict[str, object], int]:
             check=False,
             text=True,
         )
-    except FileNotFoundError as error:
+    except OSError as error:
         payload["status"] = "failed"
         payload["error"] = str(error)
         return payload, 1
@@ -41,7 +49,8 @@ def run_guard_update(*, dry_run: bool) -> tuple[dict[str, object], int]:
     payload["stdout"] = result.stdout.strip()
     payload["stderr"] = result.stderr.strip()
     payload["return_code"] = result.returncode
-    payload["resulting_version"] = _current_version()
+    importlib.invalidate_caches()
+    payload["resulting_version"] = _current_version_from_subprocess()
     return payload, 0 if result.returncode == 0 else 1
 
 
@@ -53,8 +62,10 @@ def _current_version() -> str:
 
 
 def _installer_kind() -> str:
-    prefix = Path(sys.prefix).resolve().as_posix()
-    if "/pipx/venvs/" in prefix:
+    prefix_path = Path(sys.prefix).resolve()
+    if (prefix_path / "pipx_metadata.json").exists():
+        return "pipx"
+    if "/pipx/venvs/" in prefix_path.as_posix().lower():
         return "pipx"
     return "pip"
 
@@ -78,6 +89,22 @@ def _direct_url_payload() -> dict[str, object] | None:
     except json.JSONDecodeError:
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def _current_version_from_subprocess() -> str:
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", 'import importlib.metadata; print(importlib.metadata.version("hol-guard"))'],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+    except OSError:
+        return _current_version()
+    if result.returncode != 0:
+        return _current_version()
+    version = result.stdout.strip()
+    return version or _current_version()
 
 
 __all__ = ["run_guard_update"]

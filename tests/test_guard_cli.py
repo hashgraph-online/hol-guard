@@ -2132,6 +2132,8 @@ args = ["workspace-skill.js", "--changed"]
         monkeypatch.setattr(guard_update_commands_module.subprocess, "run", fake_run)
         monkeypatch.setattr(guard_update_commands_module.sys, "prefix", "/opt/guard-venv")
         monkeypatch.setattr(guard_update_commands_module.sys, "executable", "/opt/guard-venv/bin/python")
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.18")
 
         rc = main(["guard", "update", "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -2151,6 +2153,8 @@ args = ["workspace-skill.js", "--changed"]
 
         monkeypatch.setattr(guard_update_commands_module.subprocess, "run", fake_run)
         monkeypatch.setattr(guard_update_commands_module.sys, "prefix", "/Users/test/.local/pipx/venvs/hol-guard")
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.18")
 
         rc = main(["guard", "update", "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -2160,7 +2164,9 @@ args = ["workspace-skill.js", "--changed"]
         assert commands == [["pipx", "upgrade", "hol-guard"]]
         assert output["status"] == "updated"
 
-    def test_guard_update_dry_run_emits_planned_command(self, capsys):
+    def test_guard_update_dry_run_emits_planned_command(self, monkeypatch, capsys):
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+
         rc = main(["guard", "update", "--dry-run", "--json"])
         output = json.loads(capsys.readouterr().out)
 
@@ -2168,6 +2174,21 @@ args = ["workspace-skill.js", "--changed"]
         assert output["status"] == "planned"
         assert output["dry_run"] is True
         assert output["command"]
+
+    def test_guard_update_skips_editable_installs(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            guard_update_commands_module,
+            "_direct_url_payload",
+            lambda: {"dir_info": {"editable": True}, "url": "file:///Users/test/ai-plugin-scanner"},
+        )
+
+        rc = main(["guard", "update", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["status"] == "skipped"
+        assert output["editable_install"] is True
+        assert "disabled for editable installs" in output["error"]
 
     def test_guard_uninstall_auto_detects_managed_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

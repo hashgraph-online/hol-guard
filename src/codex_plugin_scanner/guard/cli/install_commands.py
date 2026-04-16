@@ -29,7 +29,6 @@ def apply_managed_install(
             managed_installs.append(managed_install)
     payload: dict[str, object] = {
         "managed_installs": managed_installs,
-        "operation": command,
         "auto_detected": requested_harness is None or install_all,
     }
     if len(managed_installs) == 1:
