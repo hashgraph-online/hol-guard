@@ -203,12 +203,26 @@ def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
                 _migrate_guard_home_state(source=entry, destination=target)
                 continue
             if replace_database and entry.name == "guard.db" and entry.is_file():
-                shutil.copy2(entry, target)
+                _copy_guard_database(source=entry, destination=target)
             continue
         if entry.is_dir():
             shutil.copytree(entry, target)
             continue
+        if entry.name == "guard.db" and entry.is_file():
+            _copy_guard_database(source=entry, destination=target)
+            continue
         shutil.copy2(entry, target)
+
+
+def _copy_guard_database(*, source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with sqlite3.connect(f"file:{source}?mode=ro", uri=True) as source_connection, sqlite3.connect(
+            destination
+        ) as destination_connection:
+            source_connection.backup(destination_connection)
+    except sqlite3.Error:
+        shutil.copy2(source, destination)
 
 
 def _load_workspace_guard_config(workspace: Path | None) -> dict[str, object]:

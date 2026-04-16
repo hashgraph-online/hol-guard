@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from codex_plugin_scanner.guard import bridge as bridge_module
@@ -12,6 +13,13 @@ from codex_plugin_scanner.guard.store import GuardStore
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _create_sqlite_guard_db(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path) as connection:
+        connection.execute("create table migration_probe (value text)")
+        connection.execute("insert into migration_probe(value) values ('legacy')")
 
 
 def test_resolve_guard_home_defaults_to_hol_guard_directory(tmp_path, monkeypatch):
@@ -29,16 +37,16 @@ def test_resolve_guard_home_migrates_legacy_directory_into_canonical_home(tmp_pa
 
     assert resolve_guard_home() == home_dir / ".hol-guard"
 
-def test_resolve_guard_home_copies_legacy_state_into_canonical_directory(tmp_path, monkeypatch):
-    home_dir = tmp_path / "home"
-    canonical_home = home_dir / ".hol-guard"
-    legacy_home = home_dir / ".config" / ".ai-plugin-scanner-guard"
-    canonical_home.mkdir(parents=True, exist_ok=True)
-    _write_text(legacy_home / "guard.db", "sqlite placeholder")
-    monkeypatch.setattr(Path, "home", lambda: home_dir)
+def test_migrate_guard_home_state_copies_guard_db_with_sqlite_backup(tmp_path):
+    canonical_home = tmp_path / ".hol-guard"
+    legacy_home = tmp_path / ".config" / ".ai-plugin-scanner-guard"
+    _create_sqlite_guard_db(legacy_home / "guard.db")
 
-    assert resolve_guard_home() == canonical_home
-    assert (canonical_home / "guard.db").read_text(encoding="utf-8") == "sqlite placeholder"
+    _migrate_guard_home_state(source=legacy_home, destination=canonical_home)
+
+    with sqlite3.connect(canonical_home / "guard.db") as connection:
+        row = connection.execute("select value from migration_probe").fetchone()
+    assert row == ("legacy",)
 
 def test_resolve_guard_home_migrates_legacy_credentials_into_canonical_database(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
