@@ -206,6 +206,22 @@ def test_resolve_guard_home_falls_back_to_legacy_home_when_database_migration_fa
     assert not canonical_home.exists()
 
 
+def test_resolve_guard_home_falls_back_to_legacy_home_when_file_copy_fails(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    canonical_home = home_dir / ".hol-guard"
+    legacy_home = home_dir / ".ai-plugin-scanner-guard"
+    _write_text(legacy_home / "config.toml", 'default_action = "warn"\n')
+    monkeypatch.setattr(Path, "home", lambda: home_dir)
+    monkeypatch.setattr(
+        guard_config_module,
+        "_migrate_guard_home_state",
+        lambda **_kwargs: (_ for _ in ()).throw(PermissionError("unreadable legacy file")),
+    )
+
+    assert resolve_guard_home() == legacy_home
+    assert not canonical_home.exists()
+
+
 def test_resolve_guard_home_keeps_canonical_state_when_legacy_only_has_credentials(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     canonical_home = home_dir / ".hol-guard"

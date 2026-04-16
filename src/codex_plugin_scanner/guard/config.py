@@ -234,14 +234,17 @@ def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
 
 def _migrate_guard_home_transactionally(*, source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=destination.parent, prefix=f"{destination.name}-migration-") as temp_dir:
-        staging_root = Path(temp_dir)
-        _migrate_guard_home_state(source=source, destination=staging_root)
-        if destination.exists():
-            for entry in staging_root.iterdir():
-                shutil.move(str(entry), destination / entry.name)
-            return
-        shutil.move(str(staging_root), str(destination))
+    try:
+        with tempfile.TemporaryDirectory(dir=destination.parent, prefix=f"{destination.name}-migration-") as temp_dir:
+            staging_root = Path(temp_dir)
+            _migrate_guard_home_state(source=source, destination=staging_root)
+            if destination.exists():
+                for entry in staging_root.iterdir():
+                    shutil.move(str(entry), destination / entry.name)
+                return
+            shutil.move(str(staging_root), str(destination))
+    except OSError:
+        raise GuardHomeMigrationError("guard home migration failed") from None
 
 
 def _copy_guard_database(*, source: Path, destination: Path) -> None:
