@@ -25,6 +25,8 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard install codex
    ```
 
+   After upgrading later, run `hol-guard update` to update the installed `hol-guard` package in that environment.
+
 3. Run one dry pass so Guard records the current state:
 
    ```bash
