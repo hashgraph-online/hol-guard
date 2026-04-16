@@ -236,15 +236,22 @@ def _migrate_guard_home_transactionally(*, source: Path, destination: Path) -> N
     destination.parent.mkdir(parents=True, exist_ok=True)
     try:
         with tempfile.TemporaryDirectory(dir=destination.parent, prefix=f"{destination.name}-migration-") as temp_dir:
-            staging_root = Path(temp_dir)
+            staging_root = Path(temp_dir) / destination.name
             _migrate_guard_home_state(source=source, destination=staging_root)
             if destination.exists():
-                for entry in staging_root.iterdir():
-                    shutil.move(str(entry), destination / entry.name)
-                return
+                _remove_guard_home_destination(destination)
             shutil.move(str(staging_root), str(destination))
     except OSError:
         raise GuardHomeMigrationError("guard home migration failed") from None
+
+
+def _remove_guard_home_destination(path: Path) -> None:
+    for entry in path.iterdir():
+        if entry.is_dir():
+            shutil.rmtree(entry)
+            continue
+        entry.unlink()
+    path.rmdir()
 
 
 def _copy_guard_database(*, source: Path, destination: Path) -> None:
