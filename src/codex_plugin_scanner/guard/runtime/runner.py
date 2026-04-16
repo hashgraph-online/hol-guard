@@ -276,6 +276,18 @@ def sync_runtime_session(
         with urllib.request.urlopen(request, timeout=10) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
+        if error.code == 404:
+            synced_at = _now()
+            summary = {
+                "synced_at": synced_at,
+                "runtime_session_synced_at": synced_at,
+                "runtime_session_id": session_payload["sessionId"],
+                "runtime_sessions_visible": 0,
+                "runtime_session_sync_skipped": True,
+                "runtime_session_sync_reason": "runtime_session_endpoint_unavailable",
+            }
+            store.set_sync_payload("runtime_session_summary", summary, synced_at)
+            return summary
         raise RuntimeError(_sync_http_error_message(error)) from error
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
