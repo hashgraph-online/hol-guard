@@ -11,7 +11,7 @@ from hashlib import sha256
 from pathlib import Path
 from uuid import uuid4
 
-from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
+from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, PolicyDecision
 from .store_approvals import (
     add_approval_request as persist_approval_request,
 )
@@ -38,13 +38,30 @@ from .store_connect import (
 )
 from .store_connect import (
     connect_request_schema_statement,
+    connect_state_schema_statement,
     hash_pairing_secret,
+    verify_connect_request_access,
 )
 from .store_connect import (
     create_connect_request as persist_connect_request,
 )
 from .store_connect import (
+    create_connect_state as persist_connect_state,
+)
+from .store_connect import (
     get_connect_request as load_connect_request,
+)
+from .store_connect import (
+    get_connect_state as load_connect_state,
+)
+from .store_connect import (
+    get_latest_connect_state as load_latest_connect_state,
+)
+from .store_connect import (
+    mark_connect_pairing_completed as persist_connect_pairing_completed,
+)
+from .store_connect import (
+    mark_connect_result as persist_connect_result,
 )
 
 
@@ -187,16 +204,6 @@ class GuardStore:
             )
             """,
             """
-            create table if not exists guard_runtime_state (
-              state_key text primary key,
-              session_id text not null,
-              daemon_host text not null,
-              daemon_port integer not null,
-              started_at text not null,
-              last_heartbeat_at text not null
-            )
-            """,
-            """
             create table if not exists managed_installs (
               harness text primary key,
               active integer not null,
@@ -264,6 +271,7 @@ class GuardStore:
               primary key (surface, open_key)
             )
             """,
+            connect_state_schema_statement(),
             connect_request_schema_statement(),
             approval_schema_statement(),
         )
@@ -799,74 +807,6 @@ class GuardStore:
             row = connection.execute(query, params).fetchone()
         return int(row["total"]) if row is not None else 0
 
-    def upsert_runtime_state(
-        self,
-        *,
-        session_id: str,
-        daemon_host: str,
-        daemon_port: int,
-        started_at: str,
-        last_heartbeat_at: str,
-    ) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into guard_runtime_state (
-                  state_key, session_id, daemon_host, daemon_port, started_at, last_heartbeat_at
-                )
-                values ('runtime', ?, ?, ?, ?, ?)
-                on conflict(state_key) do update set
-                  session_id = excluded.session_id,
-                  daemon_host = excluded.daemon_host,
-                  daemon_port = excluded.daemon_port,
-                  started_at = excluded.started_at,
-                  last_heartbeat_at = excluded.last_heartbeat_at
-                """,
-                (session_id, daemon_host, daemon_port, started_at, last_heartbeat_at),
-            )
-
-    def touch_runtime_state(self, *, session_id: str, last_heartbeat_at: str) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                update guard_runtime_state
-                set last_heartbeat_at = ?
-                where state_key = 'runtime'
-                  and session_id = ?
-                """,
-                (last_heartbeat_at, session_id),
-            )
-
-    def get_runtime_state(self) -> dict[str, object] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                select session_id, daemon_host, daemon_port, started_at, last_heartbeat_at
-                from guard_runtime_state
-                where state_key = 'runtime'
-                """
-            ).fetchone()
-        if row is None:
-            return None
-        return GuardRuntimeState(
-            session_id=str(row["session_id"]),
-            daemon_host=str(row["daemon_host"]),
-            daemon_port=int(row["daemon_port"]),
-            started_at=str(row["started_at"]),
-            last_heartbeat_at=str(row["last_heartbeat_at"]),
-        ).to_dict()
-
-    def clear_runtime_state(self, *, session_id: str) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                delete from guard_runtime_state
-                where state_key = 'runtime'
-                  and session_id = ?
-                """,
-                (session_id,),
-            )
-
     def add_approval_request(self, request: GuardApprovalRequest, now: str) -> str:
         with self._connect() as connection:
             return persist_approval_request(connection, request, now)
@@ -1130,8 +1070,18 @@ class GuardStore:
         return items
 
     def set_sync_credentials(self, sync_url: str, token: str, now: str) -> None:
+        payload = {"sync_url": sync_url, "token": token}
         with self._connect() as connection:
-            self._set_sync_credentials_in_connection(connection, sync_url, token, now)
+            connection.execute(
+                """
+                insert into sync_state (state_key, payload_json, updated_at)
+                values ('credentials', ?, ?)
+                on conflict(state_key) do update set
+                  payload_json = excluded.payload_json,
+                  updated_at = excluded.updated_at
+                """,
+                (json.dumps(payload), now),
+            )
 
     def set_sync_payload(self, state_key: str, payload: dict[str, object] | list[object], now: str) -> None:
         with self._connect() as connection:
@@ -1273,11 +1223,33 @@ class GuardStore:
                 created_at=str(payload["created_at"]),
                 expires_at=str(payload["expires_at"]),
             )
+            persist_connect_state(
+                connection,
+                request_id=request_id,
+                sync_url=sync_url,
+                allowed_origin=allowed_origin,
+                created_at=str(payload["created_at"]),
+                expires_at=str(payload["expires_at"]),
+                updated_at=now,
+            )
         return {**payload, "pairing_secret": pairing_secret}
 
     def get_guard_connect_request(self, request_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
             return load_connect_request(connection, request_id)
+
+    def get_guard_connect_state(
+        self,
+        request_id: str,
+        *,
+        now: str,
+    ) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return load_connect_state(connection, request_id, now=now)
+
+    def get_latest_guard_connect_state(self, *, now: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return load_latest_connect_state(connection, now=now)
 
     def complete_guard_connect_request(
         self,
@@ -1294,7 +1266,16 @@ class GuardStore:
                 pairing_secret=pairing_secret,
                 completed_at=now,
             )
-            self._set_sync_credentials_in_connection(connection, str(request["sync_url"]), token, now)
+            connection.execute(
+                """
+                insert into sync_state (state_key, payload_json, updated_at)
+                values ('credentials', ?, ?)
+                on conflict(state_key) do update set
+                  payload_json = excluded.payload_json,
+                  updated_at = excluded.updated_at
+                """,
+                (json.dumps({"sync_url": request["sync_url"], "token": token}), now),
+            )
             connection.execute(
                 """
                 insert into guard_events (event_name, payload_json, occurred_at)
@@ -1302,39 +1283,46 @@ class GuardStore:
                 """,
                 ("sign_in", json.dumps({"sync_url": request["sync_url"], "source": "browser-connect"}), now),
             )
+            persist_connect_pairing_completed(
+                connection,
+                request_id=request_id,
+                completed_at=now,
+            )
         return request
 
-    def _set_sync_credentials_in_connection(
+    def record_guard_connect_result(
         self,
-        connection: sqlite3.Connection,
-        sync_url: str,
-        token: str,
+        *,
+        request_id: str,
+        status: str,
+        milestone: str,
         now: str,
-    ) -> None:
-        payload = {"sync_url": sync_url, "token": token}
-        previous_row = connection.execute(
-            "select payload_json from sync_state where state_key = 'credentials'"
-        ).fetchone()
-        credentials_changed = False
-        if previous_row is None:
-            credentials_changed = True
-        else:
-            previous_payload = json.loads(str(previous_row["payload_json"]))
-            credentials_changed = previous_payload != payload
-        connection.execute(
-            """
-            insert into sync_state (state_key, payload_json, updated_at)
-            values ('credentials', ?, ?)
-            on conflict(state_key) do update set
-              payload_json = excluded.payload_json,
-              updated_at = excluded.updated_at
-            """,
-            (json.dumps(payload), now),
-        )
-        if credentials_changed:
-            connection.execute("delete from sync_state where state_key != 'credentials'")
-            connection.execute("delete from publisher_cache")
-            connection.execute("delete from policy_decisions where source in ('cloud-sync', 'team-policy')")
+        reason: str | None = None,
+        sync_payload: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            return persist_connect_result(
+                connection,
+                request_id=request_id,
+                status=status,
+                milestone=milestone,
+                updated_at=now,
+                reason=reason,
+                sync_payload=sync_payload,
+            )
+
+    def verify_guard_connect_access(
+        self,
+        *,
+        request_id: str,
+        pairing_secret: str,
+    ) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return verify_connect_request_access(
+                connection,
+                request_id=request_id,
+                pairing_secret=pairing_secret,
+            )
 
     def upsert_guard_session(
         self,

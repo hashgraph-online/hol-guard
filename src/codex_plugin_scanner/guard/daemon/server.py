@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from ..approvals import apply_approval_resolution, build_runtime_snapshot
+from ..approvals import apply_approval_resolution
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
@@ -24,9 +24,6 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     store: GuardStore
     runtime: GuardSurfaceRuntime
     auth_token: str
-    runtime_host: str
-    runtime_session_id: str
-    runtime_started_at: str
 
 
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -44,21 +41,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path == "/v1/connect/complete":
+        if parsed.path in {"/v1/connect/complete", "/v1/connect/state"}:
             origin = self._normalize_origin(self.headers.get("Origin"))
             if origin is None:
-                self._write_empty(status=400)
+                self.send_response(400)
+                self.end_headers()
                 return
-            self._write_empty(status=200, extra_headers=self._cors_headers(origin))
+            self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Vary", "Origin")
+            self.end_headers()
             return
-        self._write_empty(status=404)
+        self.send_response(404)
+        self.end_headers()
 
     def do_GET(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
-        store.touch_runtime_state(
-            session_id=self.server.runtime_session_id,  # type: ignore[attr-defined]
-            last_heartbeat_at=_now(),
-        )
         parsed = urlparse(self.path)
         path_parts = [part for part in parsed.path.split("/") if part]
         if parsed.path == "/healthz":
@@ -69,14 +69,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "approvals": store.count_approval_requests(),
                     "tables": store.list_table_names(),
                 }
-            )
-            return
-        if parsed.path == "/v1/runtime":
-            self._write_json(
-                build_runtime_snapshot(
-                    store=store,
-                    approval_center_url=f"http://{self.server.runtime_host}:{self.server.server_port}",  # type: ignore[attr-defined]
-                )
             )
             return
         if parsed.path == "/v1/sessions":
@@ -97,6 +89,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/requests":
             self._write_json({"items": store.list_approval_requests(limit=200)})
+            return
+        if parsed.path == "/v1/connect/state":
+            self._handle_connect_state_read(parsed.query)
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "requests"]:
             approval = store.get_approval_request(path_parts[2])
@@ -169,10 +164,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
-        self.server.store.touch_runtime_state(  # type: ignore[attr-defined]
-            session_id=self.server.runtime_session_id,  # type: ignore[attr-defined]
-            last_heartbeat_at=_now(),
-        )
         parsed = urlparse(self.path)
         if parsed.path != "/v1/connect/complete" and not self._origin_is_allowed():
             self._write_json({"error": "forbidden_origin"}, status=403)
@@ -217,6 +208,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/connect/complete":
             self._handle_connect_complete(payload)
+            return
+        if parsed.path == "/v1/connect/result":
+            if not self._header_token_is_valid():
+                self._write_json({"error": "unauthorized"}, status=401)
+                return
+            self._handle_connect_result_update(payload)
             return
         if parsed.path == "/v1/operations/block":
             if not self._header_token_is_valid():
@@ -291,7 +288,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         surface = self._optional_string(payload.get("surface")) or "cli"
         capabilities = payload.get("capabilities")
         capability_items = (
-            tuple(str(item) for item in capabilities if isinstance(item, str)) if isinstance(capabilities, list) else ()
+            tuple(str(item) for item in capabilities if isinstance(item, str))
+            if isinstance(capabilities, list)
+            else ()
         )
         supported_versions = payload.get("supported_protocol_versions")
         try:
@@ -301,7 +300,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 version=self._optional_string(payload.get("version")),
                 surface=surface,
                 capabilities=capability_items,
-                supported_protocol_versions=tuple(str(item) for item in supported_versions if isinstance(item, str))
+                supported_protocol_versions=tuple(
+                    str(item) for item in supported_versions if isinstance(item, str)
+                )
                 if isinstance(supported_versions, list)
                 else (),
             )
@@ -317,17 +318,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if client_id is None or surface is None:
             self._write_json({"attached": False, "error": "missing_required_fields"}, status=400)
             return
-        try:
-            attachment = self.server.runtime.attach_client(  # type: ignore[attr-defined]
-                client_id=client_id,
-                surface=surface,
-                session_id=self._optional_string(payload.get("session_id")),
-                metadata={"title": self._optional_string(payload.get("client_title")) or surface},
-                lease_seconds=self._optional_int(payload.get("lease_seconds")) or 60,
-            )
-        except ValueError as error:
-            self._write_json({"attached": False, "error": str(error)}, status=400)
-            return
+        attachment = self.server.runtime.attach_client(  # type: ignore[attr-defined]
+            client_id=client_id,
+            surface=surface,
+            session_id=self._optional_string(payload.get("session_id")),
+            metadata={"title": self._optional_string(payload.get("client_title")) or surface},
+            lease_seconds=self._optional_int(payload.get("lease_seconds")) or 60,
+        )
         self._write_json({"attached": True, "item": attachment})
 
     def _handle_client_heartbeat(self, payload: dict[str, object]) -> None:
@@ -376,16 +373,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "missing_required_fields"}, status=400)
             return
         metadata = payload.get("metadata")
-        try:
-            operation = self.server.runtime.start_operation(  # type: ignore[attr-defined]
-                session_id=session_id,
-                operation_type=operation_type,
-                harness=harness,
-                metadata=metadata if isinstance(metadata, dict) else {},
-            )
-        except ValueError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
+        operation = self.server.runtime.start_operation(  # type: ignore[attr-defined]
+            session_id=session_id,
+            operation_type=operation_type,
+            harness=harness,
+            metadata=metadata if isinstance(metadata, dict) else {},
+        )
         self._write_json(operation)
 
     def _handle_operation_block(self, payload: dict[str, object]) -> None:
@@ -433,15 +426,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if item_type is None or not isinstance(item_payload, dict):
             self._write_json({"error": "missing_required_fields"}, status=400)
             return
-        try:
-            item = self.server.runtime.add_item(  # type: ignore[attr-defined]
-                operation_id=operation_id,
-                item_type=item_type,
-                payload=item_payload,
-            )
-        except ValueError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
+        item = self.server.runtime.add_item(  # type: ignore[attr-defined]
+            operation_id=operation_id,
+            item_type=item_type,
+            payload=item_payload,
+        )
         self._write_json({"item": item})
 
     def _handle_operation_status(self, operation_id: str, payload: dict[str, object]) -> None:
@@ -450,17 +439,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "missing_required_fields"}, status=400)
             return
         request_ids = payload.get("approval_request_ids")
-        try:
-            operation = self.server.runtime.update_operation_status(  # type: ignore[attr-defined]
-                operation_id=operation_id,
-                status=status,
-                approval_request_ids=[str(item) for item in request_ids if isinstance(item, str)]
-                if isinstance(request_ids, list)
-                else [],
-            )
-        except ValueError as error:
-            self._write_json({"error": str(error)}, status=400)
-            return
+        operation = self.server.runtime.update_operation_status(  # type: ignore[attr-defined]
+            operation_id=operation_id,
+            status=status,
+            approval_request_ids=[str(item) for item in request_ids if isinstance(item, str)]
+            if isinstance(request_ids, list)
+            else [],
+        )
         self._write_json({"operation": operation})
 
     def _handle_session_resume(self, session_id: str) -> None:
@@ -532,6 +517,72 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             extra_headers=self._cors_headers(origin),
         )
 
+    def _handle_connect_state_read(self, query: str) -> None:
+        params = parse_qs(query)
+        request_id = self._optional_string(params.get("request_id", [None])[-1])
+        pairing_secret = self._optional_string(params.get("pairing_secret", [None])[-1])
+        origin = self._normalize_origin(self.headers.get("Origin"))
+        if request_id is None:
+            self._write_json({"error": "missing_required_fields"}, status=400)
+            return
+        if self._header_token_is_valid():
+            state = self.server.store.get_guard_connect_state(request_id, now=_now())  # type: ignore[attr-defined]
+            if state is None:
+                self._write_json({"error": "not_found"}, status=404)
+                return
+            self._write_json({"state": state})
+            return
+        if origin is None or pairing_secret is None:
+            self._write_json({"error": "unauthorized"}, status=401)
+            return
+        access = self.server.store.verify_guard_connect_access(  # type: ignore[attr-defined]
+            request_id=request_id,
+            pairing_secret=pairing_secret,
+        )
+        if access is None:
+            self._write_json({"error": "forbidden"}, status=403, extra_headers=self._cors_headers(origin))
+            return
+        if origin != str(access["allowed_origin"]):
+            self._write_json(
+                {"error": "forbidden_origin"},
+                status=403,
+                extra_headers=self._cors_headers(origin),
+            )
+            return
+        state = self.server.store.get_guard_connect_state(request_id, now=_now())  # type: ignore[attr-defined]
+        if state is None:
+            self._write_json({"error": "not_found"}, status=404, extra_headers=self._cors_headers(origin))
+            return
+        self._write_json({"state": state}, extra_headers=self._cors_headers(origin))
+
+    def _handle_connect_result_update(self, payload: dict[str, object]) -> None:
+        request_id = self._optional_string(payload.get("request_id"))
+        status = self._optional_string(payload.get("status"))
+        milestone = self._optional_string(payload.get("milestone"))
+        reason = self._optional_string(payload.get("reason"))
+        sync_payload = payload.get("sync")
+        if request_id is None or status is None or milestone is None:
+            self._write_json({"error": "missing_required_fields"}, status=400)
+            return
+        normalized_sync_payload = dict(sync_payload) if isinstance(sync_payload, dict) else None
+        try:
+            state = self.server.store.record_guard_connect_result(  # type: ignore[attr-defined]
+                request_id=request_id,
+                status=status,
+                milestone=milestone,
+                now=_now(),
+                reason=reason,
+                sync_payload=normalized_sync_payload,
+            )
+        except ValueError as error:
+            error_code = str(error)
+            status_code = 400
+            if error_code == "connect_state_not_found":
+                status_code = 404
+            self._write_json({"error": error_code}, status=status_code)
+            return
+        self._write_json({"state": state})
+
     def _token_is_valid(self, query: str) -> bool:
         params = parse_qs(query)
         token = params.get("token", [None])[-1]
@@ -585,27 +636,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not isinstance(origin, str) or not origin.strip():
             return None
         parsed = urlparse(origin.strip())
-        if (
-            parsed.scheme not in {"http", "https"}
-            or parsed.hostname is None
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.path not in {"", "/"}
-            or parsed.params
-            or parsed.query
-            or parsed.fragment
-        ):
+        if parsed.scheme not in {"http", "https"} or parsed.hostname is None:
             return None
-        host = parsed.hostname
-        if ":" in host and not host.startswith("["):
-            host = f"[{host}]"
-        default_port = 80 if parsed.scheme == "http" else 443
-        try:
-            port = parsed.port
-        except ValueError:
-            return None
-        port_suffix = f":{port}" if port not in {None, default_port} else ""
-        return f"{parsed.scheme}://{host}{port_suffix}"
+        return f"{parsed.scheme}://{parsed.netloc}"
 
     @staticmethod
     def _cors_headers(origin: str) -> dict[str, str]:
@@ -710,38 +743,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        for key, value in self._validated_headers(extra_headers).items():
+        for key, value in (extra_headers or {}).items():
             self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)
-
-    def _write_empty(
-        self,
-        *,
-        status: int,
-        extra_headers: dict[str, str] | None = None,
-    ) -> None:
-        self.send_response(status)
-        for key, value in self._validated_headers(extra_headers).items():
-            self.send_header(key, value)
-        self.end_headers()
-
-    @staticmethod
-    def _validated_headers(extra_headers: dict[str, str] | None) -> dict[str, str]:
-        allowed_headers = {
-            "Access-Control-Allow-Origin",
-            "Access-Control-Allow-Methods",
-            "Access-Control-Allow-Headers",
-            "Vary",
-        }
-        validated: dict[str, str] = {}
-        for key, value in (extra_headers or {}).items():
-            if key not in allowed_headers or not isinstance(value, str):
-                continue
-            if "\r" in value or "\n" in value:
-                continue
-            validated[key] = value
-        return validated
 
     def _write_static_asset(self, relative_path: str) -> None:
         target = (_STATIC_DIR / relative_path).resolve()
@@ -781,9 +786,6 @@ class GuardDaemonServer:
         self._server.store = store
         self._server.runtime = GuardSurfaceRuntime(store)
         self._server.auth_token = uuid.uuid4().hex
-        self._server.runtime_host = host
-        self._server.runtime_session_id = uuid.uuid4().hex
-        self._server.runtime_started_at = _now()
         self.port = int(self._server.server_address[1])
         self._thread: threading.Thread | None = None
 
@@ -791,36 +793,20 @@ class GuardDaemonServer:
         if self._thread is not None:
             return
         write_guard_daemon_state(self._server.store.guard_home, self.port, self._server.auth_token)
-        self._server.store.upsert_runtime_state(
-            session_id=self._server.runtime_session_id,
-            daemon_host=self._server.runtime_host,
-            daemon_port=self.port,
-            started_at=self._server.runtime_started_at,
-            last_heartbeat_at=_now(),
-        )
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
 
     def serve(self) -> None:
         write_guard_daemon_state(self._server.store.guard_home, self.port, self._server.auth_token)
-        self._server.store.upsert_runtime_state(
-            session_id=self._server.runtime_session_id,
-            daemon_host=self._server.runtime_host,
-            daemon_port=self.port,
-            started_at=self._server.runtime_started_at,
-            last_heartbeat_at=_now(),
-        )
         try:
             self._server.serve_forever()
         finally:
             clear_guard_daemon_state(self._server.store.guard_home)
-            self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
 
     def stop(self) -> None:
         self._server.shutdown()
         self._server.server_close()
         clear_guard_daemon_state(self._server.store.guard_home)
-        self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
         if self._thread is not None:
             self._thread.join(timeout=5)
             self._thread = None
