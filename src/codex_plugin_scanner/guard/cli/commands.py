@@ -67,6 +67,7 @@ from .install_commands import apply_managed_install
 from .product import build_guard_start_payload, build_guard_status_payload
 from .prompt import build_prompt_artifacts, resolve_interactive_decisions
 from .render import emit_guard_payload
+from .update_commands import run_guard_update
 
 
 def _now() -> str:
@@ -110,7 +111,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         dest="guard_command",
         required=True,
         metavar=(
-            "{start,status,bootstrap,detect,install,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
+            "{start,status,bootstrap,detect,install,update,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
             "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,login,sync,bridge}"
         ),
     )
@@ -144,6 +145,13 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     install_parser.add_argument("--all", action="store_true")
     _add_guard_common_args(install_parser)
     install_parser.add_argument("--json", action="store_true")
+
+    update_parser = guard_subparsers.add_parser(
+        "update",
+        help="Update the installed hol-guard package in the current environment",
+    )
+    update_parser.add_argument("--dry-run", action="store_true")
+    update_parser.add_argument("--json", action="store_true")
 
     uninstall_parser = guard_subparsers.add_parser(
         "uninstall",
@@ -388,6 +396,11 @@ def run_guard_command(args: argparse.Namespace) -> int:
             if isinstance(install_verdict, dict) and str(install_verdict.get("action")) != "allow":
                 return 2
         return 0
+
+    if args.guard_command == "update":
+        payload, exit_code = run_guard_update(dry_run=bool(getattr(args, "dry_run", False)))
+        _emit("update", payload, getattr(args, "json", False))
+        return exit_code
 
     home_override = getattr(args, "home", None)
     guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)

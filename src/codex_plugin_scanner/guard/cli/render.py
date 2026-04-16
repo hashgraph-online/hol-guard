@@ -496,6 +496,32 @@ def _render_sync(console: Console, payload: dict[str, object]) -> None:
     console.print(Panel(body, title="Guard sync complete", border_style="green"))
 
 
+def _render_update(console: Console, payload: dict[str, object]) -> None:
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Current version", str(payload.get("current_version") or "unknown"))
+    body.add_row("Installer", str(payload.get("installer") or "unknown"))
+    command = payload.get("command")
+    if isinstance(command, list) and command:
+        body.add_row("Command", " ".join(str(part) for part in command))
+    body.add_row("Dry run", _bool_label(bool(payload.get("dry_run"))))
+    if payload.get("resulting_version"):
+        body.add_row("Resulting version", str(payload.get("resulting_version")))
+    if payload.get("editable_install") is not None:
+        body.add_row("Editable install", _bool_label(bool(payload.get("editable_install"))))
+    status = str(payload.get("status") or "unknown")
+    border_style = "green" if status in {"planned", "updated"} else "red"
+    console.print(Panel(body, title=f"Guard update: {status}", border_style=border_style))
+    stdout = str(payload.get("stdout") or "").strip()
+    stderr = str(payload.get("stderr") or "").strip()
+    error = str(payload.get("error") or "").strip()
+    if stdout:
+        console.print(Panel(stdout, title="stdout", border_style="green"))
+    if stderr:
+        console.print(Panel(stderr, title="stderr", border_style="yellow"))
+    if error:
+        console.print(Panel(error, title="error", border_style="red"))
+
+
 def _connect_status_text(payload: dict[str, object]) -> str:
     status = str(payload.get("status") or "unknown")
     milestone = str(payload.get("milestone") or "")
@@ -1277,6 +1303,7 @@ _RENDERERS: dict[str, Any] = {
     "deny": _render_decision,
     "login": _render_login,
     "sync": _render_sync,
+    "update": _render_update,
     "hook": _render_hook,
     "protect": _render_protect,
     "preflight": _render_preflight,

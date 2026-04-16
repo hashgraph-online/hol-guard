@@ -19,6 +19,7 @@ Manual verification should include:
 - `hol-guard detect gemini --json`
 - `hol-guard detect opencode --json`
 - `hol-guard install opencode --json`
+- `hol-guard update --dry-run --json`
 - `hol-guard run opencode --dry-run --default-action allow --json`
 - `hol-guard run opencode --default-action require-reapproval --json`
 - `hol-guard approvals --json`

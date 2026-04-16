@@ -58,6 +58,8 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
   Shows what Guard is watching now.
 - `hol-guard install <harness>`
   Creates the launcher shim for that harness.
+- `hol-guard update`
+  Updates the installed `hol-guard` package in the current environment.
 - `hol-guard run <harness> --dry-run`
   Records the current state once before you trust it.
 - `hol-guard run <harness>`
