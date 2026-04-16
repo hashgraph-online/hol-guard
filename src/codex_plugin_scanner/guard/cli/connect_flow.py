@@ -160,7 +160,11 @@ def wait_for_connect_transition(
 ) -> dict[str, object] | None:
     deadline = time.monotonic() + max(1, timeout_seconds)
     while time.monotonic() < deadline:
-        state = daemon_client.get_connect_state(request_id=request_id)
+        try:
+            state = daemon_client.get_connect_state(request_id=request_id)
+        except RuntimeError:
+            time.sleep(poll_interval_seconds)
+            continue
         if not isinstance(state, dict):
             raise RuntimeError("Guard daemon request failed: invalid connect state response")
         if str(state.get("status")) in {"connected", "retry_required", "expired"}:
