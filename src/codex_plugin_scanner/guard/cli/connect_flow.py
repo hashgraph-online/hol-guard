@@ -71,7 +71,7 @@ def run_guard_connect_command(
             sync_url=sync_url,
             connected=False,
         )
-    pairing_completed_at = str(transition.get("completed_at") or "").strip()
+    pairing_completed_at = (transition.get("completed_at") or "").strip()
     if str(transition.get("status")) == "retry_required" and not pairing_completed_at:
         return build_connect_payload(
             state=transition,
@@ -112,9 +112,7 @@ def run_guard_connect_command(
             status="connected",
             milestone="first_sync_pending",
             reason=sync_message,
-            sync={
-                **runtime_sync_summary,
-            },
+            sync=runtime_sync_summary,
         )
         return build_connect_payload(
             state=pending_state,
@@ -294,27 +292,30 @@ def _resolve_first_sync_milestone(state: dict[str, object]) -> str:
 def _start_guard_runtime_session(daemon_client: GuardSurfaceDaemonClient) -> dict[str, object]:
     start_session = getattr(daemon_client, "start_session", None)
     if callable(start_session):
-        return start_session(
-            harness="hol-guard",
-            surface="cli",
-            workspace=str(Path.cwd()),
-            client_name="hol-guard",
-            client_title="HOL Guard CLI",
-            client_version=None,
-            capabilities=["approval-resolution", "receipt-view", "runtime-sync"],
-        )
+        try:
+            return start_session(
+                harness="hol-guard",
+                surface="cli",
+                workspace=str(Path.cwd()),
+                client_name="hol-guard",
+                client_title="HOL Guard CLI",
+                client_version=None,
+                capabilities=["approval-resolution", "receipt-view", "runtime-sync"],
+            )
+        except (GuardDaemonRequestError, GuardDaemonTransportError):
+            pass
     now = datetime.now(timezone.utc).isoformat()
     return {
-        "sessionId": f"guard-session-{uuid.uuid4().hex}",
+        "session_id": f"guard-session-{uuid.uuid4().hex}",
         "harness": "hol-guard",
         "surface": "cli",
         "status": "active",
-        "clientName": "hol-guard",
-        "clientTitle": "HOL Guard CLI",
-        "clientVersion": None,
+        "client_name": "hol-guard",
+        "client_title": "HOL Guard CLI",
+        "client_version": None,
         "workspace": str(Path.cwd()),
         "capabilities": ["approval-resolution", "receipt-view", "runtime-sync"],
         "operations": [],
-        "createdAt": now,
-        "updatedAt": now,
+        "created_at": now,
+        "updated_at": now,
     }

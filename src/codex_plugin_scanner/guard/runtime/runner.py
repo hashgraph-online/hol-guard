@@ -277,14 +277,14 @@ def sync_runtime_session(
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         raise RuntimeError(_sync_http_error_message(error)) from error
+    if not isinstance(payload, dict):
+        raise RuntimeError("Invalid sync response")
     synced_at = _sync_timestamp(payload)
     summary = {
         "synced_at": synced_at,
         "runtime_session_synced_at": synced_at,
         "runtime_session_id": session_payload["sessionId"],
-        "runtime_sessions_visible": len(payload.get("items", []))
-        if isinstance(payload.get("items"), list)
-        else 0,
+        "runtime_sessions_visible": len(payload.get("items", [])) if isinstance(payload.get("items"), list) else 0,
     }
     store.set_sync_payload("runtime_session_summary", summary, synced_at)
     return summary
@@ -583,7 +583,15 @@ def _normalized_runtime_sessions_sync_url(sync_url: str) -> str:
                 "",
             )
         )
-    return normalized_receipts_url.rstrip("/") + "/runtime/sessions/sync"
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path.rstrip("/") + "/runtime/sessions/sync",
+            parsed.query,
+            "",
+        )
+    )
 
 
 def _cloud_sync_receipts_payload(receipts: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -639,20 +647,22 @@ def _cloud_sync_receipt_payload(
 def _cloud_runtime_session_payload(session: dict[str, object]) -> dict[str, object]:
     device_id, device_name = _guard_device_metadata()
     workspace = _optional_string(session.get("workspace")) or os.getcwd()
-    session_id = _optional_string(session.get("session_id")) or hashlib.sha256(
-        f"{device_id}:{workspace}".encode()
-    ).hexdigest()[:24]
-    created_at = _optional_string(session.get("created_at")) or _now()
-    updated_at = _optional_string(session.get("updated_at")) or created_at
+    session_id = (
+        _optional_string(session.get("session_id") or session.get("sessionId"))
+        or hashlib.sha256(f"{device_id}:{workspace}".encode()).hexdigest()[:24]
+    )
+    created_at = _optional_string(session.get("created_at") or session.get("createdAt")) or _now()
+    updated_at = _optional_string(session.get("updated_at") or session.get("updatedAt")) or created_at
     capabilities = [str(item) for item in session.get("capabilities", []) if isinstance(item, str)]
     return {
         "sessionId": session_id,
         "harness": _optional_string(session.get("harness")) or "hol-guard",
         "surface": _optional_string(session.get("surface")) or "cli",
         "status": _optional_string(session.get("status")) or "active",
-        "clientName": _optional_string(session.get("client_name")) or "hol-guard",
-        "clientTitle": _optional_string(session.get("client_title")) or f"HOL Guard on {device_name}",
-        "clientVersion": _optional_string(session.get("client_version")) or __version__,
+        "clientName": _optional_string(session.get("client_name") or session.get("clientName")) or "hol-guard",
+        "clientTitle": _optional_string(session.get("client_title") or session.get("clientTitle"))
+        or f"HOL Guard on {device_name}",
+        "clientVersion": _optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
         "workspace": workspace,
         "capabilities": capabilities,
         "operations": [],

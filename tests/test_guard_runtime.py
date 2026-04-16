@@ -119,6 +119,13 @@ class _FlushTrackingOutput(io.StringIO):
 
 
 class TestGuardRuntime:
+    def test_runtime_sessions_sync_url_preserves_query_parameters(self) -> None:
+        runtime_sync_url = guard_runner_module._normalized_runtime_sessions_sync_url(
+            "https://hol.org/custom/sync?tenant=guard",
+        )
+
+        assert runtime_sync_url == "https://hol.org/custom/sync/runtime/sessions/sync?tenant=guard"
+
     def test_guard_store_initializes_runtime_tables_and_receipt_columns(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
 
@@ -2477,6 +2484,7 @@ class TestGuardRuntime:
         assert blocked["responses"][0]["error"]["code"] == -32001
         assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "browser"
         assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
+
     def test_stdio_proxy_uses_native_delivery_for_managed_hermes(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         workspace_dir = tmp_path / "workspace"
@@ -2565,6 +2573,7 @@ class TestGuardRuntime:
         assert output["policy_action"] == "require-reapproval"
         assert output["approval_delivery"]["destination"] == "harness"
         assert "docker" in output["risk_summary"].lower()
+
     def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers(self):
         server = HTTPServer(("127.0.0.1", 0), _RemoteProxyHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

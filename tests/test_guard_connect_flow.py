@@ -9,8 +9,12 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from codex_plugin_scanner.guard.cli.connect_flow import run_guard_connect_command
+from codex_plugin_scanner.guard.cli.connect_flow import (
+    _start_guard_runtime_session,
+    run_guard_connect_command,
+)
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon.client import GuardDaemonTransportError
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -215,6 +219,18 @@ def test_guard_store_keeps_first_sync_pending_state_after_request_expiry(tmp_pat
     assert pending_state["status"] == "connected"
     assert pending_state["milestone"] == "first_sync_pending"
     assert pending_state["reason"] == "waiting_for_first_sync"
+
+
+def test_start_guard_runtime_session_falls_back_when_daemon_start_fails() -> None:
+    class FailingDaemonClient:
+        def start_session(self, **kwargs: object) -> dict[str, object]:
+            raise GuardDaemonTransportError("daemon_unavailable")
+
+    runtime_session = _start_guard_runtime_session(FailingDaemonClient())
+
+    assert runtime_session["session_id"].startswith("guard-session-")
+    assert runtime_session["client_name"] == "hol-guard"
+    assert runtime_session["surface"] == "cli"
 
 
 def test_guard_connect_recovers_when_browser_pairing_completed_before_cli_sync(
