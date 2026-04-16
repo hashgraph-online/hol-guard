@@ -181,6 +181,28 @@ class TestGuardApprovals:
                 allowed_origin="https://hol.org",
             )
 
+    def test_guard_surface_daemon_client_wraps_malformed_state_payloads(self, monkeypatch):
+        client = daemon_client_module.GuardSurfaceDaemonClient("http://127.0.0.1:4781", "auth-token")
+
+        class FakeResponse:
+            def __enter__(self) -> FakeResponse:
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return b"not-json"
+
+        monkeypatch.setattr(
+            daemon_client_module.urllib.request,
+            "urlopen",
+            lambda request, timeout=5: FakeResponse(),
+        )
+
+        with pytest.raises(RuntimeError, match="Guard daemon request failed"):
+            client.get_connect_state(request_id="req-123")
+
     def test_browser_connect_completion_clears_stale_cloud_state(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         store.set_sync_credentials("https://old.example/registry/api/v1", "old-token", "2026-04-10T00:00:00+00:00")
@@ -231,6 +253,37 @@ class TestGuardApprovals:
         assert request_after_failure is not None
         assert request_after_failure["status"] == "pending"
         assert store.get_sync_credentials() is None
+
+    def test_browser_connect_result_coerces_invalid_sync_counts(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        request = store.create_guard_connect_request(
+            sync_url="https://hol.org/api/guard/receipts/sync",
+            allowed_origin="https://hol.org",
+            now="2026-04-16T00:00:00+00:00",
+            lifetime_seconds=600,
+        )
+
+        store.complete_guard_connect_request(
+            request_id=str(request["request_id"]),
+            pairing_secret=str(request["pairing_secret"]),
+            token="session-token-123",
+            now="2026-04-16T00:01:00+00:00",
+        )
+
+        result = store.record_guard_connect_result(
+            request_id=str(request["request_id"]),
+            status="connected",
+            milestone="first_sync_succeeded",
+            now="2026-04-16T00:02:00+00:00",
+            sync_payload={
+                "synced_at": "2026-04-16T00:02:00+00:00",
+                "receipts_stored": "bad-value",
+                "inventory_tracked": "still-bad",
+            },
+        )
+
+        assert result["proof"]["receipts_stored"] == 0
+        assert result["proof"]["inventory_items"] == 0
 
     def test_guard_store_keeps_request_id_when_duplicate_pending_request_is_requeued(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -443,6 +496,43 @@ class TestGuardApprovals:
         assert url == f"http://127.0.0.1:{expected_port}"
         assert launched_commands
         assert launched_commands[0][-2:] == ["--port", str(expected_port)]
+
+    def test_load_guard_daemon_url_rejects_stale_runtime_without_connect_state_support(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self) -> FakeResponse:
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "ok": True,
+                        "tables": [
+                            "approval_requests",
+                            "guard_connect_requests",
+                            "sync_state",
+                        ],
+                    }
+                ).encode("utf-8")
+
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_load_state",
+            lambda _guard_home: {"port": 5530, "auth_token": "token-123"},
+        )
+        monkeypatch.setattr(
+            daemon_manager_module.urllib.request,
+            "urlopen",
+            lambda request, timeout=1: FakeResponse(),
+        )
+
+        assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
 
     def test_guard_daemon_serves_approval_queue_and_resolves_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

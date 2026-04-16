@@ -46,7 +46,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if origin is None:
                 self._write_empty(status=400)
                 return
-            self._write_empty(status=200, extra_headers=self._cors_headers(origin))
+            self._write_empty(
+                status=200,
+                extra_headers=self._cors_headers(origin, allow_methods="GET, POST, OPTIONS"),
+            )
             return
         self._write_empty(status=404)
 
@@ -682,10 +685,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return f"{parsed.scheme}://{host}{port_suffix}"
 
     @staticmethod
-    def _cors_headers(origin: str) -> dict[str, str]:
+    def _cors_headers(origin: str, *, allow_methods: str = "POST, OPTIONS") -> dict[str, str]:
         return {
             "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Methods": allow_methods,
             "Access-Control-Allow-Headers": "Content-Type",
             "Vary": "Origin",
         }

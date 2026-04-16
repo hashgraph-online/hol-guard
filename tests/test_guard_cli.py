@@ -2431,7 +2431,7 @@ args = ["workspace-skill.js", "--changed"]
             "token": "session-token-123",
         }
 
-    def test_guard_connect_returns_retry_required_when_first_sync_fails(self, tmp_path, capsys, monkeypatch):
+    def test_guard_connect_preserves_pairing_when_first_sync_fails(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
@@ -2498,11 +2498,12 @@ args = ["workspace-skill.js", "--changed"]
         finally:
             daemon.stop()
 
-        assert connect_rc == 1
-        assert connect_output["connected"] is False
-        assert connect_output["status"] == "retry_required"
-        assert connect_output["milestone"] == "first_sync_failed"
+        assert connect_rc == 0
+        assert connect_output["connected"] is True
+        assert connect_output["status"] == "connected"
+        assert connect_output["milestone"] == "first_sync_pending"
         assert connect_output["reason"] == "sync_unreachable"
+        assert connect_output["sync_message"] == "sync_unreachable"
 
     def test_guard_connect_rejects_invalid_sync_url(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -2542,6 +2543,19 @@ args = ["workspace-skill.js", "--changed"]
                     "allowed_origin": allowed_origin,
                 }
 
+            def get_connect_state(self, *, request_id: str) -> dict[str, object]:
+                return {
+                    "request_id": request_id,
+                    "status": "waiting",
+                    "milestone": "waiting_for_browser",
+                    "completed_at": None,
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "proof": {},
+                }
+
+            def report_connect_result(self, **kwargs) -> dict[str, object]:
+                raise AssertionError("report_connect_result should not be called when the browser never completes")
+
         monkeypatch.setattr(
             guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4779"
         )
@@ -2551,7 +2565,6 @@ args = ["workspace-skill.js", "--changed"]
             lambda guard_home: FakeDaemonClient(),
         )
         monkeypatch.setattr(guard_connect_flow_module, "wait_for_connect_transition", lambda **kwargs: None)
-
         payload = guard_connect_flow_module.run_guard_connect_command(
             guard_home=tmp_path / "guard-home",
             store=store,
@@ -2582,6 +2595,19 @@ args = ["workspace-skill.js", "--changed"]
                     "allowed_origin": allowed_origin,
                 }
 
+            def get_connect_state(self, *, request_id: str) -> dict[str, object]:
+                return {
+                    "request_id": request_id,
+                    "status": "waiting",
+                    "milestone": "waiting_for_browser",
+                    "completed_at": None,
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "proof": {},
+                }
+
+            def report_connect_result(self, **kwargs) -> dict[str, object]:
+                raise AssertionError("report_connect_result should not be called when the browser never completes")
+
         monkeypatch.setattr(
             guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
         )
@@ -2591,7 +2617,6 @@ args = ["workspace-skill.js", "--changed"]
             lambda guard_home: FakeDaemonClient(),
         )
         monkeypatch.setattr(guard_connect_flow_module, "wait_for_connect_transition", lambda **kwargs: None)
-
         payload = guard_connect_flow_module.run_guard_connect_command(
             guard_home=tmp_path / "guard-home",
             store=store,
@@ -2659,7 +2684,7 @@ args = ["workspace-skill.js", "--changed"]
                 poll_interval_seconds=0,
             )
 
-    def test_guard_connect_marks_retry_required_for_sync_transport_failures(self, tmp_path, monkeypatch):
+    def test_guard_connect_wraps_sync_transport_failures(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
 
         class FakeDaemonClient:
@@ -2686,9 +2711,12 @@ args = ["workspace-skill.js", "--changed"]
                     "request_id": request_id,
                     "status": status,
                     "milestone": milestone,
-                    "reason": reason,
                     "completed_at": "2026-04-15T00:00:00Z",
-                    "proof": sync or {},
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "reason": reason,
+                    "proof": {
+                        "pairing_completed_at": "2026-04-15T00:00:00Z",
+                    },
                 }
 
         monkeypatch.setattr(
@@ -2725,10 +2753,10 @@ args = ["workspace-skill.js", "--changed"]
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is False
-        assert payload["status"] == "retry_required"
-        assert payload["milestone"] == "first_sync_failed"
-        assert payload["reason"] == "<urlopen error offline>"
+        assert payload["connected"] is True
+        assert payload["status"] == "connected"
+        assert payload["milestone"] == "first_sync_pending"
+        assert payload["sync_message"] == "<urlopen error offline>"
 
     def test_guard_connect_persists_success_when_daemon_result_write_fails(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
@@ -2812,7 +2840,7 @@ args = ["workspace-skill.js", "--changed"]
         assert persisted_state["milestone"] == "first_sync_succeeded"
         assert persisted_state["proof"]["receipts_stored"] == 3
 
-    def test_guard_connect_marks_retry_required_for_paid_plan_limit(self, tmp_path, monkeypatch):
+    def test_guard_connect_reports_paid_plan_limit_without_failing_pairing(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
 
         class FakeDaemonClient:
@@ -2839,9 +2867,12 @@ args = ["workspace-skill.js", "--changed"]
                     "request_id": request_id,
                     "status": status,
                     "milestone": milestone,
-                    "reason": reason,
                     "completed_at": "2026-04-15T00:00:00Z",
-                    "proof": sync or {},
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "reason": reason,
+                    "proof": {
+                        "pairing_completed_at": "2026-04-15T00:00:00Z",
+                    },
                 }
 
         monkeypatch.setattr(
@@ -2878,12 +2909,12 @@ args = ["workspace-skill.js", "--changed"]
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is False
-        assert payload["status"] == "retry_required"
-        assert payload["milestone"] == "first_sync_failed"
-        assert payload["reason"] == "Guard Cloud sync requires a paid Guard plan"
+        assert payload["connected"] is True
+        assert payload["status"] == "connected"
+        assert payload["milestone"] == "first_sync_pending"
+        assert payload["sync_message"] == "Guard Cloud sync requires a paid Guard plan"
 
-    def test_guard_connect_marks_retry_required_for_guard_plan_required(self, tmp_path, monkeypatch):
+    def test_guard_connect_reports_guard_plan_required_without_failing_pairing(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
 
         class FakeDaemonClient:
@@ -2910,9 +2941,12 @@ args = ["workspace-skill.js", "--changed"]
                     "request_id": request_id,
                     "status": status,
                     "milestone": milestone,
-                    "reason": reason,
                     "completed_at": "2026-04-15T00:00:00Z",
-                    "proof": sync or {},
+                    "expires_at": "2026-04-15T00:05:00Z",
+                    "reason": reason,
+                    "proof": {
+                        "pairing_completed_at": "2026-04-15T00:00:00Z",
+                    },
                 }
 
         monkeypatch.setattr(
@@ -2949,10 +2983,10 @@ args = ["workspace-skill.js", "--changed"]
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is False
-        assert payload["status"] == "retry_required"
-        assert payload["milestone"] == "first_sync_failed"
-        assert payload["reason"] == "Guard plan required"
+        assert payload["connected"] is True
+        assert payload["status"] == "connected"
+        assert payload["milestone"] == "first_sync_pending"
+        assert payload["sync_message"] == "Guard plan required"
 
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

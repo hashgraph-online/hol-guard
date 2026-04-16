@@ -79,7 +79,7 @@ def test_guard_daemon_exposes_canonical_connect_state_endpoint(tmp_path) -> None
     assert state_payload["state"]["milestone"] == "waiting_for_browser"
 
 
-def test_guard_connect_returns_retry_required_when_first_sync_fails(
+def test_guard_connect_preserves_pairing_when_first_sync_fails(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -142,10 +142,11 @@ def test_guard_connect_returns_retry_required_when_first_sync_fails(
     finally:
         daemon.stop()
 
-    assert payload["connected"] is False
-    assert payload["status"] == "retry_required"
-    assert payload["milestone"] == "first_sync_failed"
+    assert payload["connected"] is True
+    assert payload["status"] == "connected"
+    assert payload["milestone"] == "first_sync_pending"
     assert payload["reason"] == "sync_unreachable"
+    assert payload["sync_message"] == "sync_unreachable"
     assert payload["request_id"].startswith("connect-")
 
 
@@ -176,7 +177,7 @@ def test_guard_store_backfills_missing_connect_state_on_pairing_completion(tmp_p
 
     assert completed_request["status"] == "completed"
     assert completed_state is not None
-    assert completed_state["status"] == "waiting"
+    assert completed_state["status"] == "connected"
     assert completed_state["milestone"] == "first_sync_pending"
     assert completed_state["proof"]["pairing_completed_at"] == "2026-04-15T00:00:01+00:00"
 
@@ -202,6 +203,6 @@ def test_guard_store_keeps_first_sync_pending_state_after_request_expiry(tmp_pat
     )
 
     assert pending_state is not None
-    assert pending_state["status"] == "waiting"
+    assert pending_state["status"] == "connected"
     assert pending_state["milestone"] == "first_sync_pending"
     assert pending_state["reason"] == "waiting_for_first_sync"
