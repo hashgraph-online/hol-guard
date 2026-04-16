@@ -2681,6 +2681,88 @@ args = ["workspace-skill.js", "--changed"]
         assert payload["milestone"] == "first_sync_failed"
         assert payload["reason"] == "<urlopen error offline>"
 
+    def test_guard_connect_persists_success_when_daemon_result_write_fails(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+
+        class FakeDaemonClient:
+            daemon_url = "http://127.0.0.1:4781"
+
+            def __init__(self) -> None:
+                self.request_id = ""
+
+            def create_connect_request(self, *, sync_url: str, allowed_origin: str) -> dict[str, object]:
+                request = store.create_guard_connect_request(
+                    sync_url=sync_url,
+                    allowed_origin=allowed_origin,
+                    now="2026-04-15T00:00:00Z",
+                )
+                self.request_id = str(request["request_id"])
+                return request
+
+            def report_connect_result(
+                self,
+                *,
+                request_id: str,
+                status: str,
+                milestone: str,
+                reason: str | None = None,
+                sync: dict[str, object] | None = None,
+            ) -> dict[str, object]:
+                raise RuntimeError("daemon restarted")
+
+        fake_daemon_client = FakeDaemonClient()
+        monkeypatch.setattr(
+            guard_connect_flow_module, "ensure_guard_daemon", lambda guard_home: "http://127.0.0.1:4781"
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "load_guard_surface_daemon_client",
+            lambda guard_home: fake_daemon_client,
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "wait_for_connect_transition",
+            lambda **kwargs: {
+                "status": "waiting",
+                "milestone": "first_sync_pending",
+                "request_id": fake_daemon_client.request_id,
+                "completed_at": "2026-04-15T00:00:00Z",
+                "proof": {},
+            },
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "sync_receipts",
+            lambda current_store: {
+                "receipts_stored": 3,
+                "inventory_tracked": 1,
+                "first_synced_at": "2026-04-15T00:00:01Z",
+            },
+        )
+
+        payload = guard_connect_flow_module.run_guard_connect_command(
+            guard_home=tmp_path / "guard-home",
+            store=store,
+            sync_url="https://hol.org/api/guard/receipts/sync",
+            connect_url="https://hol.org/guard/connect",
+            opener=lambda url: True,
+            wait_timeout_seconds=1,
+        )
+
+        persisted_state = store.get_guard_connect_state(
+            request_id=fake_daemon_client.request_id,
+            now="2026-04-15T00:00:02Z",
+        )
+
+        assert payload["connected"] is True
+        assert payload["status"] == "connected"
+        assert payload["milestone"] == "first_sync_succeeded"
+        assert payload["sync"]["receipts_stored"] == 3
+        assert persisted_state is not None
+        assert persisted_state["status"] == "connected"
+        assert persisted_state["milestone"] == "first_sync_succeeded"
+        assert persisted_state["proof"]["receipts_stored"] == 3
+
     def test_guard_connect_marks_retry_required_for_paid_plan_limit(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
 

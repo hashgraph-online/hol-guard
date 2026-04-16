@@ -6,6 +6,7 @@ import json
 import time
 import urllib.error
 import urllib.parse
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..daemon import ensure_guard_daemon, load_guard_surface_daemon_client
@@ -80,7 +81,9 @@ def run_guard_connect_command(
     try:
         sync_payload = sync_receipts(store)
     except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
-        failed_state = daemon_client.report_connect_result(
+        failed_state = _record_connect_result(
+            daemon_client=daemon_client,
+            store=store,
             request_id=str(connect_request["request_id"]),
             status="retry_required",
             milestone="first_sync_failed",
@@ -93,7 +96,9 @@ def run_guard_connect_command(
             sync_url=sync_url,
             connected=False,
         )
-    final_state = daemon_client.report_connect_result(
+    final_state = _record_connect_result(
+        daemon_client=daemon_client,
+        store=store,
         request_id=str(connect_request["request_id"]),
         status="connected",
         milestone="first_sync_succeeded",
@@ -206,6 +211,35 @@ def build_connect_payload(
     if sync is not None:
         payload["sync"] = sync
     return payload
+
+
+def _record_connect_result(
+    *,
+    daemon_client: GuardSurfaceDaemonClient,
+    store: GuardStore,
+    request_id: str,
+    status: str,
+    milestone: str,
+    reason: str | None = None,
+    sync: dict[str, object] | None = None,
+) -> dict[str, object]:
+    try:
+        return daemon_client.report_connect_result(
+            request_id=request_id,
+            status=status,
+            milestone=milestone,
+            reason=reason,
+            sync=sync,
+        )
+    except RuntimeError:
+        return store.record_guard_connect_result(
+            request_id=request_id,
+            status=status,
+            milestone=milestone,
+            now=datetime.now(timezone.utc).isoformat(),
+            reason=reason,
+            sync_payload=sync,
+        )
 
 
 def _resolve_first_sync_milestone(state: dict[str, object]) -> str:
