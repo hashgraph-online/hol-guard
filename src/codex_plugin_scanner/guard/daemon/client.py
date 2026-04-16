@@ -157,6 +157,8 @@ class GuardSurfaceDaemonClient:
             except (OSError, json.JSONDecodeError):
                 message = str(error)
             raise RuntimeError(f"Guard daemon request failed: {message}") from error
+        except (OSError, urllib.error.URLError) as error:
+            raise RuntimeError(f"Guard daemon request failed: {error}") from error
         state = payload.get("state")
         if isinstance(state, dict):
             return state

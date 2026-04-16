@@ -1070,18 +1070,8 @@ class GuardStore:
         return items
 
     def set_sync_credentials(self, sync_url: str, token: str, now: str) -> None:
-        payload = {"sync_url": sync_url, "token": token}
         with self._connect() as connection:
-            connection.execute(
-                """
-                insert into sync_state (state_key, payload_json, updated_at)
-                values ('credentials', ?, ?)
-                on conflict(state_key) do update set
-                  payload_json = excluded.payload_json,
-                  updated_at = excluded.updated_at
-                """,
-                (json.dumps(payload), now),
-            )
+            self._set_sync_credentials_in_connection(connection, sync_url, token, now)
 
     def set_sync_payload(self, state_key: str, payload: dict[str, object] | list[object], now: str) -> None:
         with self._connect() as connection:
@@ -1266,16 +1256,7 @@ class GuardStore:
                 pairing_secret=pairing_secret,
                 completed_at=now,
             )
-            connection.execute(
-                """
-                insert into sync_state (state_key, payload_json, updated_at)
-                values ('credentials', ?, ?)
-                on conflict(state_key) do update set
-                  payload_json = excluded.payload_json,
-                  updated_at = excluded.updated_at
-                """,
-                (json.dumps({"sync_url": request["sync_url"], "token": token}), now),
-            )
+            self._set_sync_credentials_in_connection(connection, str(request["sync_url"]), token, now)
             connection.execute(
                 """
                 insert into guard_events (event_name, payload_json, occurred_at)
@@ -1289,6 +1270,38 @@ class GuardStore:
                 completed_at=now,
             )
         return request
+
+    def _set_sync_credentials_in_connection(
+        self,
+        connection: sqlite3.Connection,
+        sync_url: str,
+        token: str,
+        now: str,
+    ) -> None:
+        payload = {"sync_url": sync_url, "token": token}
+        previous_row = connection.execute(
+            "select payload_json from sync_state where state_key = 'credentials'"
+        ).fetchone()
+        credentials_changed = False
+        if previous_row is None:
+            credentials_changed = True
+        else:
+            previous_payload = json.loads(str(previous_row["payload_json"]))
+            credentials_changed = previous_payload != payload
+        connection.execute(
+            """
+            insert into sync_state (state_key, payload_json, updated_at)
+            values ('credentials', ?, ?)
+            on conflict(state_key) do update set
+              payload_json = excluded.payload_json,
+              updated_at = excluded.updated_at
+            """,
+            (json.dumps(payload), now),
+        )
+        if credentials_changed:
+            connection.execute("delete from sync_state where state_key != 'credentials'")
+            connection.execute("delete from publisher_cache")
+            connection.execute("delete from policy_decisions where source in ('cloud-sync', 'team-policy')")
 
     def record_guard_connect_result(
         self,

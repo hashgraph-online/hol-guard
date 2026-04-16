@@ -9,6 +9,7 @@ import urllib.parse
 from pathlib import Path
 
 from ..daemon import ensure_guard_daemon, load_guard_surface_daemon_client
+from ..daemon.client import GuardSurfaceDaemonClient
 from ..runtime import sync_receipts
 from ..store import GuardStore
 
@@ -147,7 +148,7 @@ def build_guard_connect_browser_url(
 
 def wait_for_connect_transition(
     *,
-    daemon_client,
+    daemon_client: GuardSurfaceDaemonClient,
     request_id: str,
     timeout_seconds: int,
     poll_interval_seconds: float = 0.25,
@@ -155,6 +156,8 @@ def wait_for_connect_transition(
     deadline = time.monotonic() + max(1, timeout_seconds)
     while time.monotonic() < deadline:
         state = daemon_client.get_connect_state(request_id=request_id)
+        if not isinstance(state, dict):
+            raise RuntimeError("Guard daemon request failed: invalid connect state response")
         if str(state.get("status")) in {"connected", "retry_required", "expired"}:
             return state
         if str(state.get("milestone")) == "first_sync_pending":

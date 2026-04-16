@@ -429,7 +429,10 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
     if isinstance(payload.get("sync"), dict):
         sync_payload = payload["sync"]
         body.add_row("Receipts stored", str(sync_payload.get("receipts_stored") or 0))
-        body.add_row("Inventory sent", str(sync_payload.get("inventory") or 0))
+        inventory_value = sync_payload.get("inventory_tracked")
+        if inventory_value is None:
+            inventory_value = sync_payload.get("inventory")
+        body.add_row("Inventory sent", str(inventory_value or 0))
     proof = payload.get("proof")
     if isinstance(proof, dict) and proof.get("first_synced_at"):
         body.add_row("First synced at", str(proof.get("first_synced_at")))

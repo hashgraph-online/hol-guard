@@ -44,18 +44,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path in {"/v1/connect/complete", "/v1/connect/state"}:
             origin = self._normalize_origin(self.headers.get("Origin"))
             if origin is None:
-                self.send_response(400)
-                self.end_headers()
+                self._write_empty(status=400)
                 return
-            self.send_response(200)
-            self.send_header("Access-Control-Allow-Origin", origin)
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
-            self.send_header("Vary", "Origin")
-            self.end_headers()
+            self._write_empty(status=200, extra_headers=self._cors_headers(origin))
             return
-        self.send_response(404)
-        self.end_headers()
+        self._write_empty(status=404)
 
     def do_GET(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
@@ -636,15 +629,33 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not isinstance(origin, str) or not origin.strip():
             return None
         parsed = urlparse(origin.strip())
-        if parsed.scheme not in {"http", "https"} or parsed.hostname is None:
+        if (
+            parsed.scheme not in {"http", "https"}
+            or parsed.hostname is None
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.params
+            or parsed.query
+            or parsed.fragment
+        ):
             return None
-        return f"{parsed.scheme}://{parsed.netloc}"
+        host = parsed.hostname
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        default_port = 80 if parsed.scheme == "http" else 443
+        try:
+            port = parsed.port
+        except ValueError:
+            return None
+        port_suffix = f":{port}" if port not in {None, default_port} else ""
+        return f"{parsed.scheme}://{host}{port_suffix}"
 
     @staticmethod
     def _cors_headers(origin: str) -> dict[str, str]:
         return {
             "Access-Control-Allow-Origin": origin,
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type",
             "Vary": "Origin",
         }
@@ -743,10 +754,38 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        for key, value in (extra_headers or {}).items():
+        for key, value in self._validated_headers(extra_headers).items():
             self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)
+
+    def _write_empty(
+        self,
+        *,
+        status: int,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
+        self.send_response(status)
+        for key, value in self._validated_headers(extra_headers).items():
+            self.send_header(key, value)
+        self.end_headers()
+
+    @staticmethod
+    def _validated_headers(extra_headers: dict[str, str] | None) -> dict[str, str]:
+        allowed_headers = {
+            "Access-Control-Allow-Origin",
+            "Access-Control-Allow-Methods",
+            "Access-Control-Allow-Headers",
+            "Vary",
+        }
+        validated: dict[str, str] = {}
+        for key, value in (extra_headers or {}).items():
+            if key not in allowed_headers or not isinstance(value, str):
+                continue
+            if "\r" in value or "\n" in value:
+                continue
+            validated[key] = value
+        return validated
 
     def _write_static_asset(self, relative_path: str) -> None:
         target = (_STATIC_DIR / relative_path).resolve()
