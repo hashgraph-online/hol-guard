@@ -609,11 +609,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _touch_runtime_heartbeat(self, path: str) -> None:
         if path != "/healthz" and not path.startswith("/v1/"):
             return
-        runtime_state = self.server.store.get_runtime_state()  # type: ignore[attr-defined]
-        if runtime_state is None:
-            return
         self.server.store.touch_runtime_state(  # type: ignore[attr-defined]
-            session_id=str(runtime_state["session_id"]),
+            session_id=self.server.runtime_session_id,  # type: ignore[attr-defined]
             last_heartbeat_at=_now(),
         )
 
