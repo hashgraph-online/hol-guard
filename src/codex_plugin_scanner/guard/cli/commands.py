@@ -47,7 +47,7 @@ from ..protect import build_protect_payload
 from ..proxy import RemoteGuardProxy, StdioGuardProxy
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_summary
-from ..runtime import guard_run, sync_receipts
+from ..runtime.runner import GuardSyncNotConfiguredError, guard_run, sync_receipts
 from ..runtime.secret_file_requests import (
     build_file_read_request_artifact,
     build_tool_action_request_artifact,
@@ -270,9 +270,14 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     _add_guard_common_args(doctor_parser)
     doctor_parser.add_argument("--json", action="store_true")
 
-    login_parser = guard_subparsers.add_parser("login", help="Store Guard sync endpoint credentials")
-    login_parser.add_argument("--sync-url", required=True, type=_guard_http_url)
-    login_parser.add_argument("--token", required=True)
+    login_parser = guard_subparsers.add_parser(
+        "login",
+        help="Compatibility alias for Guard Cloud sign-in and pairing",
+    )
+    login_parser.add_argument("--sync-url", type=_guard_http_url)
+    login_parser.add_argument("--token")
+    login_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
+    login_parser.add_argument("--wait-timeout-seconds", type=int, default=180)
     login_parser.add_argument("--home")
     login_parser.add_argument("--guard-home")
     login_parser.add_argument("--json", action="store_true")
@@ -648,19 +653,36 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command == "login":
-        store.set_sync_credentials(args.sync_url, args.token, _now())
-        store.add_event("sign_in", {"sync_url": args.sync_url, "source": "local-cli"}, _now())
-        _emit("login", {"logged_in": True, "sync_url": args.sync_url}, getattr(args, "json", False))
-        return 0
+        manual_login = _manual_guard_login_payload(args=args, store=store)
+        if manual_login is not None:
+            payload, exit_code = manual_login
+            if payload is not None:
+                _emit("login", payload, getattr(args, "json", False))
+            return exit_code
+        try:
+            payload = _run_guard_connect_flow(
+                guard_home=guard_home,
+                store=store,
+                sync_url=getattr(args, "sync_url", None) or DEFAULT_GUARD_SYNC_URL,
+                connect_url=args.connect_url,
+                wait_timeout_seconds=args.wait_timeout_seconds,
+            )
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        except RuntimeError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        _emit("connect", payload, getattr(args, "json", False))
+        return 0 if bool(payload.get("connected")) else 1
 
     if args.guard_command == "connect":
         try:
-            payload = run_guard_connect_command(
+            payload = _run_guard_connect_flow(
                 guard_home=guard_home,
                 store=store,
                 sync_url=args.sync_url,
                 connect_url=args.connect_url,
-                opener=webbrowser.open,
                 wait_timeout_seconds=args.wait_timeout_seconds,
             )
         except ValueError as error:
@@ -698,6 +720,9 @@ def run_guard_command(args: argparse.Namespace) -> int:
     if args.guard_command == "sync":
         try:
             payload = sync_receipts(store)
+        except GuardSyncNotConfiguredError:
+            print(_guard_sync_prerequisite_message(), file=sys.stderr)
+            return 1
         except RuntimeError as error:
             print(str(error), file=sys.stderr)
             return 1
@@ -1538,6 +1563,52 @@ def _filter_policy_items(items: list[dict[str, object]], *, active_only: bool) -
         if expires_on > current_time:
             filtered.append(item)
     return filtered
+
+
+def _run_guard_connect_flow(
+    *,
+    guard_home: Path,
+    store: GuardStore,
+    sync_url: str,
+    connect_url: str,
+    wait_timeout_seconds: int,
+) -> dict[str, object]:
+    return run_guard_connect_command(
+        guard_home=guard_home,
+        store=store,
+        sync_url=sync_url,
+        connect_url=connect_url,
+        opener=webbrowser.open,
+        wait_timeout_seconds=wait_timeout_seconds,
+    )
+
+
+def _manual_guard_login_payload(
+    *,
+    args: argparse.Namespace,
+    store: GuardStore,
+) -> tuple[dict[str, object] | None, int] | None:
+    manual_token = _optional_string(getattr(args, "token", None))
+    if manual_token is None:
+        return None
+    manual_sync_url = _optional_string(getattr(args, "sync_url", None))
+    if manual_sync_url is None:
+        print(
+            "Pass both --sync-url and --token to save credentials manually, "
+            "or run `hol-guard login` with no token to open browser sign-in.",
+            file=sys.stderr,
+        )
+        return None, 2
+    store.set_sync_credentials(manual_sync_url, manual_token, _now())
+    store.add_event("sign_in", {"sync_url": manual_sync_url, "source": "local-cli"}, _now())
+    return {"logged_in": True, "sync_url": manual_sync_url}, 0
+
+
+def _guard_sync_prerequisite_message() -> str:
+    return (
+        "Guard Cloud is not connected yet. Run `hol-guard connect` to sign in and pair this machine, "
+        "or use `hol-guard login` as a compatibility alias for the same browser flow."
+    )
 
 
 def _build_abom_payload(store: GuardStore) -> dict[str, object]:
