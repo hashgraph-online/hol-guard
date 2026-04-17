@@ -68,8 +68,19 @@ def _format_value(value: object) -> str:
         return str(value)
     if isinstance(value, str):
         return json.dumps(value)
+    if isinstance(value, dict):
+        return _format_inline_table(value)
     if isinstance(value, list):
         return "[" + ", ".join(_format_value(item) for item in value) + "]"
     if isinstance(value, tuple):
         return "[" + ", ".join(_format_value(item) for item in value) + "]"
     return json.dumps(str(value))
+
+
+def _format_inline_table(value: dict[object, object]) -> str:
+    items = []
+    for key, item in value.items():
+        if not isinstance(key, str):
+            continue
+        items.append(f"{_format_key(key)} = {_format_value(item)}")
+    return "{ " + ", ".join(items) + " }" if items else "{}"

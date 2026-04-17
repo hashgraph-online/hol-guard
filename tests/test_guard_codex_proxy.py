@@ -820,6 +820,98 @@ def test_codex_guard_proxy_buffers_out_of_order_child_responses(tmp_path):
     assert server_output.getvalue() == ""
 
 
+def test_codex_guard_proxy_rechecks_buffer_after_nested_child_request(monkeypatch, tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    child_stdin = StringIO()
+
+    def _fake_proxy_child_request(**kwargs):
+        del kwargs
+        proxy._buffer_child_response(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": "outer"}]},
+            }
+        )
+
+    monkeypatch.setattr(proxy, "_proxy_child_request", _fake_proxy_child_request)
+    response = proxy._forward_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+        child_stdin,
+        StringIO('{"jsonrpc":"2.0","id":"child-sampling-1","method":"sampling/createMessage","params":{}}\n'),
+        client_input=StringIO(),
+        server_output=StringIO(),
+    )
+
+    assert response["id"] == 1
+    assert response["result"]["content"][0]["text"] == "outer"
+
+
+def test_codex_guard_proxy_buffers_other_inline_approval_responses(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(tmp_path / "dangerous-call.json"),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "guard-elicitation-1",
+                        "result": {"action": "accept", "content": {"decision": "approve"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "guard-elicitation-2",
+                        "result": {"action": "accept", "content": {"decision": "approve"}},
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+
+    nested_result = proxy._request_inline_approval(
+        {"jsonrpc": "2.0", "id": "guard-elicitation-2", "method": "elicitation/create", "params": {}},
+        input_stream=input_stream,
+        output_stream=StringIO(),
+        child_stdin=StringIO(),
+        child_stdout=StringIO(),
+    )
+    outer_result = proxy._request_inline_approval(
+        {"jsonrpc": "2.0", "id": "guard-elicitation-1", "method": "elicitation/create", "params": {}},
+        input_stream=input_stream,
+        output_stream=StringIO(),
+        child_stdin=StringIO(),
+        child_stdout=StringIO(),
+    )
+
+    assert nested_result == {"action": "accept", "content": {"decision": "approve"}}
+    assert outer_result == {"action": "accept", "content": {"decision": "approve"}}
+
+
 @pytest.mark.parametrize("action", ["warn", "review"])
 def test_codex_guard_proxy_treats_non_blocking_policy_actions_as_pass_through(monkeypatch, tmp_path, action):
     context = _context(tmp_path)

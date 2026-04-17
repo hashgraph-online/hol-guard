@@ -53,6 +53,7 @@ class RuntimeMcpGuardProxy:
         self._inline_prompt_available = False
         self._inline_prompt_counter = 0
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}
+        self._buffered_client_responses: dict[str, list[dict[str, Any]]] = {}
 
     def run_session(
         self,
@@ -327,10 +328,10 @@ class RuntimeMcpGuardProxy:
         request_id = message.get("id")
         child_stdin.write(json.dumps(message) + "\n")
         child_stdin.flush()
-        buffered_response = self._pop_buffered_child_response(request_id)
-        if buffered_response is not None:
-            return buffered_response
         while True:
+            buffered_response = self._pop_buffered_child_response(request_id)
+            if buffered_response is not None:
+                return buffered_response
             line = child_stdout.readline()
             if not line:
                 raise RuntimeError("Guard stdio proxy did not receive a response from the MCP server.")
@@ -369,6 +370,24 @@ class RuntimeMcpGuardProxy:
         payload = pending.pop(0)
         if len(pending) == 0:
             self._buffered_child_responses.pop(response_key, None)
+        return payload
+
+    def _buffer_client_response(self, payload: dict[str, Any]) -> None:
+        response_key = _response_key(payload.get("id"))
+        if response_key is None:
+            return
+        self._buffered_client_responses.setdefault(response_key, []).append(payload)
+
+    def _pop_buffered_client_response(self, request_id: Any) -> dict[str, Any] | None:
+        response_key = _response_key(request_id)
+        if response_key is None:
+            return None
+        pending = self._buffered_client_responses.get(response_key)
+        if not pending:
+            return None
+        payload = pending.pop(0)
+        if len(pending) == 0:
+            self._buffered_client_responses.pop(response_key, None)
         return payload
 
     def _proxy_child_request(
@@ -427,18 +446,20 @@ class RuntimeMcpGuardProxy:
         output_stream.write(json.dumps(request) + "\n")
         output_stream.flush()
         while True:
+            buffered_response = self._pop_buffered_client_response(request_id)
+            if buffered_response is not None:
+                return _approval_payload(buffered_response)
             line = input_stream.readline()
             if not line:
                 return {"action": "cancel"}
             payload = json.loads(line)
             if payload.get("id") == request_id and not _is_request(payload):
-                if "result" in payload:
-                    result = payload.get("result")
-                    return result if isinstance(result, dict) else {"action": "cancel"}
-                if "error" in payload:
-                    return {"action": "cancel"}
-            if _is_notification(payload) or not _is_request(payload):
+                return _approval_payload(payload)
+            if _is_notification(payload):
                 self._forward_notification(payload, child_stdin)
+                continue
+            if not _is_request(payload):
+                self._buffer_client_response(payload)
                 continue
             response, _event = self._handle_message(
                 message=payload,
@@ -597,6 +618,15 @@ def _approval_denies(payload: object) -> bool:
         return False
     content = payload.get("content")
     return isinstance(content, dict) and content.get("decision") == "deny"
+
+
+def _approval_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if "result" in payload:
+        result = payload.get("result")
+        return result if isinstance(result, dict) else {"action": "cancel"}
+    if "error" in payload:
+        return {"action": "cancel"}
+    return {"action": "cancel"}
 
 
 def _decision_source(action: str, source: str) -> str:

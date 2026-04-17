@@ -3,6 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib  # type: ignore[no-redef]
+
 from codex_plugin_scanner.cli import main
 
 
@@ -193,3 +198,43 @@ def test_guard_reinstall_codex_preserves_original_backup(tmp_path, capsys):
     assert uninstall_rc == 0
     assert backup_path.read_text(encoding="utf-8") == original_text
     assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_text
+
+
+def test_guard_install_codex_preserves_inline_tables_inside_arrays(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        """
+approval_policy = "never"
+profiles = [{ name = "default", mode = "safe" }, { name = "strict", mode = "review" }]
+
+[mcp_servers.workspace_skill]
+command = "node"
+args = ["workspace-skill.js"]
+""".strip()
+        + "\n",
+    )
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    with (workspace_dir / ".codex" / "config.toml").open("rb") as handle:
+        payload = tomllib.load(handle)
+
+    assert rc == 0
+    assert payload["profiles"] == [
+        {"name": "default", "mode": "safe"},
+        {"name": "strict", "mode": "review"},
+    ]
