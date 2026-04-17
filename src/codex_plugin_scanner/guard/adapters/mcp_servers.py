@@ -19,6 +19,7 @@ class ManagedMcpServer:
     args: tuple[str, ...]
     transport: str
     env: dict[str, str]
+    enabled: bool
 
 
 def managed_stdio_servers(detection: HarnessDetection) -> tuple[ManagedMcpServer, ...]:
@@ -92,6 +93,7 @@ def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
     if transport not in {"stdio", "local"}:
         return None
     env = _string_env(artifact.metadata.get("env"))
+    enabled = _bool_metadata(artifact.metadata.get("enabled"), default=True)
     return ManagedMcpServer(
         harness=artifact.harness,
         name=artifact.name,
@@ -101,6 +103,7 @@ def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
         args=artifact.args,
         transport=transport,
         env=env,
+        enabled=enabled,
     )
 
 
@@ -112,6 +115,12 @@ def _string_env(value: object) -> dict[str, str]:
         if isinstance(key, str) and isinstance(item, str):
             env[key] = item
     return env
+
+
+def _bool_metadata(value: object, *, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    return default
 
 
 __all__ = [

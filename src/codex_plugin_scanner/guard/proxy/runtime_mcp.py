@@ -398,9 +398,12 @@ class RuntimeMcpGuardProxy:
             if not line:
                 return {"action": "cancel"}
             payload = json.loads(line)
-            if payload.get("id") == request_id and not _is_request(payload) and "result" in payload:
-                result = payload.get("result")
-                return result if isinstance(result, dict) else {"action": "cancel"}
+            if payload.get("id") == request_id and not _is_request(payload):
+                if "result" in payload:
+                    result = payload.get("result")
+                    return result if isinstance(result, dict) else {"action": "cancel"}
+                if "error" in payload:
+                    return {"action": "cancel"}
             if _is_notification(payload) or not _is_request(payload):
                 self._forward_notification(payload, child_stdin)
                 continue

@@ -173,7 +173,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
                         workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
                     ),
                 ],
-                "enabled": True,
+                "enabled": server.enabled,
             }
             environment = getattr(server, "env", {})
             if environment:
@@ -185,6 +185,8 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
     def _proxy_permission_rules(servers: tuple[ManagedMcpServer, ...]) -> dict[str, object]:
         rules: dict[str, object] = {}
         for server in servers:
+            if not server.enabled:
+                continue
             rules[f"{server.name}_*"] = "ask"
         return rules
 

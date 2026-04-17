@@ -9,6 +9,7 @@ from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
+from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -413,6 +414,64 @@ def test_codex_guard_proxy_ignores_client_responses_without_hanging(tmp_path):
     assert responses[2]["id"] == 2
     assert responses[2]["result"]["content"][0]["text"] == "dangerous_delete"
     assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
+
+
+def test_codex_guard_proxy_treats_elicitation_error_as_approval_center_fallback(monkeypatch, tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {"capabilities": {"elicitation": {}}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "guard-elicitation-1",
+                        "error": {"code": 4001, "message": "client dismissed prompt"},
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+    output_stream = StringIO()
+
+    exit_code = proxy.serve(stdin=input_stream, stdout=output_stream)
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+
+    assert exit_code == 0
+    assert responses[1]["method"] == "elicitation/create"
+    assert responses[2]["id"] == 2
+    assert responses[2]["error"]["code"] == -32001
+    assert marker_path.exists() is False
+    assert store.count_approval_requests() == 1
 
 
 def test_codex_guard_proxy_services_nested_child_requests_without_deadlock(tmp_path):

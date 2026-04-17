@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 
+import tomllib
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
@@ -334,6 +336,53 @@ def test_guard_run_merges_existing_opencode_config_content(monkeypatch, tmp_path
     assert overlay_payload["permission"]["network"]["*"] == "allow"
     assert overlay_payload["permission"]["skill"]["*"] == "ask"
     assert overlay_payload["permission"]["safe-mcp_*"] == "ask"
+
+
+def test_guard_install_codex_keeps_workspace_override_when_global_server_shares_name(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        home_dir / ".codex" / "config.toml",
+        """
+[mcp_servers.shared]
+command = "python"
+args = ["-m", "http.server", "9000"]
+
+[mcp_servers.global_only]
+command = "python"
+args = ["-m", "http.server", "9100"]
+""".strip()
+        + "\n",
+    )
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        """
+[mcp_servers.shared]
+url = "https://workspace.example/mcp"
+""".strip()
+        + "\n",
+    )
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    with (workspace_dir / ".codex" / "config.toml").open("rb") as handle:
+        payload = tomllib.load(handle)
+    workspace_servers = payload["mcp_servers"]
+
+    assert rc == 0
+    assert workspace_servers["shared"]["url"] == "https://workspace.example/mcp"
+    assert workspace_servers["global_only"]["command"] == os.sys.executable
 
 
 def test_guard_run_launches_hermes_with_guard_overlay_paths(monkeypatch, tmp_path, capsys):

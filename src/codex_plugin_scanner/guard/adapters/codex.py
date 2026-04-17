@@ -114,7 +114,16 @@ class CodexHarnessAdapter(HarnessAdapter):
         mcp_servers = payload.get("mcp_servers")
         if not isinstance(mcp_servers, dict):
             mcp_servers = {}
+        existing_workspace_server_names = {
+            name for name, value in mcp_servers.items() if isinstance(name, str) and isinstance(value, dict)
+        }
         for server in managed_servers:
+            if self._should_skip_workspace_override(
+                context=context,
+                server=server,
+                existing_workspace_server_names=existing_workspace_server_names,
+            ):
+                continue
             mcp_servers[server.name] = self._proxy_server_entry(context, server)
         payload["mcp_servers"] = mcp_servers
         write_toml_payload(target_config_path, payload)
@@ -181,3 +190,16 @@ class CodexHarnessAdapter(HarnessAdapter):
         if env:
             entry["env"] = env
         return entry
+
+    @staticmethod
+    def _should_skip_workspace_override(
+        *,
+        context: HarnessContext,
+        server: ManagedMcpServer,
+        existing_workspace_server_names: set[str],
+    ) -> bool:
+        if context.workspace_dir is None:
+            return False
+        if server.source_scope == "project":
+            return False
+        return server.name in existing_workspace_server_names
