@@ -62,9 +62,6 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
     payload = _load_state(guard_home)
     if payload is None:
         return None
-    compatibility_version = payload.get("compatibility_version")
-    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
-        return None
     port = payload.get("port")
     if not isinstance(port, int):
         return None
@@ -74,6 +71,9 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
             if response.status == 200 and _healthz_payload_is_current(response.read().decode("utf-8")):
                 return url
     except (OSError, ValueError, urllib.error.URLError):
+        return None
+    compatibility_version = payload.get("compatibility_version")
+    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
         return None
     return None
 

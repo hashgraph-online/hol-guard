@@ -142,7 +142,7 @@ def run_guard_connect_command(
             connect_url=browser_url,
             sync_url=sync_url,
             connected=True,
-            sync=sync_payload,
+            sync=pending_sync_payload,
             sync_message=runtime_sync_error,
         )
     final_state = _record_connect_result(
@@ -165,11 +165,7 @@ def run_guard_connect_command(
 
 def _is_paid_plan_sync_error(message: str) -> bool:
     normalized = message.strip().lower()
-    return (
-        "paid guard plan" in normalized
-        or "paid plan" in normalized
-        or "guard plan required" in normalized
-    )
+    return "paid guard plan" in normalized or "paid plan" in normalized or "guard plan required" in normalized
 
 
 def resolve_connect_url(connect_url: str) -> tuple[str, str]:

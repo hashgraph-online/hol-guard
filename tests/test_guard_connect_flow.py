@@ -166,7 +166,6 @@ def test_guard_connect_preserves_pairing_when_first_sync_fails(
     assert payload["proof"]["first_synced_at"] is None
 
 
-
 def test_guard_connect_prefers_paid_plan_sync_note_over_runtime_sync_timeout(
     tmp_path,
     monkeypatch,
@@ -297,11 +296,14 @@ def test_guard_connect_keeps_pairing_when_runtime_sync_fails(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.connect_flow.sync_receipts",
-        lambda current_store: sync_receipts_calls.append(True) or {
-            "synced_at": "2026-04-15T00:00:02Z",
-            "receipts_stored": 0,
-            "inventory_tracked": 0,
-        },
+        lambda current_store: (
+            sync_receipts_calls.append(True)
+            or {
+                "synced_at": "2026-04-15T00:00:02Z",
+                "receipts_stored": 0,
+                "inventory_tracked": 0,
+            }
+        ),
     )
 
     try:
@@ -326,7 +328,7 @@ def test_guard_connect_keeps_pairing_when_runtime_sync_fails(
     assert payload["sync"]["runtime_session_synced_at"] is None
     assert payload["sync"]["runtime_sessions_visible"] == 0
     assert payload["sync"]["runtime_session_id"]
-    assert payload["sync"]["synced_at"] == "2026-04-15T00:00:02Z"
+    assert payload["sync"]["synced_at"] is None
     assert payload["proof"]["first_synced_at"] is None
     assert sync_receipts_calls == [True]
 
