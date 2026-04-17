@@ -29,7 +29,7 @@ The local product loop is:
 3. `hol-guard update` upgrades the installed Guard CLI in the current environment
 4. `hol-guard run <harness>` evaluates changes before the harness launches
 5. `hol-guard receipts` and `hol-guard status` let users inspect local decisions
-6. `hol-guard login` and `hol-guard sync` stay optional
+6. `hol-guard connect` stays optional, with `hol-guard login` preserved as a compatibility alias
 
 Wrapper mode is still the core execution strategy in this phase. Config mutation is limited to documented local hook helpers, where Guard can add and remove its own hook entries in workspace-local Claude settings or workspace-local Copilot CLI repo hooks.
 
