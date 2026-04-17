@@ -6,12 +6,13 @@ import json
 import time
 import urllib.error
 import urllib.parse
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ..daemon import ensure_guard_daemon, load_guard_surface_daemon_client
 from ..daemon.client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
-from ..runtime import sync_receipts
+from ..runtime import sync_receipts, sync_runtime_session
 from ..store import GuardStore
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
@@ -70,7 +71,8 @@ def run_guard_connect_command(
             sync_url=sync_url,
             connected=False,
         )
-    if str(transition.get("status")) == "retry_required":
+    pairing_completed_at = (transition.get("completed_at") or "").strip()
+    if str(transition.get("status")) == "retry_required" and not pairing_completed_at:
         return build_connect_payload(
             state=transition,
             browser_opened=browser_opened,
@@ -78,10 +80,23 @@ def run_guard_connect_command(
             sync_url=sync_url,
             connected=False,
         )
+    runtime_session = _start_guard_runtime_session(daemon_client)
+    runtime_sync_error: str | None = None
+    try:
+        runtime_sync_summary = sync_runtime_session(store, session=runtime_session)
+    except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
+        runtime_sync_error = str(error)
+        runtime_sync_summary = {
+            "runtime_session_id": str(runtime_session.get("session_id") or runtime_session.get("sessionId") or ""),
+            "runtime_session_synced_at": None,
+            "runtime_sessions_visible": 0,
+            "runtime_session_sync_pending": True,
+            "runtime_session_sync_reason": runtime_sync_error,
+        }
     try:
         sync_payload = sync_receipts(store)
     except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
-        sync_message = str(error)
+        sync_message = runtime_sync_error or str(error)
         pending_state = _record_connect_result(
             daemon_client=daemon_client,
             store=store,
@@ -89,6 +104,7 @@ def run_guard_connect_command(
             status="connected",
             milestone="first_sync_pending",
             reason=sync_message,
+            sync=runtime_sync_summary,
         )
         return build_connect_payload(
             state=pending_state,
@@ -96,7 +112,34 @@ def run_guard_connect_command(
             connect_url=browser_url,
             sync_url=sync_url,
             connected=True,
+            sync=runtime_sync_summary,
             sync_message=sync_message,
+        )
+    sync_payload["runtime_session_synced_at"] = runtime_sync_summary["runtime_session_synced_at"]
+    sync_payload["runtime_session_id"] = runtime_sync_summary["runtime_session_id"]
+    sync_payload["runtime_sessions_visible"] = runtime_sync_summary["runtime_sessions_visible"]
+    if runtime_sync_error is not None:
+        sync_payload["runtime_session_sync_pending"] = True
+        sync_payload["runtime_session_sync_reason"] = runtime_sync_error
+        pending_sync_payload = dict(sync_payload)
+        pending_sync_payload["synced_at"] = None
+        pending_state = _record_connect_result(
+            daemon_client=daemon_client,
+            store=store,
+            request_id=str(connect_request["request_id"]),
+            status="connected",
+            milestone="first_sync_pending",
+            reason=runtime_sync_error,
+            sync=pending_sync_payload,
+        )
+        return build_connect_payload(
+            state=pending_state,
+            browser_opened=browser_opened,
+            connect_url=browser_url,
+            sync_url=sync_url,
+            connected=True,
+            sync=sync_payload,
+            sync_message=runtime_sync_error,
         )
     final_state = _record_connect_result(
         daemon_client=daemon_client,
@@ -260,3 +303,35 @@ def _resolve_first_sync_milestone(state: dict[str, object]) -> str:
     if milestone == "first_sync_pending":
         return "waiting"
     return "pending"
+
+
+def _start_guard_runtime_session(daemon_client: GuardSurfaceDaemonClient) -> dict[str, object]:
+    start_session = getattr(daemon_client, "start_session", None)
+    if callable(start_session):
+        try:
+            return start_session(
+                harness="hol-guard",
+                surface="cli",
+                workspace=str(Path.cwd()),
+                client_name="hol-guard",
+                client_title="HOL Guard CLI",
+                client_version=None,
+                capabilities=["approval-resolution", "receipt-view", "runtime-sync"],
+            )
+        except (GuardDaemonRequestError, GuardDaemonTransportError):
+            pass
+    now = datetime.now(timezone.utc).isoformat()
+    return {
+        "session_id": f"guard-session-{uuid.uuid4().hex}",
+        "harness": "hol-guard",
+        "surface": "cli",
+        "status": "active",
+        "client_name": "hol-guard",
+        "client_title": "HOL Guard CLI",
+        "client_version": None,
+        "workspace": str(Path.cwd()),
+        "capabilities": ["approval-resolution", "receipt-view", "runtime-sync"],
+        "operations": [],
+        "created_at": now,
+        "updated_at": now,
+    }
