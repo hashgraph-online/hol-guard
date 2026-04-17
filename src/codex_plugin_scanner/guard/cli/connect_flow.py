@@ -99,6 +99,8 @@ def run_guard_connect_command(
         sync_message = str(error)
         if runtime_sync_error and not _is_paid_plan_sync_error(sync_message):
             sync_message = runtime_sync_error
+        pending_sync_payload = dict(runtime_sync_summary)
+        pending_sync_payload["synced_at"] = None
         pending_state = _record_connect_result(
             daemon_client=daemon_client,
             store=store,
@@ -106,7 +108,7 @@ def run_guard_connect_command(
             status="connected",
             milestone="first_sync_pending",
             reason=sync_message,
-            sync=runtime_sync_summary,
+            sync=pending_sync_payload,
         )
         return build_connect_payload(
             state=pending_state,
