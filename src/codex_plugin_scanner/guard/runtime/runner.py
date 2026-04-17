@@ -202,7 +202,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         headers=_guard_sync_headers(str(credentials["token"])),
     )
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(request, timeout=20) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         raise RuntimeError(_sync_http_error_message(error)) from error

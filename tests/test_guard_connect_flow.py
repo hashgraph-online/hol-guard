@@ -137,6 +137,7 @@ def test_guard_connect_preserves_pairing_when_first_sync_fails(
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.connect_flow.sync_runtime_session",
         lambda current_store, *, session: {
+            "synced_at": "2026-04-15T00:00:01Z",
             "runtime_session_id": str(session.get("session_id") or session.get("sessionId")),
             "runtime_session_synced_at": "2026-04-15T00:00:01Z",
             "runtime_sessions_visible": 1,
@@ -161,6 +162,160 @@ def test_guard_connect_preserves_pairing_when_first_sync_fails(
     assert payload["reason"] == "sync_unreachable"
     assert payload["sync_message"] == "sync_unreachable"
     assert payload["request_id"].startswith("connect-")
+    assert payload["sync"]["synced_at"] is None
+    assert payload["proof"]["first_synced_at"] is None
+
+
+def test_guard_connect_prefers_paid_plan_sync_note_over_runtime_sync_timeout(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    store = GuardStore(home_dir)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.ensure_guard_daemon",
+        lambda guard_home: f"http://127.0.0.1:{daemon.port}",
+    )
+
+    def open_browser(url: str) -> bool:
+        parsed = urllib.parse.urlparse(url)
+        query = urllib.parse.parse_qs(parsed.query)
+        fragment = urllib.parse.parse_qs(parsed.fragment)
+        request_id = query["guardPairRequest"][-1]
+        daemon_url = query["guardDaemon"][-1]
+        pairing_secret = fragment["guardPairSecret"][-1]
+
+        def complete_pairing() -> None:
+            request = urllib.request.Request(
+                f"{daemon_url}/v1/connect/complete",
+                data=urllib.parse.urlencode(
+                    {
+                        "request_id": request_id,
+                        "pairing_secret": pairing_secret,
+                        "token": "session-token-123",
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Origin": "https://hol.org",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=5):
+                pass
+
+        threading.Thread(target=complete_pairing, daemon=True).start()
+        return True
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.sync_runtime_session",
+        lambda current_store, *, session: (_ for _ in ()).throw(RuntimeError("timed out")),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.sync_receipts",
+        lambda current_store: (_ for _ in ()).throw(
+            RuntimeError("Guard Cloud sync requires a paid Guard plan"),
+        ),
+    )
+
+    try:
+        payload = run_guard_connect_command(
+            guard_home=home_dir,
+            store=store,
+            sync_url="https://hol.org/registry/api/v1",
+            connect_url="https://hol.org/guard/connect",
+            opener=open_browser,
+            wait_timeout_seconds=5,
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["connected"] is True
+    assert payload["status"] == "connected"
+    assert payload["milestone"] == "first_sync_pending"
+    assert payload["reason"] == "Guard Cloud sync requires a paid Guard plan"
+    assert payload["sync_message"] == "Guard Cloud sync requires a paid Guard plan"
+
+
+def test_guard_connect_preserves_http_402_payment_required_sync_note(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    store = GuardStore(home_dir)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.ensure_guard_daemon",
+        lambda guard_home: f"http://127.0.0.1:{daemon.port}",
+    )
+
+    def open_browser(url: str) -> bool:
+        parsed = urllib.parse.urlparse(url)
+        query = urllib.parse.parse_qs(parsed.query)
+        fragment = urllib.parse.parse_qs(parsed.fragment)
+        request_id = query["guardPairRequest"][-1]
+        daemon_url = query["guardDaemon"][-1]
+        pairing_secret = fragment["guardPairSecret"][-1]
+
+        def complete_pairing() -> None:
+            request = urllib.request.Request(
+                f"{daemon_url}/v1/connect/complete",
+                data=urllib.parse.urlencode(
+                    {
+                        "request_id": request_id,
+                        "pairing_secret": pairing_secret,
+                        "token": "session-token-123",
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Origin": "https://hol.org",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=5):
+                pass
+
+        threading.Thread(target=complete_pairing, daemon=True).start()
+        return True
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.sync_runtime_session",
+        lambda current_store, *, session: (_ for _ in ()).throw(RuntimeError("timed out")),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.sync_receipts",
+        lambda current_store: (_ for _ in ()).throw(
+            RuntimeError("HTTP Error 402: Payment Required"),
+        ),
+    )
+
+    try:
+        payload = run_guard_connect_command(
+            guard_home=home_dir,
+            store=store,
+            sync_url="https://hol.org/registry/api/v1",
+            connect_url="https://hol.org/guard/connect",
+            opener=open_browser,
+            wait_timeout_seconds=5,
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["connected"] is True
+    assert payload["status"] == "connected"
+    assert payload["milestone"] == "first_sync_pending"
+    assert payload["reason"] == "HTTP Error 402: Payment Required"
+    assert payload["sync_message"] == "HTTP Error 402: Payment Required"
 
 
 def test_guard_connect_keeps_pairing_when_runtime_sync_fails(
@@ -217,11 +372,14 @@ def test_guard_connect_keeps_pairing_when_runtime_sync_fails(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.connect_flow.sync_receipts",
-        lambda current_store: sync_receipts_calls.append(True) or {
-            "synced_at": "2026-04-15T00:00:02Z",
-            "receipts_stored": 0,
-            "inventory_tracked": 0,
-        },
+        lambda current_store: (
+            sync_receipts_calls.append(True)
+            or {
+                "synced_at": "2026-04-15T00:00:02Z",
+                "receipts_stored": 0,
+                "inventory_tracked": 0,
+            }
+        ),
     )
 
     try:
@@ -246,7 +404,7 @@ def test_guard_connect_keeps_pairing_when_runtime_sync_fails(
     assert payload["sync"]["runtime_session_synced_at"] is None
     assert payload["sync"]["runtime_sessions_visible"] == 0
     assert payload["sync"]["runtime_session_id"]
-    assert payload["sync"]["synced_at"] == "2026-04-15T00:00:02Z"
+    assert payload["sync"]["synced_at"] is None
     assert payload["proof"]["first_synced_at"] is None
     assert sync_receipts_calls == [True]
 

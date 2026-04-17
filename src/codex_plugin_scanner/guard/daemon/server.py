@@ -13,11 +13,16 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
+from ...version import __version__
 from ..approvals import apply_approval_resolution, build_runtime_snapshot
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
-from .manager import clear_guard_daemon_state, write_guard_daemon_state
+from .manager import (
+    GUARD_DAEMON_COMPATIBILITY_VERSION,
+    clear_guard_daemon_state,
+    write_guard_daemon_state,
+)
 
 
 class _GuardDaemonHttpServer(ThreadingHTTPServer):
@@ -65,6 +70,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     "receipts": len(store.list_receipts(limit=500)),
                     "approvals": store.count_approval_requests(),
                     "tables": store.list_table_names(),
+                    "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
+                    "package_version": __version__,
                 }
             )
             return

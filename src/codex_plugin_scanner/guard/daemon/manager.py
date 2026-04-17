@@ -12,9 +12,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from ...version import __version__
+
 DEFAULT_GUARD_DAEMON_PORT = 4781
 GUARD_DAEMON_PORT_RANGE = 1000
 REQUIRED_DAEMON_TABLES = frozenset({"guard_connect_states"})
+GUARD_DAEMON_COMPATIBILITY_VERSION = 2
 
 
 def ensure_guard_daemon(guard_home: Path) -> str:
@@ -69,6 +72,9 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
                 return url
     except (OSError, ValueError, urllib.error.URLError):
         return None
+    compatibility_version = payload.get("compatibility_version")
+    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
+        return None
     return None
 
 
@@ -83,7 +89,19 @@ def load_guard_daemon_auth_token(guard_home: Path) -> str | None:
 def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str) -> None:
     state_path = _state_path(guard_home)
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps({"port": port, "auth_token": auth_token}, indent=2), encoding="utf-8")
+    state_path.write_text(
+        json.dumps(
+            {
+                "port": port,
+                "auth_token": auth_token,
+                "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
+                "package_version": __version__,
+                "pid": os.getpid(),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
 
 def clear_guard_daemon_state(guard_home: Path) -> None:
@@ -143,6 +161,9 @@ def _candidate_ports(guard_home: Path) -> list[int]:
 def _healthz_payload_is_current(raw_payload: str) -> bool:
     payload = json.loads(raw_payload)
     if not isinstance(payload, dict):
+        return False
+    compatibility_version = payload.get("compatibility_version")
+    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
         return False
     tables = payload.get("tables")
     if not isinstance(tables, list):

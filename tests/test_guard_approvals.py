@@ -534,6 +534,78 @@ class TestGuardApprovals:
 
         assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
 
+    def test_load_guard_daemon_url_accepts_healthy_daemon_for_legacy_state_file(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self) -> FakeResponse:
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "ok": True,
+                        "tables": ["guard_connect_states"],
+                        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+                    }
+                ).encode("utf-8")
+
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_load_state",
+            lambda _guard_home: {"port": 5530, "auth_token": "token-123"},
+        )
+        monkeypatch.setattr(
+            daemon_manager_module.urllib.request,
+            "urlopen",
+            lambda request, timeout=1: FakeResponse(),
+        )
+
+        assert daemon_manager_module.load_guard_daemon_url(guard_home) == "http://127.0.0.1:5530"
+
+    def test_load_guard_daemon_url_rejects_incompatible_daemon_state(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self) -> FakeResponse:
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "ok": True,
+                        "tables": ["guard_connect_states"],
+                        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION - 1,
+                    }
+                ).encode("utf-8")
+
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_load_state",
+            lambda _guard_home: {
+                "port": 5530,
+                "auth_token": "token-123",
+                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION - 1,
+            },
+        )
+        monkeypatch.setattr(
+            daemon_manager_module.urllib.request,
+            "urlopen",
+            lambda request, timeout=1: FakeResponse(),
+        )
+
+        assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
+
     def test_guard_daemon_serves_approval_queue_and_resolves_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         store.add_approval_request(
