@@ -407,15 +407,23 @@ class RuntimeMcpGuardProxy:
             if _is_notification(payload) or not _is_request(payload):
                 self._forward_notification(payload, child_stdin)
                 continue
-            response = self._forward_message(
-                payload,
-                child_stdin,
-                child_stdout,
+            response, _event = self._handle_message(
+                message=payload,
+                child_stdin=child_stdin,
+                child_stdout=child_stdout,
                 client_input=input_stream,
                 server_output=output_stream,
+                approval_callback=lambda nested_request: self._request_inline_approval(
+                    nested_request,
+                    input_stream=input_stream,
+                    output_stream=output_stream,
+                    child_stdin=child_stdin,
+                    child_stdout=child_stdout,
+                ),
             )
-            output_stream.write(json.dumps(response) + "\n")
-            output_stream.flush()
+            if response is not None:
+                output_stream.write(json.dumps(response) + "\n")
+                output_stream.flush()
 
     def _queue_approval_center_response(
         self,

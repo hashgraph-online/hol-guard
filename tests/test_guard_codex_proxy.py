@@ -474,6 +474,80 @@ def test_codex_guard_proxy_treats_elicitation_error_as_approval_center_fallback(
     assert store.count_approval_requests() == 1
 
 
+def test_codex_guard_proxy_rechecks_interleaved_requests_during_inline_approval(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {"capabilities": {"elicitation": {}}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": "dangerous_delete", "arguments": {"target": "first.txt"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {"name": "dangerous_delete", "arguments": {"target": "second.txt"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "guard-elicitation-2",
+                        "result": {"action": "accept", "content": {"decision": "approve"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "guard-elicitation-1",
+                        "result": {"action": "accept", "content": {"decision": "approve"}},
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+    output_stream = StringIO()
+
+    exit_code = proxy.serve(stdin=input_stream, stdout=output_stream)
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+
+    assert exit_code == 0
+    assert responses[1]["id"] == "guard-elicitation-1"
+    assert responses[1]["method"] == "elicitation/create"
+    assert responses[2]["id"] == "guard-elicitation-2"
+    assert responses[2]["method"] == "elicitation/create"
+    assert responses[3]["id"] == 3
+    assert responses[4]["id"] == 2
+    assert json.loads(marker_path.read_text(encoding="utf-8"))["arguments"]["target"] == "first.txt"
+
+
 def test_codex_guard_proxy_services_nested_child_requests_without_deadlock(tmp_path):
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
