@@ -2098,7 +2098,19 @@ args = ["workspace-skill.js", "--changed"]
     def test_guard_install_creates_opencode_runtime_overlay(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _write_json(workspace_dir / "opencode.json", {"name": "workspace-opencode"})
+        _write_json(
+            workspace_dir / "opencode.json",
+            {
+                "name": "workspace-opencode",
+                "mcp": {
+                    "danger_lab": {
+                        "type": "local",
+                        "command": ["python3", "danger-server.py"],
+                        "environment": {"API_BASE": "https://hol.org"},
+                    }
+                },
+            },
+        )
 
         rc = main(
             [
@@ -2121,6 +2133,12 @@ args = ["workspace-skill.js", "--changed"]
         assert output["managed_install"]["active"] is True
         assert manifest["shim_command"] == "guard-opencode"
         assert runtime_payload["permission"]["skill"]["*"] == "ask"
+        assert runtime_payload["permission"]["danger_lab_*"] == "ask"
+        assert runtime_payload["mcp"]["danger_lab"]["type"] == "local"
+        assert runtime_payload["mcp"]["danger_lab"]["command"][0]
+        assert runtime_payload["mcp"]["danger_lab"]["command"][3] == "guard"
+        assert runtime_payload["mcp"]["danger_lab"]["command"][4] == "opencode-mcp-proxy"
+        assert runtime_payload["mcp"]["danger_lab"]["environment"]["API_BASE"] == "https://hol.org"
 
     def test_guard_update_runs_pip_upgrade_in_current_environment(self, monkeypatch, capsys):
         commands: list[list[str]] = []

@@ -70,6 +70,69 @@ def _child_command(marker_path: Path) -> list[str]:
     ]
 
 
+def _nested_request_child_command() -> list[str]:
+    return [
+        sys.executable,
+        "-u",
+        "-c",
+        "\n".join(
+            [
+                "import json",
+                "import sys",
+                "for line in sys.stdin:",
+                "    message = json.loads(line)",
+                "    message_id = message.get('id')",
+                "    method = message.get('method')",
+                "    if method is None or message_id is None:",
+                "        continue",
+                "    if method == 'initialize':",
+                "        result = {",
+                "            'protocolVersion': '2025-06-18',",
+                "            'capabilities': {'tools': {}, 'sampling': {}},",
+                "            'serverInfo': {'name': 'fixture', 'version': '1.0.0'},",
+                "        }",
+                "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
+                "        sys.stdout.flush()",
+                "        continue",
+                "    if method == 'tools/list':",
+                "        child_request_id = 'child-sampling-1'",
+                "        print(json.dumps({",
+                "            'jsonrpc': '2.0',",
+                "            'id': child_request_id,",
+                "            'method': 'sampling/createMessage',",
+                "            'params': {",
+                "                'messages': [",
+                "                    {'role': 'user', 'content': {'type': 'text', 'text': 'guard nested request'}}",
+                "                ]",
+                "            },",
+                "        }))",
+                "        sys.stdout.flush()",
+                "        while True:",
+                "            nested_line = sys.stdin.readline()",
+                "            if not nested_line:",
+                "                sys.exit(1)",
+                "            nested_message = json.loads(nested_line)",
+                "            if nested_message.get('id') == child_request_id and 'result' in nested_message:",
+                "                break",
+                "        result = {",
+                "            'tools': [",
+                "                {",
+                "                    'name': 'safe_echo',",
+                "                    'description': 'Safe echo',",
+                "                    'inputSchema': {'type': 'object', 'properties': {}},",
+                "                }",
+                "            ]",
+                "        }",
+                "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
+                "        sys.stdout.flush()",
+                "        continue",
+                "    print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': {}}))",
+                "    sys.stdout.flush()",
+            ]
+        ),
+    ]
+
+
 def _context(tmp_path: Path) -> HarnessContext:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -330,7 +393,7 @@ def test_codex_guard_proxy_ignores_client_responses_without_hanging(tmp_path):
                 json.dumps(
                     {
                         "jsonrpc": "2.0",
-                        "id": 1,
+                        "id": "guard-elicitation-1",
                         "result": {"action": "accept", "content": {"decision": "approve"}},
                     }
                 ),
@@ -345,7 +408,60 @@ def test_codex_guard_proxy_ignores_client_responses_without_hanging(tmp_path):
 
     assert exit_code == 0
     assert responses[0]["id"] == 1
+    assert responses[1]["id"] == "guard-elicitation-1"
     assert responses[1]["method"] == "elicitation/create"
     assert responses[2]["id"] == 2
     assert responses[2]["result"]["content"][0]["text"] == "dangerous_delete"
     assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
+
+
+def test_codex_guard_proxy_services_nested_child_requests_without_deadlock(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {"capabilities": {"sampling": {}}},
+                    }
+                ),
+                json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": "child-sampling-1",
+                        "result": {
+                            "role": "assistant",
+                            "content": {"type": "text", "text": "Nested approval satisfied"},
+                        },
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+    output_stream = StringIO()
+
+    exit_code = proxy.serve(stdin=input_stream, stdout=output_stream)
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+
+    assert exit_code == 0
+    assert responses[0]["id"] == 1
+    assert responses[1]["id"] == "child-sampling-1"
+    assert responses[1]["method"] == "sampling/createMessage"
+    assert responses[2]["id"] == 2
+    assert responses[2]["result"]["tools"][0]["name"] == "safe_echo"

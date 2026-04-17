@@ -71,6 +71,7 @@ def _build_opencode_fixture(home_dir: Path, workspace_dir: Path) -> None:
                 "safe-mcp": {
                     "type": "local",
                     "command": ["/usr/bin/true"],
+                    "environment": {"TOKEN_SOURCE": "workspace"},
                 }
             }
         },
@@ -275,6 +276,9 @@ def test_guard_run_launches_opencode_with_runtime_overlay(monkeypatch, tmp_path,
     assert captured_command == ["opencode", "run", "--help"]
     assert captured_env["HOME"] == str(home_dir)
     assert overlay_payload["permission"]["skill"]["*"] == "ask"
+    assert overlay_payload["permission"]["safe-mcp_*"] == "ask"
+    assert overlay_payload["mcp"]["safe-mcp"]["command"][4] == "opencode-mcp-proxy"
+    assert overlay_payload["mcp"]["safe-mcp"]["environment"]["TOKEN_SOURCE"] == "workspace"
 
 
 def test_guard_run_merges_existing_opencode_config_content(monkeypatch, tmp_path, capsys):
@@ -329,6 +333,7 @@ def test_guard_run_merges_existing_opencode_config_content(monkeypatch, tmp_path
     assert overlay_payload["model"] == "gpt-4.1"
     assert overlay_payload["permission"]["network"]["*"] == "allow"
     assert overlay_payload["permission"]["skill"]["*"] == "ask"
+    assert overlay_payload["permission"]["safe-mcp_*"] == "ask"
 
 
 def test_guard_run_launches_hermes_with_guard_overlay_paths(monkeypatch, tmp_path, capsys):

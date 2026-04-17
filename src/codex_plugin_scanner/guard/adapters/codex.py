@@ -15,6 +15,7 @@ from ..codex_config import read_toml_payload, write_toml_payload
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available
+from .mcp_servers import ManagedMcpServer, managed_stdio_servers, proxy_cli_args, skipped_stdio_server_names
 
 
 def _read_toml(path: Path) -> dict[str, object]:
@@ -101,16 +102,8 @@ class CodexHarnessAdapter(HarnessAdapter):
 
     def install(self, context: HarnessContext) -> dict[str, object]:
         detection = self.detect(context)
-        managed_artifacts = [
-            artifact
-            for artifact in detection.artifacts
-            if artifact.transport == "stdio" and artifact.command is not None and artifact.name.strip()
-        ]
-        skipped_artifacts = [
-            artifact.name
-            for artifact in detection.artifacts
-            if artifact.transport != "stdio" or artifact.command is None or not artifact.name.strip()
-        ]
+        managed_servers = managed_stdio_servers(detection)
+        skipped_servers = skipped_stdio_server_names(detection)
         target_config_path = self._target_config_path(context)
         original_text = target_config_path.read_text(encoding="utf-8") if target_config_path.is_file() else None
         backup_path = self._backup_path(context)
@@ -121,8 +114,8 @@ class CodexHarnessAdapter(HarnessAdapter):
         mcp_servers = payload.get("mcp_servers")
         if not isinstance(mcp_servers, dict):
             mcp_servers = {}
-        for artifact in managed_artifacts:
-            mcp_servers[artifact.name] = self._proxy_server_entry(context, artifact)
+        for server in managed_servers:
+            mcp_servers[server.name] = self._proxy_server_entry(context, server)
         payload["mcp_servers"] = mcp_servers
         write_toml_payload(target_config_path, payload)
         shim_manifest = install_guard_shim(self.harness, context)
@@ -134,8 +127,8 @@ class CodexHarnessAdapter(HarnessAdapter):
             "mode": "codex-mcp-proxy",
             "managed_config_path": str(target_config_path),
             "backup_path": str(backup_path),
-            "managed_servers": [artifact.name for artifact in managed_artifacts],
-            "skipped_servers": skipped_artifacts,
+            "managed_servers": [server.name for server in managed_servers],
+            "skipped_servers": list(skipped_servers),
             "source_config_paths": list(detection.config_paths),
         }
 
@@ -172,34 +165,19 @@ class CodexHarnessAdapter(HarnessAdapter):
         digest = hashlib.sha256(target_path.encode("utf-8")).hexdigest()[:12]
         return context.guard_home / "managed" / "codex" / f"{digest}.backup.toml"
 
-    def _proxy_server_entry(self, context: HarnessContext, artifact: GuardArtifact) -> dict[str, object]:
-        args = [
-            "-m",
-            "codex_plugin_scanner.cli",
-            "guard",
-            "codex-mcp-proxy",
-            "--guard-home",
-            str(context.guard_home),
-            "--server-name",
-            artifact.name,
-            "--source-scope",
-            artifact.source_scope,
-            "--config-path",
-            artifact.config_path,
-            "--command",
-            artifact.command or "",
-        ]
-        if context.home_dir.resolve() != Path.home().resolve():
-            args.extend(["--home", str(context.home_dir)])
-        if context.workspace_dir is not None:
-            args.extend(["--workspace", str(context.workspace_dir)])
-        for value in artifact.args:
-            args.append(f"--arg={value}")
+    def _proxy_server_entry(self, context: HarnessContext, server: ManagedMcpServer) -> dict[str, object]:
+        args = proxy_cli_args(
+            proxy_command="codex-mcp-proxy",
+            guard_home=str(context.guard_home),
+            server=server,
+            home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
+            workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
+        )
         entry: dict[str, object] = {
             "command": sys.executable,
             "args": args,
         }
-        env = artifact.metadata.get("env")
-        if isinstance(env, dict) and env:
+        env = getattr(server, "env", {})
+        if env:
             entry["env"] = env
         return entry
