@@ -39,9 +39,7 @@ def dump_toml(payload: dict[str, object]) -> str:
 
 
 def _emit_table(lines: list[str], path: tuple[str, ...], payload: dict[str, object]) -> None:
-    scalar_items = [
-        (key, value) for key, value in payload.items() if value is not None and not isinstance(value, dict)
-    ]
+    scalar_items = [(key, value) for key, value in payload.items() if value is not None and not isinstance(value, dict)]
     nested_items = [(key, value) for key, value in payload.items() if isinstance(value, dict)]
 
     if path:
