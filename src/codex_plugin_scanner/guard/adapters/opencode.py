@@ -158,9 +158,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             "config": _run_command_probe([self.executable, "debug", "config"]),
         }
 
-    def _proxy_mcp_overrides(
-        self, context: HarnessContext, servers: tuple[ManagedMcpServer, ...]
-    ) -> dict[str, object]:
+    def _proxy_mcp_overrides(self, context: HarnessContext, servers: tuple[ManagedMcpServer, ...]) -> dict[str, object]:
         overrides: dict[str, object] = {}
         for server in servers:
             entry: dict[str, object] = {
