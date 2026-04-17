@@ -439,11 +439,14 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
     if "connected" in payload or "browser_opened" in payload or "status" in payload:
         body = Table.grid(padding=(0, 1))
         milestone = str(payload.get("milestone") or "")
-        body.add_row("Connected", _bool_label(bool(payload.get("connected"))))
         body.add_row("Browser opened", _bool_label(bool(payload.get("browser_opened"))))
-        body.add_row("Status", _connect_status_text(payload))
+        body.add_row(
+            "Browser paired",
+            _bool_label(bool(payload.get("completed_at")) or str(payload.get("status") or "") == "connected"),
+        )
+        body.add_row("Guard status", _connect_status_text(payload))
         if milestone:
-            body.add_row("Stage", _connect_milestone_text(milestone))
+            body.add_row("Stage", _connect_milestone_text(payload))
         body.add_row("Connect URL", str(payload.get("connect_url") or "unknown"))
         body.add_row("Sync endpoint", str(payload.get("sync_url") or "unknown"))
         sync_payload = payload.get("sync")
@@ -526,11 +529,14 @@ def _connect_status_text(payload: dict[str, object]) -> str:
     status = str(payload.get("status") or "unknown")
     milestone = str(payload.get("milestone") or "")
     if status == "connected" and milestone == "first_sync_pending":
-        return "Paired locally"
+        reason = str(payload.get("reason") or payload.get("sync_message") or "").lower()
+        if "paid guard plan" in reason or "paid plan" in reason or "guard plan required" in reason:
+            return "Machine registered"
+        return "Machine registered, first proof pending"
     if status == "connected" and milestone == "first_sync_succeeded":
         return "Connected"
     if status == "waiting":
-        return "Waiting for the browser"
+        return "Browser approval pending"
     if status == "retry_required":
         return "Retry required"
     if status == "expired":
@@ -538,11 +544,15 @@ def _connect_status_text(payload: dict[str, object]) -> str:
     return status
 
 
-def _connect_milestone_text(milestone: str) -> str:
+def _connect_milestone_text(payload: dict[str, object]) -> str:
+    milestone = str(payload.get("milestone") or "")
     if milestone == "waiting_for_browser":
         return "Waiting for browser approval"
     if milestone == "first_sync_pending":
-        return "First shared proof is still on the way"
+        reason = str(payload.get("reason") or payload.get("sync_message") or "").lower()
+        if "paid guard plan" in reason or "paid plan" in reason or "guard plan required" in reason:
+            return "Shared proof sync needs a paid Guard plan"
+        return "Dashboard proof is still syncing"
     if milestone == "first_sync_succeeded":
         return "First shared proof reached the dashboard"
     if milestone == "first_sync_failed":
