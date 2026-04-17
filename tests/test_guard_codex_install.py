@@ -29,6 +29,7 @@ approval_policy = "never"
 [mcp_servers.workspace_skill]
 command = "node"
 args = ["workspace-skill.js"]
+env = { API_BASE = "https://hol.org", FEATURE_FLAG = "1" }
 """.strip()
         + "\n",
     )
@@ -65,6 +66,8 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert "guard" in config_text
     assert "codex-mcp-proxy" in config_text
     assert 'approval_policy = "never"' in config_text
+    assert 'API_BASE = "https://hol.org"' in config_text
+    assert 'FEATURE_FLAG = "1"' in config_text
 
 
 def test_guard_uninstall_codex_restores_original_workspace_config(tmp_path, capsys):
@@ -136,3 +139,57 @@ args = ["server.py", "--marker-path", "marker.json"]
 
     assert rc == 0
     assert "--arg=--marker-path" in config_text
+
+
+def test_guard_reinstall_codex_preserves_original_backup(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    original_text = (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
+
+    first_install = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    first_output = json.loads(capsys.readouterr().out)
+    second_install = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    uninstall_rc = main(
+        [
+            "guard",
+            "uninstall",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    backup_path = Path(first_output["managed_install"]["manifest"]["backup_path"])
+
+    assert first_install == 0
+    assert second_install == 0
+    assert uninstall_rc == 0
+    assert backup_path.read_text(encoding="utf-8") == original_text
+    assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_text

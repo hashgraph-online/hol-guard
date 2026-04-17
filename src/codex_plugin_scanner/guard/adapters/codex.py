@@ -78,7 +78,16 @@ class CodexHarnessAdapter(HarnessAdapter):
                             args=args,
                             url=url if isinstance(url, str) else None,
                             transport="http" if isinstance(url, str) else "stdio",
-                            metadata={"env_keys": sorted(env.keys()) if isinstance(env, dict) else []},
+                            metadata={
+                                "env": {
+                                    str(key): str(value)
+                                    for key, value in env.items()
+                                    if isinstance(key, str) and isinstance(value, str)
+                                }
+                                if isinstance(env, dict)
+                                else {},
+                                "env_keys": sorted(env.keys()) if isinstance(env, dict) else [],
+                            },
                         )
                     )
         return HarnessDetection(
@@ -105,8 +114,9 @@ class CodexHarnessAdapter(HarnessAdapter):
         target_config_path = self._target_config_path(context)
         original_text = target_config_path.read_text(encoding="utf-8") if target_config_path.is_file() else None
         backup_path = self._backup_path(context)
-        backup_path.parent.mkdir(parents=True, exist_ok=True)
-        backup_path.write_text(original_text or "", encoding="utf-8")
+        if not backup_path.exists():
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            backup_path.write_text(original_text or "", encoding="utf-8")
         payload = read_toml_payload(target_config_path)
         mcp_servers = payload.get("mcp_servers")
         if not isinstance(mcp_servers, dict):
@@ -185,7 +195,11 @@ class CodexHarnessAdapter(HarnessAdapter):
             args.extend(["--workspace", str(context.workspace_dir)])
         for value in artifact.args:
             args.append(f"--arg={value}")
-        return {
+        entry: dict[str, object] = {
             "command": sys.executable,
             "args": args,
         }
+        env = artifact.metadata.get("env")
+        if isinstance(env, dict) and env:
+            entry["env"] = env
+        return entry

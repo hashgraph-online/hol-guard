@@ -394,7 +394,7 @@ class CodexMcpGuardProxy:
             self.command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=None,
             text=True,
             cwd=self.context.workspace_dir,
         )
@@ -409,6 +409,7 @@ class CodexMcpGuardProxy:
                     message=message,
                     child_stdin=process.stdin,
                     child_stdout=process.stdout,
+                    server_output=None,
                     approval_callback=inline_approval_callback,
                 )
                 if response is not None:
@@ -435,7 +436,7 @@ class CodexMcpGuardProxy:
             self.command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=None,
             text=True,
             cwd=self.context.workspace_dir,
         )
@@ -451,6 +452,7 @@ class CodexMcpGuardProxy:
                     message=message,
                     child_stdin=process.stdin,
                     child_stdout=process.stdout,
+                    server_output=output_stream,
                     approval_callback=lambda request: self._request_inline_approval(
                         request,
                         input_stream,
@@ -476,6 +478,7 @@ class CodexMcpGuardProxy:
         message: dict[str, Any],
         child_stdin: TextIO,
         child_stdout: TextIO,
+        server_output: TextIO | None,
         approval_callback: Any | None,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         method = str(message.get("method", "unknown"))
@@ -502,7 +505,7 @@ class CodexMcpGuardProxy:
                 "redacted_params": _redact_json(params),
             }
         if method != "tools/call" or not isinstance(params, dict):
-            response = self._forward_message(message, child_stdin, child_stdout)
+            response = self._forward_message(message, child_stdin, child_stdout, server_output)
             return response, {
                 "method": method,
                 "tool_name": params.get("name") if isinstance(params, dict) else None,
@@ -538,7 +541,7 @@ class CodexMcpGuardProxy:
                 signals=decision.signals,
                 remember=False,
             )
-            response = self._forward_message(message, child_stdin, child_stdout)
+            response = self._forward_message(message, child_stdin, child_stdout, server_output)
             return response, {
                 "method": method,
                 "tool_name": tool_name,
@@ -558,7 +561,7 @@ class CodexMcpGuardProxy:
                     signals=decision.signals,
                     remember=True,
                 )
-                response = self._forward_message(message, child_stdin, child_stdout)
+                response = self._forward_message(message, child_stdin, child_stdout, server_output)
                 return response, {
                     "method": method,
                     "tool_name": tool_name,
@@ -608,13 +611,25 @@ class CodexMcpGuardProxy:
         child_stdin.flush()
 
     @staticmethod
-    def _forward_message(message: dict[str, Any], child_stdin: TextIO, child_stdout: TextIO) -> dict[str, Any]:
+    def _forward_message(
+        message: dict[str, Any],
+        child_stdin: TextIO,
+        child_stdout: TextIO,
+        server_output: TextIO | None = None,
+    ) -> dict[str, Any]:
+        request_id = message.get("id")
         child_stdin.write(json.dumps(message) + "\n")
         child_stdin.flush()
-        line = child_stdout.readline()
-        if not line:
-            raise RuntimeError("Guard stdio proxy did not receive a response from the MCP server.")
-        return json.loads(line)
+        while True:
+            line = child_stdout.readline()
+            if not line:
+                raise RuntimeError("Guard stdio proxy did not receive a response from the MCP server.")
+            payload = json.loads(line)
+            if payload.get("id") == request_id:
+                return payload
+            if server_output is not None:
+                server_output.write(json.dumps(payload) + "\n")
+                server_output.flush()
 
     def _approval_request_payload(self, tool_name: str, summary: str) -> dict[str, Any]:
         self._elicitation_counter += 1
@@ -624,8 +639,7 @@ class CodexMcpGuardProxy:
             "method": "elicitation/create",
             "params": {
                 "message": (
-                    f"HOL Guard intercepted {self.server_name}.{tool_name}. "
-                    f"{summary} Approve this exact call?"
+                    f"HOL Guard intercepted {self.server_name}.{tool_name}. {summary} Approve this exact call?"
                 ),
                 "requestedSchema": {
                     "type": "object",
@@ -664,7 +678,7 @@ class CodexMcpGuardProxy:
             if _is_notification(payload) or not _is_request(payload):
                 self._forward_notification(payload, child_stdin)
                 continue
-            response = self._forward_message(payload, child_stdin, child_stdout)
+            response = self._forward_message(payload, child_stdin, child_stdout, output_stream)
             output_stream.write(json.dumps(response) + "\n")
             output_stream.flush()
 
