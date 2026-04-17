@@ -47,7 +47,7 @@ from ..protect import build_protect_payload
 from ..proxy import RemoteGuardProxy, StdioGuardProxy
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_summary
-from ..runtime import GuardSyncNotConfiguredError, guard_run, sync_receipts
+from ..runtime.runner import GuardSyncNotConfiguredError, guard_run, sync_receipts
 from ..runtime.secret_file_requests import (
     build_file_read_request_artifact,
     build_tool_action_request_artifact,
