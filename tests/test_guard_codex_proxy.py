@@ -858,6 +858,43 @@ def test_codex_guard_proxy_rechecks_buffer_after_nested_child_request(monkeypatc
     assert response["result"]["content"][0]["text"] == "outer"
 
 
+def test_codex_guard_proxy_rechecks_buffered_client_reply_for_child_request(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    child_stdin = StringIO()
+    server_output = StringIO()
+    buffered_reply = {
+        "jsonrpc": "2.0",
+        "id": "child-sampling-1",
+        "result": {
+            "role": "assistant",
+            "content": {"type": "text", "text": "Nested approval satisfied"},
+        },
+    }
+
+    proxy._buffer_client_response(buffered_reply)
+    proxy._proxy_child_request(
+        payload={"jsonrpc": "2.0", "id": "child-sampling-1", "method": "sampling/createMessage", "params": {}},
+        child_stdin=child_stdin,
+        child_stdout=StringIO(),
+        client_input=StringIO(),
+        server_output=server_output,
+    )
+
+    assert json.loads(server_output.getvalue().splitlines()[0])["id"] == "child-sampling-1"
+    assert [json.loads(line) for line in child_stdin.getvalue().splitlines()] == [buffered_reply]
+
+
 def test_codex_guard_proxy_buffers_other_inline_approval_responses(tmp_path):
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)

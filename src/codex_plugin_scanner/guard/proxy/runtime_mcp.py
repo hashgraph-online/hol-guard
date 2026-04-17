@@ -405,6 +405,10 @@ class RuntimeMcpGuardProxy:
         server_output.flush()
         request_id = payload.get("id")
         while True:
+            buffered_response = self._pop_buffered_client_response(request_id)
+            if buffered_response is not None:
+                self._forward_notification(buffered_response, child_stdin)
+                return
             line = client_input.readline()
             if not line:
                 raise RuntimeError("Guard runtime MCP proxy lost the client while waiting for a server response.")

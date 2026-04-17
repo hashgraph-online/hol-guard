@@ -80,14 +80,23 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         detection = self.detect(context)
         managed_servers = managed_stdio_servers(detection)
         skipped_servers = skipped_stdio_server_names(detection)
+        existing_workspace_server_names = self._workspace_server_names(context)
         shim_manifest = install_guard_shim(self.harness, context)
         overlay_path = runtime_config_path(context)
         overlay_path.parent.mkdir(parents=True, exist_ok=True)
         overlay_path.write_text(
             json.dumps(
                 runtime_overlay(
-                    permission_rules=self._proxy_permission_rules(managed_servers),
-                    mcp_servers=self._proxy_mcp_overrides(context, managed_servers),
+                    permission_rules=self._proxy_permission_rules(
+                        context,
+                        managed_servers,
+                        existing_workspace_server_names,
+                    ),
+                    mcp_servers=self._proxy_mcp_overrides(
+                        context,
+                        managed_servers,
+                        existing_workspace_server_names,
+                    ),
                 ),
                 indent=2,
             )
@@ -158,9 +167,20 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             "config": _run_command_probe([self.executable, "debug", "config"]),
         }
 
-    def _proxy_mcp_overrides(self, context: HarnessContext, servers: tuple[ManagedMcpServer, ...]) -> dict[str, object]:
+    def _proxy_mcp_overrides(
+        self,
+        context: HarnessContext,
+        servers: tuple[ManagedMcpServer, ...],
+        existing_workspace_server_names: set[str],
+    ) -> dict[str, object]:
         overrides: dict[str, object] = {}
         for server in servers:
+            if self._should_skip_workspace_override(
+                context=context,
+                server=server,
+                existing_workspace_server_names=existing_workspace_server_names,
+            ):
+                continue
             entry: dict[str, object] = {
                 "type": "local",
                 "command": [
@@ -182,13 +202,54 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         return overrides
 
     @staticmethod
-    def _proxy_permission_rules(servers: tuple[ManagedMcpServer, ...]) -> dict[str, object]:
+    def _proxy_permission_rules(
+        context: HarnessContext,
+        servers: tuple[ManagedMcpServer, ...],
+        existing_workspace_server_names: set[str],
+    ) -> dict[str, object]:
         rules: dict[str, object] = {}
         for server in servers:
+            if OpenCodeHarnessAdapter._should_skip_workspace_override(
+                context=context,
+                server=server,
+                existing_workspace_server_names=existing_workspace_server_names,
+            ):
+                continue
             if not server.enabled:
                 continue
             rules[f"{server.name}_*"] = "ask"
         return rules
+
+    @staticmethod
+    def _should_skip_workspace_override(
+        *,
+        context: HarnessContext,
+        server: ManagedMcpServer,
+        existing_workspace_server_names: set[str],
+    ) -> bool:
+        if context.workspace_dir is None:
+            return False
+        if server.source_scope == "project":
+            return False
+        return server.name in existing_workspace_server_names
+
+    def _workspace_server_names(self, context: HarnessContext) -> set[str]:
+        if context.workspace_dir is None:
+            return set()
+        workspace_server_names: set[str] = set()
+        for config_path in config_paths(context):
+            if not config_path.is_relative_to(context.workspace_dir):
+                continue
+            payload, parse_error, _parse_reason = _load_json_or_jsonc(config_path)
+            if parse_error or not isinstance(payload, dict):
+                continue
+            mcp = payload.get("mcp")
+            if not isinstance(mcp, dict):
+                continue
+            for name, value in mcp.items():
+                if isinstance(name, str) and isinstance(value, dict):
+                    workspace_server_names.add(name)
+        return workspace_server_names
 
 
 __all__ = ["OpenCodeHarnessAdapter"]
