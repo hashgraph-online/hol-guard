@@ -1,6 +1,6 @@
 """Guard proxy helpers."""
 
 from .remote import RemoteGuardProxy
-from .stdio import StdioGuardProxy
+from .stdio import CodexMcpGuardProxy, StdioGuardProxy
 
-__all__ = ["RemoteGuardProxy", "StdioGuardProxy"]
+__all__ = ["CodexMcpGuardProxy", "RemoteGuardProxy", "StdioGuardProxy"]

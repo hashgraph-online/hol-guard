@@ -44,7 +44,7 @@ from ..incident import build_incident_context
 from ..models import GuardArtifact, HarnessDetection
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS
 from ..protect import build_protect_payload
-from ..proxy import RemoteGuardProxy, StdioGuardProxy
+from ..proxy import CodexMcpGuardProxy, RemoteGuardProxy, StdioGuardProxy
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_summary
 from ..runtime.runner import GuardSyncNotConfiguredError, guard_run, sync_receipts
@@ -327,11 +327,20 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     daemon_parser.add_argument("--serve", action="store_true")
     daemon_parser.add_argument("--port", type=int)
     daemon_parser.add_argument("--json", action="store_true")
+
+    codex_proxy_parser = guard_subparsers.add_parser("codex-mcp-proxy", help=argparse.SUPPRESS)
+    _add_guard_common_args(codex_proxy_parser)
+    codex_proxy_parser.add_argument("--server-name", required=True)
+    codex_proxy_parser.add_argument("--source-scope", default="project")
+    codex_proxy_parser.add_argument("--config-path", required=True)
+    codex_proxy_parser.add_argument("--command", dest="server_command", required=True)
+    codex_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+
     hermes_mcp_proxy_parser = guard_subparsers.add_parser("hermes-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(hermes_mcp_proxy_parser)
     hermes_mcp_proxy_parser.add_argument("--server", required=True)
     hermes_mcp_proxy_parser.add_argument("--stdio", action="store_true")
-    hidden_commands = {"hook", "daemon", "hermes-mcp-proxy"}
+    hidden_commands = {"hook", "daemon", "codex-mcp-proxy", "hermes-mcp-proxy"}
     guard_subparsers._choices_actions = [
         action for action in guard_subparsers._choices_actions if action.dest not in hidden_commands
     ]
@@ -487,6 +496,18 @@ def run_guard_command(args: argparse.Namespace) -> int:
             return 2
         _emit("install", payload, getattr(args, "json", False))
         return 0
+
+    if args.guard_command == "codex-mcp-proxy":
+        proxy = CodexMcpGuardProxy(
+            server_name=args.server_name,
+            command=[args.server_command, *list(args.server_args)],
+            context=context,
+            store=store,
+            config=config,
+            source_scope=args.source_scope,
+            config_path=args.config_path,
+        )
+        return proxy.serve()
 
     if args.guard_command == "hermes-mcp-proxy":
         return _run_hermes_mcp_proxy(args=args, context=context, store=store, config=config)
@@ -736,6 +757,18 @@ def run_guard_command(args: argparse.Namespace) -> int:
             return 0
         _emit("doctor", {"daemon_url": f"http://127.0.0.1:{daemon.port}"}, getattr(args, "json", False))
         return 0
+
+    if args.guard_command == "codex-mcp-proxy":
+        proxy = CodexMcpGuardProxy(
+            server_name=args.server_name,
+            command=[args.server_command, *list(args.server_args)],
+            context=context,
+            store=store,
+            config=config,
+            source_scope=args.source_scope,
+            config_path=args.config_path,
+        )
+        return proxy.serve()
 
     if args.guard_command == "hook":
         payload = _load_hook_payload(getattr(args, "event_file", None))
