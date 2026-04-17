@@ -151,6 +151,7 @@ class CodexHarnessAdapter(HarnessAdapter):
                 target_config_path.write_text(original_text, encoding="utf-8")
             elif target_config_path.is_file():
                 target_config_path.unlink()
+            backup_path.unlink()
         shim_manifest = remove_guard_shim(self.harness, context)
         return {
             "harness": self.harness,

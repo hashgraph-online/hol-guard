@@ -196,7 +196,7 @@ def test_guard_reinstall_codex_preserves_original_backup(tmp_path, capsys):
     assert first_install == 0
     assert second_install == 0
     assert uninstall_rc == 0
-    assert backup_path.read_text(encoding="utf-8") == original_text
+    assert backup_path.exists() is False
     assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_text
 
 
@@ -238,3 +238,83 @@ args = ["workspace-skill.js"]
         {"name": "default", "mode": "safe"},
         {"name": "strict", "mode": "review"},
     ]
+
+
+def test_guard_reinstall_codex_refreshes_backup_after_completed_uninstall(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    first_install = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    first_output = json.loads(capsys.readouterr().out)
+    uninstall_rc = main(
+        [
+            "guard",
+            "uninstall",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        """
+approval_policy = "never"
+
+[mcp_servers.workspace_skill]
+command = "node"
+args = ["edited-workspace-skill.js"]
+""".strip()
+        + "\n",
+    )
+
+    second_install = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    second_output = json.loads(capsys.readouterr().out)
+    second_uninstall = main(
+        [
+            "guard",
+            "uninstall",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    backup_path = Path(first_output["managed_install"]["manifest"]["backup_path"])
+
+    assert first_install == 0
+    assert uninstall_rc == 0
+    assert second_install == 0
+    assert second_uninstall == 0
+    assert backup_path == Path(second_output["managed_install"]["manifest"]["backup_path"])
+    assert backup_path.exists() is False
+    assert "edited-workspace-skill.js" in (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
