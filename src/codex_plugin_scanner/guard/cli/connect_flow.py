@@ -96,7 +96,9 @@ def run_guard_connect_command(
     try:
         sync_payload = sync_receipts(store)
     except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
-        sync_message = runtime_sync_error or str(error)
+        sync_message = str(error)
+        if runtime_sync_error and not _is_paid_plan_sync_error(sync_message):
+            sync_message = runtime_sync_error
         pending_state = _record_connect_result(
             daemon_client=daemon_client,
             store=store,
@@ -156,6 +158,15 @@ def run_guard_connect_command(
         sync_url=sync_url,
         connected=True,
         sync=sync_payload,
+    )
+
+
+def _is_paid_plan_sync_error(message: str) -> bool:
+    normalized = message.strip().lower()
+    return (
+        "paid guard plan" in normalized
+        or "paid plan" in normalized
+        or "guard plan required" in normalized
     )
 
 
