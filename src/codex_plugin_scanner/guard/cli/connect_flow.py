@@ -116,7 +116,7 @@ def run_guard_connect_command(
             connect_url=browser_url,
             sync_url=sync_url,
             connected=True,
-            sync=runtime_sync_summary,
+            sync=pending_sync_payload,
             sync_message=sync_message,
         )
     sync_payload["runtime_session_synced_at"] = runtime_sync_summary["runtime_session_synced_at"]

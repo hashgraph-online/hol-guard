@@ -273,7 +273,7 @@ def sync_runtime_session(
         headers=_guard_sync_headers(str(credentials["token"])),
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=10) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         if error.code == 404:
