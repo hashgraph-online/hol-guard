@@ -121,6 +121,8 @@ def run_guard_connect_command(
     if runtime_sync_error is not None:
         sync_payload["runtime_session_sync_pending"] = True
         sync_payload["runtime_session_sync_reason"] = runtime_sync_error
+        pending_sync_payload = dict(sync_payload)
+        pending_sync_payload["synced_at"] = None
         pending_state = _record_connect_result(
             daemon_client=daemon_client,
             store=store,
@@ -128,7 +130,7 @@ def run_guard_connect_command(
             status="connected",
             milestone="first_sync_pending",
             reason=runtime_sync_error,
-            sync=sync_payload,
+            sync=pending_sync_payload,
         )
         return build_connect_payload(
             state=pending_state,

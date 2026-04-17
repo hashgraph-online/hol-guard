@@ -246,6 +246,8 @@ def test_guard_connect_keeps_pairing_when_runtime_sync_fails(
     assert payload["sync"]["runtime_session_synced_at"] is None
     assert payload["sync"]["runtime_sessions_visible"] == 0
     assert payload["sync"]["runtime_session_id"]
+    assert payload["sync"]["synced_at"] == "2026-04-15T00:00:02Z"
+    assert payload["proof"]["first_synced_at"] is None
     assert sync_receipts_calls == [True]
 
 
