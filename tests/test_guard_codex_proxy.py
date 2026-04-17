@@ -27,15 +27,31 @@ def _child_command(marker_path: Path) -> list[str]:
                 "    message = json.loads(line)",
                 "    message_id = message.get('id')",
                 "    method = message.get('method')",
+                "    if method is None:",
+                "        continue",
                 "    if message_id is None:",
                 "        continue",
                 "    if method == 'initialize':",
-                "        result = {'protocolVersion': '2025-06-18', 'capabilities': {'tools': {}}, 'serverInfo': {'name': 'fixture', 'version': '1.0.0'}}",
+                "        result = {",
+                "            'protocolVersion': '2025-06-18',",
+                "            'capabilities': {'tools': {}},",
+                "            'serverInfo': {'name': 'fixture', 'version': '1.0.0'},",
+                "        }",
                 "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
                 "        sys.stdout.flush()",
                 "        continue",
                 "    if method == 'tools/list':",
-                "        result = {'tools': [{'name': 'safe_echo', 'description': 'Safe echo', 'inputSchema': {'type': 'object', 'properties': {}}}, {'name': 'dangerous_delete', 'description': 'Dangerous delete', 'inputSchema': {'type': 'object', 'properties': {'target': {'type': 'string'}}}}]}",
+                "        safe_tool = {",
+                "            'name': 'safe_echo',",
+                "            'description': 'Safe echo',",
+                "            'inputSchema': {'type': 'object', 'properties': {}},",
+                "        }",
+                "        dangerous_tool = {",
+                "            'name': 'dangerous_delete',",
+                "            'description': 'Dangerous delete',",
+                "            'inputSchema': {'type': 'object', 'properties': {'target': {'type': 'string'}}},",
+                "        }",
+                "        result = {'tools': [safe_tool, dangerous_tool]}",
                 "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
                 "        sys.stdout.flush()",
                 "        continue",
@@ -275,3 +291,61 @@ def test_codex_guard_proxy_does_not_emit_responses_for_notifications(tmp_path):
 
     assert exit_code == 0
     assert [response["id"] for response in responses] == [1, 2]
+
+
+def test_codex_guard_proxy_ignores_client_responses_without_hanging(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    input_stream = StringIO(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {"capabilities": {"elicitation": {}}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+                    }
+                ),
+                json.dumps({"jsonrpc": "2.0", "id": 999, "result": {"status": "unrelated"}}),
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "result": {"action": "accept", "content": {"decision": "approve"}},
+                    }
+                ),
+            ]
+        )
+        + "\n"
+    )
+    output_stream = StringIO()
+
+    exit_code = proxy.serve(stdin=input_stream, stdout=output_stream)
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+
+    assert exit_code == 0
+    assert responses[0]["id"] == 1
+    assert responses[1]["method"] == "elicitation/create"
+    assert responses[2]["id"] == 2
+    assert responses[2]["result"]["content"][0]["text"] == "dangerous_delete"
+    assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"

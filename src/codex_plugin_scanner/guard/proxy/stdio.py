@@ -451,7 +451,13 @@ class CodexMcpGuardProxy:
                     message=message,
                     child_stdin=process.stdin,
                     child_stdout=process.stdout,
-                    approval_callback=lambda request: self._request_inline_approval(request, input_stream, output_stream),
+                    approval_callback=lambda request: self._request_inline_approval(
+                        request,
+                        input_stream,
+                        output_stream,
+                        process.stdin,
+                        process.stdout,
+                    ),
                 )
                 if response is not None:
                     output_stream.write(json.dumps(response) + "\n")
@@ -485,6 +491,14 @@ class CodexMcpGuardProxy:
                 "method": method,
                 "tool_name": params.get("name") if isinstance(params, dict) else None,
                 "decision": "forward-notification",
+                "redacted_params": _redact_json(params),
+            }
+        if not _is_request(message):
+            self._forward_notification(message, child_stdin)
+            return None, {
+                "method": method,
+                "tool_name": params.get("name") if isinstance(params, dict) else None,
+                "decision": "forward-response",
                 "redacted_params": _redact_json(params),
             }
         if method != "tools/call" or not isinstance(params, dict):
@@ -633,15 +647,26 @@ class CodexMcpGuardProxy:
         request: dict[str, Any],
         input_stream: TextIO,
         output_stream: TextIO,
+        child_stdin: TextIO,
+        child_stdout: TextIO,
     ) -> dict[str, Any]:
+        request_id = request.get("id")
         output_stream.write(json.dumps(request) + "\n")
         output_stream.flush()
-        line = input_stream.readline()
-        if not line:
-            return {"action": "cancel"}
-        payload = json.loads(line)
-        result = payload.get("result")
-        return result if isinstance(result, dict) else {"action": "cancel"}
+        while True:
+            line = input_stream.readline()
+            if not line:
+                return {"action": "cancel"}
+            payload = json.loads(line)
+            if payload.get("id") == request_id and "result" in payload:
+                result = payload.get("result")
+                return result if isinstance(result, dict) else {"action": "cancel"}
+            if _is_notification(payload) or not _is_request(payload):
+                self._forward_notification(payload, child_stdin)
+                continue
+            response = self._forward_message(payload, child_stdin, child_stdout)
+            output_stream.write(json.dumps(response) + "\n")
+            output_stream.flush()
 
     def _queue_approval_center_response(
         self,
@@ -673,7 +698,7 @@ class CodexMcpGuardProxy:
                         "config_path": artifact.config_path,
                         "changed_fields": ["runtime_tool_call"],
                         "policy_action": "require-reapproval",
-                        "launch_target": f"{tool_name} {json.dumps(params.get('arguments')) if params.get('arguments') is not None else ''}".strip(),
+                        "launch_target": self._launch_target(tool_name, params.get("arguments")),
                         "risk_summary": tool_call_risk_summary(artifact, params.get("arguments")),
                         "risk_signals": list(signals),
                     }
@@ -706,6 +731,11 @@ class CodexMcpGuardProxy:
             "redacted_params": _redact_json(params),
         }
 
+    @staticmethod
+    def _launch_target(tool_name: str, arguments: object) -> str:
+        serialized_arguments = json.dumps(arguments) if arguments is not None else ""
+        return f"{tool_name} {serialized_arguments}".strip()
+
 
 def _approval_allows(payload: object) -> bool:
     if not isinstance(payload, dict):
@@ -727,6 +757,10 @@ def _approval_denies(payload: object) -> bool:
 
 def _is_notification(message: dict[str, Any]) -> bool:
     return "method" in message and "id" not in message
+
+
+def _is_request(message: dict[str, Any]) -> bool:
+    return "method" in message and "id" in message
 
 
 def _now() -> str:

@@ -39,7 +39,9 @@ def dump_toml(payload: dict[str, object]) -> str:
 
 
 def _emit_table(lines: list[str], path: tuple[str, ...], payload: dict[str, object]) -> None:
-    scalar_items = [(key, value) for key, value in payload.items() if not isinstance(value, dict)]
+    scalar_items = [
+        (key, value) for key, value in payload.items() if value is not None and not isinstance(value, dict)
+    ]
     nested_items = [(key, value) for key, value in payload.items() if isinstance(value, dict)]
 
     if path:
@@ -72,6 +74,4 @@ def _format_value(value: object) -> str:
         return "[" + ", ".join(_format_value(item) for item in value) + "]"
     if isinstance(value, tuple):
         return "[" + ", ".join(_format_value(item) for item in value) + "]"
-    if value is None:
-        return '""'
     return json.dumps(str(value))

@@ -6,10 +6,9 @@ import json
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import PurePath
-from typing import Any
 
 from .config import GuardConfig
-from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
+from .models import GUARD_ACTION_VALUES, GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .receipts import build_receipt
 from .store import GuardStore
 
@@ -74,9 +73,10 @@ def evaluate_tool_call(
     )
     if override is None:
         override = config.resolve_action_override(artifact.harness, artifact.artifact_id, artifact.publisher)
-    if isinstance(override, str):
+    action = _coerce_guard_action(override) if isinstance(override, str) else None
+    if action is not None:
         return ToolCallDecision(
-            action=override,  # type: ignore[arg-type]
+            action=action,
             source="policy",
             signals=tool_call_risk_signals(artifact, arguments),
             summary="Local Guard policy matched this exact tool call.",
@@ -134,7 +134,7 @@ def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
         return "No high-risk signal was detected in this tool call."
     if len(signals) == 1:
         return signals[0].capitalize() + "."
-    return f"{signals[0].capitalize()}, and it also {signals[1]}."
+    return f"{signals[0].capitalize()}, and it also {', and it also '.join(signals[1:])}."
 
 
 def allow_tool_call(
@@ -247,3 +247,10 @@ def _dedupe(values: list[str]) -> list[str]:
         seen.add(value)
         ordered.append(value)
     return ordered
+
+
+def _coerce_guard_action(value: str) -> GuardAction | None:
+    for action in GUARD_ACTION_VALUES:
+        if value == action:
+            return action
+    return None

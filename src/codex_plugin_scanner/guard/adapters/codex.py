@@ -11,9 +11,9 @@ try:  # pragma: no cover - Python 3.11+
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
+from ..codex_config import read_toml_payload, write_toml_payload
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
-from ..codex_config import read_toml_payload, write_toml_payload
 from .base import HarnessAdapter, HarnessContext, _command_available
 
 
@@ -35,7 +35,9 @@ class CodexHarnessAdapter(HarnessAdapter):
     executable = "codex"
     approval_tier = "native-or-center"
     approval_summary = "Guard can stop live Codex MCP tool calls inline and fall back to the local approval center."
-    fallback_hint = "If Codex cannot render the inline approval request, Guard will queue it in the local approval center."
+    fallback_hint = (
+        "If Codex cannot render the inline approval request, Guard will queue it in the local approval center."
+    )
 
     @staticmethod
     def _scope_for(context: HarnessContext, path: Path) -> str:
@@ -132,8 +134,11 @@ class CodexHarnessAdapter(HarnessAdapter):
         backup_path = self._backup_path(context)
         if backup_path.is_file():
             original_text = backup_path.read_text(encoding="utf-8")
-            target_config_path.parent.mkdir(parents=True, exist_ok=True)
-            target_config_path.write_text(original_text, encoding="utf-8")
+            if original_text:
+                target_config_path.parent.mkdir(parents=True, exist_ok=True)
+                target_config_path.write_text(original_text, encoding="utf-8")
+            elif target_config_path.is_file():
+                target_config_path.unlink()
         shim_manifest = remove_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
