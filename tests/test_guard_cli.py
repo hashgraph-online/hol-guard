@@ -2500,6 +2500,114 @@ args = ["workspace-skill.js", "--changed"]
             "token": "session-token-123",
         }
 
+    def test_guard_login_without_manual_credentials_runs_browser_pairing(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+        _SyncRequestHandler.response_payload = {
+            "syncedAt": "2026-04-09T00:00:00Z",
+            "receiptsStored": 1,
+        }
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        store = GuardStore(home_dir)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda guard_home: f"http://127.0.0.1:{daemon.port}",
+        )
+
+        opened_urls: list[str] = []
+
+        def open_browser(url: str) -> bool:
+            opened_urls.append(url)
+            parsed = urllib.parse.urlparse(url)
+            query = urllib.parse.parse_qs(parsed.query)
+            fragment = urllib.parse.parse_qs(parsed.fragment)
+            request_id = query["guardPairRequest"][-1]
+            daemon_url = query["guardDaemon"][-1]
+            pairing_secret = fragment["guardPairSecret"][-1]
+
+            def complete_pairing() -> None:
+                request = urllib.request.Request(
+                    f"{daemon_url}/v1/connect/complete",
+                    data=urllib.parse.urlencode(
+                        {
+                            "request_id": request_id,
+                            "pairing_secret": pairing_secret,
+                            "token": "session-token-compat",
+                        }
+                    ).encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Origin": "https://hol.org",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=5):
+                    pass
+
+            threading.Thread(target=complete_pairing, daemon=True).start()
+            return True
+
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", open_browser)
+        try:
+            login_rc = main(
+                [
+                    "guard",
+                    "login",
+                    "--home",
+                    str(home_dir),
+                    "--sync-url",
+                    f"http://127.0.0.1:{server.server_port}/receipts",
+                    "--connect-url",
+                    "https://hol.org/guard/connect",
+                    "--json",
+                ]
+            )
+            login_output = json.loads(capsys.readouterr().out)
+            sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
+            sync_output = json.loads(capsys.readouterr().out)
+        finally:
+            daemon.stop()
+            server.shutdown()
+            thread.join(timeout=5)
+
+        assert login_rc == 0
+        assert login_output["connected"] is True
+        assert login_output["status"] == "connected"
+        assert opened_urls and opened_urls[0].startswith("https://hol.org/guard/connect?")
+        assert sync_rc == 0
+        assert sync_output["receipts_stored"] == 1
+        assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer session-token-compat"
+        assert store.get_sync_credentials() == {
+            "sync_url": f"http://127.0.0.1:{server.server_port}/receipts",
+            "token": "session-token-compat",
+        }
+
+    def test_guard_login_manual_mode_requires_sync_url_and_token(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+
+        login_rc = main(
+            [
+                "guard",
+                "login",
+                "--home",
+                str(home_dir),
+                "--token",
+                "demo-token",
+            ]
+        )
+
+        assert login_rc == 2
+        assert "Pass both --sync-url and --token to save credentials manually" in capsys.readouterr().err
+
     def test_guard_connect_preserves_pairing_when_first_sync_fails(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -3477,7 +3585,9 @@ args = ["workspace-skill.js", "--changed"]
         )
 
         assert rc == 1
-        assert "Guard is not logged in." in capsys.readouterr().err
+        stderr = capsys.readouterr().err
+        assert "Guard Cloud is not connected yet." in stderr
+        assert "Run `hol-guard connect`" in stderr
 
     def test_guard_doctor_reports_runtime_mismatch_for_cursor(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

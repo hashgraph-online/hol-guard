@@ -315,11 +315,11 @@ export function WelcomeState(props: { resolutionMessage: string | null }) {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue mb-4">Sync your decisions</p>
           <div className="flex items-center gap-3 rounded-lg bg-surface-1 px-5 py-3 font-mono text-sm">
             <span className="text-muted-foreground">$</span>
-            <span className="text-brand-dark">hol-guard login</span>
-            <span className="text-muted-foreground">&&</span>
-            <span className="text-brand-dark">hol-guard sync</span>
+            <span className="text-brand-dark">hol-guard connect</span>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">Connect this machine to Guard Cloud to share approvals across your team.</p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Open the browser pairing flow, sign in once, and let Guard finish the first sync automatically.
+          </p>
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-3">

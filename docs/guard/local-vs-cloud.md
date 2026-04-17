@@ -22,4 +22,4 @@ Optional cloud features:
 - billing and entitlements
 - shared team policy
 
-The local runtime does not require any hosted service. `hol-guard login` and `hol-guard sync` add optional cloud features later. They do not unlock the core safety workflow.
+The local runtime does not require any hosted service. `hol-guard connect` is the preferred way to pair a machine with Guard Cloud later, and `hol-guard login` remains as a compatibility alias for the same browser sign-in flow. They do not unlock the core safety workflow.
