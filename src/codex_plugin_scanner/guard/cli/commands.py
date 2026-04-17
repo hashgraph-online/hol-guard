@@ -47,7 +47,7 @@ from ..protect import build_protect_payload
 from ..proxy import RemoteGuardProxy, StdioGuardProxy
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_summary
-from ..runtime import guard_run, sync_receipts
+from ..runtime import GuardSyncNotConfiguredError, guard_run, sync_receipts
 from ..runtime.secret_file_requests import (
     build_file_read_request_artifact,
     build_tool_action_request_artifact,
@@ -653,20 +653,12 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command == "login":
-        manual_token = _optional_string(getattr(args, "token", None))
-        manual_sync_url = _optional_string(getattr(args, "sync_url", None))
-        if manual_token is not None:
-            if manual_sync_url is None:
-                print(
-                    "Pass both --sync-url and --token to save credentials manually, "
-                    "or run `hol-guard login` with no token to open browser sign-in.",
-                    file=sys.stderr,
-                )
-                return 2
-            store.set_sync_credentials(manual_sync_url, manual_token, _now())
-            store.add_event("sign_in", {"sync_url": manual_sync_url, "source": "local-cli"}, _now())
-            _emit("login", {"logged_in": True, "sync_url": manual_sync_url}, getattr(args, "json", False))
-            return 0
+        manual_login = _manual_guard_login_payload(args=args, store=store)
+        if manual_login is not None:
+            payload, exit_code = manual_login
+            if payload is not None:
+                _emit("login", payload, getattr(args, "json", False))
+            return exit_code
         try:
             payload = _run_guard_connect_flow(
                 guard_home=guard_home,
@@ -728,11 +720,11 @@ def run_guard_command(args: argparse.Namespace) -> int:
     if args.guard_command == "sync":
         try:
             payload = sync_receipts(store)
+        except GuardSyncNotConfiguredError:
+            print(_guard_sync_prerequisite_message(), file=sys.stderr)
+            return 1
         except RuntimeError as error:
-            if str(error).strip() == "Guard is not logged in.":
-                print(_guard_sync_prerequisite_message(), file=sys.stderr)
-            else:
-                print(str(error), file=sys.stderr)
+            print(str(error), file=sys.stderr)
             return 1
         _emit("sync", payload, getattr(args, "json", False))
         return 0
@@ -1589,6 +1581,27 @@ def _run_guard_connect_flow(
         opener=webbrowser.open,
         wait_timeout_seconds=wait_timeout_seconds,
     )
+
+
+def _manual_guard_login_payload(
+    *,
+    args: argparse.Namespace,
+    store: GuardStore,
+) -> tuple[dict[str, object] | None, int] | None:
+    manual_token = _optional_string(getattr(args, "token", None))
+    if manual_token is None:
+        return None
+    manual_sync_url = _optional_string(getattr(args, "sync_url", None))
+    if manual_sync_url is None:
+        print(
+            "Pass both --sync-url and --token to save credentials manually, "
+            "or run `hol-guard login` with no token to open browser sign-in.",
+            file=sys.stderr,
+        )
+        return None, 2
+    store.set_sync_credentials(manual_sync_url, manual_token, _now())
+    store.add_event("sign_in", {"sync_url": manual_sync_url, "source": "local-cli"}, _now())
+    return {"logged_in": True, "sync_url": manual_sync_url}, 0
 
 
 def _guard_sync_prerequisite_message() -> str:

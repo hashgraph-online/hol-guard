@@ -44,6 +44,10 @@ _ENV_PROMPT_PATTERN = re.compile(r"(?<![\w-])\.env(?:\.[\w.-]+)?\b")
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 
 
+class GuardSyncNotConfiguredError(RuntimeError):
+    """Raised when Guard Cloud sync is requested before the machine is paired."""
+
+
 def guard_run(
     harness: str,
     context: HarnessContext,
@@ -190,7 +194,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
 
     credentials = store.get_sync_credentials()
     if credentials is None:
-        raise RuntimeError("Guard is not logged in.")
+        raise GuardSyncNotConfiguredError("Guard is not logged in.")
     sync_url = _normalized_receipts_sync_url(str(credentials["sync_url"]))
     receipts = store.list_receipts(limit=200)
     inventory = store.list_inventory()
@@ -262,7 +266,7 @@ def sync_runtime_session(
 
     credentials = store.get_sync_credentials()
     if credentials is None:
-        raise RuntimeError("Guard is not logged in.")
+        raise GuardSyncNotConfiguredError("Guard is not logged in.")
     sync_url = _normalized_runtime_sessions_sync_url(str(credentials["sync_url"]))
     session_payload = _cloud_runtime_session_payload(session)
     body = json.dumps({"session": session_payload}).encode("utf-8")
