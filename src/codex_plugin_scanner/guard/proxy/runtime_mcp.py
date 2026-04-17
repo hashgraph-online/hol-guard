@@ -52,6 +52,7 @@ class RuntimeMcpGuardProxy:
         self.transport = transport
         self._inline_prompt_available = False
         self._inline_prompt_counter = 0
+        self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}
 
     def run_session(
         self,
@@ -192,7 +193,7 @@ class RuntimeMcpGuardProxy:
             artifact_hash=artifact_hash,
             arguments=arguments,
         )
-        if decision.action == "allow":
+        if decision.action == "allow" or (decision.source == "policy" and decision.action in {"warn", "review"}):
             return self._allow_and_forward(
                 message=message,
                 child_stdin=child_stdin,
@@ -201,7 +202,7 @@ class RuntimeMcpGuardProxy:
                 server_output=server_output,
                 artifact=artifact,
                 artifact_hash=artifact_hash,
-                decision_source="policy-allowed" if decision.source == "policy" else "heuristic-allowed",
+                decision_source=_decision_source(decision.action, decision.source),
                 signals=decision.signals,
                 params=params,
             )
@@ -326,6 +327,9 @@ class RuntimeMcpGuardProxy:
         request_id = message.get("id")
         child_stdin.write(json.dumps(message) + "\n")
         child_stdin.flush()
+        buffered_response = self._pop_buffered_child_response(request_id)
+        if buffered_response is not None:
+            return buffered_response
         while True:
             line = child_stdout.readline()
             if not line:
@@ -342,9 +346,30 @@ class RuntimeMcpGuardProxy:
                     server_output=server_output,
                 )
                 continue
+            if "id" in payload:
+                self._buffer_child_response(payload)
+                continue
             if server_output is not None:
                 server_output.write(json.dumps(payload) + "\n")
                 server_output.flush()
+
+    def _buffer_child_response(self, payload: dict[str, Any]) -> None:
+        response_key = _response_key(payload.get("id"))
+        if response_key is None:
+            return
+        self._buffered_child_responses.setdefault(response_key, []).append(payload)
+
+    def _pop_buffered_child_response(self, request_id: Any) -> dict[str, Any] | None:
+        response_key = _response_key(request_id)
+        if response_key is None:
+            return None
+        pending = self._buffered_child_responses.get(response_key)
+        if not pending:
+            return None
+        payload = pending.pop(0)
+        if len(pending) == 0:
+            self._buffered_child_responses.pop(response_key, None)
+        return payload
 
     def _proxy_child_request(
         self,
@@ -574,12 +599,24 @@ def _approval_denies(payload: object) -> bool:
     return isinstance(content, dict) and content.get("decision") == "deny"
 
 
+def _decision_source(action: str, source: str) -> str:
+    if source == "policy":
+        return f"policy-{action}"
+    return f"{source}-{action}"
+
+
 def _is_notification(message: dict[str, Any]) -> bool:
     return "method" in message and "id" not in message
 
 
 def _is_request(message: dict[str, Any]) -> bool:
     return "method" in message and "id" in message
+
+
+def _response_key(value: object) -> str | None:
+    if value is None:
+        return None
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def _now() -> str:

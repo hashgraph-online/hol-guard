@@ -5,9 +5,12 @@ import sys
 from io import StringIO
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.store import GuardStore
@@ -770,3 +773,92 @@ def test_codex_guard_proxy_guards_interleaved_requests_during_child_request_wait
             },
         }
     ]
+
+
+def test_codex_guard_proxy_buffers_out_of_order_child_responses(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    child_stdin = StringIO()
+    child_stdout = StringIO(
+        "\n".join(
+            [
+                json.dumps({"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "second"}]}}),
+                json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": "first"}]}}),
+            ]
+        )
+        + "\n"
+    )
+    server_output = StringIO()
+
+    first_response = proxy._forward_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "safe_echo", "arguments": {}}},
+        child_stdin,
+        child_stdout,
+        client_input=None,
+        server_output=server_output,
+    )
+    second_response = proxy._forward_message(
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "safe_echo", "arguments": {}}},
+        child_stdin,
+        child_stdout,
+        client_input=None,
+        server_output=server_output,
+    )
+
+    assert first_response["id"] == 1
+    assert second_response["id"] == 2
+    assert server_output.getvalue() == ""
+
+
+@pytest.mark.parametrize("action", ["warn", "review"])
+def test_codex_guard_proxy_treats_non_blocking_policy_actions_as_pass_through(monkeypatch, tmp_path, action):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    monkeypatch.setattr(
+        runtime_mcp_module,
+        "evaluate_tool_call",
+        lambda **_: ToolCallDecision(
+            action=action,
+            source="policy",
+            signals=("tool name implies destructive file or system changes",),
+            summary="Policy override matched this tool call.",
+        ),
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "dangerous_delete", "arguments": {"target": ".env"}},
+            },
+        ]
+    )
+
+    assert result["responses"][1]["result"]["content"][0]["text"] == "dangerous_delete"
+    assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
+    assert store.count_approval_requests() == 0
+    assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
