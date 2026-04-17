@@ -165,7 +165,13 @@ def run_guard_connect_command(
 
 def _is_paid_plan_sync_error(message: str) -> bool:
     normalized = message.strip().lower()
-    return "paid guard plan" in normalized or "paid plan" in normalized or "guard plan required" in normalized
+    return (
+        "paid guard plan" in normalized
+        or "paid plan" in normalized
+        or "guard plan required" in normalized
+        or "payment required" in normalized
+        or "http error 402" in normalized
+    )
 
 
 def resolve_connect_url(connect_url: str) -> tuple[str, str]:
