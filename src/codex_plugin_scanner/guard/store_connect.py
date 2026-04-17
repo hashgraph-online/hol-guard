@@ -127,6 +127,8 @@ def create_connect_state(
         "first_synced_at": None,
         "receipts_stored": 0,
         "inventory_items": 0,
+        "runtime_session_id": None,
+        "runtime_session_synced_at": None,
     }
     connection.execute(
         """
@@ -282,6 +284,8 @@ def mark_connect_result(
         proof["inventory_items"] = _coerce_non_negative_int(
             sync_payload.get("inventory_tracked", sync_payload.get("inventory"))
         )
+        proof["runtime_session_id"] = sync_payload.get("runtime_session_id")
+        proof["runtime_session_synced_at"] = sync_payload.get("runtime_session_synced_at")
     connection.execute(
         """
         update guard_connect_states

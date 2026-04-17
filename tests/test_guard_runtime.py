@@ -8,6 +8,7 @@ import json
 import subprocess
 import sys
 import threading
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -119,6 +120,51 @@ class _FlushTrackingOutput(io.StringIO):
 
 
 class TestGuardRuntime:
+    def test_runtime_sessions_sync_url_preserves_query_parameters(self) -> None:
+        runtime_sync_url = guard_runner_module._normalized_runtime_sessions_sync_url(
+            "https://hol.org/custom/sync?tenant=guard",
+        )
+
+        assert runtime_sync_url == "https://hol.org/custom/sync/runtime/sessions/sync?tenant=guard"
+
+    def test_sync_runtime_session_treats_missing_runtime_endpoint_as_non_fatal(
+        self,
+        monkeypatch,
+        tmp_path,
+    ) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_credentials(
+            "https://hol.org/api/guard/receipts/sync",
+            "guard-token",
+            "2026-04-16T00:00:00.000Z",
+        )
+
+        def _raise_not_found(*args, **kwargs):
+            raise urllib.error.HTTPError(
+                "https://hol.org/api/guard/runtime/sessions/sync",
+                404,
+                "Not Found",
+                hdrs=None,
+                fp=None,
+            )
+
+        monkeypatch.setattr(urllib.request, "urlopen", _raise_not_found)
+
+        summary = guard_runner_module.sync_runtime_session(
+            store,
+            session={
+                "session_id": "session-live",
+                "created_at": "2026-04-16T00:00:00.000Z",
+                "updated_at": "2026-04-16T00:00:00.000Z",
+            },
+        )
+
+        assert summary["runtime_session_id"] == "session-live"
+        assert summary["synced_at"] is None
+        assert summary["runtime_session_synced_at"] is None
+        assert summary["runtime_session_sync_skipped"] is True
+        assert summary["runtime_session_sync_reason"] == "runtime_session_endpoint_unavailable"
+
     def test_guard_store_initializes_runtime_tables_and_receipt_columns(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
 
@@ -2477,6 +2523,7 @@ class TestGuardRuntime:
         assert blocked["responses"][0]["error"]["code"] == -32001
         assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "browser"
         assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
+
     def test_stdio_proxy_uses_native_delivery_for_managed_hermes(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         workspace_dir = tmp_path / "workspace"
@@ -2565,6 +2612,7 @@ class TestGuardRuntime:
         assert output["policy_action"] == "require-reapproval"
         assert output["approval_delivery"]["destination"] == "harness"
         assert "docker" in output["risk_summary"].lower()
+
     def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers(self):
         server = HTTPServer(("127.0.0.1", 0), _RemoteProxyHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

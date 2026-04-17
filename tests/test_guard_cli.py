@@ -2517,6 +2517,14 @@ args = ["workspace-skill.js", "--changed"]
             "codex_plugin_scanner.guard.cli.connect_flow.sync_receipts",
             lambda current_store: (_ for _ in ()).throw(RuntimeError("sync_unreachable")),
         )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.cli.connect_flow.sync_runtime_session",
+            lambda current_store, *, session: {
+                "runtime_session_id": str(session.get("session_id") or session.get("sessionId")),
+                "runtime_session_synced_at": "2026-04-15T00:00:01Z",
+                "runtime_sessions_visible": 1,
+            },
+        )
 
         def open_browser(url: str) -> bool:
             parsed = urllib.parse.urlparse(url)
@@ -2812,6 +2820,15 @@ args = ["workspace-skill.js", "--changed"]
             "sync_receipts",
             lambda current_store: (_ for _ in ()).throw(urllib.error.URLError("offline")),
         )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "sync_runtime_session",
+            lambda current_store, *, session: {
+                "runtime_session_id": str(session.get("session_id") or session.get("sessionId")),
+                "runtime_session_synced_at": "2026-04-15T00:00:01Z",
+                "runtime_sessions_visible": 1,
+            },
+        )
 
         payload = guard_connect_flow_module.run_guard_connect_command(
             guard_home=tmp_path / "guard-home",
@@ -2883,6 +2900,15 @@ args = ["workspace-skill.js", "--changed"]
                 "receipts_stored": 3,
                 "inventory_tracked": 1,
                 "first_synced_at": "2026-04-15T00:00:01Z",
+            },
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "sync_runtime_session",
+            lambda current_store, *, session: {
+                "runtime_session_id": str(session.get("session_id") or session.get("sessionId")),
+                "runtime_session_synced_at": "2026-04-15T00:00:01Z",
+                "runtime_sessions_visible": 1,
             },
         )
 
@@ -2968,6 +2994,15 @@ args = ["workspace-skill.js", "--changed"]
             "sync_receipts",
             lambda current_store: (_ for _ in ()).throw(RuntimeError("Guard Cloud sync requires a paid Guard plan")),
         )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "sync_runtime_session",
+            lambda current_store, *, session: {
+                "runtime_session_id": str(session.get("session_id") or session.get("sessionId")),
+                "runtime_session_synced_at": "2026-04-15T00:00:01Z",
+                "runtime_sessions_visible": 1,
+            },
+        )
 
         payload = guard_connect_flow_module.run_guard_connect_command(
             guard_home=tmp_path / "guard-home",
@@ -3041,6 +3076,15 @@ args = ["workspace-skill.js", "--changed"]
             guard_connect_flow_module,
             "sync_receipts",
             lambda current_store: (_ for _ in ()).throw(RuntimeError("Guard plan required")),
+        )
+        monkeypatch.setattr(
+            guard_connect_flow_module,
+            "sync_runtime_session",
+            lambda current_store, *, session: {
+                "runtime_session_id": str(session.get("session_id") or session.get("sessionId")),
+                "runtime_session_synced_at": "2026-04-15T00:00:01Z",
+                "runtime_sessions_visible": 1,
+            },
         )
 
         payload = guard_connect_flow_module.run_guard_connect_command(

@@ -253,6 +253,55 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     return summary
 
 
+def sync_runtime_session(
+    store: GuardStore,
+    *,
+    session: dict[str, object],
+) -> dict[str, object]:
+    """Publish the active Guard runtime session so the dashboard can show the machine immediately."""
+
+    credentials = store.get_sync_credentials()
+    if credentials is None:
+        raise RuntimeError("Guard is not logged in.")
+    sync_url = _normalized_runtime_sessions_sync_url(str(credentials["sync_url"]))
+    session_payload = _cloud_runtime_session_payload(session)
+    body = json.dumps({"session": session_payload}).encode("utf-8")
+    request = urllib.request.Request(
+        sync_url,
+        data=body,
+        method="POST",
+        headers=_guard_sync_headers(str(credentials["token"])),
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            recorded_at = _now()
+            summary = {
+                "synced_at": None,
+                "runtime_session_synced_at": None,
+                "runtime_session_id": session_payload["sessionId"],
+                "runtime_sessions_visible": 0,
+                "runtime_session_sync_skipped": True,
+                "runtime_session_sync_reason": "runtime_session_endpoint_unavailable",
+            }
+            store.set_sync_payload("runtime_session_summary", summary, recorded_at)
+            return summary
+        raise RuntimeError(_sync_http_error_message(error)) from error
+    if not isinstance(payload, dict):
+        raise RuntimeError("Invalid sync response")
+    synced_at = _sync_timestamp(payload)
+    summary = {
+        "synced_at": synced_at,
+        "runtime_session_synced_at": synced_at,
+        "runtime_session_id": session_payload["sessionId"],
+        "runtime_sessions_visible": len(payload.get("items", [])) if isinstance(payload.get("items"), list) else 0,
+    }
+    store.set_sync_payload("runtime_session_summary", summary, synced_at)
+    return summary
+
+
 def sync_pain_signals(store: GuardStore) -> int:
     credentials = store.get_sync_credentials()
     if credentials is None:
@@ -523,6 +572,40 @@ def _normalized_receipts_sync_url(sync_url: str) -> str:
     return sync_url
 
 
+def _normalized_runtime_sessions_sync_url(sync_url: str) -> str:
+    normalized_receipts_url = _normalized_receipts_sync_url(sync_url)
+    parsed = urllib.parse.urlsplit(normalized_receipts_url)
+    if parsed.path.rstrip("/") == "/api/guard/receipts/sync":
+        return urllib.parse.urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                "/api/guard/runtime/sessions/sync",
+                parsed.query,
+                "",
+            )
+        )
+    if parsed.path.rstrip("/") == "/guard/receipts/sync":
+        return urllib.parse.urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                "/guard/runtime/sessions/sync",
+                parsed.query,
+                "",
+            )
+        )
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path.rstrip("/") + "/runtime/sessions/sync",
+            parsed.query,
+            "",
+        )
+    )
+
+
 def _cloud_sync_receipts_payload(receipts: list[dict[str, object]]) -> list[dict[str, object]]:
     device_id, device_name = _guard_device_metadata()
     return [_cloud_sync_receipt_payload(receipt, device_id=device_id, device_name=device_name) for receipt in receipts]
@@ -571,6 +654,33 @@ def _cloud_sync_receipt_payload(
     if publisher is not None:
         payload["publisher"] = publisher
     return payload
+
+
+def _cloud_runtime_session_payload(session: dict[str, object]) -> dict[str, object]:
+    device_id, device_name = _guard_device_metadata()
+    workspace = _optional_string(session.get("workspace")) or os.getcwd()
+    session_id = (
+        _optional_string(session.get("session_id") or session.get("sessionId"))
+        or hashlib.sha256(f"{device_id}:{workspace}".encode()).hexdigest()[:24]
+    )
+    created_at = _optional_string(session.get("created_at") or session.get("createdAt")) or _now()
+    updated_at = _optional_string(session.get("updated_at") or session.get("updatedAt")) or created_at
+    capabilities = [str(item) for item in session.get("capabilities", []) if isinstance(item, str)]
+    return {
+        "sessionId": session_id,
+        "harness": _optional_string(session.get("harness")) or "hol-guard",
+        "surface": _optional_string(session.get("surface")) or "cli",
+        "status": _optional_string(session.get("status")) or "active",
+        "clientName": _optional_string(session.get("client_name") or session.get("clientName")) or "hol-guard",
+        "clientTitle": _optional_string(session.get("client_title") or session.get("clientTitle"))
+        or f"HOL Guard on {device_name}",
+        "clientVersion": _optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
+        "workspace": workspace,
+        "capabilities": capabilities,
+        "operations": [],
+        "createdAt": created_at,
+        "updatedAt": updated_at,
+    }
 
 
 def _cloud_sync_receipt_fingerprint(receipt: dict[str, object]) -> str:
