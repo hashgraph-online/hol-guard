@@ -895,6 +895,60 @@ def test_codex_guard_proxy_rechecks_buffered_client_reply_for_child_request(tmp_
     assert [json.loads(line) for line in child_stdin.getvalue().splitlines()] == [buffered_reply]
 
 
+def test_codex_guard_proxy_buffers_non_matching_child_request_replies(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_nested_request_child_command(),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    inner_child_stdin = StringIO()
+    inner_server_output = StringIO()
+    outer_reply = {
+        "jsonrpc": "2.0",
+        "id": "child-sampling-outer",
+        "result": {
+            "role": "assistant",
+            "content": {"type": "text", "text": "Outer reply"},
+        },
+    }
+    inner_reply = {
+        "jsonrpc": "2.0",
+        "id": "child-sampling-inner",
+        "result": {
+            "role": "assistant",
+            "content": {"type": "text", "text": "Inner reply"},
+        },
+    }
+
+    proxy._proxy_child_request(
+        payload={"jsonrpc": "2.0", "id": "child-sampling-inner", "method": "sampling/createMessage", "params": {}},
+        child_stdin=inner_child_stdin,
+        child_stdout=StringIO(),
+        client_input=StringIO("\n".join([json.dumps(outer_reply), json.dumps(inner_reply)]) + "\n"),
+        server_output=inner_server_output,
+    )
+
+    outer_child_stdin = StringIO()
+    outer_server_output = StringIO()
+    proxy._proxy_child_request(
+        payload={"jsonrpc": "2.0", "id": "child-sampling-outer", "method": "sampling/createMessage", "params": {}},
+        child_stdin=outer_child_stdin,
+        child_stdout=StringIO(),
+        client_input=StringIO(),
+        server_output=outer_server_output,
+    )
+
+    assert [json.loads(line) for line in inner_child_stdin.getvalue().splitlines()] == [inner_reply]
+    assert [json.loads(line) for line in outer_child_stdin.getvalue().splitlines()] == [outer_reply]
+
+
 def test_codex_guard_proxy_buffers_other_inline_approval_responses(tmp_path):
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)

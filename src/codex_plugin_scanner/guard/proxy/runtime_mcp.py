@@ -416,8 +416,11 @@ class RuntimeMcpGuardProxy:
             if message.get("id") == request_id and not _is_request(message):
                 self._forward_notification(message, child_stdin)
                 return
-            if _is_notification(message) or not _is_request(message):
+            if _is_notification(message):
                 self._forward_notification(message, child_stdin)
+                continue
+            if not _is_request(message):
+                self._buffer_client_response(message)
                 continue
             response, _event = self._handle_message(
                 message=message,
