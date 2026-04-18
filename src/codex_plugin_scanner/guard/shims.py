@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .launcher import merge_guard_launcher_env
+
 if TYPE_CHECKING:
     from .adapters.base import HarnessContext
 
@@ -68,15 +70,28 @@ def _build_python_shim(harness: str, context: HarnessContext, workspace_args: li
         *_home_override_args(context),
         *workspace_args,
     ]
+    launcher_env = merge_guard_launcher_env()
     return "\n".join(
         (
             f"#!{sys.executable}",
             "from __future__ import annotations",
+            "import os",
             "import subprocess",
             "import sys",
             f"base_command = {command_args!r}",
+            f"base_env = {launcher_env!r}",
+            "combined_env = {**os.environ, **base_env}",
+            "if 'PYTHONPATH' in os.environ and 'PYTHONPATH' in base_env:",
+            "    pythonpath_entries = []",
+            "    os_pythonpath = os.environ['PYTHONPATH'].split(os.pathsep)",
+            "    base_pythonpath = base_env['PYTHONPATH'].split(os.pathsep)",
+            "    for entry in [*os_pythonpath, *base_pythonpath]:",
+            "        normalized = entry.strip()",
+            "        if normalized and normalized not in pythonpath_entries:",
+            "            pythonpath_entries.append(normalized)",
+            "    combined_env['PYTHONPATH'] = os.pathsep.join(pythonpath_entries)",
             'extra_args = [f"--arg={arg}" for arg in sys.argv[1:]]',
-            "raise SystemExit(subprocess.call([*base_command, *extra_args]))",
+            "raise SystemExit(subprocess.call([*base_command, *extra_args], env=combined_env))",
             "",
         )
     )

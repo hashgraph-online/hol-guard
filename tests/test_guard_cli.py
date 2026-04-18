@@ -2140,6 +2140,43 @@ args = ["workspace-skill.js", "--changed"]
         assert runtime_payload["mcp"]["danger_lab"]["command"][4] == "opencode-mcp-proxy"
         assert runtime_payload["mcp"]["danger_lab"]["environment"]["API_BASE"] == "https://hol.org"
 
+    def test_guard_install_keeps_pythonpath_in_opencode_runtime_overlay(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            workspace_dir / "opencode.json",
+            {
+                "name": "workspace-opencode",
+                "mcp": {
+                    "danger_lab": {
+                        "type": "local",
+                        "command": ["python3", "danger-server.py"],
+                    }
+                },
+            },
+        )
+        monkeypatch.setenv("PYTHONPATH", str(tmp_path / "src"))
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        manifest = output["managed_install"]["manifest"]
+        runtime_config_path = Path(str(manifest["runtime_config_path"]))
+        runtime_payload = json.loads(runtime_config_path.read_text(encoding="utf-8"))
+
+        assert rc == 0
+        assert runtime_payload["mcp"]["danger_lab"]["environment"]["PYTHONPATH"] == str(tmp_path / "src")
+
     def test_guard_install_keeps_disabled_opencode_servers_disabled(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
