@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from pathlib import Path
 
 try:
@@ -318,3 +320,138 @@ args = ["edited-workspace-skill.js"]
     assert backup_path == Path(second_output["managed_install"]["manifest"]["backup_path"])
     assert backup_path.exists() is False
     assert "edited-workspace-skill.js" in (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
+
+
+def test_guard_install_codex_proxy_entry_boots_outside_dev_shell_when_pythonpath_is_required(
+    tmp_path, capsys, monkeypatch
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    marker_path = tmp_path / "marker.json"
+    canary_path = Path(__file__).resolve().parent / "fixtures" / "mcp-canary-server.py"
+    source_root = Path(__file__).resolve().parents[1] / "src"
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    monkeypatch.setenv("PYTHONPATH", "src")
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        f"""
+[mcp_servers.danger_lab]
+command = "python3"
+args = [{str(canary_path)!r}, "--marker-path", {str(marker_path)!r}]
+""".strip()
+        + "\n",
+    )
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    with (workspace_dir / ".codex" / "config.toml").open("rb") as handle:
+        payload = tomllib.load(handle)
+    proxy_entry = payload["mcp_servers"]["danger_lab"]
+    proxy_env = dict(proxy_entry.get("env", {}))
+    result = subprocess.run(
+        [proxy_entry["command"], *proxy_entry["args"]],
+        input='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}\n',
+        text=True,
+        capture_output=True,
+        cwd=workspace_dir,
+        env={
+            "PATH": os.environ["PATH"],
+            "HOME": str(home_dir),
+            **proxy_env,
+        },
+        check=False,
+    )
+
+    assert rc == 0
+    assert proxy_env["PYTHONPATH"] == str(source_root)
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["result"]["serverInfo"]["name"] == "danger-lab"
+
+
+def test_guard_install_codex_preserves_server_relative_pythonpath_entries(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    source_root = Path(__file__).resolve().parents[1] / "src"
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    monkeypatch.setenv("PYTHONPATH", "src")
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        """
+[mcp_servers.danger_lab]
+command = "python3"
+args = ["danger-lab.py"]
+env = { PYTHONPATH = "app/src", API_BASE = "https://hol.org" }
+""".strip()
+        + "\n",
+    )
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    with (workspace_dir / ".codex" / "config.toml").open("rb") as handle:
+        payload = tomllib.load(handle)
+    proxy_env = payload["mcp_servers"]["danger_lab"]["env"]
+
+    assert rc == 0
+    assert proxy_env["PYTHONPATH"] == os.pathsep.join((str(source_root), "app/src"))
+
+
+def test_guard_install_codex_allows_server_to_clear_launcher_pythonpath(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    monkeypatch.setenv("PYTHONPATH", "src")
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        """
+[mcp_servers.danger_lab]
+command = "python3"
+args = ["danger-lab.py"]
+env = { PYTHONPATH = "" }
+""".strip()
+        + "\n",
+    )
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    with (workspace_dir / ".codex" / "config.toml").open("rb") as handle:
+        payload = tomllib.load(handle)
+    proxy_env = payload["mcp_servers"]["danger_lab"]["env"]
+
+    assert rc == 0
+    assert proxy_env["PYTHONPATH"] == ""
