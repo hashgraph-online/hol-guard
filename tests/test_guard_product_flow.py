@@ -421,6 +421,9 @@ args = ["workspace-skill.js", "--changed"]
         fake_bin = tmp_path / "fake-bin"
         fake_codex = fake_bin / "codex"
         args_file = tmp_path / "codex-args.txt"
+        env_file = tmp_path / "codex-env.txt"
+        source_root = Path(__file__).resolve().parents[1] / "src"
+        runtime_pythonpath = tmp_path / "runtime-modules"
         _build_guard_fixture(home_dir, workspace_dir)
         _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
         _write_text(
@@ -429,6 +432,7 @@ args = ["workspace-skill.js", "--changed"]
                 (
                     "#!/bin/sh",
                     f'printf "%s\\n" "$@" > "{args_file}"',
+                    f'printf "%s" "$PYTHONPATH" > "{env_file}"',
                     "exit 0",
                     "",
                 )
@@ -460,9 +464,11 @@ args = ["workspace-skill.js", "--changed"]
             env={
                 "PATH": f"{fake_bin}:{os.environ['PATH']}",
                 "HOME": str(home_dir),
+                "PYTHONPATH": str(runtime_pythonpath),
             },
             check=False,
         )
 
         assert result.returncode == 0
         assert args_file.read_text(encoding="utf-8").strip() == "--help"
+        assert env_file.read_text(encoding="utf-8") == os.pathsep.join((str(runtime_pythonpath), str(source_root)))

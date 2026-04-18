@@ -378,3 +378,42 @@ args = [{str(canary_path)!r}, "--marker-path", {str(marker_path)!r}]
     assert proxy_env["PYTHONPATH"] == str(source_root)
     assert result.returncode == 0
     assert json.loads(result.stdout)["result"]["serverInfo"]["name"] == "danger-lab"
+
+
+def test_guard_install_codex_preserves_server_relative_pythonpath_entries(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    source_root = Path(__file__).resolve().parents[1] / "src"
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    monkeypatch.setenv("PYTHONPATH", "src")
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        """
+[mcp_servers.danger_lab]
+command = "python3"
+args = ["danger-lab.py"]
+env = { PYTHONPATH = "app/src", API_BASE = "https://hol.org" }
+""".strip()
+        + "\n",
+    )
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    with (workspace_dir / ".codex" / "config.toml").open("rb") as handle:
+        payload = tomllib.load(handle)
+    proxy_env = payload["mcp_servers"]["danger_lab"]["env"]
+
+    assert rc == 0
+    assert proxy_env["PYTHONPATH"] == os.pathsep.join((str(source_root), "app/src"))
