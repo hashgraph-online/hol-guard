@@ -414,3 +414,55 @@ args = ["workspace-skill.js", "--changed"]
 
         assert result.returncode == 0
         assert args_file.read_text(encoding="utf-8").strip() == "--help"
+
+    def test_guard_shim_keeps_pythonpath_for_source_checkout_launches(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        fake_bin = tmp_path / "fake-bin"
+        fake_codex = fake_bin / "codex"
+        args_file = tmp_path / "codex-args.txt"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+        _write_text(
+            fake_codex,
+            "\n".join(
+                (
+                    "#!/bin/sh",
+                    f'printf "%s\\n" "$@" > "{args_file}"',
+                    "exit 0",
+                    "",
+                )
+            ),
+        )
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        fake_codex.chmod(fake_codex.stat().st_mode | 0o755)
+        monkeypatch.chdir(Path(__file__).resolve().parents[1])
+        monkeypatch.setenv("PYTHONPATH", "src")
+
+        main(
+            [
+                "guard",
+                "install",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        install_output = json.loads(capsys.readouterr().out)
+        shim_path = Path(install_output["managed_install"]["manifest"]["shim_path"])
+        result = subprocess.run(
+            [str(shim_path), "--help"],
+            capture_output=True,
+            text=True,
+            env={
+                "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                "HOME": str(home_dir),
+            },
+            check=False,
+        )
+
+        assert result.returncode == 0
+        assert args_file.read_text(encoding="utf-8").strip() == "--help"

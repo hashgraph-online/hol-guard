@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from ...ecosystems.opencode import _load_json_or_jsonc
+from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _run_command_probe
@@ -195,7 +196,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
                 ],
                 "enabled": server.enabled,
             }
-            environment = getattr(server, "env", {})
+            environment = merge_guard_launcher_env(getattr(server, "env", {}))
             if environment:
                 entry["environment"] = environment
             overrides[server.name] = entry

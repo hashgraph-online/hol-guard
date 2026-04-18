@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .launcher import merge_guard_launcher_env
+
 if TYPE_CHECKING:
     from .adapters.base import HarnessContext
 
@@ -68,15 +70,18 @@ def _build_python_shim(harness: str, context: HarnessContext, workspace_args: li
         *_home_override_args(context),
         *workspace_args,
     ]
+    launcher_env = merge_guard_launcher_env()
     return "\n".join(
         (
             f"#!{sys.executable}",
             "from __future__ import annotations",
+            "import os",
             "import subprocess",
             "import sys",
             f"base_command = {command_args!r}",
+            f"base_env = {launcher_env!r}",
             'extra_args = [f"--arg={arg}" for arg in sys.argv[1:]]',
-            "raise SystemExit(subprocess.call([*base_command, *extra_args]))",
+            "raise SystemExit(subprocess.call([*base_command, *extra_args], env={**os.environ, **base_env}))",
             "",
         )
     )

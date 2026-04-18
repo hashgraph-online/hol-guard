@@ -12,6 +12,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib  # type: ignore[no-redef]
 
 from ..codex_config import read_toml_payload, write_toml_payload
+from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available
@@ -187,7 +188,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             "command": sys.executable,
             "args": args,
         }
-        env = getattr(server, "env", {})
+        env = merge_guard_launcher_env(getattr(server, "env", {}))
         if env:
             entry["env"] = env
         return entry
