@@ -18,6 +18,9 @@ def merge_guard_launcher_env(env: Mapping[str, str] | None = None) -> dict[str, 
         return merged
     for key, value in env.items():
         if key == "PYTHONPATH":
+            if value.strip() == "":
+                merged["PYTHONPATH"] = ""
+                continue
             pythonpath = _merge_path_entries(merged.get("PYTHONPATH", ""), value)
             if pythonpath:
                 merged["PYTHONPATH"] = pythonpath

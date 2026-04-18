@@ -417,3 +417,41 @@ env = { PYTHONPATH = "app/src", API_BASE = "https://hol.org" }
 
     assert rc == 0
     assert proxy_env["PYTHONPATH"] == os.pathsep.join((str(source_root), "app/src"))
+
+
+def test_guard_install_codex_allows_server_to_clear_launcher_pythonpath(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    monkeypatch.setenv("PYTHONPATH", "src")
+    _write_text(
+        workspace_dir / ".codex" / "config.toml",
+        """
+[mcp_servers.danger_lab]
+command = "python3"
+args = ["danger-lab.py"]
+env = { PYTHONPATH = "" }
+""".strip()
+        + "\n",
+    )
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    with (workspace_dir / ".codex" / "config.toml").open("rb") as handle:
+        payload = tomllib.load(handle)
+    proxy_env = payload["mcp_servers"]["danger_lab"]["env"]
+
+    assert rc == 0
+    assert proxy_env["PYTHONPATH"] == ""
