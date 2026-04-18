@@ -185,8 +185,12 @@ class RuntimeMcpGuardProxy:
             source_scope=self.source_scope,
             config_path=self.config_path,
             transport=self.transport,
+            server_fingerprint={
+                "command": self.command,
+                "transport": self.transport,
+            },
         )
-        artifact_hash = build_tool_call_hash(self.server_name, tool_name, arguments)
+        artifact_hash = build_tool_call_hash(artifact, arguments)
         decision = evaluate_tool_call(
             store=self.store,
             config=self.config,

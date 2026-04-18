@@ -31,7 +31,11 @@ def build_tool_call_artifact(
     source_scope: str,
     config_path: str,
     transport: str,
+    server_fingerprint: object | None = None,
 ) -> GuardArtifact:
+    metadata = {"server_name": server_name}
+    if server_fingerprint is not None:
+        metadata["server_fingerprint"] = server_fingerprint
     return GuardArtifact(
         artifact_id=f"{harness}:runtime:{source_scope}:{server_name}:{tool_name}",
         name=f"{server_name}:{tool_name}",
@@ -41,15 +45,17 @@ def build_tool_call_artifact(
         config_path=config_path,
         command=tool_name,
         transport=transport,
-        metadata={"server_name": server_name},
+        metadata=metadata,
     )
 
 
-def build_tool_call_hash(server_name: str, tool_name: str, arguments: object) -> str:
+def build_tool_call_hash(artifact: GuardArtifact, arguments: object) -> str:
     payload = json.dumps(
         {
-            "server_name": server_name,
-            "tool_name": tool_name,
+            "artifact_id": artifact.artifact_id,
+            "config_path": artifact.config_path,
+            "transport": artifact.transport,
+            "server_fingerprint": artifact.metadata.get("server_fingerprint"),
             "arguments": arguments,
         },
         sort_keys=True,

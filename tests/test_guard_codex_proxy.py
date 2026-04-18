@@ -10,7 +10,7 @@ import pytest
 from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
+from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision, build_tool_call_artifact, build_tool_call_hash
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.store import GuardStore
@@ -947,6 +947,32 @@ def test_codex_guard_proxy_buffers_non_matching_child_request_replies(tmp_path):
 
     assert [json.loads(line) for line in inner_child_stdin.getvalue().splitlines()] == [inner_reply]
     assert [json.loads(line) for line in outer_child_stdin.getvalue().splitlines()] == [outer_reply]
+
+
+def test_tool_call_hash_changes_when_server_identity_changes():
+    artifact_a = build_tool_call_artifact(
+        harness="codex",
+        server_name="danger_lab",
+        tool_name="dangerous_delete",
+        source_scope="project",
+        config_path="/workspace-a/.codex/config.toml",
+        transport="stdio",
+        server_fingerprint={"command": ["python3", "server-a.py"], "transport": "stdio"},
+    )
+    artifact_b = build_tool_call_artifact(
+        harness="codex",
+        server_name="danger_lab",
+        tool_name="dangerous_delete",
+        source_scope="project",
+        config_path="/workspace-b/.codex/config.toml",
+        transport="stdio",
+        server_fingerprint={"command": ["python3", "server-b.py"], "transport": "stdio"},
+    )
+
+    assert build_tool_call_hash(artifact_a, {"target": "canary.txt"}) != build_tool_call_hash(
+        artifact_b,
+        {"target": "canary.txt"},
+    )
 
 
 def test_codex_guard_proxy_buffers_other_inline_approval_responses(tmp_path):
