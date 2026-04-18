@@ -180,15 +180,25 @@ def runtime_config_path(context: HarnessContext) -> Path:
     return context.guard_home / "opencode" / "runtime-config.json"
 
 
-def runtime_overlay() -> dict[str, object]:
-    return {
-        "$schema": "https://opencode.ai/config.json",
-        "permission": {
-            "skill": {
-                "*": "ask",
-            }
-        },
+def runtime_overlay(
+    *,
+    permission_rules: dict[str, object] | None = None,
+    mcp_servers: dict[str, object] | None = None,
+) -> dict[str, object]:
+    permission: dict[str, object] = {
+        "skill": {
+            "*": "ask",
+        }
     }
+    if permission_rules:
+        permission.update(permission_rules)
+    overlay: dict[str, object] = {
+        "$schema": "https://opencode.ai/config.json",
+        "permission": permission,
+    }
+    if mcp_servers:
+        overlay["mcp"] = mcp_servers
+    return overlay
 
 
 def append_artifact(
@@ -240,6 +250,7 @@ def _append_mcp_artifacts(
         command, args = _command_parts(server_config)
         transport = server_config.get("type") if isinstance(server_config.get("type"), str) else None
         url = server_config.get("url") if isinstance(server_config.get("url"), str) else None
+        environment = server_config.get("environment")
         artifact = GuardArtifact(
             artifact_id=f"opencode:{scope}:{name}",
             name=name,
@@ -251,7 +262,16 @@ def _append_mcp_artifacts(
             args=args,
             url=url,
             transport=transport or ("remote" if url is not None else "stdio"),
-            metadata={"enabled": bool(server_config.get("enabled", True))},
+            metadata={
+                "enabled": bool(server_config.get("enabled", True)),
+                "env": {
+                    str(key): str(value)
+                    for key, value in environment.items()
+                    if isinstance(key, str) and isinstance(value, str)
+                }
+                if isinstance(environment, dict)
+                else {},
+            },
         )
         append_artifact(artifacts, seen_artifact_ids, artifact)
 

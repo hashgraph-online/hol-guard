@@ -151,7 +151,7 @@ Current strategy:
 - `copilot`
   wraps the `copilot` CLI, watches documented repo hooks and MCP config, and treats workspace `.vscode/mcp.json` as MCP artifact detection only
 - `codex`
-  uses the Guard approval center today; App Server is the long-term richer in-client path
+  uses inline MCP elicitation in the same Codex chat when the interactive CLI or Codex App can answer it, and falls back to the local Guard approval center for `codex exec` or any other nonresponsive session
 - `cursor`
   keeps Cursor’s native tool approval and lets Guard own artifact trust before tool use
 - `antigravity`
@@ -186,3 +186,17 @@ hol-guard receipts
 ```
 
 For a real Codex canary, point `~/.codex/config.toml` or `<workspace>/.codex/config.toml` at a local `hashnet-mcp` command, then repeat the Guard loop above.
+
+## Codex-specific approval behavior
+
+Guard now has two real runtime paths for Codex MCP tool calls:
+
+1. interactive Codex CLI and Codex App
+   Guard sends an MCP `elicitation/create` approval request, so the user can approve or deny in the same Codex chat
+2. noninteractive Codex runs such as `codex exec`
+   if Codex does not answer the elicitation request, Guard queues a localhost approval request and returns the request id plus approval URL in the same tool-call error
+
+That means the user should never get a silent pass-through on a risky MCP tool call:
+
+- same-chat approve or deny when Codex can render the inline prompt
+- explicit approval-center recovery when the session cannot

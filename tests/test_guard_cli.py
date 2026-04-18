@@ -2098,7 +2098,19 @@ args = ["workspace-skill.js", "--changed"]
     def test_guard_install_creates_opencode_runtime_overlay(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
-        _write_json(workspace_dir / "opencode.json", {"name": "workspace-opencode"})
+        _write_json(
+            workspace_dir / "opencode.json",
+            {
+                "name": "workspace-opencode",
+                "mcp": {
+                    "danger_lab": {
+                        "type": "local",
+                        "command": ["python3", "danger-server.py"],
+                        "environment": {"API_BASE": "https://hol.org"},
+                    }
+                },
+            },
+        )
 
         rc = main(
             [
@@ -2121,6 +2133,102 @@ args = ["workspace-skill.js", "--changed"]
         assert output["managed_install"]["active"] is True
         assert manifest["shim_command"] == "guard-opencode"
         assert runtime_payload["permission"]["skill"]["*"] == "ask"
+        assert runtime_payload["permission"]["danger_lab_*"] == "ask"
+        assert runtime_payload["mcp"]["danger_lab"]["type"] == "local"
+        assert runtime_payload["mcp"]["danger_lab"]["command"][0]
+        assert runtime_payload["mcp"]["danger_lab"]["command"][3] == "guard"
+        assert runtime_payload["mcp"]["danger_lab"]["command"][4] == "opencode-mcp-proxy"
+        assert runtime_payload["mcp"]["danger_lab"]["environment"]["API_BASE"] == "https://hol.org"
+
+    def test_guard_install_keeps_disabled_opencode_servers_disabled(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            workspace_dir / "opencode.json",
+            {
+                "name": "workspace-opencode",
+                "mcp": {
+                    "sleep_lab": {
+                        "type": "local",
+                        "command": ["python3", "sleep-lab.py"],
+                        "enabled": False,
+                    }
+                },
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        manifest = output["managed_install"]["manifest"]
+        runtime_payload = json.loads(Path(str(manifest["runtime_config_path"])).read_text(encoding="utf-8"))
+
+        assert rc == 0
+        assert runtime_payload["mcp"]["sleep_lab"]["enabled"] is False
+        assert "sleep_lab_*" not in runtime_payload["permission"]
+
+    def test_guard_install_opencode_preserves_workspace_server_name_collisions(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            home_dir / ".config" / "opencode" / "opencode.json",
+            {
+                "mcp": {
+                    "shared_lab": {
+                        "type": "local",
+                        "command": ["python3", "global-shared.py"],
+                    },
+                    "global_only_lab": {
+                        "type": "local",
+                        "command": ["python3", "global-only.py"],
+                    },
+                }
+            },
+        )
+        _write_json(
+            workspace_dir / "opencode.json",
+            {
+                "name": "workspace-opencode",
+                "mcp": {
+                    "shared_lab": {
+                        "type": "remote",
+                        "url": "https://workspace.example/mcp",
+                    }
+                },
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "opencode",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        manifest = output["managed_install"]["manifest"]
+        runtime_payload = json.loads(Path(str(manifest["runtime_config_path"])).read_text(encoding="utf-8"))
+
+        assert rc == 0
+        assert "shared_lab" not in runtime_payload["mcp"]
+        assert "shared_lab_*" not in runtime_payload["permission"]
+        assert runtime_payload["mcp"]["global_only_lab"]["type"] == "local"
+        assert runtime_payload["permission"]["global_only_lab_*"] == "ask"
 
     def test_guard_update_runs_pip_upgrade_in_current_environment(self, monkeypatch, capsys):
         commands: list[list[str]] = []

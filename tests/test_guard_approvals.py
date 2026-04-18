@@ -285,6 +285,53 @@ class TestGuardApprovals:
         assert result["proof"]["receipts_stored"] == 0
         assert result["proof"]["inventory_items"] == 0
 
+    def test_guard_queue_prefers_runtime_risk_metadata_from_evaluation(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        artifact = GuardArtifact(
+            artifact_id="codex:runtime:project:danger_lab:dangerous_delete",
+            name="danger_lab:dangerous_delete",
+            harness="codex",
+            artifact_type="tool_call",
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            command="dangerous_delete",
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+
+        queued = queue_blocked_approvals(
+            detection=detection,
+            evaluation={
+                "artifacts": [
+                    {
+                        "artifact_id": artifact.artifact_id,
+                        "artifact_name": artifact.name,
+                        "artifact_hash": "hash-runtime",
+                        "artifact_type": artifact.artifact_type,
+                        "source_scope": artifact.source_scope,
+                        "config_path": artifact.config_path,
+                        "changed_fields": ["runtime_tool_call"],
+                        "policy_action": "require-reapproval",
+                        "launch_target": "dangerous_delete .env",
+                        "risk_summary": "Call arguments mention sensitive local files or secrets.",
+                        "risk_signals": ["call arguments mention sensitive local files or secrets"],
+                    }
+                ]
+            },
+            store=store,
+            approval_center_url="http://127.0.0.1:4455",
+            now="2026-04-17T00:00:00+00:00",
+        )
+
+        assert queued[0]["risk_summary"] == "Call arguments mention sensitive local files or secrets."
+        assert queued[0]["risk_signals"] == ["call arguments mention sensitive local files or secrets"]
+        assert queued[0]["launch_summary"] == "Launches with `dangerous_delete .env`."
+
     def test_guard_store_keeps_request_id_when_duplicate_pending_request_is_requeued(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         original = GuardApprovalRequest(
