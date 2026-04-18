@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -343,3 +344,15 @@ class StdioGuardProxy:
         if self.cwd is not None:
             return self.cwd / ".mcp.json"
         return Path.home() / ".mcp.json"
+
+
+def _is_notification(message: dict[str, Any]) -> bool:
+    return "method" in message and "id" not in message
+
+
+def _is_request(message: dict[str, Any]) -> bool:
+    return "method" in message and "id" in message
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()

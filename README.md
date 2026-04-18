@@ -79,7 +79,7 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
 - `copilot`
   Guard can wrap the `copilot` CLI, detect `~/.copilot/config.json`, `~/.copilot/mcp-config.json`, workspace `.vscode/mcp.json`, and install repo-local `.github/hooks/hol-guard-copilot.json` hook entries for documented `preToolUse` and `postToolUse` events.
 - `codex`
-  Guard owns artifact approval today through the local approval center. App Server is the future path for richer in-client approvals.
+  Guard asks inline in the same Codex chat when the interactive CLI or Codex App can answer MCP elicitations, and falls back to the local approval center for `codex exec` or any nonresponsive session.
 - `cursor`
   Guard respects Cursor’s native tool approval and focuses on artifact trust before launch.
 - `opencode`

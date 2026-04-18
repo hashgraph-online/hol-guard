@@ -44,7 +44,7 @@ from ..incident import build_incident_context
 from ..models import GuardArtifact, HarnessDetection
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS
 from ..protect import build_protect_payload
-from ..proxy import RemoteGuardProxy, StdioGuardProxy
+from ..proxy import CodexMcpGuardProxy, OpenCodeMcpGuardProxy, RemoteGuardProxy, StdioGuardProxy
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_summary
 from ..runtime.runner import GuardSyncNotConfiguredError, guard_run, sync_receipts
@@ -327,11 +327,30 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     daemon_parser.add_argument("--serve", action="store_true")
     daemon_parser.add_argument("--port", type=int)
     daemon_parser.add_argument("--json", action="store_true")
+
+    codex_proxy_parser = guard_subparsers.add_parser("codex-mcp-proxy", help=argparse.SUPPRESS)
+    _add_guard_common_args(codex_proxy_parser)
+    codex_proxy_parser.add_argument("--server-name", required=True)
+    codex_proxy_parser.add_argument("--source-scope", default="project")
+    codex_proxy_parser.add_argument("--config-path", required=True)
+    codex_proxy_parser.add_argument("--transport", default="stdio")
+    codex_proxy_parser.add_argument("--command", dest="server_command", required=True)
+    codex_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+
+    opencode_proxy_parser = guard_subparsers.add_parser("opencode-mcp-proxy", help=argparse.SUPPRESS)
+    _add_guard_common_args(opencode_proxy_parser)
+    opencode_proxy_parser.add_argument("--server-name", required=True)
+    opencode_proxy_parser.add_argument("--source-scope", default="project")
+    opencode_proxy_parser.add_argument("--config-path", required=True)
+    opencode_proxy_parser.add_argument("--transport", default="local")
+    opencode_proxy_parser.add_argument("--command", dest="server_command", required=True)
+    opencode_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+
     hermes_mcp_proxy_parser = guard_subparsers.add_parser("hermes-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(hermes_mcp_proxy_parser)
     hermes_mcp_proxy_parser.add_argument("--server", required=True)
     hermes_mcp_proxy_parser.add_argument("--stdio", action="store_true")
-    hidden_commands = {"hook", "daemon", "hermes-mcp-proxy"}
+    hidden_commands = {"hook", "daemon", "codex-mcp-proxy", "opencode-mcp-proxy", "hermes-mcp-proxy"}
     guard_subparsers._choices_actions = [
         action for action in guard_subparsers._choices_actions if action.dest not in hidden_commands
     ]
@@ -487,6 +506,32 @@ def run_guard_command(args: argparse.Namespace) -> int:
             return 2
         _emit("install", payload, getattr(args, "json", False))
         return 0
+
+    if args.guard_command == "codex-mcp-proxy":
+        proxy = CodexMcpGuardProxy(
+            server_name=args.server_name,
+            command=[args.server_command, *list(args.server_args)],
+            context=context,
+            store=store,
+            config=config,
+            source_scope=args.source_scope,
+            config_path=args.config_path,
+            transport=args.transport,
+        )
+        return proxy.serve()
+
+    if args.guard_command == "opencode-mcp-proxy":
+        proxy = OpenCodeMcpGuardProxy(
+            server_name=args.server_name,
+            command=[args.server_command, *list(args.server_args)],
+            context=context,
+            store=store,
+            config=config,
+            source_scope=args.source_scope,
+            config_path=args.config_path,
+            transport=args.transport,
+        )
+        return proxy.serve()
 
     if args.guard_command == "hermes-mcp-proxy":
         return _run_hermes_mcp_proxy(args=args, context=context, store=store, config=config)
@@ -1051,6 +1096,8 @@ def _headless_approval_resolver(
     store: GuardStore,
     config,
 ):
+    should_wait_for_approvals = not bool(getattr(args, "json", False))
+
     def resolve(detection, payload):
         managed_install = _managed_install_for(store, args.harness)
         approval_flow = approval_prompt_flow(args.harness, managed_install=managed_install)
@@ -1074,7 +1121,7 @@ def _headless_approval_resolver(
                 queued=queued,
             )
             payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
-            if str(approval_flow["tier"]) != "native-or-center":
+            if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals:
                 payload["approval_wait"] = {
                     "resolved": False,
                     "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
@@ -1139,7 +1186,7 @@ def _headless_approval_resolver(
             managed_install=managed_install,
         )
         payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
-        if str(approval_flow["tier"]) != "native-or-center":
+        if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals:
             payload["approval_wait"] = {
                 "resolved": False,
                 "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],

@@ -17,6 +17,7 @@ _HARNESS_LABELS = {
 
 _ARTIFACT_LABELS = {
     "mcp_server": "MCP server",
+    "tool_call": "Tool call",
     "hook": "Hook",
     "agent": "Agent",
     "command": "Command",
@@ -113,6 +114,8 @@ def _trigger_verb(*, policy_action: GuardAction, changed_fields: list[str]) -> s
 
 
 def _launch_summary(*, artifact: GuardArtifact | None, launch_target: str | None) -> str:
+    if launch_target:
+        return f"Launches with `{_truncate(launch_target)}`."
     if artifact is not None:
         request_summary = artifact.metadata.get("request_summary")
         if isinstance(request_summary, str) and request_summary:
@@ -125,8 +128,6 @@ def _launch_summary(*, artifact: GuardArtifact | None, launch_target: str | None
         if artifact.command:
             command_parts = [artifact.command, *artifact.args]
             return f"Launches with `{_truncate(' '.join(command_parts))}`."
-    if launch_target:
-        return f"Launches with `{_truncate(launch_target)}`."
     return "Launch details were not available."
 
 

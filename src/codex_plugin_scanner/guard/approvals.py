@@ -40,7 +40,7 @@ def queue_blocked_approvals(
             continue
         artifact = artifacts_by_id.get(artifact_id)
         request_id = uuid.uuid4().hex
-        risk_summary = artifact_risk_summary(artifact) if artifact is not None else None
+        risk_summary = _item_risk_summary(item, artifact)
         launch_target = _launch_target(artifact, item)
         incident = build_incident_context(
             harness=detection.harness,
@@ -74,7 +74,7 @@ def queue_blocked_approvals(
             workspace=_workspace_scope_target(item, artifact),
             publisher=artifact.publisher if artifact is not None else None,
             risk_summary=risk_summary,
-            risk_signals=artifact_risk_signals(artifact) if artifact is not None else (),
+            risk_signals=_item_risk_signals(item, artifact),
             artifact_label=incident["artifact_label"],
             source_label=incident["source_label"],
             trigger_summary=incident["trigger_summary"],
@@ -259,15 +259,15 @@ def _config_path(item: dict[str, object], artifact) -> str:
 
 
 def _launch_target(artifact, item: dict[str, object]) -> str | None:
+    value = item.get("launch_target")
+    if isinstance(value, str) and value:
+        return value
     if artifact is not None:
         if artifact.url:
             return artifact.url
         if artifact.command:
             parts = [artifact.command, *artifact.args]
             return " ".join(parts)
-    value = item.get("launch_target")
-    if isinstance(value, str) and value:
-        return value
     return None
 
 
@@ -298,6 +298,22 @@ def _workspace_scope_target(item: dict[str, object], artifact) -> str | None:
     if workspace_value:
         return workspace_value
     return None
+
+
+def _item_risk_summary(item: dict[str, object], artifact) -> str | None:
+    value = item.get("risk_summary")
+    if isinstance(value, str) and value:
+        return value
+    return artifact_risk_summary(artifact) if artifact is not None else None
+
+
+def _item_risk_signals(item: dict[str, object], artifact) -> tuple[str, ...]:
+    value = item.get("risk_signals")
+    if isinstance(value, list):
+        normalized = tuple(str(signal) for signal in value if isinstance(signal, str) and signal)
+        if normalized:
+            return normalized
+    return artifact_risk_signals(artifact) if artifact is not None else ()
 
 
 def _string_list(value: object) -> list[str]:
