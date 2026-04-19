@@ -834,9 +834,7 @@ def _wrapper_flag_has_attached_value(command_name: str, token: str) -> bool:
             len(token) > 2 and token[:2] in {"-i", "-o", "-e"}
         )
     if command_name == "time":
-        return token.startswith(("--format=", "--output=")) or (
-            len(token) > 2 and token[:2] in {"-f", "-o"}
-        )
+        return token.startswith(("--format=", "--output=")) or (len(token) > 2 and token[:2] in {"-f", "-o"})
     return False
 
 
