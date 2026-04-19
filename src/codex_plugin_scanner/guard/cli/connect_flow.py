@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..daemon import ensure_guard_daemon, load_guard_surface_daemon_client
-from ..daemon.client import GuardSurfaceDaemonClient
+from ..daemon.client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
 from ..runtime import GuardSyncNotAvailableError, sync_receipts, sync_runtime_session
 from ..store import GuardStore
 
@@ -240,9 +240,11 @@ def wait_for_connect_transition(
     while time.monotonic() < deadline:
         try:
             state = daemon_client.get_connect_state(request_id=request_id)
-        except RuntimeError:
+        except GuardDaemonTransportError:
             time.sleep(poll_interval_seconds)
             continue
+        except GuardDaemonRequestError:
+            raise
         if not isinstance(state, dict):
             raise RuntimeError("Guard daemon request failed: invalid connect state response")
         if str(state.get("status")) in {"connected", "retry_required", "expired"}:
