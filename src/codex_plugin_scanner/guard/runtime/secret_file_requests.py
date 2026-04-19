@@ -562,14 +562,14 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     normalized = command_text.strip()
     if not normalized:
         return False
-    lowered = normalized.lower()
-    redacted_command_text = _redacted_shell_text_for_command_names(lowered)
-    if _contains_mutating_shell_redirection(lowered):
-        return True
-    raw_command_names = list(_shell_command_names(redacted_command_text))
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
+    lowered = normalized.lower()
+    redacted_command_text = _redacted_shell_text_for_command_names(lowered)
+    if _contains_mutating_shell_redirection(parts):
+        return True
+    raw_command_names = list(_shell_command_names(redacted_command_text))
     if _looks_like_benign_interpreter_wait(normalized, parts, raw_command_names):
         return False
     if _contains_destructive_node_inline_eval(parts):
@@ -605,7 +605,7 @@ def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
 def _contains_destructive_node_inline_script(script: str) -> bool:
     for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS:
         escaped_call_name = re.escape(call_name)
-        if re.search(rf"(?<![a-z0-9_$'\"]){escaped_call_name}\s*(?:\?\.\s*)?\(", script):
+        if re.search(rf"(?<![A-Za-z0-9_$'\"]){escaped_call_name}\s*(?:\?\.\s*)?\(", script):
             return True
         for base_pattern in (
             rf"\.\s*{escaped_call_name}",
@@ -688,6 +688,9 @@ def _segment_contains_destructive_node_inline_eval(segment_args: list[str]) -> b
         if token == "--":
             break
         if token in _NODE_INLINE_EVAL_FLAGS and index + 1 < len(lowered_args):
+            if token in {"-p", "--print"} and lowered_args[index + 1].startswith("-"):
+                index += 1
+                continue
             if _contains_destructive_node_inline_script(segment_args[index + 1]):
                 return True
             index += 2
@@ -771,8 +774,11 @@ def _env_split_string_payloads(parts: list[str]) -> tuple[str, ...]:
                     payloads.append(payload)
                 index += _wrapper_option_tokens_consumed("env", token)
                 continue
-            if token.startswith("-S") and token != "-S":
-                payload = token[2:].strip()
+            clustered_split_string_payload = _env_clustered_split_string_payload(token)
+            if clustered_split_string_payload is not None:
+                payload = clustered_split_string_payload.strip()
+                if not payload and index + 1 < len(segment):
+                    payload = segment[index + 1].strip()
                 if payload:
                     payloads.append(payload)
                 index += _wrapper_option_tokens_consumed("env", token)
@@ -803,13 +809,43 @@ def _shell_segment_env_index(segment: list[str]) -> int | None:
     return None
 
 
-def _contains_mutating_shell_redirection(command_text: str) -> bool:
-    for match in re.finditer(r"(?<!<)(?P<fd>[0-2]?)(?P<op>>\||>>|>)\s*(?P<target>\S+)", command_text):
-        fd = match.group("fd")
-        target = _normalized_redirect_target(match.group("target"))
-        if fd == "2" and target in _SAFE_SHELL_REDIRECT_TARGETS:
+def _contains_mutating_shell_redirection(parts: list[str]) -> bool:
+    index = 0
+    while index < len(parts):
+        token = parts[index].strip()
+        if not token:
+            index += 1
             continue
-        if target in _SAFE_SHELL_REDIRECT_TARGETS or target.startswith("&"):
+        fd = ""
+        target: str | None = None
+        if token in {">", ">>", ">|", "1>", "1>>", "1>|", "2>", "2>>", "2>|"}:
+            if token[0].isdigit():
+                fd = token[0]
+            if index + 1 < len(parts):
+                target = parts[index + 1]
+                index += 2
+            else:
+                index += 1
+        else:
+            match = re.fullmatch(r"(?P<fd>[0-2]?)(?P<op>>\||>>|>)(?P<target>.+)?", token)
+            if match is None:
+                index += 1
+                continue
+            fd = match.group("fd")
+            target = match.group("target")
+            if target:
+                index += 1
+            elif index + 1 < len(parts):
+                target = parts[index + 1]
+                index += 2
+            else:
+                index += 1
+        if target is None:
+            continue
+        normalized_target = _normalized_redirect_target(target)
+        if fd == "2" and normalized_target in _SAFE_SHELL_REDIRECT_TARGETS:
+            continue
+        if normalized_target in _SAFE_SHELL_REDIRECT_TARGETS or normalized_target.startswith("&"):
             continue
         return True
     return False
@@ -905,6 +941,17 @@ def _env_short_option_tokens_consumed(token: str) -> int | None:
             return 1
         return 2
     return 1
+
+
+def _env_clustered_split_string_payload(token: str) -> str | None:
+    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
+        return None
+    split_index = token.find("S", 1)
+    if split_index == -1:
+        return None
+    if split_index + 1 >= len(token):
+        return ""
+    return token[split_index + 1 :]
 
 
 def _wrapper_flag_has_attached_value(command_name: str, token: str) -> bool:

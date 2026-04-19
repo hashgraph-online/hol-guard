@@ -520,6 +520,16 @@ def test_tool_action_request_classifier_skips_benign_mixed_case_node_identifier(
     assert request is None
 
 
+def test_tool_action_request_classifier_detects_node_print_followed_by_eval_flag():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -p -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_skips_find_exec_literal_delete_string():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -582,6 +592,16 @@ def test_tool_action_request_classifier_detects_clustered_env_short_option_find_
     request = extract_sensitive_tool_action_request(
         "bash",
         {"command": "env -iu FOO find . -name dangerous-marker.json -delete"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_clustered_env_split_string_find_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """env -iS "find . -name dangerous-marker.json -delete" """},
     )
 
     assert request is not None
