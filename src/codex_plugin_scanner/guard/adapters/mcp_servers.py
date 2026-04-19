@@ -22,6 +22,16 @@ class ManagedMcpServer:
     enabled: bool
 
 
+_GUARD_PROXY_COMMANDS = frozenset(
+    {
+        "codex-mcp-proxy",
+        "opencode-mcp-proxy",
+        "copilot-mcp-proxy",
+        "mcp-proxy",
+    }
+)
+
+
 def managed_stdio_servers(detection: HarnessDetection) -> tuple[ManagedMcpServer, ...]:
     """Extract local stdio MCP servers from a harness detection payload."""
 
@@ -89,6 +99,8 @@ def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
         return None
     if artifact.command is None or not artifact.name.strip():
         return None
+    if is_guard_proxy_command(artifact.command, artifact.args):
+        return None
     transport = artifact.transport or "stdio"
     if transport not in {"stdio", "local"}:
         return None
@@ -123,8 +135,17 @@ def _bool_metadata(value: object, *, default: bool) -> bool:
     return default
 
 
+def is_guard_proxy_command(command: str | None, args: tuple[str, ...]) -> bool:
+    if not isinstance(command, str):
+        return False
+    if "codex_plugin_scanner.cli" not in args or "guard" not in args:
+        return False
+    return any(value in _GUARD_PROXY_COMMANDS for value in args)
+
+
 __all__ = [
     "ManagedMcpServer",
+    "is_guard_proxy_command",
     "managed_stdio_servers",
     "proxy_cli_args",
     "skipped_stdio_server_names",

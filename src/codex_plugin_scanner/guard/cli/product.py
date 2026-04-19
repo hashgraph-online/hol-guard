@@ -141,10 +141,29 @@ def _recommended_harness(harnesses: list[dict[str, object]]) -> dict[str, object
         harnesses,
         key=lambda item: (
             0 if bool(item["installed"]) else 1,
+            0 if int(item.get("artifact_count", 0)) > 0 else 1,
             0 if bool(item["command_available"]) else 1,
+            _approval_experience_rank(item.get("approval_flow")),
             priority.get(str(item["harness"]), len(HARNESS_PRIORITY)),
         ),
     )
+
+
+def _approval_experience_rank(flow: object) -> int:
+    if not isinstance(flow, dict):
+        return 4
+    prompt_channel = str(flow.get("prompt_channel") or "browser")
+    tier = str(flow.get("tier") or "approval-center")
+    auto_open_browser = bool(flow.get("auto_open_browser", True))
+    if prompt_channel in {"native", "hook"} and tier in {"native-harness", "native-or-center", "mixed"}:
+        return 0
+    if prompt_channel in {"native", "hook"} and not auto_open_browser:
+        return 1
+    if not auto_open_browser:
+        return 2
+    if tier == "approval-center":
+        return 3
+    return 4
 
 
 def _resolve_next_action(detection: HarnessDetection, managed: bool, review_count: int) -> str:

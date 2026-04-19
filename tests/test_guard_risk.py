@@ -10,12 +10,20 @@ from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.incident import build_incident_context
+from codex_plugin_scanner.guard.mcp_tool_calls import (
+    build_tool_call_artifact,
+    build_tool_call_hash,
+    evaluate_tool_call,
+    tool_call_risk_signals,
+)
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.risk import artifact_risk_signals, artifact_risk_summary
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_file_read_request_artifact,
+    build_tool_action_request_artifact,
     classify_sensitive_path,
     extract_sensitive_file_read_request,
+    extract_sensitive_tool_action_request,
     is_file_read_tool_name,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -270,3 +278,134 @@ def test_file_read_request_artifact_hash_is_exact_to_tool_and_path():
 
     assert artifact_hash(first_artifact) == artifact_hash(same_artifact)
     assert artifact_hash(first_artifact) != artifact_hash(different_artifact)
+
+
+def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_dev_null():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "ls /mock-workspace/app/guard/_components/ 2>/dev/null | head -40"},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_detects_destructive_subcommand_after_safe_prefix():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo ok && rm -rf dangerous-marker.json"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_absolute_path_destructive_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "/bin/rm -rf dangerous-marker.json"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_shell_wrapper_script_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": 'bash -lc "rm -rf dangerous-marker.json"'},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_env_wrapped_destructive_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "env FOO=1 rm -rf dangerous-marker.json"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_parenthesized_destructive_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "(rm -rf dangerous-marker.json)"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_incident_context_describes_runtime_tool_action_requests():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo MALICIOUS > dangerous-marker.json"},
+    )
+
+    assert request is not None
+
+    artifact = build_tool_action_request_artifact(
+        "copilot",
+        request,
+        config_path="/workspace/.github/hooks/hol-guard-copilot.json",
+        source_scope="project",
+    )
+    incident = build_incident_context(
+        harness="copilot",
+        artifact=artifact,
+        artifact_id=artifact.artifact_id,
+        artifact_name=artifact.name,
+        artifact_type=artifact.artifact_type,
+        source_scope=artifact.source_scope,
+        config_path=artifact.config_path,
+        changed_fields=["tool_action_request"],
+        policy_action="require-reapproval",
+        launch_target=artifact.metadata.get("request_summary"),
+        risk_summary=artifact.metadata.get("runtime_request_summary"),
+    )
+
+    assert incident["source_label"] == "Copilot CLI runtime tool call"
+    assert incident["trigger_summary"].startswith("HOL Guard paused the native tool action")
+    assert incident["why_now"].startswith("HOL Guard paused this native tool action")
+
+
+def test_tool_call_risk_signals_do_not_treat_format_name_as_destructive():
+    artifact = build_tool_call_artifact(
+        harness="copilot",
+        server_name="workspace_tools",
+        tool_name="format_component",
+        source_scope="project",
+        config_path="/workspace/.mcp.json",
+        transport="stdio",
+    )
+
+    signals = tool_call_risk_signals(artifact, {"path": "app/button.tsx"})
+
+    assert "tool name implies destructive file or system changes" not in signals
+
+
+def test_prompt_mode_keeps_destructive_tool_calls_on_review_path(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace", mode="prompt")
+    artifact = build_tool_call_artifact(
+        harness="copilot",
+        server_name="danger_lab",
+        tool_name="dangerous_delete",
+        source_scope="project",
+        config_path="/workspace/.mcp.json",
+        transport="stdio",
+    )
+
+    decision = evaluate_tool_call(
+        store=store,
+        config=config,
+        artifact=artifact,
+        artifact_hash=build_tool_call_hash(artifact, {"target": "dangerous-marker.json"}),
+        arguments={"target": "dangerous-marker.json"},
+    )
+
+    assert decision.action == "review"
+    assert "tool name implies destructive file or system changes" in decision.signals

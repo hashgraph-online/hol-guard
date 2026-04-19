@@ -16,7 +16,13 @@ from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available
-from .mcp_servers import ManagedMcpServer, managed_stdio_servers, proxy_cli_args, skipped_stdio_server_names
+from .mcp_servers import (
+    ManagedMcpServer,
+    is_guard_proxy_command,
+    managed_stdio_servers,
+    proxy_cli_args,
+    skipped_stdio_server_names,
+)
 
 
 def _read_toml(path: Path) -> dict[str, object]:
@@ -36,10 +42,16 @@ class CodexHarnessAdapter(HarnessAdapter):
     harness = "codex"
     executable = "codex"
     approval_tier = "native-or-center"
-    approval_summary = "Guard can stop live Codex MCP tool calls inline and fall back to the local approval center."
-    fallback_hint = (
-        "If Codex cannot render the inline approval request, Guard will queue it in the local approval center."
+    approval_summary = (
+        "Guard prefers same-chat Codex approvals for live MCP tool calls and falls back to the "
+        "local approval center only when Codex cannot answer."
     )
+    fallback_hint = (
+        "If Codex cannot render or return the inline approval request, Guard will queue it in the "
+        "local approval center."
+    )
+    approval_prompt_channel = "native"
+    approval_auto_open_browser = False
 
     @staticmethod
     def _scope_for(context: HarnessContext, path: Path) -> str:
@@ -66,6 +78,8 @@ class CodexHarnessAdapter(HarnessAdapter):
                         continue
                     command = server_config.get("command")
                     args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
+                    if is_guard_proxy_command(command if isinstance(command, str) else None, args):
+                        continue
                     url = server_config.get("url")
                     env = server_config.get("env")
                     artifacts.append(

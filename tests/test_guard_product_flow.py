@@ -106,6 +106,9 @@ class TestGuardProductFlow:
         assert output["receipt_count"] == 0
         assert codex_summary["managed"] is False
         assert codex_summary["next_action"] == "install"
+        assert codex_summary["approval_flow"]["prompt_channel"] == "native"
+        assert codex_summary["approval_flow"]["auto_open_browser"] is False
+        assert "same-chat Codex approvals" in codex_summary["approval_flow"]["summary"]
         assert output["next_steps"][0]["command"] == "hol-guard install codex"
         assert output["next_steps"][1]["command"] == "hol-guard run codex --dry-run"
 
@@ -136,6 +139,83 @@ class TestGuardProductFlow:
         assert output["recommended_harness"] == "copilot"
         assert copilot_summary["install_command"] == "hol-guard install copilot"
         assert output["next_steps"][1]["command"] == "hol-guard run copilot --dry-run"
+
+    def test_guard_start_surfaces_opencode_native_approval_path(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            workspace_dir / "opencode.json",
+            {
+                "permission": {"bash": "allow"},
+                "mcp": {
+                    "danger_lab": {
+                        "type": "local",
+                        "command": ["python3", "danger-lab.py"],
+                    }
+                },
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "start",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        opencode_summary = next(item for item in output["harnesses"] if item["harness"] == "opencode")
+
+        assert rc == 0
+        assert opencode_summary["approval_flow"]["prompt_channel"] == "native"
+        assert opencode_summary["approval_flow"]["auto_open_browser"] is False
+        assert "native ask" in opencode_summary["approval_flow"]["summary"]
+
+    def test_guard_start_prefers_opencode_over_browser_only_harnesses(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_json(
+            workspace_dir / "opencode.json",
+            {
+                "mcp": {
+                    "danger_lab": {
+                        "type": "local",
+                        "command": ["python3", "danger-lab.py"],
+                    }
+                }
+            },
+        )
+        _write_json(
+            workspace_dir / ".gemini" / "settings.json",
+            {
+                "mcpServers": {
+                    "browser-only-lab": {
+                        "command": "python3",
+                        "args": ["browser-only.py"],
+                    }
+                }
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "start",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recommended_harness"] == "opencode"
 
     def test_guard_status_json_surfaces_local_only_state(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
+from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload
+from .base import HarnessAdapter, HarnessContext, _json_payload, _run_command_probe
 
 
 def _merge_hook_entry(entries: list[dict[str, object]], command: str) -> list[dict[str, object]]:
@@ -36,6 +38,10 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
     fallback_hint = "Claude is the best current harness for deferred Guard approvals."
     approval_prompt_channel = "hook"
     approval_auto_open_browser = False
+
+    def executable_candidates(self, context: HarnessContext) -> tuple[Path, ...]:
+        del context
+        return (Path.home() / ".claude" / "local" / "claude",)
 
     @staticmethod
     def _scope_for(context: HarnessContext, path: Path) -> str:
@@ -116,10 +122,11 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                             config_path=str(agent_path),
                         )
                     )
+        resolved_executable = self.resolved_executable(context)
         return HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or _command_available(self.executable),
-            command_available=_command_available(self.executable),
+            installed=bool(found_paths) or resolved_executable is not None,
+            command_available=resolved_executable is not None,
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
             warnings=(),
@@ -127,20 +134,39 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _hook_command(context: HarnessContext) -> str:
-        command = [
-            sys.executable,
-            "-m",
-            "codex_plugin_scanner.cli",
+        command = ClaudeCodeHarnessAdapter._hook_command_parts(context)
+        return subprocess.list2cmdline(list(command))
+
+    @staticmethod
+    def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
+        guard_args = [
             "guard",
             "hook",
             "--guard-home",
             str(context.guard_home),
         ]
         if context.home_dir.resolve() != Path.home().resolve():
-            command.extend(["--home", str(context.home_dir)])
+            guard_args.extend(["--home", str(context.home_dir)])
         if context.workspace_dir is not None:
-            command.extend(["--workspace", str(context.workspace_dir)])
-        return subprocess.list2cmdline(command)
+            guard_args.extend(["--workspace", str(context.workspace_dir)])
+        launcher_env = merge_guard_launcher_env()
+        pythonpath = launcher_env.get("PYTHONPATH", "")
+        if not pythonpath.strip():
+            return (sys.executable, "-m", "codex_plugin_scanner.cli", *guard_args)
+        path_entries = [entry for entry in pythonpath.split(os.pathsep) if entry.strip()]
+        code = (
+            "import sys;"
+            f"sys.path[:0]={path_entries!r};"
+            "from codex_plugin_scanner.cli import main;"
+            f"raise SystemExit(main({guard_args!r}))"
+        )
+        return (sys.executable, "-c", code)
+
+    def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
+        resolved_executable = self.resolved_executable(context)
+        if resolved_executable is None:
+            return None
+        return _run_command_probe([resolved_executable, "--help"], timeout_seconds=5)
 
     def install(self, context: HarnessContext) -> dict[str, object]:
         shim_manifest = install_guard_shim(self.harness, context)

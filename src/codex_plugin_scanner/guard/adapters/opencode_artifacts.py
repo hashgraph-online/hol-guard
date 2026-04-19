@@ -185,11 +185,7 @@ def runtime_overlay(
     permission_rules: dict[str, object] | None = None,
     mcp_servers: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    permission: dict[str, object] = {
-        "skill": {
-            "*": "ask",
-        }
-    }
+    permission: dict[str, object] = {}
     if permission_rules:
         permission.update(permission_rules)
     overlay: dict[str, object] = {

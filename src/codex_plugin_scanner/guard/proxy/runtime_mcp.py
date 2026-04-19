@@ -559,11 +559,8 @@ class RuntimeMcpGuardProxy:
         return f"{tool_name} {serialized_arguments}".strip()
 
 
-class CodexMcpGuardProxy(RuntimeMcpGuardProxy):
-    """Guard-managed runtime MCP proxy for Codex."""
-
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(harness="codex", **kwargs)
+class ElicitationMcpGuardProxy(RuntimeMcpGuardProxy):
+    """Runtime MCP proxy that can ask for in-band approval via elicitation."""
 
     def _record_client_capabilities(self, method: str, params: object) -> None:
         if method != "initialize" or not isinstance(params, dict):
@@ -580,6 +577,7 @@ class CodexMcpGuardProxy(RuntimeMcpGuardProxy):
             "id": f"guard-elicitation-{self._inline_prompt_counter}",
             "method": "elicitation/create",
             "params": {
+                "mode": "form",
                 "message": (
                     f"HOL Guard intercepted {self.server_name}.{tool_name}. {summary} Approve this exact call?"
                 ),
@@ -597,6 +595,20 @@ class CodexMcpGuardProxy(RuntimeMcpGuardProxy):
                 },
             },
         }
+
+
+class CodexMcpGuardProxy(ElicitationMcpGuardProxy):
+    """Guard-managed runtime MCP proxy for Codex."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(harness="codex", **kwargs)
+
+
+class CopilotMcpGuardProxy(ElicitationMcpGuardProxy):
+    """Guard-managed runtime MCP proxy for Copilot MCP clients that support elicitation."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(harness="copilot", **kwargs)
 
 
 class OpenCodeMcpGuardProxy(RuntimeMcpGuardProxy):
@@ -664,4 +676,10 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-__all__ = ["CodexMcpGuardProxy", "OpenCodeMcpGuardProxy", "RuntimeMcpGuardProxy"]
+__all__ = [
+    "CodexMcpGuardProxy",
+    "CopilotMcpGuardProxy",
+    "ElicitationMcpGuardProxy",
+    "OpenCodeMcpGuardProxy",
+    "RuntimeMcpGuardProxy",
+]

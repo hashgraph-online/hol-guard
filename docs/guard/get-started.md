@@ -166,7 +166,11 @@ Current strategy:
   scans `.gemini/settings.json`, extension manifests, hooks, MCP registrations, and Gemini skill directories before
   launch, then routes blocked changes to the approval center
 
-Guard does not claim VS Code Copilot extension-host interception in this pass, and it does not add Cisco AIBOM runtime policy logic. AIBOM can come back later only as evidence or export.
+Guard does not claim VS Code Copilot extension-host interception in this pass. A VS Code inline tool prompt by itself is
+not proof that Guard blocked the action, because that prompt can come from VS Code's own permission surface. For Copilot,
+count Guard proof only from CLI hook responses, Guard runtime receipts, or an MCP client that explicitly answers Guard
+elicitation. Guard also does not add Cisco AIBOM runtime policy logic in this pass. AIBOM can come back later only as
+evidence or export.
 
 ## First-party canaries
 
