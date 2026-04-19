@@ -717,6 +717,7 @@ def _check_plan_restriction_403(
         return True, message_str
     return False, message_str
 
+
 def _sync_url_error_message(error: urllib.error.URLError) -> str:
     reason = getattr(error, "reason", None)
     if reason is not None:
