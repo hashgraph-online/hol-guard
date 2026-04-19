@@ -40,8 +40,10 @@ _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_SUBCOMMANDS = frozenset({"build", "compose", "login", "push", "run"})
 _SHELL_TOOL_NAMES = frozenset(
     {
+        "ash",
         "bash",
         "cmd",
+        "dash",
         "powershell",
         "pwsh",
         "run_command",
@@ -52,7 +54,7 @@ _SHELL_TOOL_NAMES = frozenset(
         "zsh",
     }
 )
-_SHELL_SCRIPT_INTERPRETER_COMMANDS = frozenset({"bash", "sh", "zsh"})
+_SHELL_SCRIPT_INTERPRETER_COMMANDS = frozenset({"ash", "bash", "dash", "sh", "zsh", ".", "source"})
 _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
     {
         "chmod",
@@ -565,7 +567,10 @@ def _decoded_payload_looks_sensitive(
 def _decoded_shell_payloads(command_text: str) -> tuple[str, ...]:
     lowered = command_text.lower()
     payloads: list[str] = []
-    if any(token in lowered for token in ("base64", "b64decode", "frombase64string", "-encodedcommand", " -enc ")):
+    if any(
+        token in lowered
+        for token in ("base64", "b64decode", "frombase64string", "-encodedcommand", " -enc ", "openssl", "gpg")
+    ):
         for literal in _BASE64_LITERAL_PATTERN.findall(command_text):
             decoded = _decode_base64_literal(literal)
             if decoded is not None:
@@ -657,10 +662,16 @@ def _shell_script_path_from_segment(segment_args: list[str]) -> str | None:
         if token == "--":
             index += 1
             break
-        if not token.startswith("-"):
+        if not token.startswith("-") and not token.startswith("+"):
             return token
-        if "c" in token[1:]:
+        if token in {"-c", "--command"} or token.startswith(("-c", "--command=")):
             return None
+        if token in {"-O", "-o", "+O", "+o", "--rcfile", "--init-file"}:
+            index += 2
+            continue
+        if token.startswith(("--rcfile=", "--init-file=")):
+            index += 1
+            continue
         index += 1
     while index < len(segment_args):
         token = segment_args[index].strip()
