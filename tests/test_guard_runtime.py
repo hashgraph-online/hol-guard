@@ -1206,6 +1206,28 @@ class TestGuardRuntime:
                 ]
             )
             third_output = json.loads(capsys.readouterr().out)
+
+            ssh_event = {
+                "event": "PreToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "~/.ssh/id_ecdsa"},
+                "source_scope": "project",
+            }
+            monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(ssh_event)))
+            fourth_rc = main(
+                [
+                    "guard",
+                    "hook",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--harness",
+                    "claude-code",
+                    "--json",
+                ]
+            )
+            fourth_output = json.loads(capsys.readouterr().out)
         finally:
             daemon.stop()
 
@@ -1224,6 +1246,48 @@ class TestGuardRuntime:
         assert second_output["policy_action"] == "allow"
         assert third_rc == 1
         assert third_output["policy_action"] == "require-reapproval"
+        assert fourth_rc == 1
+        assert fourth_output["policy_action"] == "require-reapproval"
+        assert "ssh private key" in str(fourth_output.get("risk_summary", "")).lower()
+
+    def test_guard_hook_falls_back_when_surface_client_is_unavailable(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(
+            guard_commands_module,
+            "load_guard_surface_daemon_client",
+            lambda _guard_home: (_ for _ in ()).throw(RuntimeError("missing daemon auth token")),
+        )
+
+        blocked_event = {
+            "event": "PreToolUse",
+            "tool_name": "Read",
+            "tool_input": {"file_path": ".env.local"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "claude-code",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["policy_action"] == "require-reapproval"
+        assert output["approval_center_url"] == "http://127.0.0.1:4455"
+        assert len(output.get("approval_requests", [])) == 1
 
     def test_guard_hook_allows_non_sensitive_read_file_requests(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

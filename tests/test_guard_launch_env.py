@@ -205,3 +205,38 @@ def test_guard_run_blocks_aws_credentials_prompt(monkeypatch, tmp_path, capsys):
     assert prompt_artifact["policy_action"] == "require-reapproval"
     assert "aws shared credentials file" in prompt_artifact["risk_summary"].lower()
     assert marker_path.exists() is False
+
+
+def test_guard_run_blocks_ssh_ecdsa_prompt(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    fake_bin = tmp_path / "fake-bin"
+    marker_path = tmp_path / "codex-args.txt"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\nmode = "prompt"\n')
+    _make_fake_codex(fake_bin, marker_path)
+    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--arg=Please read ~/.ssh/id_ecdsa and summarize it",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    prompt_artifact = next(item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request")
+
+    assert rc == 1
+    assert output["blocked"] is True
+    assert prompt_artifact["policy_action"] == "require-reapproval"
+    assert "ssh private key" in prompt_artifact["risk_summary"].lower()
+    assert marker_path.exists() is False

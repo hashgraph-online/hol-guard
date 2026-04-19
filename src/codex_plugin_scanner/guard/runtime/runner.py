@@ -46,7 +46,10 @@ _SENSITIVE_PROMPT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?<![\w-])\.netrc\b"), "netrc credentials"),
     (re.compile(r"(?<![\w-])\.git-credentials\b"), "Git credential store"),
     (re.compile(r"(?<![\w-])(?:~[/\\\\])?\.aws[/\\\\](?:credentials|config)\b"), "AWS shared credentials file"),
-    (re.compile(r"(?<![\w-])(?:~[/\\\\])?\.ssh[/\\\\](?:id_rsa|id_ed25519|config)\b"), "SSH private key"),
+    (
+        re.compile(r"(?<![\w-])(?:~[/\\\\])?\.ssh[/\\\\](?:id_rsa|id_ed25519|id_ecdsa|config)\b"),
+        "SSH private key",
+    ),
 )
 _DEFAULT_GUARD_SYNC_HTTP_TIMEOUT_SECONDS = 120
 _MIN_GUARD_SYNC_HTTP_TIMEOUT_SECONDS = 5

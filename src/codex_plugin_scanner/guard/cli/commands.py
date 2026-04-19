@@ -46,6 +46,8 @@ from .product import build_guard_start_payload, build_guard_status_payload
 from .prompt import build_prompt_artifacts, resolve_interactive_decisions
 from .render import emit_guard_payload
 
+_GUARD_CLIENT_VERSION = "2.0.0"
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -240,9 +242,20 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     _add_guard_common_args(doctor_parser)
     doctor_parser.add_argument("--json", action="store_true")
 
-    login_parser = guard_subparsers.add_parser("login", help="Store Guard sync endpoint credentials")
+    login_parser = guard_subparsers.add_parser(
+        "login",
+        help="Store Guard sync endpoint credentials after browser-based pairing or managed setup",
+        description=(
+            "Store Guard sync endpoint credentials. Individual developers should run "
+            "`hol-guard connect` for browser-based pairing first."
+        ),
+    )
     login_parser.add_argument("--sync-url", required=True, type=_guard_http_url)
-    login_parser.add_argument("--token", required=True)
+    login_parser.add_argument(
+        "--token",
+        required=True,
+        help="Token to store after `hol-guard connect` browser-based pairing or managed provisioning.",
+    )
     login_parser.add_argument("--home")
     login_parser.add_argument("--guard-home")
     login_parser.add_argument("--json", action="store_true")
@@ -596,7 +609,14 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0 if bool(payload.get("connected")) else 1
 
     if args.guard_command == "sync":
-        payload = sync_receipts(store)
+        try:
+            payload = sync_receipts(store)
+        except RuntimeError as error:
+            if getattr(args, "json", False):
+                _emit("sync", {"synced": False, "error": str(error)}, True)
+            else:
+                print(str(error), file=sys.stderr)
+            return 1
         _emit("sync", payload, getattr(args, "json", False))
         return 0
 
@@ -680,14 +700,33 @@ def run_guard_command(args: argparse.Namespace) -> int:
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
                 approval_flow = get_adapter(args.harness).approval_flow()
                 approval_center_url = ensure_guard_daemon(guard_home)
-                daemon_client = load_guard_surface_daemon_client(guard_home)
+                try:
+                    daemon_client = load_guard_surface_daemon_client(guard_home)
+                except RuntimeError:
+                    queued = queue_blocked_approvals(
+                        detection=_runtime_detection(args.harness, runtime_artifact),
+                        evaluation={"artifacts": [response_payload]},
+                        store=store,
+                        approval_center_url=approval_center_url,
+                        now=_now(),
+                    )
+                    response_payload["approval_requests"] = queued
+                    response_payload["approval_center_url"] = approval_center_url
+                    response_payload["review_hint"] = approval_center_hint(
+                        context=context,
+                        harness=args.harness,
+                        approval_center_url=approval_center_url,
+                        queued=queued,
+                    )
+                    _emit("hook", response_payload, getattr(args, "json", False))
+                    return 1
                 session = daemon_client.start_session(
                     harness=args.harness,
                     surface="harness-adapter",
                     workspace=str(workspace) if workspace else None,
                     client_name=f"{args.harness}-hook",
                     client_title=f"{args.harness} hook",
-                    client_version="1.0.0",
+                    client_version=_GUARD_CLIENT_VERSION,
                     capabilities=["approval-resolution", "receipt-view"],
                 )
                 response_payload["session_id"] = str(session["session_id"])
@@ -843,7 +882,7 @@ def _headless_approval_resolver(
             workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
             client_name="hol-guard",
             client_title="HOL Guard CLI",
-            client_version="2.0.0",
+            client_version=_GUARD_CLIENT_VERSION,
             capabilities=["approval-resolution", "receipt-view"],
         )
         blocked_operation = daemon_client.queue_blocked_operation(
@@ -1000,17 +1039,13 @@ def _hook_file_read_artifact(
 
 
 def _runtime_policy_path(harness: str, home_dir: Path, workspace: Path | None) -> Path:
-    if harness == "claude-code":
-        if workspace is not None:
-            return workspace / ".claude" / "settings.local.json"
-        return home_dir / ".claude" / "settings.json"
-    if harness == "codex":
-        if workspace is not None:
-            return workspace / ".codex" / "config.toml"
-        return home_dir / ".codex" / "config.toml"
-    if workspace is not None:
-        return workspace / ".mcp.json"
-    return home_dir / ".mcp.json"
+    return get_adapter(harness).policy_path(
+        HarnessContext(
+            home_dir=home_dir,
+            workspace_dir=workspace,
+            guard_home=home_dir,
+        )
+    )
 
 
 def _runtime_detection(harness: str, artifact: GuardArtifact) -> HarnessDetection:
