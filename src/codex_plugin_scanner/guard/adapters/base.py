@@ -124,6 +124,11 @@ class HarnessAdapter:
             command.append(str(context.workspace_dir))
         return [*command, *passthrough_args]
 
+    def policy_path(self, context: HarnessContext) -> Path:
+        if context.workspace_dir is not None:
+            return context.workspace_dir / ".mcp.json"
+        return context.home_dir / ".mcp.json"
+
     def launch_environment(self, context: HarnessContext) -> dict[str, str]:
         del context
         return {}
