@@ -79,7 +79,18 @@ _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
         "nul",
     }
 )
-_NODE_INLINE_EVAL_FLAGS = frozenset({"-e", "--eval"})
+_NODE_INLINE_EVAL_FLAGS = frozenset({"-e", "--eval", "-p", "--print"})
+_NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
+    {
+        "-r",
+        "--require",
+        "--import",
+        "--loader",
+        "--experimental-loader",
+        "--input-type",
+        "--conditions",
+    }
+)
 _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
     {
         "appendfile",
@@ -569,19 +580,20 @@ def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
     for index, part in enumerate(lowered_parts):
         if _normalized_shell_command_name(part) != "node":
             continue
-        for inner_index in range(index + 1, len(lowered_parts)):
+        inner_index = index + 1
+        while inner_index < len(lowered_parts):
             token = lowered_parts[inner_index]
             if token in {"&&", "||", ";", "|", "&"}:
                 break
+            if token == "--":
+                break
             if token in _NODE_INLINE_EVAL_FLAGS and inner_index + 1 < len(lowered_parts):
-                if _contains_destructive_node_inline_script(lowered_parts[inner_index + 1]):
-                    return True
-                continue
+                return _contains_destructive_node_inline_script(lowered_parts[inner_index + 1])
             if _is_combined_node_inline_eval_flag(token) and inner_index + 1 < len(lowered_parts):
-                if _contains_destructive_node_inline_script(lowered_parts[inner_index + 1]):
-                    return True
-                continue
+                return _contains_destructive_node_inline_script(lowered_parts[inner_index + 1])
             if token.startswith("--eval=") and _contains_destructive_node_inline_script(token.split("=", 1)[1]):
+                return True
+            if token.startswith("--print=") and _contains_destructive_node_inline_script(token.split("=", 1)[1]):
                 return True
             if (
                 token.startswith("-e")
@@ -589,6 +601,19 @@ def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
                 and _contains_destructive_node_inline_script(token[2:])
             ):
                 return True
+            if (
+                token.startswith("-p")
+                and token not in _NODE_INLINE_EVAL_FLAGS
+                and _contains_destructive_node_inline_script(token[2:])
+            ):
+                return True
+            if token in _NODE_OPTION_FLAGS_WITH_VALUE and inner_index + 1 < len(lowered_parts):
+                inner_index += 1
+                inner_index += 1
+                continue
+            if not token.startswith("-"):
+                break
+            inner_index += 1
     return False
 
 
@@ -600,7 +625,7 @@ def _contains_destructive_node_inline_script(script: str) -> bool:
 
 
 def _is_combined_node_inline_eval_flag(token: str) -> bool:
-    return token.startswith("-") and not token.startswith("--") and any(flag in token[1:] for flag in {"e", "p"})
+    return token in {"-pe", "-ep"}
 
 
 def _find_command_uses_delete(parts: list[str]) -> bool:
@@ -626,7 +651,7 @@ def _find_command_uses_delete(parts: list[str]) -> bool:
             expect_command = False
             index += 1
             continue
-        if current_command == "find" and token in {"-exec", "-execdir"}:
+        if current_command == "find" and token in {"-exec", "-execdir", "-ok", "-okdir"}:
             index += 1
             while index < len(parts) and parts[index] not in {";", "+"}:
                 index += 1
