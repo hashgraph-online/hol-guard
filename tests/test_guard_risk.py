@@ -500,6 +500,35 @@ def test_tool_action_request_classifier_skips_node_script_argument_named_eval_fl
     assert request is None
 
 
+def test_tool_action_request_classifier_detects_later_destructive_node_eval_flag():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "console.log('ok')" -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_env_wrapped_find_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "env FOO=bar find . -name dangerous-marker.json -delete"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_skips_echoed_node_eval_string():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """echo node -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_skips_find_ok_literal_delete_string():
     request = extract_sensitive_tool_action_request(
         "bash",

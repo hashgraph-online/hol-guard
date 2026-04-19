@@ -91,6 +91,9 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
         "--conditions",
     }
 )
+_SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&"})
+_SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nohup"})
+_SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
     {
         "appendfile",
@@ -576,44 +579,12 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
 
 
 def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
-    lowered_parts = [part.lower() for part in parts]
-    for index, part in enumerate(lowered_parts):
-        if _normalized_shell_command_name(part) != "node":
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name != "node" or command_index is None:
             continue
-        inner_index = index + 1
-        while inner_index < len(lowered_parts):
-            token = lowered_parts[inner_index]
-            if token in {"&&", "||", ";", "|", "&"}:
-                break
-            if token == "--":
-                break
-            if token in _NODE_INLINE_EVAL_FLAGS and inner_index + 1 < len(lowered_parts):
-                return _contains_destructive_node_inline_script(lowered_parts[inner_index + 1])
-            if _is_combined_node_inline_eval_flag(token) and inner_index + 1 < len(lowered_parts):
-                return _contains_destructive_node_inline_script(lowered_parts[inner_index + 1])
-            if token.startswith("--eval=") and _contains_destructive_node_inline_script(token.split("=", 1)[1]):
-                return True
-            if token.startswith("--print=") and _contains_destructive_node_inline_script(token.split("=", 1)[1]):
-                return True
-            if (
-                token.startswith("-e")
-                and token not in _NODE_INLINE_EVAL_FLAGS
-                and _contains_destructive_node_inline_script(token[2:])
-            ):
-                return True
-            if (
-                token.startswith("-p")
-                and token not in _NODE_INLINE_EVAL_FLAGS
-                and _contains_destructive_node_inline_script(token[2:])
-            ):
-                return True
-            if token in _NODE_OPTION_FLAGS_WITH_VALUE and inner_index + 1 < len(lowered_parts):
-                inner_index += 1
-                inner_index += 1
-                continue
-            if not token.startswith("-"):
-                break
-            inner_index += 1
+        if _segment_contains_destructive_node_inline_eval(segment[command_index + 1 :]):
+            return True
     return False
 
 
@@ -629,35 +600,111 @@ def _is_combined_node_inline_eval_flag(token: str) -> bool:
 
 
 def _find_command_uses_delete(parts: list[str]) -> bool:
-    expect_command = True
-    current_command: str | None = None
-    index = 0
-    while index < len(parts):
-        token = parts[index].strip()
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name != "find" or command_index is None:
+            continue
+        if _find_segment_uses_delete(segment[command_index + 1 :]):
+            return True
+    return False
+
+
+def _iter_shell_command_segments(parts: list[str]) -> list[list[str]]:
+    segments: list[list[str]] = []
+    current_segment: list[str] = []
+    for part in parts:
+        token = part.strip()
         if not token:
+            continue
+        if token in _SHELL_COMMAND_SEPARATORS:
+            if current_segment:
+                segments.append(current_segment)
+                current_segment = []
+            continue
+        current_segment.append(token)
+    if current_segment:
+        segments.append(current_segment)
+    return segments
+
+
+def _shell_segment_primary_command(segment: list[str]) -> tuple[str | None, int | None]:
+    index = 0
+    while index < len(segment):
+        normalized_token = segment[index].lstrip("(").rstrip(")")
+        if _SHELL_ASSIGNMENT_PATTERN.match(normalized_token):
             index += 1
             continue
-        if token in {"&&", "||", ";", "|", "&"}:
-            expect_command = True
-            current_command = None
+        command_name = _normalized_shell_command_name(normalized_token)
+        if command_name == "env":
             index += 1
-            continue
-        normalized_token = token.lstrip("(").rstrip(")")
-        if expect_command:
-            if re.match(r"^[a-z_][a-z0-9_]*=.*", normalized_token):
+            while index < len(segment) and _SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
                 index += 1
-                continue
-            current_command = _normalized_shell_command_name(normalized_token)
-            expect_command = False
+            continue
+        if command_name in _SHELL_COMMAND_WRAPPERS:
             index += 1
             continue
-        if current_command == "find" and token in {"-exec", "-execdir", "-ok", "-okdir"}:
+        return command_name, index
+    return None, None
+
+
+def _segment_contains_destructive_node_inline_eval(segment_args: list[str]) -> bool:
+    lowered_args = [arg.lower() for arg in segment_args]
+    index = 0
+    while index < len(lowered_args):
+        token = lowered_args[index]
+        if token == "--":
+            break
+        if token in _NODE_INLINE_EVAL_FLAGS and index + 1 < len(lowered_args):
+            if _contains_destructive_node_inline_script(lowered_args[index + 1]):
+                return True
+            index += 2
+            continue
+        if _is_combined_node_inline_eval_flag(token) and index + 1 < len(lowered_args):
+            if _contains_destructive_node_inline_script(lowered_args[index + 1]):
+                return True
+            index += 2
+            continue
+        if token.startswith("--eval="):
+            if _contains_destructive_node_inline_script(token.split("=", 1)[1]):
+                return True
             index += 1
-            while index < len(parts) and parts[index] not in {";", "+"}:
+            continue
+        if token.startswith("--print="):
+            if _contains_destructive_node_inline_script(token.split("=", 1)[1]):
+                return True
+            index += 1
+            continue
+        if token.startswith("-e") and token not in _NODE_INLINE_EVAL_FLAGS:
+            if _contains_destructive_node_inline_script(token[2:]):
+                return True
+            index += 1
+            continue
+        if token.startswith("-p") and token not in _NODE_INLINE_EVAL_FLAGS:
+            if _contains_destructive_node_inline_script(token[2:]):
+                return True
+            index += 1
+            continue
+        if token in _NODE_OPTION_FLAGS_WITH_VALUE and index + 1 < len(lowered_args):
+            index += 2
+            continue
+        if not token.startswith("-"):
+            break
+        index += 1
+    return False
+
+
+def _find_segment_uses_delete(segment_args: list[str]) -> bool:
+    index = 0
+    while index < len(segment_args):
+        token = segment_args[index]
+        if token in {"-exec", "-execdir", "-ok", "-okdir"}:
+            index += 1
+            while index < len(segment_args) and segment_args[index] not in {";", "+"}:
                 index += 1
-            index += 1
+            if index < len(segment_args):
+                index += 1
             continue
-        if current_command == "find" and token == "-delete":
+        if token == "-delete":
             return True
         index += 1
     return False
