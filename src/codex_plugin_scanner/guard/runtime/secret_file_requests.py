@@ -553,7 +553,7 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     command_names.extend(_shell_command_names_from_parts(parts))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
         return True
-    if "find" in command_names and any(part == "-delete" for part in parts):
+    if _find_command_uses_delete(parts):
         return True
     for shell_script in _shell_command_scripts(parts):
         if _looks_destructive_shell_command(shell_script):
@@ -577,6 +577,10 @@ def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
                 if _contains_destructive_node_inline_script(lowered_parts[inner_index + 1]):
                     return True
                 continue
+            if _is_combined_node_inline_eval_flag(token) and inner_index + 1 < len(lowered_parts):
+                if _contains_destructive_node_inline_script(lowered_parts[inner_index + 1]):
+                    return True
+                continue
             if token.startswith("--eval=") and _contains_destructive_node_inline_script(token.split("=", 1)[1]):
                 return True
             if (
@@ -593,6 +597,45 @@ def _contains_destructive_node_inline_script(script: str) -> bool:
         re.search(rf"(?<![a-z0-9_$'\"]){re.escape(call_name)}\s*\(", script)
         for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS
     )
+
+
+def _is_combined_node_inline_eval_flag(token: str) -> bool:
+    return token.startswith("-") and not token.startswith("--") and any(flag in token[1:] for flag in {"e", "p"})
+
+
+def _find_command_uses_delete(parts: list[str]) -> bool:
+    expect_command = True
+    current_command: str | None = None
+    index = 0
+    while index < len(parts):
+        token = parts[index].strip()
+        if not token:
+            index += 1
+            continue
+        if token in {"&&", "||", ";", "|", "&"}:
+            expect_command = True
+            current_command = None
+            index += 1
+            continue
+        normalized_token = token.lstrip("(").rstrip(")")
+        if expect_command:
+            if re.match(r"^[a-z_][a-z0-9_]*=.*", normalized_token):
+                index += 1
+                continue
+            current_command = _normalized_shell_command_name(normalized_token)
+            expect_command = False
+            index += 1
+            continue
+        if current_command == "find" and token in {"-exec", "-execdir"}:
+            index += 1
+            while index < len(parts) and parts[index] not in {";", "+"}:
+                index += 1
+            index += 1
+            continue
+        if current_command == "find" and token == "-delete":
+            return True
+        index += 1
+    return False
 
 
 def _contains_mutating_shell_redirection(command_text: str) -> bool:

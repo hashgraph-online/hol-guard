@@ -434,6 +434,16 @@ def test_tool_action_request_classifier_detects_node_inline_eval_equals_form():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_node_inline_combined_print_eval_flag():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -pe "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_node_inline_unlinksync_with_space_before_call_paren():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -457,6 +467,15 @@ def test_tool_action_request_classifier_skips_benign_node_inline_transform_call(
     request = extract_sensitive_tool_action_request(
         "bash",
         {"command": """node -e "const value = transform('ok'); console.log(value)" """},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_skips_find_exec_literal_delete_string():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """find . -name dangerous-marker.json -exec echo "-delete" \\;"""},
     )
 
     assert request is None
