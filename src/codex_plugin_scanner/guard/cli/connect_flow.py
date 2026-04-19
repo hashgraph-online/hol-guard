@@ -102,7 +102,7 @@ def run_guard_connect_command(
             store=store,
             request_id=str(connect_request["request_id"]),
             status="connected",
-            milestone="first_sync_pending",
+            milestone="sync_not_available",
             reason=plan_msg,
         )
         return build_connect_payload(
