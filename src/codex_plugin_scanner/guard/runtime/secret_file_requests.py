@@ -153,7 +153,7 @@ _ENCODED_EXECUTION_TARGET_PATTERN = (
 )
 _ENCODED_EXECUTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
-        rf"\bbase64(?:\s+--decode|\s+-(?:d|D))\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
+        rf"\bbase64(?:\s+--decode|\s+-(?:[A-Za-z]*[dD][A-Za-z]*))\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
         re.IGNORECASE,
     ),
     re.compile(
@@ -684,6 +684,8 @@ def _shell_script_path_from_segment(segment_args: list[str]) -> str | None:
         if _SHELL_ASSIGNMENT_PATTERN.match(token):
             index += 1
             continue
+        if token.startswith("-") and not token.startswith("--") and "c" in token[1:]:
+            return None
         if not token.startswith("-") and not token.startswith("+"):
             return token
         if token in {"-c", "--command"} or token.startswith(("-c", "--command=")):
