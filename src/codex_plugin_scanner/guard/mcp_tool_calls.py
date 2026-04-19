@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import PurePath
@@ -112,14 +113,15 @@ def evaluate_tool_call(
 
 
 def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
-    tool_name = PurePath(artifact.command or artifact.name).name.lower()
+    tool_name = PurePath(artifact.command or artifact.name).name
     serialized_arguments = json.dumps(arguments, sort_keys=True).lower() if arguments is not None else ""
     combined = f"{artifact.name.lower()} {serialized_arguments}"
+    tool_name_tokens = set(_tool_name_tokens(tool_name))
     signals: list[str] = []
 
-    if any(token in tool_name for token in ("delete", "remove", "rm", "destroy", "erase")):
+    if len(tool_name_tokens.intersection({"delete", "remove", "rm", "destroy", "erase"})) > 0:
         signals.append("tool name implies destructive file or system changes")
-    if any(token in tool_name for token in ("shell", "bash", "exec", "command", "powershell")):
+    if len(tool_name_tokens.intersection({"shell", "bash", "exec", "execute", "command", "powershell"})) > 0:
         signals.append("tool name implies shell or command execution")
     if any(token in combined for token in ("http://", "https://", "curl", "wget", "fetch", "axios", "requests")):
         signals.append("call arguments imply outbound network activity")
@@ -253,6 +255,11 @@ def _dedupe(values: list[str]) -> list[str]:
         seen.add(value)
         ordered.append(value)
     return ordered
+
+
+def _tool_name_tokens(tool_name: str) -> tuple[str, ...]:
+    camel_normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", tool_name)
+    return tuple(token for token in re.findall(r"[a-z0-9]+", camel_normalized.lower()) if token)
 
 
 def _coerce_guard_action(value: str) -> GuardAction | None:

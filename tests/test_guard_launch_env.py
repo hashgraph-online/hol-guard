@@ -123,12 +123,21 @@ def test_guard_run_launches_with_configured_home(monkeypatch, tmp_path, capsys):
 def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
+    actual_home = tmp_path / "actual-home"
+    local_copilot = actual_home / ".local" / "copilot-cli" / "copilot"
+    local_copilot.parent.mkdir(parents=True, exist_ok=True)
+    local_copilot.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    local_copilot.chmod(0o755)
     _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
     workspace_dir.mkdir(parents=True, exist_ok=True)
     (home_dir / ".copilot").mkdir(parents=True, exist_ok=True)
     _write_text(
         home_dir / ".copilot" / "mcp-config.json",
         json.dumps({"servers": {"global-tool": {"command": "npx", "args": ["server.js"]}}}),
+    )
+    _write_text(
+        workspace_dir / ".mcp.json",
+        json.dumps({"mcpServers": {"danger_lab": {"command": "python3", "args": ["server.py"]}}}),
     )
     captured_command: list[str] = []
 
@@ -138,6 +147,8 @@ def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path,
         return _CompletedProcess(0)
 
     monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    monkeypatch.setattr("shutil.which", lambda command: None)
+    monkeypatch.setattr(Path, "home", lambda: actual_home)
 
     rc = main(
         [
@@ -157,7 +168,13 @@ def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path,
 
     assert rc == 0
     assert output["launched"] is True
-    assert captured_command == ["copilot", "suggest", "explain this function"]
+    assert captured_command[0].endswith("/copilot")
+    assert captured_command[1:] == [
+        "--additional-mcp-config",
+        f"@{workspace_dir / '.mcp.json'}",
+        "suggest",
+        "explain this function",
+    ]
 def test_guard_run_blocks_direct_env_prompt_until_approved(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -278,12 +295,261 @@ def test_guard_run_launches_opencode_with_runtime_overlay(monkeypatch, tmp_path,
     assert install_rc == 0
     assert rc == 0
     assert output["launched"] is True
-    assert captured_command == ["opencode", "run", "--help"]
+    assert captured_command == ["opencode", str(workspace_dir), "--help"]
     assert captured_env["HOME"] == str(home_dir)
-    assert overlay_payload["permission"]["skill"]["*"] == "ask"
+    assert "skill" not in overlay_payload["permission"]
     assert overlay_payload["permission"]["safe-mcp_*"] == "ask"
     assert overlay_payload["mcp"]["safe-mcp"]["command"][4] == "opencode-mcp-proxy"
     assert overlay_payload["mcp"]["safe-mcp"]["environment"]["TOKEN_SOURCE"] == "workspace"
+
+
+def test_guard_run_launches_opencode_prompt_through_interactive_tui(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_opencode_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
+    captured_command: list[str] = []
+
+    def _fake_run(command, cwd=None, check=False, env=None):
+        del cwd, check, env
+        captured_command.extend(command)
+        return _CompletedProcess(0)
+
+    main(
+        [
+            "guard",
+            "install",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--arg=Use",
+            "--arg=the",
+            "--arg=danger_lab",
+            "--arg=MCP",
+            "--arg=tool",
+            "--arg=dangerous_delete",
+            "--arg=right",
+            "--arg=now",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["launched"] is True
+    assert captured_command == [
+        "opencode",
+        str(workspace_dir),
+        "--prompt",
+        "Use the danger_lab MCP tool dangerous_delete right now",
+    ]
+
+
+def test_guard_run_launches_opencode_prompt_with_flags_through_interactive_tui(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_opencode_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
+    captured_command: list[str] = []
+
+    def _fake_run(command, cwd=None, check=False, env=None):
+        del cwd, check, env
+        captured_command.extend(command)
+        return _CompletedProcess(0)
+
+    main(
+        [
+            "guard",
+            "install",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--arg=--model",
+            "--arg=openai/gpt-5.4",
+            "--arg=Use",
+            "--arg=the",
+            "--arg=danger_lab",
+            "--arg=MCP",
+            "--arg=tool",
+            "--arg=dangerous_delete",
+            "--arg=right",
+            "--arg=now",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["launched"] is True
+    assert captured_command == [
+        "opencode",
+        str(workspace_dir),
+        "--model",
+        "openai/gpt-5.4",
+        "--prompt",
+        "Use the danger_lab MCP tool dangerous_delete right now",
+    ]
+
+
+def test_guard_run_keeps_attach_and_file_flags_out_of_prompt(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_opencode_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
+    captured_command: list[str] = []
+
+    def _fake_run(command, cwd=None, check=False, env=None):
+        del cwd, check, env
+        captured_command.extend(command)
+        return _CompletedProcess(0)
+
+    main(
+        [
+            "guard",
+            "install",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--arg=--attach",
+            "--arg=http://127.0.0.1:4096",
+            "--arg=--file",
+            "--arg=README.md",
+            "--arg=Use",
+            "--arg=the",
+            "--arg=danger_lab",
+            "--arg=tool",
+            "--arg=now",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["launched"] is True
+    assert captured_command == [
+        "opencode",
+        str(workspace_dir),
+        "--attach",
+        "http://127.0.0.1:4096",
+        "--file",
+        "README.md",
+        "--prompt",
+        "Use the danger_lab tool now",
+    ]
+
+
+def test_guard_run_keeps_explicit_opencode_run_args_unchanged(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_opencode_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\ndefault_action = "allow"\n')
+    captured_command: list[str] = []
+    captured_cwd: list[Path | None] = []
+
+    def _fake_run(command, cwd=None, check=False, env=None):
+        del check, env
+        captured_command.extend(command)
+        captured_cwd.append(Path(cwd) if cwd is not None else None)
+        return _CompletedProcess(0)
+
+    main(
+        [
+            "guard",
+            "install",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "opencode",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--arg=run",
+            "--arg=--attach",
+            "--arg=http://127.0.0.1:4096",
+            "--arg=Use",
+            "--arg=the",
+            "--arg=tool",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["launched"] is True
+    assert captured_command == [
+        "opencode",
+        "run",
+        "--attach",
+        "http://127.0.0.1:4096",
+        "Use",
+        "the",
+        "tool",
+    ]
+    assert captured_cwd == [workspace_dir]
 
 
 def test_guard_run_merges_existing_opencode_config_content(monkeypatch, tmp_path, capsys):
@@ -337,7 +603,6 @@ def test_guard_run_merges_existing_opencode_config_content(monkeypatch, tmp_path
     assert output["launched"] is True
     assert overlay_payload["model"] == "gpt-4.1"
     assert overlay_payload["permission"]["network"]["*"] == "allow"
-    assert overlay_payload["permission"]["skill"]["*"] == "ask"
     assert overlay_payload["permission"]["safe-mcp_*"] == "ask"
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import builtins
 import io
 import json
 import subprocess
@@ -126,6 +127,89 @@ class TestGuardRuntime:
         )
 
         assert runtime_sync_url == "https://hol.org/custom/sync/runtime/sessions/sync?tenant=guard"
+
+    def test_guard_hook_uses_payload_cwd_for_global_copilot_hooks(self, tmp_path, capsys) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        marker_path = workspace_dir / "dangerous-marker.json"
+        marker_path.parent.mkdir(parents=True, exist_ok=True)
+        marker_path.write_text('{"status":"armed"}\n', encoding="utf-8")
+        event_path = tmp_path / "copilot-hook.json"
+        _write_json(
+            event_path,
+            {
+                "cwd": str(workspace_dir),
+                "toolName": "bash",
+                "toolInput": {"command": "rm dangerous-marker.json"},
+                "policyAction": "allow",
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--harness",
+                "copilot",
+                "--event-file",
+                str(event_path),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["artifact_type"] == "tool_action_request"
+        assert "rm dangerous-marker.json" in output["launch_summary"]
+        assert output["trigger_summary"].startswith("HOL Guard paused the native tool action")
+
+    def test_guard_hook_copilot_path_does_not_require_rich_imports(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        event_path = tmp_path / "copilot-hook.json"
+        _write_json(
+            event_path,
+            {
+                "cwd": str(workspace_dir),
+                "toolName": "bash",
+                "toolArgs": '{"command":"rm dangerous-marker.json"}',
+                "policyAction": "require-reapproval",
+            },
+        )
+        original_import = builtins.__import__
+
+        def _guarded_import(name, global_ns=None, local_ns=None, fromlist=(), level=0):
+            if name == "rich" or name.startswith("rich."):
+                raise ModuleNotFoundError("No module named 'rich'")
+            return original_import(name, global_ns, local_ns, fromlist, level)
+
+        monkeypatch.setattr(builtins, "__import__", _guarded_import)
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--harness",
+                "copilot",
+                "--event-file",
+                str(event_path),
+            ]
+        )
+        output = capsys.readouterr().out.strip()
+
+        assert rc == 0
+        assert '"permissionDecision":"deny"' in output
+        assert "destructive shell command" in output
+        assert "Approve it in HOL Guard, then retry." in output
 
     def test_sync_runtime_session_treats_missing_runtime_endpoint_as_non_fatal(
         self,
@@ -626,17 +710,628 @@ class TestGuardRuntime:
         assert output["policy_action"] == "require-reapproval"
         assert output["path_summary"] == str(home_dir / ".env")
 
-    def test_guard_hook_emits_copilot_native_deny_response(self, tmp_path, capsys, monkeypatch):
+
+def test_guard_hook_emits_copilot_native_ask_response(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "view",
+        "toolArgs": json.dumps({"path": str(home_dir / ".env")}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "approve" in output["permissionDecisionReason"].lower()
+
+
+def test_guard_hook_emits_copilot_native_ask_response_for_destructive_shell_command(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": "echo MALICIOUS > dangerous-marker.json"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "hol guard" in output["permissionDecisionReason"].lower()
+    assert "approve it in hol guard, then retry." in output["permissionDecisionReason"].lower()
+
+
+def test_guard_hook_emits_copilot_native_ask_response_for_destructive_shell_redirection_without_spaces(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": "echo MALICIOUS>dangerous-marker.json"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "hol guard" in output["permissionDecisionReason"].lower()
+    assert "approve it in hol guard, then retry." in output["permissionDecisionReason"].lower()
+
+
+def test_guard_hook_emits_copilot_native_allow_response_for_read_only_ls_pipeline(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": "ls /mock-workspace/app/guard/_components/ 2>/dev/null | head -40"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
+
+
+def test_guard_hook_emits_copilot_permission_request_allow_for_safe_mcp_tool(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hookName": "permissionRequest",
+        "toolName": "danger_lab/safe_echo",
+        "toolInput": {"text": "ok"},
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output == {"behavior": "allow"}
+
+
+def test_guard_hook_emits_copilot_permission_request_allow_for_hook_event_name_variant(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hookEventName": "permissionRequest",
+        "toolName": "danger_lab/safe_echo",
+        "toolInput": {"text": "ok"},
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output == {"behavior": "allow"}
+
+
+def test_guard_hook_emits_copilot_permission_request_deny_for_risky_mcp_tool(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hookName": "permissionRequest",
+        "toolName": "danger_lab/dangerous_delete",
+        "toolInput": {"target": "dangerous-marker.json"},
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["behavior"] == "deny"
+    assert output["interrupt"] is True
+    assert "HOL Guard blocked" in output["message"]
+    assert "danger_lab:dangerous_delete" in output["message"]
+
+
+def test_guard_hook_emits_copilot_permission_request_deny_from_tool_calls_payload(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hookName": "permissionRequest",
+        "toolCalls": [
+            {
+                "id": "call-dangerous",
+                "name": "danger_lab/dangerous_delete",
+                "args": json.dumps({"target": "dangerous-marker.json"}),
+            }
+        ],
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["behavior"] == "deny"
+    assert "danger_lab:dangerous_delete" in output["message"]
+
+
+def test_copilot_runtime_tool_call_prefers_cli_workspace_config_when_workspace_is_inferred(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_json(
+        workspace_dir / ".mcp.json",
+        {"mcpServers": {"danger_lab": {"command": "python3", "args": ["cli-danger-lab.py"]}}},
+    )
+    _write_json(
+        workspace_dir / ".vscode" / "mcp.json",
+        {"servers": {"danger_lab": {"command": "python3", "args": ["ide-danger-lab.py"]}}},
+    )
+
+    artifact = guard_commands_module._copilot_runtime_tool_call(
+        payload={
+            "tool_name": "mcp_danger_lab_dangerous_delete",
+            "tool_input": {"target": "dangerous-marker.json"},
+            "source_scope": "project",
+        },
+        home_dir=home_dir,
+        workspace=workspace_dir,
+        preferred_workspace_config="cli",
+    )
+
+    assert artifact is not None
+    runtime_artifact, _artifact_hash, _arguments = artifact
+    assert runtime_artifact.config_path == str(workspace_dir / ".mcp.json")
+
+
+def test_copilot_runtime_tool_call_prefers_ide_workspace_config_when_workspace_is_explicit(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_json(
+        workspace_dir / ".mcp.json",
+        {"mcpServers": {"danger_lab": {"command": "python3", "args": ["cli-danger-lab.py"]}}},
+    )
+    _write_json(
+        workspace_dir / ".vscode" / "mcp.json",
+        {"servers": {"danger_lab": {"command": "python3", "args": ["ide-danger-lab.py"]}}},
+    )
+
+    artifact = guard_commands_module._copilot_runtime_tool_call(
+        payload={
+            "tool_name": "mcp_danger_lab_dangerous_delete",
+            "tool_input": {"target": "dangerous-marker.json"},
+            "source_scope": "project",
+        },
+        home_dir=home_dir,
+        workspace=workspace_dir,
+        preferred_workspace_config="ide",
+    )
+
+    assert artifact is not None
+    runtime_artifact, _artifact_hash, _arguments = artifact
+    assert runtime_artifact.config_path == str(workspace_dir / ".vscode" / "mcp.json")
+
+
+def test_guard_hook_emits_copilot_native_deny_for_risky_mcp_pre_tool_use(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_json(
+        workspace_dir / ".vscode" / "mcp.json",
+        {
+            "servers": {
+                "danger_lab": {
+                    "type": "local",
+                    "command": "python3",
+                    "args": ["danger-lab.py"],
+                }
+            }
+        },
+    )
+    event = {
+        "hook_event_name": "PreToolUse",
+        "toolName": "mcp_danger_lab_dangerous_delete",
+        "toolArgs": json.dumps({"target": "dangerous-marker.json"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(guard_home),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    store = GuardStore(guard_home)
+    receipts = store.list_receipts(limit=20)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "hol guard" in output["permissionDecisionReason"].lower()
+    assert "destructive" in output["permissionDecisionReason"].lower()
+    assert receipts == []
+
+
+def test_guard_hook_emits_copilot_native_allow_for_safe_mcp_pre_tool_use(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_json(
+        workspace_dir / ".vscode" / "mcp.json",
+        {
+            "servers": {
+                "danger_lab": {
+                    "type": "local",
+                    "command": "python3",
+                    "args": ["danger-lab.py"],
+                }
+            }
+        },
+    )
+    event = {
+        "hook_event_name": "PreToolUse",
+        "toolName": "mcp_danger_lab_safe_echo",
+        "toolArgs": json.dumps({"text": "ok"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(guard_home),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    store = GuardStore(guard_home)
+    receipts = store.list_receipts(limit=20)
+
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
+    assert any(
+        receipt["artifact_id"] == "copilot:runtime:project:danger_lab:safe_echo"
+        and receipt["policy_decision"] == "allow"
+        for receipt in receipts
+    )
+
+
+def test_guard_hook_resolves_copilot_nested_cwd_back_to_workspace_root(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    nested_dir = workspace_dir / "src" / "components"
+    nested_dir.mkdir(parents=True, exist_ok=True)
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_json(
+        workspace_dir / ".vscode" / "mcp.json",
+        {
+            "servers": {
+                "danger_lab": {
+                    "type": "local",
+                    "command": "python3",
+                    "args": ["danger-lab.py"],
+                }
+            }
+        },
+    )
+    event = {
+        "hook_event_name": "PreToolUse",
+        "cwd": str(nested_dir),
+        "toolName": "mcp_danger_lab_safe_echo",
+        "toolArgs": json.dumps({"text": "ok"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(guard_home),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    store = GuardStore(guard_home)
+    receipts = store.list_receipts(limit=20)
+
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
+    assert any(
+        receipt["artifact_id"] == "copilot:runtime:project:danger_lab:safe_echo"
+        and receipt["policy_decision"] == "allow"
+        for receipt in receipts
+    )
+
+
+def test_guard_hook_emits_copilot_native_deny_response_for_sandbox_required_requests(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": "docker run --rm alpine sh"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+            "--policy-action",
+            "sandbox-required",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+
+
+def test_guard_hook_emits_claude_native_ask_response(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(home_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "approve" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_guard_hook_emits_claude_native_deny_response_for_sandbox_required_requests(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "docker run --rm alpine sh"},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+            "--policy-action",
+            "sandbox-required",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_guard_hook_emits_copilot_native_allow_response_for_safe_requests(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         event = {
             "toolName": "view",
-            "toolArgs": json.dumps({"path": str(home_dir / ".env")}),
+            "toolArgs": json.dumps({"path": str(workspace_dir / "README.md")}),
             "sourceScope": "project",
         }
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
 
         rc = main(
             [
@@ -653,17 +1348,20 @@ class TestGuardRuntime:
         output = json.loads(capsys.readouterr().out)
 
         assert rc == 0
-        assert output["permissionDecision"] == "deny"
-        assert "approve" in output["permissionDecisionReason"]
-        assert "http://127.0.0.1:4455" in output["permissionDecisionReason"]
+        assert output == {"permissionDecision": "allow"}
 
-    def test_guard_hook_emits_copilot_native_allow_response_for_safe_requests(self, tmp_path, capsys, monkeypatch):
+    def test_guard_hook_emits_copilot_native_allow_response_for_read_only_sed_requests(
+        self,
+        tmp_path,
+        capsys,
+        monkeypatch,
+    ):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
         event = {
-            "toolName": "view",
-            "toolArgs": json.dumps({"path": str(workspace_dir / "README.md")}),
+            "toolName": "bash",
+            "toolArgs": json.dumps({"command": "sed -n '1p' README.md"}),
             "sourceScope": "project",
         }
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
@@ -820,7 +1518,7 @@ class TestGuardRuntime:
         assert rc == 1
         assert output["approval_center_url"] == "http://127.0.0.1:4455"
         assert output["blocked"] is True
-        assert output["approval_delivery"]["destination"] == "browser"
+        assert output["approval_delivery"]["destination"] == "harness"
         assert opened_urls == []
 
     def test_headless_approval_resolver_skips_browser_for_hook_first_harnesses(self, tmp_path, monkeypatch):
@@ -2476,7 +3174,7 @@ class TestGuardRuntime:
         assert blocked["responses"][0]["error"]["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
         assert blocked["responses"][0]["error"]["data"]["reviewHint"]
         assert blocked["events"][0]["decision"] == "block"
-        assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
+        assert blocked["events"][0]["approval_delivery"]["destination"] == "harness"
         assert blocked["events"][0]["redacted_params"]["arguments"]["headers"]["Authorization"] == "*****"
         assert blocked["events"][0]["path_summary"].endswith("/.env")
         pending = store.list_approval_requests(limit=10)
@@ -2612,6 +3310,46 @@ class TestGuardRuntime:
         assert output["policy_action"] == "require-reapproval"
         assert output["approval_delivery"]["destination"] == "harness"
         assert "docker" in output["risk_summary"].lower()
+
+    def test_hermes_pretool_blocks_destructive_shell_command_requests(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        _write_text(home_dir / "config.toml", 'mode = "prompt"\n')
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(
+            sys,
+            "stdin",
+            io.StringIO(
+                json.dumps(
+                    {
+                        "event": "PreToolUse",
+                        "tool_name": "shell",
+                        "tool_input": {"command": "echo MALICIOUS > dangerous-marker.json"},
+                        "source_scope": "project",
+                    }
+                )
+            ),
+        )
+
+        rc = main(
+            [
+                "hermes",
+                "pretool",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["policy_action"] == "require-reapproval"
+        assert output["approval_delivery"]["destination"] == "harness"
+        assert "destructive shell command" in output["risk_summary"].lower()
 
     def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers(self):
         server = HTTPServer(("127.0.0.1", 0), _RemoteProxyHandler)

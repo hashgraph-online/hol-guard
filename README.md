@@ -77,13 +77,14 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
 - `claude-code`
   Guard prefers Claude hooks first, then the local approval center when the shell cannot prompt.
 - `copilot`
-  Guard can wrap the `copilot` CLI, detect `~/.copilot/config.json`, `~/.copilot/mcp-config.json`, workspace `.vscode/mcp.json`, and install repo-local `.github/hooks/hol-guard-copilot.json` hook entries for documented `preToolUse` and `postToolUse` events.
+  Guard can wrap the `copilot` CLI, detect `~/.copilot/config.json`, `~/.copilot/mcp-config.json`, workspace `.vscode/mcp.json`, and install Guard-managed Copilot hook wiring for documented `preToolUse` and `postToolUse` events.
+  Guard does not treat a VS Code Copilot inline permission sheet by itself as proof of Guard interception; current proof should come from Guard hook responses, Guard receipts, or an MCP client that explicitly answers Guard elicitation.
 - `codex`
-  Guard asks inline in the same Codex chat when the interactive CLI or Codex App can answer MCP elicitations, and falls back to the local approval center for `codex exec` or any nonresponsive session.
+  Guard asks inline in the same Codex chat when the interactive CLI or Codex App can answer MCP elicitations, and falls back to the local approval center only for `codex exec` or any other nonresponsive session.
 - `cursor`
   Guard respects Cursor’s native tool approval and focuses on artifact trust before launch.
 - `opencode`
-  Guard authors package-level policy while OpenCode keeps native allow or deny rules.
+  Guard authors package-level policy while OpenCode keeps native once, always, or reject prompts for managed MCP tools.
 - `hermes`
   Guard installs a managed Hermes overlay bundle, routes MCP servers through Guard proxies, and prefers native-or-center delivery for blocked requests.
 - `gemini`
