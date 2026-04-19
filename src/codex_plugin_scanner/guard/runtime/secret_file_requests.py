@@ -61,9 +61,10 @@ _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
         "perl",
         "python",
         "python3",
+        "rd",
+        "remove-item",
         "rm",
         "rmdir",
-        "remove-item",
         "ruby",
         "tee",
         "truncate",
@@ -103,6 +104,10 @@ _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
     {
         "appendFile",
         "appendFileSync",
+        "chmod",
+        "chmodSync",
+        "chown",
+        "chownSync",
         "copyFile",
         "copyFileSync",
         "mkdir",
@@ -111,10 +116,25 @@ _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
         "renameSync",
         "rm",
         "rmSync",
+        "truncate",
+        "truncateSync",
         "unlink",
         "unlinkSync",
         "writeFile",
         "writeFileSync",
+    }
+)
+_DESTRUCTIVE_GIT_SUBCOMMANDS = frozenset({"clean", "reset", "restore", "rm"})
+_GIT_GLOBAL_OPTIONS_WITH_VALUE = frozenset(
+    {
+        "-C",
+        "-c",
+        "--config-env",
+        "--exec-path",
+        "--git-dir",
+        "--namespace",
+        "--super-prefix",
+        "--work-tree",
     }
 )
 _WRAPPER_FLAGS_WITH_VALUES = {
@@ -575,6 +595,8 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return False
     if _contains_destructive_node_inline_eval(parts):
         return True
+    if _contains_destructive_git_command(parts):
+        return True
     command_names = list(raw_command_names)
     command_names.extend(_shell_command_names_from_parts(parts))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
@@ -752,6 +774,10 @@ def _find_segment_uses_delete(segment_args: list[str]) -> bool:
         token = segment_args[index]
         if token in {"-exec", "-execdir", "-ok", "-okdir"}:
             index += 1
+            if index < len(segment_args):
+                command_name = _normalized_shell_command_name(segment_args[index])
+                if command_name in _DESTRUCTIVE_SHELL_COMMANDS:
+                    return True
             while index < len(segment_args) and segment_args[index] not in {";", "+"}:
                 index += 1
             if index < len(segment_args):
@@ -765,7 +791,39 @@ def _find_segment_uses_delete(segment_args: list[str]) -> bool:
         index += 1
     return False
 
+def _contains_destructive_git_command(parts: list[str]) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name != "git" or command_index is None:
+            continue
+        if _segment_uses_destructive_git_command(segment[command_index + 1 :]):
+            return True
+    return False
 
+
+def _segment_uses_destructive_git_command(segment_args: list[str]) -> bool:
+    subcommand_index = 0
+    while subcommand_index < len(segment_args):
+        token = segment_args[subcommand_index]
+        if token == "--":
+            subcommand_index += 1
+            continue
+        if token in _GIT_GLOBAL_OPTIONS_WITH_VALUE and subcommand_index + 1 < len(segment_args):
+            subcommand_index += 2
+            continue
+        if any(
+            token.startswith(f"{option}=")
+            for option in _GIT_GLOBAL_OPTIONS_WITH_VALUE
+            if option.startswith("--")
+        ):
+            subcommand_index += 1
+            continue
+        if token.startswith("-"):
+            subcommand_index += 1
+            continue
+        normalized_token = token.strip().lower()
+        return normalized_token in _DESTRUCTIVE_GIT_SUBCOMMANDS
+    return False
 def _env_split_string_payloads(parts: list[str]) -> tuple[str, ...]:
     payloads: list[str] = []
     for segment in _iter_shell_command_segments(parts):
@@ -850,9 +908,6 @@ def _contains_mutating_shell_redirection(parts: list[str]) -> bool:
             else:
                 index += 1
         else:
-            if re.search(r"\s", token):
-                index += 1
-                continue
             match = re.fullmatch(r"(?P<prefix>[^<>\s]*?)(?P<fd>[0-2]?)(?P<op>>\||>>|>)(?P<target>.*)", token)
             if match is None:
                 index += 1
@@ -892,7 +947,7 @@ def _redacted_node_inline_string_literals(script: str, *, preserve_bracket_membe
     preserve_string_contents = False
     for character in script:
         if quote_char is None:
-            if character in {"'", '"'}:
+            if character in {"'", '"', "`"}:
                 preserve_string_contents = (
                     preserve_bracket_member_strings and _last_non_whitespace_character(result) == "["
                 )
@@ -967,7 +1022,7 @@ def _replace_unquoted_newlines_with_separators(command_text: str) -> str:
             result.append(character)
             escape_next = True
             continue
-        if quote_char is None and character in {"'", '"'}:
+        if quote_char is None and character in {"'", '"', "`"}:
             quote_char = character
             result.append(character)
             continue
