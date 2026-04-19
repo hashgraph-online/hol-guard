@@ -615,6 +615,8 @@ def _contains_destructive_node_inline_script(script: str) -> bool:
                 return True
             if re.search(rf"{base_pattern}\s*\.\s*call\s*\(", script):
                 return True
+            if re.search(rf"{base_pattern}\s*\.\s*apply\s*\(", script):
+                return True
     return False
 
 

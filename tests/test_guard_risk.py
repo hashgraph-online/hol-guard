@@ -755,6 +755,16 @@ def test_tool_action_request_classifier_detects_node_inline_call_unlinksync_bypa
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_node_inline_apply_unlinksync_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "require('fs').unlinkSync.apply(null, ['dangerous-marker.json'])" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_skips_echoed_node_eval_string():
     request = extract_sensitive_tool_action_request(
         "bash",
