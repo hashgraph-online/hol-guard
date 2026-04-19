@@ -10,6 +10,7 @@ import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,11 @@ from ..consumer import detect_harness, evaluate_detection
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..store import GuardStore
 
+
+class GuardSyncNotAvailableError(RuntimeError):
+    """Raised when the Guard sync endpoint returns 403 (plan upgrade required)."""
+
+
 _APPROVAL_METADATA_KEYS = ("approval_center_url", "approval_requests", "approval_wait", "review_hint")
 _PAIN_SIGNAL_EVENTS = frozenset(
     {
@@ -33,6 +39,18 @@ _PAIN_SIGNAL_EVENTS = frozenset(
 )
 _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
 _ENV_PROMPT_PATTERN = re.compile(r"(?<![\w-])\.env(?:\.[\w.-]+)?\b")
+_SENSITIVE_PROMPT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (_ENV_PROMPT_PATTERN, "local .env file"),
+    (re.compile(r"(?<![\w-])\.npmrc\b"), "npm registry credentials"),
+    (re.compile(r"(?<![\w-])\.pypirc\b"), "Python package credentials"),
+    (re.compile(r"(?<![\w-])\.netrc\b"), "netrc credentials"),
+    (re.compile(r"(?<![\w-])\.git-credentials\b"), "Git credential store"),
+    (re.compile(r"(?<![\w-])(?:~[/\\\\])?\.aws[/\\\\](?:credentials|config)\b"), "AWS shared credentials file"),
+    (re.compile(r"(?<![\w-])(?:~[/\\\\])?\.ssh[/\\\\](?:id_rsa|id_ed25519|config)\b"), "SSH private key"),
+)
+_DEFAULT_GUARD_SYNC_HTTP_TIMEOUT_SECONDS = 120
+_MIN_GUARD_SYNC_HTTP_TIMEOUT_SECONDS = 5
+_MAX_GUARD_SYNC_HTTP_TIMEOUT_SECONDS = 300
 
 
 def guard_run(
@@ -78,6 +96,7 @@ def guard_run(
     environment["HOME"] = str(context.home_dir)
     if os.name == "nt":
         environment["USERPROFILE"] = str(context.home_dir)
+    environment.update(adapter.launch_environment(context))
     try:
         result = subprocess.run(command, cwd=context.workspace_dir or Path.cwd(), check=False, env=environment)
     except FileNotFoundError as error:
@@ -115,26 +134,41 @@ def _prompt_env_artifact(
 ) -> GuardArtifact | None:
     prompt_text = " ".join(value.strip() for value in passthrough_args if value.strip())
     normalized_prompt = " ".join(prompt_text.split()).lower()
-    if not normalized_prompt or not _requests_direct_env_read(normalized_prompt):
+    prompt_path_class = _matched_sensitive_prompt_path_class(normalized_prompt)
+    if not normalized_prompt or prompt_path_class is None:
         return None
     prompt_hash = hashlib.sha256(normalized_prompt.encode("utf-8")).hexdigest()
-    prompt_summary = "Prompt asks the harness to read a local .env file directly."
+    if prompt_path_class == "local .env file":
+        prompt_signal = "asks the harness to read a local .env file directly"
+        prompt_summary = "Prompt asks the harness to read a local .env file directly."
+        artifact_name = "direct .env prompt access"
+    else:
+        prompt_signal = "asks the harness to read a sensitive local file directly"
+        prompt_summary = (
+            "Prompt asks the harness to read a sensitive local file directly: "
+            f"{prompt_path_class}."
+        )
+        artifact_name = "direct sensitive-file prompt access"
     return GuardArtifact(
         artifact_id=f"{harness}:session:prompt-env-read:{prompt_hash}",
-        name="direct .env prompt access",
+        name=artifact_name,
         harness=harness,
         artifact_type="prompt_request",
         source_scope="session",
         config_path=str(_prompt_policy_path(context)),
         metadata={
-            "prompt_signals": ["asks the harness to read a local .env file directly"],
+            "prompt_signals": [prompt_signal],
             "prompt_summary": prompt_summary,
+            "prompt_path_class": prompt_path_class,
         },
     )
 
 
-def _requests_direct_env_read(prompt_text: str) -> bool:
-    return _ENV_PROMPT_PATTERN.search(prompt_text) is not None
+def _matched_sensitive_prompt_path_class(prompt_text: str) -> str | None:
+    for pattern, path_class in _SENSITIVE_PROMPT_PATTERNS:
+        if pattern.search(prompt_text) is not None:
+            return path_class
+    return None
 
 
 def _prompt_policy_path(context: HarnessContext) -> Path:
@@ -149,6 +183,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     credentials = store.get_sync_credentials()
     if credentials is None:
         raise RuntimeError("Guard is not logged in.")
+    timeout_seconds = _sync_http_timeout_seconds()
     receipts = store.list_receipts(limit=200)
     inventory = store.list_inventory()
     body = json.dumps({"receipts": receipts, "inventory": inventory}).encode("utf-8")
@@ -161,8 +196,15 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(request, timeout=10) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        if error.code == 403:
+            raise GuardSyncNotAvailableError(_sync_http_error_message(error)) from error
+        raise RuntimeError(_sync_http_error_message(error)) from error
+    except urllib.error.URLError as error:
+        raise RuntimeError(_sync_url_error_message(error)) from error
     now = _sync_timestamp(payload)
     advisories = payload.get("advisories")
     advisories_stored = 0
@@ -207,10 +249,46 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     }
 
 
+def sync_runtime_session(store: GuardStore, *, session: dict[str, object]) -> dict[str, object]:
+    """Push one runtime session snapshot to the configured sync endpoint."""
+
+    credentials = store.get_sync_credentials()
+    if credentials is None:
+        raise RuntimeError("Guard is not logged in.")
+    timeout_seconds = _sync_http_timeout_seconds()
+
+    normalized_session = _normalize_runtime_session_payload(session)
+    request = urllib.request.Request(
+        _runtime_session_sync_url(str(credentials["sync_url"])),
+        data=json.dumps({"session": normalized_session}).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {credentials['token']}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(_sync_http_error_message(error)) from error
+    except urllib.error.URLError as error:
+        raise RuntimeError(_sync_url_error_message(error)) from error
+
+    visible_items = payload.get("items")
+    return {
+        "runtime_session_id": normalized_session.get("sessionId", ""),
+        "runtime_session_synced_at": payload.get("generatedAt") or payload.get("generated_at"),
+        "runtime_sessions_visible": len(visible_items) if isinstance(visible_items, list) else 0,
+        "runtime_session_sync_pending": False,
+    }
+
+
 def sync_pain_signals(store: GuardStore) -> int:
     credentials = store.get_sync_credentials()
     if credentials is None:
         return 0
+    timeout_seconds = _sync_http_timeout_seconds()
     cursor_payload = store.get_sync_payload("pain_signal_cursor")
     last_event_id = _last_uploaded_event_id(cursor_payload)
     uploaded_count = 0
@@ -236,7 +314,7 @@ def sync_pain_signals(store: GuardStore) -> int:
                 },
             )
             try:
-                with urllib.request.urlopen(request, timeout=10):
+                with urllib.request.urlopen(request, timeout=timeout_seconds):
                     pass
             except urllib.error.HTTPError as error:
                 if error.code == 404:
@@ -247,7 +325,9 @@ def sync_pain_signals(store: GuardStore) -> int:
                         _now(),
                     )
                     return uploaded_count
-                raise
+                raise RuntimeError(_sync_http_error_message(error)) from error
+            except urllib.error.URLError as error:
+                raise RuntimeError(_sync_url_error_message(error)) from error
             uploaded_count += len(signal_items)
         current_event_id = last_processed_event_id
         store.set_sync_payload(
@@ -324,6 +404,40 @@ def _build_remote_policy_decisions(payload: dict[str, object]) -> list[PolicyDec
                     )
                 )
     return decisions
+
+
+def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
+    try:
+        payload = json.loads(error.read().decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        payload = None
+    if isinstance(payload, dict):
+        error_value = payload.get("error")
+        if isinstance(error_value, str) and error_value.strip():
+            return error_value
+    return f"Guard sync failed with HTTP {error.code}."
+
+
+def _sync_http_timeout_seconds() -> int:
+    raw_timeout = os.getenv("GUARD_SYNC_HTTP_TIMEOUT_SECONDS")
+    if raw_timeout is None:
+        return _DEFAULT_GUARD_SYNC_HTTP_TIMEOUT_SECONDS
+    try:
+        parsed_timeout = int(raw_timeout)
+    except ValueError:
+        return _DEFAULT_GUARD_SYNC_HTTP_TIMEOUT_SECONDS
+    if parsed_timeout < _MIN_GUARD_SYNC_HTTP_TIMEOUT_SECONDS:
+        return _MIN_GUARD_SYNC_HTTP_TIMEOUT_SECONDS
+    if parsed_timeout > _MAX_GUARD_SYNC_HTTP_TIMEOUT_SECONDS:
+        return _MAX_GUARD_SYNC_HTTP_TIMEOUT_SECONDS
+    return parsed_timeout
+
+
+def _sync_url_error_message(error: urllib.error.URLError) -> str:
+    reason = getattr(error, "reason", None)
+    if isinstance(reason, str) and reason.strip():
+        return f"Guard sync failed: {reason.strip()}"
+    return "Guard sync failed because the remote endpoint could not be reached."
 
 
 def _remote_harness(value: object, *, allow_wildcard: bool = True) -> str | None:
@@ -434,6 +548,74 @@ def _pain_signal_sync_url(sync_url: str) -> str:
             parsed.fragment,
         )
     )
+
+
+def _runtime_session_sync_url(sync_url: str) -> str:
+    parsed = urllib.parse.urlsplit(sync_url)
+    path = parsed.path.rstrip("/")
+    segments = [segment for segment in path.split("/") if segment]
+    if len(segments) >= 2 and segments[-2:] in (["receipts", "sync"], ["inventory", "sync"]):
+        next_segments = [*segments[:-2], "runtime", "sessions", "sync"]
+    elif segments and segments[-1] in {"receipts", "inventory"}:
+        next_segments = [*segments[:-1], "runtime", "sessions", "sync"]
+    else:
+        next_segments = [*segments, "runtime", "sessions", "sync"]
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            "/" + "/".join(next_segments),
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+
+
+def _normalize_runtime_session_payload(session: dict[str, object]) -> dict[str, object]:
+    operations_value = session.get("operations")
+    operations: list[dict[str, object]] = []
+    if isinstance(operations_value, list):
+        operations = [
+            _normalize_runtime_operation_payload(item)
+            for item in operations_value
+            if isinstance(item, dict)
+        ]
+
+    return {
+        "sessionId": str(
+            session.get("sessionId")
+            or session.get("session_id")
+            or f"guard-session-{hashlib.sha256(str(session).encode('utf-8')).hexdigest()[:12]}"
+        ),
+        "harness": str(session.get("harness") or "unknown"),
+        "surface": str(session.get("surface") or "cli"),
+        "status": str(session.get("status") or "active"),
+        "clientName": str(session.get("clientName") or session.get("client_name") or "hol-guard"),
+        "clientTitle": session.get("clientTitle") or session.get("client_title"),
+        "clientVersion": session.get("clientVersion") or session.get("client_version"),
+        "workspace": session.get("workspace"),
+        "capabilities": list(session.get("capabilities")) if isinstance(session.get("capabilities"), list) else [],
+        "operations": operations,
+        "createdAt": str(session.get("createdAt") or session.get("created_at") or _now()),
+        "updatedAt": str(session.get("updatedAt") or session.get("updated_at") or _now()),
+    }
+
+
+def _normalize_runtime_operation_payload(item: dict[str, object]) -> dict[str, object]:
+    return {
+        "operationId": str(item.get("operationId") or item.get("operation_id") or f"guard-op-{uuid.uuid4().hex}"),
+        "operationType": str(item.get("operationType") or item.get("operation_type") or "unknown"),
+        "status": str(item.get("status") or "pending"),
+        "approvalRequestIds": list(item.get("approvalRequestIds"))
+        if isinstance(item.get("approvalRequestIds"), list)
+        else list(item.get("approval_request_ids"))
+        if isinstance(item.get("approval_request_ids"), list)
+        else [],
+        "resumeToken": item.get("resumeToken") or item.get("resume_token"),
+        "metadata": item.get("metadata") if isinstance(item.get("metadata"), dict) else {},
+        "createdAt": str(item.get("createdAt") or item.get("created_at") or _now()),
+        "updatedAt": str(item.get("updatedAt") or item.get("updated_at") or _now()),
+    }
 
 
 def _record_synced_alert_events(

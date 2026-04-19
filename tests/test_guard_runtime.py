@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.policy import decide_action
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
@@ -603,25 +604,35 @@ class TestGuardRuntime:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
         monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+        store = GuardStore(home_dir)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
 
-        rc = main(
-            [
-                "guard",
-                "run",
-                "codex",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--json",
-            ]
-        )
-        output = capsys.readouterr().out
+        try:
+            monkeypatch.setattr(
+                guard_commands_module,
+                "ensure_guard_daemon",
+                lambda _guard_home: f"http://127.0.0.1:{daemon.port}",
+            )
+            rc = main(
+                [
+                    "guard",
+                    "run",
+                    "codex",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--json",
+                ]
+            )
+            output = capsys.readouterr().out
+        finally:
+            daemon.stop()
 
         assert rc == 1
-        assert '"approval_center_url": "http://127.0.0.1:4455"' in output
+        assert f'"approval_center_url": "http://127.0.0.1:{daemon.port}"' in output
         assert '"blocked": true' in output
 
     def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
@@ -669,13 +680,14 @@ class TestGuardRuntime:
         _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
 
         store = GuardStore(home_dir)
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
         monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
         monkeypatch.setattr(
             guard_runner_module.subprocess,
             "run",
             lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
         )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
 
         def resolve_pending() -> None:
             for _ in range(40):
@@ -696,19 +708,26 @@ class TestGuardRuntime:
 
         worker = threading.Thread(target=resolve_pending, daemon=True)
         worker.start()
-
-        rc = main(
-            [
-                "guard",
-                "run",
-                "claude-code",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-            ]
-        )
-        output = capsys.readouterr().out
+        try:
+            monkeypatch.setattr(
+                guard_commands_module,
+                "ensure_guard_daemon",
+                lambda _guard_home: f"http://127.0.0.1:{daemon.port}",
+            )
+            rc = main(
+                [
+                    "guard",
+                    "run",
+                    "claude-code",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                ]
+            )
+            output = capsys.readouterr().out
+        finally:
+            daemon.stop()
 
         assert rc == 0
         assert "Launch allowed" in output
@@ -780,13 +799,14 @@ class TestGuardRuntime:
             ),
         ]
         call_count = {"detect": 0}
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
         monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
         monkeypatch.setattr(
             guard_runner_module.subprocess,
             "run",
             lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
         )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
 
         def fake_detect(harness: str, context):
             call_count["detect"] += 1
@@ -812,30 +832,125 @@ class TestGuardRuntime:
 
         worker = threading.Thread(target=resolve_pending, daemon=True)
         worker.start()
-
-        config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
-        blocked_resolver = guard_commands_module._headless_approval_resolver(
-            args=argparse.Namespace(harness="claude-code"),
-            context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
-            store=store,
-            config=config,
-        )
-        result = guard_runner_module.guard_run(
-            "claude-code",
-            HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
-            store,
-            config,
-            dry_run=False,
-            passthrough_args=[],
-            default_action=None,
-            interactive_resolver=None,
-            blocked_resolver=blocked_resolver,
-        )
+        try:
+            monkeypatch.setattr(
+                guard_commands_module,
+                "ensure_guard_daemon",
+                lambda _guard_home: f"http://127.0.0.1:{daemon.port}",
+            )
+            config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+            blocked_resolver = guard_commands_module._headless_approval_resolver(
+                args=argparse.Namespace(harness="claude-code"),
+                context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+                store=store,
+                config=config,
+            )
+            result = guard_runner_module.guard_run(
+                "claude-code",
+                HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+                store,
+                config,
+                dry_run=False,
+                passthrough_args=[],
+                default_action=None,
+                interactive_resolver=None,
+                blocked_resolver=blocked_resolver,
+            )
+        finally:
+            daemon.stop()
 
         assert result["blocked"] is True
         assert result["artifacts"][0]["changed_fields"] == ["args"]
         assert result["artifacts"][0]["artifact_hash"] == artifact_hash(detections[-1].artifacts[0])
         assert call_count["detect"] >= 2
+
+    def test_guard_run_headless_opens_browser_only_for_approval_center_tiers(self, tmp_path, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 1\n")
+        config_path = workspace_dir / ".mcp.json"
+        store = GuardStore(home_dir)
+        baseline = GuardArtifact(
+            artifact_id="guard:project:workspace-tools",
+            name="workspace-tools",
+            harness="codex",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=str(config_path),
+            command="python",
+            args=("-m", "http.server", "9100"),
+            transport="stdio",
+        )
+        baseline_hash = artifact_hash(baseline)
+        store.save_snapshot(
+            "codex",
+            baseline.artifact_id,
+            {**baseline.to_dict(), "artifact_hash": baseline_hash},
+            baseline_hash,
+            "2026-04-10T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        opened_urls: list[str] = []
+        monkeypatch.setattr(daemon_server_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
+
+        def run_blocked_flow(harness: str) -> dict[str, object]:
+            detection = HarnessDetection(
+                harness=harness,
+                installed=True,
+                command_available=True,
+                config_paths=(str(config_path),),
+                artifacts=(
+                    GuardArtifact(
+                        artifact_id=baseline.artifact_id,
+                        name="workspace-tools",
+                        harness=harness,
+                        artifact_type="mcp_server",
+                        source_scope="project",
+                        config_path=str(config_path),
+                        command="python",
+                        args=("-m", "http.server", "9100", f"--{harness}"),
+                        transport="stdio",
+                    ),
+                ),
+            )
+            config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+            blocked_resolver = guard_commands_module._headless_approval_resolver(
+                args=argparse.Namespace(harness=harness),
+                context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+                store=store,
+                config=config,
+            )
+            monkeypatch.setattr(
+                guard_commands_module,
+                "ensure_guard_daemon",
+                lambda _guard_home: f"http://127.0.0.1:{daemon.port}",
+            )
+            monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+            return guard_runner_module.guard_run(
+                harness,
+                HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+                store,
+                config,
+                dry_run=False,
+                passthrough_args=[],
+                default_action=None,
+                interactive_resolver=None,
+                blocked_resolver=blocked_resolver,
+            )
+
+        try:
+            codex_result = run_blocked_flow("codex")
+            urls_after_codex = list(opened_urls)
+            opencode_result = run_blocked_flow("opencode")
+        finally:
+            daemon.stop()
+
+        assert codex_result["blocked"] is True
+        assert len(urls_after_codex) == 1
+        assert urls_after_codex[0].startswith(f"http://127.0.0.1:{daemon.port}")
+        assert opencode_result["blocked"] is True
+        assert opened_urls == urls_after_codex
 
     def test_guard_headless_blocked_run_persists_receipts_and_diffs(self, tmp_path, monkeypatch):
         home_dir = tmp_path / "home"
@@ -1001,91 +1116,109 @@ class TestGuardRuntime:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
         monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+        store = GuardStore(home_dir)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
 
-        blocked_event = {
-            "event": "PreToolUse",
-            "tool_name": "Read",
-            "tool_input": {"file_path": ".env.local"},
-            "source_scope": "project",
-        }
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
+        try:
+            monkeypatch.setattr(
+                guard_commands_module,
+                "ensure_guard_daemon",
+                lambda _guard_home: f"http://127.0.0.1:{daemon.port}",
+            )
+            blocked_event = {
+                "event": "PreToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": ".env.local"},
+                "source_scope": "project",
+            }
+            monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
 
-        first_rc = main(
-            [
-                "guard",
-                "hook",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--harness",
-                "claude-code",
-                "--json",
-            ]
-        )
-        first_output = json.loads(capsys.readouterr().out)
-        approval_request = first_output["approval_requests"][0]
+            first_rc = main(
+                [
+                    "guard",
+                    "hook",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--harness",
+                    "claude-code",
+                    "--json",
+                ]
+            )
+            first_output = json.loads(capsys.readouterr().out)
+            approval_request = first_output["approval_requests"][0]
+            operation = store.get_guard_operation(str(first_output["operation_id"]))
+            assert operation is not None
+            items = store.list_guard_operation_items(str(first_output["operation_id"]))
 
-        approval_rc = main(
-            [
-                "guard",
-                "approvals",
-                "approve",
-                str(approval_request["request_id"]),
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--json",
-            ]
-        )
-        json.loads(capsys.readouterr().out)
+            approval_rc = main(
+                [
+                    "guard",
+                    "approvals",
+                    "approve",
+                    str(approval_request["request_id"]),
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--json",
+                ]
+            )
+            json.loads(capsys.readouterr().out)
 
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
-        second_rc = main(
-            [
-                "guard",
-                "hook",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--harness",
-                "claude-code",
-                "--json",
-            ]
-        )
-        second_output = json.loads(capsys.readouterr().out)
+            monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
+            second_rc = main(
+                [
+                    "guard",
+                    "hook",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--harness",
+                    "claude-code",
+                    "--json",
+                ]
+            )
+            second_output = json.loads(capsys.readouterr().out)
 
-        different_event = {
-            "event": "PreToolUse",
-            "tool_name": "Read",
-            "tool_input": {"file_path": "~/.aws/credentials"},
-            "source_scope": "project",
-        }
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(different_event)))
-        third_rc = main(
-            [
-                "guard",
-                "hook",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--harness",
-                "claude-code",
-                "--json",
-            ]
-        )
-        third_output = json.loads(capsys.readouterr().out)
+            different_event = {
+                "event": "PreToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": "~/.aws/credentials"},
+                "source_scope": "project",
+            }
+            monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(different_event)))
+            third_rc = main(
+                [
+                    "guard",
+                    "hook",
+                    "--home",
+                    str(home_dir),
+                    "--workspace",
+                    str(workspace_dir),
+                    "--harness",
+                    "claude-code",
+                    "--json",
+                ]
+            )
+            third_output = json.loads(capsys.readouterr().out)
+        finally:
+            daemon.stop()
 
         assert first_rc == 1
         assert first_output["policy_action"] == "require-reapproval"
         assert first_output["artifact_type"] == "file_read_request"
         assert "sensitive local file" in first_output["risk_summary"].lower()
         assert approval_request["recommended_scope"] == "artifact"
+        assert first_output["session_id"]
+        assert first_output["operation_id"]
+        assert operation["status"] == "waiting_on_approval"
+        assert items[0]["item_type"] == "approval_requested"
+        assert items[0]["payload"]["approval_requests"][0]["request_id"] == approval_request["request_id"]
         assert approval_rc == 0
         assert second_rc == 0
         assert second_output["policy_action"] == "allow"
@@ -1185,6 +1318,8 @@ class TestGuardRuntime:
         store = GuardStore(tmp_path / "guard-home")
         (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
         config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
         proxy = StdioGuardProxy(
             command=[
                 sys.executable,
@@ -1204,53 +1339,63 @@ class TestGuardRuntime:
             cwd=tmp_path / "workspace",
             guard_store=store,
             guard_config=config,
-            approval_center_url="http://127.0.0.1:4455",
+            approval_center_url=f"http://127.0.0.1:{daemon.port}",
             harness="codex",
         )
-
-        allowed = proxy.run_session(
-            [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "read_file",
-                        "arguments": {
-                            "path": "README.md",
-                            "headers": {"Authorization": "Bearer secret-token"},
+        try:
+            allowed = proxy.run_session(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "read_file",
+                            "arguments": {
+                                "path": "README.md",
+                                "headers": {"Authorization": "Bearer secret-token"},
+                            },
                         },
-                    },
-                }
-            ]
-        )
-        blocked = proxy.run_session(
-            [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "read_file",
-                        "arguments": {
-                            "path": ".env",
-                            "headers": {"Authorization": "Bearer secret-token"},
+                    }
+                ]
+            )
+            blocked = proxy.run_session(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 2,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "read_file",
+                            "arguments": {
+                                "path": ".env",
+                                "headers": {"Authorization": "Bearer secret-token"},
+                            },
                         },
-                    },
-                }
-            ]
-        )
+                    }
+                ]
+            )
+        finally:
+            daemon.stop()
 
+        pending = store.list_approval_requests(limit=10)
+        operation = store.get_guard_operation(str(blocked["events"][0]["operation_id"]))
+        assert operation is not None
+        items = store.list_guard_operation_items(str(blocked["events"][0]["operation_id"]))
         assert allowed["responses"][0]["result"]["tool"] == "read_file"
         assert allowed["events"][0]["decision"] == "forward"
         assert blocked["responses"][0]["error"]["code"] == -32001
         assert "sensitive local file" in blocked["responses"][0]["error"]["message"].lower()
         assert blocked["events"][0]["decision"] == "block"
+        assert blocked["events"][0]["session_id"]
+        assert blocked["events"][0]["operation_id"]
         assert blocked["events"][0]["redacted_params"]["arguments"]["headers"]["Authorization"] == "*****"
         assert blocked["events"][0]["path_summary"].endswith("/.env")
-        pending = store.list_approval_requests(limit=10)
         assert len(pending) == 1
         assert pending[0]["artifact_type"] == "file_read_request"
+        assert operation["status"] == "waiting_on_approval"
+        assert items[0]["item_type"] == "approval_requested"
+        assert items[0]["payload"]["approval_requests"][0]["request_id"] == pending[0]["request_id"]
 
     def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers(self):
         server = HTTPServer(("127.0.0.1", 0), _RemoteProxyHandler)
@@ -1305,3 +1450,88 @@ class TestGuardRuntime:
         assert health_payload["ok"] is True
         assert health_payload["receipts"] == 1
         assert receipts_payload["items"][0]["artifact_id"] == "codex:workspace_skill"
+
+    def test_sync_receipts_uses_configurable_http_timeout(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_credentials(
+            "http://127.0.0.1:3001/api/guard/receipts/sync",
+            "guard_test_token",
+            "2026-04-19T00:00:00+00:00",
+        )
+        monkeypatch.setenv("GUARD_SYNC_HTTP_TIMEOUT_SECONDS", "37")
+        captured_timeouts: list[int] = []
+
+        class _Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "syncedAt": "2026-04-19T00:00:00+00:00",
+                        "receiptsStored": 0,
+                        "advisories": [],
+                        "policy": {},
+                        "alertPreferences": {},
+                        "teamPolicyPack": {},
+                        "exceptions": [],
+                    }
+                ).encode("utf-8")
+
+        def _fake_urlopen(request, timeout=10):
+            captured_timeouts.append(int(timeout))
+            return _Response()
+
+        monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+        payload = guard_runner_module.sync_receipts(store)
+
+        assert captured_timeouts == [37]
+        assert payload["synced_at"] == "2026-04-19T00:00:00+00:00"
+
+    def test_sync_runtime_session_uses_configurable_http_timeout(self, tmp_path, monkeypatch):
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_credentials(
+            "http://127.0.0.1:3001/api/guard/receipts/sync",
+            "guard_test_token",
+            "2026-04-19T00:00:00+00:00",
+        )
+        monkeypatch.setenv("GUARD_SYNC_HTTP_TIMEOUT_SECONDS", "44")
+        captured_timeouts: list[int] = []
+
+        class _Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "generatedAt": "2026-04-19T00:00:00+00:00",
+                        "items": [],
+                    }
+                ).encode("utf-8")
+
+        def _fake_urlopen(request, timeout=10):
+            captured_timeouts.append(int(timeout))
+            return _Response()
+
+        monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+        payload = guard_runner_module.sync_runtime_session(
+            store,
+            session={
+                "sessionId": "session-1",
+                "harness": "codex",
+                "status": "active",
+                "createdAt": "2026-04-19T00:00:00+00:00",
+            },
+        )
+
+        assert captured_timeouts == [44]
+        assert payload["runtime_session_synced_at"] == "2026-04-19T00:00:00+00:00"
