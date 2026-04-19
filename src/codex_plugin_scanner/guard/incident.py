@@ -47,13 +47,19 @@ def build_incident_context(
     if artifact_type == "prompt_request":
         source_label = f"{harness_label} session prompt"
         trigger_summary = (
-            f"Guard paused the {artifact_label} `{artifact_name or artifact_id}` from the active "
+            f"HOL Guard paused the {artifact_label} `{artifact_name or artifact_id}` from the active "
             f"{harness_label} prompt."
         )
     elif artifact_type == "file_read_request":
         source_label = f"{harness_label} runtime tool call"
         trigger_summary = (
-            f"Guard paused the {artifact_label} `{artifact_name or artifact_id}` from an active "
+            f"HOL Guard paused the {artifact_label} `{artifact_name or artifact_id}` from an active "
+            f"{harness_label} tool call."
+        )
+    elif artifact_type == "tool_action_request":
+        source_label = f"{harness_label} runtime tool call"
+        trigger_summary = (
+            f"HOL Guard paused the native tool action `{artifact_name or artifact_id}` from an active "
             f"{harness_label} tool call."
         )
     else:
@@ -61,10 +67,10 @@ def build_incident_context(
         source_label = f"{normalized_scope} {harness_label} config"
         action_verb = _trigger_verb(policy_action=policy_action, changed_fields=changed_fields)
         trigger_summary = (
-            f"Guard {action_verb} the {artifact_label} `{artifact_name or artifact_id}` from "
+            f"HOL Guard {action_verb} the {artifact_label} `{artifact_name or artifact_id}` from "
             f"`{short_config_path}` for {harness_label}."
         )
-    why_now = _why_now_text(changed_fields, policy_action, harness_label)
+    why_now = _why_now_text(changed_fields, policy_action, harness_label, artifact_type)
     launch_summary = _launch_summary(artifact=artifact, launch_target=launch_target)
     risk_headline = risk_summary or "Guard could not classify a high-confidence secret or network signal."
     return {
@@ -77,32 +83,39 @@ def build_incident_context(
     }
 
 
-def _why_now_text(changed_fields: list[str], policy_action: GuardAction, harness_label: str) -> str:
+def _why_now_text(
+    changed_fields: list[str],
+    policy_action: GuardAction,
+    harness_label: str,
+    artifact_type: str | None,
+) -> str:
     normalized = {field.strip().lower() for field in changed_fields}
     if len(normalized) == 0 and policy_action == "allow":
-        return "Guard matched an existing allow rule for this exact version, so the launch can continue."
+        return "HOL Guard matched an existing allow rule for this exact version, so the launch can continue."
     if "prompt_request" in normalized:
         return (
             "The prompt asks the agent to read a local .env file directly, "
-            "so Guard paused it until you approve that secret access."
+            "so HOL Guard paused it until you approve that secret access."
         )
     if "file_read_request" in normalized:
-        return "The tool requested a protected local secret file, so Guard paused the read until you approve it."
+        return "The tool requested a protected local secret file, so HOL Guard paused the read until you approve it."
+    if artifact_type == "tool_action_request" or "tool_action_request" in normalized:
+        return "HOL Guard paused this native tool action because it can change the local machine before you confirm it."
     if "first_seen" in normalized:
-        return f"It is new in this {harness_label.lower()} workspace, so Guard paused it for review."
+        return f"It is new in this {harness_label.lower()} workspace, so HOL Guard paused it for review."
     if "removed" in normalized:
-        return "It disappeared from the harness config, so Guard paused the change until you confirm the removal."
+        return "It disappeared from the harness config, so HOL Guard paused the change until you confirm the removal."
     if "command" in normalized or "args" in normalized:
-        return "Its launch command changed, so Guard is treating this as a new executable fingerprint."
+        return "Its launch command changed, so HOL Guard is treating this as a new executable fingerprint."
     if "url" in normalized or "transport" in normalized:
-        return "Its connection target changed, so Guard is treating this as a new remote endpoint."
+        return "Its connection target changed, so HOL Guard is treating this as a new remote endpoint."
     if "publisher" in normalized:
-        return "Its publisher or source changed, so Guard needs a fresh trust decision."
+        return "Its publisher or source changed, so HOL Guard needs a fresh trust decision."
     if policy_action == "sandbox-required":
-        return "Guard requires extra isolation before this launch can continue."
+        return "HOL Guard requires extra isolation before this launch can continue."
     if policy_action == "block":
-        return "Guard blocked this definition because the configured policy does not trust it yet."
-    return "Guard found a meaningful config change and paused the launch for review."
+        return "HOL Guard blocked this definition because the configured policy does not trust it yet."
+    return "HOL Guard found a meaningful config change and paused the launch for review."
 
 
 def _trigger_verb(*, policy_action: GuardAction, changed_fields: list[str]) -> str:

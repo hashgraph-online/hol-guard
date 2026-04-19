@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,6 +36,43 @@ _PATH_LIST_KEYS = ("paths", "file_paths", "filePaths")
 _COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
 _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_SUBCOMMANDS = frozenset({"build", "compose", "login", "push", "run"})
+_SHELL_TOOL_NAMES = frozenset(
+    {
+        "bash",
+        "cmd",
+        "powershell",
+        "pwsh",
+        "run_command",
+        "run_terminal_command",
+        "shell",
+        "sh",
+        "terminal",
+        "zsh",
+    }
+)
+_DESTRUCTIVE_SHELL_COMMANDS = frozenset(
+    {
+        "chmod",
+        "chown",
+        "dd",
+        "mv",
+        "perl",
+        "python",
+        "python3",
+        "rm",
+        "ruby",
+        "tee",
+        "truncate",
+    }
+)
+_SAFE_SHELL_REDIRECT_TARGETS = frozenset(
+    {
+        "/dev/null",
+        "/dev/stdout",
+        "/dev/stderr",
+        "nul",
+    }
+)
 _SENSITIVE_BASENAME_LABELS = {
     ".npmrc": "npm registry credentials",
     ".pypirc": "Python package credentials",
@@ -215,7 +254,7 @@ def extract_sensitive_tool_action_request(
     cwd: Path | None = None,
     home_dir: Path | None = None,
 ) -> ToolActionRequestMatch | None:
-    """Extract a sensitive Docker or Docker-auth native tool action from arguments."""
+    """Extract a sensitive native tool action from arguments."""
 
     normalized_tool_name = _normalize_tool_name(tool_name)
     if normalized_tool_name is None:
@@ -238,6 +277,13 @@ def extract_sensitive_tool_action_request(
         )
         if docker_config_request is not None:
             return docker_config_request
+        destructive_shell_request = _destructive_shell_tool_action_request(
+            tool_name=requested_tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+        )
+        if destructive_shell_request is not None:
+            return destructive_shell_request
     return None
 
 
@@ -280,6 +326,28 @@ def _docker_config_tool_action_request(
     )
 
 
+def _destructive_shell_tool_action_request(
+    *,
+    tool_name: str,
+    normalized_tool_name: str,
+    command_text: str,
+) -> ToolActionRequestMatch | None:
+    if normalized_tool_name not in _SHELL_TOOL_NAMES:
+        return None
+    if not _looks_destructive_shell_command(command_text):
+        return None
+    return ToolActionRequestMatch(
+        tool_name=tool_name,
+        normalized_tool_name=normalized_tool_name,
+        command_text=command_text,
+        action_class="destructive shell command",
+        reason=(
+            "Guard treats destructive shell writes and delete operations as sensitive because they can mutate the "
+            "local machine before the user confirms the action."
+        ),
+    )
+
+
 def build_tool_action_request_artifact(
     harness: str,
     request: ToolActionRequestMatch,
@@ -301,7 +369,7 @@ def build_tool_action_request_artifact(
         ).encode("utf-8")
     ).hexdigest()
     request_summary = f"Requested `{request.tool_name}` action `{request.command_text}` ({request.action_class})."
-    risk_summary = f"Requests a Docker-sensitive native tool action: {request.action_class}."
+    risk_summary = f"Requests a sensitive native tool action: {request.action_class}."
     return GuardArtifact(
         artifact_id=f"{harness}:{source_scope}:tool-action:{fingerprint}",
         name=f"{request.tool_name} {request.action_class}",
@@ -313,7 +381,7 @@ def build_tool_action_request_artifact(
             "tool_name": request.tool_name,
             "command_text": request.command_text,
             "request_summary": request_summary,
-            "runtime_request_signals": ["invokes a Docker-sensitive command before execution"],
+            "runtime_request_signals": [f"invokes a sensitive native tool action: {request.action_class}"],
             "runtime_request_summary": risk_summary,
             "runtime_request_reason": request.reason,
         },
@@ -439,6 +507,106 @@ def _docker_config_path_from_command(
     if match is None:
         return None
     return match.normalized_path
+
+
+def _looks_destructive_shell_command(command_text: str) -> bool:
+    normalized = command_text.strip()
+    if not normalized:
+        return False
+    lowered = normalized.lower()
+    if _contains_mutating_shell_redirection(lowered):
+        return True
+    try:
+        parts = shlex.split(normalized, posix=True)
+    except ValueError:
+        parts = normalized.split()
+    if not parts:
+        return False
+    command_names = list(_shell_command_names(lowered))
+    command_names.extend(_shell_command_names_from_parts(parts))
+    if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
+        return True
+    for shell_script in _shell_command_scripts(parts):
+        if _looks_destructive_shell_command(shell_script):
+            return True
+    return any(
+        command_name == "sed" and any(part == "-i" or part.startswith("-i") for part in parts[1:])
+        for command_name in command_names
+    )
+
+
+def _contains_mutating_shell_redirection(command_text: str) -> bool:
+    for match in re.finditer(r"(?<!<)(?P<fd>[0-2]?)(?P<op>>\||>>|>)\s*(?P<target>\S+)", command_text):
+        fd = match.group("fd")
+        target = _normalized_redirect_target(match.group("target"))
+        if fd == "2" and target in _SAFE_SHELL_REDIRECT_TARGETS:
+            continue
+        if target in _SAFE_SHELL_REDIRECT_TARGETS or target.startswith("&"):
+            continue
+        return True
+    return False
+
+
+def _normalized_redirect_target(target: str) -> str:
+    return target.strip().strip(");,").strip("'\"")
+
+
+def _shell_command_names(command_text: str) -> tuple[str, ...]:
+    pattern = re.compile(r"(?:^|&&|\|\||[;&|\n])\s*(?:[a-z_][a-z0-9_]*=\S+\s+)*(?P<command>[a-z0-9_./\\\\-]+)")
+    return tuple(_normalized_shell_command_name(match.group("command")) for match in pattern.finditer(command_text))
+
+
+def _normalized_shell_command_name(command_name: str) -> str:
+    normalized_command = command_name.replace("\\", "/").strip()
+    if "/" not in normalized_command:
+        return normalized_command
+    return normalized_command.rsplit("/", 1)[-1]
+
+
+def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
+    command_names: list[str] = []
+    expect_command = True
+    for part in parts:
+        token = part.strip()
+        if not token:
+            continue
+        if token in {"&&", "||", ";", "|", "&"}:
+            expect_command = True
+            continue
+        normalized_token = token.lstrip("(").rstrip(")")
+        if not normalized_token:
+            continue
+        if not expect_command:
+            continue
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", normalized_token):
+            continue
+        normalized_command = _normalized_shell_command_name(normalized_token)
+        if normalized_command in {"env", "command", "builtin", "nohup", "nice", "time", "stdbuf"}:
+            expect_command = True
+            continue
+        command_names.append(normalized_command)
+        expect_command = False
+    return tuple(command_names)
+
+
+def _shell_command_scripts(parts: list[str]) -> tuple[str, ...]:
+    scripts: list[str] = []
+    for index, part in enumerate(parts[:-1]):
+        if not _is_shell_command_flag(part):
+            continue
+        script = parts[index + 1].strip()
+        if script:
+            scripts.append(script)
+    return tuple(scripts)
+
+
+def _is_shell_command_flag(value: str) -> bool:
+    if value == "-c":
+        return True
+    if not value.startswith("-"):
+        return False
+    flag_characters = value[1:]
+    return bool(flag_characters) and set(flag_characters) <= {"c", "l"}
 
 
 def _file_read_request_fingerprint(*, harness: str, tool_name: str, normalized_path: str) -> str:

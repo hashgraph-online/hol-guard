@@ -6,7 +6,8 @@ Current Guard support in this repo:
   - detects global and project `config.toml`
   - parses configured MCP servers
   - supports wrapper-mode `guard run codex`
-  - uses the local approval center for blocked artifact changes today
+  - uses same-chat MCP elicitation for live managed MCP tool approvals in the interactive CLI and Codex App
+  - falls back to the local approval center only for nonresponsive or headless Codex sessions such as `codex exec`
 - `claude-code`
   - detects global and project settings, hooks, `.mcp.json`, and workspace agents
   - supports local hook install and uninstall in `.claude/settings.local.json`
@@ -39,6 +40,7 @@ Current Guard support in this repo:
     plugin files, and OpenCode-compatible skill directories
   - supports wrapper-mode management state plus a Guard-owned runtime overlay for native skill approval prompts
   - supports wrapper-mode `guard run opencode`
+  - keeps managed MCP tools on OpenCode native ask so the user can allow once, allow for the session, or reject inline
   - blocks newly introduced OpenCode MCP, plugin, and skill artifacts before launch when local Guard policy requires
     approval
 
@@ -53,6 +55,8 @@ The harness adapters are designed to prefer discovery and reversible overlay beh
 Explicit non-support:
 
 - Guard does not claim VS Code Copilot extension-host interception.
+- A VS Code Copilot inline tool prompt by itself is not proof that Guard blocked the action; that prompt can come from VS Code's own permission surface.
+- Current Copilot proof should come from Guard-owned CLI hook responses, Guard runtime receipts, or an MCP client that explicitly answers Guard elicitation.
 - Guard does not add `guard run vscode-copilot`.
 - Guard treats `~/.copilot/*` as read-only detection input and does not auto-write user-level Copilot config.
 - Guard does not add Cisco AIBOM runtime or policy integration in this pass. If revisited later, AIBOM belongs on evidence or export surfaces.

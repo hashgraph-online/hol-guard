@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shlex
 import subprocess
 import sys
@@ -41,10 +42,23 @@ from ..consumer import (
 )
 from ..daemon import GuardDaemonServer, ensure_guard_daemon, load_guard_surface_daemon_client
 from ..incident import build_incident_context
+from ..mcp_tool_calls import (
+    allow_tool_call,
+    block_tool_call,
+    build_tool_call_artifact,
+    build_tool_call_hash,
+    evaluate_tool_call,
+)
 from ..models import GuardArtifact, HarnessDetection
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS
 from ..protect import build_protect_payload
-from ..proxy import CodexMcpGuardProxy, OpenCodeMcpGuardProxy, RemoteGuardProxy, StdioGuardProxy
+from ..proxy import (
+    CodexMcpGuardProxy,
+    CopilotMcpGuardProxy,
+    OpenCodeMcpGuardProxy,
+    RemoteGuardProxy,
+    StdioGuardProxy,
+)
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_summary
 from ..runtime.runner import GuardSyncNotConfiguredError, guard_run, sync_receipts
@@ -65,8 +79,6 @@ from .connect_flow import (
 )
 from .install_commands import apply_managed_install
 from .product import build_guard_start_payload, build_guard_status_payload
-from .prompt import build_prompt_artifacts, resolve_interactive_decisions
-from .render import emit_guard_payload
 from .update_commands import run_guard_update
 
 
@@ -346,11 +358,27 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     opencode_proxy_parser.add_argument("--command", dest="server_command", required=True)
     opencode_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
 
+    copilot_proxy_parser = guard_subparsers.add_parser("copilot-mcp-proxy", help=argparse.SUPPRESS)
+    _add_guard_common_args(copilot_proxy_parser)
+    copilot_proxy_parser.add_argument("--server-name", required=True)
+    copilot_proxy_parser.add_argument("--source-scope", default="project")
+    copilot_proxy_parser.add_argument("--config-path", required=True)
+    copilot_proxy_parser.add_argument("--transport", default="stdio")
+    copilot_proxy_parser.add_argument("--command", dest="server_command", required=True)
+    copilot_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+
     hermes_mcp_proxy_parser = guard_subparsers.add_parser("hermes-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(hermes_mcp_proxy_parser)
     hermes_mcp_proxy_parser.add_argument("--server", required=True)
     hermes_mcp_proxy_parser.add_argument("--stdio", action="store_true")
-    hidden_commands = {"hook", "daemon", "codex-mcp-proxy", "opencode-mcp-proxy", "hermes-mcp-proxy"}
+    hidden_commands = {
+        "hook",
+        "daemon",
+        "codex-mcp-proxy",
+        "opencode-mcp-proxy",
+        "copilot-mcp-proxy",
+        "hermes-mcp-proxy",
+    }
     guard_subparsers._choices_actions = [
         action for action in guard_subparsers._choices_actions if action.dest not in hidden_commands
     ]
@@ -533,6 +561,19 @@ def run_guard_command(args: argparse.Namespace) -> int:
         )
         return proxy.serve()
 
+    if args.guard_command == "copilot-mcp-proxy":
+        proxy = CopilotMcpGuardProxy(
+            server_name=args.server_name,
+            command=[args.server_command, *list(args.server_args)],
+            context=context,
+            store=store,
+            config=config,
+            source_scope=args.source_scope,
+            config_path=args.config_path,
+            transport=args.transport,
+        )
+        return proxy.serve()
+
     if args.guard_command == "hermes-mcp-proxy":
         return _run_hermes_mcp_proxy(args=args, context=context, store=store, config=config)
 
@@ -564,6 +605,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             and config.mode == "prompt"
             and sys.stdin.isatty()
         ):
+            from .prompt import build_prompt_artifacts, resolve_interactive_decisions
 
             def interactive_resolver(detection, payload):
                 return resolve_interactive_decisions(
@@ -785,11 +827,224 @@ def run_guard_command(args: argparse.Namespace) -> int:
     if args.guard_command == "hook":
         payload = _load_hook_payload(getattr(args, "event_file", None))
         managed_install = _managed_install_for(store, args.harness)
+        payload_cwd = payload.get("cwd")
+        workspace_was_explicit = workspace is not None
+        runtime_workspace = workspace
+        if runtime_workspace is None and isinstance(payload_cwd, str) and payload_cwd.strip():
+            runtime_workspace = Path(payload_cwd).expanduser().resolve()
+        if args.harness == "copilot":
+            runtime_workspace = _resolve_copilot_workspace_root(runtime_workspace)
+        copilot_hook_stage = _copilot_hook_stage(payload) if args.harness == "copilot" else None
+        copilot_runtime_tool_call = (
+            _copilot_runtime_tool_call(
+                payload=payload,
+                home_dir=context.home_dir,
+                workspace=runtime_workspace,
+                preferred_workspace_config="ide" if workspace_was_explicit else "cli",
+            )
+            if args.harness == "copilot"
+            else None
+        )
+        if copilot_runtime_tool_call is not None and copilot_hook_stage == "pretooluse":
+            runtime_artifact, runtime_artifact_hash, runtime_arguments = copilot_runtime_tool_call
+            decision = evaluate_tool_call(
+                store=store,
+                config=config,
+                artifact=runtime_artifact,
+                artifact_hash=runtime_artifact_hash,
+                arguments=runtime_arguments,
+            )
+            policy_action = {
+                "allow": "allow",
+                "warn": "allow",
+                "review": "require-reapproval",
+                "block": "block",
+                "sandbox-required": "sandbox-required",
+                "require-reapproval": "require-reapproval",
+            }.get(decision.action, "require-reapproval")
+            now = _now()
+            if policy_action == "allow":
+                allow_tool_call(
+                    store=store,
+                    artifact=runtime_artifact,
+                    artifact_hash=runtime_artifact_hash,
+                    decision_source="pre-tool-hook",
+                    now=now,
+                    signals=decision.signals,
+                    remember=False,
+                )
+                if _should_emit_copilot_hook_response(args):
+                    _emit_copilot_hook_response(policy_action="allow", reason="")
+                    return 0
+            else:
+                if policy_action in {"block", "sandbox-required"}:
+                    block_tool_call(
+                        store=store,
+                        artifact=runtime_artifact,
+                        artifact_hash=runtime_artifact_hash,
+                        decision_source="pre-tool-hook",
+                        now=now,
+                        signals=decision.signals,
+                    )
+                if _should_emit_copilot_hook_response(args):
+                    _emit_copilot_hook_response(
+                        policy_action=policy_action,
+                        reason=_copilot_hook_reason(decision.summary, runtime_artifact.name),
+                    )
+                    return 0
+        copilot_permission_request = (
+            _copilot_runtime_tool_call(
+                payload=payload,
+                home_dir=context.home_dir,
+                workspace=runtime_workspace,
+                preferred_workspace_config="ide" if workspace_was_explicit else "cli",
+            )
+            if args.harness == "copilot" and _is_copilot_permission_request(payload)
+            else None
+        )
+        if copilot_permission_request is not None:
+            runtime_artifact, runtime_artifact_hash, runtime_arguments = copilot_permission_request
+            artifact_id = runtime_artifact.artifact_id
+            artifact_name = runtime_artifact.name
+            decision = evaluate_tool_call(
+                store=store,
+                config=config,
+                artifact=runtime_artifact,
+                artifact_hash=runtime_artifact_hash,
+                arguments=runtime_arguments,
+            )
+            policy_action = {
+                "allow": "allow",
+                "warn": "allow",
+                "review": "require-reapproval",
+                "block": "block",
+                "sandbox-required": "sandbox-required",
+                "require-reapproval": "require-reapproval",
+            }.get(decision.action, "require-reapproval")
+            runtime_detection = _runtime_detection(args.harness, runtime_artifact)
+            evaluation_payload = {
+                "artifacts": [
+                    {
+                        "artifact_id": artifact_id,
+                        "artifact_name": artifact_name,
+                        "artifact_hash": runtime_artifact_hash,
+                        "policy_action": policy_action,
+                        "changed_fields": ["runtime_tool_call", *decision.signals],
+                        "artifact_type": runtime_artifact.artifact_type,
+                        "source_scope": runtime_artifact.source_scope,
+                        "config_path": runtime_artifact.config_path,
+                        "launch_target": json.dumps(runtime_arguments, sort_keys=True)
+                        if runtime_arguments is not None
+                        else runtime_artifact.command,
+                    }
+                ]
+            }
+            now = _now()
+            response_payload = {
+                "recorded": True,
+                "artifact_id": artifact_id,
+                "artifact_name": artifact_name,
+                "artifact_type": runtime_artifact.artifact_type,
+                "policy_action": policy_action,
+                "risk_signals": list(decision.signals),
+                "risk_summary": decision.summary,
+                "launch_summary": json.dumps(runtime_arguments, sort_keys=True)
+                if runtime_arguments is not None
+                else runtime_artifact.command,
+            }
+            if policy_action == "allow":
+                allow_tool_call(
+                    store=store,
+                    artifact=runtime_artifact,
+                    artifact_hash=runtime_artifact_hash,
+                    decision_source=decision.source,
+                    now=now,
+                    signals=decision.signals,
+                    remember=False,
+                )
+                if _should_emit_copilot_hook_response(args):
+                    _emit_copilot_permission_request_response(behavior="allow")
+                    return 0
+                _emit("hook", response_payload, getattr(args, "json", False))
+                return 0
+            block_tool_call(
+                store=store,
+                artifact=runtime_artifact,
+                artifact_hash=runtime_artifact_hash,
+                decision_source="permission-request-hook",
+                now=now,
+                signals=decision.signals,
+            )
+            approval_center_url = ensure_guard_daemon(guard_home)
+            approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
+            try:
+                daemon_client = load_guard_surface_daemon_client(guard_home)
+            except RuntimeError:
+                queued = queue_blocked_approvals(
+                    detection=runtime_detection,
+                    evaluation=evaluation_payload,
+                    store=store,
+                    approval_center_url=approval_center_url,
+                    now=now,
+                )
+            else:
+                session = daemon_client.start_session(
+                    harness=args.harness,
+                    surface="harness-adapter",
+                    workspace=str(runtime_workspace) if runtime_workspace else None,
+                    client_name=f"{args.harness}-permission-hook",
+                    client_title=f"{args.harness} permission hook",
+                    client_version="1.0.0",
+                    capabilities=["approval-resolution", "receipt-view"],
+                )
+                blocked_operation = daemon_client.queue_blocked_operation(
+                    session_id=str(session["session_id"]),
+                    operation_type="tool_call",
+                    harness=args.harness,
+                    metadata={
+                        "tool_name": str(payload.get("tool_name", "")),
+                        "hook_name": "permissionRequest",
+                    },
+                    detection=runtime_detection.to_dict(),
+                    evaluation=evaluation_payload,
+                    approval_center_url=approval_center_url,
+                    approval_surface_policy=_approval_surface_policy_for_flow(
+                        config.approval_surface_policy,
+                        approval_flow,
+                    ),
+                    open_key=artifact_id,
+                )
+                queued = (
+                    blocked_operation["approval_requests"]
+                    if isinstance(blocked_operation.get("approval_requests"), list)
+                    else []
+                )
+            response_payload["approval_requests"] = queued
+            response_payload["approval_center_url"] = approval_center_url
+            response_payload["review_hint"] = approval_center_hint(
+                context=context,
+                harness=args.harness,
+                approval_center_url=approval_center_url,
+                queued=queued,
+                managed_install=managed_install,
+            )
+            if _should_emit_copilot_hook_response(args):
+                _emit_copilot_permission_request_response(
+                    behavior="deny",
+                    message=(
+                        f"HOL Guard blocked {artifact_name}. {decision.summary} "
+                        f"Approve the exact call in Guard, then retry."
+                    ),
+                    interrupt=True,
+                )
+                return 0
+            _emit("hook", response_payload, getattr(args, "json", False))
+            return 1
         runtime_artifact = _hook_runtime_artifact(
             harness=args.harness,
             payload=payload,
             home_dir=context.home_dir,
-            workspace=workspace,
+            workspace=runtime_workspace,
         )
         if runtime_artifact is not None:
             runtime_artifact_hash = artifact_hash(runtime_artifact)
@@ -802,7 +1057,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     args.harness,
                     artifact_id,
                     runtime_artifact_hash,
-                    str(workspace) if workspace else None,
+                    str(runtime_workspace) if runtime_workspace else None,
                 ),
             )
             if policy_action not in VALID_GUARD_ACTIONS:
@@ -853,6 +1108,26 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 "path_summary": _runtime_requested_path(runtime_artifact),
             }
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+                if _should_emit_copilot_hook_response(args):
+                    _emit_copilot_hook_response(
+                        policy_action=policy_action,
+                        reason=_copilot_hook_reason(
+                            response_payload.get("why_now"),
+                            response_payload.get("risk_headline"),
+                            response_payload.get("path_summary"),
+                        ),
+                    )
+                    return 0
+                if _should_emit_claude_hook_response(args):
+                    _emit_claude_hook_response(
+                        policy_action=policy_action,
+                        reason=_native_hook_reason(
+                            response_payload.get("why_now"),
+                            response_payload.get("risk_headline"),
+                            response_payload.get("path_summary"),
+                        ),
+                    )
+                    return 0
                 approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
                 approval_center_url = ensure_guard_daemon(guard_home)
                 runtime_detection = _runtime_detection(args.harness, runtime_artifact)
@@ -941,6 +1216,16 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     ),
                 )
                 return 0
+            if _should_emit_claude_hook_response(args):
+                _emit_claude_hook_response(
+                    policy_action=policy_action,
+                    reason=_native_hook_reason(
+                        response_payload.get("why_now"),
+                        response_payload.get("review_hint"),
+                        response_payload.get("risk_headline"),
+                    ),
+                )
+                return 0
             _emit("hook", response_payload, getattr(args, "json", False))
             return 1 if policy_action in {"block", "require-reapproval"} else 0
         artifact_id = _coalesce_string(
@@ -995,6 +1280,12 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 reason=_copilot_hook_reason(payload.get("permission_decision_reason")),
             )
             return 0
+        if _should_emit_claude_hook_response(args):
+            _emit_claude_hook_response(
+                policy_action=policy_action,
+                reason=_native_hook_reason(payload.get("permission_decision_reason")),
+            )
+            return 0
         _emit(
             "hook",
             {
@@ -1011,11 +1302,17 @@ def run_guard_command(args: argparse.Namespace) -> int:
 
 
 def _emit(command: str, payload: dict[str, object], as_json: bool) -> None:
+    from .render import emit_guard_payload
+
     emit_guard_payload(command, payload, as_json)
 
 
 def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
     return args.harness == "copilot" and not getattr(args, "json", False)
+
+
+def _should_emit_claude_hook_response(args: argparse.Namespace) -> bool:
+    return args.harness == "claude-code" and not getattr(args, "json", False)
 
 
 def _approval_delivery_payload(
@@ -1026,7 +1323,7 @@ def _approval_delivery_payload(
     return approval_delivery_payload(approval_prompt_flow(harness, managed_install=managed_install))
 
 
-def _copilot_hook_reason(*values: object | None) -> str:
+def _native_hook_reason(*values: object | None) -> str:
     messages: list[str] = []
     for value in values:
         if isinstance(value, str) and value.strip():
@@ -1035,7 +1332,16 @@ def _copilot_hook_reason(*values: object | None) -> str:
                 messages.append(candidate)
     if messages:
         return " ".join(messages)
-    return "Guard blocked this tool call. Open the Guard approval center to review the request."
+    return "HOL Guard flagged this tool call for review."
+
+
+def _copilot_hook_reason(*values: object | None) -> str:
+    reason = _native_hook_reason(*values)
+    if reason.startswith("Guard "):
+        reason = f"HOL {reason}"
+    if "approve" in reason.lower():
+        return reason
+    return f"{reason} Approve it in HOL Guard, then retry."
 
 
 def _guard_rerun_command(args: argparse.Namespace) -> str:
@@ -1079,14 +1385,50 @@ def _append_guard_context_args(command: list[str], args: argparse.Namespace) -> 
 
 
 def _emit_copilot_hook_response(*, policy_action: str, reason: str) -> None:
-    if policy_action in {"block", "sandbox-required", "require-reapproval"}:
-        payload = {
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }
-    else:
-        payload = {"permissionDecision": "allow"}
+    payload = {"permissionDecision": _copilot_hook_permission_decision(policy_action)}
+    if payload["permissionDecision"] != "allow":
+        payload["permissionDecisionReason"] = reason
     print(json.dumps(payload, separators=(",", ":")))
+
+
+def _emit_copilot_permission_request_response(
+    *,
+    behavior: str,
+    message: str | None = None,
+    interrupt: bool | None = None,
+) -> None:
+    payload: dict[str, object] = {"behavior": behavior}
+    if isinstance(message, str) and message.strip():
+        payload["message"] = message.strip()
+    if isinstance(interrupt, bool):
+        payload["interrupt"] = interrupt
+    print(json.dumps(payload, separators=(",", ":")))
+
+
+def _emit_claude_hook_response(*, policy_action: str, reason: str) -> None:
+    payload = {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": _native_hook_permission_decision(policy_action),
+        }
+    }
+    if payload["hookSpecificOutput"]["permissionDecision"] != "allow":
+        payload["hookSpecificOutput"]["permissionDecisionReason"] = reason
+    print(json.dumps(payload, separators=(",", ":")))
+
+
+def _native_hook_permission_decision(policy_action: str) -> str:
+    if policy_action in {"block", "sandbox-required"}:
+        return "deny"
+    if policy_action == "require-reapproval":
+        return "ask"
+    return "allow"
+
+
+def _copilot_hook_permission_decision(policy_action: str) -> str:
+    if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+        return "deny"
+    return "allow"
 
 
 def _headless_approval_resolver(
@@ -1267,6 +1609,7 @@ def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
         ("artifactHash", "artifact_hash"),
         ("artifactName", "artifact_name"),
         ("changedCapabilities", "changed_capabilities"),
+        ("hookName", "hook_name"),
         ("policyAction", "policy_action"),
         ("sourceScope", "source_scope"),
         ("toolName", "tool_name"),
@@ -1274,6 +1617,15 @@ def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
     ):
         if target_key not in normalized and source_key in payload:
             normalized[target_key] = payload[source_key]
+    if "tool_name" not in normalized or "tool_input" not in normalized:
+        tool_name, tool_input = _first_hook_tool_call(
+            payload.get("toolCalls"),
+            expected_tool_name=normalized.get("tool_name"),
+        )
+        if "tool_name" not in normalized and tool_name is not None:
+            normalized["tool_name"] = tool_name
+        if "tool_input" not in normalized and tool_input is not None:
+            normalized["tool_input"] = tool_input
     arguments = _normalize_hook_arguments(
         normalized.get("tool_input"),
         normalized.get("arguments"),
@@ -1311,6 +1663,31 @@ def _normalize_hook_argument_value(value: object | None) -> object | None:
             return parsed
         return stripped
     return value
+
+
+def _first_hook_tool_call(
+    value: object | None,
+    *,
+    expected_tool_name: object | None = None,
+) -> tuple[str | None, object | None]:
+    if not isinstance(value, list):
+        return None, None
+    normalized_expected_tool_name = expected_tool_name.strip() if isinstance(expected_tool_name, str) else None
+    fallback_tool_call: tuple[str, object | None] | None = None
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        tool_name = item.get("name")
+        tool_input = _normalize_hook_argument_value(item.get("args"))
+        if isinstance(tool_name, str) and tool_name.strip():
+            stripped_tool_name = tool_name.strip()
+            if fallback_tool_call is None:
+                fallback_tool_call = (stripped_tool_name, tool_input)
+            if normalized_expected_tool_name is None or stripped_tool_name == normalized_expected_tool_name:
+                return stripped_tool_name, tool_input
+    if fallback_tool_call is not None:
+        return fallback_tool_call
+    return None, None
 
 
 def _coalesce_string(*values: object | None) -> str:
@@ -1379,6 +1756,180 @@ def _hook_runtime_artifact(
         config_path=config_path,
         source_scope=source_scope,
     )
+
+
+def _is_copilot_permission_request(payload: dict[str, object]) -> bool:
+    for key in ("hook_name", "hook_event_name", "hookEventName"):
+        hook_name = payload.get(key)
+        if isinstance(hook_name, str) and hook_name == "permissionRequest":
+            return True
+    return False
+
+
+def _copilot_hook_stage(payload: dict[str, object]) -> str | None:
+    for key in ("hook_name", "hook_event_name", "hookEventName"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower()
+    return None
+
+
+def _copilot_runtime_tool_call(
+    *,
+    payload: dict[str, object],
+    home_dir: Path,
+    workspace: Path | None,
+    preferred_workspace_config: str | None = None,
+) -> tuple[GuardArtifact, str, object] | None:
+    tool_name = payload.get("tool_name")
+    if not isinstance(tool_name, str) or not tool_name.strip():
+        return None
+    server_name: str | None = None
+    runtime_tool_name: str | None = None
+    source_scope = _coalesce_string(payload.get("source_scope"), "project" if workspace is not None else "global")
+    config_path = str(_runtime_policy_path("copilot", home_dir, workspace))
+    if "/" in tool_name:
+        server_name, runtime_tool_name = tool_name.split("/", 1)
+    elif tool_name.startswith("mcp_"):
+        resolved = _resolve_copilot_mcp_runtime_tool(
+            tool_name=tool_name,
+            home_dir=home_dir,
+            workspace=workspace,
+            preferred_workspace_config=preferred_workspace_config,
+        )
+        if resolved is None:
+            return None
+        server_name, runtime_tool_name, source_scope, config_path = resolved
+    if (
+        not isinstance(server_name, str)
+        or not server_name.strip()
+        or not isinstance(runtime_tool_name, str)
+        or not runtime_tool_name.strip()
+    ):
+        return None
+    artifact = build_tool_call_artifact(
+        harness="copilot",
+        server_name=server_name.strip(),
+        tool_name=runtime_tool_name.strip(),
+        source_scope=source_scope,
+        config_path=config_path,
+        transport="stdio",
+    )
+    arguments = payload.get("tool_input", payload.get("arguments"))
+    artifact_hash = build_tool_call_hash(artifact, arguments)
+    return artifact, artifact_hash, arguments
+
+
+def _resolve_copilot_mcp_runtime_tool(
+    *,
+    tool_name: str,
+    home_dir: Path,
+    workspace: Path | None,
+    preferred_workspace_config: str | None = None,
+) -> tuple[str, str, str, str] | None:
+    if not tool_name.startswith("mcp_"):
+        return None
+    suffix = tool_name[len("mcp_") :]
+    if not suffix:
+        return None
+    matches: list[tuple[int, int, str, str, str, str]] = []
+    for server_name, source_scope, config_path in _copilot_runtime_server_entries(home_dir, workspace):
+        server_token = _copilot_mcp_tool_token(server_name)
+        if suffix.startswith(f"{server_token}_"):
+            runtime_tool_name = suffix[len(server_token) + 1 :]
+            if runtime_tool_name:
+                matches.append(
+                    (
+                        len(server_token),
+                        _copilot_runtime_match_priority(
+                            config_path=config_path,
+                            preferred_workspace_config=preferred_workspace_config,
+                        ),
+                        server_name,
+                        runtime_tool_name,
+                        source_scope,
+                        config_path,
+                    )
+                )
+    if matches:
+        _length, _priority, server_name, runtime_tool_name, source_scope, config_path = max(
+            matches,
+            key=lambda item: (item[0], item[1], item[5]),
+        )
+        return server_name, runtime_tool_name, source_scope, config_path
+    return None
+
+
+def _copilot_runtime_server_entries(home_dir: Path, workspace: Path | None) -> list[tuple[str, str, str]]:
+    entries: list[tuple[str, str, str]] = []
+    if workspace is not None:
+        for path in (workspace / ".vscode" / "mcp.json", workspace / ".mcp.json"):
+            entries.extend(_mcp_server_entries_from_path(path, source_scope="project"))
+    entries.extend(_mcp_server_entries_from_path(home_dir / ".copilot" / "mcp-config.json", source_scope="global"))
+    return entries
+
+
+def _copilot_runtime_match_priority(*, config_path: str, preferred_workspace_config: str | None) -> int:
+    path = Path(config_path)
+    is_cli_workspace_config = path.name == ".mcp.json"
+    is_ide_workspace_config = path.name == "mcp.json" and path.parent.name == ".vscode"
+    if preferred_workspace_config == "cli":
+        if is_cli_workspace_config:
+            return 2
+        if is_ide_workspace_config:
+            return 1
+        return 0
+    if preferred_workspace_config == "ide":
+        if is_ide_workspace_config:
+            return 2
+        if is_cli_workspace_config:
+            return 1
+        return 0
+    return 0
+
+
+def _resolve_copilot_workspace_root(workspace: Path | None) -> Path | None:
+    if workspace is None:
+        return None
+    candidates = [workspace, *workspace.parents]
+    for candidate in candidates:
+        if (candidate / ".mcp.json").is_file() or (candidate / ".vscode" / "mcp.json").is_file():
+            return candidate
+    return workspace
+
+
+def _mcp_server_entries_from_path(path: Path, *, source_scope: str) -> list[tuple[str, str, str]]:
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, dict):
+        return []
+    servers = _mcp_servers_payload(payload)
+    if not isinstance(servers, dict):
+        return []
+    return [
+        (str(server_name), source_scope, str(path))
+        for server_name in servers
+        if isinstance(server_name, str) and server_name.strip()
+    ]
+
+
+def _mcp_servers_payload(payload: dict[str, object]) -> dict[str, object] | None:
+    servers = payload.get("servers")
+    if isinstance(servers, dict):
+        return servers
+    mcp_servers = payload.get("mcpServers")
+    if isinstance(mcp_servers, dict):
+        return mcp_servers
+    return None
+
+
+def _copilot_mcp_tool_token(value: str) -> str:
+    token = re.sub(r"[^a-z0-9]+", "_", value.strip().lower())
+    return token.strip("_")
 
 
 def _runtime_policy_path(harness: str, home_dir: Path, workspace: Path | None) -> Path:

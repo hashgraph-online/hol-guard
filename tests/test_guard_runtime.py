@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import builtins
 import io
 import json
 import subprocess
@@ -126,6 +127,89 @@ class TestGuardRuntime:
         )
 
         assert runtime_sync_url == "https://hol.org/custom/sync/runtime/sessions/sync?tenant=guard"
+
+    def test_guard_hook_uses_payload_cwd_for_global_copilot_hooks(self, tmp_path, capsys) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        marker_path = workspace_dir / "dangerous-marker.json"
+        marker_path.parent.mkdir(parents=True, exist_ok=True)
+        marker_path.write_text('{"status":"armed"}\n', encoding="utf-8")
+        event_path = tmp_path / "copilot-hook.json"
+        _write_json(
+            event_path,
+            {
+                "cwd": str(workspace_dir),
+                "toolName": "bash",
+                "toolInput": {"command": "rm dangerous-marker.json"},
+                "policyAction": "allow",
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--harness",
+                "copilot",
+                "--event-file",
+                str(event_path),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["artifact_type"] == "tool_action_request"
+        assert "rm dangerous-marker.json" in output["launch_summary"]
+        assert output["trigger_summary"].startswith("HOL Guard paused the native tool action")
+
+    def test_guard_hook_copilot_path_does_not_require_rich_imports(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        event_path = tmp_path / "copilot-hook.json"
+        _write_json(
+            event_path,
+            {
+                "cwd": str(workspace_dir),
+                "toolName": "bash",
+                "toolArgs": '{"command":"rm dangerous-marker.json"}',
+                "policyAction": "require-reapproval",
+            },
+        )
+        original_import = builtins.__import__
+
+        def _guarded_import(name, global_ns=None, local_ns=None, fromlist=(), level=0):
+            if name == "rich" or name.startswith("rich."):
+                raise ModuleNotFoundError("No module named 'rich'")
+            return original_import(name, global_ns, local_ns, fromlist, level)
+
+        monkeypatch.setattr(builtins, "__import__", _guarded_import)
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--harness",
+                "copilot",
+                "--event-file",
+                str(event_path),
+            ]
+        )
+        output = capsys.readouterr().out.strip()
+
+        assert rc == 0
+        assert '"permissionDecision":"deny"' in output
+        assert "destructive shell command" in output
+        assert "Approve it in HOL Guard, then retry." in output
 
     def test_sync_runtime_session_treats_missing_runtime_endpoint_as_non_fatal(
         self,
@@ -626,2090 +710,2817 @@ class TestGuardRuntime:
         assert output["policy_action"] == "require-reapproval"
         assert output["path_summary"] == str(home_dir / ".env")
 
-    def test_guard_hook_emits_copilot_native_deny_response(self, tmp_path, capsys, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-        event = {
-            "toolName": "view",
-            "toolArgs": json.dumps({"path": str(home_dir / ".env")}),
-            "sourceScope": "project",
-        }
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
 
-        rc = main(
-            [
-                "guard",
-                "hook",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--harness",
-                "copilot",
-            ]
-        )
-        output = json.loads(capsys.readouterr().out)
+def test_guard_hook_emits_copilot_native_ask_response(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "view",
+        "toolArgs": json.dumps({"path": str(home_dir / ".env")}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
 
-        assert rc == 0
-        assert output["permissionDecision"] == "deny"
-        assert "approve" in output["permissionDecisionReason"]
-        assert "http://127.0.0.1:4455" in output["permissionDecisionReason"]
-
-    def test_guard_hook_emits_copilot_native_allow_response_for_safe_requests(self, tmp_path, capsys, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-        event = {
-            "toolName": "view",
-            "toolArgs": json.dumps({"path": str(workspace_dir / "README.md")}),
-            "sourceScope": "project",
-        }
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
-
-        rc = main(
-            [
-                "guard",
-                "hook",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--harness",
-                "copilot",
-            ]
-        )
-        output = json.loads(capsys.readouterr().out)
-
-        assert rc == 0
-        assert output == {"permissionDecision": "allow"}
-
-    def test_guard_run_returns_structured_error_when_executable_missing(self, tmp_path, capsys, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
-        monkeypatch.setattr(
-            guard_runner_module.subprocess,
-            "run",
-            lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("codex not found")),
-        )
-
-        rc = main(
-            [
-                "guard",
-                "run",
-                "claude-code",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--default-action",
-                "allow",
-                "--json",
-            ]
-        )
-        output = json.loads(capsys.readouterr().out)
-
-        assert rc == 127
-        assert output["launched"] is False
-        assert output["return_code"] == 127
-        assert "codex not found" in output["launch_error"]
-
-    def test_guard_run_prompt_allow_once_launches_and_records_override(self, tmp_path, capsys, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-        answers = iter(["1", "1"])
-        monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
-        monkeypatch.setattr("rich.console.Console.input", lambda self, prompt="": next(answers))
-        monkeypatch.setattr(
-            guard_runner_module.subprocess,
-            "run",
-            lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
-        )
-
-        rc = main(
-            [
-                "guard",
-                "run",
-                "codex",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-            ]
-        )
-        output = capsys.readouterr().out
-        receipts = GuardStore(Path(home_dir)).list_receipts(limit=10)
-
-        assert rc == 0
-        assert "Launch allowed" in output
-        assert any(item.get("user_override") == "allow-once" for item in receipts)
-
-    def test_guard_run_prompt_allow_artifact_persists_for_next_run(self, tmp_path, capsys, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-        answers = iter(["2", "2"])
-        monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
-        monkeypatch.setattr("rich.console.Console.input", lambda self, prompt="": next(answers))
-        monkeypatch.setattr(
-            guard_runner_module.subprocess,
-            "run",
-            lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
-        )
-
-        first_rc = main(
-            [
-                "guard",
-                "run",
-                "codex",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-            ]
-        )
-        first_output = capsys.readouterr().out
-
-        second_rc = main(
-            [
-                "guard",
-                "run",
-                "codex",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--dry-run",
-                "--json",
-            ]
-        )
-        second_output = json.loads(capsys.readouterr().out)
-
-        assert first_rc == 0
-        assert "Launch allowed" in first_output
-        assert second_rc == 0
-        assert second_output["blocked"] is False
-        assert all(item["policy_action"] == "allow" for item in second_output["artifacts"])
-
-    def test_guard_run_headless_blocks_with_review_hint_without_opening_browser(self, tmp_path, capsys, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        opened_urls: list[str] = []
-        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
-
-        rc = main(
-            [
-                "guard",
-                "run",
-                "codex",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--json",
-            ]
-        )
-        output = json.loads(capsys.readouterr().out)
-
-        assert rc == 1
-        assert output["approval_center_url"] == "http://127.0.0.1:4455"
-        assert output["blocked"] is True
-        assert output["approval_delivery"]["destination"] == "browser"
-        assert opened_urls == []
-
-    def test_headless_approval_resolver_skips_browser_for_hook_first_harnesses(self, tmp_path, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        store = GuardStore(home_dir)
-        config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
-        artifact = GuardArtifact(
-            artifact_id="copilot:project:workspace-tools",
-            name="workspace-tools",
-            harness="copilot",
-            artifact_type="mcp_server",
-            source_scope="project",
-            config_path=str(workspace_dir / ".vscode" / "mcp.json"),
-            command="python",
-            args=("-m", "http.server", "9100"),
-            transport="stdio",
-        )
-        detection = HarnessDetection(
-            harness="copilot",
-            installed=True,
-            command_available=True,
-            config_paths=(artifact.config_path,),
-            artifacts=(artifact,),
-        )
-        payload = {
-            "blocked": True,
-            "artifacts": [
-                {
-                    "artifact_id": artifact.artifact_id,
-                    "artifact_name": artifact.name,
-                    "artifact_hash": artifact_hash(artifact),
-                    "policy_action": "require-reapproval",
-                    "changed_fields": ["args"],
-                    "artifact_type": artifact.artifact_type,
-                    "source_scope": artifact.source_scope,
-                    "config_path": artifact.config_path,
-                    "launch_target": "python -m http.server 9100",
-                }
-            ],
-        }
-        opened_urls: list[str] = []
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
-
-        blocked_resolver = guard_commands_module._headless_approval_resolver(
-            args=argparse.Namespace(harness="copilot"),
-            context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
-            store=store,
-            config=config,
-        )
-        result = blocked_resolver(detection, payload)
-
-        assert opened_urls == []
-        assert result["approval_center_url"] == "http://127.0.0.1:4455"
-        assert result["approval_delivery"]["destination"] == "harness"
-        assert result["approval_delivery"]["prompt_channel"] == "hook"
-        assert result["approval_wait"]["resolved"] is False
-
-    def test_headless_approval_resolver_treats_managed_hermes_as_native_or_center(self, tmp_path, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        store = GuardStore(home_dir)
-        config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
-        artifact = GuardArtifact(
-            artifact_id="hermes:global:github",
-            name="github",
-            harness="hermes",
-            artifact_type="mcp_server",
-            source_scope="global",
-            config_path=str(home_dir / ".hermes" / "config.yaml"),
-            command="npx",
-            args=("-y", "@modelcontextprotocol/server-github"),
-            transport="stdio",
-        )
-        detection = HarnessDetection(
-            harness="hermes",
-            installed=True,
-            command_available=True,
-            config_paths=(artifact.config_path,),
-            artifacts=(artifact,),
-        )
-        payload = {
-            "blocked": True,
-            "artifacts": [
-                {
-                    "artifact_id": artifact.artifact_id,
-                    "artifact_name": artifact.name,
-                    "artifact_hash": artifact_hash(artifact),
-                    "policy_action": "require-reapproval",
-                    "changed_fields": ["args"],
-                    "artifact_type": artifact.artifact_type,
-                    "source_scope": artifact.source_scope,
-                    "config_path": artifact.config_path,
-                    "launch_target": "npx -y @modelcontextprotocol/server-github",
-                }
-            ],
-        }
-        store.set_managed_install(
-            "hermes",
-            True,
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
             str(workspace_dir),
-            {"capabilities": {"same_channel": True}},
-            "2026-04-15T00:00:00+00:00",
-        )
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-
-        blocked_resolver = guard_commands_module._headless_approval_resolver(
-            args=argparse.Namespace(harness="hermes"),
-            context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
-            store=store,
-            config=config,
-        )
-        result = blocked_resolver(detection, payload)
-
-        assert result["approval_delivery"]["destination"] == "harness"
-        assert result["approval_delivery"]["prompt_channel"] == "native"
-        assert result["approval_wait"]["resolved"] is False
-
-    def test_hermes_mcp_proxy_streams_stdio_messages_without_waiting_for_eof(self, tmp_path, monkeypatch, capsys):
-        guard_home = tmp_path / "guard-home"
-        workspace = tmp_path / "workspace"
-        workspace.mkdir()
-        store = GuardStore(guard_home)
-        store.set_managed_install(
-            "hermes",
-            True,
-            str(workspace),
-            {
-                "servers": {
-                    "yaml:demo": {
-                        "transport": "stdio",
-                        "command": "python",
-                        "args": ["-m", "demo"],
-                    }
-                }
-            },
-            "2026-04-15T00:00:00+00:00",
-        )
-        captured_messages: list[dict[str, object]] = []
-
-        class _FakeProxy:
-            def __init__(self, **kwargs) -> None:
-                self.kwargs = kwargs
-
-            def run_stream(self, *, input_stream, output_stream, error_stream) -> int:
-                for line in input_stream:
-                    payload = json.loads(line)
-                    captured_messages.append(payload)
-                    output_stream.write(
-                        json.dumps({"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}) + "\n"
-                    )
-                    output_stream.flush()
-                return 0
-
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(guard_commands_module, "StdioGuardProxy", _FakeProxy)
-        monkeypatch.setattr(sys, "stdin", _LineOnlyInput(['{"jsonrpc":"2.0","id":7,"method":"tools/list"}\n']))
-
-        rc = guard_commands_module._run_hermes_mcp_proxy(
-            args=argparse.Namespace(server="yaml:demo"),
-            context=HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=guard_home),
-            store=store,
-            config=load_guard_config(guard_home),
-        )
-        output = capsys.readouterr()
-
-        assert rc == 0
-        assert captured_messages == [{"jsonrpc": "2.0", "id": 7, "method": "tools/list"}]
-        assert '"id": 7' in output.out
-
-    def test_hermes_mcp_proxy_passes_manifest_env_to_stdio_proxy(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-        workspace = tmp_path / "workspace"
-        workspace.mkdir()
-        store = GuardStore(guard_home)
-        store.set_managed_install(
-            "hermes",
-            True,
-            str(workspace),
-            {
-                "servers": {
-                    "yaml:demo": {
-                        "transport": "stdio",
-                        "command": "python",
-                        "args": ["-m", "demo"],
-                        "env": {"GITHUB_TOKEN": "ghp_test_token"},
-                    }
-                }
-            },
-            "2026-04-15T00:00:00+00:00",
-        )
-        captured_init: list[dict[str, object]] = []
-
-        class _FakeProxy:
-            def __init__(self, **kwargs) -> None:
-                captured_init.append(kwargs)
-
-            def run_stream(self, *, input_stream, output_stream, error_stream) -> int:
-                return 0
-
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(guard_commands_module, "StdioGuardProxy", _FakeProxy)
-        monkeypatch.setattr(sys, "stdin", _LineOnlyInput([]))
-
-        rc = guard_commands_module._run_hermes_mcp_proxy(
-            args=argparse.Namespace(server="yaml:demo"),
-            context=HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=guard_home),
-            store=store,
-            config=load_guard_config(guard_home),
-        )
-
-        assert rc == 0
-        assert captured_init[0]["env"] == {"GITHUB_TOKEN": "ghp_test_token"}
-
-    def test_hermes_mcp_proxy_rejects_invalid_json(self, tmp_path, monkeypatch, capsys):
-        guard_home = tmp_path / "guard-home"
-        store = GuardStore(guard_home)
-        store.set_managed_install(
-            "hermes",
-            True,
-            None,
-            {
-                "servers": {
-                    "yaml:demo": {
-                        "transport": "http",
-                        "url": "https://mcp.example.com/v1/mcp",
-                    }
-                }
-            },
-            "2026-04-15T00:00:00+00:00",
-        )
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(sys, "stdin", io.StringIO("{not-json}\n"))
-
-        rc = guard_commands_module._run_hermes_mcp_proxy(
-            args=argparse.Namespace(server="yaml:demo"),
-            context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
-            store=store,
-            config=load_guard_config(guard_home),
-        )
-        output = capsys.readouterr()
-
-        assert rc == 2
-        assert "invalid JSON" in output.err
-
-    def test_hermes_mcp_proxy_forwards_remote_headers_and_flushes_stdout(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-        store = GuardStore(guard_home)
-        store.set_managed_install(
-            "hermes",
-            True,
-            None,
-            {
-                "servers": {
-                    "yaml:demo": {
-                        "transport": "http",
-                        "url": "https://mcp.example.com/v1/mcp",
-                        "headers": {"Authorization": "Bearer test-token"},
-                    }
-                }
-            },
-            "2026-04-15T00:00:00+00:00",
-        )
-        captured_headers: list[dict[str, str]] = []
-        output_stream = _FlushTrackingOutput()
-
-        class _FakeRemoteProxy:
-            def __init__(self, *, base_url: str, allow_insecure_localhost: bool = False) -> None:
-                self.base_url = base_url
-                self.allow_insecure_localhost = allow_insecure_localhost
-
-            def forward(
-                self,
-                path: str,
-                payload: dict[str, object],
-                headers: dict[str, str] | None = None,
-                expect_response: bool = True,
-            ) -> dict[str, object]:
-                captured_headers.append(headers or {})
-                assert expect_response is True
-                return {"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}
-
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(guard_commands_module, "RemoteGuardProxy", _FakeRemoteProxy)
-        monkeypatch.setattr(sys, "stdin", io.StringIO('{"jsonrpc":"2.0","id":9,"method":"tools/list"}\n'))
-        monkeypatch.setattr(sys, "stdout", output_stream)
-
-        rc = guard_commands_module._run_hermes_mcp_proxy(
-            args=argparse.Namespace(server="yaml:demo"),
-            context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
-            store=store,
-            config=load_guard_config(guard_home),
-        )
-
-        assert rc == 0
-        assert captured_headers == [{"Authorization": "Bearer test-token"}]
-        assert '"id":9' in output_stream.getvalue()
-        assert output_stream.flush_count >= 1
-
-    def test_hermes_mcp_proxy_skips_http_notification_responses(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-        store = GuardStore(guard_home)
-        store.set_managed_install(
-            "hermes",
-            True,
-            None,
-            {
-                "servers": {
-                    "yaml:demo": {
-                        "transport": "http",
-                        "url": "https://mcp.example.com/v1/mcp",
-                    }
-                }
-            },
-            "2026-04-15T00:00:00+00:00",
-        )
-        captured_expect_response: list[bool] = []
-        output_stream = _FlushTrackingOutput()
-
-        class _FakeRemoteProxy:
-            def __init__(self, *, base_url: str, allow_insecure_localhost: bool = False) -> None:
-                self.base_url = base_url
-                self.allow_insecure_localhost = allow_insecure_localhost
-
-            def forward(
-                self,
-                path: str,
-                payload: dict[str, object],
-                headers: dict[str, str] | None = None,
-                expect_response: bool = True,
-            ) -> dict[str, object] | None:
-                captured_expect_response.append(expect_response)
-                return None
-
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(guard_commands_module, "RemoteGuardProxy", _FakeRemoteProxy)
-        monkeypatch.setattr(
-            sys,
-            "stdin",
-            io.StringIO('{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}\n'),
-        )
-        monkeypatch.setattr(sys, "stdout", output_stream)
-
-        rc = guard_commands_module._run_hermes_mcp_proxy(
-            args=argparse.Namespace(server="yaml:demo"),
-            context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
-            store=store,
-            config=load_guard_config(guard_home),
-        )
-
-        assert rc == 0
-        assert captured_expect_response == [False]
-        assert output_stream.getvalue() == ""
-
-    def test_hermes_mcp_proxy_http_transport_does_not_require_guard_daemon(self, tmp_path, monkeypatch):
-        guard_home = tmp_path / "guard-home"
-        store = GuardStore(guard_home)
-        store.set_managed_install(
-            "hermes",
-            True,
-            None,
-            {
-                "servers": {
-                    "yaml:demo": {
-                        "transport": "http",
-                        "url": "https://mcp.example.com/v1/mcp",
-                    }
-                }
-            },
-            "2026-04-15T00:00:00+00:00",
-        )
-        output_stream = _FlushTrackingOutput()
-
-        class _FakeRemoteProxy:
-            def __init__(self, *, base_url: str, allow_insecure_localhost: bool = False) -> None:
-                self.base_url = base_url
-                self.allow_insecure_localhost = allow_insecure_localhost
-
-            def forward(
-                self,
-                path: str,
-                payload: dict[str, object],
-                headers: dict[str, str] | None = None,
-                expect_response: bool = True,
-            ) -> dict[str, object]:
-                return {"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}
-
-        def _raise_daemon_error(_guard_home):
-            raise RuntimeError("daemon unavailable")
-
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", _raise_daemon_error)
-        monkeypatch.setattr(guard_commands_module, "RemoteGuardProxy", _FakeRemoteProxy)
-        monkeypatch.setattr(sys, "stdin", io.StringIO('{"jsonrpc":"2.0","id":9,"method":"tools/list"}\n'))
-        monkeypatch.setattr(sys, "stdout", output_stream)
-
-        rc = guard_commands_module._run_hermes_mcp_proxy(
-            args=argparse.Namespace(server="yaml:demo"),
-            context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
-            store=store,
-            config=load_guard_config(guard_home),
-        )
-
-        assert rc == 0
-        assert '"id":9' in output_stream.getvalue()
-
-    def test_approval_surface_policy_disables_auto_open_when_flow_forbids_browser(self):
-        assert (
-            guard_commands_module._approval_surface_policy_for_flow(
-                "auto-open-once",
-                {"tier": "approval-center", "auto_open_browser": False, "prompt_channel": "native-fallback"},
-            )
-            == "never-auto-open"
-        )
-
-    def test_hermes_pretool_uses_managed_same_channel_policy_for_blocked_operations(
-        self,
-        tmp_path,
-        capsys,
-        monkeypatch,
-    ):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        workspace_dir.mkdir(parents=True, exist_ok=True)
-        _write_text(home_dir / "config.toml", 'mode = "prompt"\napproval_surface_policy = "auto-open-once"\n')
-        GuardStore(home_dir).set_managed_install(
-            "hermes",
-            True,
-            str(workspace_dir),
-            {"capabilities": {"same_channel": True}},
-            "2026-04-15T00:00:00+00:00",
-        )
-
-        captured_surface_policy: list[str] = []
-
-        class _FakeDaemonClient:
-            def start_session(self, **kwargs) -> dict[str, object]:
-                return {"session_id": "session-1"}
-
-            def queue_blocked_operation(self, **kwargs) -> dict[str, object]:
-                captured_surface_policy.append(str(kwargs["approval_surface_policy"]))
-                return {
-                    "operation": {"operation_id": "operation-1"},
-                    "approval_requests": [{"request_id": "request-1"}],
-                }
-
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(
-            guard_commands_module,
-            "load_guard_surface_daemon_client",
-            lambda _guard_home: _FakeDaemonClient(),
-        )
-        monkeypatch.setattr(
-            sys,
-            "stdin",
-            io.StringIO(
-                json.dumps(
-                    {
-                        "event": "PreToolUse",
-                        "tool_name": "shell",
-                        "tool_input": {"command": "docker login ghcr.io", "docker_mode": True},
-                        "source_scope": "project",
-                    }
-                )
-            ),
-        )
-
-        rc = main(
-            [
-                "hermes",
-                "pretool",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--json",
-            ]
-        )
-        output = json.loads(capsys.readouterr().out)
-
-        assert rc == 1
-        assert captured_surface_policy == ["notify-only"]
-        assert output["approval_delivery"]["destination"] == "harness"
-        assert output["approval_delivery"]["prompt_channel"] == "native"
-
-    def test_guard_run_dry_run_human_output_is_summary_first(self, tmp_path, capsys):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-
-        rc = main(
-            [
-                "guard",
-                "run",
-                "codex",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--dry-run",
-            ]
-        )
-        output = capsys.readouterr().out
-
-        assert rc == 1
-        assert "What changed" in output
-        assert "Next step" in output
-        assert "rerun without --dry-run" in output.lower()
-        assert "Fields" not in output
-        assert "first_seen" not in output
-
-    def test_guard_run_renderer_coalesces_replaced_artifacts(self, capsys):
-        emit_guard_payload(
-            "run",
-            {
-                "harness": "codex",
-                "blocked": True,
-                "dry_run": True,
-                "launched": False,
-                "receipts_recorded": 2,
-                "artifacts": [
-                    {
-                        "artifact_id": "codex:project:chrome-devtools:new",
-                        "artifact_name": "chrome-devtools",
-                        "changed": True,
-                        "changed_fields": ["first_seen"],
-                        "policy_action": "require-reapproval",
-                        "artifact_label": "MCP server",
-                        "why_now": "It is new in this codex workspace, so Guard paused it for review.",
-                        "risk_summary": "Connects to a remote server.",
-                    },
-                    {
-                        "artifact_id": "codex:project:chrome-devtools:old",
-                        "artifact_name": "chrome-devtools",
-                        "changed": True,
-                        "changed_fields": ["removed"],
-                        "policy_action": "require-reapproval",
-                        "artifact_label": "MCP server",
-                        "why_now": (
-                            "It disappeared from the harness config, so Guard paused the change until you "
-                            "confirm the removal."
-                        ),
-                    },
-                ],
-            },
-            False,
-        )
-        output = capsys.readouterr().out
-
-        assert "chrome-devtools" in output
-        assert output.lower().count("chrome-devtools") == 1
-        assert "definition" in output.lower()
-        assert "replaced" in output.lower()
-        assert "first_seen" not in output
-        assert "removed" not in output
-
-    def test_guard_run_renderer_keeps_same_named_artifacts_separate_across_configs(self, capsys):
-        emit_guard_payload(
-            "run",
-            {
-                "harness": "codex",
-                "blocked": True,
-                "dry_run": True,
-                "launched": False,
-                "receipts_recorded": 2,
-                "artifacts": [
-                    {
-                        "artifact_id": "codex:project:chrome-devtools:new",
-                        "artifact_name": "chrome-devtools",
-                        "changed": True,
-                        "changed_fields": ["first_seen"],
-                        "policy_action": "require-reapproval",
-                        "artifact_label": "MCP server",
-                        "source_scope": "project",
-                        "config_path": "/workspace/.codex/config.toml",
-                        "why_now": "It is new in this codex workspace, so Guard paused it for review.",
-                    },
-                    {
-                        "artifact_id": "codex:global:chrome-devtools:old",
-                        "artifact_name": "chrome-devtools",
-                        "changed": True,
-                        "changed_fields": ["removed"],
-                        "policy_action": "require-reapproval",
-                        "artifact_label": "MCP server",
-                        "source_scope": "global",
-                        "config_path": "/home/.codex/config.toml",
-                        "why_now": (
-                            "It disappeared from the global harness config, so Guard paused the change until "
-                            "you confirm the removal."
-                        ),
-                    },
-                ],
-            },
-            False,
-        )
-        output = capsys.readouterr().out
-
-        assert "chrome-devtools" in output
-        assert output.lower().count("chrome-devtools") == 2
-        assert "definition replaced" not in output.lower()
-
-    def test_guard_run_renderer_filters_unchanged_artifacts_and_counts_review_items(self, capsys):
-        emit_guard_payload(
-            "run",
-            {
-                "harness": "codex",
-                "blocked": True,
-                "dry_run": True,
-                "launched": False,
-                "receipts_recorded": 3,
-                "artifacts": [
-                    {
-                        "artifact_id": "codex:project:stable-tool",
-                        "artifact_name": "stable-tool",
-                        "changed": False,
-                        "changed_fields": [],
-                        "policy_action": "allow",
-                        "why_now": "Guard matched an existing allow rule for this exact version.",
-                    },
-                    {
-                        "artifact_id": "codex:project:already-approved",
-                        "artifact_name": "already-approved",
-                        "changed": True,
-                        "changed_fields": ["command"],
-                        "policy_action": "allow",
-                        "why_now": "Guard matched an existing allow rule for this exact definition.",
-                    },
-                    {
-                        "artifact_id": "codex:project:review-tool",
-                        "artifact_name": "review-tool",
-                        "changed": True,
-                        "changed_fields": ["first_seen"],
-                        "policy_action": "require-reapproval",
-                        "why_now": "It is new in this codex workspace, so Guard paused it for review.",
-                    },
-                ],
-            },
-            False,
-        )
-        output = capsys.readouterr().out
-
-        assert "stable-tool" not in output
-        assert "already-approved" in output
-        assert "review-tool" in output
-        assert "Needs review 1" in output
-
-    def test_guard_run_renderer_keeps_unchanged_blockers_visible(self, capsys):
-        emit_guard_payload(
-            "run",
-            {
-                "harness": "codex",
-                "blocked": True,
-                "dry_run": True,
-                "launched": False,
-                "receipts_recorded": 1,
-                "artifacts": [
-                    {
-                        "artifact_id": "codex:project:blocked-tool",
-                        "artifact_name": "blocked-tool",
-                        "changed": False,
-                        "changed_fields": [],
-                        "policy_action": "require-reapproval",
-                        "why_now": "Guard blocked this definition because the configured policy does not trust it yet.",
-                    }
-                ],
-            },
-            False,
-        )
-        output = capsys.readouterr().out
-
-        assert "blocked-tool" in output
-        assert "Needs review 1" in output
-
-    def test_guard_run_renderer_counts_each_visible_blocker_even_when_rows_coalesce(self, capsys):
-        emit_guard_payload(
-            "run",
-            {
-                "harness": "codex",
-                "blocked": True,
-                "dry_run": True,
-                "launched": False,
-                "receipts_recorded": 2,
-                "artifacts": [
-                    {
-                        "artifact_id": "codex:project:chrome-devtools:new",
-                        "artifact_name": "chrome-devtools",
-                        "changed": True,
-                        "changed_fields": ["first_seen"],
-                        "policy_action": "require-reapproval",
-                        "why_now": "It is new in this codex workspace, so Guard paused it for review.",
-                    },
-                    {
-                        "artifact_id": "codex:project:chrome-devtools:old",
-                        "artifact_name": "chrome-devtools",
-                        "changed": True,
-                        "changed_fields": ["removed"],
-                        "policy_action": "require-reapproval",
-                        "why_now": (
-                            "It disappeared from the harness config, so Guard paused the change until you confirm it."
-                        ),
-                    },
-                ],
-            },
-            False,
-        )
-        output = capsys.readouterr().out
-
-        assert "Needs review 2" in output
-        assert output.lower().count("chrome-devtools") == 1
-
-    def test_guard_run_renderer_leads_blocked_dry_runs_with_full_review_path(self, capsys):
-        emit_guard_payload(
-            "run",
-            {
-                "harness": "codex",
-                "blocked": True,
-                "dry_run": True,
-                "launched": False,
-                "receipts_recorded": 1,
-                "artifacts": [
-                    {
-                        "artifact_id": "codex:project:blocked-tool",
-                        "artifact_name": "blocked-tool",
-                        "changed": False,
-                        "changed_fields": [],
-                        "policy_action": "require-reapproval",
-                        "why_now": "Guard blocked this definition because the configured policy does not trust it yet.",
-                    }
-                ],
-            },
-            False,
-        )
-        output = capsys.readouterr().out
-
-        assert "Resolve the blocked launch" in output
-        assert "hol-guard run codex" in output
-        assert "Inspect only the changed config entries (optional)" in output
-        assert "hol-guard diff codex" in output
-
-    def test_guard_run_renderer_counts_only_blocking_actions_as_needing_review(self, capsys):
-        emit_guard_payload(
-            "run",
-            {
-                "harness": "codex",
-                "blocked": True,
-                "dry_run": True,
-                "launched": False,
-                "receipts_recorded": 2,
-                "artifacts": [
-                    {
-                        "artifact_id": "codex:project:warn-only-tool",
-                        "artifact_name": "warn-only-tool",
-                        "changed": True,
-                        "changed_fields": ["command"],
-                        "policy_action": "warn",
-                        "why_now": "Guard wants to highlight this change, but it does not block launch.",
-                    },
-                    {
-                        "artifact_id": "codex:project:blocked-tool",
-                        "artifact_name": "blocked-tool",
-                        "changed": True,
-                        "changed_fields": ["first_seen"],
-                        "policy_action": "require-reapproval",
-                        "why_now": "Guard blocked this definition because the configured policy does not trust it yet.",
-                    },
-                ],
-            },
-            False,
-        )
-        output = capsys.readouterr().out
-
-        assert "warn-only-tool" in output
-        assert "blocked-tool" in output
-        assert "Needs review 1" in output
-
-    def test_guard_run_renderer_uses_neutral_blocked_copy_for_policy_only_blockers(self, capsys):
-        emit_guard_payload(
-            "run",
-            {
-                "harness": "codex",
-                "blocked": True,
-                "dry_run": True,
-                "launched": False,
-                "receipts_recorded": 1,
-                "artifacts": [
-                    {
-                        "artifact_id": "codex:project:blocked-tool",
-                        "artifact_name": "blocked-tool",
-                        "changed": False,
-                        "changed_fields": [],
-                        "policy_action": "require-reapproval",
-                        "why_now": "Guard blocked this definition because the configured policy does not trust it yet.",
-                    }
-                ],
-            },
-            False,
-        )
-        output = capsys.readouterr().out
-
-        assert "Guard found changes that need review before a real launch." not in output
-        assert "Guard found artifacts that need review before a real launch." in output
-
-    def test_guard_run_renderer_prefers_context_preserving_rerun_command(self):
-        steps = guard_render_module._build_run_steps(
-            {
-                "harness": "codex",
-                "blocked": True,
-                "dry_run": True,
-                "rerun_command": (
-                    "hol-guard run codex --home /guard-home --workspace /workspace "
-                    "--default-action warn --arg '--model gpt-5'"
-                ),
-            },
-            blocked=True,
-            dry_run=True,
-        )
-
-        assert steps[0]["command"] == (
-            "hol-guard run codex --home /guard-home --workspace /workspace --default-action warn --arg '--model gpt-5'"
-        )
-
-    def test_guard_rerun_command_preserves_run_context(self):
-        command = guard_commands_module._guard_rerun_command(
-            argparse.Namespace(
-                harness="codex",
-                home="/guard-home",
-                guard_home=None,
-                workspace="/workspace",
-                default_action="warn",
-                passthrough_args=["--model gpt-5"],
-            )
-        )
-
-        assert command == (
-            "hol-guard run codex --home /guard-home --workspace /workspace --default-action warn --arg '--model gpt-5'"
-        )
-
-    def test_guard_rerun_command_uses_windows_safe_quoting(self, monkeypatch):
-        monkeypatch.setattr(guard_commands_module.sys, "platform", "win32")
-        command = guard_commands_module._guard_rerun_command(
-            argparse.Namespace(
-                harness="codex",
-                home=r"C:\Guard Home",
-                guard_home=None,
-                workspace=r"C:\Workspace Root",
-                default_action="warn",
-                passthrough_args=["--model gpt-5"],
-            )
-        )
-
-        expected = subprocess.list2cmdline(
-            [
-                "hol-guard",
-                "run",
-                "codex",
-                "--home",
-                r"C:\Guard Home",
-                "--workspace",
-                r"C:\Workspace Root",
-                "--default-action",
-                "warn",
-                "--arg",
-                "--model gpt-5",
-            ]
-        )
-
-        assert command == expected
-
-    def test_guard_diff_command_preserves_common_context(self):
-        command = guard_commands_module._guard_diff_command(
-            argparse.Namespace(
-                harness="codex",
-                home="/guard-home",
-                guard_home=None,
-                workspace="/workspace",
-            )
-        )
-
-        assert command == "hol-guard diff codex --home /guard-home --workspace /workspace"
-
-    def test_guard_run_renderer_uses_context_preserving_diff_command(self):
-        steps = guard_render_module._build_run_steps(
-            {
-                "harness": "codex",
-                "blocked": True,
-                "dry_run": True,
-                "diff_command": "hol-guard diff codex --home /guard-home --workspace /workspace",
-            },
-            blocked=True,
-            dry_run=True,
-        )
-
-        assert steps[1]["command"] == "hol-guard diff codex --home /guard-home --workspace /workspace"
-
-    def test_guard_run_renderer_uses_context_preserving_launch_command_for_clean_dry_runs(self):
-        steps = guard_render_module._build_run_steps(
-            {
-                "harness": "codex",
-                "dry_run": True,
-                "rerun_command": (
-                    "hol-guard run codex --home /guard-home --workspace /workspace "
-                    "--default-action warn --arg '--model gpt-5'"
-                ),
-            },
-            blocked=False,
-            dry_run=True,
-        )
-
-        assert steps[0]["command"] == (
-            "hol-guard run codex --home /guard-home --workspace /workspace --default-action warn --arg '--model gpt-5'"
-        )
-
-    def test_guard_approvals_command_preserves_common_context(self):
-        command = guard_commands_module._guard_approvals_command(
-            argparse.Namespace(
-                harness="codex",
-                home="/guard-home",
-                guard_home="/guard-db",
-                workspace="/workspace",
-            )
-        )
-
-        assert command == "hol-guard approvals --home /guard-home --guard-home /guard-db --workspace /workspace"
-
-    def test_guard_run_renderer_uses_context_preserving_approvals_command_for_blocked_launches(self):
-        steps = guard_render_module._build_run_steps(
-            {
-                "harness": "codex",
-                "approval_center_url": "http://127.0.0.1:4455",
-                "approvals_command": "hol-guard approvals --home /guard-home --workspace /workspace",
-                "review_hint": "Open the approval center and resolve the pending request.",
-            },
-            blocked=True,
-            dry_run=False,
-        )
-
-        assert steps[0]["command"] == "hol-guard approvals --home /guard-home --workspace /workspace"
-
-    def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(
-        self, tmp_path, capsys, monkeypatch
-    ):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(
-            guard_runner_module.subprocess,
-            "run",
-            lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
-        )
-
-        rc = main(
-            [
-                "guard",
-                "run",
-                "codex",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--default-action",
-                "allow",
-            ]
-        )
-        output = capsys.readouterr().out
-        store = GuardStore(home_dir)
-        receipts = store.list_receipts(limit=10)
-        snapshots = store.list_snapshots("codex")
-
-        assert rc == 0
-        assert "Launch allowed" in output
-        assert len(receipts) == 2
-        assert {
-            "codex:global:global_tools",
-            "codex:project:workspace_skill",
-        } <= set(snapshots)
-
-    def test_guard_run_headless_waits_for_local_approval_and_resumes(self, tmp_path, capsys, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-        _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
-
-        store = GuardStore(home_dir)
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(
-            guard_runner_module.subprocess,
-            "run",
-            lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
-        )
-
-        def resolve_pending() -> None:
-            for _ in range(40):
-                pending = store.list_approval_requests(limit=10)
-                if pending:
-                    for request in pending:
-                        apply_approval_resolution(
-                            store=store,
-                            request_id=str(request["request_id"]),
-                            action="allow",
-                            scope="artifact",
-                            workspace=None,
-                            reason="approved from test",
-                        )
-                    if not store.list_approval_requests(limit=10):
-                        return
-                threading.Event().wait(0.05)
-
-        worker = threading.Thread(target=resolve_pending, daemon=True)
-        worker.start()
-
-        rc = main(
-            [
-                "guard",
-                "run",
-                "claude-code",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-            ]
-        )
-        output = capsys.readouterr().out
-
-        assert rc == 0
-        assert "Launch allowed" in output
-        assert "Approval received" in output
-
-    def test_guard_run_headless_redetects_before_persisted_resume(self, tmp_path, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 1\n")
-
-        store = GuardStore(home_dir)
-        baseline = GuardArtifact(
-            artifact_id="claude-code:project:workspace-tools",
-            name="workspace-tools",
-            harness="claude-code",
-            artifact_type="mcp_server",
-            source_scope="project",
-            config_path=str(workspace_dir / ".mcp.json"),
-            command="python",
-            args=("-m", "http.server", "9100"),
-            transport="stdio",
-        )
-        baseline_hash = artifact_hash(baseline)
-        store.save_snapshot(
-            "claude-code",
-            baseline.artifact_id,
-            {**baseline.to_dict(), "artifact_hash": baseline_hash},
-            baseline_hash,
-            "2026-04-10T00:00:00+00:00",
-        )
-        detections = [
-            HarnessDetection(
-                harness="claude-code",
-                installed=True,
-                command_available=True,
-                config_paths=(str(workspace_dir / ".mcp.json"),),
-                artifacts=(
-                    GuardArtifact(
-                        artifact_id=baseline.artifact_id,
-                        name="workspace-tools",
-                        harness="claude-code",
-                        artifact_type="mcp_server",
-                        source_scope="project",
-                        config_path=str(workspace_dir / ".mcp.json"),
-                        command="python",
-                        args=("-m", "http.server", "9100", "--changed-1"),
-                        transport="stdio",
-                    ),
-                ),
-            ),
-            HarnessDetection(
-                harness="claude-code",
-                installed=True,
-                command_available=True,
-                config_paths=(str(workspace_dir / ".mcp.json"),),
-                artifacts=(
-                    GuardArtifact(
-                        artifact_id=baseline.artifact_id,
-                        name="workspace-tools",
-                        harness="claude-code",
-                        artifact_type="mcp_server",
-                        source_scope="project",
-                        config_path=str(workspace_dir / ".mcp.json"),
-                        command="python",
-                        args=("-m", "http.server", "9100", "--changed-2"),
-                        transport="stdio",
-                    ),
-                ),
-            ),
+            "--harness",
+            "copilot",
         ]
-        call_count = {"detect": 0}
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(
-            guard_runner_module.subprocess,
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "approve" in output["permissionDecisionReason"].lower()
+
+
+def test_guard_hook_emits_copilot_native_ask_response_for_destructive_shell_command(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": "echo MALICIOUS > dangerous-marker.json"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "hol guard" in output["permissionDecisionReason"].lower()
+    assert "approve it in hol guard, then retry." in output["permissionDecisionReason"].lower()
+
+
+def test_guard_hook_emits_copilot_native_ask_response_for_destructive_shell_redirection_without_spaces(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": "echo MALICIOUS>dangerous-marker.json"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "hol guard" in output["permissionDecisionReason"].lower()
+    assert "approve it in hol guard, then retry." in output["permissionDecisionReason"].lower()
+
+
+def test_guard_hook_emits_copilot_native_allow_response_for_read_only_ls_pipeline(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": "ls /mock-workspace/app/guard/_components/ 2>/dev/null | head -40"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
+
+
+def test_guard_hook_emits_copilot_permission_request_allow_for_safe_mcp_tool(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hookName": "permissionRequest",
+        "toolName": "danger_lab/safe_echo",
+        "toolInput": {"text": "ok"},
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output == {"behavior": "allow"}
+
+
+def test_guard_hook_emits_copilot_permission_request_allow_for_hook_event_name_variant(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hookEventName": "permissionRequest",
+        "toolName": "danger_lab/safe_echo",
+        "toolInput": {"text": "ok"},
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output == {"behavior": "allow"}
+
+
+def test_guard_hook_emits_copilot_permission_request_deny_for_risky_mcp_tool(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hookName": "permissionRequest",
+        "toolName": "danger_lab/dangerous_delete",
+        "toolInput": {"target": "dangerous-marker.json"},
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["behavior"] == "deny"
+    assert output["interrupt"] is True
+    assert "HOL Guard blocked" in output["message"]
+    assert "danger_lab:dangerous_delete" in output["message"]
+
+
+def test_guard_hook_emits_copilot_permission_request_deny_from_tool_calls_payload(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hookName": "permissionRequest",
+        "toolCalls": [
+            {
+                "id": "call-dangerous",
+                "name": "danger_lab/dangerous_delete",
+                "args": json.dumps({"target": "dangerous-marker.json"}),
+            }
+        ],
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["behavior"] == "deny"
+    assert "danger_lab:dangerous_delete" in output["message"]
+
+
+def test_normalize_hook_payload_prefers_matching_tool_call_args() -> None:
+    payload = guard_commands_module._normalize_hook_payload(
+        {
+            "toolName": "danger_lab/dangerous_delete",
+            "toolCalls": [
+                {
+                    "id": "call-safe",
+                    "name": "safe_tools/read_file",
+                    "args": json.dumps({"path": "README.md"}),
+                },
+                {
+                    "id": "call-dangerous",
+                    "name": "danger_lab/dangerous_delete",
+                    "args": json.dumps({"target": "dangerous-marker.json"}),
+                },
+            ],
+        }
+    )
+
+    assert payload["tool_name"] == "danger_lab/dangerous_delete"
+    assert payload["tool_input"] == {"target": "dangerous-marker.json"}
+    assert payload["arguments"] == {"target": "dangerous-marker.json"}
+
+
+def test_copilot_runtime_tool_call_prefers_cli_workspace_config_when_workspace_is_inferred(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_json(
+        workspace_dir / ".mcp.json",
+        {"mcpServers": {"danger_lab": {"command": "python3", "args": ["cli-danger-lab.py"]}}},
+    )
+    _write_json(
+        workspace_dir / ".vscode" / "mcp.json",
+        {"servers": {"danger_lab": {"command": "python3", "args": ["ide-danger-lab.py"]}}},
+    )
+
+    artifact = guard_commands_module._copilot_runtime_tool_call(
+        payload={
+            "tool_name": "mcp_danger_lab_dangerous_delete",
+            "tool_input": {"target": "dangerous-marker.json"},
+            "source_scope": "project",
+        },
+        home_dir=home_dir,
+        workspace=workspace_dir,
+        preferred_workspace_config="cli",
+    )
+
+    assert artifact is not None
+    runtime_artifact, _artifact_hash, _arguments = artifact
+    assert runtime_artifact.config_path == str(workspace_dir / ".mcp.json")
+
+
+def test_copilot_runtime_tool_call_prefers_ide_workspace_config_when_workspace_is_explicit(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_json(
+        workspace_dir / ".mcp.json",
+        {"mcpServers": {"danger_lab": {"command": "python3", "args": ["cli-danger-lab.py"]}}},
+    )
+    _write_json(
+        workspace_dir / ".vscode" / "mcp.json",
+        {"servers": {"danger_lab": {"command": "python3", "args": ["ide-danger-lab.py"]}}},
+    )
+
+    artifact = guard_commands_module._copilot_runtime_tool_call(
+        payload={
+            "tool_name": "mcp_danger_lab_dangerous_delete",
+            "tool_input": {"target": "dangerous-marker.json"},
+            "source_scope": "project",
+        },
+        home_dir=home_dir,
+        workspace=workspace_dir,
+        preferred_workspace_config="ide",
+    )
+
+    assert artifact is not None
+    runtime_artifact, _artifact_hash, _arguments = artifact
+    assert runtime_artifact.config_path == str(workspace_dir / ".vscode" / "mcp.json")
+
+
+def test_guard_hook_emits_copilot_native_deny_for_risky_mcp_pre_tool_use(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_json(
+        workspace_dir / ".vscode" / "mcp.json",
+        {
+            "servers": {
+                "danger_lab": {
+                    "type": "local",
+                    "command": "python3",
+                    "args": ["danger-lab.py"],
+                }
+            }
+        },
+    )
+    event = {
+        "hook_event_name": "PreToolUse",
+        "toolName": "mcp_danger_lab_dangerous_delete",
+        "toolArgs": json.dumps({"target": "dangerous-marker.json"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(guard_home),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    store = GuardStore(guard_home)
+    receipts = store.list_receipts(limit=20)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "hol guard" in output["permissionDecisionReason"].lower()
+    assert "destructive" in output["permissionDecisionReason"].lower()
+    assert receipts == []
+
+
+def test_guard_hook_emits_copilot_native_allow_for_safe_mcp_pre_tool_use(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_json(
+        workspace_dir / ".vscode" / "mcp.json",
+        {
+            "servers": {
+                "danger_lab": {
+                    "type": "local",
+                    "command": "python3",
+                    "args": ["danger-lab.py"],
+                }
+            }
+        },
+    )
+    event = {
+        "hook_event_name": "PreToolUse",
+        "toolName": "mcp_danger_lab_safe_echo",
+        "toolArgs": json.dumps({"text": "ok"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(guard_home),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    store = GuardStore(guard_home)
+    receipts = store.list_receipts(limit=20)
+
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
+    assert any(
+        receipt["artifact_id"] == "copilot:runtime:project:danger_lab:safe_echo"
+        and receipt["policy_decision"] == "allow"
+        for receipt in receipts
+    )
+
+
+def test_guard_hook_resolves_copilot_nested_cwd_back_to_workspace_root(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    guard_home = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    nested_dir = workspace_dir / "src" / "components"
+    nested_dir.mkdir(parents=True, exist_ok=True)
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_json(
+        workspace_dir / ".vscode" / "mcp.json",
+        {
+            "servers": {
+                "danger_lab": {
+                    "type": "local",
+                    "command": "python3",
+                    "args": ["danger-lab.py"],
+                }
+            }
+        },
+    )
+    event = {
+        "hook_event_name": "PreToolUse",
+        "cwd": str(nested_dir),
+        "toolName": "mcp_danger_lab_safe_echo",
+        "toolArgs": json.dumps({"text": "ok"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(guard_home),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    store = GuardStore(guard_home)
+    receipts = store.list_receipts(limit=20)
+
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
+    assert any(
+        receipt["artifact_id"] == "copilot:runtime:project:danger_lab:safe_echo"
+        and receipt["policy_decision"] == "allow"
+        for receipt in receipts
+    )
+
+
+def test_guard_hook_emits_copilot_native_deny_response_for_sandbox_required_requests(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": "docker run --rm alpine sh"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+            "--policy-action",
+            "sandbox-required",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+
+
+def test_guard_hook_emits_claude_native_ask_response(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(home_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "approve" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_guard_hook_emits_claude_native_deny_response_for_sandbox_required_requests(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "docker run --rm alpine sh"},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+            "--policy-action",
+            "sandbox-required",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_guard_hook_emits_copilot_native_allow_response_for_safe_requests(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "view",
+        "toolArgs": json.dumps({"path": str(workspace_dir / "README.md")}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
+
+
+def test_guard_hook_emits_copilot_native_allow_response_for_read_only_sed_requests(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": "sed -n '1p' README.md"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
+
+
+def test_guard_run_returns_structured_error_when_executable_missing(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+    monkeypatch.setattr(
+        guard_runner_module.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("codex not found")),
+    )
+
+    rc = main(
+        [
+            "guard",
             "run",
-            lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+            "claude-code",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--default-action",
+            "allow",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 127
+    assert output["launched"] is False
+    assert output["return_code"] == 127
+    assert "codex not found" in output["launch_error"]
+
+
+def test_guard_run_prompt_allow_once_launches_and_records_override(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    answers = iter(["1", "1"])
+    monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("rich.console.Console.input", lambda self, prompt="": next(answers))
+    monkeypatch.setattr(
+        guard_runner_module.subprocess,
+        "run",
+        lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+    )
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+        ]
+    )
+    output = capsys.readouterr().out
+    receipts = GuardStore(Path(home_dir)).list_receipts(limit=10)
+
+    assert rc == 0
+    assert "Launch allowed" in output
+    assert any(item.get("user_override") == "allow-once" for item in receipts)
+
+
+def test_guard_run_prompt_allow_artifact_persists_for_next_run(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    answers = iter(["2", "2"])
+    monkeypatch.setattr(guard_commands_module.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("rich.console.Console.input", lambda self, prompt="": next(answers))
+    monkeypatch.setattr(
+        guard_runner_module.subprocess,
+        "run",
+        lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+    )
+
+    first_rc = main(
+        [
+            "guard",
+            "run",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+        ]
+    )
+    first_output = capsys.readouterr().out
+
+    second_rc = main(
+        [
+            "guard",
+            "run",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--dry-run",
+            "--json",
+        ]
+    )
+    second_output = json.loads(capsys.readouterr().out)
+
+    assert first_rc == 0
+    assert "Launch allowed" in first_output
+    assert second_rc == 0
+    assert second_output["blocked"] is False
+    assert all(item["policy_action"] == "allow" for item in second_output["artifacts"])
+
+
+def test_guard_run_headless_blocks_with_review_hint_without_opening_browser(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    opened_urls: list[str] = []
+    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert output["approval_center_url"] == "http://127.0.0.1:4455"
+    assert output["blocked"] is True
+    assert output["approval_delivery"]["destination"] == "harness"
+    assert opened_urls == []
+
+
+def test_headless_approval_resolver_skips_browser_for_hook_first_harnesses(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    store = GuardStore(home_dir)
+    config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+    artifact = GuardArtifact(
+        artifact_id="copilot:project:workspace-tools",
+        name="workspace-tools",
+        harness="copilot",
+        artifact_type="mcp_server",
+        source_scope="project",
+        config_path=str(workspace_dir / ".vscode" / "mcp.json"),
+        command="python",
+        args=("-m", "http.server", "9100"),
+        transport="stdio",
+    )
+    detection = HarnessDetection(
+        harness="copilot",
+        installed=True,
+        command_available=True,
+        config_paths=(artifact.config_path,),
+        artifacts=(artifact,),
+    )
+    payload = {
+        "blocked": True,
+        "artifacts": [
+            {
+                "artifact_id": artifact.artifact_id,
+                "artifact_name": artifact.name,
+                "artifact_hash": artifact_hash(artifact),
+                "policy_action": "require-reapproval",
+                "changed_fields": ["args"],
+                "artifact_type": artifact.artifact_type,
+                "source_scope": artifact.source_scope,
+                "config_path": artifact.config_path,
+                "launch_target": "python -m http.server 9100",
+            }
+        ],
+    }
+    opened_urls: list[str] = []
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda url: opened_urls.append(url) or True)
+
+    blocked_resolver = guard_commands_module._headless_approval_resolver(
+        args=argparse.Namespace(harness="copilot"),
+        context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+        store=store,
+        config=config,
+    )
+    result = blocked_resolver(detection, payload)
+
+    assert opened_urls == []
+    assert result["approval_center_url"] == "http://127.0.0.1:4455"
+    assert result["approval_delivery"]["destination"] == "harness"
+    assert result["approval_delivery"]["prompt_channel"] == "hook"
+    assert result["approval_wait"]["resolved"] is False
+
+
+def test_headless_approval_resolver_treats_managed_hermes_as_native_or_center(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    store = GuardStore(home_dir)
+    config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+    artifact = GuardArtifact(
+        artifact_id="hermes:global:github",
+        name="github",
+        harness="hermes",
+        artifact_type="mcp_server",
+        source_scope="global",
+        config_path=str(home_dir / ".hermes" / "config.yaml"),
+        command="npx",
+        args=("-y", "@modelcontextprotocol/server-github"),
+        transport="stdio",
+    )
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=True,
+        config_paths=(artifact.config_path,),
+        artifacts=(artifact,),
+    )
+    payload = {
+        "blocked": True,
+        "artifacts": [
+            {
+                "artifact_id": artifact.artifact_id,
+                "artifact_name": artifact.name,
+                "artifact_hash": artifact_hash(artifact),
+                "policy_action": "require-reapproval",
+                "changed_fields": ["args"],
+                "artifact_type": artifact.artifact_type,
+                "source_scope": artifact.source_scope,
+                "config_path": artifact.config_path,
+                "launch_target": "npx -y @modelcontextprotocol/server-github",
+            }
+        ],
+    }
+    store.set_managed_install(
+        "hermes",
+        True,
+        str(workspace_dir),
+        {"capabilities": {"same_channel": True}},
+        "2026-04-15T00:00:00+00:00",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    blocked_resolver = guard_commands_module._headless_approval_resolver(
+        args=argparse.Namespace(harness="hermes"),
+        context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+        store=store,
+        config=config,
+    )
+    result = blocked_resolver(detection, payload)
+
+    assert result["approval_delivery"]["destination"] == "harness"
+    assert result["approval_delivery"]["prompt_channel"] == "native"
+    assert result["approval_wait"]["resolved"] is False
+
+
+def test_hermes_mcp_proxy_streams_stdio_messages_without_waiting_for_eof(tmp_path, monkeypatch, capsys):
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(guard_home)
+    store.set_managed_install(
+        "hermes",
+        True,
+        str(workspace),
+        {
+            "servers": {
+                "yaml:demo": {
+                    "transport": "stdio",
+                    "command": "python",
+                    "args": ["-m", "demo"],
+                }
+            }
+        },
+        "2026-04-15T00:00:00+00:00",
+    )
+    captured_messages: list[dict[str, object]] = []
+
+    class _FakeProxy:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+        def run_stream(self, *, input_stream, output_stream, error_stream) -> int:
+            for line in input_stream:
+                payload = json.loads(line)
+                captured_messages.append(payload)
+                output_stream.write(json.dumps({"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}) + "\n")
+                output_stream.flush()
+            return 0
+
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(guard_commands_module, "StdioGuardProxy", _FakeProxy)
+    monkeypatch.setattr(sys, "stdin", _LineOnlyInput(['{"jsonrpc":"2.0","id":7,"method":"tools/list"}\n']))
+
+    rc = guard_commands_module._run_hermes_mcp_proxy(
+        args=argparse.Namespace(server="yaml:demo"),
+        context=HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=guard_home),
+        store=store,
+        config=load_guard_config(guard_home),
+    )
+    output = capsys.readouterr()
+
+    assert rc == 0
+    assert captured_messages == [{"jsonrpc": "2.0", "id": 7, "method": "tools/list"}]
+    assert '"id": 7' in output.out
+
+
+def test_hermes_mcp_proxy_passes_manifest_env_to_stdio_proxy(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(guard_home)
+    store.set_managed_install(
+        "hermes",
+        True,
+        str(workspace),
+        {
+            "servers": {
+                "yaml:demo": {
+                    "transport": "stdio",
+                    "command": "python",
+                    "args": ["-m", "demo"],
+                    "env": {"GITHUB_TOKEN": "ghp_test_token"},
+                }
+            }
+        },
+        "2026-04-15T00:00:00+00:00",
+    )
+    captured_init: list[dict[str, object]] = []
+
+    class _FakeProxy:
+        def __init__(self, **kwargs) -> None:
+            captured_init.append(kwargs)
+
+        def run_stream(self, *, input_stream, output_stream, error_stream) -> int:
+            return 0
+
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(guard_commands_module, "StdioGuardProxy", _FakeProxy)
+    monkeypatch.setattr(sys, "stdin", _LineOnlyInput([]))
+
+    rc = guard_commands_module._run_hermes_mcp_proxy(
+        args=argparse.Namespace(server="yaml:demo"),
+        context=HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=guard_home),
+        store=store,
+        config=load_guard_config(guard_home),
+    )
+
+    assert rc == 0
+    assert captured_init[0]["env"] == {"GITHUB_TOKEN": "ghp_test_token"}
+
+
+def test_hermes_mcp_proxy_rejects_invalid_json(tmp_path, monkeypatch, capsys):
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_managed_install(
+        "hermes",
+        True,
+        None,
+        {
+            "servers": {
+                "yaml:demo": {
+                    "transport": "http",
+                    "url": "https://mcp.example.com/v1/mcp",
+                }
+            }
+        },
+        "2026-04-15T00:00:00+00:00",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("{not-json}\n"))
+
+    rc = guard_commands_module._run_hermes_mcp_proxy(
+        args=argparse.Namespace(server="yaml:demo"),
+        context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
+        store=store,
+        config=load_guard_config(guard_home),
+    )
+    output = capsys.readouterr()
+
+    assert rc == 2
+    assert "invalid JSON" in output.err
+
+
+def test_hermes_mcp_proxy_forwards_remote_headers_and_flushes_stdout(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_managed_install(
+        "hermes",
+        True,
+        None,
+        {
+            "servers": {
+                "yaml:demo": {
+                    "transport": "http",
+                    "url": "https://mcp.example.com/v1/mcp",
+                    "headers": {"Authorization": "Bearer test-token"},
+                }
+            }
+        },
+        "2026-04-15T00:00:00+00:00",
+    )
+    captured_headers: list[dict[str, str]] = []
+    output_stream = _FlushTrackingOutput()
+
+    class _FakeRemoteProxy:
+        def __init__(self, *, base_url: str, allow_insecure_localhost: bool = False) -> None:
+            self.base_url = base_url
+            self.allow_insecure_localhost = allow_insecure_localhost
+
+        def forward(
+            self,
+            path: str,
+            payload: dict[str, object],
+            headers: dict[str, str] | None = None,
+            expect_response: bool = True,
+        ) -> dict[str, object]:
+            captured_headers.append(headers or {})
+            assert expect_response is True
+            return {"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}
+
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(guard_commands_module, "RemoteGuardProxy", _FakeRemoteProxy)
+    monkeypatch.setattr(sys, "stdin", io.StringIO('{"jsonrpc":"2.0","id":9,"method":"tools/list"}\n'))
+    monkeypatch.setattr(sys, "stdout", output_stream)
+
+    rc = guard_commands_module._run_hermes_mcp_proxy(
+        args=argparse.Namespace(server="yaml:demo"),
+        context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
+        store=store,
+        config=load_guard_config(guard_home),
+    )
+
+    assert rc == 0
+    assert captured_headers == [{"Authorization": "Bearer test-token"}]
+    assert '"id":9' in output_stream.getvalue()
+    assert output_stream.flush_count >= 1
+
+
+def test_hermes_mcp_proxy_skips_http_notification_responses(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_managed_install(
+        "hermes",
+        True,
+        None,
+        {
+            "servers": {
+                "yaml:demo": {
+                    "transport": "http",
+                    "url": "https://mcp.example.com/v1/mcp",
+                }
+            }
+        },
+        "2026-04-15T00:00:00+00:00",
+    )
+    captured_expect_response: list[bool] = []
+    output_stream = _FlushTrackingOutput()
+
+    class _FakeRemoteProxy:
+        def __init__(self, *, base_url: str, allow_insecure_localhost: bool = False) -> None:
+            self.base_url = base_url
+            self.allow_insecure_localhost = allow_insecure_localhost
+
+        def forward(
+            self,
+            path: str,
+            payload: dict[str, object],
+            headers: dict[str, str] | None = None,
+            expect_response: bool = True,
+        ) -> dict[str, object] | None:
+            captured_expect_response.append(expect_response)
+            return None
+
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(guard_commands_module, "RemoteGuardProxy", _FakeRemoteProxy)
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO('{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}\n'),
+    )
+    monkeypatch.setattr(sys, "stdout", output_stream)
+
+    rc = guard_commands_module._run_hermes_mcp_proxy(
+        args=argparse.Namespace(server="yaml:demo"),
+        context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
+        store=store,
+        config=load_guard_config(guard_home),
+    )
+
+    assert rc == 0
+    assert captured_expect_response == [False]
+    assert output_stream.getvalue() == ""
+
+
+def test_hermes_mcp_proxy_http_transport_does_not_require_guard_daemon(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    store.set_managed_install(
+        "hermes",
+        True,
+        None,
+        {
+            "servers": {
+                "yaml:demo": {
+                    "transport": "http",
+                    "url": "https://mcp.example.com/v1/mcp",
+                }
+            }
+        },
+        "2026-04-15T00:00:00+00:00",
+    )
+    output_stream = _FlushTrackingOutput()
+
+    class _FakeRemoteProxy:
+        def __init__(self, *, base_url: str, allow_insecure_localhost: bool = False) -> None:
+            self.base_url = base_url
+            self.allow_insecure_localhost = allow_insecure_localhost
+
+        def forward(
+            self,
+            path: str,
+            payload: dict[str, object],
+            headers: dict[str, str] | None = None,
+            expect_response: bool = True,
+        ) -> dict[str, object]:
+            return {"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}
+
+    def _raise_daemon_error(_guard_home):
+        raise RuntimeError("daemon unavailable")
+
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", _raise_daemon_error)
+    monkeypatch.setattr(guard_commands_module, "RemoteGuardProxy", _FakeRemoteProxy)
+    monkeypatch.setattr(sys, "stdin", io.StringIO('{"jsonrpc":"2.0","id":9,"method":"tools/list"}\n'))
+    monkeypatch.setattr(sys, "stdout", output_stream)
+
+    rc = guard_commands_module._run_hermes_mcp_proxy(
+        args=argparse.Namespace(server="yaml:demo"),
+        context=HarnessContext(home_dir=tmp_path, workspace_dir=None, guard_home=guard_home),
+        store=store,
+        config=load_guard_config(guard_home),
+    )
+
+    assert rc == 0
+    assert '"id":9' in output_stream.getvalue()
+
+
+def test_approval_surface_policy_disables_auto_open_when_flow_forbids_browser():
+    assert (
+        guard_commands_module._approval_surface_policy_for_flow(
+            "auto-open-once",
+            {"tier": "approval-center", "auto_open_browser": False, "prompt_channel": "native-fallback"},
         )
+        == "never-auto-open"
+    )
 
-        def fake_detect(harness: str, context):
-            call_count["detect"] += 1
-            index = min(call_count["detect"] - 1, len(detections) - 1)
-            return detections[index]
 
-        monkeypatch.setattr(guard_runner_module, "detect_harness", fake_detect)
+def test_hermes_pretool_uses_managed_same_channel_policy_for_blocked_operations(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    _write_text(home_dir / "config.toml", 'mode = "prompt"\napproval_surface_policy = "auto-open-once"\n')
+    GuardStore(home_dir).set_managed_install(
+        "hermes",
+        True,
+        str(workspace_dir),
+        {"capabilities": {"same_channel": True}},
+        "2026-04-15T00:00:00+00:00",
+    )
 
-        def resolve_pending() -> None:
-            for _ in range(40):
-                pending = store.list_approval_requests(limit=10)
-                if pending:
+    captured_surface_policy: list[str] = []
+
+    class _FakeDaemonClient:
+        def start_session(self, **kwargs) -> dict[str, object]:
+            return {"session_id": "session-1"}
+
+        def queue_blocked_operation(self, **kwargs) -> dict[str, object]:
+            captured_surface_policy.append(str(kwargs["approval_surface_policy"]))
+            return {
+                "operation": {"operation_id": "operation-1"},
+                "approval_requests": [{"request_id": "request-1"}],
+            }
+
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        guard_commands_module,
+        "load_guard_surface_daemon_client",
+        lambda _guard_home: _FakeDaemonClient(),
+    )
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "event": "PreToolUse",
+                    "tool_name": "shell",
+                    "tool_input": {"command": "docker login ghcr.io", "docker_mode": True},
+                    "source_scope": "project",
+                }
+            )
+        ),
+    )
+
+    rc = main(
+        [
+            "hermes",
+            "pretool",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert captured_surface_policy == ["notify-only"]
+    assert output["approval_delivery"]["destination"] == "harness"
+    assert output["approval_delivery"]["prompt_channel"] == "native"
+
+
+def test_guard_run_dry_run_human_output_is_summary_first(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--dry-run",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert rc == 1
+    assert "What changed" in output
+    assert "Next step" in output
+    assert "rerun without --dry-run" in output.lower()
+    assert "Fields" not in output
+    assert "first_seen" not in output
+
+
+def test_guard_run_renderer_coalesces_replaced_artifacts(capsys):
+    emit_guard_payload(
+        "run",
+        {
+            "harness": "codex",
+            "blocked": True,
+            "dry_run": True,
+            "launched": False,
+            "receipts_recorded": 2,
+            "artifacts": [
+                {
+                    "artifact_id": "codex:project:chrome-devtools:new",
+                    "artifact_name": "chrome-devtools",
+                    "changed": True,
+                    "changed_fields": ["first_seen"],
+                    "policy_action": "require-reapproval",
+                    "artifact_label": "MCP server",
+                    "why_now": "It is new in this codex workspace, so Guard paused it for review.",
+                    "risk_summary": "Connects to a remote server.",
+                },
+                {
+                    "artifact_id": "codex:project:chrome-devtools:old",
+                    "artifact_name": "chrome-devtools",
+                    "changed": True,
+                    "changed_fields": ["removed"],
+                    "policy_action": "require-reapproval",
+                    "artifact_label": "MCP server",
+                    "why_now": (
+                        "It disappeared from the harness config, so Guard paused the change until you "
+                        "confirm the removal."
+                    ),
+                },
+            ],
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+
+    assert "chrome-devtools" in output
+    assert output.lower().count("chrome-devtools") == 1
+    assert "definition" in output.lower()
+    assert "replaced" in output.lower()
+    assert "first_seen" not in output
+    assert "removed" not in output
+
+
+def test_guard_run_renderer_keeps_same_named_artifacts_separate_across_configs(capsys):
+    emit_guard_payload(
+        "run",
+        {
+            "harness": "codex",
+            "blocked": True,
+            "dry_run": True,
+            "launched": False,
+            "receipts_recorded": 2,
+            "artifacts": [
+                {
+                    "artifact_id": "codex:project:chrome-devtools:new",
+                    "artifact_name": "chrome-devtools",
+                    "changed": True,
+                    "changed_fields": ["first_seen"],
+                    "policy_action": "require-reapproval",
+                    "artifact_label": "MCP server",
+                    "source_scope": "project",
+                    "config_path": "/workspace/.codex/config.toml",
+                    "why_now": "It is new in this codex workspace, so Guard paused it for review.",
+                },
+                {
+                    "artifact_id": "codex:global:chrome-devtools:old",
+                    "artifact_name": "chrome-devtools",
+                    "changed": True,
+                    "changed_fields": ["removed"],
+                    "policy_action": "require-reapproval",
+                    "artifact_label": "MCP server",
+                    "source_scope": "global",
+                    "config_path": "/home/.codex/config.toml",
+                    "why_now": (
+                        "It disappeared from the global harness config, so Guard paused the change until "
+                        "you confirm the removal."
+                    ),
+                },
+            ],
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+
+    assert "chrome-devtools" in output
+    assert output.lower().count("chrome-devtools") == 2
+    assert "definition replaced" not in output.lower()
+
+
+def test_guard_run_renderer_filters_unchanged_artifacts_and_counts_review_items(capsys):
+    emit_guard_payload(
+        "run",
+        {
+            "harness": "codex",
+            "blocked": True,
+            "dry_run": True,
+            "launched": False,
+            "receipts_recorded": 3,
+            "artifacts": [
+                {
+                    "artifact_id": "codex:project:stable-tool",
+                    "artifact_name": "stable-tool",
+                    "changed": False,
+                    "changed_fields": [],
+                    "policy_action": "allow",
+                    "why_now": "Guard matched an existing allow rule for this exact version.",
+                },
+                {
+                    "artifact_id": "codex:project:already-approved",
+                    "artifact_name": "already-approved",
+                    "changed": True,
+                    "changed_fields": ["command"],
+                    "policy_action": "allow",
+                    "why_now": "Guard matched an existing allow rule for this exact definition.",
+                },
+                {
+                    "artifact_id": "codex:project:review-tool",
+                    "artifact_name": "review-tool",
+                    "changed": True,
+                    "changed_fields": ["first_seen"],
+                    "policy_action": "require-reapproval",
+                    "why_now": "It is new in this codex workspace, so Guard paused it for review.",
+                },
+            ],
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+
+    assert "stable-tool" not in output
+    assert "already-approved" in output
+    assert "review-tool" in output
+    assert "Needs review 1" in output
+
+
+def test_guard_run_renderer_keeps_unchanged_blockers_visible(capsys):
+    emit_guard_payload(
+        "run",
+        {
+            "harness": "codex",
+            "blocked": True,
+            "dry_run": True,
+            "launched": False,
+            "receipts_recorded": 1,
+            "artifacts": [
+                {
+                    "artifact_id": "codex:project:blocked-tool",
+                    "artifact_name": "blocked-tool",
+                    "changed": False,
+                    "changed_fields": [],
+                    "policy_action": "require-reapproval",
+                    "why_now": "Guard blocked this definition because the configured policy does not trust it yet.",
+                }
+            ],
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+
+    assert "blocked-tool" in output
+    assert "Needs review 1" in output
+
+
+def test_guard_run_renderer_counts_each_visible_blocker_even_when_rows_coalesce(capsys):
+    emit_guard_payload(
+        "run",
+        {
+            "harness": "codex",
+            "blocked": True,
+            "dry_run": True,
+            "launched": False,
+            "receipts_recorded": 2,
+            "artifacts": [
+                {
+                    "artifact_id": "codex:project:chrome-devtools:new",
+                    "artifact_name": "chrome-devtools",
+                    "changed": True,
+                    "changed_fields": ["first_seen"],
+                    "policy_action": "require-reapproval",
+                    "why_now": "It is new in this codex workspace, so Guard paused it for review.",
+                },
+                {
+                    "artifact_id": "codex:project:chrome-devtools:old",
+                    "artifact_name": "chrome-devtools",
+                    "changed": True,
+                    "changed_fields": ["removed"],
+                    "policy_action": "require-reapproval",
+                    "why_now": (
+                        "It disappeared from the harness config, so Guard paused the change until you confirm it."
+                    ),
+                },
+            ],
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+
+    assert "Needs review 2" in output
+    assert output.lower().count("chrome-devtools") == 1
+
+
+def test_guard_run_renderer_leads_blocked_dry_runs_with_full_review_path(capsys):
+    emit_guard_payload(
+        "run",
+        {
+            "harness": "codex",
+            "blocked": True,
+            "dry_run": True,
+            "launched": False,
+            "receipts_recorded": 1,
+            "artifacts": [
+                {
+                    "artifact_id": "codex:project:blocked-tool",
+                    "artifact_name": "blocked-tool",
+                    "changed": False,
+                    "changed_fields": [],
+                    "policy_action": "require-reapproval",
+                    "why_now": "Guard blocked this definition because the configured policy does not trust it yet.",
+                }
+            ],
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+
+    assert "Resolve the blocked launch" in output
+    assert "hol-guard run codex" in output
+    assert "Inspect only the changed config entries (optional)" in output
+    assert "hol-guard diff codex" in output
+
+
+def test_guard_run_renderer_counts_only_blocking_actions_as_needing_review(capsys):
+    emit_guard_payload(
+        "run",
+        {
+            "harness": "codex",
+            "blocked": True,
+            "dry_run": True,
+            "launched": False,
+            "receipts_recorded": 2,
+            "artifacts": [
+                {
+                    "artifact_id": "codex:project:warn-only-tool",
+                    "artifact_name": "warn-only-tool",
+                    "changed": True,
+                    "changed_fields": ["command"],
+                    "policy_action": "warn",
+                    "why_now": "Guard wants to highlight this change, but it does not block launch.",
+                },
+                {
+                    "artifact_id": "codex:project:blocked-tool",
+                    "artifact_name": "blocked-tool",
+                    "changed": True,
+                    "changed_fields": ["first_seen"],
+                    "policy_action": "require-reapproval",
+                    "why_now": "Guard blocked this definition because the configured policy does not trust it yet.",
+                },
+            ],
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+
+    assert "warn-only-tool" in output
+    assert "blocked-tool" in output
+    assert "Needs review 1" in output
+
+
+def test_guard_run_renderer_uses_neutral_blocked_copy_for_policy_only_blockers(capsys):
+    emit_guard_payload(
+        "run",
+        {
+            "harness": "codex",
+            "blocked": True,
+            "dry_run": True,
+            "launched": False,
+            "receipts_recorded": 1,
+            "artifacts": [
+                {
+                    "artifact_id": "codex:project:blocked-tool",
+                    "artifact_name": "blocked-tool",
+                    "changed": False,
+                    "changed_fields": [],
+                    "policy_action": "require-reapproval",
+                    "why_now": "Guard blocked this definition because the configured policy does not trust it yet.",
+                }
+            ],
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+
+    assert "Guard found changes that need review before a real launch." not in output
+    assert "Guard found artifacts that need review before a real launch." in output
+
+
+def test_guard_run_renderer_prefers_context_preserving_rerun_command():
+    steps = guard_render_module._build_run_steps(
+        {
+            "harness": "codex",
+            "blocked": True,
+            "dry_run": True,
+            "rerun_command": (
+                "hol-guard run codex --home /guard-home --workspace /workspace "
+                "--default-action warn --arg '--model gpt-5'"
+            ),
+        },
+        blocked=True,
+        dry_run=True,
+    )
+
+    assert steps[0]["command"] == (
+        "hol-guard run codex --home /guard-home --workspace /workspace --default-action warn --arg '--model gpt-5'"
+    )
+
+
+def test_guard_rerun_command_preserves_run_context():
+    command = guard_commands_module._guard_rerun_command(
+        argparse.Namespace(
+            harness="codex",
+            home="/guard-home",
+            guard_home=None,
+            workspace="/workspace",
+            default_action="warn",
+            passthrough_args=["--model gpt-5"],
+        )
+    )
+
+    assert command == (
+        "hol-guard run codex --home /guard-home --workspace /workspace --default-action warn --arg '--model gpt-5'"
+    )
+
+
+def test_guard_rerun_command_uses_windows_safe_quoting(monkeypatch):
+    monkeypatch.setattr(guard_commands_module.sys, "platform", "win32")
+    command = guard_commands_module._guard_rerun_command(
+        argparse.Namespace(
+            harness="codex",
+            home=r"C:\Guard Home",
+            guard_home=None,
+            workspace=r"C:\Workspace Root",
+            default_action="warn",
+            passthrough_args=["--model gpt-5"],
+        )
+    )
+
+    expected = subprocess.list2cmdline(
+        [
+            "hol-guard",
+            "run",
+            "codex",
+            "--home",
+            r"C:\Guard Home",
+            "--workspace",
+            r"C:\Workspace Root",
+            "--default-action",
+            "warn",
+            "--arg",
+            "--model gpt-5",
+        ]
+    )
+
+    assert command == expected
+
+
+def test_guard_diff_command_preserves_common_context():
+    command = guard_commands_module._guard_diff_command(
+        argparse.Namespace(
+            harness="codex",
+            home="/guard-home",
+            guard_home=None,
+            workspace="/workspace",
+        )
+    )
+
+    assert command == "hol-guard diff codex --home /guard-home --workspace /workspace"
+
+
+def test_guard_run_renderer_uses_context_preserving_diff_command():
+    steps = guard_render_module._build_run_steps(
+        {
+            "harness": "codex",
+            "blocked": True,
+            "dry_run": True,
+            "diff_command": "hol-guard diff codex --home /guard-home --workspace /workspace",
+        },
+        blocked=True,
+        dry_run=True,
+    )
+
+    assert steps[1]["command"] == "hol-guard diff codex --home /guard-home --workspace /workspace"
+
+
+def test_guard_run_renderer_uses_context_preserving_launch_command_for_clean_dry_runs():
+    steps = guard_render_module._build_run_steps(
+        {
+            "harness": "codex",
+            "dry_run": True,
+            "rerun_command": (
+                "hol-guard run codex --home /guard-home --workspace /workspace "
+                "--default-action warn --arg '--model gpt-5'"
+            ),
+        },
+        blocked=False,
+        dry_run=True,
+    )
+
+    assert steps[0]["command"] == (
+        "hol-guard run codex --home /guard-home --workspace /workspace --default-action warn --arg '--model gpt-5'"
+    )
+
+
+def test_guard_approvals_command_preserves_common_context():
+    command = guard_commands_module._guard_approvals_command(
+        argparse.Namespace(
+            harness="codex",
+            home="/guard-home",
+            guard_home="/guard-db",
+            workspace="/workspace",
+        )
+    )
+
+    assert command == "hol-guard approvals --home /guard-home --guard-home /guard-db --workspace /workspace"
+
+
+def test_guard_run_renderer_uses_context_preserving_approvals_command_for_blocked_launches():
+    steps = guard_render_module._build_run_steps(
+        {
+            "harness": "codex",
+            "approval_center_url": "http://127.0.0.1:4455",
+            "approvals_command": "hol-guard approvals --home /guard-home --workspace /workspace",
+            "review_hint": "Open the approval center and resolve the pending request.",
+        },
+        blocked=True,
+        dry_run=False,
+    )
+
+    assert steps[0]["command"] == "hol-guard approvals --home /guard-home --workspace /workspace"
+
+
+def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setattr(
+        guard_runner_module.subprocess,
+        "run",
+        lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+    )
+
+    rc = main(
+        [
+            "guard",
+            "run",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--default-action",
+            "allow",
+        ]
+    )
+    output = capsys.readouterr().out
+    store = GuardStore(home_dir)
+    receipts = store.list_receipts(limit=10)
+    snapshots = store.list_snapshots("codex")
+
+    assert rc == 0
+    assert "Launch allowed" in output
+    assert len(receipts) == 2
+    assert {
+        "codex:global:global_tools",
+        "codex:project:workspace_skill",
+    } <= set(snapshots)
+
+
+def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
+
+    store = GuardStore(home_dir)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        guard_runner_module.subprocess,
+        "run",
+        lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+    )
+
+    def resolve_pending() -> None:
+        for _ in range(40):
+            pending = store.list_approval_requests(limit=10)
+            if pending:
+                for request in pending:
                     apply_approval_resolution(
                         store=store,
-                        request_id=str(pending[0]["request_id"]),
+                        request_id=str(request["request_id"]),
                         action="allow",
                         scope="artifact",
                         workspace=None,
                         reason="approved from test",
                     )
+                if not store.list_approval_requests(limit=10):
                     return
-                threading.Event().wait(0.05)
+            threading.Event().wait(0.05)
 
-        worker = threading.Thread(target=resolve_pending, daemon=True)
-        worker.start()
+    worker = threading.Thread(target=resolve_pending, daemon=True)
+    worker.start()
 
-        config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
-        blocked_resolver = guard_commands_module._headless_approval_resolver(
-            args=argparse.Namespace(harness="claude-code"),
-            context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
-            store=store,
-            config=config,
-        )
-        result = guard_runner_module.guard_run(
+    rc = main(
+        [
+            "guard",
+            "run",
             "claude-code",
-            HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
-            store,
-            config,
-            dry_run=False,
-            passthrough_args=[],
-            default_action=None,
-            interactive_resolver=None,
-            blocked_resolver=blocked_resolver,
-        )
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+        ]
+    )
+    output = capsys.readouterr().out
 
-        assert result["blocked"] is True
-        assert result["artifacts"][0]["changed_fields"] == ["args"]
-        assert result["artifacts"][0]["artifact_hash"] == artifact_hash(detections[-1].artifacts[0])
-        assert call_count["detect"] >= 2
+    assert rc == 0
+    assert "Launch allowed" in output
+    assert "Approval received" in output
 
-    def test_guard_headless_blocked_run_persists_receipts_and_diffs(self, tmp_path, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-        store = GuardStore(home_dir)
-        baseline = GuardArtifact(
-            artifact_id="claude-code:project:workspace-tools",
-            name="workspace-tools",
-            harness="claude-code",
-            artifact_type="mcp_server",
-            source_scope="project",
-            config_path=str(workspace_dir / ".mcp.json"),
-            command="python",
-            args=("-m", "http.server", "9100"),
-            transport="stdio",
-        )
-        baseline_hash = artifact_hash(baseline)
-        store.save_snapshot(
-            "claude-code",
-            baseline.artifact_id,
-            {**baseline.to_dict(), "artifact_hash": baseline_hash},
-            baseline_hash,
-            "2026-04-10T00:00:00+00:00",
-        )
-        changed = GuardArtifact(
-            artifact_id=baseline.artifact_id,
-            name=baseline.name,
-            harness=baseline.harness,
-            artifact_type=baseline.artifact_type,
-            source_scope=baseline.source_scope,
-            config_path=baseline.config_path,
-            command="python",
-            args=("-m", "http.server", "9100", "--changed"),
-            transport="stdio",
-        )
-        detection = HarnessDetection(
+
+def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 1\n")
+
+    store = GuardStore(home_dir)
+    baseline = GuardArtifact(
+        artifact_id="claude-code:project:workspace-tools",
+        name="workspace-tools",
+        harness="claude-code",
+        artifact_type="mcp_server",
+        source_scope="project",
+        config_path=str(workspace_dir / ".mcp.json"),
+        command="python",
+        args=("-m", "http.server", "9100"),
+        transport="stdio",
+    )
+    baseline_hash = artifact_hash(baseline)
+    store.save_snapshot(
+        "claude-code",
+        baseline.artifact_id,
+        {**baseline.to_dict(), "artifact_hash": baseline_hash},
+        baseline_hash,
+        "2026-04-10T00:00:00+00:00",
+    )
+    detections = [
+        HarnessDetection(
             harness="claude-code",
             installed=True,
             command_available=True,
-            config_paths=(baseline.config_path,),
-            artifacts=(changed,),
-        )
-
-        monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-
-        config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
-        result = guard_runner_module.guard_run(
-            "claude-code",
-            HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
-            store,
-            config,
-            dry_run=False,
-            passthrough_args=[],
-            default_action=None,
-            interactive_resolver=None,
-            blocked_resolver=lambda _detection, evaluation: evaluation,
-        )
-
-        latest_diff = store.get_latest_diff("claude-code", baseline.artifact_id)
-        latest_receipt = store.get_latest_receipt("claude-code", baseline.artifact_id)
-
-        assert result["blocked"] is True
-        assert latest_diff is not None
-        assert latest_diff["current_hash"] == artifact_hash(changed)
-        assert latest_receipt is not None
-        assert latest_receipt["policy_decision"] == "require-reapproval"
-
-    def test_guard_invalid_changed_hash_action_falls_back_to_reapproval(self, tmp_path):
-        store = GuardStore(tmp_path / "guard-home")
-        baseline = GuardArtifact(
-            artifact_id="codex:project:workspace-tools",
-            name="workspace-tools",
-            harness="codex",
-            artifact_type="mcp_server",
-            source_scope="project",
-            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
-            command="node",
-            args=("workspace.js",),
-            transport="stdio",
-        )
-        changed = GuardArtifact(
-            artifact_id=baseline.artifact_id,
-            name=baseline.name,
-            harness=baseline.harness,
-            artifact_type=baseline.artifact_type,
-            source_scope=baseline.source_scope,
-            config_path=baseline.config_path,
-            command="node",
-            args=("workspace.js", "--changed"),
-            transport="stdio",
-        )
-        baseline_hash = artifact_hash(baseline)
-        store.save_snapshot(
-            "codex",
-            baseline.artifact_id,
-            {**baseline.to_dict(), "artifact_hash": baseline_hash},
-            baseline_hash,
-            "2026-04-10T00:00:00+00:00",
-        )
-        detection = HarnessDetection(
-            harness="codex",
+            config_paths=(str(workspace_dir / ".mcp.json"),),
+            artifacts=(
+                GuardArtifact(
+                    artifact_id=baseline.artifact_id,
+                    name="workspace-tools",
+                    harness="claude-code",
+                    artifact_type="mcp_server",
+                    source_scope="project",
+                    config_path=str(workspace_dir / ".mcp.json"),
+                    command="python",
+                    args=("-m", "http.server", "9100", "--changed-1"),
+                    transport="stdio",
+                ),
+            ),
+        ),
+        HarnessDetection(
+            harness="claude-code",
             installed=True,
             command_available=True,
-            config_paths=(baseline.config_path,),
-            artifacts=(changed,),
-        )
-        config = GuardConfig(
-            guard_home=tmp_path / "guard-home",
-            workspace=None,
-            changed_hash_action="require_reapproval",  # type: ignore[arg-type]
-        )
-
-        evaluation = evaluate_detection(detection, store, config, default_action="allow", persist=False)
-
-        assert evaluation["blocked"] is True
-        assert evaluation["artifacts"][0]["policy_action"] == "require-reapproval"
-
-    def test_guard_invalid_default_action_falls_back_to_reapproval(self, tmp_path):
-        config = GuardConfig(
-            guard_home=tmp_path / "guard-home",
-            workspace=None,
-            default_action="blok",  # type: ignore[arg-type]
-        )
-
-        action = decide_action(configured_action=None, default_action=None, config=config, changed=False)
-
-        assert action == "require-reapproval"
-
-    def test_guard_hook_invalid_policy_action_falls_back_to_reapproval(self, tmp_path, capsys, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-
-        event = {
-            "event": "PreToolUse",
-            "tool_name": "workspace-tools",
-            "artifact_id": "claude-code:project:workspace-tools",
-            "policy_action": "require_reapproval",
-            "source_scope": "project",
-        }
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
-
-        rc = main(
-            [
-                "guard",
-                "hook",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--harness",
-                "claude-code",
-                "--json",
-            ]
-        )
-        output = json.loads(capsys.readouterr().out)
-
-        assert rc == 1
-        assert output["policy_action"] == "require-reapproval"
-
-    def test_guard_hook_blocks_sensitive_runtime_file_read_until_exactly_approved(self, tmp_path, capsys, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-
-        blocked_event = {
-            "event": "PreToolUse",
-            "tool_name": "Read",
-            "tool_input": {"file_path": ".env.local"},
-            "source_scope": "project",
-        }
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
-
-        first_rc = main(
-            [
-                "guard",
-                "hook",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--harness",
-                "claude-code",
-                "--json",
-            ]
-        )
-        first_output = json.loads(capsys.readouterr().out)
-        approval_request = first_output["approval_requests"][0]
-
-        approval_rc = main(
-            [
-                "guard",
-                "approvals",
-                "approve",
-                str(approval_request["request_id"]),
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--json",
-            ]
-        )
-        json.loads(capsys.readouterr().out)
-
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
-        second_rc = main(
-            [
-                "guard",
-                "hook",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--harness",
-                "claude-code",
-                "--json",
-            ]
-        )
-        second_output = json.loads(capsys.readouterr().out)
-
-        different_event = {
-            "event": "PreToolUse",
-            "tool_name": "Read",
-            "tool_input": {"file_path": "~/.aws/credentials"},
-            "source_scope": "project",
-        }
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(different_event)))
-        third_rc = main(
-            [
-                "guard",
-                "hook",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--harness",
-                "claude-code",
-                "--json",
-            ]
-        )
-        third_output = json.loads(capsys.readouterr().out)
-
-        assert first_rc == 1
-        assert first_output["policy_action"] == "require-reapproval"
-        assert first_output["artifact_type"] == "file_read_request"
-        assert "sensitive local file" in first_output["risk_summary"].lower()
-        assert approval_request["recommended_scope"] == "artifact"
-        assert approval_rc == 0
-        assert second_rc == 0
-        assert second_output["policy_action"] == "allow"
-        assert third_rc == 1
-        assert third_output["policy_action"] == "require-reapproval"
-
-    def test_guard_hook_allows_non_sensitive_read_file_requests(self, tmp_path, capsys, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        _build_guard_fixture(home_dir, workspace_dir)
-
-        safe_event = {
-            "event": "PreToolUse",
-            "tool_name": "Read",
-            "tool_input": {"file_path": "README.md"},
-            "source_scope": "project",
-        }
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(safe_event)))
-
-        rc = main(
-            [
-                "guard",
-                "hook",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--harness",
-                "claude-code",
-                "--json",
-            ]
-        )
-        output = json.loads(capsys.readouterr().out)
-
-        assert rc == 0
-        assert output["policy_action"] in {"allow", "warn"}
-        assert output.get("approval_requests") in (None, [])
-
-    def test_stdio_proxy_blocks_disallowed_tools_and_redacts_headers(self):
-        proxy = StdioGuardProxy(
-            command=[
-                sys.executable,
-                "-u",
-                "-c",
-                "\n".join(
-                    [
-                        "import json, sys",
-                        "for line in sys.stdin:",
-                        "    message = json.loads(line)",
-                        "    result = {'echo': message.get('method')}",
-                        "    if message.get('method') == 'tools/call':",
-                        "        result['tool'] = message.get('params', {}).get('name')",
-                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}))",
-                        "    sys.stdout.flush()",
-                    ]
+            config_paths=(str(workspace_dir / ".mcp.json"),),
+            artifacts=(
+                GuardArtifact(
+                    artifact_id=baseline.artifact_id,
+                    name="workspace-tools",
+                    harness="claude-code",
+                    artifact_type="mcp_server",
+                    source_scope="project",
+                    config_path=str(workspace_dir / ".mcp.json"),
+                    command="python",
+                    args=("-m", "http.server", "9100", "--changed-2"),
+                    transport="stdio",
                 ),
-            ],
-            blocked_tools={"dangerous"},
-        )
+            ),
+        ),
+    ]
+    call_count = {"detect": 0}
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        guard_runner_module.subprocess,
+        "run",
+        lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+    )
 
-        allowed = proxy.run_session(
-            [
-                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "safe-tool",
-                        "arguments": {
-                            "headers": {
-                                "Authorization": "Bearer secret-token",
-                                "x-api-key": "hidden",
-                            }
-                        },
-                    },
-                },
-            ]
-        )
-        blocked = proxy.run_session(
-            [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 3,
-                    "method": "tools/call",
-                    "params": {"name": "dangerous"},
-                }
-            ]
-        )
+    def fake_detect(harness: str, context):
+        call_count["detect"] += 1
+        index = min(call_count["detect"] - 1, len(detections) - 1)
+        return detections[index]
 
-        assert allowed["responses"][1]["result"]["tool"] == "safe-tool"
-        assert allowed["events"][1]["redacted_params"]["arguments"]["headers"]["Authorization"] == "*****"
-        assert blocked["responses"][0]["error"]["code"] == -32001
-        assert blocked["events"][0]["decision"] == "block"
+    monkeypatch.setattr(guard_runner_module, "detect_harness", fake_detect)
 
-    def test_stdio_proxy_waits_for_matching_response_id(self):
-        proxy = StdioGuardProxy(
-            command=[
-                sys.executable,
-                "-u",
-                "-c",
-                "\n".join(
-                    [
-                        "import json, sys",
-                        "for line in sys.stdin:",
-                        "    message = json.loads(line)",
-                        "    print(json.dumps({'jsonrpc': '2.0', 'method': 'tools/progress', 'params': {'step': 1}}))",
-                        "    result = {'echo': message.get('method')}",
-                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}))",
-                        "    sys.stdout.flush()",
-                    ]
-                ),
-            ],
-        )
+    def resolve_pending() -> None:
+        for _ in range(40):
+            pending = store.list_approval_requests(limit=10)
+            if pending:
+                apply_approval_resolution(
+                    store=store,
+                    request_id=str(pending[0]["request_id"]),
+                    action="allow",
+                    scope="artifact",
+                    workspace=None,
+                    reason="approved from test",
+                )
+                return
+            threading.Event().wait(0.05)
 
-        result = proxy.run_session(
-            [
-                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-            ]
-        )
+    worker = threading.Thread(target=resolve_pending, daemon=True)
+    worker.start()
 
-        assert result["responses"][0]["id"] == 1
-        assert result["responses"][0]["result"]["echo"] == "initialize"
+    config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+    blocked_resolver = guard_commands_module._headless_approval_resolver(
+        args=argparse.Namespace(harness="claude-code"),
+        context=HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+        store=store,
+        config=config,
+    )
+    result = guard_runner_module.guard_run(
+        "claude-code",
+        HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+        store,
+        config,
+        dry_run=False,
+        passthrough_args=[],
+        default_action=None,
+        interactive_resolver=None,
+        blocked_resolver=blocked_resolver,
+    )
 
-    def test_stdio_proxy_stream_does_not_wait_for_notification_replies(self):
-        proxy = StdioGuardProxy(
-            command=[
-                sys.executable,
-                "-u",
-                "-c",
-                "\n".join(
-                    [
-                        "import json, sys",
-                        "for line in sys.stdin:",
-                        "    message = json.loads(line)",
-                        "    if message.get('id') is None:",
-                        "        continue",
-                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                        "    sys.stdout.flush()",
-                    ]
-                ),
-            ],
-        )
-        output_stream = _FlushTrackingOutput()
+    assert result["blocked"] is True
+    assert result["artifacts"][0]["changed_fields"] == ["args"]
+    assert result["artifacts"][0]["artifact_hash"] == artifact_hash(detections[-1].artifacts[0])
+    assert call_count["detect"] >= 2
 
-        exit_code = proxy.run_stream(
-            input_stream=_LineOnlyInput(
+
+def test_guard_headless_blocked_run_persists_receipts_and_diffs(tmp_path, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    store = GuardStore(home_dir)
+    baseline = GuardArtifact(
+        artifact_id="claude-code:project:workspace-tools",
+        name="workspace-tools",
+        harness="claude-code",
+        artifact_type="mcp_server",
+        source_scope="project",
+        config_path=str(workspace_dir / ".mcp.json"),
+        command="python",
+        args=("-m", "http.server", "9100"),
+        transport="stdio",
+    )
+    baseline_hash = artifact_hash(baseline)
+    store.save_snapshot(
+        "claude-code",
+        baseline.artifact_id,
+        {**baseline.to_dict(), "artifact_hash": baseline_hash},
+        baseline_hash,
+        "2026-04-10T00:00:00+00:00",
+    )
+    changed = GuardArtifact(
+        artifact_id=baseline.artifact_id,
+        name=baseline.name,
+        harness=baseline.harness,
+        artifact_type=baseline.artifact_type,
+        source_scope=baseline.source_scope,
+        config_path=baseline.config_path,
+        command="python",
+        args=("-m", "http.server", "9100", "--changed"),
+        transport="stdio",
+    )
+    detection = HarnessDetection(
+        harness="claude-code",
+        installed=True,
+        command_available=True,
+        config_paths=(baseline.config_path,),
+        artifacts=(changed,),
+    )
+
+    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+
+    config = GuardConfig(guard_home=home_dir, workspace=workspace_dir, approval_wait_timeout_seconds=1)
+    result = guard_runner_module.guard_run(
+        "claude-code",
+        HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
+        store,
+        config,
+        dry_run=False,
+        passthrough_args=[],
+        default_action=None,
+        interactive_resolver=None,
+        blocked_resolver=lambda _detection, evaluation: evaluation,
+    )
+
+    latest_diff = store.get_latest_diff("claude-code", baseline.artifact_id)
+    latest_receipt = store.get_latest_receipt("claude-code", baseline.artifact_id)
+
+    assert result["blocked"] is True
+    assert latest_diff is not None
+    assert latest_diff["current_hash"] == artifact_hash(changed)
+    assert latest_receipt is not None
+    assert latest_receipt["policy_decision"] == "require-reapproval"
+
+
+def test_guard_invalid_changed_hash_action_falls_back_to_reapproval(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    baseline = GuardArtifact(
+        artifact_id="codex:project:workspace-tools",
+        name="workspace-tools",
+        harness="codex",
+        artifact_type="mcp_server",
+        source_scope="project",
+        config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+        command="node",
+        args=("workspace.js",),
+        transport="stdio",
+    )
+    changed = GuardArtifact(
+        artifact_id=baseline.artifact_id,
+        name=baseline.name,
+        harness=baseline.harness,
+        artifact_type=baseline.artifact_type,
+        source_scope=baseline.source_scope,
+        config_path=baseline.config_path,
+        command="node",
+        args=("workspace.js", "--changed"),
+        transport="stdio",
+    )
+    baseline_hash = artifact_hash(baseline)
+    store.save_snapshot(
+        "codex",
+        baseline.artifact_id,
+        {**baseline.to_dict(), "artifact_hash": baseline_hash},
+        baseline_hash,
+        "2026-04-10T00:00:00+00:00",
+    )
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(baseline.config_path,),
+        artifacts=(changed,),
+    )
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=None,
+        changed_hash_action="require_reapproval",  # type: ignore[arg-type]
+    )
+
+    evaluation = evaluate_detection(detection, store, config, default_action="allow", persist=False)
+
+    assert evaluation["blocked"] is True
+    assert evaluation["artifacts"][0]["policy_action"] == "require-reapproval"
+
+
+def test_guard_invalid_default_action_falls_back_to_reapproval(tmp_path):
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=None,
+        default_action="blok",  # type: ignore[arg-type]
+    )
+
+    action = decide_action(configured_action=None, default_action=None, config=config, changed=False)
+
+    assert action == "require-reapproval"
+
+
+def test_guard_hook_invalid_policy_action_falls_back_to_reapproval(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    event = {
+        "event": "PreToolUse",
+        "tool_name": "workspace-tools",
+        "artifact_id": "claude-code:project:workspace-tools",
+        "policy_action": "require_reapproval",
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert output["policy_action"] == "require-reapproval"
+
+
+def test_guard_hook_blocks_sensitive_runtime_file_read_until_exactly_approved(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    blocked_event = {
+        "event": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": ".env.local"},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
+
+    first_rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+            "--json",
+        ]
+    )
+    first_output = json.loads(capsys.readouterr().out)
+    approval_request = first_output["approval_requests"][0]
+
+    approval_rc = main(
+        [
+            "guard",
+            "approvals",
+            "approve",
+            str(approval_request["request_id"]),
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
+    second_rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+            "--json",
+        ]
+    )
+    second_output = json.loads(capsys.readouterr().out)
+
+    different_event = {
+        "event": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "~/.aws/credentials"},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(different_event)))
+    third_rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+            "--json",
+        ]
+    )
+    third_output = json.loads(capsys.readouterr().out)
+
+    assert first_rc == 1
+    assert first_output["policy_action"] == "require-reapproval"
+    assert first_output["artifact_type"] == "file_read_request"
+    assert "sensitive local file" in first_output["risk_summary"].lower()
+    assert approval_request["recommended_scope"] == "artifact"
+    assert approval_rc == 0
+    assert second_rc == 0
+    assert second_output["policy_action"] == "allow"
+    assert third_rc == 1
+    assert third_output["policy_action"] == "require-reapproval"
+
+
+def test_guard_hook_allows_non_sensitive_read_file_requests(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    safe_event = {
+        "event": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "README.md"},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(safe_event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["policy_action"] in {"allow", "warn"}
+    assert output.get("approval_requests") in (None, [])
+
+
+def test_stdio_proxy_blocks_disallowed_tools_and_redacts_headers():
+    proxy = StdioGuardProxy(
+        command=[
+            sys.executable,
+            "-u",
+            "-c",
+            "\n".join(
                 [
-                    '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}\n',
-                    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n',
+                    "import json, sys",
+                    "for line in sys.stdin:",
+                    "    message = json.loads(line)",
+                    "    result = {'echo': message.get('method')}",
+                    "    if message.get('method') == 'tools/call':",
+                    "        result['tool'] = message.get('params', {}).get('name')",
+                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}))",
+                    "    sys.stdout.flush()",
                 ]
             ),
-            output_stream=output_stream,
-            error_stream=io.StringIO(),
-        )
+        ],
+        blocked_tools={"dangerous"},
+    )
 
-        assert exit_code == 0
-        assert '"id":1' in output_stream.getvalue()
-
-    def test_stdio_proxy_stream_forwards_interleaved_notifications(self):
-        proxy = StdioGuardProxy(
-            command=[
-                sys.executable,
-                "-u",
-                "-c",
-                "\n".join(
-                    [
-                        "import json, sys",
-                        "for line in sys.stdin:",
-                        "    message = json.loads(line)",
-                        "    print(json.dumps({'jsonrpc': '2.0', 'method': 'tools/progress', 'params': {'step': 1}}))",
-                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                        "    sys.stdout.flush()",
-                    ]
-                ),
-            ],
-        )
-        output_stream = _FlushTrackingOutput()
-
-        exit_code = proxy.run_stream(
-            input_stream=_LineOnlyInput(['{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n']),
-            output_stream=output_stream,
-            error_stream=io.StringIO(),
-        )
-        output_lines = [json.loads(line) for line in output_stream.getvalue().splitlines()]
-
-        assert exit_code == 0
-        assert output_lines[0]["method"] == "tools/progress"
-        assert output_lines[1]["id"] == 1
-
-    def test_stdio_proxy_blocks_sensitive_file_reads_without_forwarding(self, tmp_path):
-        store = GuardStore(tmp_path / "guard-home")
-        (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
-        config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace")
-        proxy = StdioGuardProxy(
-            command=[
-                sys.executable,
-                "-u",
-                "-c",
-                "\n".join(
-                    [
-                        "import json, sys",
-                        "for line in sys.stdin:",
-                        "    message = json.loads(line)",
-                        "    result = {'tool': message.get('params', {}).get('name')}",
-                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}))",
-                        "    sys.stdout.flush()",
-                    ]
-                ),
-            ],
-            cwd=tmp_path / "workspace",
-            guard_store=store,
-            guard_config=config,
-            approval_center_url="http://127.0.0.1:4455",
-            harness="codex",
-        )
-
-        allowed = proxy.run_session(
-            [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "read_file",
-                        "arguments": {
-                            "path": "README.md",
-                            "headers": {"Authorization": "Bearer secret-token"},
-                        },
+    allowed = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "safe-tool",
+                    "arguments": {
+                        "headers": {
+                            "Authorization": "Bearer secret-token",
+                            "x-api-key": "hidden",
+                        }
                     },
-                }
-            ]
-        )
-        blocked = proxy.run_session(
-            [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "read_file",
-                        "arguments": {
-                            "path": ".env",
-                            "headers": {"Authorization": "Bearer secret-token"},
-                        },
-                    },
-                }
-            ]
-        )
+                },
+            },
+        ]
+    )
+    blocked = proxy.run_session(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "dangerous"},
+            }
+        ]
+    )
 
-        assert allowed["responses"][0]["result"]["tool"] == "read_file"
-        assert allowed["events"][0]["decision"] == "forward"
-        assert blocked["responses"][0]["error"]["code"] == -32001
-        assert "sensitive local file" in blocked["responses"][0]["error"]["message"].lower()
-        assert "http://127.0.0.1:4455" in blocked["responses"][0]["error"]["message"]
-        assert blocked["responses"][0]["error"]["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
-        assert blocked["responses"][0]["error"]["data"]["reviewHint"]
-        assert blocked["events"][0]["decision"] == "block"
-        assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
-        assert blocked["events"][0]["redacted_params"]["arguments"]["headers"]["Authorization"] == "*****"
-        assert blocked["events"][0]["path_summary"].endswith("/.env")
-        pending = store.list_approval_requests(limit=10)
-        assert len(pending) == 1
-        assert pending[0]["artifact_type"] == "file_read_request"
+    assert allowed["responses"][1]["result"]["tool"] == "safe-tool"
+    assert allowed["events"][1]["redacted_params"]["arguments"]["headers"]["Authorization"] == "*****"
+    assert blocked["responses"][0]["error"]["code"] == -32001
+    assert blocked["events"][0]["decision"] == "block"
 
-    def test_stdio_proxy_handles_unknown_harness_when_queueing_sensitive_read_blocks(self, tmp_path):
-        store = GuardStore(tmp_path / "guard-home")
-        workspace_dir = tmp_path / "workspace"
-        workspace_dir.mkdir(parents=True, exist_ok=True)
-        config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
-        proxy = StdioGuardProxy(
-            command=[
-                sys.executable,
-                "-u",
-                "-c",
-                "\n".join(
-                    [
-                        "import json, sys",
-                        "for line in sys.stdin:",
-                        "    message = json.loads(line)",
-                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                        "    sys.stdout.flush()",
-                    ]
-                ),
-            ],
-            cwd=workspace_dir,
-            guard_store=store,
-            guard_config=config,
-            approval_center_url="http://127.0.0.1:4455",
-        )
 
-        blocked = proxy.run_session(
-            [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {"name": "read_file", "arguments": {"path": ".env"}},
-                }
-            ]
-        )
-
-        assert blocked["responses"][0]["error"]["code"] == -32001
-        assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "browser"
-        assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
-
-    def test_stdio_proxy_uses_native_delivery_for_managed_hermes(self, tmp_path):
-        store = GuardStore(tmp_path / "guard-home")
-        workspace_dir = tmp_path / "workspace"
-        workspace_dir.mkdir(parents=True, exist_ok=True)
-        store.set_managed_install(
-            "hermes",
-            True,
-            str(workspace_dir),
-            {"capabilities": {"same_channel": True}},
-            "2026-04-15T00:00:00+00:00",
-        )
-        config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
-        proxy = StdioGuardProxy(
-            command=[
-                sys.executable,
-                "-u",
-                "-c",
-                "\n".join(
-                    [
-                        "import json, sys",
-                        "for line in sys.stdin:",
-                        "    message = json.loads(line)",
-                        "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                        "    sys.stdout.flush()",
-                    ]
-                ),
-            ],
-            cwd=workspace_dir,
-            guard_store=store,
-            guard_config=config,
-            approval_center_url="http://127.0.0.1:4455",
-            harness="hermes",
-        )
-
-        blocked = proxy.run_session(
-            [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {"name": "read_file", "arguments": {"path": ".env"}},
-                }
-            ]
-        )
-
-        assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "harness"
-        assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["prompt_channel"] == "native"
-        assert blocked["events"][0]["approval_delivery"]["destination"] == "harness"
-
-    def test_hermes_pretool_blocks_docker_sensitive_command_requests(self, tmp_path, capsys, monkeypatch):
-        home_dir = tmp_path / "home"
-        workspace_dir = tmp_path / "workspace"
-        workspace_dir.mkdir(parents=True, exist_ok=True)
-        _write_text(home_dir / "config.toml", 'mode = "prompt"\n')
-        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-        monkeypatch.setattr(
-            sys,
-            "stdin",
-            io.StringIO(
-                json.dumps(
-                    {
-                        "event": "PreToolUse",
-                        "tool_name": "shell",
-                        "tool_input": {"command": "docker login ghcr.io", "docker_mode": True},
-                        "source_scope": "project",
-                    }
-                )
+def test_stdio_proxy_waits_for_matching_response_id():
+    proxy = StdioGuardProxy(
+        command=[
+            sys.executable,
+            "-u",
+            "-c",
+            "\n".join(
+                [
+                    "import json, sys",
+                    "for line in sys.stdin:",
+                    "    message = json.loads(line)",
+                    "    print(json.dumps({'jsonrpc': '2.0', 'method': 'tools/progress', 'params': {'step': 1}}))",
+                    "    result = {'echo': message.get('method')}",
+                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}))",
+                    "    sys.stdout.flush()",
+                ]
             ),
-        )
+        ],
+    )
 
-        rc = main(
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+        ]
+    )
+
+    assert result["responses"][0]["id"] == 1
+    assert result["responses"][0]["result"]["echo"] == "initialize"
+
+
+def test_stdio_proxy_stream_does_not_wait_for_notification_replies():
+    proxy = StdioGuardProxy(
+        command=[
+            sys.executable,
+            "-u",
+            "-c",
+            "\n".join(
+                [
+                    "import json, sys",
+                    "for line in sys.stdin:",
+                    "    message = json.loads(line)",
+                    "    if message.get('id') is None:",
+                    "        continue",
+                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                    "    sys.stdout.flush()",
+                ]
+            ),
+        ],
+    )
+    output_stream = _FlushTrackingOutput()
+
+    exit_code = proxy.run_stream(
+        input_stream=_LineOnlyInput(
             [
-                "hermes",
-                "pretool",
-                "--home",
-                str(home_dir),
-                "--workspace",
-                str(workspace_dir),
-                "--json",
+                '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}\n',
+                '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n',
             ]
+        ),
+        output_stream=output_stream,
+        error_stream=io.StringIO(),
+    )
+
+    assert exit_code == 0
+    assert '"id":1' in output_stream.getvalue()
+
+
+def test_stdio_proxy_stream_forwards_interleaved_notifications():
+    proxy = StdioGuardProxy(
+        command=[
+            sys.executable,
+            "-u",
+            "-c",
+            "\n".join(
+                [
+                    "import json, sys",
+                    "for line in sys.stdin:",
+                    "    message = json.loads(line)",
+                    "    print(json.dumps({'jsonrpc': '2.0', 'method': 'tools/progress', 'params': {'step': 1}}))",
+                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                    "    sys.stdout.flush()",
+                ]
+            ),
+        ],
+    )
+    output_stream = _FlushTrackingOutput()
+
+    exit_code = proxy.run_stream(
+        input_stream=_LineOnlyInput(['{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n']),
+        output_stream=output_stream,
+        error_stream=io.StringIO(),
+    )
+    output_lines = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+
+    assert exit_code == 0
+    assert output_lines[0]["method"] == "tools/progress"
+    assert output_lines[1]["id"] == 1
+
+
+def test_stdio_proxy_blocks_sensitive_file_reads_without_forwarding(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
+    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace")
+    proxy = StdioGuardProxy(
+        command=[
+            sys.executable,
+            "-u",
+            "-c",
+            "\n".join(
+                [
+                    "import json, sys",
+                    "for line in sys.stdin:",
+                    "    message = json.loads(line)",
+                    "    result = {'tool': message.get('params', {}).get('name')}",
+                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}))",
+                    "    sys.stdout.flush()",
+                ]
+            ),
+        ],
+        cwd=tmp_path / "workspace",
+        guard_store=store,
+        guard_config=config,
+        approval_center_url="http://127.0.0.1:4455",
+        harness="codex",
+    )
+
+    allowed = proxy.run_session(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "read_file",
+                    "arguments": {
+                        "path": "README.md",
+                        "headers": {"Authorization": "Bearer secret-token"},
+                    },
+                },
+            }
+        ]
+    )
+    blocked = proxy.run_session(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "read_file",
+                    "arguments": {
+                        "path": ".env",
+                        "headers": {"Authorization": "Bearer secret-token"},
+                    },
+                },
+            }
+        ]
+    )
+
+    assert allowed["responses"][0]["result"]["tool"] == "read_file"
+    assert allowed["events"][0]["decision"] == "forward"
+    assert blocked["responses"][0]["error"]["code"] == -32001
+    assert "sensitive local file" in blocked["responses"][0]["error"]["message"].lower()
+    assert "http://127.0.0.1:4455" in blocked["responses"][0]["error"]["message"]
+    assert blocked["responses"][0]["error"]["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
+    assert blocked["responses"][0]["error"]["data"]["reviewHint"]
+    assert blocked["events"][0]["decision"] == "block"
+    assert blocked["events"][0]["approval_delivery"]["destination"] == "harness"
+    assert blocked["events"][0]["redacted_params"]["arguments"]["headers"]["Authorization"] == "*****"
+    assert blocked["events"][0]["path_summary"].endswith("/.env")
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    assert pending[0]["artifact_type"] == "file_read_request"
+
+
+def test_stdio_proxy_handles_unknown_harness_when_queueing_sensitive_read_blocks(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
+    proxy = StdioGuardProxy(
+        command=[
+            sys.executable,
+            "-u",
+            "-c",
+            "\n".join(
+                [
+                    "import json, sys",
+                    "for line in sys.stdin:",
+                    "    message = json.loads(line)",
+                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                    "    sys.stdout.flush()",
+                ]
+            ),
+        ],
+        cwd=workspace_dir,
+        guard_store=store,
+        guard_config=config,
+        approval_center_url="http://127.0.0.1:4455",
+    )
+
+    blocked = proxy.run_session(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "read_file", "arguments": {"path": ".env"}},
+            }
+        ]
+    )
+
+    assert blocked["responses"][0]["error"]["code"] == -32001
+    assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "browser"
+    assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
+
+
+def test_stdio_proxy_uses_native_delivery_for_managed_hermes(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    store.set_managed_install(
+        "hermes",
+        True,
+        str(workspace_dir),
+        {"capabilities": {"same_channel": True}},
+        "2026-04-15T00:00:00+00:00",
+    )
+    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
+    proxy = StdioGuardProxy(
+        command=[
+            sys.executable,
+            "-u",
+            "-c",
+            "\n".join(
+                [
+                    "import json, sys",
+                    "for line in sys.stdin:",
+                    "    message = json.loads(line)",
+                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
+                    "    sys.stdout.flush()",
+                ]
+            ),
+        ],
+        cwd=workspace_dir,
+        guard_store=store,
+        guard_config=config,
+        approval_center_url="http://127.0.0.1:4455",
+        harness="hermes",
+    )
+
+    blocked = proxy.run_session(
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "read_file", "arguments": {"path": ".env"}},
+            }
+        ]
+    )
+
+    assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "harness"
+    assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["prompt_channel"] == "native"
+    assert blocked["events"][0]["approval_delivery"]["destination"] == "harness"
+
+
+def test_hermes_pretool_blocks_docker_sensitive_command_requests(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    _write_text(home_dir / "config.toml", 'mode = "prompt"\n')
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "event": "PreToolUse",
+                    "tool_name": "shell",
+                    "tool_input": {"command": "docker login ghcr.io", "docker_mode": True},
+                    "source_scope": "project",
+                }
+            )
+        ),
+    )
+
+    rc = main(
+        [
+            "hermes",
+            "pretool",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert output["artifact_type"] == "tool_action_request"
+    assert output["policy_action"] == "require-reapproval"
+    assert output["approval_delivery"]["destination"] == "harness"
+    assert "docker" in output["risk_summary"].lower()
+
+
+def test_hermes_pretool_blocks_destructive_shell_command_requests(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    _write_text(home_dir / "config.toml", 'mode = "prompt"\n')
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(
+            json.dumps(
+                {
+                    "event": "PreToolUse",
+                    "tool_name": "shell",
+                    "tool_input": {"command": "echo MALICIOUS > dangerous-marker.json"},
+                    "source_scope": "project",
+                }
+            )
+        ),
+    )
+
+    rc = main(
+        [
+            "hermes",
+            "pretool",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert output["artifact_type"] == "tool_action_request"
+    assert output["policy_action"] == "require-reapproval"
+    assert output["approval_delivery"]["destination"] == "harness"
+    assert "destructive shell command" in output["risk_summary"].lower()
+
+
+def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers():
+    server = HTTPServer(("127.0.0.1", 0), _RemoteProxyHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        proxy = RemoteGuardProxy(
+            base_url=f"http://127.0.0.1:{server.server_port}",
+            allow_insecure_localhost=True,
         )
-        output = json.loads(capsys.readouterr().out)
-
-        assert rc == 1
-        assert output["artifact_type"] == "tool_action_request"
-        assert output["policy_action"] == "require-reapproval"
-        assert output["approval_delivery"]["destination"] == "harness"
-        assert "docker" in output["risk_summary"].lower()
-
-    def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers(self):
-        server = HTTPServer(("127.0.0.1", 0), _RemoteProxyHandler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-
-        try:
-            proxy = RemoteGuardProxy(
-                base_url=f"http://127.0.0.1:{server.server_port}",
-                allow_insecure_localhost=True,
-            )
-            response = proxy.forward(
-                "/mcp",
-                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-                headers={"Authorization": "Bearer secret-token", "x-api-key": "hidden"},
-            )
-        finally:
-            server.shutdown()
-            thread.join(timeout=5)
-
-        assert response["result"]["ok"] is True
-        assert _RemoteProxyHandler.captured_headers["authorization"] == "Bearer secret-token"
-        assert proxy.events[0]["headers"]["Authorization"] == "*****"
-
-    def test_remote_proxy_allows_notification_requests_without_response_body(self, monkeypatch):
-        class _EmptyResponse:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def read(self) -> bytes:
-                return b""
-
-        monkeypatch.setattr(urllib.request, "urlopen", lambda request, timeout: _EmptyResponse())
-        proxy = RemoteGuardProxy(base_url="https://mcp.example.com/v1/mcp")
-
         response = proxy.forward(
-            "",
-            {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
-            expect_response=False,
+            "/mcp",
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            headers={"Authorization": "Bearer secret-token", "x-api-key": "hidden"},
         )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
 
-        assert response is None
+    assert response["result"]["ok"] is True
+    assert _RemoteProxyHandler.captured_headers["authorization"] == "Bearer secret-token"
+    assert proxy.events[0]["headers"]["Authorization"] == "*****"
 
-    def test_remote_proxy_preserves_exact_base_url_when_forwarding_empty_path(self, monkeypatch):
-        captured_urls: list[str] = []
 
-        class _FakeResponse:
-            def __enter__(self):
-                return self
+def test_remote_proxy_allows_notification_requests_without_response_body(monkeypatch):
+    class _EmptyResponse:
+        def __enter__(self):
+            return self
 
-            def __exit__(self, exc_type, exc, tb):
-                return False
+        def __exit__(self, exc_type, exc, tb):
+            return False
 
-            def read(self) -> bytes:
-                return b'{"jsonrpc":"2.0","id":1,"result":{"ok":true}}'
+        def read(self) -> bytes:
+            return b""
 
-        def _fake_urlopen(request, timeout):
-            captured_urls.append(request.full_url)
-            return _FakeResponse()
+    monkeypatch.setattr(urllib.request, "urlopen", lambda request, timeout: _EmptyResponse())
+    proxy = RemoteGuardProxy(base_url="https://mcp.example.com/v1/mcp")
 
-        monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
-        proxy = RemoteGuardProxy(base_url="https://mcp.example.com/v1/mcp")
+    response = proxy.forward(
+        "",
+        {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+        expect_response=False,
+    )
 
-        response = proxy.forward("", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+    assert response is None
 
-        assert response["result"]["ok"] is True
-        assert captured_urls == ["https://mcp.example.com/v1/mcp"]
 
-    def test_guard_daemon_serves_health_and_receipt_state(self, tmp_path):
-        store = GuardStore(tmp_path / "guard-home")
-        store.add_receipt(
-            build_receipt(
-                harness="codex",
-                artifact_id="codex:workspace_skill",
-                artifact_hash="hash-123",
-                policy_decision="allow",
-                capabilities_summary="mcp server • stdio • python",
-                changed_capabilities=["first_seen"],
-                provenance_summary="project artifact defined at .codex/config.toml",
-                artifact_name="workspace_skill",
-                source_scope="project",
-            )
+def test_remote_proxy_preserves_exact_base_url_when_forwarding_empty_path(monkeypatch):
+    captured_urls: list[str] = []
+
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return b'{"jsonrpc":"2.0","id":1,"result":{"ok":true}}'
+
+    def _fake_urlopen(request, timeout):
+        captured_urls.append(request.full_url)
+        return _FakeResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+    proxy = RemoteGuardProxy(base_url="https://mcp.example.com/v1/mcp")
+
+    response = proxy.forward("", {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+
+    assert response["result"]["ok"] is True
+    assert captured_urls == ["https://mcp.example.com/v1/mcp"]
+
+
+def test_guard_daemon_serves_health_and_receipt_state(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_receipt(
+        build_receipt(
+            harness="codex",
+            artifact_id="codex:workspace_skill",
+            artifact_hash="hash-123",
+            policy_decision="allow",
+            capabilities_summary="mcp server • stdio • python",
+            changed_capabilities=["first_seen"],
+            provenance_summary="project artifact defined at .codex/config.toml",
+            artifact_name="workspace_skill",
+            source_scope="project",
         )
+    )
 
-        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        daemon.start()
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
 
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=5) as response:
-                health_payload = json.loads(response.read().decode("utf-8"))
-            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/receipts", timeout=5) as response:
-                receipts_payload = json.loads(response.read().decode("utf-8"))
-        finally:
-            daemon.stop()
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=5) as response:
+            health_payload = json.loads(response.read().decode("utf-8"))
+        with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/receipts", timeout=5) as response:
+            receipts_payload = json.loads(response.read().decode("utf-8"))
+    finally:
+        daemon.stop()
 
-        assert health_payload["ok"] is True
-        assert health_payload["receipts"] == 1
-        assert receipts_payload["items"][0]["artifact_id"] == "codex:workspace_skill"
+    assert health_payload["ok"] is True
+    assert health_payload["receipts"] == 1
+    assert receipts_payload["items"][0]["artifact_id"] == "codex:workspace_skill"
