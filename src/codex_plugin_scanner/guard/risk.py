@@ -26,6 +26,10 @@ _NON_NETWORK_SUFFIXES = {
     "sh",
     "cfg",
     "conf",
+    "log",
+    "tmp",
+    "bak",
+    "bin",
 }
 _ENCODED_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"\bbase64(?:\s+--decode|\s+-d)\b", "base64 decode invocation"),

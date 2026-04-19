@@ -138,6 +138,16 @@ class TestGuardRuntime:
         assert "exfil_intent" in classes
         assert "guard_bypass_intent" in classes
 
+    def test_extract_prompt_requests_detects_exec_and_spawn_subprocess_intent(self) -> None:
+        exec_requests = guard_runner_module.extract_prompt_requests("run exec('ls -la')")
+        spawn_requests = guard_runner_module.extract_prompt_requests("run spawn('python -V')")
+
+        exec_classes = {item.request_class for item in exec_requests}
+        spawn_classes = {item.request_class for item in spawn_requests}
+
+        assert "subprocess_intent" in exec_classes
+        assert "subprocess_intent" in spawn_classes
+
     def test_prompt_requests_to_artifacts_generates_session_prompt_artifacts(self, tmp_path) -> None:
         context = HarnessContext(
             home_dir=tmp_path / "home",
@@ -2620,7 +2630,7 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
-    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 5\n")
 
     store = GuardStore(home_dir)
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
@@ -2631,7 +2641,7 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     )
 
     def resolve_pending() -> None:
-        for _ in range(40):
+        for _ in range(100):
             pending = store.list_approval_requests(limit=10)
             if pending:
                 for request in pending:

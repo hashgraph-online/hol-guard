@@ -217,6 +217,10 @@ def _migrate_guard_home_state(*, source: Path, destination: Path) -> None:
             continue
         target = destination / entry.name
         if target.exists():
+            if replace_database and entry.name == "secrets" and entry.is_dir() and target.is_dir():
+                shutil.rmtree(target)
+                shutil.copytree(entry, target)
+                continue
             if entry.is_dir() and target.is_dir():
                 _migrate_guard_home_state(source=entry, destination=target)
                 continue

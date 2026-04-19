@@ -59,7 +59,7 @@ _DESTRUCTIVE_PROMPT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _SUBPROCESS_PROMPT_PATTERN = re.compile(
-    r"\b(bash\s+-c|sh\s+-c|zsh\s+-c|powershell\b|cmd\s+/c|subprocess|exec\(|spawn\()\b",
+    r"\b(?:bash\s+-c|sh\s+-c|zsh\s+-c|powershell|cmd\s+/c|subprocess)\b|(?:exec|spawn)\s*\(",
     re.IGNORECASE,
 )
 _GUARD_BYPASS_PROMPT_PATTERN = re.compile(

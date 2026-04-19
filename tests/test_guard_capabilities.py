@@ -26,7 +26,7 @@ def test_normalize_artifact_capabilities_extracts_hosts_secret_classes_and_execu
 
     capabilities = normalize_artifact_capabilities(artifact)
 
-    assert "api.example.com" in capabilities.network_hosts
+    assert capabilities.network_hosts == ("api.example.com",)
     assert "https" in capabilities.network_schemes
     assert "local .env file" in capabilities.secret_classes
     assert "sensitive environment key" in capabilities.secret_classes

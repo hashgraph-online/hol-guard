@@ -138,20 +138,12 @@ def build_history_context(
     """Collect local artifact history signals for verdict enrichment."""
 
     inventory_item = store.find_inventory_item(artifact_id)
-    receipts = [
-        receipt
-        for receipt in store.list_receipts(limit=1000)
-        if receipt.get("harness") == harness and receipt.get("artifact_id") == artifact_id
-    ]
+    decision_counts = store.receipt_decision_counts(harness, artifact_id)
     prior_approvals = sum(
-        1
-        for receipt in receipts
-        if receipt.get("policy_decision") in {"allow", "warn", "review", "require-reapproval"}
+        decision_counts.get(decision, 0) for decision in {"allow", "warn", "review", "require-reapproval"}
     )
     prior_blocks = sum(
-        1
-        for receipt in receipts
-        if receipt.get("policy_decision") in {"block", "sandbox-required", "require-reapproval"}
+        decision_counts.get(decision, 0) for decision in {"block", "sandbox-required", "require-reapproval"}
     )
     prior_incidents = 0
     for event in store.list_events(limit=1000):

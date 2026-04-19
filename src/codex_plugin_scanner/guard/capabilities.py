@@ -116,9 +116,7 @@ def compute_capability_delta(before: CapabilitySet | None, after: CapabilitySet)
                 after=", ".join(after.secret_classes),
                 severity=9,
                 explanation=(
-                    "Artifact now references additional secret-bearing classes: "
-                    + ", ".join(new_secret_classes)
-                    + "."
+                    "Artifact now references additional secret-bearing classes: " + ", ".join(new_secret_classes) + "."
                 ),
             )
         )

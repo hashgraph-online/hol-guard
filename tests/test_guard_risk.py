@@ -65,6 +65,25 @@ def test_artifact_risk_signals_detect_secret_and_network_patterns():
     assert "secrets" in summary.lower()
 
 
+def test_artifact_risk_signals_ignore_common_file_extensions_as_network_hosts():
+    artifact = GuardArtifact(
+        artifact_id="codex:project:local-file-audit",
+        name="local-file-audit",
+        harness="codex",
+        artifact_type="mcp_server",
+        source_scope="project",
+        config_path="/workspace/.codex/config.toml",
+        command="python",
+        args=("-c", "cat backup.log cache.tmp payload.bin old.bak"),
+        transport="stdio",
+    )
+
+    signals = artifact_risk_signals_typed(artifact)
+    host_signals = [signal for signal in signals if signal.signal_id.startswith("network:host:")]
+
+    assert host_signals == []
+
+
 def test_artifact_risk_signals_detect_direct_env_prompt_requests():
     artifact = GuardArtifact(
         artifact_id="codex:session:prompt-env-read:abc123",

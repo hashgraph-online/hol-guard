@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
+from cryptography.fernet import Fernet, InvalidToken
+
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
 from .store_approvals import (
     add_approval_request as persist_approval_request,
@@ -70,7 +72,12 @@ from .store_connect import (
 from .types import CapabilitySet
 
 _SYNC_TOKEN_REF = "guard-cloud-token"
+_SYNC_TOKEN_HASH_KEY = "token_sha256"
 _DEVICE_ROW_KEY = "local-device"
+
+
+def _token_sha256(value: str) -> str:
+    return sha256(value.encode("utf-8")).hexdigest()
 
 
 class SecretStore(Protocol):
@@ -96,6 +103,7 @@ class KeychainSecretStore:
     def set_secret(self, secret_id: str, value: str) -> None:
         if not self._is_available():
             raise RuntimeError("macOS keychain command is not available")
+        prompt_payload = f"{value}\n{value}\n"
         subprocess.run(
             [
                 "/usr/bin/security",
@@ -104,13 +112,13 @@ class KeychainSecretStore:
                 secret_id,
                 "-s",
                 self.service_name,
-                "-w",
-                value,
                 "-U",
+                "-w",
             ],
             check=True,
             capture_output=True,
             text=True,
+            input=prompt_payload,
         )
 
     def get_secret(self, secret_id: str) -> str | None:
@@ -132,7 +140,7 @@ class KeychainSecretStore:
         )
         if result.returncode != 0:
             return None
-        value = result.stdout.strip()
+        value = result.stdout.rstrip("\r\n")
         return value if value else None
 
 
@@ -141,19 +149,27 @@ class EncryptedFileSecretStore:
 
     def __init__(self, guard_home: Path) -> None:
         self.base_dir = guard_home / "secrets"
-        self.base_dir.mkdir(parents=True, exist_ok=True)
         self.key_path = self.base_dir / "key.bin"
+        self._fernet: Fernet | None = None
+
+    def _ensure_ready(self) -> None:
+        if self._fernet is not None:
+            return
+        self.base_dir.mkdir(parents=True, exist_ok=True)
         if not self.key_path.exists():
-            self.key_path.write_bytes(os.urandom(32))
+            self.key_path.write_bytes(Fernet.generate_key())
             os.chmod(self.key_path, 0o600)
+        self._fernet = Fernet(self._load_fernet_key())
 
     def set_secret(self, secret_id: str, value: str) -> None:
-        payload = self._encrypt(value)
+        self._ensure_ready()
+        payload = self._encrypt_fernet(value)
         path = self._path_for(secret_id)
         path.write_text(json.dumps(payload), encoding="utf-8")
         os.chmod(path, 0o600)
 
     def get_secret(self, secret_id: str) -> str | None:
+        self._ensure_ready()
         path = self._path_for(secret_id)
         if not path.exists():
             return None
@@ -163,24 +179,75 @@ class EncryptedFileSecretStore:
             return None
         if not isinstance(payload, dict):
             return None
-        return self._decrypt(payload)
+        value = self._decrypt_fernet(payload)
+        if value is not None:
+            return value
+        legacy_value = self._decrypt_legacy_payload(payload)
+        if legacy_value is None:
+            return None
+        self.set_secret(secret_id, legacy_value)
+        return legacy_value
 
     def _path_for(self, secret_id: str) -> Path:
         normalized = secret_id.replace("/", "_").replace(":", "_")
         return self.base_dir / f"{normalized}.enc"
 
-    def _encrypt(self, value: str) -> dict[str, str]:
-        nonce = os.urandom(16)
-        plaintext = value.encode("utf-8")
-        key = self.key_path.read_bytes()
-        keystream = _expand_keystream(key=key, nonce=nonce, length=len(plaintext))
-        encrypted = bytes(item ^ mask for item, mask in zip(plaintext, keystream, strict=True))
+    def _load_fernet_key(self) -> bytes:
+        existing = self.key_path.read_bytes().strip()
+        if not existing:
+            key = Fernet.generate_key()
+            self.key_path.write_bytes(key)
+            os.chmod(self.key_path, 0o600)
+            return key
+        try:
+            decoded = base64.urlsafe_b64decode(existing)
+        except (ValueError, TypeError):
+            decoded = b""
+        if len(decoded) == 32:
+            if len(existing) == 32:
+                upgraded = base64.urlsafe_b64encode(existing)
+                self.key_path.write_bytes(upgraded)
+                os.chmod(self.key_path, 0o600)
+                return upgraded
+            return existing
+        if len(existing) == 32:
+            upgraded = base64.urlsafe_b64encode(existing)
+            self.key_path.write_bytes(upgraded)
+            os.chmod(self.key_path, 0o600)
+            return upgraded
+        key = Fernet.generate_key()
+        self.key_path.write_bytes(key)
+        os.chmod(self.key_path, 0o600)
+        return key
+
+    def _encrypt_fernet(self, value: str) -> dict[str, str]:
+        fernet = self._fernet
+        if fernet is None:
+            raise RuntimeError("secret store is not initialized")
+        token = fernet.encrypt(value.encode("utf-8")).decode("ascii")
         return {
-            "nonce": base64.urlsafe_b64encode(nonce).decode("ascii"),
-            "ciphertext": base64.urlsafe_b64encode(encrypted).decode("ascii"),
+            "version": "fernet-v1",
+            "ciphertext": token,
         }
 
-    def _decrypt(self, payload: dict[str, object]) -> str | None:
+    def _decrypt_fernet(self, payload: dict[str, object]) -> str | None:
+        version = payload.get("version")
+        ciphertext_value = payload.get("ciphertext")
+        if version != "fernet-v1" or not isinstance(ciphertext_value, str):
+            return None
+        fernet = self._fernet
+        if fernet is None:
+            return None
+        try:
+            plaintext = fernet.decrypt(ciphertext_value.encode("ascii"))
+        except (InvalidToken, ValueError, TypeError):
+            return None
+        try:
+            return plaintext.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+
+    def _decrypt_legacy_payload(self, payload: dict[str, object]) -> str | None:
         nonce_value = payload.get("nonce")
         ciphertext_value = payload.get("ciphertext")
         if not isinstance(nonce_value, str) or not isinstance(ciphertext_value, str):
@@ -188,9 +255,9 @@ class EncryptedFileSecretStore:
         try:
             nonce = base64.urlsafe_b64decode(nonce_value.encode("ascii"))
             ciphertext = base64.urlsafe_b64decode(ciphertext_value.encode("ascii"))
+            key = base64.urlsafe_b64decode(self._load_fernet_key())
         except (ValueError, TypeError):
             return None
-        key = self.key_path.read_bytes()
         keystream = _expand_keystream(key=key, nonce=nonce, length=len(ciphertext))
         plaintext = bytes(item ^ mask for item, mask in zip(ciphertext, keystream, strict=True))
         try:
@@ -199,21 +266,47 @@ class EncryptedFileSecretStore:
             return None
 
 
+class FallbackSecretStore:
+    """Fallback-capable secret store that tolerates primary backend failures."""
+
+    def __init__(self, primary: SecretStore, fallback: SecretStore) -> None:
+        self.primary = primary
+        self.fallback = fallback
+
+    def set_secret(self, secret_id: str, value: str) -> None:
+        try:
+            self.primary.set_secret(secret_id, value)
+        except Exception:
+            self.fallback.set_secret(secret_id, value)
+
+    def get_secret(self, secret_id: str) -> str | None:
+        try:
+            primary_value = self.primary.get_secret(secret_id)
+        except Exception:
+            primary_value = None
+        if primary_value is not None:
+            return primary_value
+        return self.fallback.get_secret(secret_id)
+
+
 def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
     chunks: list[bytes] = []
+    generated = 0
     counter = 0
-    while sum(len(chunk) for chunk in chunks) < length:
+    while generated < length:
         counter_bytes = counter.to_bytes(4, byteorder="big", signed=False)
-        chunks.append(sha256(key + nonce + counter_bytes).digest())
+        digest = sha256(key + nonce + counter_bytes).digest()
+        chunks.append(digest)
+        generated += len(digest)
         counter += 1
     return b"".join(chunks)[:length]
 
 
 def _build_secret_store(guard_home: Path) -> SecretStore:
-    keychain_store = KeychainSecretStore(service_name="hol-guard.sync")
+    fallback_store = EncryptedFileSecretStore(guard_home)
     if KeychainSecretStore._is_available():
-        return keychain_store
-    return EncryptedFileSecretStore(guard_home)
+        return FallbackSecretStore(KeychainSecretStore(service_name="hol-guard.sync"), fallback_store)
+    return fallback_store
 
 
 class GuardStore:
@@ -1154,6 +1247,22 @@ class GuardStore:
             row = connection.execute(query, params).fetchone()
         return int(row["total"]) if row is not None else 0
 
+    def receipt_decision_counts(self, harness: str, artifact_id: str) -> dict[str, int]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                select policy_decision, count(*) as total
+                from runtime_receipts
+                where harness = ? and artifact_id = ?
+                group by policy_decision
+                """,
+                (harness, artifact_id),
+            ).fetchall()
+        counts: dict[str, int] = {}
+        for row in rows:
+            counts[str(row["policy_decision"])] = int(row["total"])
+        return counts
+
     def upsert_runtime_state(
         self,
         *,
@@ -1741,6 +1850,20 @@ class GuardStore:
                 pairing_secret=pairing_secret,
             )
 
+    def _credential_payload_token_hash(self, payload: dict[str, object]) -> str | None:
+        token_hash = payload.get(_SYNC_TOKEN_HASH_KEY)
+        if isinstance(token_hash, str) and token_hash:
+            return token_hash
+        legacy_token = payload.get("token")
+        if isinstance(legacy_token, str) and legacy_token:
+            return _token_sha256(legacy_token)
+        token_reference = payload.get("token_ref")
+        if isinstance(token_reference, str) and token_reference:
+            token = self._secret_store.get_secret(token_reference)
+            if isinstance(token, str) and token:
+                return _token_sha256(token)
+        return None
+
     def _set_sync_credentials_in_connection(
         self,
         connection: sqlite3.Connection,
@@ -1749,18 +1872,28 @@ class GuardStore:
         now: str,
     ) -> None:
         self._secret_store.set_secret(_SYNC_TOKEN_REF, token)
-        payload = {"sync_url": sync_url, "token_ref": _SYNC_TOKEN_REF}
+        payload = {
+            "sync_url": sync_url,
+            "token_ref": _SYNC_TOKEN_REF,
+            _SYNC_TOKEN_HASH_KEY: _token_sha256(token),
+        }
         previous_row = connection.execute(
             "select payload_json from sync_state where state_key = 'credentials'"
         ).fetchone()
-        credentials_changed = False
         if previous_row is None:
             credentials_changed = True
         else:
             previous_payload = json.loads(str(previous_row["payload_json"]))
-            if isinstance(previous_payload, dict) and "token" in previous_payload:
-                previous_payload = {"sync_url": previous_payload.get("sync_url"), "token_ref": _SYNC_TOKEN_REF}
-            credentials_changed = previous_payload != payload
+            if not isinstance(previous_payload, dict):
+                credentials_changed = True
+            else:
+                previous_sync_url = previous_payload.get("sync_url")
+                previous_token_hash = self._credential_payload_token_hash(previous_payload)
+                credentials_changed = (
+                    previous_sync_url != sync_url
+                    or previous_token_hash is None
+                    or previous_token_hash != payload[_SYNC_TOKEN_HASH_KEY]
+                )
         connection.execute(
             """
             insert into sync_state (state_key, payload_json, updated_at)
