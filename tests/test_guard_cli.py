@@ -3421,6 +3421,99 @@ args = ["workspace-skill.js", "--changed"]
         assert connect_output["reason"] == "sync_unreachable"
         assert connect_output["sync_message"] == "sync_unreachable"
 
+    def test_guard_connect_surfaces_remote_sync_errors_cleanly(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _SyncRequestHandler.response_code = 403
+        _SyncRequestHandler.response_payload = {
+            "error": "Guard sync requires a Pro or Team plan.",
+        }
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+
+        store = GuardStore(home_dir)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda guard_home: f"http://127.0.0.1:{daemon.port}",
+        )
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.cli.connect_flow.sync_runtime_session",
+            lambda current_store, *, session: {
+                "runtime_session_id": str(session.get("session_id") or session.get("sessionId")),
+                "runtime_session_synced_at": "2026-04-15T00:00:01Z",
+                "runtime_sessions_visible": 1,
+            },
+        )
+
+        def open_browser(url: str) -> bool:
+            parsed = urllib.parse.urlparse(url)
+            query = urllib.parse.parse_qs(parsed.query)
+            fragment = urllib.parse.parse_qs(parsed.fragment)
+            request_id = query["guardPairRequest"][-1]
+            daemon_url = query["guardDaemon"][-1]
+            pairing_secret = fragment["guardPairSecret"][-1]
+
+            def complete_pairing() -> None:
+                request = urllib.request.Request(
+                    f"{daemon_url}/v1/connect/complete",
+                    data=urllib.parse.urlencode(
+                        {
+                            "request_id": request_id,
+                            "pairing_secret": pairing_secret,
+                            "token": "session-token-123",
+                        }
+                    ).encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Origin": "https://hol.org",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=5):
+                    pass
+
+            threading.Thread(target=complete_pairing, daemon=True).start()
+            return True
+
+        monkeypatch.setattr(guard_commands_module.webbrowser, "open", open_browser)
+        try:
+            connect_rc = main(
+                [
+                    "guard",
+                    "connect",
+                    "--home",
+                    str(home_dir),
+                    "--sync-url",
+                    f"http://127.0.0.1:{server.server_port}/receipts",
+                    "--connect-url",
+                    "https://hol.org/guard/connect",
+                    "--json",
+                ]
+            )
+            connect_output = json.loads(capsys.readouterr().out)
+        finally:
+            daemon.stop()
+            server.shutdown()
+            thread.join(timeout=5)
+            _SyncRequestHandler.response_code = 200
+            _SyncRequestHandler.response_payload = {
+                "syncedAt": "2026-04-09T00:00:00Z",
+                "receiptsStored": 1,
+            }
+
+        assert connect_rc == 0
+        assert connect_output["connected"] is True
+        assert connect_output["status"] == "connected"
+        assert connect_output["milestone"] == "first_sync_pending"
+        assert connect_output["reason"] == "Guard sync requires a Pro or Team plan."
+        assert connect_output["sync_message"] == "Guard sync requires a Pro or Team plan."
+
     def test_guard_connect_rejects_invalid_sync_url(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -4319,6 +4412,82 @@ args = ["workspace-skill.js", "--changed"]
         stderr = capsys.readouterr().err
         assert "Guard Cloud is not connected yet." in stderr
         assert "Run `hol-guard connect`" in stderr
+
+    def test_guard_sync_reports_remote_sync_errors_in_json_mode(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        _SyncRequestHandler.response_code = 403
+        _SyncRequestHandler.response_payload = {
+            "error": "Guard sync requires a Pro or Team plan.",
+        }
+
+        server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            login_rc = main(
+                [
+                    "guard",
+                    "login",
+                    "--home",
+                    str(home_dir),
+                    "--sync-url",
+                    f"http://127.0.0.1:{server.server_port}/receipts",
+                    "--token",
+                    "demo-token",
+                    "--json",
+                ]
+            )
+            json.loads(capsys.readouterr().out)
+
+            sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
+            sync_output = json.loads(capsys.readouterr().out)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            _SyncRequestHandler.response_code = 200
+            _SyncRequestHandler.response_payload = {
+                "syncedAt": "2026-04-09T00:00:00Z",
+                "receiptsStored": 1,
+            }
+
+        assert login_rc == 0
+        assert sync_rc == 1
+        assert sync_output == {
+            "synced": False,
+            "error": "Guard sync requires a Pro or Team plan.",
+        }
+
+    def test_guard_sync_reports_non_string_url_errors_in_json_mode(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        main(
+            [
+                "guard",
+                "login",
+                "--home",
+                str(home_dir),
+                "--sync-url",
+                "https://hol.org/api/guard/receipts/sync",
+                "--token",
+                "demo-token",
+                "--json",
+            ]
+        )
+        json.loads(capsys.readouterr().out)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.runtime.runner.urllib.request.urlopen",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+            ),
+        )
+
+        sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
+        sync_output = json.loads(capsys.readouterr().out)
+
+        assert sync_rc == 1
+        assert sync_output == {
+            "synced": False,
+            "error": "Guard sync failed: [Errno 61] Connection refused",
+        }
 
     def test_guard_doctor_reports_runtime_mismatch_for_cursor(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
