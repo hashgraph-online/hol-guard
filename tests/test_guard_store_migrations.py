@@ -22,7 +22,8 @@ def test_sync_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path):
     assert row is not None
     payload = json.loads(str(row[0]))
     assert payload["sync_url"] == "https://hol.org/api/guard/receipts/sync"
-    assert payload.get("token_ref") == "guard-cloud-token"
+    assert isinstance(payload.get("token_ref"), str)
+    assert str(payload["token_ref"]).startswith("guard-cloud-token:")
     assert isinstance(payload.get("token_sha256"), str)
     assert "token" not in payload
     assert store.get_sync_credentials() == {
@@ -62,8 +63,36 @@ def test_legacy_plaintext_sync_payload_is_migrated_on_read(tmp_path):
 
     payload = json.loads(str(row[0])) if row is not None else {}
     assert "token" not in payload
-    assert payload.get("token_ref") == "guard-cloud-token"
+    assert isinstance(payload.get("token_ref"), str)
+    assert str(payload["token_ref"]).startswith("guard-cloud-token:")
     assert isinstance(payload.get("token_sha256"), str)
+
+
+def test_sync_credentials_are_scoped_per_guard_home(tmp_path):
+    home_a = tmp_path / "guard-home-a"
+    home_b = tmp_path / "guard-home-b"
+    store_a = GuardStore(home_a)
+    store_b = GuardStore(home_b)
+
+    store_a.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-a",
+        "2026-04-19T00:00:00+00:00",
+    )
+    store_b.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-b",
+        "2026-04-19T00:00:05+00:00",
+    )
+
+    assert store_a.get_sync_credentials() == {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "token": "token-a",
+    }
+    assert store_b.get_sync_credentials() == {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "token": "token-b",
+    }
 
 
 def test_sync_token_rotation_with_same_url_clears_cloud_sync_payloads(tmp_path):
