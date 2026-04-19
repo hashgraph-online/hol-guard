@@ -150,11 +150,11 @@ _WRAPPER_FLAGS_WITH_VALUES = {
 }
 _ENCODED_EXECUTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
-        r"\bbase64(?:\s+--decode|\s+-d)\b[^\n|;]*(?:\|\s*(?:bash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b)",
+        r"\bbase64(?:\s+--decode|\s+-(?:d|D))\b[^\n|;]*(?:\|\s*(?:bash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b)",
         re.IGNORECASE,
     ),
     re.compile(
-        r"\bxxd\s+-r\s+-p\b[^\n|;]*(?:\|\s*(?:bash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b)",
+        r"\bxxd\s+(?:-r\s+-p|-rp)\b[^\n|;]*(?:\|\s*(?:bash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b)",
         re.IGNORECASE,
     ),
     re.compile(
@@ -162,10 +162,10 @@ _ENCODED_EXECUTION_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.IGNORECASE,
     ),
     re.compile(
-        r"\bgpg\b[^\n|;]*(?:--decrypt|-d)\b[^\n|;]*(?:\|\s*(?:bash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b)",
+        r"\b(?:gpg|gpg2)\b[^\n|;]*(?:--decrypt|-d)\b[^\n|;]*(?:\|\s*(?:bash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b)",
         re.IGNORECASE,
     ),
-    re.compile(r"\bpowershell\b[^\n;]*\s-(?:enc|encodedcommand)\b", re.IGNORECASE),
+    re.compile(r"\b(?:powershell|pwsh)\b[^\n;]*\s-(?:e|ec|enc|encodedcommand)\b", re.IGNORECASE),
     re.compile(r"\bfrombase64string\s*\(", re.IGNORECASE),
 )
 _BASE64_LITERAL_PATTERN = re.compile(r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{20,}={0,2}(?![A-Za-z0-9+/=])")
@@ -631,9 +631,9 @@ def _local_shell_script_payloads(
     payloads: list[tuple[str, Path | None, str]] = []
     for segment in _iter_shell_command_segments(parts):
         command_name, command_index = _shell_segment_primary_command(segment)
-        if command_name not in _SHELL_SCRIPT_INTERPRETER_COMMANDS or command_index is None:
+        if command_index is None:
             continue
-        script_path = _shell_script_path_from_segment(segment[command_index + 1 :])
+        script_path = _shell_script_path_for_segment(segment, command_name=command_name, command_index=command_index)
         if script_path is None:
             continue
         normalized_script_path = _normalize_path(_expand_home(script_path, home_dir), cwd)
@@ -652,6 +652,20 @@ def _local_shell_script_payloads(
     return tuple(payloads)
 
 
+def _shell_script_path_for_segment(
+    segment: list[str],
+    *,
+    command_name: str | None,
+    command_index: int,
+) -> str | None:
+    if command_name in _SHELL_SCRIPT_INTERPRETER_COMMANDS:
+        return _shell_script_path_from_segment(segment[command_index + 1 :])
+    command_token = segment[command_index].strip()
+    if not command_token or command_token.startswith("-") or _SHELL_ASSIGNMENT_PATTERN.match(command_token):
+        return None
+    return command_token
+
+
 def _shell_script_path_from_segment(segment_args: list[str]) -> str | None:
     index = 0
     while index < len(segment_args):
@@ -662,6 +676,9 @@ def _shell_script_path_from_segment(segment_args: list[str]) -> str | None:
         if token == "--":
             index += 1
             break
+        if _SHELL_ASSIGNMENT_PATTERN.match(token):
+            index += 1
+            continue
         if not token.startswith("-") and not token.startswith("+"):
             return token
         if token in {"-c", "--command"} or token.startswith(("-c", "--command=")):
