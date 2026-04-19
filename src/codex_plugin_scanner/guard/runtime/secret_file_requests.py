@@ -517,12 +517,13 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     lowered = normalized.lower()
     if _contains_mutating_shell_redirection(lowered):
         return True
+    raw_command_names = list(_shell_command_names(lowered))
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
-    if _looks_like_benign_interpreter_wait(parts):
+    if _looks_like_benign_interpreter_wait(parts, raw_command_names):
         return False
-    command_names = list(_shell_command_names(lowered))
+    command_names = list(raw_command_names)
     command_names.extend(_shell_command_names_from_parts(parts))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
         return True
@@ -651,8 +652,7 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
     return tuple(scripts)
 
 
-def _looks_like_benign_interpreter_wait(parts: list[str]) -> bool:
-    command_names = _shell_command_names_from_parts(parts)
+def _looks_like_benign_interpreter_wait(parts: list[str], command_names: list[str]) -> bool:
     if not command_names or not all(command_name in _SCRIPT_INTERPRETER_COMMANDS for command_name in command_names):
         return False
     scripts = _script_interpreter_texts(parts)

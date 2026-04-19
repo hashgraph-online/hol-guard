@@ -435,6 +435,16 @@ def test_tool_action_request_classifier_does_not_promote_echoed_interpreter_text
     assert request is None
 
 
+def test_tool_action_request_classifier_does_not_let_benign_wait_mask_following_rm():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c 'sleep 1'\nrm -rf dangerous-marker.json"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_destructive_subcommand_after_safe_prefix():
     request = extract_sensitive_tool_action_request(
         "bash",
