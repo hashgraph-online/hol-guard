@@ -12,11 +12,21 @@ from pathlib import Path
 
 from ..daemon import ensure_guard_daemon, load_guard_surface_daemon_client
 from ..daemon.client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
+from ..daemon.manager import clear_guard_daemon_state
 from ..runtime import GuardSyncNotAvailableError, sync_receipts, sync_runtime_session
 from ..store import GuardStore
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
+
+
+def _load_connect_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClient:
+    try:
+        return load_guard_surface_daemon_client(guard_home)
+    except RuntimeError:
+        clear_guard_daemon_state(guard_home)
+        ensure_guard_daemon(guard_home)
+        return load_guard_surface_daemon_client(guard_home)
 
 
 def run_guard_connect_command(
@@ -29,7 +39,7 @@ def run_guard_connect_command(
     wait_timeout_seconds: int,
 ) -> dict[str, object]:
     ensure_guard_daemon(guard_home)
-    daemon_client = load_guard_surface_daemon_client(guard_home)
+    daemon_client = _load_connect_daemon_client(guard_home)
     normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
     connect_request = daemon_client.create_connect_request(
         sync_url=sync_url,

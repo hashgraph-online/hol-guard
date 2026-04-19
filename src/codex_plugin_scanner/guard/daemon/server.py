@@ -652,7 +652,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     self.wfile.flush()
                 except BrokenPipeError:
                     return
-            time.sleep(0.25)
+            time.sleep(0.5)
 
     def _origin_is_allowed(self) -> bool:
         origin = self.headers.get("Origin")

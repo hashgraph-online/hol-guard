@@ -155,6 +155,7 @@ _SENSITIVE_SUFFIX_LABELS = {
     (".docker", "config.json"): "Docker client config",
     (".ssh", "id_rsa"): "SSH private key",
     (".ssh", "id_ed25519"): "SSH private key",
+    (".ssh", "id_ecdsa"): "SSH private key",
     (".ssh", "config"): "SSH client config",
 }
 _SENSITIVE_PATH_REASONS = {

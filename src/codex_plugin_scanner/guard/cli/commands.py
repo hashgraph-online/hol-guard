@@ -81,6 +81,8 @@ from .install_commands import apply_managed_install
 from .product import build_guard_start_payload, build_guard_status_payload
 from .update_commands import run_guard_update
 
+_GUARD_CLIENT_VERSION = "2.0.0"
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -1542,7 +1544,7 @@ def _headless_approval_resolver(
             workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
             client_name="hol-guard",
             client_title="HOL Guard CLI",
-            client_version="2.0.0",
+            client_version=_GUARD_CLIENT_VERSION,
             capabilities=["approval-resolution", "receipt-view"],
         )
         blocked_operation = daemon_client.queue_blocked_operation(
