@@ -453,6 +453,15 @@ def test_tool_action_request_classifier_skips_benign_node_inline_read_only_scrip
     assert request is None
 
 
+def test_tool_action_request_classifier_skips_benign_node_inline_transform_call():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "const value = transform('ok'); console.log(value)" """},
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_detects_perl_inline_system_shell_out():
     request = extract_sensitive_tool_action_request(
         "bash",

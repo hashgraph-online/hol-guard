@@ -589,7 +589,10 @@ def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
 
 
 def _contains_destructive_node_inline_script(script: str) -> bool:
-    return any(re.search(rf"{re.escape(call_name)}\s*\(", script) for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS)
+    return any(
+        re.search(rf"(?<![a-z0-9_$'\"]){re.escape(call_name)}\s*\(", script)
+        for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS
+    )
 
 
 def _contains_mutating_shell_redirection(command_text: str) -> bool:
