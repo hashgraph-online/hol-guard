@@ -89,6 +89,7 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
         "--experimental-loader",
         "--input-type",
         "--conditions",
+        "--title",
     }
 )
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&"})
@@ -576,6 +577,9 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return True
     if _find_command_uses_delete(parts):
         return True
+    for env_split_string in _env_split_string_payloads(parts):
+        if _looks_destructive_shell_command(env_split_string):
+            return True
     for shell_script in _shell_command_scripts(parts):
         if _looks_destructive_shell_command(shell_script):
             return True
@@ -727,6 +731,59 @@ def _find_segment_uses_delete(segment_args: list[str]) -> bool:
             return True
         index += 1
     return False
+
+
+def _env_split_string_payloads(parts: list[str]) -> tuple[str, ...]:
+    payloads: list[str] = []
+    for segment in _iter_shell_command_segments(parts):
+        env_index = _shell_segment_env_index(segment)
+        if env_index is None:
+            continue
+        index = env_index + 1
+        while index < len(segment):
+            token = segment[index]
+            if token in {"-S", "--split-string"} and index + 1 < len(segment):
+                payload = segment[index + 1].strip()
+                if payload:
+                    payloads.append(payload)
+                index += 2
+                continue
+            if token.startswith("--split-string="):
+                payload = token.split("=", 1)[1].strip()
+                if payload:
+                    payloads.append(payload)
+                index += 1
+                continue
+            if token.startswith("-S") and token != "-S":
+                payload = token[2:].strip()
+                if payload:
+                    payloads.append(payload)
+                index += 1
+                continue
+            index += 1
+    return tuple(payloads)
+
+
+def _shell_segment_env_index(segment: list[str]) -> int | None:
+    index = 0
+    while index < len(segment):
+        normalized_token = segment[index].lstrip("(").rstrip(")")
+        if _SHELL_ASSIGNMENT_PATTERN.match(normalized_token):
+            index += 1
+            continue
+        command_name = _normalized_shell_command_name(normalized_token)
+        if command_name == "env":
+            return index
+        if command_name in _SHELL_COMMAND_WRAPPERS:
+            index += 1
+            while index < len(segment):
+                token = segment[index]
+                if not token.startswith("-"):
+                    break
+                index += _wrapper_option_tokens_consumed(command_name, token)
+            continue
+        return None
+    return None
 
 
 def _contains_mutating_shell_redirection(command_text: str) -> bool:

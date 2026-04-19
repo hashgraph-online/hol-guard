@@ -454,6 +454,16 @@ def test_tool_action_request_classifier_detects_node_inline_print_flag():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_node_title_option_before_eval_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node --title guard-proof -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_node_inline_unlinksync_with_space_before_call_paren():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -564,6 +574,26 @@ def test_tool_action_request_classifier_detects_stdbuf_value_wrapped_node_eval_d
     request = extract_sensitive_tool_action_request(
         "bash",
         {"command": """stdbuf -o L node -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_env_split_string_find_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """env -S "find . -name dangerous-marker.json -delete" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_env_split_string_node_eval_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """env -S "node -e \\\"require('fs').unlinkSync('dangerous-marker.json')\\\"\" """},
     )
 
     assert request is not None
