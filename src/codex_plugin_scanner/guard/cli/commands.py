@@ -124,7 +124,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         required=True,
         metavar=(
             "{start,status,bootstrap,detect,install,update,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
-            "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,login,sync,bridge}"
+            "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,login,sync,device,bridge}"
         ),
     )
 
@@ -308,6 +308,24 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     sync_parser.add_argument("--home")
     sync_parser.add_argument("--guard-home")
     sync_parser.add_argument("--json", action="store_true")
+
+    device_parser = guard_subparsers.add_parser("device", help="Manage local Guard installation identity")
+    _add_guard_common_args(device_parser)
+    device_parser.add_argument("--json", action="store_true")
+    device_subparsers = device_parser.add_subparsers(dest="device_command", required=True)
+
+    device_show_parser = device_subparsers.add_parser("show", help="Show local installation ID and label")
+    device_show_parser.add_argument("--json", action="store_true")
+
+    device_rotate_parser = device_subparsers.add_parser("rotate", help="Rotate local installation ID")
+    device_rotate_parser.add_argument("--json", action="store_true")
+
+    device_label_parser = device_subparsers.add_parser("label", help="Manage local device label")
+    device_label_parser.add_argument("--json", action="store_true")
+    device_label_subparsers = device_label_parser.add_subparsers(dest="device_label_command", required=True)
+    device_label_set_parser = device_label_subparsers.add_parser("set", help="Set local device label")
+    device_label_set_parser.add_argument("label")
+    device_label_set_parser.add_argument("--json", action="store_true")
 
     # Bridge command
     bridge_parser = guard_subparsers.add_parser("bridge", help="Start the Guard Bridge notification daemon")
@@ -822,6 +840,30 @@ def run_guard_command(args: argparse.Namespace) -> int:
             return 1
         _emit("sync", payload, getattr(args, "json", False))
         return 0
+
+    if args.guard_command == "device":
+        command = getattr(args, "device_command", None)
+        now = _now()
+        if command == "show":
+            payload = {"device": store.get_device_metadata()}
+            _emit("device", payload, getattr(args, "json", False))
+            return 0
+        if command == "rotate":
+            metadata = store.rotate_installation_id(now)
+            store.add_event("device_rotated", {"installation_id": metadata["installation_id"]}, now)
+            _emit("device", {"device": metadata, "rotated": True}, getattr(args, "json", False))
+            return 0
+        if command == "label":
+            label_command = getattr(args, "device_label_command", None)
+            if label_command != "set":
+                print("device label subcommand is required", file=sys.stderr)
+                return 2
+            metadata = store.set_device_label(getattr(args, "label", ""), now)
+            store.add_event("device_labeled", {"device_label": metadata["device_label"]}, now)
+            _emit("device", {"device": metadata, "updated": True}, getattr(args, "json", False))
+            return 0
+        print("device subcommand is required", file=sys.stderr)
+        return 2
 
     if args.guard_command == "daemon":
         daemon = GuardDaemonServer(store, port=args.port or 0)
