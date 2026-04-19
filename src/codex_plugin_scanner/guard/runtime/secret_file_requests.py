@@ -517,11 +517,11 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     lowered = normalized.lower()
     if _contains_mutating_shell_redirection(lowered):
         return True
-    raw_command_names = list(_shell_command_names(lowered))
+    raw_command_names = list(_shell_command_names(_redacted_shell_text_for_command_names(lowered)))
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
-    if _looks_like_benign_interpreter_wait(parts, raw_command_names):
+    if _looks_like_benign_interpreter_wait(normalized, parts, raw_command_names):
         return False
     command_names = list(raw_command_names)
     command_names.extend(_shell_command_names_from_parts(parts))
@@ -562,6 +562,10 @@ def _normalized_shell_command_name(command_name: str) -> str:
     if "/" not in normalized_command:
         return normalized_command
     return normalized_command.rsplit("/", 1)[-1]
+
+
+def _redacted_shell_text_for_command_names(command_text: str) -> str:
+    return re.sub(r"'[^']*'|\"[^\"]*\"", "Q", command_text)
 
 
 def _split_shell_parts(command_text: str) -> list[str]:
@@ -652,7 +656,9 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
     return tuple(scripts)
 
 
-def _looks_like_benign_interpreter_wait(parts: list[str], command_names: list[str]) -> bool:
+def _looks_like_benign_interpreter_wait(command_text: str, parts: list[str], command_names: list[str]) -> bool:
+    if "$(" in command_text or "`" in command_text:
+        return False
     if not command_names or not all(command_name in _SCRIPT_INTERPRETER_COMMANDS for command_name in command_names):
         return False
     scripts = _script_interpreter_texts(parts)

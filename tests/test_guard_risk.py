@@ -445,6 +445,25 @@ def test_tool_action_request_classifier_does_not_let_benign_wait_mask_following_
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_allows_python_time_sleep_one_liner():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c 'import time; time.sleep(310)'"},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_does_not_allow_wait_with_shell_substitution():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c 'sleep 1' $(rm -rf dangerous-marker.json)"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_destructive_subcommand_after_safe_prefix():
     request = extract_sensitive_tool_action_request(
         "bash",
