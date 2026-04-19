@@ -457,8 +457,10 @@ def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
 
 def _sync_url_error_message(error: urllib.error.URLError) -> str:
     reason = getattr(error, "reason", None)
-    if isinstance(reason, str) and reason.strip():
-        return f"Guard sync failed: {reason.strip()}"
+    if reason is not None:
+        reason_text = str(reason).strip()
+        if reason_text:
+            return f"Guard sync failed: {reason_text}"
     return "Guard sync failed because the remote endpoint could not be reached."
 
 

@@ -4457,6 +4457,38 @@ args = ["workspace-skill.js", "--changed"]
             "error": "Guard sync requires a Pro or Team plan.",
         }
 
+    def test_guard_sync_reports_non_string_url_errors_in_json_mode(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        main(
+            [
+                "guard",
+                "login",
+                "--home",
+                str(home_dir),
+                "--sync-url",
+                "https://hol.org/api/guard/receipts/sync",
+                "--token",
+                "demo-token",
+                "--json",
+            ]
+        )
+        json.loads(capsys.readouterr().out)
+        monkeypatch.setattr(
+            "codex_plugin_scanner.guard.runtime.runner.urllib.request.urlopen",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+            ),
+        )
+
+        sync_rc = main(["guard", "sync", "--home", str(home_dir), "--json"])
+        sync_output = json.loads(capsys.readouterr().out)
+
+        assert sync_rc == 1
+        assert sync_output == {
+            "synced": False,
+            "error": "Guard sync failed: [Errno 61] Connection refused",
+        }
+
     def test_guard_doctor_reports_runtime_mismatch_for_cursor(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
