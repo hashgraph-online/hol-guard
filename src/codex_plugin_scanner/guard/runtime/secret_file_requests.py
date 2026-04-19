@@ -149,12 +149,12 @@ _WRAPPER_FLAGS_WITH_VALUES = {
     "time": frozenset({"-f", "--format", "-o", "--output"}),
 }
 _ENCODED_EXECUTION_TARGET_PATTERN = (
-    r"(?:env(?:\s+[A-Za-z_][A-Za-z0-9_]*=\S+)*\s+)?"
+    r"(?:env(?:(?:\s+--?[A-Za-z][A-Za-z-]*|\s+--|\s+[A-Za-z_][A-Za-z0-9_]*=\S+))*\s+)?"
     r"(?:[A-Za-z0-9_./~-]+/)?(?:ash|bash|dash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b"
 )
 _ENCODED_EXECUTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
-        rf"\bbase64(?:\s+--decode|\s+-(?:[A-Za-z]*[dD][A-Za-z]*))\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
+        rf"\bbase64\b(?=[^\n|;]*\s(?:--decode|-[A-Za-z]*[dD][A-Za-z]*))[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
         re.IGNORECASE,
     ),
     re.compile(
@@ -714,6 +714,7 @@ def _is_explicit_shell_script_path_token(token: str) -> bool:
         normalized_token.startswith((".", "/", "~"))
         or normalized_token.startswith("../")
         or normalized_token.startswith("./")
+        or "/" in normalized_token
     )
 
 
