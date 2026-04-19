@@ -26,6 +26,7 @@ from ..store import GuardStore
 class GuardSyncNotAvailableError(Exception):
     """Raised when the Guard sync endpoint returns 403 (plan upgrade required)."""
 
+
 _APPROVAL_METADATA_KEYS = ("approval_center_url", "approval_requests", "approval_wait", "review_hint")
 _PAIN_SIGNAL_EVENTS = frozenset(
     {
