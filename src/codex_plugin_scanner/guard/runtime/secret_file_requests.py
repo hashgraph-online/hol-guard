@@ -148,21 +148,24 @@ _WRAPPER_FLAGS_WITH_VALUES = {
     "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
     "time": frozenset({"-f", "--format", "-o", "--output"}),
 }
+_ENCODED_EXECUTION_TARGET_PATTERN = (
+    r"(?:[A-Za-z0-9_./~-]+/)?(?:bash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b"
+)
 _ENCODED_EXECUTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
-        r"\bbase64(?:\s+--decode|\s+-(?:d|D))\b[^\n|;]*(?:\|\s*(?:bash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b)",
+        rf"\bbase64(?:\s+--decode|\s+-(?:d|D))\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
         re.IGNORECASE,
     ),
     re.compile(
-        r"\bxxd\s+(?:-r\s+-p|-rp)\b[^\n|;]*(?:\|\s*(?:bash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b)",
+        rf"\bxxd\s+(?:-r\s+-p|-rp)\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
         re.IGNORECASE,
     ),
     re.compile(
-        r"\bopenssl\s+enc\b[^\n|;]*\s-(?:d|decrypt)\b[^\n|;]*(?:\|\s*(?:bash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b)",
+        rf"\bopenssl\s+enc\b[^\n|;]*\s-(?:d|decrypt)\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
         re.IGNORECASE,
     ),
     re.compile(
-        r"\b(?:gpg|gpg2)\b[^\n|;]*(?:--decrypt|-d)\b[^\n|;]*(?:\|\s*(?:bash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b)",
+        rf"\b(?:gpg|gpg2)\b[^\n|;]*(?:--decrypt|-d)\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
         re.IGNORECASE,
     ),
     re.compile(r"\b(?:powershell|pwsh)\b[^\n;]*\s-(?:e|ec|enc|encodedcommand)\b", re.IGNORECASE),
@@ -663,6 +666,8 @@ def _shell_script_path_for_segment(
     command_token = segment[command_index].strip()
     if not command_token or command_token.startswith("-") or _SHELL_ASSIGNMENT_PATTERN.match(command_token):
         return None
+    if not _is_explicit_shell_script_path_token(command_token):
+        return None
     return command_token
 
 
@@ -696,6 +701,17 @@ def _shell_script_path_from_segment(segment_args: list[str]) -> str | None:
             return token
         index += 1
     return None
+
+
+def _is_explicit_shell_script_path_token(token: str) -> bool:
+    normalized_token = token.strip()
+    if not normalized_token:
+        return False
+    return (
+        normalized_token.startswith((".", "/", "~"))
+        or normalized_token.startswith("../")
+        or normalized_token.startswith("./")
+    )
 
 
 def build_tool_action_request_artifact(
