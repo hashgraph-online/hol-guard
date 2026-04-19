@@ -827,8 +827,15 @@ def _contains_mutating_shell_redirection(parts: list[str]) -> bool:
             else:
                 index += 1
         else:
-            match = re.fullmatch(r"(?P<fd>[0-2]?)(?P<op>>\||>>|>)(?P<target>.+)?", token)
+            if re.search(r"\s", token):
+                index += 1
+                continue
+            match = re.fullmatch(r"(?P<prefix>[^<>\s]*?)(?P<fd>[0-2]?)(?P<op>>\||>>|>)(?P<target>.*)", token)
             if match is None:
+                index += 1
+                continue
+            prefix = match.group("prefix") or ""
+            if prefix.endswith("="):
                 index += 1
                 continue
             fd = match.group("fd")
