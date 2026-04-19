@@ -464,6 +464,16 @@ def test_tool_action_request_classifier_detects_node_title_option_before_eval_de
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_uppercase_node_eval_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """NODE -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_node_inline_unlinksync_with_space_before_call_paren():
     request = extract_sensitive_tool_action_request(
         "bash",

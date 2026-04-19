@@ -810,8 +810,8 @@ def _shell_command_names(command_text: str) -> tuple[str, ...]:
 def _normalized_shell_command_name(command_name: str) -> str:
     normalized_command = command_name.replace("\\", "/").strip()
     if "/" not in normalized_command:
-        return normalized_command
-    return normalized_command.rsplit("/", 1)[-1]
+        return normalized_command.lower()
+    return normalized_command.rsplit("/", 1)[-1].lower()
 
 
 def _redacted_shell_text_for_command_names(command_text: str) -> str:
