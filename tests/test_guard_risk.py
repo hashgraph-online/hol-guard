@@ -382,6 +382,50 @@ def test_tool_action_request_classifier_detects_python_heredoc_file_write():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_semicolon_chained_interpreter_script():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "echo ok; python3 -c \"from pathlib import Path; Path('dangerous-marker.json').write_text('owned')\""
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_newline_chained_interpreter_script():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo ok\nperl -e 'unlink q(dangerous-marker.json)'"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_second_interpreter_heredoc_mutation():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "python3 - <<'PY'\n"
+                "print('safe')\n"
+                "PY\n"
+                "python3 - <<'PY'\n"
+                "from pathlib import Path\n"
+                "Path('dangerous-marker.json').write_text('owned')\n"
+                "PY"
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_destructive_subcommand_after_safe_prefix():
     request = extract_sensitive_tool_action_request(
         "bash",

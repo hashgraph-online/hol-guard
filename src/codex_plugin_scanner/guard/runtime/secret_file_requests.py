@@ -540,10 +540,7 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return True
     if _looks_destructive_interpreter_heredoc(normalized):
         return True
-    try:
-        parts = shlex.split(normalized, posix=True)
-    except ValueError:
-        parts = normalized.split()
+    parts = _split_shell_parts(normalized)
     if not parts:
         return False
     command_names = list(_shell_command_names(lowered))
@@ -588,6 +585,15 @@ def _normalized_shell_command_name(command_name: str) -> str:
     if "/" not in normalized_command:
         return normalized_command
     return normalized_command.rsplit("/", 1)[-1]
+
+
+def _split_shell_parts(command_text: str) -> list[str]:
+    try:
+        lexer = shlex.shlex(command_text, posix=True, punctuation_chars=";&|")
+        lexer.whitespace_split = True
+        return list(lexer)
+    except ValueError:
+        return command_text.split()
 
 
 def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
@@ -646,6 +652,15 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
         if not normalized_token:
             index += 1
             continue
+        if (
+            not expect_command
+            and normalized_token in _SCRIPT_INTERPRETER_COMMANDS
+            and _looks_like_interpreter_script_start(parts, index)
+        ):
+            current_command = normalized_token
+            expect_command = False
+            index += 1
+            continue
         if expect_command:
             if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", normalized_token):
                 index += 1
@@ -688,11 +703,20 @@ def _looks_destructive_interpreter_script(script_text: str) -> bool:
     return any(pattern.search(normalized_script) for pattern in _INTERPRETER_MUTATION_PATTERNS)
 
 
-def _looks_destructive_interpreter_heredoc(command_text: str) -> bool:
-    match = _INTERPRETER_HEREDOC_PATTERN.search(command_text)
-    if match is None:
+def _looks_like_interpreter_script_start(parts: list[str], index: int) -> bool:
+    if index + 1 >= len(parts):
         return False
-    return _looks_destructive_interpreter_script(match.group("body"))
+    next_token = parts[index + 1].strip().lstrip("(").rstrip(")")
+    if not next_token:
+        return False
+    return next_token in {"-c", "-e"} or next_token.startswith(("-c", "-e"))
+
+
+def _looks_destructive_interpreter_heredoc(command_text: str) -> bool:
+    return any(
+        _looks_destructive_interpreter_script(match.group("body"))
+        for match in _INTERPRETER_HEREDOC_PATTERN.finditer(command_text)
+    )
 
 
 def _is_shell_command_flag(value: str) -> bool:
