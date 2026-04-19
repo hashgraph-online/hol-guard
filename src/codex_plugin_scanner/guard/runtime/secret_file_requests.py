@@ -92,7 +92,7 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
         "--title",
     }
 )
-_SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&"})
+_SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
 _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "time"})
 _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _SHELL_NEWLINE_SEPARATOR = ";"
@@ -750,25 +750,32 @@ def _env_split_string_payloads(parts: list[str]) -> tuple[str, ...]:
         index = env_index + 1
         while index < len(segment):
             token = segment[index]
+            if _SHELL_ASSIGNMENT_PATTERN.match(token):
+                index += 1
+                continue
+            if token == "--":
+                break
+            if not token.startswith("-"):
+                break
             if token in {"-S", "--split-string"} and index + 1 < len(segment):
                 payload = segment[index + 1].strip()
                 if payload:
                     payloads.append(payload)
-                index += 2
+                index += _wrapper_option_tokens_consumed("env", token)
                 continue
             if token.startswith("--split-string="):
                 payload = token.split("=", 1)[1].strip()
                 if payload:
                     payloads.append(payload)
-                index += 1
+                index += _wrapper_option_tokens_consumed("env", token)
                 continue
             if token.startswith("-S") and token != "-S":
                 payload = token[2:].strip()
                 if payload:
                     payloads.append(payload)
-                index += 1
+                index += _wrapper_option_tokens_consumed("env", token)
                 continue
-            index += 1
+            index += _wrapper_option_tokens_consumed("env", token)
     return tuple(payloads)
 
 
@@ -873,11 +880,27 @@ def _replace_unquoted_newlines_with_separators(command_text: str) -> str:
 def _wrapper_option_tokens_consumed(command_name: str, token: str) -> int:
     if not token.startswith("-"):
         return 1
+    if command_name == "env":
+        env_short_option_tokens = _env_short_option_tokens_consumed(token)
+        if env_short_option_tokens is not None:
+            return env_short_option_tokens
     exact_flags = _WRAPPER_FLAGS_WITH_VALUES.get(command_name, frozenset())
     if token in exact_flags:
         return 2
     if _wrapper_flag_has_attached_value(command_name, token):
         return 1
+    return 1
+
+
+def _env_short_option_tokens_consumed(token: str) -> int | None:
+    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
+        return None
+    for index, flag_character in enumerate(token[1:], start=1):
+        if flag_character not in {"C", "S", "u"}:
+            continue
+        if index < len(token) - 1:
+            return 1
+        return 2
     return 1
 
 
@@ -910,7 +933,7 @@ def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
         token = part.strip()
         if not token:
             continue
-        if token in {"&&", "||", ";", "|", "&"}:
+        if token in _SHELL_COMMAND_SEPARATORS:
             expect_command = True
             continue
         normalized_token = token.lstrip("(").rstrip(")")
@@ -950,7 +973,7 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
         if not token:
             index += 1
             continue
-        if token in {"&&", "||", ";", "|", "&"}:
+        if token in _SHELL_COMMAND_SEPARATORS:
             current_command = None
             expect_command = True
             index += 1
