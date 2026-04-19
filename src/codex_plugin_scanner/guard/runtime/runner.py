@@ -670,7 +670,6 @@ def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
     return f"HTTP Error {error.code}: {error.reason}"
 
 
-
 _PLAN_403_KEYWORDS: frozenset[str] = frozenset(
     {
         "sync_not_available",
