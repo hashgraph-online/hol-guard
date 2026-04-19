@@ -52,6 +52,18 @@ Approval tiers:
 
 The harness adapters are designed to prefer discovery and reversible overlay behavior over invasive config mutation.
 
+Runtime intent protections:
+
+- Guard evaluates prompt and tool intent for secret-bearing files beyond `.env`, including SSH, AWS, kubeconfig, Docker, npm, and Python credential files.
+- Guard flags exfiltration verbs, staged transfer intent, destructive filesystem mutation intent, subprocess expansion, and explicit Guard bypass intent.
+- Prompt intent is converted into typed prompt-request artifacts so it follows the same policy, approval, receipt, and cloud sync pipeline as other artifact decisions.
+
+Device identity model:
+
+- Guard sync now uses an opaque local installation ID instead of hostname-derived IDs.
+- The local label is user-controlled through `hol-guard device label set <label>`.
+- Installation IDs can be rotated with `hol-guard device rotate` without breaking local policy history.
+
 Explicit non-support:
 
 - Guard does not claim VS Code Copilot extension-host interception.

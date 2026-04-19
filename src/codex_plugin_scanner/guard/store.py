@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import base64
 import json
+import os
 import sqlite3
+import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
+from typing import Protocol
 from uuid import uuid4
+
+from cryptography.fernet import Fernet, InvalidToken
 
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
 from .store_approvals import (
@@ -63,6 +69,244 @@ from .store_connect import (
 from .store_connect import (
     mark_connect_result as persist_connect_result,
 )
+from .types import CapabilitySet
+
+_SYNC_TOKEN_REF = "guard-cloud-token"
+_SYNC_TOKEN_HASH_KEY = "token_sha256"
+_DEVICE_ROW_KEY = "local-device"
+
+
+def _token_sha256(value: str) -> str:
+    return sha256(value.encode("utf-8")).hexdigest()
+
+
+class SecretStore(Protocol):
+    """Credential persistence contract for local Guard secrets."""
+
+    def set_secret(self, secret_id: str, value: str) -> None:
+        """Store a secret value."""
+
+    def get_secret(self, secret_id: str) -> str | None:
+        """Fetch a secret value."""
+
+
+class KeychainSecretStore:
+    """macOS keychain-backed secret store."""
+
+    def __init__(self, service_name: str) -> None:
+        self.service_name = service_name
+
+    @staticmethod
+    def _is_available() -> bool:
+        return os.name == "posix" and Path("/usr/bin/security").exists()
+
+    def set_secret(self, secret_id: str, value: str) -> None:
+        if not self._is_available():
+            raise RuntimeError("macOS keychain command is not available")
+        prompt_payload = f"{value}\n{value}\n"
+        subprocess.run(
+            [
+                "/usr/bin/security",
+                "add-generic-password",
+                "-a",
+                secret_id,
+                "-s",
+                self.service_name,
+                "-U",
+                "-w",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            input=prompt_payload,
+        )
+
+    def get_secret(self, secret_id: str) -> str | None:
+        if not self._is_available():
+            return None
+        result = subprocess.run(
+            [
+                "/usr/bin/security",
+                "find-generic-password",
+                "-a",
+                secret_id,
+                "-s",
+                self.service_name,
+                "-w",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+        value = result.stdout.rstrip("\r\n")
+        return value if value else None
+
+
+class EncryptedFileSecretStore:
+    """Encrypted file-based fallback secret store."""
+
+    def __init__(self, guard_home: Path) -> None:
+        self.base_dir = guard_home / "secrets"
+        self.key_path = self.base_dir / "key.bin"
+        self._fernet: Fernet | None = None
+
+    def _ensure_ready(self) -> None:
+        if self._fernet is not None:
+            return
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        if not self.key_path.exists():
+            self.key_path.write_bytes(Fernet.generate_key())
+            os.chmod(self.key_path, 0o600)
+        self._fernet = Fernet(self._load_fernet_key())
+
+    def set_secret(self, secret_id: str, value: str) -> None:
+        self._ensure_ready()
+        payload = self._encrypt_fernet(value)
+        path = self._path_for(secret_id)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        os.chmod(path, 0o600)
+
+    def get_secret(self, secret_id: str) -> str | None:
+        self._ensure_ready()
+        path = self._path_for(secret_id)
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        value = self._decrypt_fernet(payload)
+        if value is not None:
+            return value
+        legacy_value = self._decrypt_legacy_payload(payload)
+        if legacy_value is None:
+            return None
+        self.set_secret(secret_id, legacy_value)
+        return legacy_value
+
+    def _path_for(self, secret_id: str) -> Path:
+        normalized = secret_id.replace("/", "_").replace(":", "_")
+        return self.base_dir / f"{normalized}.enc"
+
+    def _load_fernet_key(self) -> bytes:
+        existing = self.key_path.read_bytes().strip()
+        if not existing:
+            key = Fernet.generate_key()
+            self.key_path.write_bytes(key)
+            os.chmod(self.key_path, 0o600)
+            return key
+        try:
+            decoded = base64.urlsafe_b64decode(existing)
+        except (ValueError, TypeError):
+            decoded = b""
+        if len(decoded) == 32:
+            if len(existing) == 32:
+                upgraded = base64.urlsafe_b64encode(existing)
+                self.key_path.write_bytes(upgraded)
+                os.chmod(self.key_path, 0o600)
+                return upgraded
+            return existing
+        if len(existing) == 32:
+            upgraded = base64.urlsafe_b64encode(existing)
+            self.key_path.write_bytes(upgraded)
+            os.chmod(self.key_path, 0o600)
+            return upgraded
+        key = Fernet.generate_key()
+        self.key_path.write_bytes(key)
+        os.chmod(self.key_path, 0o600)
+        return key
+
+    def _encrypt_fernet(self, value: str) -> dict[str, str]:
+        fernet = self._fernet
+        if fernet is None:
+            raise RuntimeError("secret store is not initialized")
+        token = fernet.encrypt(value.encode("utf-8")).decode("ascii")
+        return {
+            "version": "fernet-v1",
+            "ciphertext": token,
+        }
+
+    def _decrypt_fernet(self, payload: dict[str, object]) -> str | None:
+        version = payload.get("version")
+        ciphertext_value = payload.get("ciphertext")
+        if version != "fernet-v1" or not isinstance(ciphertext_value, str):
+            return None
+        fernet = self._fernet
+        if fernet is None:
+            return None
+        try:
+            plaintext = fernet.decrypt(ciphertext_value.encode("ascii"))
+        except (InvalidToken, ValueError, TypeError):
+            return None
+        try:
+            return plaintext.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+
+    def _decrypt_legacy_payload(self, payload: dict[str, object]) -> str | None:
+        nonce_value = payload.get("nonce")
+        ciphertext_value = payload.get("ciphertext")
+        if not isinstance(nonce_value, str) or not isinstance(ciphertext_value, str):
+            return None
+        try:
+            nonce = base64.urlsafe_b64decode(nonce_value.encode("ascii"))
+            ciphertext = base64.urlsafe_b64decode(ciphertext_value.encode("ascii"))
+            key = base64.urlsafe_b64decode(self._load_fernet_key())
+        except (ValueError, TypeError):
+            return None
+        keystream = _expand_keystream(key=key, nonce=nonce, length=len(ciphertext))
+        plaintext = bytes(item ^ mask for item, mask in zip(ciphertext, keystream, strict=True))
+        try:
+            return plaintext.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+
+
+class FallbackSecretStore:
+    """Fallback-capable secret store that tolerates primary backend failures."""
+
+    def __init__(self, primary: SecretStore, fallback: SecretStore) -> None:
+        self.primary = primary
+        self.fallback = fallback
+
+    def set_secret(self, secret_id: str, value: str) -> None:
+        try:
+            self.primary.set_secret(secret_id, value)
+        except Exception:
+            self.fallback.set_secret(secret_id, value)
+
+    def get_secret(self, secret_id: str) -> str | None:
+        try:
+            primary_value = self.primary.get_secret(secret_id)
+        except Exception:
+            primary_value = None
+        if primary_value is not None:
+            return primary_value
+        return self.fallback.get_secret(secret_id)
+
+
+def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
+    chunks: list[bytes] = []
+    generated = 0
+    counter = 0
+    while generated < length:
+        counter_bytes = counter.to_bytes(4, byteorder="big", signed=False)
+        digest = sha256(key + nonce + counter_bytes).digest()
+        chunks.append(digest)
+        generated += len(digest)
+        counter += 1
+    return b"".join(chunks)[:length]
+
+
+def _build_secret_store(guard_home: Path) -> SecretStore:
+    fallback_store = EncryptedFileSecretStore(guard_home)
+    if KeychainSecretStore._is_available():
+        return FallbackSecretStore(KeychainSecretStore(service_name="hol-guard.sync"), fallback_store)
+    return fallback_store
 
 
 class GuardStore:
@@ -71,6 +315,7 @@ class GuardStore:
     def __init__(self, guard_home: Path) -> None:
         self.guard_home = guard_home
         self.guard_home.mkdir(parents=True, exist_ok=True)
+        self._secret_store = _build_secret_store(self.guard_home)
         self.path = self.guard_home / "guard.db"
         self._initialize()
 
@@ -123,6 +368,22 @@ class GuardStore:
               previous_hash text,
               current_hash text not null,
               recorded_at text not null
+            )
+            """,
+            """
+            create table if not exists artifact_capabilities (
+              artifact_id text not null,
+              harness text not null,
+              capability_json text not null,
+              updated_at text not null,
+              primary key (artifact_id, harness)
+            )
+            """,
+            """
+            create table if not exists provenance_cache (
+              artifact_hash text primary key,
+              payload_json text not null,
+              updated_at text not null
             )
             """,
             """
@@ -193,6 +454,21 @@ class GuardStore:
               state_key text primary key,
               payload_json text not null,
               updated_at text not null
+            )
+            """,
+            """
+            create table if not exists guard_devices (
+              device_key text primary key,
+              installation_id text not null,
+              device_label text not null,
+              created_at text not null,
+              updated_at text not null
+            )
+            """,
+            """
+            create table if not exists schema_migrations (
+              version integer primary key,
+              applied_at text not null
             )
             """,
             """
@@ -309,6 +585,8 @@ class GuardStore:
             self._ensure_approval_column(connection, "workspace", "text")
             self._ensure_attachment_column(connection, "lease_id", "text not null default ''")
             self._ensure_attachment_column(connection, "lease_expires_at", "text")
+            self._ensure_local_device(connection)
+            self._record_schema_version(connection, version=2)
 
     @staticmethod
     def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
@@ -341,6 +619,33 @@ class GuardStore:
         if column_name in existing:
             return
         connection.execute(f"alter table guard_client_attachments add column {column_name} {column_type}")
+
+    @staticmethod
+    def _record_schema_version(connection: sqlite3.Connection, *, version: int) -> None:
+        connection.execute(
+            """
+            insert or ignore into schema_migrations (version, applied_at)
+            values (?, ?)
+            """,
+            (version, _now()),
+        )
+
+    @staticmethod
+    def _ensure_local_device(connection: sqlite3.Connection) -> None:
+        row = connection.execute(
+            "select device_key from guard_devices where device_key = ?",
+            (_DEVICE_ROW_KEY,),
+        ).fetchone()
+        if row is not None:
+            return
+        now = _now()
+        connection.execute(
+            """
+            insert into guard_devices (device_key, installation_id, device_label, created_at, updated_at)
+            values (?, ?, ?, ?, ?)
+            """,
+            (_DEVICE_ROW_KEY, uuid4().hex, "Local machine", now, now),
+        )
 
     def list_table_names(self) -> list[str]:
         with self._connect() as connection:
@@ -582,6 +887,130 @@ class GuardStore:
             "artifact_hash": str(row["artifact_hash"]),
         }
 
+    def save_artifact_capability(
+        self,
+        *,
+        harness: str,
+        artifact_id: str,
+        capability_snapshot: dict[str, object],
+        now: str,
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into artifact_capabilities (artifact_id, harness, capability_json, updated_at)
+                values (?, ?, ?, ?)
+                on conflict(artifact_id, harness) do update set
+                  capability_json = excluded.capability_json,
+                  updated_at = excluded.updated_at
+                """,
+                (artifact_id, harness, json.dumps(capability_snapshot), now),
+            )
+
+    def get_artifact_capability(self, harness: str, artifact_id: str) -> CapabilitySet | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select capability_json
+                from artifact_capabilities
+                where artifact_id = ? and harness = ?
+                """,
+                (artifact_id, harness),
+            ).fetchone()
+        if row is None:
+            return None
+        payload = json.loads(str(row["capability_json"]))
+        if not isinstance(payload, dict):
+            return None
+        return CapabilitySet(
+            network_hosts=tuple(_string_list(payload.get("network_hosts"))),
+            network_schemes=tuple(_string_list(payload.get("network_schemes"))),
+            filesystem_paths=tuple(_string_list(payload.get("filesystem_paths"))),
+            secret_classes=tuple(_string_list(payload.get("secret_classes"))),
+            subprocess_invocation=bool(payload.get("subprocess_invocation")),
+            interpreters=tuple(_string_list(payload.get("interpreters"))),
+            shell_wrappers=tuple(_string_list(payload.get("shell_wrappers"))),
+            publisher=payload.get("publisher") if isinstance(payload.get("publisher"), str) else None,
+            transport=_transport_value(payload.get("transport")),
+        )
+
+    def upsert_provenance_cache(self, *, artifact_hash: str, payload: dict[str, object], now: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into provenance_cache (artifact_hash, payload_json, updated_at)
+                values (?, ?, ?)
+                on conflict(artifact_hash) do update set
+                  payload_json = excluded.payload_json,
+                  updated_at = excluded.updated_at
+                """,
+                (artifact_hash, json.dumps(payload), now),
+            )
+
+    def get_provenance_cache(self, artifact_hash: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "select payload_json from provenance_cache where artifact_hash = ?",
+                (artifact_hash,),
+            ).fetchone()
+        if row is None:
+            return None
+        payload = json.loads(str(row["payload_json"]))
+        return payload if isinstance(payload, dict) else None
+
+    def get_or_create_installation_id(self) -> str:
+        with self._connect() as connection:
+            self._ensure_local_device(connection)
+            row = connection.execute(
+                "select installation_id from guard_devices where device_key = ?",
+                (_DEVICE_ROW_KEY,),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("Guard local device row was not initialized.")
+        return str(row["installation_id"])
+
+    def set_device_label(self, label: str, now: str) -> dict[str, str]:
+        normalized_label = label.strip() or "Local machine"
+        with self._connect() as connection:
+            self._ensure_local_device(connection)
+            connection.execute(
+                """
+                update guard_devices
+                set device_label = ?, updated_at = ?
+                where device_key = ?
+                """,
+                (normalized_label, now, _DEVICE_ROW_KEY),
+            )
+        return self.get_device_metadata()
+
+    def rotate_installation_id(self, now: str) -> dict[str, str]:
+        new_installation_id = uuid4().hex
+        with self._connect() as connection:
+            self._ensure_local_device(connection)
+            connection.execute(
+                """
+                update guard_devices
+                set installation_id = ?, updated_at = ?
+                where device_key = ?
+                """,
+                (new_installation_id, now, _DEVICE_ROW_KEY),
+            )
+        return self.get_device_metadata()
+
+    def get_device_metadata(self) -> dict[str, str]:
+        with self._connect() as connection:
+            self._ensure_local_device(connection)
+            row = connection.execute(
+                "select installation_id, device_label from guard_devices where device_key = ?",
+                (_DEVICE_ROW_KEY,),
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("Guard local device metadata is unavailable.")
+        return {
+            "installation_id": str(row["installation_id"]),
+            "device_label": str(row["device_label"]),
+        }
+
     def upsert_policy(self, decision: PolicyDecision, now: str) -> None:
         artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
         with self._connect() as connection:
@@ -817,6 +1246,22 @@ class GuardStore:
         with self._connect() as connection:
             row = connection.execute(query, params).fetchone()
         return int(row["total"]) if row is not None else 0
+
+    def receipt_decision_counts(self, harness: str, artifact_id: str) -> dict[str, int]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                select policy_decision, count(*) as total
+                from runtime_receipts
+                where harness = ? and artifact_id = ?
+                group by policy_decision
+                """,
+                (harness, artifact_id),
+            ).fetchall()
+        counts: dict[str, int] = {}
+        for row in rows:
+            counts[str(row["policy_decision"])] = int(row["total"])
+        return counts
 
     def upsert_runtime_state(
         self,
@@ -1261,10 +1706,21 @@ class GuardStore:
         if not isinstance(payload, dict):
             return None
         sync_url = payload.get("sync_url")
-        token = payload.get("token")
-        if not isinstance(sync_url, str) or not isinstance(token, str):
+        if not isinstance(sync_url, str):
             return None
-        return {"sync_url": sync_url, "token": token}
+        token_reference = payload.get("token_ref")
+        if isinstance(token_reference, str) and token_reference:
+            token = self._secret_store.get_secret(token_reference)
+            if token is None:
+                return None
+            return {"sync_url": sync_url, "token": token}
+        legacy_token = payload.get("token")
+        if isinstance(legacy_token, str) and legacy_token:
+            now = _now()
+            with self._connect() as connection:
+                self._set_sync_credentials_in_connection(connection, sync_url, legacy_token, now)
+            return {"sync_url": sync_url, "token": legacy_token}
+        return None
 
     def create_guard_connect_request(
         self,
@@ -1394,6 +1850,20 @@ class GuardStore:
                 pairing_secret=pairing_secret,
             )
 
+    def _credential_payload_token_hash(self, payload: dict[str, object]) -> str | None:
+        token_hash = payload.get(_SYNC_TOKEN_HASH_KEY)
+        if isinstance(token_hash, str) and token_hash:
+            return token_hash
+        legacy_token = payload.get("token")
+        if isinstance(legacy_token, str) and legacy_token:
+            return _token_sha256(legacy_token)
+        token_reference = payload.get("token_ref")
+        if isinstance(token_reference, str) and token_reference:
+            token = self._secret_store.get_secret(token_reference)
+            if isinstance(token, str) and token:
+                return _token_sha256(token)
+        return None
+
     def _set_sync_credentials_in_connection(
         self,
         connection: sqlite3.Connection,
@@ -1401,16 +1871,29 @@ class GuardStore:
         token: str,
         now: str,
     ) -> None:
-        payload = {"sync_url": sync_url, "token": token}
+        self._secret_store.set_secret(_SYNC_TOKEN_REF, token)
+        payload = {
+            "sync_url": sync_url,
+            "token_ref": _SYNC_TOKEN_REF,
+            _SYNC_TOKEN_HASH_KEY: _token_sha256(token),
+        }
         previous_row = connection.execute(
             "select payload_json from sync_state where state_key = 'credentials'"
         ).fetchone()
-        credentials_changed = False
         if previous_row is None:
             credentials_changed = True
         else:
             previous_payload = json.loads(str(previous_row["payload_json"]))
-            credentials_changed = previous_payload != payload
+            if not isinstance(previous_payload, dict):
+                credentials_changed = True
+            else:
+                previous_sync_url = previous_payload.get("sync_url")
+                previous_token_hash = self._credential_payload_token_hash(previous_payload)
+                credentials_changed = (
+                    previous_sync_url != sync_url
+                    or previous_token_hash is None
+                    or previous_token_hash != payload[_SYNC_TOKEN_HASH_KEY]
+                )
         connection.execute(
             """
             insert into sync_state (state_key, payload_json, updated_at)
@@ -1881,3 +2364,15 @@ def _now() -> str:
 
 def _lease_expiry(now: str, lease_seconds: int) -> str:
     return (datetime.fromisoformat(now) + timedelta(seconds=max(lease_seconds, 1))).isoformat()
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str) and item]
+
+
+def _transport_value(value: object) -> str:
+    if isinstance(value, str) and value in {"local", "remote", "hybrid"}:
+        return value
+    return "local"

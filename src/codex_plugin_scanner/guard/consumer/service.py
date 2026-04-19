@@ -11,14 +11,22 @@ from typing import Any
 from ...models import ScanOptions
 from ..adapters import get_adapter, list_adapters
 from ..adapters.base import HarnessContext
+from ..capabilities import compute_capability_delta, normalize_artifact_capabilities, severity_from_deltas
 from ..config import GuardConfig
 from ..incident import build_incident_context
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..policy import decide_action
 from ..receipts import build_receipt
-from ..risk import artifact_risk_signals, artifact_risk_summary
+from ..risk import artifact_risk_signals_typed, artifact_risk_summary, summarize_signals
 from ..schemas import build_consumer_mode_contract
 from ..store import GuardStore
+from ..types import (
+    CapabilityDelta,
+    GuardSignal,
+    GuardVerdict,
+    HistoryContext,
+    ProvenanceBundle,
+)
 
 
 def _now() -> str:
@@ -121,6 +129,210 @@ def _removed_capabilities_summary(previous: dict[str, object]) -> str:
     return " • ".join(parts) if parts else "removed artifact"
 
 
+def build_history_context(
+    store: GuardStore,
+    harness: str,
+    artifact_id: str,
+    publisher: str | None,
+) -> HistoryContext:
+    """Collect local artifact history signals for verdict enrichment."""
+
+    inventory_item = store.find_inventory_item(artifact_id)
+    decision_counts = store.receipt_decision_counts(harness, artifact_id)
+    prior_approvals = sum(decision_counts.get(decision, 0) for decision in {"allow", "warn", "review"})
+    prior_blocks = sum(
+        decision_counts.get(decision, 0) for decision in {"block", "sandbox-required", "require-reapproval"}
+    )
+    prior_incidents = 0
+    for event in store.list_events(limit=1000):
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("artifact_id") != artifact_id:
+            continue
+        if event.get("event_name") in {"changed_artifact_caught", "premium_advisory", "install_time_block"}:
+            prior_incidents += 1
+    publisher_trust = "unknown"
+    if publisher:
+        advisories = [item for item in store.list_cached_advisories(limit=200) if item.get("publisher") == publisher]
+        if advisories:
+            severity_labels = {str(item.get("severity", "")).lower() for item in advisories}
+            publisher_trust = "flagged" if {"critical", "high", "revoked"} & severity_labels else "known-good"
+    return HistoryContext(
+        first_seen_at=(
+            str(inventory_item.get("first_seen_at"))
+            if isinstance(inventory_item, dict) and isinstance(inventory_item.get("first_seen_at"), str)
+            else None
+        ),
+        last_seen_at=(
+            str(inventory_item.get("last_seen_at"))
+            if isinstance(inventory_item, dict) and isinstance(inventory_item.get("last_seen_at"), str)
+            else None
+        ),
+        prior_approvals=prior_approvals,
+        prior_incidents=prior_incidents,
+        prior_blocks=prior_blocks,
+        publisher_trust=publisher_trust,  # type: ignore[arg-type]
+    )
+
+
+def build_provenance_bundle(store: GuardStore, publisher: str | None) -> ProvenanceBundle:
+    """Build provenance context from local cache and advisories."""
+
+    if publisher is None:
+        return ProvenanceBundle()
+    advisories = [item for item in store.list_cached_advisories(limit=200) if item.get("publisher") == publisher]
+    if not advisories:
+        return ProvenanceBundle(
+            source_kind="self-declared",
+            publisher_trust="unknown",
+            signature_verified=False,
+            attestation_verified=False,
+            evidence_refs=(f"publisher:{publisher}",),
+        )
+    severity_labels = {str(item.get("severity", "")).lower() for item in advisories}
+    trust: str = "known-good"
+    if {"critical", "high", "revoked"} & severity_labels:
+        trust = "flagged"
+    signature_verified = any(bool(item.get("signatureVerified")) for item in advisories)
+    attestation_verified = any(bool(item.get("attestationVerified")) for item in advisories)
+    references = tuple(
+        sorted(
+            {
+                str(item.get("advisoryId"))
+                for item in advisories
+                if isinstance(item.get("advisoryId"), str) and str(item.get("advisoryId"))
+            }
+        )
+    )
+    return ProvenanceBundle(
+        source_kind="curated",
+        publisher_trust=trust,  # type: ignore[arg-type]
+        signature_verified=signature_verified,
+        attestation_verified=attestation_verified,
+        evidence_refs=references or (f"publisher:{publisher}",),
+    )
+
+
+def score_verdict(
+    signals: tuple[GuardSignal, ...],
+    deltas: tuple[CapabilityDelta, ...],
+    provenance: ProvenanceBundle,
+    history: HistoryContext,
+) -> GuardVerdict:
+    """Produce a structured verdict before explicit policy override."""
+
+    signal_severity = max((signal.severity for signal in signals), default=1)
+    delta_severity = severity_from_deltas(deltas)
+    severity = max(signal_severity, delta_severity)
+    confidence_pool = [signal.confidence for signal in signals]
+    if deltas:
+        confidence_pool.append(0.78)
+    if provenance.source_kind != "none":
+        confidence_pool.append(0.74)
+    confidence = max(confidence_pool) if confidence_pool else 0.55
+    reasons = [signal.explanation for signal in sorted(signals, key=lambda item: item.severity, reverse=True)[:3]]
+    reasons.extend(delta.explanation for delta in deltas[:2])
+    if history.prior_approvals > 0 and history.prior_incidents == 0 and severity < 8:
+        reasons.append("Artifact has prior local approvals without recent incidents.")
+        confidence = min(0.98, confidence + 0.05)
+    if provenance.publisher_trust in {"flagged", "revoked"}:
+        severity = max(severity, 9)
+        reasons.append("Publisher trust is flagged by local advisory intelligence.")
+    evidence_sources = tuple(sorted({signal.evidence_source for signal in signals}))
+    if history.prior_approvals > 0 or history.prior_incidents > 0:
+        evidence_sources = tuple(sorted({*evidence_sources, "history"}))
+    if provenance.source_kind in {"curated", "signed", "attested"}:
+        evidence_sources = tuple(sorted({*evidence_sources, "cloud"}))
+
+    recommended_actions = _recommended_actions(signals, deltas, severity)
+    suppressible = severity <= 6 and provenance.publisher_trust != "flagged"
+    review_priority = _review_priority_from_severity(severity)
+    action = _action_from_scoring(severity, confidence, provenance, deltas)
+
+    return GuardVerdict(
+        action=action,
+        severity=severity,
+        confidence=round(confidence, 3),
+        reasons=tuple(reasons[:4]),
+        recommended_next_actions=tuple(recommended_actions),
+        suppressible=suppressible,
+        review_priority=review_priority,
+        evidence_sources=evidence_sources or ("artifact",),
+        provenance_state=provenance.source_kind,
+        capability_delta=deltas,
+    )
+
+
+def _action_from_scoring(
+    severity: int,
+    confidence: float,
+    provenance: ProvenanceBundle,
+    deltas: tuple[CapabilityDelta, ...],
+) -> str:
+    if provenance.publisher_trust in {"flagged", "revoked"} and confidence >= 0.7:
+        return "block"
+    if severity >= 9 and confidence >= 0.75:
+        return "block"
+    if severity >= 8 and provenance.source_kind == "none":
+        return "sandbox_required"
+    if severity >= 7 or any(
+        delta.delta_type in {"secret_scope_expanded", "subprocess_added", "approval_surface_changed"}
+        for delta in deltas
+    ):
+        return "require_reapproval"
+    if severity >= 5:
+        return "warn"
+    return "allow"
+
+
+def _review_priority_from_severity(severity: int) -> str:
+    if severity >= 9:
+        return "critical"
+    if severity >= 7:
+        return "high"
+    if severity >= 5:
+        return "medium"
+    return "low"
+
+
+def _recommended_actions(
+    signals: tuple[GuardSignal, ...],
+    deltas: tuple[CapabilityDelta, ...],
+    severity: int,
+) -> list[str]:
+    actions: list[str] = []
+    delta_types = {delta.delta_type for delta in deltas}
+    if "new_network_host" in delta_types:
+        actions.append("review_network_destination")
+    if "secret_scope_expanded" in delta_types:
+        actions.append("rotate_exposed_secret")
+    if "subprocess_added" in delta_types or "approval_surface_changed" in delta_types:
+        actions.append("approve_once")
+    if any(signal.family == "policy" for signal in signals):
+        actions.append("open_investigation")
+    if severity >= 8:
+        actions.append("run_in_sandbox")
+    if not actions:
+        actions.extend(["approve_once", "defer_and_notify_team"])
+    ordered: list[str] = []
+    for action in actions:
+        if action not in ordered:
+            ordered.append(action)
+    return ordered
+
+
+def _default_action_from_verdict(verdict: GuardVerdict) -> str:
+    mapping = {
+        "allow": "allow",
+        "warn": "warn",
+        "block": "block",
+        "require_reapproval": "require-reapproval",
+        "sandbox_required": "sandbox-required",
+    }
+    return mapping.get(verdict.action, "warn")
+
+
 def detect_all(context: HarnessContext) -> list[HarnessDetection]:
     """Run detection across all adapters."""
 
@@ -168,21 +380,34 @@ def evaluate_detection(
                 artifact.artifact_id,
                 artifact.publisher,
             )
-        if configured_action is None and artifact.artifact_type in {"prompt_request", "file_read_request"}:
+        previous_capabilities = store.get_artifact_capability(detection.harness, artifact.artifact_id)
+        current_capabilities = normalize_artifact_capabilities(artifact)
+        capability_delta = compute_capability_delta(previous_capabilities, current_capabilities)
+        structured_signals = artifact_risk_signals_typed(artifact)
+        history_context = build_history_context(store, detection.harness, artifact.artifact_id, artifact.publisher)
+        provenance_bundle = build_provenance_bundle(store, artifact.publisher)
+        verdict = score_verdict(structured_signals, capability_delta, provenance_bundle, history_context)
+        effective_default_action = default_action
+        if configured_action is None and artifact.artifact_type in {
+            "prompt_request",
+            "file_read_request",
+            "tool_action_request",
+        }:
             policy_action = "require-reapproval"
-        elif is_first_seen and configured_action is None and default_action is not None:
-            policy_action = default_action
+        elif is_first_seen and configured_action is None and effective_default_action is not None:
+            policy_action = effective_default_action
         else:
             policy_action = decide_action(
                 configured_action=configured_action,
-                default_action=default_action,
+                default_action=effective_default_action,
                 config=config,
                 changed=bool(diff["changed"]),
             )
         if _is_blocking_action(policy_action):
             blocked = True
-        risk_signals = artifact_risk_signals(artifact)
-        risk_summary = artifact_risk_summary(artifact)
+        risk_signals = tuple(signal.explanation for signal in structured_signals)
+        risk_summary = artifact_risk_summary(artifact) if structured_signals else summarize_signals(())
+        changed_capabilities = [delta.delta_type for delta in capability_delta] or list(diff["changed_fields"])
         launch_target = _launch_target_from_artifact(artifact)
         incident = build_incident_context(
             harness=detection.harness,
@@ -203,8 +428,11 @@ def evaluate_detection(
             artifact_hash=str(diff["current_hash"]),
             policy_decision=policy_action,
             capabilities_summary=_capabilities_summary(artifact),
-            changed_capabilities=list(diff["changed_fields"]),
-            provenance_summary=f"{artifact.source_scope} artifact defined at {artifact.config_path}",
+            changed_capabilities=changed_capabilities,
+            provenance_summary=(
+                f"{artifact.source_scope} artifact defined at {artifact.config_path} "
+                f"(provenance: {provenance_bundle.source_kind})"
+            ),
             artifact_name=artifact.name,
             source_scope=artifact.source_scope,
         )
@@ -216,6 +444,17 @@ def evaluate_detection(
                 changed=bool(diff["changed"]),
                 now=now,
                 approved=not _is_blocking_action(policy_action),
+            )
+            store.save_artifact_capability(
+                harness=detection.harness,
+                artifact_id=artifact.artifact_id,
+                capability_snapshot=current_capabilities.to_dict(),
+                now=now,
+            )
+            store.upsert_provenance_cache(
+                artifact_hash=str(diff["current_hash"]),
+                payload=provenance_bundle.to_dict(),
+                now=now,
             )
             if diff["changed"]:
                 previous_hash = diff["previous_hash"] if isinstance(diff["previous_hash"], str) else None
@@ -259,6 +498,20 @@ def evaluate_detection(
                 "artifact_hash": diff["current_hash"],
                 "risk_signals": list(risk_signals),
                 "risk_summary": risk_summary,
+                "signals": [signal.to_dict() for signal in structured_signals],
+                "confidence": verdict.confidence,
+                "severity": verdict.severity,
+                "evidence_sources": list(verdict.evidence_sources),
+                "provenance_state": verdict.provenance_state,
+                "provenance": provenance_bundle.to_dict(),
+                "history_context": history_context.to_dict(),
+                "capability_snapshot": current_capabilities.to_dict(),
+                "capability_delta": [delta.to_dict() for delta in capability_delta],
+                "remediation": list(verdict.recommended_next_actions),
+                "suppressibility": verdict.suppressible,
+                "review_priority": verdict.review_priority,
+                "verdict_action": verdict.action,
+                "verdict_reasons": list(verdict.reasons),
                 "artifact_type": artifact.artifact_type,
                 "config_path": artifact.config_path,
                 "source_scope": artifact.source_scope,
@@ -354,6 +607,22 @@ def evaluate_detection(
                 "policy_action": policy_action,
                 "artifact_hash": previous_hash,
                 "removed": True,
+                "risk_signals": ["artifact removed from local harness configuration"],
+                "risk_summary": "Artifact was removed from the harness configuration.",
+                "signals": [],
+                "confidence": 0.7,
+                "severity": 3,
+                "evidence_sources": ["history"],
+                "provenance_state": "none",
+                "provenance": ProvenanceBundle().to_dict(),
+                "history_context": HistoryContext().to_dict(),
+                "capability_snapshot": {},
+                "capability_delta": [],
+                "remediation": ["defer_and_notify_team"],
+                "suppressibility": True,
+                "review_priority": "low",
+                "verdict_action": "warn",
+                "verdict_reasons": ["Artifact removal should be reviewed for intentionality."],
                 "artifact_type": removed_artifact_type,
                 "config_path": str(config_path) if isinstance(config_path, str) else None,
                 "source_scope": str(source_scope) if isinstance(source_scope, str) else None,
