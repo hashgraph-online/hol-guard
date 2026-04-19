@@ -564,7 +564,7 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return False
     lowered = normalized.lower()
     redacted_command_text = _redacted_shell_text_for_command_names(lowered)
-    if _contains_mutating_shell_redirection(redacted_command_text):
+    if _contains_mutating_shell_redirection(lowered):
         return True
     raw_command_names = list(_shell_command_names(redacted_command_text))
     parts = _split_shell_parts(normalized)

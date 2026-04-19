@@ -315,6 +315,15 @@ def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_dev_nu
     assert request is None
 
 
+def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_quoted_dev_null():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": 'ls missing 2>"/dev/null" | head -40'},
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_skips_perl_sleep_wait():
     request = extract_sensitive_tool_action_request(
         "bash",
