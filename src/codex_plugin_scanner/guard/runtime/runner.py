@@ -210,6 +210,8 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         raise RuntimeError(_sync_http_error_message(error)) from error
+    except urllib.error.URLError as error:
+        raise RuntimeError(_sync_url_error_message(error)) from error
     now = _sync_timestamp(payload)
     advisories = payload.get("advisories")
     advisories_stored = 0
@@ -345,6 +347,8 @@ def sync_pain_signals(store: GuardStore) -> int:
                     )
                     return uploaded_count
                 raise RuntimeError(_sync_http_error_message(error)) from error
+            except urllib.error.URLError as error:
+                raise RuntimeError(_sync_url_error_message(error)) from error
             uploaded_count += len(signal_items)
         current_event_id = last_processed_event_id
         store.set_sync_payload(
@@ -449,6 +453,15 @@ def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
     if normalized_body:
         return normalized_body
     return f"HTTP Error {error.code}: {error.reason}"
+
+
+def _sync_url_error_message(error: urllib.error.URLError) -> str:
+    reason = getattr(error, "reason", None)
+    if reason is not None:
+        reason_text = str(reason).strip()
+        if reason_text:
+            return f"Guard sync failed: {reason_text}"
+    return "Guard sync failed because the remote endpoint could not be reached."
 
 
 def _remote_harness(value: object, *, allow_wildcard: bool = True) -> str | None:
