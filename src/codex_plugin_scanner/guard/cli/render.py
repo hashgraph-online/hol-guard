@@ -9,18 +9,29 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
-from rich import box
-from rich.console import Console
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.table import Table
-from rich.text import Text
+try:
+    from rich import box
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.syntax import Syntax
+    from rich.table import Table
+    from rich.text import Text
+
+    _RICH_AVAILABLE = True
+except ModuleNotFoundError:
+    _RICH_AVAILABLE = False
+    box = None  # type: ignore[assignment]
+    Console = Any  # type: ignore[misc,assignment]
+    Panel = Any  # type: ignore[misc,assignment]
+    Syntax = Any  # type: ignore[misc,assignment]
+    Table = Any  # type: ignore[misc,assignment]
+    Text = Any  # type: ignore[misc,assignment]
 
 
 def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) -> None:
     """Render Guard payloads as JSON or human-friendly rich output."""
 
-    if as_json:
+    if as_json or not _RICH_AVAILABLE:
         print(json.dumps(payload, indent=2))
         return
 

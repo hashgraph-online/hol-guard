@@ -66,6 +66,31 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard connect
    ```
 
+9. Inspect or rotate the local installation identity that cloud sync uses:
+
+   ```bash
+   hol-guard device show
+   hol-guard device label set "VPS - Hermes runtime"
+   hol-guard device rotate
+   ```
+
+## Evidence-first decisions
+
+Guard now scores local decisions from structured evidence, not only string heuristics. Each changed artifact carries:
+
+- typed risk signals with confidence and remediation
+- capability deltas like `new_network_host`, `secret_scope_expanded`, and `subprocess_added`
+- provenance state and local history context
+- review priority and suppressibility guidance
+
+Runtime prompt intent is also evaluated as first-class risk input. Guard detects more than direct `.env` reads, including:
+
+- secret-bearing files (`~/.ssh`, `~/.aws/credentials`, `~/.kube/config`, `.npmrc`, `.pypirc`, Docker auth config)
+- exfil-like intent (`upload`, `post`, `webhook`, `gist`, transfer verbs)
+- subprocess and shell-wrapper expansion
+- destructive mutation intent
+- Guard bypass intent
+
 ## Fine-tune local policy
 
 Guard works with local defaults first, then optional overrides for a harness, publisher, or artifact.

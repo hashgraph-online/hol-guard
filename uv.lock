@@ -1055,6 +1055,7 @@ version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "cisco-ai-skill-scanner" },
+    { name = "cryptography" },
     { name = "rich" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
@@ -1080,6 +1081,7 @@ requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.2" },
     { name = "cisco-ai-mcp-scanner", marker = "python_full_version >= '3.11' and extra == 'cisco'", specifier = "~=4.5" },
     { name = "cisco-ai-skill-scanner", specifier = "~=2.0.8" },
+    { name = "cryptography", specifier = ">=46.0.0" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.26.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },

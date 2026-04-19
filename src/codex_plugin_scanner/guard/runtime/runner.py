@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import re
-import socket
 import subprocess
 import urllib.error
 import urllib.parse
@@ -23,6 +22,7 @@ from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..store import GuardStore
+from ..types import PromptRequest, RemediationAction
 
 _APPROVAL_METADATA_KEYS = (
     "approval_center_url",
@@ -40,7 +40,39 @@ _PAIN_SIGNAL_EVENTS = frozenset(
     }
 )
 _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
-_ENV_PROMPT_PATTERN = re.compile(r"(?<![\w-])\.env(?:\.[\w.-]+)?\b")
+_SECRET_REQUEST_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"(?<![\w-])\.env(?:\.[\w.-]+)?\b"), "local .env file"),
+    (re.compile(r"(?:^|[\s'\"`])~?/.ssh(?:/|\b)"), "SSH material"),
+    (re.compile(r"(?:^|[\s'\"`])~?/.aws/(?:credentials|config)\b"), "AWS credentials"),
+    (re.compile(r"(?:^|[\s'\"`])~?/.kube/config\b"), "kubeconfig"),
+    (re.compile(r"(?:^|[\s'\"`])~?/.docker/config\.json\b"), "Docker credentials"),
+    (re.compile(r"(?<![\w-])\.npmrc\b"), "npm registry credentials"),
+    (re.compile(r"(?<![\w-])\.pypirc\b"), "Python package credentials"),
+    (re.compile(r"(?<![\w-])\.git-credentials\b"), "Git credential store"),
+)
+_SECRET_ABSOLUTE_HINTS: tuple[tuple[str, str], ...] = (
+    ("/.ssh/", "SSH material"),
+    ("/.aws/credentials", "AWS credentials"),
+    ("/.aws/config", "AWS credentials"),
+    ("/.kube/config", "kubeconfig"),
+    ("/.docker/config.json", "Docker credentials"),
+)
+_EXFIL_PROMPT_PATTERN = re.compile(
+    r"\b(upload|exfiltrate|send|post|sync|webhook|paste|gist|transfer)\b",
+    re.IGNORECASE,
+)
+_DESTRUCTIVE_PROMPT_PATTERN = re.compile(
+    r"\b(rm\s+-rf|rm\s+|del\s+|truncate\s+|chmod\s+|chown\s+|mv\s+|overwrite)\b",
+    re.IGNORECASE,
+)
+_SUBPROCESS_PROMPT_PATTERN = re.compile(
+    r"\b(?:bash\s+-c|sh\s+-c|zsh\s+-c|powershell|cmd\s+/c|subprocess)\b|(?:exec|spawn)\s*\(",
+    re.IGNORECASE,
+)
+_GUARD_BYPASS_PROMPT_PATTERN = re.compile(
+    r"\b(hol-guard\s+(?:disable|off|uninstall)|disable\s+hol-guard|approval_policy\s*=\s*\"never\"|guard[_-]?bypass)\b",
+    re.IGNORECASE,
+)
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 
 
@@ -109,46 +141,220 @@ def _detection_with_prompt_artifacts(
     context: HarnessContext,
     passthrough_args: list[str],
 ) -> HarnessDetection:
-    prompt_artifact = _prompt_env_artifact(detection, context, passthrough_args)
-    if prompt_artifact is None:
+    prompt_text = " ".join(value.strip() for value in passthrough_args if value.strip())
+    prompt_requests = extract_prompt_requests(prompt_text)
+    if not prompt_requests:
         return detection
+    prompt_artifacts = prompt_requests_to_artifacts(
+        detection=detection,
+        context=context,
+        requests=prompt_requests,
+    )
     return HarnessDetection(
         harness=detection.harness,
         installed=detection.installed,
         command_available=detection.command_available,
         config_paths=detection.config_paths,
-        artifacts=(*detection.artifacts, prompt_artifact),
+        artifacts=(*detection.artifacts, *prompt_artifacts),
         warnings=detection.warnings,
     )
 
 
-def _prompt_env_artifact(
+def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
+    """Extract structured prompt intent requests from passthrough arguments."""
+
+    normalized_prompt = " ".join(prompt_text.split())
+    lowered = normalized_prompt.lower()
+    if not lowered:
+        return []
+    requests: list[PromptRequest] = []
+    seen_secret_labels: set[str] = set()
+
+    def add_secret_request(*, label: str, matched: str) -> None:
+        if label in seen_secret_labels:
+            return
+        seen_secret_labels.add(label)
+        summary = (
+            "Prompt asks the harness to read a local .env file directly."
+            if label == "local .env file"
+            else f"Prompt asks for direct access to {label}."
+        )
+        requests.append(
+            PromptRequest(
+                request_id=_prompt_request_id("secret_read", matched, lowered),
+                request_class="secret_read",
+                summary=summary,
+                matched_text=matched,
+                severity=8,
+                confidence=0.9,
+                remediation=(
+                    RemediationAction(kind="approve_once", label="Approve once", detail="Allow a one-time access."),
+                    RemediationAction(
+                        kind="rotate_exposed_secret",
+                        label="Rotate secret",
+                        detail="Rotate credentials if this read is unexpected.",
+                    ),
+                ),
+            )
+        )
+
+    for pattern, label in _SECRET_REQUEST_PATTERNS:
+        match = pattern.search(normalized_prompt)
+        if match is None:
+            continue
+        add_secret_request(label=label, matched=match.group(0).strip())
+    for hint, label in _SECRET_ABSOLUTE_HINTS:
+        if hint in lowered:
+            add_secret_request(label=label, matched=hint)
+    if _EXFIL_PROMPT_PATTERN.search(normalized_prompt):
+        requests.append(
+            PromptRequest(
+                request_id=_prompt_request_id("exfil_intent", "exfil", lowered),
+                request_class="exfil_intent",
+                summary="Prompt includes exfiltration-oriented transfer intent.",
+                matched_text="exfil-transfer",
+                severity=8,
+                confidence=0.84,
+                remediation=(
+                    RemediationAction(
+                        kind="review_network_destination",
+                        label="Review destination",
+                        detail="Validate destination before data transfer.",
+                    ),
+                    RemediationAction(kind="defer_and_notify_team", label="Notify team", detail="Escalate for review."),
+                ),
+            )
+        )
+    if _DESTRUCTIVE_PROMPT_PATTERN.search(normalized_prompt):
+        requests.append(
+            PromptRequest(
+                request_id=_prompt_request_id("destructive_intent", "destructive", lowered),
+                request_class="destructive_intent",
+                summary="Prompt includes destructive filesystem mutation intent.",
+                matched_text="destructive-operation",
+                severity=8,
+                confidence=0.87,
+                remediation=(
+                    RemediationAction(
+                        kind="approve_once",
+                        label="Approve once",
+                        detail="Require explicit one-time approval.",
+                    ),
+                    RemediationAction(
+                        kind="open_investigation",
+                        label="Open investigation",
+                        detail="Track destructive intent.",
+                    ),
+                ),
+            )
+        )
+    if _SUBPROCESS_PROMPT_PATTERN.search(normalized_prompt):
+        requests.append(
+            PromptRequest(
+                request_id=_prompt_request_id("subprocess_intent", "subprocess", lowered),
+                request_class="subprocess_intent",
+                summary="Prompt asks for subprocess or shell-wrapper execution.",
+                matched_text="subprocess-shell",
+                severity=7,
+                confidence=0.8,
+                remediation=(
+                    RemediationAction(
+                        kind="approve_once",
+                        label="Approve once",
+                        detail="Constrain this run to one approval.",
+                    ),
+                    RemediationAction(
+                        kind="run_in_sandbox",
+                        label="Run in sandbox",
+                        detail="Execute in isolated mode.",
+                    ),
+                ),
+            )
+        )
+    if _GUARD_BYPASS_PROMPT_PATTERN.search(normalized_prompt):
+        requests.append(
+            PromptRequest(
+                request_id=_prompt_request_id("guard_bypass_intent", "guard-bypass", lowered),
+                request_class="guard_bypass_intent",
+                summary="Prompt includes Guard bypass or disable intent.",
+                matched_text="guard-bypass",
+                severity=10,
+                confidence=0.93,
+                remediation=(
+                    RemediationAction(
+                        kind="block_and_remove",
+                        label="Block",
+                        detail="Do not allow bypass behavior.",
+                    ),
+                    RemediationAction(
+                        kind="open_investigation",
+                        label="Investigate",
+                        detail="Escalate bypass attempt.",
+                    ),
+                ),
+            )
+        )
+    deduped: dict[str, PromptRequest] = {}
+    for request in requests:
+        deduped[request.request_id] = request
+    return list(deduped.values())
+
+
+def prompt_requests_to_artifacts(
+    *,
     detection: HarnessDetection,
     context: HarnessContext,
-    passthrough_args: list[str],
-) -> GuardArtifact | None:
-    prompt_text = " ".join(value.strip() for value in passthrough_args if value.strip())
-    normalized_prompt = " ".join(prompt_text.split()).lower()
-    if not normalized_prompt or not _requests_direct_env_read(normalized_prompt):
-        return None
-    prompt_hash = hashlib.sha256(normalized_prompt.encode("utf-8")).hexdigest()
-    prompt_summary = "Prompt asks the harness to read a local .env file directly."
-    return GuardArtifact(
-        artifact_id=f"{detection.harness}:session:prompt-env-read:{prompt_hash}",
-        name="direct .env prompt access",
-        harness=detection.harness,
-        artifact_type="prompt_request",
-        source_scope="session",
-        config_path=str(_prompt_policy_path(detection, context)),
-        metadata={
-            "prompt_signals": ["asks the harness to read a local .env file directly"],
-            "prompt_summary": prompt_summary,
-        },
+    requests: list[PromptRequest],
+) -> list[GuardArtifact]:
+    """Convert typed prompt requests into pseudo-artifacts for policy evaluation."""
+
+    config_path = str(_prompt_policy_path(detection, context))
+    artifacts: list[GuardArtifact] = []
+    for request in requests:
+        if request.request_class == "secret_read" and ".env" in request.matched_text.lower():
+            artifact_id = f"{detection.harness}:session:prompt-env-read:{request.request_id[:24]}"
+        else:
+            artifact_id = f"{detection.harness}:session:prompt:{request.request_class}:{request.request_id[:24]}"
+        artifacts.append(
+            GuardArtifact(
+                artifact_id=artifact_id,
+                name=f"prompt {request.request_class.replace('_', ' ')}",
+                harness=detection.harness,
+                artifact_type="prompt_request",
+                source_scope="session",
+                config_path=config_path,
+                metadata={
+                    "prompt_signals": [request.summary],
+                    "prompt_summary": request.summary,
+                    "prompt_matched_text": request.matched_text,
+                    "prompt_request_class": request.request_class,
+                    "prompt_confidence": request.confidence,
+                    "prompt_severity": request.severity,
+                },
+            )
+        )
+    return artifacts
+
+
+def should_force_reapproval(prompt_reqs: list[PromptRequest], prior_policy: dict[str, object] | None) -> bool:
+    """Return whether current prompt requests exceed prior approved scope."""
+
+    if not prompt_reqs:
+        return False
+    if prior_policy is None:
+        return True
+    approved_classes = prior_policy.get("approved_prompt_classes")
+    approved = (
+        {str(item) for item in approved_classes if isinstance(item, str)}
+        if isinstance(approved_classes, list)
+        else set()
     )
+    return any(request.request_class not in approved or request.severity >= 8 for request in prompt_reqs)
 
 
-def _requests_direct_env_read(prompt_text: str) -> bool:
-    return _ENV_PROMPT_PATTERN.search(prompt_text) is not None
+def _prompt_request_id(request_class: str, matched_text: str, normalized_prompt: str) -> str:
+    fingerprint = hashlib.sha256(f"{request_class}:{matched_text}:{normalized_prompt}".encode()).hexdigest()
+    return fingerprint
 
 
 def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) -> Path:
@@ -198,7 +404,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
     sync_url = _normalized_receipts_sync_url(str(credentials["sync_url"]))
     receipts = store.list_receipts(limit=200)
     inventory = store.list_inventory()
-    body = json.dumps({"receipts": _cloud_sync_receipts_payload(receipts)}).encode("utf-8")
+    body = json.dumps({"receipts": _cloud_sync_receipts_payload(store, receipts)}).encode("utf-8")
     request = urllib.request.Request(
         sync_url,
         data=body,
@@ -270,7 +476,7 @@ def sync_runtime_session(
     if credentials is None:
         raise GuardSyncNotConfiguredError("Guard is not logged in.")
     sync_url = _normalized_runtime_sessions_sync_url(str(credentials["sync_url"]))
-    session_payload = _cloud_runtime_session_payload(session)
+    session_payload = _cloud_runtime_session_payload(store, session)
     body = json.dumps({"session": session_payload}).encode("utf-8")
     request = urllib.request.Request(
         sync_url,
@@ -623,8 +829,8 @@ def _normalized_runtime_sessions_sync_url(sync_url: str) -> str:
     )
 
 
-def _cloud_sync_receipts_payload(receipts: list[dict[str, object]]) -> list[dict[str, object]]:
-    device_id, device_name = _guard_device_metadata()
+def _cloud_sync_receipts_payload(store: GuardStore, receipts: list[dict[str, object]]) -> list[dict[str, object]]:
+    device_id, device_name = _guard_device_metadata(store)
     return [_cloud_sync_receipt_payload(receipt, device_id=device_id, device_name=device_name) for receipt in receipts]
 
 
@@ -673,8 +879,8 @@ def _cloud_sync_receipt_payload(
     return payload
 
 
-def _cloud_runtime_session_payload(session: dict[str, object]) -> dict[str, object]:
-    device_id, device_name = _guard_device_metadata()
+def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]) -> dict[str, object]:
+    device_id, device_name = _guard_device_metadata(store)
     workspace = _optional_string(session.get("workspace")) or os.getcwd()
     session_id = (
         _optional_string(session.get("session_id") or session.get("sessionId"))
@@ -728,10 +934,9 @@ def _cloud_sync_recommendation(policy_decision: str) -> str:
     return "monitor"
 
 
-def _guard_device_metadata() -> tuple[str, str]:
-    device_name = socket.gethostname().strip() or "Local machine"
-    device_id = hashlib.sha256(device_name.encode("utf-8")).hexdigest()[:24]
-    return device_id, device_name
+def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:
+    metadata = store.get_device_metadata()
+    return str(metadata["installation_id"]), str(metadata["device_label"])
 
 
 def _record_synced_alert_events(
