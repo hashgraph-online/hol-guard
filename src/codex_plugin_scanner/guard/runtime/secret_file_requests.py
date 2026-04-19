@@ -54,15 +54,20 @@ _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
     {
         "chmod",
         "chown",
+        "del",
         "dd",
+        "erase",
         "mv",
         "perl",
         "python",
         "python3",
         "rm",
+        "rmdir",
+        "remove-item",
         "ruby",
         "tee",
         "truncate",
+        "unlink",
     }
 )
 _SCRIPT_INTERPRETER_COMMANDS = frozenset({"perl", "python", "python3", "ruby"})
@@ -74,6 +79,50 @@ _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
         "nul",
     }
 )
+_NODE_INLINE_EVAL_FLAGS = frozenset({"-e", "--eval", "-p", "--print"})
+_NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
+    {
+        "-r",
+        "--require",
+        "--import",
+        "--loader",
+        "--experimental-loader",
+        "--input-type",
+        "--conditions",
+        "--debug-port",
+        "--inspect-port",
+        "--redirect-warnings",
+        "--title",
+    }
+)
+_SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
+_SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "time"})
+_SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
+_SHELL_NEWLINE_SEPARATOR = ";"
+_DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
+    {
+        "appendFile",
+        "appendFileSync",
+        "copyFile",
+        "copyFileSync",
+        "mkdir",
+        "mkdirSync",
+        "rename",
+        "renameSync",
+        "rm",
+        "rmSync",
+        "unlink",
+        "unlinkSync",
+        "writeFile",
+        "writeFileSync",
+    }
+)
+_WRAPPER_FLAGS_WITH_VALUES = {
+    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
+    "nice": frozenset({"-n", "--adjustment"}),
+    "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
+    "time": frozenset({"-f", "--format", "-o", "--output"}),
+}
 _SENSITIVE_BASENAME_LABELS = {
     ".npmrc": "npm registry credentials",
     ".pypirc": "Python package credentials",
@@ -514,19 +563,27 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     normalized = command_text.strip()
     if not normalized:
         return False
-    lowered = normalized.lower()
-    if _contains_mutating_shell_redirection(lowered):
-        return True
-    raw_command_names = list(_shell_command_names(_redacted_shell_text_for_command_names(lowered)))
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
+    lowered = normalized.lower()
+    redacted_command_text = _redacted_shell_text_for_command_names(lowered)
+    if _contains_mutating_shell_redirection(parts):
+        return True
+    raw_command_names = list(_shell_command_names(redacted_command_text))
     if _looks_like_benign_interpreter_wait(normalized, parts, raw_command_names):
         return False
+    if _contains_destructive_node_inline_eval(parts):
+        return True
     command_names = list(raw_command_names)
     command_names.extend(_shell_command_names_from_parts(parts))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
         return True
+    if _find_command_uses_delete(parts):
+        return True
+    for env_split_string in _env_split_string_payloads(parts):
+        if _looks_destructive_shell_command(env_split_string):
+            return True
     for shell_script in _shell_command_scripts(parts):
         if _looks_destructive_shell_command(shell_script):
             return True
@@ -536,13 +593,289 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     )
 
 
-def _contains_mutating_shell_redirection(command_text: str) -> bool:
-    for match in re.finditer(r"(?<!<)(?P<fd>[0-2]?)(?P<op>>\||>>|>)\s*(?P<target>\S+)", command_text):
-        fd = match.group("fd")
-        target = _normalized_redirect_target(match.group("target"))
-        if fd == "2" and target in _SAFE_SHELL_REDIRECT_TARGETS:
+def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name != "node" or command_index is None:
             continue
-        if target in _SAFE_SHELL_REDIRECT_TARGETS or target.startswith("&"):
+        if _segment_contains_destructive_node_inline_eval(segment[command_index + 1 :]):
+            return True
+    return False
+
+
+def _contains_destructive_node_inline_script(script: str) -> bool:
+    redacted_script = _redacted_node_inline_string_literals(script)
+    member_scan_script = _redacted_node_inline_string_literals(script, preserve_bracket_member_strings=True)
+    for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS:
+        escaped_call_name = re.escape(call_name)
+        if re.search(rf"(?<![A-Za-z0-9_$'\"]){escaped_call_name}\s*(?:\?\.\s*)?\(", redacted_script):
+            return True
+        for base_pattern in (
+            rf"\.\s*{escaped_call_name}",
+            rf"\[\s*['\"]{escaped_call_name}['\"]\s*\]",
+        ):
+            if re.search(rf"{base_pattern}\s*(?:\?\.\s*)?(?:\)\s*)?\(", member_scan_script):
+                return True
+            if re.search(rf"{base_pattern}\s*(?:\?\s*)?\.\s*call\s*\(", member_scan_script):
+                return True
+            if re.search(rf"{base_pattern}\s*(?:\?\s*)?\.\s*apply\s*\(", member_scan_script):
+                return True
+    return False
+
+
+def _is_combined_node_inline_eval_flag(token: str) -> bool:
+    return token in {"-pe", "-ep"}
+
+
+def _find_command_uses_delete(parts: list[str]) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name != "find" or command_index is None:
+            continue
+        if _find_segment_uses_delete(segment[command_index + 1 :]):
+            return True
+    return False
+
+
+def _iter_shell_command_segments(parts: list[str]) -> list[list[str]]:
+    segments: list[list[str]] = []
+    current_segment: list[str] = []
+    for part in parts:
+        token = part.strip()
+        if not token:
+            continue
+        if token in _SHELL_COMMAND_SEPARATORS:
+            if current_segment:
+                segments.append(current_segment)
+                current_segment = []
+            continue
+        current_segment.append(token)
+    if current_segment:
+        segments.append(current_segment)
+    return segments
+
+
+def _shell_segment_primary_command(segment: list[str]) -> tuple[str | None, int | None]:
+    index = 0
+    while index < len(segment):
+        normalized_token = segment[index].lstrip("(").rstrip(")")
+        if _SHELL_ASSIGNMENT_PATTERN.match(normalized_token):
+            index += 1
+            continue
+        command_name = _normalized_shell_command_name(normalized_token)
+        if command_name == "env":
+            index += 1
+            while index < len(segment):
+                token = segment[index]
+                if not token.startswith("-") and not _SHELL_ASSIGNMENT_PATTERN.match(token):
+                    break
+                tokens_consumed = _wrapper_option_tokens_consumed(command_name, token)
+                index += tokens_consumed
+                continue
+            continue
+        if command_name in _SHELL_COMMAND_WRAPPERS:
+            index += 1
+            while index < len(segment):
+                token = segment[index]
+                if not token.startswith("-"):
+                    break
+                index += _wrapper_option_tokens_consumed(command_name, token)
+            continue
+        return command_name, index
+    return None, None
+
+
+def _segment_contains_destructive_node_inline_eval(segment_args: list[str]) -> bool:
+    lowered_args = [arg.lower() for arg in segment_args]
+    index = 0
+    while index < len(lowered_args):
+        token = lowered_args[index]
+        if token == "--":
+            break
+        if token in _NODE_INLINE_EVAL_FLAGS and index + 1 < len(lowered_args):
+            if token in {"-p", "--print"} and lowered_args[index + 1].startswith("-"):
+                index += 1
+                continue
+            if _contains_destructive_node_inline_script(segment_args[index + 1]):
+                return True
+            index += 2
+            continue
+        if _is_combined_node_inline_eval_flag(token) and index + 1 < len(lowered_args):
+            if _contains_destructive_node_inline_script(segment_args[index + 1]):
+                return True
+            index += 2
+            continue
+        if token.startswith("--eval="):
+            if _contains_destructive_node_inline_script(segment_args[index].split("=", 1)[1]):
+                return True
+            index += 1
+            continue
+        if token.startswith("--print="):
+            if _contains_destructive_node_inline_script(segment_args[index].split("=", 1)[1]):
+                return True
+            index += 1
+            continue
+        if token.startswith("-e") and token not in _NODE_INLINE_EVAL_FLAGS:
+            if _contains_destructive_node_inline_script(segment_args[index][2:]):
+                return True
+            index += 1
+            continue
+        if token.startswith("-p") and token not in _NODE_INLINE_EVAL_FLAGS:
+            if _contains_destructive_node_inline_script(segment_args[index][2:]):
+                return True
+            index += 1
+            continue
+        if token in _NODE_OPTION_FLAGS_WITH_VALUE and index + 1 < len(lowered_args):
+            index += 2
+            continue
+        if not token.startswith("-"):
+            break
+        index += 1
+    return False
+
+
+def _find_segment_uses_delete(segment_args: list[str]) -> bool:
+    value_taking_predicates = {
+        "-name",
+        "-iname",
+        "-path",
+        "-ipath",
+        "-wholename",
+        "-iwholename",
+        "-regex",
+        "-iregex",
+        "-lname",
+        "-ilname",
+    }
+    index = 0
+    while index < len(segment_args):
+        token = segment_args[index]
+        if token in {"-exec", "-execdir", "-ok", "-okdir"}:
+            index += 1
+            while index < len(segment_args) and segment_args[index] not in {";", "+"}:
+                index += 1
+            if index < len(segment_args):
+                index += 1
+            continue
+        if token in value_taking_predicates and index + 1 < len(segment_args):
+            index += 2
+            continue
+        if token == "-delete":
+            return True
+        index += 1
+    return False
+
+
+def _env_split_string_payloads(parts: list[str]) -> tuple[str, ...]:
+    payloads: list[str] = []
+    for segment in _iter_shell_command_segments(parts):
+        env_index = _shell_segment_env_index(segment)
+        if env_index is None:
+            continue
+        index = env_index + 1
+        while index < len(segment):
+            token = segment[index]
+            if _SHELL_ASSIGNMENT_PATTERN.match(token):
+                index += 1
+                continue
+            if token == "--":
+                break
+            if not token.startswith("-"):
+                break
+            if token in {"-S", "--split-string"} and index + 1 < len(segment):
+                payload = segment[index + 1].strip()
+                if payload:
+                    payloads.append(payload)
+                index += _wrapper_option_tokens_consumed("env", token)
+                continue
+            if token.startswith("--split-string="):
+                payload = token.split("=", 1)[1].strip()
+                if payload:
+                    payloads.append(payload)
+                index += _wrapper_option_tokens_consumed("env", token)
+                continue
+            clustered_split_string_payload = _env_clustered_split_string_payload(token)
+            if clustered_split_string_payload is not None:
+                payload = clustered_split_string_payload.strip()
+                if not payload and index + 1 < len(segment):
+                    payload = segment[index + 1].strip()
+                if payload:
+                    payloads.append(payload)
+                index += _wrapper_option_tokens_consumed("env", token)
+                continue
+            index += _wrapper_option_tokens_consumed("env", token)
+    return tuple(payloads)
+
+
+def _shell_segment_env_index(segment: list[str]) -> int | None:
+    index = 0
+    while index < len(segment):
+        normalized_token = segment[index].lstrip("(").rstrip(")")
+        if _SHELL_ASSIGNMENT_PATTERN.match(normalized_token):
+            index += 1
+            continue
+        command_name = _normalized_shell_command_name(normalized_token)
+        if command_name == "env":
+            return index
+        if command_name in _SHELL_COMMAND_WRAPPERS:
+            index += 1
+            while index < len(segment):
+                token = segment[index]
+                if not token.startswith("-"):
+                    break
+                index += _wrapper_option_tokens_consumed(command_name, token)
+            continue
+        return None
+    return None
+
+
+def _contains_mutating_shell_redirection(parts: list[str]) -> bool:
+    index = 0
+    while index < len(parts):
+        token = parts[index].strip()
+        if not token:
+            index += 1
+            continue
+        fd = ""
+        target: str | None = None
+        if token in {">", ">>", ">|", "1>", "1>>", "1>|", "2>", "2>>", "2>|"}:
+            if token[0].isdigit():
+                fd = token[0]
+            if token.endswith(">") and index + 2 < len(parts) and parts[index + 1] == "|":
+                target = parts[index + 2]
+                index += 3
+            elif index + 1 < len(parts):
+                target = parts[index + 1]
+                index += 2
+            else:
+                index += 1
+        else:
+            if re.search(r"\s", token):
+                index += 1
+                continue
+            match = re.fullmatch(r"(?P<prefix>[^<>\s]*?)(?P<fd>[0-2]?)(?P<op>>\||>>|>)(?P<target>.*)", token)
+            if match is None:
+                index += 1
+                continue
+            prefix = match.group("prefix") or ""
+            if prefix.endswith("="):
+                index += 1
+                continue
+            fd = match.group("fd")
+            target = match.group("target")
+            if target:
+                index += 1
+            elif index + 1 < len(parts):
+                target = parts[index + 1]
+                index += 2
+            else:
+                index += 1
+        if target is None:
+            continue
+        normalized_target = _normalized_redirect_target(target).lower()
+        if fd == "2" and normalized_target in _SAFE_SHELL_REDIRECT_TARGETS:
+            continue
+        if normalized_target in _SAFE_SHELL_REDIRECT_TARGETS or normalized_target.startswith("&"):
             continue
         return True
     return False
@@ -550,6 +883,46 @@ def _contains_mutating_shell_redirection(command_text: str) -> bool:
 
 def _normalized_redirect_target(target: str) -> str:
     return target.strip().strip(");,").strip("'\"")
+
+
+def _redacted_node_inline_string_literals(script: str, *, preserve_bracket_member_strings: bool = False) -> str:
+    result: list[str] = []
+    quote_char: str | None = None
+    escape_next = False
+    preserve_string_contents = False
+    for character in script:
+        if quote_char is None:
+            if character in {"'", '"'}:
+                preserve_string_contents = (
+                    preserve_bracket_member_strings and _last_non_whitespace_character(result) == "["
+                )
+                quote_char = character
+                result.append(character)
+                continue
+            result.append(character)
+            continue
+        if escape_next:
+            result.append(character if preserve_string_contents else "Q")
+            escape_next = False
+            continue
+        if character == "\\":
+            result.append(character)
+            escape_next = True
+            continue
+        if character == quote_char:
+            result.append(character)
+            quote_char = None
+            preserve_string_contents = False
+            continue
+        result.append(character if preserve_string_contents else "Q")
+    return "".join(result)
+
+
+def _last_non_whitespace_character(result: list[str]) -> str | None:
+    for character in reversed(result):
+        if not character.isspace():
+            return character
+    return None
 
 
 def _shell_command_names(command_text: str) -> tuple[str, ...]:
@@ -560,8 +933,8 @@ def _shell_command_names(command_text: str) -> tuple[str, ...]:
 def _normalized_shell_command_name(command_name: str) -> str:
     normalized_command = command_name.replace("\\", "/").strip()
     if "/" not in normalized_command:
-        return normalized_command
-    return normalized_command.rsplit("/", 1)[-1]
+        return normalized_command.lower()
+    return normalized_command.rsplit("/", 1)[-1].lower()
 
 
 def _redacted_shell_text_for_command_names(command_text: str) -> str:
@@ -570,11 +943,107 @@ def _redacted_shell_text_for_command_names(command_text: str) -> str:
 
 def _split_shell_parts(command_text: str) -> list[str]:
     try:
-        lexer = shlex.shlex(command_text, posix=True, punctuation_chars=";&|")
+        lexer = shlex.shlex(
+            _replace_unquoted_newlines_with_separators(command_text),
+            posix=True,
+            punctuation_chars=";&|",
+        )
         lexer.whitespace_split = True
         return list(lexer)
     except ValueError:
         return command_text.split()
+
+
+def _replace_unquoted_newlines_with_separators(command_text: str) -> str:
+    result: list[str] = []
+    quote_char: str | None = None
+    escape_next = False
+    for character in command_text:
+        if escape_next:
+            result.append(character)
+            escape_next = False
+            continue
+        if character == "\\":
+            result.append(character)
+            escape_next = True
+            continue
+        if quote_char is None and character in {"'", '"'}:
+            quote_char = character
+            result.append(character)
+            continue
+        if quote_char == character:
+            quote_char = None
+            result.append(character)
+            continue
+        if quote_char is None and character in {"\n", "\r"}:
+            if not result or result[-1] != " ":
+                result.append(" ")
+            result.append("\n")
+            result.append(_SHELL_NEWLINE_SEPARATOR)
+            result.append("\n")
+            continue
+        result.append(character)
+    return "".join(result)
+
+
+def _wrapper_option_tokens_consumed(command_name: str, token: str) -> int:
+    if not token.startswith("-"):
+        return 1
+    if command_name == "env":
+        env_short_option_tokens = _env_short_option_tokens_consumed(token)
+        if env_short_option_tokens is not None:
+            return env_short_option_tokens
+    exact_flags = _WRAPPER_FLAGS_WITH_VALUES.get(command_name, frozenset())
+    if token in exact_flags:
+        return 2
+    if _wrapper_flag_has_attached_value(command_name, token):
+        return 1
+    return 1
+
+
+def _env_short_option_tokens_consumed(token: str) -> int | None:
+    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
+        return None
+    for index, flag_character in enumerate(token[1:], start=1):
+        if flag_character not in {"C", "S", "u"}:
+            continue
+        if index < len(token) - 1:
+            return 1
+        return 2
+    return 1
+
+
+def _env_clustered_split_string_payload(token: str) -> str | None:
+    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
+        return None
+    split_index = token.find("S", 1)
+    if split_index == -1:
+        return None
+    if split_index + 1 >= len(token):
+        return ""
+    return token[split_index + 1 :]
+
+
+def _wrapper_flag_has_attached_value(command_name: str, token: str) -> bool:
+    if command_name == "env":
+        return any(
+            token.startswith(prefix)
+            for prefix in (
+                "--unset=",
+                "--chdir=",
+                "--split-string=",
+                "-C",
+            )
+        )
+    if command_name == "nice":
+        return token.startswith("--adjustment=") or (token.startswith("-n") and token != "-n")
+    if command_name == "stdbuf":
+        return token.startswith(("--input=", "--output=", "--error=")) or (
+            len(token) > 2 and token[:2] in {"-i", "-o", "-e"}
+        )
+    if command_name == "time":
+        return token.startswith(("--format=", "--output=")) or (len(token) > 2 and token[:2] in {"-f", "-o"})
+    return False
 
 
 def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
@@ -584,7 +1053,7 @@ def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
         token = part.strip()
         if not token:
             continue
-        if token in {"&&", "||", ";", "|", "&"}:
+        if token in _SHELL_COMMAND_SEPARATORS:
             expect_command = True
             continue
         normalized_token = token.lstrip("(").rstrip(")")
@@ -624,7 +1093,7 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
         if not token:
             index += 1
             continue
-        if token in {"&&", "||", ";", "|", "&"}:
+        if token in _SHELL_COMMAND_SEPARATORS:
             current_command = None
             expect_command = True
             index += 1
