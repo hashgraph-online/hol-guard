@@ -808,10 +808,17 @@ def run_guard_command(args: argparse.Namespace) -> int:
         try:
             payload = sync_receipts(store)
         except GuardSyncNotConfiguredError:
-            print(_guard_sync_prerequisite_message(), file=sys.stderr)
+            message = _guard_sync_prerequisite_message()
+            if getattr(args, "json", False):
+                _emit("sync", {"synced": False, "error": message}, True)
+            else:
+                print(message, file=sys.stderr)
             return 1
         except RuntimeError as error:
-            print(str(error), file=sys.stderr)
+            if getattr(args, "json", False):
+                _emit("sync", {"synced": False, "error": str(error)}, True)
+            else:
+                print(str(error), file=sys.stderr)
             return 1
         _emit("sync", payload, getattr(args, "json", False))
         return 0
