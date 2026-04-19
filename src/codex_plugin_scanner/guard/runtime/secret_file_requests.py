@@ -92,7 +92,7 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
     }
 )
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&"})
-_SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nohup"})
+_SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "time"})
 _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
     {
@@ -637,11 +637,26 @@ def _shell_segment_primary_command(segment: list[str]) -> tuple[str | None, int 
         command_name = _normalized_shell_command_name(normalized_token)
         if command_name == "env":
             index += 1
-            while index < len(segment) and _SHELL_ASSIGNMENT_PATTERN.match(segment[index]):
+            while index < len(segment):
+                token = segment[index]
+                if token in {"-u", "--unset"} and index + 1 < len(segment):
+                    index += 2
+                    continue
+                if token.startswith("-"):
+                    index += 1
+                    continue
+                if not _SHELL_ASSIGNMENT_PATTERN.match(token):
+                    break
                 index += 1
             continue
         if command_name in _SHELL_COMMAND_WRAPPERS:
             index += 1
+            while index < len(segment) and segment[index].startswith("-"):
+                token = segment[index]
+                if command_name == "nice" and token in {"-n", "--adjustment"} and index + 1 < len(segment):
+                    index += 2
+                    continue
+                index += 1
             continue
         return command_name, index
     return None, None

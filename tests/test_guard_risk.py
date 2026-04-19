@@ -520,6 +520,26 @@ def test_tool_action_request_classifier_detects_env_wrapped_find_delete():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_env_ignore_environment_find_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "env -i find . -name dangerous-marker.json -delete"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_stdbuf_wrapped_node_eval_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """stdbuf -oL node -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_skips_echoed_node_eval_string():
     request = extract_sensitive_tool_action_request(
         "bash",
