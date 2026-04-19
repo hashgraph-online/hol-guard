@@ -525,6 +525,9 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     command_names = list(_shell_command_names(lowered))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
         return True
+    for shell_script in _shell_command_scripts(parts):
+        if _looks_destructive_shell_command(shell_script):
+            return True
     return any(
         command_name == "sed" and any(part == "-i" or part.startswith("-i") for part in parts[1:])
         for command_name in command_names
@@ -557,6 +560,26 @@ def _normalized_shell_command_name(command_name: str) -> str:
     if "/" not in normalized_command:
         return normalized_command
     return normalized_command.rsplit("/", 1)[-1]
+
+
+def _shell_command_scripts(parts: list[str]) -> tuple[str, ...]:
+    scripts: list[str] = []
+    for index, part in enumerate(parts[:-1]):
+        if not _is_shell_command_flag(part):
+            continue
+        script = parts[index + 1].strip()
+        if script:
+            scripts.append(script)
+    return tuple(scripts)
+
+
+def _is_shell_command_flag(value: str) -> bool:
+    if value == "-c":
+        return True
+    if not value.startswith("-"):
+        return False
+    flag_characters = value[1:]
+    return bool(flag_characters) and set(flag_characters) <= {"c", "l"}
 
 
 def _file_read_request_fingerprint(*, harness: str, tool_name: str, normalized_path: str) -> str:

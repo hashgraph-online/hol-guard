@@ -994,6 +994,30 @@ def test_guard_hook_emits_copilot_permission_request_deny_from_tool_calls_payloa
     assert "danger_lab:dangerous_delete" in output["message"]
 
 
+def test_normalize_hook_payload_prefers_matching_tool_call_args() -> None:
+    payload = guard_commands_module._normalize_hook_payload(
+        {
+            "toolName": "danger_lab/dangerous_delete",
+            "toolCalls": [
+                {
+                    "id": "call-safe",
+                    "name": "safe_tools/read_file",
+                    "args": json.dumps({"path": "README.md"}),
+                },
+                {
+                    "id": "call-dangerous",
+                    "name": "danger_lab/dangerous_delete",
+                    "args": json.dumps({"target": "dangerous-marker.json"}),
+                },
+            ],
+        }
+    )
+
+    assert payload["tool_name"] == "danger_lab/dangerous_delete"
+    assert payload["tool_input"] == {"target": "dangerous-marker.json"}
+    assert payload["arguments"] == {"target": "dangerous-marker.json"}
+
+
 def test_copilot_runtime_tool_call_prefers_cli_workspace_config_when_workspace_is_inferred(tmp_path):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

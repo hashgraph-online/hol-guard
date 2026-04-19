@@ -1618,7 +1618,10 @@ def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
         if target_key not in normalized and source_key in payload:
             normalized[target_key] = payload[source_key]
     if "tool_name" not in normalized or "tool_input" not in normalized:
-        tool_name, tool_input = _first_hook_tool_call(payload.get("toolCalls"))
+        tool_name, tool_input = _first_hook_tool_call(
+            payload.get("toolCalls"),
+            expected_tool_name=normalized.get("tool_name"),
+        )
         if "tool_name" not in normalized and tool_name is not None:
             normalized["tool_name"] = tool_name
         if "tool_input" not in normalized and tool_input is not None:
@@ -1662,16 +1665,28 @@ def _normalize_hook_argument_value(value: object | None) -> object | None:
     return value
 
 
-def _first_hook_tool_call(value: object | None) -> tuple[str | None, object | None]:
+def _first_hook_tool_call(
+    value: object | None,
+    *,
+    expected_tool_name: object | None = None,
+) -> tuple[str | None, object | None]:
     if not isinstance(value, list):
         return None, None
+    normalized_expected_tool_name = expected_tool_name.strip() if isinstance(expected_tool_name, str) else None
+    fallback_tool_call: tuple[str, object | None] | None = None
     for item in value:
         if not isinstance(item, dict):
             continue
         tool_name = item.get("name")
         tool_input = _normalize_hook_argument_value(item.get("args"))
         if isinstance(tool_name, str) and tool_name.strip():
-            return tool_name.strip(), tool_input
+            stripped_tool_name = tool_name.strip()
+            if fallback_tool_call is None:
+                fallback_tool_call = (stripped_tool_name, tool_input)
+            if normalized_expected_tool_name is None or stripped_tool_name == normalized_expected_tool_name:
+                return stripped_tool_name, tool_input
+    if fallback_tool_call is not None:
+        return fallback_tool_call
     return None, None
 
 

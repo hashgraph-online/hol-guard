@@ -309,6 +309,16 @@ def test_tool_action_request_classifier_detects_absolute_path_destructive_comman
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_shell_wrapper_script_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": 'bash -lc "rm -rf dangerous-marker.json"'},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_incident_context_describes_runtime_tool_action_requests():
     request = extract_sensitive_tool_action_request(
         "bash",
