@@ -179,14 +179,7 @@ class EncryptedFileSecretStore:
             return None
         if not isinstance(payload, dict):
             return None
-        value = self._decrypt_fernet(payload)
-        if value is not None:
-            return value
-        legacy_value = self._decrypt_legacy_payload(payload)
-        if legacy_value is None:
-            return None
-        self.set_secret(secret_id, legacy_value)
-        return legacy_value
+        return self._decrypt_fernet(payload)
 
     def _path_for(self, secret_id: str) -> Path:
         normalized = secret_id.replace("/", "_").replace(":", "_")
@@ -247,24 +240,6 @@ class EncryptedFileSecretStore:
         except UnicodeDecodeError:
             return None
 
-    def _decrypt_legacy_payload(self, payload: dict[str, object]) -> str | None:
-        nonce_value = payload.get("nonce")
-        ciphertext_value = payload.get("ciphertext")
-        if not isinstance(nonce_value, str) or not isinstance(ciphertext_value, str):
-            return None
-        try:
-            nonce = base64.urlsafe_b64decode(nonce_value.encode("ascii"))
-            ciphertext = base64.urlsafe_b64decode(ciphertext_value.encode("ascii"))
-            key = base64.urlsafe_b64decode(self._load_fernet_key())
-        except (ValueError, TypeError):
-            return None
-        keystream = _expand_keystream(key=key, nonce=nonce, length=len(ciphertext))
-        plaintext = bytes(item ^ mask for item, mask in zip(ciphertext, keystream, strict=True))
-        try:
-            return plaintext.decode("utf-8")
-        except UnicodeDecodeError:
-            return None
-
 
 class FallbackSecretStore:
     """Fallback-capable secret store that tolerates primary backend failures."""
@@ -287,19 +262,6 @@ class FallbackSecretStore:
         if primary_value is not None:
             return primary_value
         return self.fallback.get_secret(secret_id)
-
-
-def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
-    chunks: list[bytes] = []
-    generated = 0
-    counter = 0
-    while generated < length:
-        counter_bytes = counter.to_bytes(4, byteorder="big", signed=False)
-        digest = sha256(key + nonce + counter_bytes).digest()
-        chunks.append(digest)
-        generated += len(digest)
-        counter += 1
-    return b"".join(chunks)[:length]
 
 
 def _build_secret_store(guard_home: Path) -> SecretStore:
