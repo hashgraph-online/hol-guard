@@ -336,7 +336,7 @@ def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_upperc
 def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_noclobber_dev_null():
     request = extract_sensitive_tool_action_request(
         "bash",
-        {"command": 'ls missing 2>|/dev/null | head -40'},
+        {"command": "ls missing 2>|/dev/null | head -40"},
     )
 
     assert request is None
@@ -346,6 +346,24 @@ def test_tool_action_request_classifier_skips_perl_sleep_wait():
     request = extract_sensitive_tool_action_request(
         "bash",
         {"command": "perl -e 'sleep 310'"},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trailer():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "cd /Users/michaelkantor/CascadeProjects/hashgraph-online/ai-plugin-scanner && "
+                "git add src/codex_plugin_scanner/guard/runtime/runner.py "
+                "src/codex_plugin_scanner/guard/runtime/__init__.py "
+                "src/codex_plugin_scanner/guard/cli/connect_flow.py && "
+                'git commit -m "fix(guard): gracefully handle free-plan sync 403 in connect flow\n\n'
+                'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>" 2>&1'
+            )
+        },
     )
 
     assert request is None
@@ -825,6 +843,96 @@ def test_tool_action_request_classifier_detects_perl_inline_system_shell_out():
     request = extract_sensitive_tool_action_request(
         "bash",
         {"command": "perl -e \"system('rm -rf dangerous-marker.json')\""},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_find_exec_rm_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "find . -name dangerous-marker.json -exec rm {} ;"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_git_rm_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "git rm --force dangerous-marker.json"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_node_inline_truncatesync_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "require('fs').truncateSync('dangerous-marker.json', 0)" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_skips_node_template_literal_false_positive():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "console.log(`unlinkSync('dangerous-marker.json')`)" """},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_detects_node_template_interpolation_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": ("""node -e "console.log(`x ${require('fs').unlinkSync('dangerous-marker.json')}`)" """)},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_node_template_interpolation_regex_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                """node -e "console.log(`x ${/}/.test('a') || require('fs').unlinkSync('dangerous-marker.json')}`)" """
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_git_c_rm_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "git -C /mock-workspace rm --force dangerous-marker.json"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_skips_git_help_modes():
+    assert extract_sensitive_tool_action_request("bash", {"command": "git --help rm"}) is None
+    assert extract_sensitive_tool_action_request("bash", {"command": "git -h rm"}) is None
+    assert extract_sensitive_tool_action_request("bash", {"command": "git help rm"}) is None
+    assert extract_sensitive_tool_action_request("bash", {"command": "git --version rm"}) is None
+
+
+def test_tool_action_request_classifier_detects_redirection_to_quoted_space_target():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": '''echo owned >"dangerous marker.json"'''},
     )
 
     assert request is not None
