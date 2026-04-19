@@ -91,6 +91,7 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
         "--conditions",
         "--debug-port",
         "--inspect-port",
+        "--redirect-warnings",
         "--title",
     }
 )
@@ -603,19 +604,21 @@ def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
 
 
 def _contains_destructive_node_inline_script(script: str) -> bool:
+    redacted_script = _redacted_node_inline_string_literals(script)
+    member_scan_script = _redacted_node_inline_string_literals(script, preserve_bracket_member_strings=True)
     for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS:
         escaped_call_name = re.escape(call_name)
-        if re.search(rf"(?<![A-Za-z0-9_$'\"]){escaped_call_name}\s*(?:\?\.\s*)?\(", script):
+        if re.search(rf"(?<![A-Za-z0-9_$'\"]){escaped_call_name}\s*(?:\?\.\s*)?\(", redacted_script):
             return True
         for base_pattern in (
             rf"\.\s*{escaped_call_name}",
             rf"\[\s*['\"]{escaped_call_name}['\"]\s*\]",
         ):
-            if re.search(rf"{base_pattern}\s*(?:\?\.\s*)?(?:\)\s*)?\(", script):
+            if re.search(rf"{base_pattern}\s*(?:\?\.\s*)?(?:\)\s*)?\(", member_scan_script):
                 return True
-            if re.search(rf"{base_pattern}\s*\.\s*call\s*\(", script):
+            if re.search(rf"{base_pattern}\s*\.\s*call\s*\(", member_scan_script):
                 return True
-            if re.search(rf"{base_pattern}\s*\.\s*apply\s*\(", script):
+            if re.search(rf"{base_pattern}\s*\.\s*apply\s*\(", member_scan_script):
                 return True
     return False
 
@@ -865,6 +868,46 @@ def _contains_mutating_shell_redirection(parts: list[str]) -> bool:
 
 def _normalized_redirect_target(target: str) -> str:
     return target.strip().strip(");,").strip("'\"")
+
+
+def _redacted_node_inline_string_literals(script: str, *, preserve_bracket_member_strings: bool = False) -> str:
+    result: list[str] = []
+    quote_char: str | None = None
+    escape_next = False
+    preserve_string_contents = False
+    for character in script:
+        if quote_char is None:
+            if character in {"'", '"'}:
+                preserve_string_contents = (
+                    preserve_bracket_member_strings and _last_non_whitespace_character(result) == "["
+                )
+                quote_char = character
+                result.append(character)
+                continue
+            result.append(character)
+            continue
+        if escape_next:
+            result.append(character if preserve_string_contents else "Q")
+            escape_next = False
+            continue
+        if character == "\\":
+            result.append(character)
+            escape_next = True
+            continue
+        if character == quote_char:
+            result.append(character)
+            quote_char = None
+            preserve_string_contents = False
+            continue
+        result.append(character if preserve_string_contents else "Q")
+    return "".join(result)
+
+
+def _last_non_whitespace_character(result: list[str]) -> str | None:
+    for character in reversed(result):
+        if not character.isspace():
+            return character
+    return None
 
 
 def _shell_command_names(command_text: str) -> tuple[str, ...]:

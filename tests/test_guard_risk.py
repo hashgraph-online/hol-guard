@@ -606,6 +606,16 @@ def test_tool_action_request_classifier_detects_node_inspect_port_before_eval_de
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_node_redirect_warnings_before_eval_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node --redirect-warnings /tmp/w.log -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_clustered_env_short_option_find_delete():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -763,6 +773,15 @@ def test_tool_action_request_classifier_detects_node_inline_apply_unlinksync_byp
 
     assert request is not None
     assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_skips_node_string_literal_with_dotted_mutator_text():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "console.log('foo.unlinkSync(')" """},
+    )
+
+    assert request is None
 
 
 def test_tool_action_request_classifier_skips_echoed_node_eval_string():

@@ -1571,6 +1571,48 @@ def test_guard_hook_emits_copilot_native_ask_response_for_node_inspect_port_befo
     assert "approve it in hol guard, then retry." in output["permissionDecisionReason"].lower()
 
 
+def test_guard_hook_emits_copilot_native_ask_response_for_node_redirect_warnings_before_eval_delete(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps(
+            {
+                "command": (
+                    """node --redirect-warnings /tmp/w.log -e "require('fs').unlinkSync('dangerous-marker.json')" """
+                )
+            }
+        ),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "hol guard" in output["permissionDecisionReason"].lower()
+    assert "approve it in hol guard, then retry." in output["permissionDecisionReason"].lower()
+
+
 def test_guard_hook_emits_copilot_native_ask_response_for_pipe_and_stderr_followed_node_eval_delete(
     tmp_path,
     capsys,
@@ -1790,6 +1832,39 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_node_transfor
     event = {
         "toolName": "bash",
         "toolArgs": json.dumps({"command": """node -e "const value = transform('ok'); console.log(value)" """}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
+
+
+def test_guard_hook_emits_copilot_native_allow_response_for_node_string_literal_with_dotted_mutator_text(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": """node -e "console.log('foo.unlinkSync(')" """}),
         "sourceScope": "project",
     }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
