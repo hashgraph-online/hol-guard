@@ -657,12 +657,12 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
 
 
 def _looks_like_benign_interpreter_wait(command_text: str, parts: list[str], command_names: list[str]) -> bool:
-    if "$(" in command_text or "`" in command_text:
+    if "$(" in command_text or "`" in command_text or "<(" in command_text or ">(" in command_text:
         return False
     if not command_names or not all(command_name in _SCRIPT_INTERPRETER_COMMANDS for command_name in command_names):
         return False
     scripts = _script_interpreter_texts(parts)
-    if not scripts:
+    if not scripts or len(scripts) != len(command_names):
         return False
     return all(_script_is_benign_wait(script_text) for script_text in scripts)
 

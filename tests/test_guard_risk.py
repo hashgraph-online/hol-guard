@@ -464,6 +464,26 @@ def test_tool_action_request_classifier_does_not_allow_wait_with_shell_substitut
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_does_not_allow_wait_with_process_substitution():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c 'sleep 1' <(rm -rf dangerous-marker.json)"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_requires_each_interpreter_command_to_be_a_wait():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c 'sleep 1' && python3 dangerous.py"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_destructive_subcommand_after_safe_prefix():
     request = extract_sensitive_tool_action_request(
         "bash",
