@@ -384,6 +384,45 @@ def test_tool_action_request_classifier_detects_dynamic_python_os_system_shell_o
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_unlink_delete_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "unlink dangerous-marker.json"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_find_delete_flag():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "find . -name dangerous-marker.json -delete"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_node_inline_unlinksync_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_skips_benign_node_inline_read_only_script():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "console.log('ok')" """},
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_detects_perl_inline_system_shell_out():
     request = extract_sensitive_tool_action_request(
         "bash",

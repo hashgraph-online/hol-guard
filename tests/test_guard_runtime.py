@@ -871,6 +871,78 @@ def test_guard_hook_emits_copilot_native_ask_response_for_destructive_shell_redi
     assert "approve it in hol guard, then retry." in output["permissionDecisionReason"].lower()
 
 
+def test_guard_hook_emits_copilot_native_ask_response_for_node_inline_delete_bypass(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": """node -e "require('fs').unlinkSync('dangerous-marker.json')" """}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "hol guard" in output["permissionDecisionReason"].lower()
+    assert "approve it in hol guard, then retry." in output["permissionDecisionReason"].lower()
+
+
+def test_guard_hook_emits_copilot_native_ask_response_for_unlink_delete_bypass(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": "unlink dangerous-marker.json"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "hol guard" in output["permissionDecisionReason"].lower()
+    assert "approve it in hol guard, then retry." in output["permissionDecisionReason"].lower()
+
+
 def test_guard_hook_emits_copilot_native_allow_response_for_read_only_ls_pipeline(
     tmp_path,
     capsys,

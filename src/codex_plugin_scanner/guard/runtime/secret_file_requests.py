@@ -54,15 +54,20 @@ _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
     {
         "chmod",
         "chown",
+        "del",
         "dd",
+        "erase",
         "mv",
         "perl",
         "python",
         "python3",
         "rm",
+        "rmdir",
+        "remove-item",
         "ruby",
         "tee",
         "truncate",
+        "unlink",
     }
 )
 _SCRIPT_INTERPRETER_COMMANDS = frozenset({"perl", "python", "python3", "ruby"})
@@ -72,6 +77,25 @@ _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
         "/dev/stdout",
         "/dev/stderr",
         "nul",
+    }
+)
+_NODE_INLINE_EVAL_FLAGS = frozenset({"-e", "--eval"})
+_DESTRUCTIVE_NODE_INLINE_TOKENS = frozenset(
+    {
+        "appendfile(",
+        "appendfilesync(",
+        "copyfile(",
+        "copyfilesync(",
+        "mkdir(",
+        "mkdirsync(",
+        "rename(",
+        "renamesync(",
+        "rm(",
+        "rmsync(",
+        "unlink(",
+        "unlinksync(",
+        "writefile(",
+        "writefilesync(",
     }
 )
 _SENSITIVE_BASENAME_LABELS = {
@@ -523,9 +547,13 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return False
     if _looks_like_benign_interpreter_wait(normalized, parts, raw_command_names):
         return False
+    if _contains_destructive_node_inline_eval(parts):
+        return True
     command_names = list(raw_command_names)
     command_names.extend(_shell_command_names_from_parts(parts))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
+        return True
+    if "find" in command_names and " -delete" in lowered:
         return True
     for shell_script in _shell_command_scripts(parts):
         if _looks_destructive_shell_command(shell_script):
@@ -534,6 +562,19 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         command_name == "sed" and any(part == "-i" or part.startswith("-i") for part in parts[1:])
         for command_name in command_names
     )
+
+
+def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
+    lowered_parts = [part.lower() for part in parts]
+    for index, part in enumerate(lowered_parts[:-2]):
+        if _normalized_shell_command_name(part) != "node":
+            continue
+        if lowered_parts[index + 1] not in _NODE_INLINE_EVAL_FLAGS:
+            continue
+        script = lowered_parts[index + 2]
+        if any(token in script for token in _DESTRUCTIVE_NODE_INLINE_TOKENS):
+            return True
+    return False
 
 
 def _contains_mutating_shell_redirection(command_text: str) -> bool:
