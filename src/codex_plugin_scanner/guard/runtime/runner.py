@@ -10,6 +10,7 @@ import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -523,6 +524,41 @@ def sync_runtime_session(
     return summary
 
 
+def sync_runtime_session(store: GuardStore, *, session: dict[str, object]) -> dict[str, object]:
+    """Push one runtime session snapshot to the configured sync endpoint."""
+
+    credentials = store.get_sync_credentials()
+    if credentials is None:
+        raise RuntimeError("Guard is not logged in.")
+    timeout_seconds = _sync_http_timeout_seconds()
+
+    normalized_session = _normalize_runtime_session_payload(session)
+    request = urllib.request.Request(
+        _runtime_session_sync_url(str(credentials["sync_url"])),
+        data=json.dumps({"session": normalized_session}).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {credentials['token']}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(_sync_http_error_message(error)) from error
+    except urllib.error.URLError as error:
+        raise RuntimeError(_sync_url_error_message(error)) from error
+
+    visible_items = payload.get("items")
+    return {
+        "runtime_session_id": normalized_session.get("sessionId", ""),
+        "runtime_session_synced_at": payload.get("generatedAt") or payload.get("generated_at"),
+        "runtime_sessions_visible": len(visible_items) if isinstance(visible_items, list) else 0,
+        "runtime_session_sync_pending": False,
+    }
+
+
 def sync_pain_signals(store: GuardStore) -> int:
     credentials = store.get_sync_credentials()
     if credentials is None:
@@ -550,7 +586,7 @@ def sync_pain_signals(store: GuardStore) -> int:
                 headers=_guard_sync_headers(str(credentials["token"])),
             )
             try:
-                with urllib.request.urlopen(request, timeout=10):
+                with urllib.request.urlopen(request, timeout=timeout_seconds):
                     pass
             except urllib.error.HTTPError as error:
                 if error.code == 404:
