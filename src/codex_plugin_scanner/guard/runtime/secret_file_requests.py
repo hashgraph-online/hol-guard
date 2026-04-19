@@ -98,20 +98,20 @@ _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _SHELL_NEWLINE_SEPARATOR = ";"
 _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
     {
-        "appendfile",
-        "appendfilesync",
-        "copyfile",
-        "copyfilesync",
+        "appendFile",
+        "appendFileSync",
+        "copyFile",
+        "copyFileSync",
         "mkdir",
-        "mkdirsync",
+        "mkdirSync",
         "rename",
-        "renamesync",
+        "renameSync",
         "rm",
-        "rmsync",
+        "rmSync",
         "unlink",
-        "unlinksync",
-        "writefile",
-        "writefilesync",
+        "unlinkSync",
+        "writeFile",
+        "writeFileSync",
     }
 )
 _WRAPPER_FLAGS_WITH_VALUES = {
@@ -561,9 +561,10 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     if not normalized:
         return False
     lowered = normalized.lower()
-    if _contains_mutating_shell_redirection(lowered):
+    redacted_command_text = _redacted_shell_text_for_command_names(lowered)
+    if _contains_mutating_shell_redirection(redacted_command_text):
         return True
-    raw_command_names = list(_shell_command_names(_redacted_shell_text_for_command_names(lowered)))
+    raw_command_names = list(_shell_command_names(redacted_command_text))
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
@@ -600,12 +601,19 @@ def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
 
 
 def _contains_destructive_node_inline_script(script: str) -> bool:
-    return any(
-        re.search(rf"(?<![a-z0-9_$'\"]){re.escape(call_name)}\s*\(", script)
-        or re.search(rf"\.\s*{re.escape(call_name)}\s*(?:\)\s*)?\(", script)
-        or re.search(rf"\[\s*['\"]{re.escape(call_name)}['\"]\s*\]\s*(?:\)\s*)?\(", script)
-        for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS
-    )
+    for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS:
+        escaped_call_name = re.escape(call_name)
+        if re.search(rf"(?<![a-z0-9_$'\"]){escaped_call_name}\s*(?:\?\.\s*)?\(", script):
+            return True
+        for base_pattern in (
+            rf"\.\s*{escaped_call_name}",
+            rf"\[\s*['\"]{escaped_call_name}['\"]\s*\]",
+        ):
+            if re.search(rf"{base_pattern}\s*(?:\?\.\s*)?(?:\)\s*)?\(", script):
+                return True
+            if re.search(rf"{base_pattern}\s*\.\s*call\s*\(", script):
+                return True
+    return False
 
 
 def _is_combined_node_inline_eval_flag(token: str) -> bool:
@@ -678,32 +686,32 @@ def _segment_contains_destructive_node_inline_eval(segment_args: list[str]) -> b
         if token == "--":
             break
         if token in _NODE_INLINE_EVAL_FLAGS and index + 1 < len(lowered_args):
-            if _contains_destructive_node_inline_script(lowered_args[index + 1]):
+            if _contains_destructive_node_inline_script(segment_args[index + 1]):
                 return True
             index += 2
             continue
         if _is_combined_node_inline_eval_flag(token) and index + 1 < len(lowered_args):
-            if _contains_destructive_node_inline_script(lowered_args[index + 1]):
+            if _contains_destructive_node_inline_script(segment_args[index + 1]):
                 return True
             index += 2
             continue
         if token.startswith("--eval="):
-            if _contains_destructive_node_inline_script(token.split("=", 1)[1]):
+            if _contains_destructive_node_inline_script(segment_args[index].split("=", 1)[1]):
                 return True
             index += 1
             continue
         if token.startswith("--print="):
-            if _contains_destructive_node_inline_script(token.split("=", 1)[1]):
+            if _contains_destructive_node_inline_script(segment_args[index].split("=", 1)[1]):
                 return True
             index += 1
             continue
         if token.startswith("-e") and token not in _NODE_INLINE_EVAL_FLAGS:
-            if _contains_destructive_node_inline_script(token[2:]):
+            if _contains_destructive_node_inline_script(segment_args[index][2:]):
                 return True
             index += 1
             continue
         if token.startswith("-p") and token not in _NODE_INLINE_EVAL_FLAGS:
-            if _contains_destructive_node_inline_script(token[2:]):
+            if _contains_destructive_node_inline_script(segment_args[index][2:]):
                 return True
             index += 1
             continue
