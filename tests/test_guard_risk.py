@@ -540,6 +540,56 @@ def test_tool_action_request_classifier_detects_stdbuf_wrapped_node_eval_delete(
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_newline_followed_node_eval_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """echo ok\nnode -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_env_chdir_wrapped_find_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "env -C /tmp find . -name dangerous-marker.json -delete"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_stdbuf_value_wrapped_node_eval_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """stdbuf -o L node -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_node_inline_bracket_unlinksync_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "require('fs')['unlinkSync']('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_node_inline_parenthesized_unlinksync_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "(require('fs').unlinkSync)('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_skips_echoed_node_eval_string():
     request = extract_sensitive_tool_action_request(
         "bash",

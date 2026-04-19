@@ -94,6 +94,7 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&"})
 _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "time"})
 _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
+_SHELL_NEWLINE_SEPARATOR = ";"
 _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
     {
         "appendfile",
@@ -112,6 +113,12 @@ _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
         "writefilesync",
     }
 )
+_WRAPPER_FLAGS_WITH_VALUES = {
+    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
+    "nice": frozenset({"-n", "--adjustment"}),
+    "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
+    "time": frozenset({"-f", "--format", "-o", "--output"}),
+}
 _SENSITIVE_BASENAME_LABELS = {
     ".npmrc": "npm registry credentials",
     ".pypirc": "Python package credentials",
@@ -591,6 +598,8 @@ def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
 def _contains_destructive_node_inline_script(script: str) -> bool:
     return any(
         re.search(rf"(?<![a-z0-9_$'\"]){re.escape(call_name)}\s*\(", script)
+        or re.search(rf"\.\s*{re.escape(call_name)}\s*(?:\)\s*)?\(", script)
+        or re.search(rf"\[\s*['\"]{re.escape(call_name)}['\"]\s*\]\s*(?:\)\s*)?\(", script)
         for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS
     )
 
@@ -639,24 +648,19 @@ def _shell_segment_primary_command(segment: list[str]) -> tuple[str | None, int 
             index += 1
             while index < len(segment):
                 token = segment[index]
-                if token in {"-u", "--unset"} and index + 1 < len(segment):
-                    index += 2
-                    continue
-                if token.startswith("-"):
-                    index += 1
-                    continue
-                if not _SHELL_ASSIGNMENT_PATTERN.match(token):
+                if not token.startswith("-") and not _SHELL_ASSIGNMENT_PATTERN.match(token):
                     break
-                index += 1
+                tokens_consumed = _wrapper_option_tokens_consumed(command_name, token)
+                index += tokens_consumed
+                continue
             continue
         if command_name in _SHELL_COMMAND_WRAPPERS:
             index += 1
-            while index < len(segment) and segment[index].startswith("-"):
+            while index < len(segment):
                 token = segment[index]
-                if command_name == "nice" and token in {"-n", "--adjustment"} and index + 1 < len(segment):
-                    index += 2
-                    continue
-                index += 1
+                if not token.startswith("-"):
+                    break
+                index += _wrapper_option_tokens_consumed(command_name, token)
             continue
         return command_name, index
     return None, None
@@ -759,11 +763,81 @@ def _redacted_shell_text_for_command_names(command_text: str) -> str:
 
 def _split_shell_parts(command_text: str) -> list[str]:
     try:
-        lexer = shlex.shlex(command_text, posix=True, punctuation_chars=";&|")
+        lexer = shlex.shlex(
+            _replace_unquoted_newlines_with_separators(command_text),
+            posix=True,
+            punctuation_chars=";&|",
+        )
         lexer.whitespace_split = True
         return list(lexer)
     except ValueError:
         return command_text.split()
+
+
+def _replace_unquoted_newlines_with_separators(command_text: str) -> str:
+    result: list[str] = []
+    quote_char: str | None = None
+    escape_next = False
+    for character in command_text:
+        if escape_next:
+            result.append(character)
+            escape_next = False
+            continue
+        if character == "\\":
+            result.append(character)
+            escape_next = True
+            continue
+        if quote_char is None and character in {"'", '"'}:
+            quote_char = character
+            result.append(character)
+            continue
+        if quote_char == character:
+            quote_char = None
+            result.append(character)
+            continue
+        if quote_char is None and character in {"\n", "\r"}:
+            if not result or result[-1] != " ":
+                result.append(" ")
+            result.append(_SHELL_NEWLINE_SEPARATOR)
+            result.append(" ")
+            continue
+        result.append(character)
+    return "".join(result)
+
+
+def _wrapper_option_tokens_consumed(command_name: str, token: str) -> int:
+    if not token.startswith("-"):
+        return 1
+    exact_flags = _WRAPPER_FLAGS_WITH_VALUES.get(command_name, frozenset())
+    if token in exact_flags:
+        return 2
+    if _wrapper_flag_has_attached_value(command_name, token):
+        return 1
+    return 1
+
+
+def _wrapper_flag_has_attached_value(command_name: str, token: str) -> bool:
+    if command_name == "env":
+        return any(
+            token.startswith(prefix)
+            for prefix in (
+                "--unset=",
+                "--chdir=",
+                "--split-string=",
+                "-C",
+            )
+        )
+    if command_name == "nice":
+        return token.startswith("--adjustment=") or (token.startswith("-n") and token != "-n")
+    if command_name == "stdbuf":
+        return token.startswith(("--input=", "--output=", "--error=")) or (
+            len(token) > 2 and token[:2] in {"-i", "-o", "-e"}
+        )
+    if command_name == "time":
+        return token.startswith(("--format=", "--output=")) or (
+            len(token) > 2 and token[:2] in {"-f", "-o"}
+        )
+    return False
 
 
 def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
