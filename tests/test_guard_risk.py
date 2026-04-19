@@ -1155,6 +1155,26 @@ def test_tool_action_request_classifier_detects_base64_decode_and_env_option_wra
     assert request.action_class == "encoded or encrypted shell command"
 
 
+def test_tool_action_request_classifier_detects_base64_decode_and_env_unset_wrapped_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env -u FOO bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_base64_decode_and_env_unset_equals_wrapped_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env --unset=FOO bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
 def test_tool_action_request_classifier_detects_base64_decode_when_flag_not_first():
     request = extract_sensitive_tool_action_request(
         "bash",

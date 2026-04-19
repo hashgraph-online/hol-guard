@@ -149,7 +149,7 @@ _WRAPPER_FLAGS_WITH_VALUES = {
     "time": frozenset({"-f", "--format", "-o", "--output"}),
 }
 _ENCODED_EXECUTION_TARGET_PATTERN = (
-    r"(?:env(?:(?:\s+--?[A-Za-z][A-Za-z-]*|\s+--|\s+[A-Za-z_][A-Za-z0-9_]*=\S+))*\s+)?"
+    r"(?:env(?:(?:\s+--?[A-Za-z][A-Za-z-]*(?:=\S+)?|\s+--|\s+[A-Za-z_][A-Za-z0-9_]*=\S+|\s+\S+))*\s+)?"
     r"(?:[A-Za-z0-9_./~-]+/)?(?:ash|bash|dash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b"
 )
 _ENCODED_EXECUTION_PATTERNS: tuple[re.Pattern[str], ...] = (
