@@ -1125,6 +1125,26 @@ def test_tool_action_request_classifier_detects_clustered_base64_decode_and_exec
     assert request.action_class == "encoded or encrypted shell command"
 
 
+def test_tool_action_request_classifier_detects_base64_decode_and_dash_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | dash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_base64_decode_and_env_wrapped_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
 def test_tool_action_request_classifier_detects_xxd_compact_reverse_hex_exec_command():
     request = extract_sensitive_tool_action_request(
         "bash",
