@@ -527,6 +527,7 @@ def sync_pain_signals(store: GuardStore) -> int:
     credentials = store.get_sync_credentials()
     if credentials is None:
         return 0
+    timeout_seconds = 10
     normalized_sync_url = _normalized_receipts_sync_url(str(credentials["sync_url"]))
     cursor_payload = store.get_sync_payload("pain_signal_cursor")
     last_event_id = _last_uploaded_event_id(cursor_payload)
@@ -550,7 +551,7 @@ def sync_pain_signals(store: GuardStore) -> int:
                 headers=_guard_sync_headers(str(credentials["token"])),
             )
             try:
-                with urllib.request.urlopen(request, timeout=10):
+                with urllib.request.urlopen(request, timeout=timeout_seconds):
                     pass
             except urllib.error.HTTPError as error:
                 if error.code == 404:

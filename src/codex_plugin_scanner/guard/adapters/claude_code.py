@@ -49,6 +49,11 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             return "project"
         return "global"
 
+    def policy_path(self, context: HarnessContext) -> Path:
+        if context.workspace_dir is not None:
+            return context.workspace_dir / ".claude" / "settings.local.json"
+        return context.home_dir / ".claude" / "settings.json"
+
     def detect(self, context: HarnessContext) -> HarnessDetection:
         config_candidates = [context.home_dir / ".claude" / "settings.json"]
         if context.workspace_dir is not None:
