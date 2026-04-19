@@ -821,7 +821,10 @@ def _contains_mutating_shell_redirection(parts: list[str]) -> bool:
         if token in {">", ">>", ">|", "1>", "1>>", "1>|", "2>", "2>>", "2>|"}:
             if token[0].isdigit():
                 fd = token[0]
-            if index + 1 < len(parts):
+            if token.endswith(">") and index + 2 < len(parts) and parts[index + 1] == "|":
+                target = parts[index + 2]
+                index += 3
+            elif index + 1 < len(parts):
                 target = parts[index + 1]
                 index += 2
             else:
@@ -849,7 +852,7 @@ def _contains_mutating_shell_redirection(parts: list[str]) -> bool:
                 index += 1
         if target is None:
             continue
-        normalized_target = _normalized_redirect_target(target)
+        normalized_target = _normalized_redirect_target(target).lower()
         if fd == "2" and normalized_target in _SAFE_SHELL_REDIRECT_TARGETS:
             continue
         if normalized_target in _SAFE_SHELL_REDIRECT_TARGETS or normalized_target.startswith("&"):
