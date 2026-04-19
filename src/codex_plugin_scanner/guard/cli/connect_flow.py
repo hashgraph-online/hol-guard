@@ -116,6 +116,7 @@ def run_guard_connect_command(
         sync_message = str(error)
         if runtime_sync_error and not _is_paid_plan_sync_error(sync_message):
             sync_message = runtime_sync_error
+        sync_is_plan_limited = _is_paid_plan_sync_error(sync_message)
         pending_sync_payload = dict(runtime_sync_summary)
         pending_sync_payload["synced_at"] = None
         pending_state = _record_connect_result(
@@ -135,6 +136,7 @@ def run_guard_connect_command(
             connected=True,
             sync=pending_sync_payload,
             sync_message=sync_message,
+            sync_available=False if sync_is_plan_limited else None,
         )
     sync_payload["runtime_session_synced_at"] = runtime_sync_summary["runtime_session_synced_at"]
     sync_payload["runtime_session_id"] = runtime_sync_summary["runtime_session_id"]
