@@ -289,6 +289,25 @@ def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_dev_nu
     assert request is None
 
 
+def test_tool_action_request_classifier_skips_perl_sleep_wait():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "perl -e 'sleep 310'"},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_detects_python_inline_file_write():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": ("python3 -c \"from pathlib import Path; Path('dangerous-marker.json').write_text('owned')\"")},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_destructive_subcommand_after_safe_prefix():
     request = extract_sensitive_tool_action_request(
         "bash",

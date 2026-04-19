@@ -56,14 +56,27 @@ _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
         "chown",
         "dd",
         "mv",
-        "perl",
-        "python",
-        "python3",
         "rm",
-        "ruby",
         "tee",
         "truncate",
     }
+)
+_SCRIPT_INTERPRETER_COMMANDS = frozenset({"perl", "python", "python3", "ruby"})
+_INTERPRETER_MUTATION_PATTERNS = (
+    re.compile(
+        r"\b(?:chmod|chown|mkdir|makedirs|move|remove|rename|replace|rmdir|rmtree|symlink|touch|truncate|unlink|write_bytes|write_text)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:file|path)\s*\([^)]*\)\.(?:chmod|delete|mkdir|rename|replace|symlink|touch|unlink|write(?:_bytes|_text)?)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(?:file|path)\.(?:chmod|delete|rename|replace|symlink|write)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:os|shutil)\.(?:chmod|chown|makedirs|mkdir|move|remove|rename|replace|rmdir|rmtree|unlink)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bopen\s*\([^)]*,\s*['\"](?:a|ab|a\+|rb\+|r\+|w|wb|w\+|x|xb|x\+)[^'\"]*['\"]", re.IGNORECASE),
 )
 _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
     {
@@ -526,6 +539,9 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     command_names.extend(_shell_command_names_from_parts(parts))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
         return True
+    for script_text in _script_interpreter_texts(parts):
+        if _looks_destructive_interpreter_script(script_text):
+            return True
     for shell_script in _shell_command_scripts(parts):
         if _looks_destructive_shell_command(shell_script):
             return True
@@ -598,6 +614,59 @@ def _shell_command_scripts(parts: list[str]) -> tuple[str, ...]:
         if script:
             scripts.append(script)
     return tuple(scripts)
+
+
+def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
+    scripts: list[str] = []
+    current_command: str | None = None
+    expect_command = True
+    index = 0
+    while index < len(parts):
+        token = parts[index].strip()
+        if not token:
+            index += 1
+            continue
+        if token in {"&&", "||", ";", "|", "&"}:
+            current_command = None
+            expect_command = True
+            index += 1
+            continue
+        normalized_token = token.lstrip("(").rstrip(")")
+        if not normalized_token:
+            index += 1
+            continue
+        if expect_command:
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", normalized_token):
+                index += 1
+                continue
+            normalized_command = _normalized_shell_command_name(normalized_token)
+            if normalized_command in {"env", "command", "builtin", "nohup", "nice", "time", "stdbuf"}:
+                current_command = None
+                index += 1
+                continue
+            current_command = normalized_command
+            expect_command = False
+            index += 1
+            continue
+        if (
+            current_command in _SCRIPT_INTERPRETER_COMMANDS
+            and normalized_token in {"-c", "-e"}
+            and index + 1 < len(parts)
+        ):
+            script_text = parts[index + 1].strip()
+            if script_text:
+                scripts.append(script_text)
+            index += 2
+            continue
+        index += 1
+    return tuple(scripts)
+
+
+def _looks_destructive_interpreter_script(script_text: str) -> bool:
+    normalized_script = script_text.strip()
+    if not normalized_script:
+        return False
+    return any(pattern.search(normalized_script) for pattern in _INTERPRETER_MUTATION_PATTERNS)
 
 
 def _is_shell_command_flag(value: str) -> bool:
