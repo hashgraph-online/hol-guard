@@ -308,6 +308,46 @@ def test_tool_action_request_classifier_detects_python_inline_file_write():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_python_inline_file_write_without_space_after_c():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c\"from pathlib import Path; Path('dangerous-marker.json').write_text('owned')\""},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_perl_inline_unlink_without_space_after_e():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "perl -e'unlink q(dangerous-marker.json)'"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_python_inline_os_system_shell_out():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c \"import os; os.system('rm -rf dangerous-marker.json')\""},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_python_inline_subprocess_shell_out():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": ("python3 -c \"import subprocess; subprocess.run(['rm', '-rf', 'dangerous-marker.json'])\"")},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_destructive_subcommand_after_safe_prefix():
     request = extract_sensitive_tool_action_request(
         "bash",

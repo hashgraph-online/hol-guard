@@ -64,19 +64,24 @@ _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
 _SCRIPT_INTERPRETER_COMMANDS = frozenset({"perl", "python", "python3", "ruby"})
 _INTERPRETER_MUTATION_PATTERNS = (
     re.compile(
-        r"\b(?:chmod|chown|mkdir|makedirs|move|remove|rename|replace|rmdir|rmtree|symlink|touch|truncate|unlink|write_bytes|write_text)\b",
-        re.IGNORECASE,
+        r"\b(?:chmod|chown|mkdir|makedirs|move|remove|rename|replace|rmdir|rmtree|symlink|touch|truncate|write_bytes|write_text)\s*\(",
     ),
     re.compile(
-        r"\b(?:file|path)\s*\([^)]*\)\.(?:chmod|delete|mkdir|rename|replace|symlink|touch|unlink|write(?:_bytes|_text)?)\b",
-        re.IGNORECASE,
+        r"\b(?:File|Path)\s*\([^)]*\)\.(?:chmod|delete|mkdir|rename|replace|symlink|touch|unlink|write(?:_bytes|_text)?)\s*\(",
     ),
-    re.compile(r"\b(?:file|path)\.(?:chmod|delete|rename|replace|symlink|write)\b", re.IGNORECASE),
     re.compile(
-        r"\b(?:os|shutil)\.(?:chmod|chown|makedirs|mkdir|move|remove|rename|replace|rmdir|rmtree|unlink)\b",
-        re.IGNORECASE,
+        r"\b(?:File|Path)\.(?:chmod|delete|rename|replace|symlink|write)\s*\(",
     ),
-    re.compile(r"\bopen\s*\([^)]*,\s*['\"](?:a|ab|a\+|rb\+|r\+|w|wb|w\+|x|xb|x\+)[^'\"]*['\"]", re.IGNORECASE),
+    re.compile(
+        r"\b(?:os|shutil)\.(?:chmod|chown|makedirs|mkdir|move|remove|rename|replace|rmdir|rmtree|unlink)\s*\(",
+    ),
+    re.compile(
+        r"\bunlink\b\s*(?:\(|q\(|qq\(|['\"])",
+    ),
+    re.compile(r"\bopen\s*\([^)]*,\s*(?:mode\s*=\s*)?['\"](?:a|ab|a\+|rb\+|r\+|w|wb|w\+|x|xb|x\+)[^'\"]*['\"]"),
+)
+_INTERPRETER_SHELL_OUT_PATTERN = re.compile(
+    r"\b(?P<runner>os\.system|subprocess\.(?:run|call|check_call|check_output|Popen))\s*\(\s*(?P<command>\[[^\]]+\]|['\"][^'\"]*['\"])",
 )
 _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
     {
@@ -658,6 +663,12 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
                 scripts.append(script_text)
             index += 2
             continue
+        if current_command in _SCRIPT_INTERPRETER_COMMANDS and normalized_token.startswith(("-c", "-e")):
+            script_text = normalized_token[2:].strip()
+            if script_text:
+                scripts.append(script_text)
+            index += 1
+            continue
         index += 1
     return tuple(scripts)
 
@@ -666,7 +677,35 @@ def _looks_destructive_interpreter_script(script_text: str) -> bool:
     normalized_script = script_text.strip()
     if not normalized_script:
         return False
+    if any(
+        _looks_destructive_shell_command(command_text)
+        for command_text in _interpreter_shell_out_commands(normalized_script)
+    ):
+        return True
     return any(pattern.search(normalized_script) for pattern in _INTERPRETER_MUTATION_PATTERNS)
+
+
+def _interpreter_shell_out_commands(script_text: str) -> tuple[str, ...]:
+    commands: list[str] = []
+    for match in _INTERPRETER_SHELL_OUT_PATTERN.finditer(script_text):
+        command_expression = match.group("command").strip()
+        command_text = _normalize_interpreter_shell_out_command(command_expression)
+        if command_text:
+            commands.append(command_text)
+    return tuple(commands)
+
+
+def _normalize_interpreter_shell_out_command(command_expression: str) -> str | None:
+    stripped_expression = command_expression.strip()
+    if not stripped_expression:
+        return None
+    if stripped_expression.startswith(("'", '"')) and stripped_expression[-1:] == stripped_expression[:1]:
+        return stripped_expression[1:-1]
+    if stripped_expression.startswith("[") and stripped_expression.endswith("]"):
+        parts = re.findall(r"['\"]([^'\"]+)['\"]", stripped_expression)
+        if parts:
+            return " ".join(parts)
+    return None
 
 
 def _is_shell_command_flag(value: str) -> bool:
