@@ -426,6 +426,15 @@ def test_tool_action_request_classifier_detects_second_interpreter_heredoc_mutat
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_does_not_promote_echoed_interpreter_text():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo python3 -c \"from pathlib import Path; Path('dangerous-marker.json').write_text('owned')\""},
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_detects_destructive_subcommand_after_safe_prefix():
     request = extract_sensitive_tool_action_request(
         "bash",

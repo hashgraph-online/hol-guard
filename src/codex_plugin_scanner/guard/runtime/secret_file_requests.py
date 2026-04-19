@@ -56,37 +56,16 @@ _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
         "chown",
         "dd",
         "mv",
+        "perl",
+        "python",
+        "python3",
         "rm",
+        "ruby",
         "tee",
         "truncate",
     }
 )
 _SCRIPT_INTERPRETER_COMMANDS = frozenset({"perl", "python", "python3", "ruby"})
-_INTERPRETER_MUTATION_PATTERNS = (
-    re.compile(
-        r"\b(?:chmod|chown|mkdir|makedirs|move|remove|rename|replace|rmdir|rmtree|symlink|touch|truncate|write_bytes|write_text)\s*\(",
-    ),
-    re.compile(
-        r"\b(?:File|Path)\s*\([^)]*\)\.(?:chmod|delete|mkdir|rename|replace|symlink|touch|unlink|write(?:_bytes|_text)?)\s*\(",
-    ),
-    re.compile(
-        r"\b(?:File|Path)\.(?:chmod|delete|rename|replace|symlink|write)\s*\(",
-    ),
-    re.compile(
-        r"\b(?:os|shutil)\.(?:chmod|chown|makedirs|mkdir|move|remove|rename|replace|rmdir|rmtree|unlink)\s*\(",
-    ),
-    re.compile(
-        r"\bunlink\b\s*(?:\(|q\(|qq\(|['\"])",
-    ),
-    re.compile(r"\bopen\s*\([^)]*,\s*(?:mode\s*=\s*)?['\"](?:a|ab|a\+|rb\+|r\+|w|wb|w\+|x|xb|x\+)[^'\"]*['\"]"),
-)
-_INTERPRETER_SHELL_OUT_PATTERN = re.compile(
-    r"\b(?:os\.system|system|subprocess\.(?:run|call|check_call|check_output|Popen))\s*\(",
-)
-_INTERPRETER_HEREDOC_PATTERN = re.compile(
-    r"\b(?:perl|python|python3|ruby)\b[^\n]*<<-?\s*(?P<quote>['\"]?)(?P<tag>[A-Za-z_][A-Za-z0-9_]*)\1(?P<body>.*?)(?:^|\n)(?P=tag)\s*$",
-    re.DOTALL | re.MULTILINE,
-)
 _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
     {
         "/dev/null",
@@ -538,18 +517,15 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     lowered = normalized.lower()
     if _contains_mutating_shell_redirection(lowered):
         return True
-    if _looks_destructive_interpreter_heredoc(normalized):
-        return True
     parts = _split_shell_parts(normalized)
     if not parts:
+        return False
+    if _looks_like_benign_interpreter_wait(parts):
         return False
     command_names = list(_shell_command_names(lowered))
     command_names.extend(_shell_command_names_from_parts(parts))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
         return True
-    for script_text in _script_interpreter_texts(parts):
-        if _looks_destructive_interpreter_script(script_text):
-            return True
     for shell_script in _shell_command_scripts(parts):
         if _looks_destructive_shell_command(shell_script):
             return True
@@ -652,15 +628,6 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
         if not normalized_token:
             index += 1
             continue
-        if (
-            not expect_command
-            and normalized_token in _SCRIPT_INTERPRETER_COMMANDS
-            and _looks_like_interpreter_script_start(parts, index)
-        ):
-            current_command = normalized_token
-            expect_command = False
-            index += 1
-            continue
         if expect_command:
             if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", normalized_token):
                 index += 1
@@ -674,49 +641,61 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
             expect_command = False
             index += 1
             continue
-        if (
-            current_command in _SCRIPT_INTERPRETER_COMMANDS
-            and normalized_token in {"-c", "-e"}
-            and index + 1 < len(parts)
-        ):
-            script_text = parts[index + 1].strip()
-            if script_text:
-                scripts.append(script_text)
-            index += 2
-            continue
-        if current_command in _SCRIPT_INTERPRETER_COMMANDS and normalized_token.startswith(("-c", "-e")):
-            script_text = normalized_token[2:].strip()
-            if script_text:
-                scripts.append(script_text)
-            index += 1
-            continue
+        if current_command in _SCRIPT_INTERPRETER_COMMANDS:
+            flag_payload = _interpreter_flag_payload(parts, index)
+            if flag_payload is not None:
+                scripts.append(flag_payload.script_text)
+                index += flag_payload.tokens_consumed
+                continue
         index += 1
     return tuple(scripts)
 
 
-def _looks_destructive_interpreter_script(script_text: str) -> bool:
+def _looks_like_benign_interpreter_wait(parts: list[str]) -> bool:
+    command_names = _shell_command_names_from_parts(parts)
+    if not command_names or not all(command_name in _SCRIPT_INTERPRETER_COMMANDS for command_name in command_names):
+        return False
+    scripts = _script_interpreter_texts(parts)
+    if not scripts:
+        return False
+    return all(_script_is_benign_wait(script_text) for script_text in scripts)
+
+
+def _script_is_benign_wait(script_text: str) -> bool:
     normalized_script = script_text.strip()
     if not normalized_script:
         return False
-    if _INTERPRETER_SHELL_OUT_PATTERN.search(normalized_script):
-        return True
-    return any(pattern.search(normalized_script) for pattern in _INTERPRETER_MUTATION_PATTERNS)
-
-
-def _looks_like_interpreter_script_start(parts: list[str], index: int) -> bool:
-    if index + 1 >= len(parts):
-        return False
-    next_token = parts[index + 1].strip().lstrip("(").rstrip(")")
-    if not next_token:
-        return False
-    return next_token in {"-c", "-e"} or next_token.startswith(("-c", "-e"))
-
-
-def _looks_destructive_interpreter_heredoc(command_text: str) -> bool:
-    return any(
-        _looks_destructive_interpreter_script(match.group("body"))
-        for match in _INTERPRETER_HEREDOC_PATTERN.finditer(command_text)
+    return bool(
+        re.fullmatch(r"sleep\s+\d+(?:\.\d+)?", normalized_script)
+        or re.fullmatch(r"(?:import\s+time\s*;\s*)?time\.sleep\(\s*\d+(?:\.\d+)?\s*\)", normalized_script)
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _InterpreterFlagPayload:
+    script_text: str
+    tokens_consumed: int
+
+
+def _interpreter_flag_payload(parts: list[str], index: int) -> _InterpreterFlagPayload | None:
+    normalized_token = parts[index].strip().lstrip("(").rstrip(")")
+    if not normalized_token.startswith("-"):
+        return None
+    flag_text = normalized_token[1:]
+    for flag_name in ("c", "e"):
+        flag_index = flag_text.find(flag_name)
+        if flag_index == -1:
+            continue
+        attached_script = flag_text[flag_index + 1 :].strip()
+        if attached_script:
+            return _InterpreterFlagPayload(script_text=attached_script, tokens_consumed=1)
+        if index + 1 >= len(parts):
+            return None
+        next_script = parts[index + 1].strip()
+        if not next_script:
+            return None
+        return _InterpreterFlagPayload(script_text=next_script, tokens_consumed=2)
+    return None
 
 
 def _is_shell_command_flag(value: str) -> bool:
