@@ -80,6 +80,10 @@ class GuardSyncNotConfiguredError(RuntimeError):
     """Raised when Guard Cloud sync is requested before the machine is paired."""
 
 
+class GuardSyncNotAvailableError(RuntimeError):
+    """Raised when the sync endpoint returns 403 (free-plan restriction)."""
+
+
 def guard_run(
     harness: str,
     context: HarnessContext,
@@ -415,6 +419,11 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         with urllib.request.urlopen(request, timeout=20) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
+        if error.code == 403:
+            _is_plan, _msg = _check_plan_restriction_403(error)
+            if _is_plan:
+                raise GuardSyncNotAvailableError(_msg) from error
+            raise RuntimeError(_msg) from error
         raise RuntimeError(_sync_http_error_message(error)) from error
     except urllib.error.URLError as error:
         raise RuntimeError(_sync_url_error_message(error)) from error
@@ -659,6 +668,54 @@ def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
     if normalized_body:
         return normalized_body
     return f"HTTP Error {error.code}: {error.reason}"
+
+
+_PLAN_403_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "sync_not_available",
+        "plan_restriction",
+        "requires a pro",
+        "requires a team",
+        "upgrade your plan",
+        "upgrade to",
+        "subscription required",
+        "not included in your plan",
+        "guard sync requires",
+    }
+)
+
+
+def _check_plan_restriction_403(
+    error: urllib.error.HTTPError,
+) -> tuple[bool, str]:
+    """Read a 403 response body exactly once.
+
+    Returns (is_plan_restriction, error_message) so callers never
+    drain the stream more than once regardless of which branch they take.
+    Checks both machine-readable fields (syncEnabled, error, code) and
+    human-readable error messages for plan-restriction signals.
+    """
+    try:
+        raw_body = error.read().decode("utf-8", errors="replace")
+    except OSError:
+        raw_body = ""
+    try:
+        payload: object = json.loads(raw_body) if raw_body else None
+    except json.JSONDecodeError:
+        payload = None
+    fallback = raw_body.strip() or f"HTTP Error {error.code}: {error.reason}"
+    if not isinstance(payload, dict):
+        return False, fallback
+    message = payload.get("error")
+    message_str = message.strip() if isinstance(message, str) and message.strip() else fallback
+    if payload.get("syncEnabled") is False:
+        return True, message_str
+    error_field = str(payload.get("error") or "").lower()
+    code_field = str(payload.get("code") or "").lower()
+    combined = f"{error_field} {code_field}"
+    if any(kw in combined for kw in _PLAN_403_KEYWORDS):
+        return True, message_str
+    return False, message_str
 
 
 def _sync_url_error_message(error: urllib.error.URLError) -> str:

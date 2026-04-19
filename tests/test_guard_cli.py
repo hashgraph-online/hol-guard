@@ -3510,7 +3510,7 @@ args = ["workspace-skill.js", "--changed"]
         assert connect_rc == 0
         assert connect_output["connected"] is True
         assert connect_output["status"] == "connected"
-        assert connect_output["milestone"] == "first_sync_pending"
+        assert connect_output["milestone"] == "sync_not_available"
         assert connect_output["reason"] == "Guard sync requires a Pro or Team plan."
         assert connect_output["sync_message"] == "Guard sync requires a Pro or Team plan."
 
