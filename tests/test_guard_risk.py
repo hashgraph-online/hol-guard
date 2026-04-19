@@ -414,6 +414,36 @@ def test_tool_action_request_classifier_detects_node_inline_unlinksync_bypass():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_node_inline_unlinksync_with_shifted_eval_flag():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node --trace-warnings -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_node_inline_eval_equals_form():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node --eval="require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_node_inline_unlinksync_with_space_before_call_paren():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "require('fs').unlinkSync ('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_skips_benign_node_inline_read_only_script():
     request = extract_sensitive_tool_action_request(
         "bash",

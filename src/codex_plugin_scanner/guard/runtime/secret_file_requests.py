@@ -80,22 +80,22 @@ _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
     }
 )
 _NODE_INLINE_EVAL_FLAGS = frozenset({"-e", "--eval"})
-_DESTRUCTIVE_NODE_INLINE_TOKENS = frozenset(
+_DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
     {
-        "appendfile(",
-        "appendfilesync(",
-        "copyfile(",
-        "copyfilesync(",
-        "mkdir(",
-        "mkdirsync(",
-        "rename(",
-        "renamesync(",
-        "rm(",
-        "rmsync(",
-        "unlink(",
-        "unlinksync(",
-        "writefile(",
-        "writefilesync(",
+        "appendfile",
+        "appendfilesync",
+        "copyfile",
+        "copyfilesync",
+        "mkdir",
+        "mkdirsync",
+        "rename",
+        "renamesync",
+        "rm",
+        "rmsync",
+        "unlink",
+        "unlinksync",
+        "writefile",
+        "writefilesync",
     }
 )
 _SENSITIVE_BASENAME_LABELS = {
@@ -553,7 +553,7 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     command_names.extend(_shell_command_names_from_parts(parts))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
         return True
-    if "find" in command_names and " -delete" in lowered:
+    if "find" in command_names and any(part == "-delete" for part in parts):
         return True
     for shell_script in _shell_command_scripts(parts):
         if _looks_destructive_shell_command(shell_script):
@@ -566,15 +566,30 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
 
 def _contains_destructive_node_inline_eval(parts: list[str]) -> bool:
     lowered_parts = [part.lower() for part in parts]
-    for index, part in enumerate(lowered_parts[:-2]):
+    for index, part in enumerate(lowered_parts):
         if _normalized_shell_command_name(part) != "node":
             continue
-        if lowered_parts[index + 1] not in _NODE_INLINE_EVAL_FLAGS:
-            continue
-        script = lowered_parts[index + 2]
-        if any(token in script for token in _DESTRUCTIVE_NODE_INLINE_TOKENS):
-            return True
+        for inner_index in range(index + 1, len(lowered_parts)):
+            token = lowered_parts[inner_index]
+            if token in {"&&", "||", ";", "|", "&"}:
+                break
+            if token in _NODE_INLINE_EVAL_FLAGS and inner_index + 1 < len(lowered_parts):
+                if _contains_destructive_node_inline_script(lowered_parts[inner_index + 1]):
+                    return True
+                continue
+            if token.startswith("--eval=") and _contains_destructive_node_inline_script(token.split("=", 1)[1]):
+                return True
+            if (
+                token.startswith("-e")
+                and token not in _NODE_INLINE_EVAL_FLAGS
+                and _contains_destructive_node_inline_script(token[2:])
+            ):
+                return True
     return False
+
+
+def _contains_destructive_node_inline_script(script: str) -> bool:
+    return any(re.search(rf"{re.escape(call_name)}\s*\(", script) for call_name in _DESTRUCTIVE_NODE_INLINE_CALLS)
 
 
 def _contains_mutating_shell_redirection(command_text: str) -> bool:
