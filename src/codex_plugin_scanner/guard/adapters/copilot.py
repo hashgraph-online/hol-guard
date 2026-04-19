@@ -167,13 +167,15 @@ def _managed_hook_payload(payload: dict[str, object]) -> dict[str, object]:
     return normalized_payload
 
 
-def _mcp_servers_payload(payload: dict[str, object]) -> dict[str, object] | None:
-    servers = payload.get("servers")
-    if isinstance(servers, dict):
-        return servers
-    mcp_servers = payload.get("mcpServers")
-    if isinstance(mcp_servers, dict):
-        return mcp_servers
+def _mcp_servers_payload(target_path: Path, payload: dict[str, object]) -> dict[str, object] | None:
+    preferred_key = CopilotHarnessAdapter._mcp_payload_key(target_path, payload)
+    preferred_servers = payload.get(preferred_key)
+    if isinstance(preferred_servers, dict):
+        return preferred_servers
+    fallback_key = "servers" if preferred_key == "mcpServers" else "mcpServers"
+    fallback_servers = payload.get(fallback_key)
+    if isinstance(fallback_servers, dict):
+        return fallback_servers
     return None
 
 
@@ -272,9 +274,23 @@ class CopilotHarnessAdapter(HarnessAdapter):
     def _mcp_payload_key(target_path: Path, payload: dict[str, object]) -> str:
         if "mcpServers" in payload and "servers" not in payload:
             return "mcpServers"
+        if "servers" in payload and "mcpServers" not in payload:
+            return "servers"
         if target_path.name in {".mcp.json", "mcp-config.json"}:
             return "mcpServers"
         return "servers"
+
+    @staticmethod
+    def _strict_json_object(path: Path, *, label: str) -> dict[str, object]:
+        if not path.is_file():
+            return {}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Guard refused to overwrite unreadable {label} at {path}") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"Guard refused to overwrite non-object {label} at {path}")
+        return payload
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         config_candidates = [
@@ -350,7 +366,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
                 encoding="utf-8",
             )
             mcp_payload = _json_payload(target_mcp_path)
-            existing_servers = _mcp_servers_payload(mcp_payload)
+            existing_servers = _mcp_servers_payload(target_mcp_path, mcp_payload)
             normalized_servers = dict(existing_servers) if isinstance(existing_servers, dict) else {}
             for name, server_config in tuple(normalized_servers.items()):
                 if not isinstance(name, str) or not isinstance(server_config, dict):
@@ -380,6 +396,8 @@ class CopilotHarnessAdapter(HarnessAdapter):
                 normalized_servers[server.name] = self._proxy_server_entry(context, server, target_mcp_path)
             payload_key = self._mcp_payload_key(target_mcp_path, mcp_payload)
             mcp_payload[payload_key] = normalized_servers
+            alternate_key = "servers" if payload_key == "mcpServers" else "mcpServers"
+            mcp_payload.pop(alternate_key, None)
             target_mcp_path.parent.mkdir(parents=True, exist_ok=True)
             target_mcp_path.write_text(json.dumps(mcp_payload, indent=2) + "\n", encoding="utf-8")
         shim_manifest = install_guard_shim(self.harness, context)
@@ -387,7 +405,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
         primary_backup_path = backup_paths[0]
         primary_state_path = state_paths[0]
         config_path = self._config_path(context)
-        config_payload = _json_payload(config_path)
+        config_payload = self._strict_json_object(config_path, label="Copilot config")
         hooks_payload = _inline_hooks_payload(config_payload)
         hook_entry = _hook_entry(context, include_workspace=False)
         for hook_name in _MANAGED_HOOK_EVENTS:
@@ -458,7 +476,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
         primary_backup_path = backup_paths[0] if backup_paths else ""
         primary_state_path = state_paths[0] if state_paths else ""
         config_path = self._config_path(context)
-        config_payload = _json_payload(config_path)
+        config_payload = self._strict_json_object(config_path, label="Copilot config")
         hooks_payload = _inline_hooks_payload(config_payload)
         bash_command, powershell_command = _hook_shell_commands(context, include_workspace=False)
         if len(remaining_state_entries) == 0:
@@ -556,7 +574,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
         payload: dict[str, object],
         scope: str,
     ) -> list[GuardArtifact]:
-        servers = _mcp_servers_payload(payload)
+        servers = _mcp_servers_payload(config_path, payload)
         if servers is None:
             return []
         artifacts: list[GuardArtifact] = []

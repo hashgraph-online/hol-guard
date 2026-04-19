@@ -124,6 +124,24 @@ def test_copilot_detect_tolerates_malformed_json(tmp_path):
     assert [artifact.artifact_id for artifact in detection.artifacts] == ["copilot:project:workspace-tool"]
 
 
+def test_copilot_install_fails_closed_when_global_config_is_unreadable(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = CopilotHarnessAdapter()
+    config_path = context.home_dir / ".copilot" / "config.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("{broken", encoding="utf-8")
+
+    try:
+        adapter.install(context)
+    except RuntimeError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected install to refuse unreadable Copilot config")
+
+    assert "unreadable Copilot config" in message
+    assert config_path.read_text(encoding="utf-8") == "{broken"
+
+
 def test_copilot_detect_ignores_hook_json_without_hook_entries(tmp_path):
     context = _build_context(tmp_path)
     adapter = CopilotHarnessAdapter()
@@ -165,13 +183,8 @@ def test_copilot_detect_records_bash_and_powershell_hook_commands_separately(tmp
     assert "copilot:project:hook:custom:pretooluse:0:powershell" in artifacts
     assert artifacts["copilot:project:hook:custom:pretooluse:0:bash"]["command"] == "python guard-hook.py"
     assert artifacts["copilot:project:hook:custom:pretooluse:0:bash"]["metadata"] == {"shell": "bash"}
-    assert (
-        artifacts["copilot:project:hook:custom:pretooluse:0:powershell"]["command"]
-        == "pwsh -File guard-hook.ps1"
-    )
-    assert artifacts["copilot:project:hook:custom:pretooluse:0:powershell"]["metadata"] == {
-        "shell": "powershell"
-    }
+    assert artifacts["copilot:project:hook:custom:pretooluse:0:powershell"]["command"] == "pwsh -File guard-hook.ps1"
+    assert artifacts["copilot:project:hook:custom:pretooluse:0:powershell"]["metadata"] == {"shell": "powershell"}
 
 
 def test_copilot_install_and_uninstall_manage_inline_config_hooks_idempotently(tmp_path):
@@ -356,8 +369,8 @@ def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp
                         ),
                         "powershell": (
                             '"C:\\Python\\python.exe" -m codex_plugin_scanner.cli guard hook '
-                            '--guard-home C:\\old-guard --harness copilot --home C:\\old-home '
-                            '--workspace C:\\old-workspace'
+                            "--guard-home C:\\old-guard --harness copilot --home C:\\old-home "
+                            "--workspace C:\\old-workspace"
                         ),
                         "cwd": ".",
                         "timeoutSec": 30,
@@ -373,8 +386,8 @@ def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp
                         ),
                         "powershell": (
                             '"C:\\Python\\python.exe" -m codex_plugin_scanner.cli guard hook '
-                            '--guard-home C:\\old-guard --harness copilot --home C:\\old-home '
-                            '--workspace C:\\old-workspace'
+                            "--guard-home C:\\old-guard --harness copilot --home C:\\old-home "
+                            "--workspace C:\\old-workspace"
                         ),
                         "cwd": ".",
                         "timeoutSec": 30,
@@ -506,13 +519,13 @@ def test_copilot_install_manages_workspace_mcp_servers_for_ide(tmp_path):
     }
     assert install_payload["managed_config_paths"] == [str(workspace_cli_mcp_path), str(workspace_mcp_path)]
     assert len(install_payload["backup_paths"]) == 2
-    assert cli_payload["mcpServers"]["workspace-cli-tool"]["type"] == "local"
-    assert cli_payload["mcpServers"]["workspace-cli-tool"]["tools"] == ["*"]
+    assert cli_payload["servers"]["workspace-cli-tool"]["type"] == "local"
+    assert cli_payload["servers"]["workspace-cli-tool"]["tools"] == ["*"]
     assert managed_payload["servers"]["global-tool"]["type"] == "stdio"
     assert managed_payload["servers"]["workspace-tool"]["type"] == "stdio"
     assert managed_payload["servers"]["existing-tool"]["type"] == "stdio"
-    assert cli_payload["mcpServers"]["workspace-cli-tool"]["command"] == sys.executable
-    assert cli_payload["mcpServers"]["workspace-cli-tool"]["args"][:4] == [
+    assert cli_payload["servers"]["workspace-cli-tool"]["command"] == sys.executable
+    assert cli_payload["servers"]["workspace-cli-tool"]["args"][:4] == [
         "-m",
         "codex_plugin_scanner.cli",
         "guard",
@@ -526,6 +539,30 @@ def test_copilot_install_manages_workspace_mcp_servers_for_ide(tmp_path):
     assert managed_payload["servers"]["global-tool"]["command"] == sys.executable
     assert managed_payload["servers"]["workspace-tool"]["command"] == sys.executable
     assert managed_payload["servers"]["existing-tool"]["command"] == sys.executable
+
+
+def test_copilot_install_preserves_existing_workspace_mcp_key_schema(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = CopilotHarnessAdapter()
+    workspace_cli_mcp_path = context.workspace_dir / ".mcp.json"
+    _write_json(
+        workspace_cli_mcp_path,
+        {
+            "servers": {
+                "workspace-cli-tool": {
+                    "command": "python",
+                    "args": ["-m", "workspace_cli_server"],
+                }
+            }
+        },
+    )
+
+    adapter.install(context)
+    payload = json.loads(workspace_cli_mcp_path.read_text(encoding="utf-8"))
+
+    assert "servers" in payload
+    assert "mcpServers" not in payload
+    assert payload["servers"]["workspace-cli-tool"]["command"] == sys.executable
 
 
 def test_copilot_install_keeps_target_specific_workspace_servers_distinct(tmp_path):

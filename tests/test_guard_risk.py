@@ -319,6 +319,26 @@ def test_tool_action_request_classifier_detects_shell_wrapper_script_command():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_env_wrapped_destructive_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "env FOO=1 rm -rf dangerous-marker.json"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_parenthesized_destructive_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "(rm -rf dangerous-marker.json)"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_incident_context_describes_runtime_tool_action_requests():
     request = extract_sensitive_tool_action_request(
         "bash",

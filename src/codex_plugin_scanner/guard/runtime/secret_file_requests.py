@@ -523,6 +523,7 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     if not parts:
         return False
     command_names = list(_shell_command_names(lowered))
+    command_names.extend(_shell_command_names_from_parts(parts))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
         return True
     for shell_script in _shell_command_scripts(parts):
@@ -560,6 +561,32 @@ def _normalized_shell_command_name(command_name: str) -> str:
     if "/" not in normalized_command:
         return normalized_command
     return normalized_command.rsplit("/", 1)[-1]
+
+
+def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
+    command_names: list[str] = []
+    expect_command = True
+    for part in parts:
+        token = part.strip()
+        if not token:
+            continue
+        if token in {"&&", "||", ";", "|", "&"}:
+            expect_command = True
+            continue
+        normalized_token = token.lstrip("(").rstrip(")")
+        if not normalized_token:
+            continue
+        if not expect_command:
+            continue
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", normalized_token):
+            continue
+        normalized_command = _normalized_shell_command_name(normalized_token)
+        if normalized_command in {"env", "command", "builtin", "nohup", "nice", "time", "stdbuf"}:
+            expect_command = True
+            continue
+        command_names.append(normalized_command)
+        expect_command = False
+    return tuple(command_names)
 
 
 def _shell_command_scripts(parts: list[str]) -> tuple[str, ...]:
