@@ -559,6 +559,16 @@ def test_tool_action_request_classifier_detects_env_ignore_environment_find_dele
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_node_inspect_port_before_eval_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node --inspect-port 0 -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_clustered_env_short_option_find_delete():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -593,6 +603,16 @@ def test_tool_action_request_classifier_detects_pipe_and_stderr_followed_node_ev
     request = extract_sensitive_tool_action_request(
         "bash",
         {"command": """echo ok |& node -e "require('fs').unlinkSync('dangerous-marker.json')" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_commented_newline_followed_node_eval_delete():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """echo ok # note\nnode -e "require('fs').unlinkSync('dangerous-marker.json')" """},
     )
 
     assert request is not None

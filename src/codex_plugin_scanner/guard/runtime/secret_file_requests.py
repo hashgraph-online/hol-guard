@@ -89,6 +89,8 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
         "--experimental-loader",
         "--input-type",
         "--conditions",
+        "--debug-port",
+        "--inspect-port",
         "--title",
     }
 )
@@ -870,8 +872,9 @@ def _replace_unquoted_newlines_with_separators(command_text: str) -> str:
         if quote_char is None and character in {"\n", "\r"}:
             if not result or result[-1] != " ":
                 result.append(" ")
+            result.append("\n")
             result.append(_SHELL_NEWLINE_SEPARATOR)
-            result.append(" ")
+            result.append("\n")
             continue
         result.append(character)
     return "".join(result)
