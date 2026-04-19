@@ -54,8 +54,8 @@ _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
     {
         "chmod",
         "chown",
-        "del",
         "dd",
+        "del",
         "erase",
         "mv",
         "perl",

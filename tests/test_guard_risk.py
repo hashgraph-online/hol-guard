@@ -849,6 +849,16 @@ def test_tool_action_request_classifier_detects_perl_inline_system_shell_out():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_find_exec_rm_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "find . -name dangerous-marker.json -exec rm {} ;"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_git_rm_delete():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -859,10 +869,39 @@ def test_tool_action_request_classifier_detects_git_rm_delete():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_node_inline_truncatesync_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "require('fs').truncateSync('dangerous-marker.json', 0)" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_skips_node_template_literal_false_positive():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "console.log(`unlinkSync('dangerous-marker.json')`)" """},
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_detects_git_c_rm_delete():
     request = extract_sensitive_tool_action_request(
         "bash",
         {"command": "git -C /mock-workspace rm --force dangerous-marker.json"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_redirection_to_quoted_space_target():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": '''echo owned >"dangerous marker.json"'''},
     )
 
     assert request is not None
