@@ -671,6 +671,21 @@ def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
 
 
 
+_PLAN_403_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "sync_not_available",
+        "plan_restriction",
+        "requires a pro",
+        "requires a team",
+        "upgrade your plan",
+        "upgrade to",
+        "subscription required",
+        "not included in your plan",
+        "guard sync requires",
+    }
+)
+
+
 def _check_plan_restriction_403(
     error: urllib.error.HTTPError,
 ) -> tuple[bool, str]:
@@ -678,6 +693,8 @@ def _check_plan_restriction_403(
 
     Returns (is_plan_restriction, error_message) so callers never
     drain the stream more than once regardless of which branch they take.
+    Checks both machine-readable fields (syncEnabled, error, code) and
+    human-readable error messages for plan-restriction signals.
     """
     try:
         raw_body = error.read().decode("utf-8", errors="replace")
@@ -692,14 +709,14 @@ def _check_plan_restriction_403(
         return False, fallback
     message = payload.get("error")
     message_str = message.strip() if isinstance(message, str) and message.strip() else fallback
-    sync_enabled = payload.get("syncEnabled")
-    error_code = str(payload.get("error", "") or payload.get("code", ""))
-    is_plan = (
-        sync_enabled is False
-        or "sync_not_available" in error_code
-        or "plan_restriction" in error_code
-    )
-    return is_plan, message_str
+    if payload.get("syncEnabled") is False:
+        return True, message_str
+    error_field = str(payload.get("error") or "").lower()
+    code_field = str(payload.get("code") or "").lower()
+    combined = f"{error_field} {code_field}"
+    if any(kw in combined for kw in _PLAN_403_KEYWORDS):
+        return True, message_str
+    return False, message_str
 
 def _sync_url_error_message(error: urllib.error.URLError) -> str:
     reason = getattr(error, "reason", None)
