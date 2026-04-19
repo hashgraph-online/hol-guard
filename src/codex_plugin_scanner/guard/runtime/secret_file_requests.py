@@ -54,16 +54,17 @@ _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
     {
         "chmod",
         "chown",
-        "del",
         "dd",
+        "del",
         "erase",
         "mv",
         "perl",
         "python",
         "python3",
+        "rd",
+        "remove-item",
         "rm",
         "rmdir",
-        "remove-item",
         "ruby",
         "tee",
         "truncate",
@@ -103,6 +104,10 @@ _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
     {
         "appendFile",
         "appendFileSync",
+        "chmod",
+        "chmodSync",
+        "chown",
+        "chownSync",
         "copyFile",
         "copyFileSync",
         "mkdir",
@@ -111,10 +116,25 @@ _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
         "renameSync",
         "rm",
         "rmSync",
+        "truncate",
+        "truncateSync",
         "unlink",
         "unlinkSync",
         "writeFile",
         "writeFileSync",
+    }
+)
+_DESTRUCTIVE_GIT_SUBCOMMANDS = frozenset({"clean", "reset", "restore", "rm"})
+_GIT_GLOBAL_OPTIONS_WITH_VALUE = frozenset(
+    {
+        "-C",
+        "-c",
+        "--config-env",
+        "--exec-path",
+        "--git-dir",
+        "--namespace",
+        "--super-prefix",
+        "--work-tree",
     }
 )
 _WRAPPER_FLAGS_WITH_VALUES = {
@@ -575,6 +595,8 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return False
     if _contains_destructive_node_inline_eval(parts):
         return True
+    if _contains_destructive_git_command(parts):
+        return True
     command_names = list(raw_command_names)
     command_names.extend(_shell_command_names_from_parts(parts))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
@@ -752,6 +774,10 @@ def _find_segment_uses_delete(segment_args: list[str]) -> bool:
         token = segment_args[index]
         if token in {"-exec", "-execdir", "-ok", "-okdir"}:
             index += 1
+            if index < len(segment_args):
+                command_name = _normalized_shell_command_name(segment_args[index])
+                if command_name in _DESTRUCTIVE_SHELL_COMMANDS:
+                    return True
             while index < len(segment_args) and segment_args[index] not in {";", "+"}:
                 index += 1
             if index < len(segment_args):
@@ -763,6 +789,41 @@ def _find_segment_uses_delete(segment_args: list[str]) -> bool:
         if token == "-delete":
             return True
         index += 1
+    return False
+
+
+def _contains_destructive_git_command(parts: list[str]) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name != "git" or command_index is None:
+            continue
+        if _segment_uses_destructive_git_command(segment[command_index + 1 :]):
+            return True
+    return False
+
+
+def _segment_uses_destructive_git_command(segment_args: list[str]) -> bool:
+    subcommand_index = 0
+    while subcommand_index < len(segment_args):
+        token = segment_args[subcommand_index]
+        if token == "--":
+            subcommand_index += 1
+            continue
+        if token in {"-h", "--help", "--version"}:
+            return False
+        if token in _GIT_GLOBAL_OPTIONS_WITH_VALUE and subcommand_index + 1 < len(segment_args):
+            subcommand_index += 2
+            continue
+        if any(token.startswith(f"{option}=") for option in _GIT_GLOBAL_OPTIONS_WITH_VALUE if option.startswith("--")):
+            subcommand_index += 1
+            continue
+        if token.startswith("-"):
+            subcommand_index += 1
+            continue
+        normalized_token = token.strip().lower()
+        if normalized_token == "help":
+            return False
+        return normalized_token in _DESTRUCTIVE_GIT_SUBCOMMANDS
     return False
 
 
@@ -850,9 +911,6 @@ def _contains_mutating_shell_redirection(parts: list[str]) -> bool:
             else:
                 index += 1
         else:
-            if re.search(r"\s", token):
-                index += 1
-                continue
             match = re.fullmatch(r"(?P<prefix>[^<>\s]*?)(?P<fd>[0-2]?)(?P<op>>\||>>|>)(?P<target>.*)", token)
             if match is None:
                 index += 1
@@ -890,39 +948,147 @@ def _redacted_node_inline_string_literals(script: str, *, preserve_bracket_membe
     quote_char: str | None = None
     escape_next = False
     preserve_string_contents = False
-    for character in script:
+    template_expression_depth = 0
+    comment_type: str | None = None
+    regex_literal = False
+    regex_escape_next = False
+    regex_char_class = False
+    index = 0
+    while index < len(script):
+        character = script[index]
         if quote_char is None:
-            if character in {"'", '"'}:
+            if template_expression_depth > 0:
+                if comment_type == "line":
+                    result.append(character)
+                    if character in {"\n", "\r"}:
+                        comment_type = None
+                    index += 1
+                    continue
+                if comment_type == "block":
+                    result.append(character)
+                    if character == "/" and result[-2:-1] == ["*"]:
+                        comment_type = None
+                    index += 1
+                    continue
+                if regex_literal:
+                    result.append(character)
+                    if regex_escape_next:
+                        regex_escape_next = False
+                    elif character == "\\":
+                        regex_escape_next = True
+                    elif character == "[" and not regex_char_class:
+                        regex_char_class = True
+                    elif character == "]" and regex_char_class:
+                        regex_char_class = False
+                    elif character == "/" and not regex_char_class:
+                        regex_literal = False
+                    index += 1
+                    continue
+                if character == "/" and index + 1 < len(script):
+                    next_character = script[index + 1]
+                    if next_character == "/":
+                        result.append("//")
+                        comment_type = "line"
+                        index += 2
+                        continue
+                    if next_character == "*":
+                        result.append("/*")
+                        comment_type = "block"
+                        index += 2
+                        continue
+                    if _js_slash_starts_regex(result):
+                        result.append(character)
+                        regex_literal = True
+                        regex_escape_next = False
+                        regex_char_class = False
+                        index += 1
+                        continue
+                if character == "{":
+                    template_expression_depth += 1
+                    result.append(character)
+                    index += 1
+                    continue
+                if character == "}":
+                    template_expression_depth -= 1
+                    result.append(character)
+                    if template_expression_depth == 0:
+                        quote_char = "`"
+                        comment_type = None
+                        regex_literal = False
+                        regex_escape_next = False
+                        regex_char_class = False
+                    index += 1
+                    continue
+            if character in {"'", '"', "`"}:
                 preserve_string_contents = (
                     preserve_bracket_member_strings and _last_non_whitespace_character(result) == "["
                 )
                 quote_char = character
                 result.append(character)
+                index += 1
                 continue
             result.append(character)
+            index += 1
             continue
         if escape_next:
             result.append(character if preserve_string_contents else "Q")
             escape_next = False
+            index += 1
             continue
         if character == "\\":
             result.append(character)
             escape_next = True
+            index += 1
+            continue
+        if quote_char == "`" and character == "$" and index + 1 < len(script) and script[index + 1] == "{":
+            result.append("${")
+            quote_char = None
+            preserve_string_contents = False
+            template_expression_depth = 1
+            index += 2
             continue
         if character == quote_char:
             result.append(character)
             quote_char = None
             preserve_string_contents = False
+            index += 1
             continue
         result.append(character if preserve_string_contents else "Q")
+        index += 1
     return "".join(result)
 
 
 def _last_non_whitespace_character(result: list[str]) -> str | None:
-    for character in reversed(result):
-        if not character.isspace():
-            return character
+    for chunk in reversed(result):
+        for character in reversed(chunk):
+            if not character.isspace():
+                return character
     return None
+
+
+def _js_slash_starts_regex(result: list[str]) -> bool:
+    previous_character = _last_non_whitespace_character(result)
+    if previous_character is None:
+        return True
+    return previous_character in {
+        "(",
+        "{",
+        "[",
+        "=",
+        ":",
+        ",",
+        ";",
+        "!",
+        "?",
+        "|",
+        "&",
+        "+",
+        "-",
+        "*",
+        "%",
+        "^",
+        "~",
+    }
 
 
 def _shell_command_names(command_text: str) -> tuple[str, ...]:
@@ -967,7 +1133,7 @@ def _replace_unquoted_newlines_with_separators(command_text: str) -> str:
             result.append(character)
             escape_next = True
             continue
-        if quote_char is None and character in {"'", '"'}:
+        if quote_char is None and character in {"'", '"', "`"}:
             quote_char = character
             result.append(character)
             continue
