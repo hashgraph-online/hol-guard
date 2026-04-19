@@ -616,9 +616,9 @@ def _contains_destructive_node_inline_script(script: str) -> bool:
         ):
             if re.search(rf"{base_pattern}\s*(?:\?\.\s*)?(?:\)\s*)?\(", member_scan_script):
                 return True
-            if re.search(rf"{base_pattern}\s*\.\s*call\s*\(", member_scan_script):
+            if re.search(rf"{base_pattern}\s*(?:\?\s*)?\.\s*call\s*\(", member_scan_script):
                 return True
-            if re.search(rf"{base_pattern}\s*\.\s*apply\s*\(", member_scan_script):
+            if re.search(rf"{base_pattern}\s*(?:\?\s*)?\.\s*apply\s*\(", member_scan_script):
                 return True
     return False
 
@@ -735,6 +735,18 @@ def _segment_contains_destructive_node_inline_eval(segment_args: list[str]) -> b
 
 
 def _find_segment_uses_delete(segment_args: list[str]) -> bool:
+    value_taking_predicates = {
+        "-name",
+        "-iname",
+        "-path",
+        "-ipath",
+        "-wholename",
+        "-iwholename",
+        "-regex",
+        "-iregex",
+        "-lname",
+        "-ilname",
+    }
     index = 0
     while index < len(segment_args):
         token = segment_args[index]
@@ -744,6 +756,9 @@ def _find_segment_uses_delete(segment_args: list[str]) -> bool:
                 index += 1
             if index < len(segment_args):
                 index += 1
+            continue
+        if token in value_taking_predicates and index + 1 < len(segment_args):
+            index += 2
             continue
         if token == "-delete":
             return True

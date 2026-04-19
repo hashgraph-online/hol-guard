@@ -557,6 +557,15 @@ def test_tool_action_request_classifier_skips_find_exec_literal_delete_string():
     assert request is None
 
 
+def test_tool_action_request_classifier_skips_find_name_delete_literal():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """find . -name "-delete" """},
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_skips_node_script_argument_named_eval_flag():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -769,6 +778,16 @@ def test_tool_action_request_classifier_detects_node_inline_apply_unlinksync_byp
     request = extract_sensitive_tool_action_request(
         "bash",
         {"command": """node -e "require('fs').unlinkSync.apply(null, ['dangerous-marker.json'])" """},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_node_inline_optional_chain_apply_unlinksync_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": """node -e "require('fs').unlinkSync?.apply(null, ['dangerous-marker.json'])" """},
     )
 
     assert request is not None
