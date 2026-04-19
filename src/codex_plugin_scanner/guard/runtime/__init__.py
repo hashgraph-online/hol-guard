@@ -1,5 +1,6 @@
 """Guard runtime helpers."""
 
-from .runner import GuardSyncNotConfiguredError, guard_run, sync_receipts, sync_runtime_session
+from .runner import GuardSyncNotAvailableError, guard_run, sync_receipts
+from .surface_server import GuardSurfaceRuntime
 
-__all__ = ["GuardSyncNotConfiguredError", "guard_run", "sync_receipts", "sync_runtime_session"]
+__all__ = ["GuardSurfaceRuntime", "GuardSyncNotAvailableError", "guard_run", "sync_receipts"]
