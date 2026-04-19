@@ -10,6 +10,7 @@ import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,7 +24,7 @@ from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..store import GuardStore
 
 
-class GuardSyncNotAvailableError(Exception):
+class GuardSyncNotAvailableError(RuntimeError):
     """Raised when the Guard sync endpoint returns 403 (plan upgrade required)."""
 
 
@@ -83,6 +84,7 @@ def guard_run(
     environment["HOME"] = str(context.home_dir)
     if os.name == "nt":
         environment["USERPROFILE"] = str(context.home_dir)
+    environment.update(adapter.launch_environment(context))
     try:
         result = subprocess.run(command, cwd=context.workspace_dir or Path.cwd(), check=False, env=environment)
     except FileNotFoundError as error:
@@ -216,6 +218,40 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         "pain_signals_uploaded": pain_signals_uploaded,
         "receipts": len(receipts),
         "inventory": len(inventory),
+    }
+
+
+def sync_runtime_session(store: GuardStore, *, session: dict[str, object]) -> dict[str, object]:
+    """Push one runtime session snapshot to the configured sync endpoint."""
+
+    credentials = store.get_sync_credentials()
+    if credentials is None:
+        raise RuntimeError("Guard is not logged in.")
+
+    normalized_session = _normalize_runtime_session_payload(session)
+    request = urllib.request.Request(
+        _runtime_session_sync_url(str(credentials["sync_url"])),
+        data=json.dumps({"session": normalized_session}).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {credentials['token']}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(_sync_http_error_message(error)) from error
+    except urllib.error.URLError as error:
+        raise RuntimeError(_sync_url_error_message(error)) from error
+
+    visible_items = payload.get("items")
+    return {
+        "runtime_session_id": normalized_session.get("sessionId", ""),
+        "runtime_session_synced_at": payload.get("generatedAt") or payload.get("generated_at"),
+        "runtime_sessions_visible": len(visible_items) if isinstance(visible_items, list) else 0,
+        "runtime_session_sync_pending": False,
     }
 
 
@@ -467,6 +503,74 @@ def _pain_signal_sync_url(sync_url: str) -> str:
             parsed.fragment,
         )
     )
+
+
+def _runtime_session_sync_url(sync_url: str) -> str:
+    parsed = urllib.parse.urlsplit(sync_url)
+    path = parsed.path.rstrip("/")
+    segments = [segment for segment in path.split("/") if segment]
+    if len(segments) >= 2 and segments[-2:] in (["receipts", "sync"], ["inventory", "sync"]):
+        next_segments = [*segments[:-2], "runtime", "sessions", "sync"]
+    elif segments and segments[-1] in {"receipts", "inventory"}:
+        next_segments = [*segments[:-1], "runtime", "sessions", "sync"]
+    else:
+        next_segments = [*segments, "runtime", "sessions", "sync"]
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            "/" + "/".join(next_segments),
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+
+
+def _normalize_runtime_session_payload(session: dict[str, object]) -> dict[str, object]:
+    operations_value = session.get("operations")
+    operations: list[dict[str, object]] = []
+    if isinstance(operations_value, list):
+        operations = [
+            _normalize_runtime_operation_payload(item)
+            for item in operations_value
+            if isinstance(item, dict)
+        ]
+
+    return {
+        "sessionId": str(
+            session.get("sessionId")
+            or session.get("session_id")
+            or f"guard-session-{hashlib.sha256(str(session).encode('utf-8')).hexdigest()[:12]}"
+        ),
+        "harness": str(session.get("harness") or "unknown"),
+        "surface": str(session.get("surface") or "cli"),
+        "status": str(session.get("status") or "active"),
+        "clientName": str(session.get("clientName") or session.get("client_name") or "hol-guard"),
+        "clientTitle": session.get("clientTitle") or session.get("client_title"),
+        "clientVersion": session.get("clientVersion") or session.get("client_version"),
+        "workspace": session.get("workspace"),
+        "capabilities": list(session.get("capabilities")) if isinstance(session.get("capabilities"), list) else [],
+        "operations": operations,
+        "createdAt": str(session.get("createdAt") or session.get("created_at") or _now()),
+        "updatedAt": str(session.get("updatedAt") or session.get("updated_at") or _now()),
+    }
+
+
+def _normalize_runtime_operation_payload(item: dict[str, object]) -> dict[str, object]:
+    return {
+        "operationId": str(item.get("operationId") or item.get("operation_id") or f"guard-op-{uuid.uuid4().hex}"),
+        "operationType": str(item.get("operationType") or item.get("operation_type") or "unknown"),
+        "status": str(item.get("status") or "pending"),
+        "approvalRequestIds": list(item.get("approvalRequestIds"))
+        if isinstance(item.get("approvalRequestIds"), list)
+        else list(item.get("approval_request_ids"))
+        if isinstance(item.get("approval_request_ids"), list)
+        else [],
+        "resumeToken": item.get("resumeToken") or item.get("resume_token"),
+        "metadata": item.get("metadata") if isinstance(item.get("metadata"), dict) else {},
+        "createdAt": str(item.get("createdAt") or item.get("created_at") or _now()),
+        "updatedAt": str(item.get("updatedAt") or item.get("updated_at") or _now()),
+    }
 
 
 def _record_synced_alert_events(
