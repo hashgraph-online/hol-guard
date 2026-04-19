@@ -65,6 +65,7 @@ _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
         "truncate",
     }
 )
+_SCRIPT_INTERPRETER_COMMANDS = frozenset({"perl", "python", "python3", "ruby"})
 _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
     {
         "/dev/null",
@@ -516,13 +517,13 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     lowered = normalized.lower()
     if _contains_mutating_shell_redirection(lowered):
         return True
-    try:
-        parts = shlex.split(normalized, posix=True)
-    except ValueError:
-        parts = normalized.split()
+    raw_command_names = list(_shell_command_names(_redacted_shell_text_for_command_names(lowered)))
+    parts = _split_shell_parts(normalized)
     if not parts:
         return False
-    command_names = list(_shell_command_names(lowered))
+    if _looks_like_benign_interpreter_wait(normalized, parts, raw_command_names):
+        return False
+    command_names = list(raw_command_names)
     command_names.extend(_shell_command_names_from_parts(parts))
     if any(command_name in _DESTRUCTIVE_SHELL_COMMANDS for command_name in command_names):
         return True
@@ -563,6 +564,19 @@ def _normalized_shell_command_name(command_name: str) -> str:
     return normalized_command.rsplit("/", 1)[-1]
 
 
+def _redacted_shell_text_for_command_names(command_text: str) -> str:
+    return re.sub(r"'[^']*'|\"[^\"]*\"", "Q", command_text)
+
+
+def _split_shell_parts(command_text: str) -> list[str]:
+    try:
+        lexer = shlex.shlex(command_text, posix=True, punctuation_chars=";&|")
+        lexer.whitespace_split = True
+        return list(lexer)
+    except ValueError:
+        return command_text.split()
+
+
 def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
     command_names: list[str] = []
     expect_command = True
@@ -598,6 +612,96 @@ def _shell_command_scripts(parts: list[str]) -> tuple[str, ...]:
         if script:
             scripts.append(script)
     return tuple(scripts)
+
+
+def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
+    scripts: list[str] = []
+    current_command: str | None = None
+    expect_command = True
+    index = 0
+    while index < len(parts):
+        token = parts[index].strip()
+        if not token:
+            index += 1
+            continue
+        if token in {"&&", "||", ";", "|", "&"}:
+            current_command = None
+            expect_command = True
+            index += 1
+            continue
+        normalized_token = token.lstrip("(").rstrip(")")
+        if not normalized_token:
+            index += 1
+            continue
+        if expect_command:
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", normalized_token):
+                index += 1
+                continue
+            normalized_command = _normalized_shell_command_name(normalized_token)
+            if normalized_command in {"env", "command", "builtin", "nohup", "nice", "time", "stdbuf"}:
+                current_command = None
+                index += 1
+                continue
+            current_command = normalized_command
+            expect_command = False
+            index += 1
+            continue
+        if current_command in _SCRIPT_INTERPRETER_COMMANDS:
+            flag_payload = _interpreter_flag_payload(parts, index)
+            if flag_payload is not None:
+                scripts.append(flag_payload.script_text)
+                index += flag_payload.tokens_consumed
+                continue
+        index += 1
+    return tuple(scripts)
+
+
+def _looks_like_benign_interpreter_wait(command_text: str, parts: list[str], command_names: list[str]) -> bool:
+    if "$(" in command_text or "`" in command_text or "<(" in command_text or ">(" in command_text:
+        return False
+    if not command_names or not all(command_name in _SCRIPT_INTERPRETER_COMMANDS for command_name in command_names):
+        return False
+    scripts = _script_interpreter_texts(parts)
+    if not scripts or len(scripts) != len(command_names):
+        return False
+    return all(_script_is_benign_wait(script_text) for script_text in scripts)
+
+
+def _script_is_benign_wait(script_text: str) -> bool:
+    normalized_script = script_text.strip()
+    if not normalized_script:
+        return False
+    return bool(
+        re.fullmatch(r"sleep\s+\d+(?:\.\d+)?", normalized_script)
+        or re.fullmatch(r"(?:import\s+time\s*;\s*)?time\.sleep\(\s*\d+(?:\.\d+)?\s*\)", normalized_script)
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _InterpreterFlagPayload:
+    script_text: str
+    tokens_consumed: int
+
+
+def _interpreter_flag_payload(parts: list[str], index: int) -> _InterpreterFlagPayload | None:
+    normalized_token = parts[index].strip().lstrip("(").rstrip(")")
+    if not normalized_token.startswith("-"):
+        return None
+    flag_text = normalized_token[1:]
+    for flag_name in ("c", "e"):
+        flag_index = flag_text.find(flag_name)
+        if flag_index == -1:
+            continue
+        attached_script = flag_text[flag_index + 1 :].strip()
+        if attached_script:
+            return _InterpreterFlagPayload(script_text=attached_script, tokens_consumed=1)
+        if index + 1 >= len(parts):
+            return None
+        next_script = parts[index + 1].strip()
+        if not next_script:
+            return None
+        return _InterpreterFlagPayload(script_text=next_script, tokens_consumed=2)
+    return None
 
 
 def _is_shell_command_flag(value: str) -> bool:

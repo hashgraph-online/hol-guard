@@ -289,6 +289,201 @@ def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_dev_nu
     assert request is None
 
 
+def test_tool_action_request_classifier_skips_perl_sleep_wait():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "perl -e 'sleep 310'"},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_detects_python_inline_file_write():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": ("python3 -c \"from pathlib import Path; Path('dangerous-marker.json').write_text('owned')\"")},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_python_inline_file_write_without_space_after_c():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c\"from pathlib import Path; Path('dangerous-marker.json').write_text('owned')\""},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_perl_inline_unlink_without_space_after_e():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "perl -e'unlink q(dangerous-marker.json)'"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_python_inline_os_system_shell_out():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c \"import os; os.system('rm -rf dangerous-marker.json')\""},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_python_inline_subprocess_shell_out():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": ("python3 -c \"import subprocess; subprocess.run(['rm', '-rf', 'dangerous-marker.json'])\"")},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_dynamic_python_os_system_shell_out():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c \"cmd = 'rm -rf dangerous-marker.json'; os.system(cmd)\""},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_perl_inline_system_shell_out():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "perl -e \"system('rm -rf dangerous-marker.json')\""},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_python_heredoc_file_write():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "python3 - <<'PY'\nfrom pathlib import Path\nPath('dangerous-marker.json').write_text('owned')\nPY"
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_semicolon_chained_interpreter_script():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "echo ok; python3 -c \"from pathlib import Path; Path('dangerous-marker.json').write_text('owned')\""
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_newline_chained_interpreter_script():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo ok\nperl -e 'unlink q(dangerous-marker.json)'"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_second_interpreter_heredoc_mutation():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "python3 - <<'PY'\n"
+                "print('safe')\n"
+                "PY\n"
+                "python3 - <<'PY'\n"
+                "from pathlib import Path\n"
+                "Path('dangerous-marker.json').write_text('owned')\n"
+                "PY"
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_does_not_promote_echoed_interpreter_text():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo python3 -c \"from pathlib import Path; Path('dangerous-marker.json').write_text('owned')\""},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_does_not_let_benign_wait_mask_following_rm():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c 'sleep 1'\nrm -rf dangerous-marker.json"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_allows_python_time_sleep_one_liner():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c 'import time; time.sleep(310)'"},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_does_not_allow_wait_with_shell_substitution():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c 'sleep 1' $(rm -rf dangerous-marker.json)"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_does_not_allow_wait_with_process_substitution():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c 'sleep 1' <(rm -rf dangerous-marker.json)"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_requires_each_interpreter_command_to_be_a_wait():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c 'sleep 1' && python3 dangerous.py"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_destructive_subcommand_after_safe_prefix():
     request = extract_sensitive_tool_action_request(
         "bash",
