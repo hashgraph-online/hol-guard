@@ -155,7 +155,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
 
     credentials = store.get_sync_credentials()
     if credentials is None:
-        raise RuntimeError("Guard is not logged in.")
+        raise GuardSyncNotConfiguredError("Guard sync is not configured. Run 'hol-guard connect' first.")
     receipts = store.list_receipts(limit=200)
     inventory = store.list_inventory()
     body = json.dumps({"receipts": receipts, "inventory": inventory}).encode("utf-8")
@@ -209,6 +209,17 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         now=now,
     )
     pain_signals_uploaded = sync_pain_signals(store)
+    sync_summary: dict[str, object] = {
+        "synced_at": payload.get("syncedAt"),
+        "receipts_stored": payload.get("receiptsStored"),
+        "advisories_stored": advisories_stored,
+        "exceptions_stored": len(exceptions) if isinstance(exceptions, list) else 0,
+        "remote_policies_stored": len(remote_decisions),
+        "pain_signals_uploaded": pain_signals_uploaded,
+        "receipts": len(receipts),
+        "inventory": len(inventory),
+    }
+    store.set_sync_payload("sync_summary", sync_summary, now)
     return {
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": payload.get("receiptsStored"),
