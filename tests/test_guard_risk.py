@@ -898,6 +898,20 @@ def test_tool_action_request_classifier_detects_node_template_interpolation_bypa
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_node_template_interpolation_regex_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                """node -e "console.log(`x ${/}/.test('a') || require('fs').unlinkSync('dangerous-marker.json')}`)" """
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_git_c_rm_delete():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -906,6 +920,13 @@ def test_tool_action_request_classifier_detects_git_c_rm_delete():
 
     assert request is not None
     assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_skips_git_help_modes():
+    assert extract_sensitive_tool_action_request("bash", {"command": "git --help rm"}) is None
+    assert extract_sensitive_tool_action_request("bash", {"command": "git -h rm"}) is None
+    assert extract_sensitive_tool_action_request("bash", {"command": "git help rm"}) is None
+    assert extract_sensitive_tool_action_request("bash", {"command": "git --version rm"}) is None
 
 
 def test_tool_action_request_classifier_detects_redirection_to_quoted_space_target():

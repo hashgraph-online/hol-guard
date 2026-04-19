@@ -809,6 +809,8 @@ def _segment_uses_destructive_git_command(segment_args: list[str]) -> bool:
         if token == "--":
             subcommand_index += 1
             continue
+        if token in {"-h", "--help", "--version"}:
+            return False
         if token in _GIT_GLOBAL_OPTIONS_WITH_VALUE and subcommand_index + 1 < len(segment_args):
             subcommand_index += 2
             continue
@@ -819,6 +821,8 @@ def _segment_uses_destructive_git_command(segment_args: list[str]) -> bool:
             subcommand_index += 1
             continue
         normalized_token = token.strip().lower()
+        if normalized_token == "help":
+            return False
         return normalized_token in _DESTRUCTIVE_GIT_SUBCOMMANDS
     return False
 
@@ -945,11 +949,60 @@ def _redacted_node_inline_string_literals(script: str, *, preserve_bracket_membe
     escape_next = False
     preserve_string_contents = False
     template_expression_depth = 0
+    comment_type: str | None = None
+    regex_literal = False
+    regex_escape_next = False
+    regex_char_class = False
     index = 0
     while index < len(script):
         character = script[index]
         if quote_char is None:
             if template_expression_depth > 0:
+                if comment_type == "line":
+                    result.append(character)
+                    if character in {"\n", "\r"}:
+                        comment_type = None
+                    index += 1
+                    continue
+                if comment_type == "block":
+                    result.append(character)
+                    if character == "/" and result[-2:-1] == ["*"]:
+                        comment_type = None
+                    index += 1
+                    continue
+                if regex_literal:
+                    result.append(character)
+                    if regex_escape_next:
+                        regex_escape_next = False
+                    elif character == "\\":
+                        regex_escape_next = True
+                    elif character == "[" and not regex_char_class:
+                        regex_char_class = True
+                    elif character == "]" and regex_char_class:
+                        regex_char_class = False
+                    elif character == "/" and not regex_char_class:
+                        regex_literal = False
+                    index += 1
+                    continue
+                if character == "/" and index + 1 < len(script):
+                    next_character = script[index + 1]
+                    if next_character == "/":
+                        result.append("//")
+                        comment_type = "line"
+                        index += 2
+                        continue
+                    if next_character == "*":
+                        result.append("/*")
+                        comment_type = "block"
+                        index += 2
+                        continue
+                    if _js_slash_starts_regex(result):
+                        result.append(character)
+                        regex_literal = True
+                        regex_escape_next = False
+                        regex_char_class = False
+                        index += 1
+                        continue
                 if character == "{":
                     template_expression_depth += 1
                     result.append(character)
@@ -960,6 +1013,10 @@ def _redacted_node_inline_string_literals(script: str, *, preserve_bracket_membe
                     result.append(character)
                     if template_expression_depth == 0:
                         quote_char = "`"
+                        comment_type = None
+                        regex_literal = False
+                        regex_escape_next = False
+                        regex_char_class = False
                     index += 1
                     continue
             if character in {"'", '"', "`"}:
@@ -1002,10 +1059,36 @@ def _redacted_node_inline_string_literals(script: str, *, preserve_bracket_membe
 
 
 def _last_non_whitespace_character(result: list[str]) -> str | None:
-    for character in reversed(result):
-        if not character.isspace():
-            return character
+    for chunk in reversed(result):
+        for character in reversed(chunk):
+            if not character.isspace():
+                return character
     return None
+
+
+def _js_slash_starts_regex(result: list[str]) -> bool:
+    previous_character = _last_non_whitespace_character(result)
+    if previous_character is None:
+        return True
+    return previous_character in {
+        "(",
+        "{",
+        "[",
+        "=",
+        ":",
+        ",",
+        ";",
+        "!",
+        "?",
+        "|",
+        "&",
+        "+",
+        "-",
+        "*",
+        "%",
+        "^",
+        "~",
+    }
 
 
 def _shell_command_names(command_text: str) -> tuple[str, ...]:

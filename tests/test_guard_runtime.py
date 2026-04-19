@@ -2600,6 +2600,78 @@ def test_guard_hook_emits_copilot_native_deny_for_node_template_interpolation_by
     assert "hol guard" in output["permissionDecisionReason"].lower()
 
 
+def test_guard_hook_emits_copilot_native_deny_for_node_template_interpolation_regex_bypass(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    command = (
+        """node -e "console.log(`x ${/}/.test('a') || """
+        """require('fs').unlinkSync('dangerous-marker.json')}`)" """
+    )
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": command}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["permissionDecision"] == "deny"
+    assert "hol guard" in output["permissionDecisionReason"].lower()
+
+
+def test_guard_hook_emits_copilot_native_allow_for_git_help_modes(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "toolName": "bash",
+        "toolArgs": json.dumps({"command": "git --help rm"}),
+        "sourceScope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
+
+
 def test_guard_hook_emits_copilot_native_deny_for_quoted_space_redirection_target(
     tmp_path,
     capsys,
