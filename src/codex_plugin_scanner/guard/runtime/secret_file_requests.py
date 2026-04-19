@@ -81,7 +81,11 @@ _INTERPRETER_MUTATION_PATTERNS = (
     re.compile(r"\bopen\s*\([^)]*,\s*(?:mode\s*=\s*)?['\"](?:a|ab|a\+|rb\+|r\+|w|wb|w\+|x|xb|x\+)[^'\"]*['\"]"),
 )
 _INTERPRETER_SHELL_OUT_PATTERN = re.compile(
-    r"\b(?P<runner>os\.system|subprocess\.(?:run|call|check_call|check_output|Popen))\s*\(\s*(?P<command>\[[^\]]+\]|['\"][^'\"]*['\"])",
+    r"\b(?:os\.system|system|subprocess\.(?:run|call|check_call|check_output|Popen))\s*\(",
+)
+_INTERPRETER_HEREDOC_PATTERN = re.compile(
+    r"\b(?:perl|python|python3|ruby)\b[^\n]*<<-?\s*(?P<quote>['\"]?)(?P<tag>[A-Za-z_][A-Za-z0-9_]*)\1(?P<body>.*?)(?:^|\n)(?P=tag)\s*$",
+    re.DOTALL | re.MULTILINE,
 )
 _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
     {
@@ -534,6 +538,8 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     lowered = normalized.lower()
     if _contains_mutating_shell_redirection(lowered):
         return True
+    if _looks_destructive_interpreter_heredoc(normalized):
+        return True
     try:
         parts = shlex.split(normalized, posix=True)
     except ValueError:
@@ -677,35 +683,16 @@ def _looks_destructive_interpreter_script(script_text: str) -> bool:
     normalized_script = script_text.strip()
     if not normalized_script:
         return False
-    if any(
-        _looks_destructive_shell_command(command_text)
-        for command_text in _interpreter_shell_out_commands(normalized_script)
-    ):
+    if _INTERPRETER_SHELL_OUT_PATTERN.search(normalized_script):
         return True
     return any(pattern.search(normalized_script) for pattern in _INTERPRETER_MUTATION_PATTERNS)
 
 
-def _interpreter_shell_out_commands(script_text: str) -> tuple[str, ...]:
-    commands: list[str] = []
-    for match in _INTERPRETER_SHELL_OUT_PATTERN.finditer(script_text):
-        command_expression = match.group("command").strip()
-        command_text = _normalize_interpreter_shell_out_command(command_expression)
-        if command_text:
-            commands.append(command_text)
-    return tuple(commands)
-
-
-def _normalize_interpreter_shell_out_command(command_expression: str) -> str | None:
-    stripped_expression = command_expression.strip()
-    if not stripped_expression:
-        return None
-    if stripped_expression.startswith(("'", '"')) and stripped_expression[-1:] == stripped_expression[:1]:
-        return stripped_expression[1:-1]
-    if stripped_expression.startswith("[") and stripped_expression.endswith("]"):
-        parts = re.findall(r"['\"]([^'\"]+)['\"]", stripped_expression)
-        if parts:
-            return " ".join(parts)
-    return None
+def _looks_destructive_interpreter_heredoc(command_text: str) -> bool:
+    match = _INTERPRETER_HEREDOC_PATTERN.search(command_text)
+    if match is None:
+        return False
+    return _looks_destructive_interpreter_script(match.group("body"))
 
 
 def _is_shell_command_flag(value: str) -> bool:

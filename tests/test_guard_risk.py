@@ -348,6 +348,40 @@ def test_tool_action_request_classifier_detects_python_inline_subprocess_shell_o
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_dynamic_python_os_system_shell_out():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "python3 -c \"cmd = 'rm -rf dangerous-marker.json'; os.system(cmd)\""},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_perl_inline_system_shell_out():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "perl -e \"system('rm -rf dangerous-marker.json')\""},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_python_heredoc_file_write():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "python3 - <<'PY'\nfrom pathlib import Path\nPath('dangerous-marker.json').write_text('owned')\nPY"
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_destructive_subcommand_after_safe_prefix():
     request = extract_sensitive_tool_action_request(
         "bash",
