@@ -336,7 +336,7 @@ def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_upperc
 def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_noclobber_dev_null():
     request = extract_sensitive_tool_action_request(
         "bash",
-        {"command": 'ls missing 2>|/dev/null | head -40'},
+        {"command": "ls missing 2>|/dev/null | head -40"},
     )
 
     assert request is None
@@ -886,6 +886,16 @@ def test_tool_action_request_classifier_skips_node_template_literal_false_positi
     )
 
     assert request is None
+
+
+def test_tool_action_request_classifier_detects_node_template_interpolation_bypass():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": ("""node -e "console.log(`x ${require('fs').unlinkSync('dangerous-marker.json')}`)" """)},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
 
 
 def test_tool_action_request_classifier_detects_git_c_rm_delete():

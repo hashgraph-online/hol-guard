@@ -791,6 +791,7 @@ def _find_segment_uses_delete(segment_args: list[str]) -> bool:
         index += 1
     return False
 
+
 def _contains_destructive_git_command(parts: list[str]) -> bool:
     for segment in _iter_shell_command_segments(parts):
         command_name, command_index = _shell_segment_primary_command(segment)
@@ -811,11 +812,7 @@ def _segment_uses_destructive_git_command(segment_args: list[str]) -> bool:
         if token in _GIT_GLOBAL_OPTIONS_WITH_VALUE and subcommand_index + 1 < len(segment_args):
             subcommand_index += 2
             continue
-        if any(
-            token.startswith(f"{option}=")
-            for option in _GIT_GLOBAL_OPTIONS_WITH_VALUE
-            if option.startswith("--")
-        ):
+        if any(token.startswith(f"{option}=") for option in _GIT_GLOBAL_OPTIONS_WITH_VALUE if option.startswith("--")):
             subcommand_index += 1
             continue
         if token.startswith("-"):
@@ -824,6 +821,8 @@ def _segment_uses_destructive_git_command(segment_args: list[str]) -> bool:
         normalized_token = token.strip().lower()
         return normalized_token in _DESTRUCTIVE_GIT_SUBCOMMANDS
     return False
+
+
 def _env_split_string_payloads(parts: list[str]) -> tuple[str, ...]:
     payloads: list[str] = []
     for segment in _iter_shell_command_segments(parts):
@@ -945,31 +944,60 @@ def _redacted_node_inline_string_literals(script: str, *, preserve_bracket_membe
     quote_char: str | None = None
     escape_next = False
     preserve_string_contents = False
-    for character in script:
+    template_expression_depth = 0
+    index = 0
+    while index < len(script):
+        character = script[index]
         if quote_char is None:
+            if template_expression_depth > 0:
+                if character == "{":
+                    template_expression_depth += 1
+                    result.append(character)
+                    index += 1
+                    continue
+                if character == "}":
+                    template_expression_depth -= 1
+                    result.append(character)
+                    if template_expression_depth == 0:
+                        quote_char = "`"
+                    index += 1
+                    continue
             if character in {"'", '"', "`"}:
                 preserve_string_contents = (
                     preserve_bracket_member_strings and _last_non_whitespace_character(result) == "["
                 )
                 quote_char = character
                 result.append(character)
+                index += 1
                 continue
             result.append(character)
+            index += 1
             continue
         if escape_next:
             result.append(character if preserve_string_contents else "Q")
             escape_next = False
+            index += 1
             continue
         if character == "\\":
             result.append(character)
             escape_next = True
+            index += 1
+            continue
+        if quote_char == "`" and character == "$" and index + 1 < len(script) and script[index + 1] == "{":
+            result.append("${")
+            quote_char = None
+            preserve_string_contents = False
+            template_expression_depth = 1
+            index += 2
             continue
         if character == quote_char:
             result.append(character)
             quote_char = None
             preserve_string_contents = False
+            index += 1
             continue
         result.append(character if preserve_string_contents else "Q")
+        index += 1
     return "".join(result)
 
 
