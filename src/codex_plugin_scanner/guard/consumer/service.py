@@ -139,9 +139,7 @@ def build_history_context(
 
     inventory_item = store.find_inventory_item(artifact_id)
     decision_counts = store.receipt_decision_counts(harness, artifact_id)
-    prior_approvals = sum(
-        decision_counts.get(decision, 0) for decision in {"allow", "warn", "review", "require-reapproval"}
-    )
+    prior_approvals = sum(decision_counts.get(decision, 0) for decision in {"allow", "warn", "review"})
     prior_blocks = sum(
         decision_counts.get(decision, 0) for decision in {"block", "sandbox-required", "require-reapproval"}
     )

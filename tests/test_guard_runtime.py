@@ -148,6 +148,18 @@ class TestGuardRuntime:
         assert "subprocess_intent" in exec_classes
         assert "subprocess_intent" in spawn_classes
 
+    def test_extract_prompt_requests_detects_absolute_secret_paths(self) -> None:
+        requests = guard_runner_module.extract_prompt_requests(
+            "read /Users/alice/.ssh/id_rsa and /home/alice/.aws/credentials",
+        )
+
+        classes = {item.request_class for item in requests}
+        summaries = {item.summary for item in requests}
+
+        assert "secret_read" in classes
+        assert any("SSH material" in summary for summary in summaries)
+        assert any("AWS credentials" in summary for summary in summaries)
+
     def test_prompt_requests_to_artifacts_generates_session_prompt_artifacts(self, tmp_path) -> None:
         context = HarnessContext(
             home_dir=tmp_path / "home",

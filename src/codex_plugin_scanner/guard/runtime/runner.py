@@ -50,6 +50,13 @@ _SECRET_REQUEST_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?<![\w-])\.pypirc\b"), "Python package credentials"),
     (re.compile(r"(?<![\w-])\.git-credentials\b"), "Git credential store"),
 )
+_SECRET_ABSOLUTE_HINTS: tuple[tuple[str, str], ...] = (
+    ("/.ssh/", "SSH material"),
+    ("/.aws/credentials", "AWS credentials"),
+    ("/.aws/config", "AWS credentials"),
+    ("/.kube/config", "kubeconfig"),
+    ("/.docker/config.json", "Docker credentials"),
+)
 _EXFIL_PROMPT_PATTERN = re.compile(
     r"\b(upload|exfiltrate|send|post|sync|webhook|paste|gist|transfer)\b",
     re.IGNORECASE,
@@ -161,11 +168,12 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
     if not lowered:
         return []
     requests: list[PromptRequest] = []
-    for pattern, label in _SECRET_REQUEST_PATTERNS:
-        match = pattern.search(normalized_prompt)
-        if match is None:
-            continue
-        matched = match.group(0).strip()
+    seen_secret_labels: set[str] = set()
+
+    def add_secret_request(*, label: str, matched: str) -> None:
+        if label in seen_secret_labels:
+            return
+        seen_secret_labels.add(label)
         summary = (
             "Prompt asks the harness to read a local .env file directly."
             if label == "local .env file"
@@ -189,6 +197,15 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
                 ),
             )
         )
+
+    for pattern, label in _SECRET_REQUEST_PATTERNS:
+        match = pattern.search(normalized_prompt)
+        if match is None:
+            continue
+        add_secret_request(label=label, matched=match.group(0).strip())
+    for hint, label in _SECRET_ABSOLUTE_HINTS:
+        if hint in lowered:
+            add_secret_request(label=label, matched=hint)
     if _EXFIL_PROMPT_PATTERN.search(normalized_prompt):
         requests.append(
             PromptRequest(

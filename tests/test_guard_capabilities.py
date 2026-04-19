@@ -74,3 +74,21 @@ def test_compute_capability_delta_detects_semantic_expansion_and_scores_severity
     assert "subprocess_added" in delta_types
     assert "secret_scope_expanded" in delta_types
     assert severity_from_deltas(deltas) >= 8
+
+
+def test_normalize_artifact_capabilities_ignores_common_local_file_suffixes_as_hosts():
+    artifact = GuardArtifact(
+        artifact_id="codex:project:local-file-only",
+        name="local-file-only",
+        harness="codex",
+        artifact_type="mcp_server",
+        source_scope="project",
+        config_path="/workspace/.codex/config.toml",
+        command="python",
+        args=("-c", "cat backup.log cache.tmp payload.bin old.bak"),
+        transport="stdio",
+    )
+
+    capabilities = normalize_artifact_capabilities(artifact)
+
+    assert capabilities.network_hosts == ()

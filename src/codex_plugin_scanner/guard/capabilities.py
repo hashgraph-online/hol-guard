@@ -12,6 +12,24 @@ from .types import CapabilityDelta, CapabilitySet, TransportKind
 _URL_PATTERN = re.compile(r"https?://[^\s'\"`]+", re.IGNORECASE)
 _HOST_PATTERN = re.compile(r"\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b", re.IGNORECASE)
 _PATH_PATTERN = re.compile(r"(~?/[\w./-]+|\.[/\\][\w./\\-]+)")
+_NON_NETWORK_SUFFIXES = {
+    "md",
+    "json",
+    "toml",
+    "yaml",
+    "yml",
+    "txt",
+    "py",
+    "js",
+    "ts",
+    "sh",
+    "cfg",
+    "conf",
+    "log",
+    "tmp",
+    "bak",
+    "bin",
+}
 _SCRIPT_INTERPRETERS = {"python", "python3", "node", "ruby", "perl", "pwsh", "powershell"}
 _SHELL_COMMANDS = {"bash", "sh", "zsh", "cmd", "powershell", "pwsh"}
 _SUBPROCESS_TOKENS = (
@@ -260,8 +278,13 @@ def _extract_network_hosts(text: str, url: str | None) -> set[str]:
         if parsed.hostname:
             hosts.add(parsed.hostname.lower())
     for candidate in _HOST_PATTERN.findall(text):
-        if candidate.count(".") >= 1:
-            hosts.add(candidate.lower())
+        if candidate.count(".") < 1:
+            continue
+        lowered = candidate.lower()
+        suffix = lowered.rsplit(".", 1)[-1]
+        if suffix in _NON_NETWORK_SUFFIXES:
+            continue
+        hosts.add(lowered)
     return hosts
 
 
