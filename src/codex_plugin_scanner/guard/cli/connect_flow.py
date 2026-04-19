@@ -95,22 +95,24 @@ def run_guard_connect_command(
         }
     try:
         sync_payload = sync_receipts(store)
-    except GuardSyncNotAvailableError:
-        local_only_state = _record_connect_result(
+    except GuardSyncNotAvailableError as plan_error:
+        plan_msg = str(plan_error).strip() or "Cloud sync requires a paid Guard plan."
+        pending_state = _record_connect_result(
             daemon_client=daemon_client,
             store=store,
             request_id=str(connect_request["request_id"]),
             status="connected",
-            milestone="sync_not_available",
-            reason="Cloud sync requires a Pro plan. Guard is active locally.",
+            milestone="first_sync_pending",
+            reason=plan_msg,
         )
         return build_connect_payload(
-            state=local_only_state,
+            state=pending_state,
             browser_opened=browser_opened,
             connect_url=browser_url,
             sync_url=sync_url,
             connected=True,
             sync_available=False,
+            sync_message=plan_msg,
         )
     except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
         sync_message = str(error)
