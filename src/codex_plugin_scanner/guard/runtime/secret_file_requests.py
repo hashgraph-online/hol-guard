@@ -686,6 +686,8 @@ def _shell_script_path_from_segment(segment_args: list[str]) -> str | None:
         if _SHELL_ASSIGNMENT_PATTERN.match(token):
             index += 1
             continue
+        if token == "-s":
+            return None
         if token.startswith("-") and not token.startswith("--") and "c" in token[1:]:
             return None
         if not token.startswith("-") and not token.startswith("+"):
