@@ -1288,6 +1288,16 @@ echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
     assert request is None
 
 
+def test_tool_action_request_classifier_detects_bash_c_destructive_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash -c 'rm -rf dangerous-marker.json'"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_encrypted_decrypt_and_exec_command():
     request = extract_sensitive_tool_action_request(
         "bash",

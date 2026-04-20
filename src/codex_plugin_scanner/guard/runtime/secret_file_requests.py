@@ -55,6 +55,7 @@ _SHELL_TOOL_NAMES = frozenset(
     }
 )
 _SHELL_SCRIPT_INTERPRETER_COMMANDS = frozenset({"ash", "bash", "dash", "sh", "zsh", ".", "source"})
+_SHELL_COMMAND_STRING_INTERPRETERS = frozenset({"ash", "bash", "dash", "sh", "zsh"})
 _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
     {
         "chmod",
@@ -1542,7 +1543,20 @@ def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
 
 
 def _shell_command_scripts(parts: list[str]) -> tuple[str, ...]:
-    return _script_interpreter_texts(parts)
+    scripts: list[str] = []
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name not in _SHELL_COMMAND_STRING_INTERPRETERS or command_index is None:
+            continue
+        index = command_index + 1
+        while index < len(segment):
+            flag_payload = _interpreter_flag_payload(segment, index)
+            if flag_payload is not None:
+                scripts.append(flag_payload.script_text)
+                index += flag_payload.tokens_consumed
+                continue
+            index += 1
+    return tuple(scripts)
 
 
 def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
