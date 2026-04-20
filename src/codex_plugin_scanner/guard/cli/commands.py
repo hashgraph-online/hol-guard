@@ -1291,14 +1291,15 @@ def run_guard_command(args: argparse.Namespace) -> int:
             payload.get("tool_name"),
             artifact_id,
         )
+        stored_policy_action = store.resolve_policy(
+            args.harness,
+            artifact_id,
+            str(payload.get("artifact_hash")) if isinstance(payload.get("artifact_hash"), str) else None,
+            str(runtime_workspace) if runtime_workspace else None,
+        )
         policy_action = _coalesce_string(
             getattr(args, "policy_action", None),
-            store.resolve_policy(
-                args.harness,
-                artifact_id,
-                str(payload.get("artifact_hash")) if isinstance(payload.get("artifact_hash"), str) else None,
-                str(runtime_workspace) if runtime_workspace else None,
-            ),
+            stored_policy_action,
             payload.get("policy_action"),
             config.default_action,
         )
