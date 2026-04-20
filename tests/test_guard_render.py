@@ -219,3 +219,117 @@ def test_guard_bootstrap_render_rewrites_missing_harness_reason(capsys) -> None:
     output = capsys.readouterr().out
     assert "No supported harness detected yet" in output
     assert "no_harness_detected" not in output
+
+
+def test_guard_install_render_surfaces_proxy_details_and_skipped_servers(capsys) -> None:
+    emit_guard_payload(
+        "install",
+        {
+            "managed_install": {
+                "harness": "codex",
+                "active": True,
+                "workspace": "/repo",
+                "manifest": {
+                    "mode": "codex-mcp-proxy",
+                    "config_path": "/repo/.codex/config.toml",
+                    "managed_servers": ["global_tools", "workspace_skill"],
+                    "skipped_servers": ["existing_global"],
+                    "notes": ["Guard rewrote the workspace config with proxy entries."],
+                },
+            },
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Protection" in output
+    assert "Installed" in output
+    assert "Mode" in output
+    assert "Codex MCP proxy" in output
+    assert "Managed servers" in output
+    assert "2" in output
+    assert "Skipped servers" in output
+    assert "existing_global" in output
+
+
+def test_guard_sync_render_surfaces_policy_and_alert_details(capsys) -> None:
+    emit_guard_payload(
+        "sync",
+        {
+            "synced_at": "2026-04-20T19:00:00Z",
+            "receipts": 3,
+            "inventory_tracked": 4,
+            "receipts_stored": 2,
+            "advisories_stored": 1,
+            "exceptions_stored": 2,
+            "remote_policies_stored": 5,
+            "pain_signals_uploaded": 1,
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Remote policies" in output
+    assert "Exceptions stored" in output
+    assert "Pain signals uploaded" in output
+    assert "5" in output
+    assert "2" in output
+    assert "1" in output
+
+
+def test_guard_uninstall_render_adds_removal_note_without_manifest(capsys) -> None:
+    emit_guard_payload(
+        "uninstall",
+        {
+            "managed_install": {
+                "harness": "codex",
+                "active": False,
+                "workspace": "/repo",
+            },
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Removed" in output
+    assert "Guard removed the managed wrapper configuration for this harness." in output
+
+
+def test_guard_uninstall_render_adds_removal_note_without_manifest_notes(capsys) -> None:
+    emit_guard_payload(
+        "uninstall",
+        {
+            "managed_install": {
+                "harness": "codex",
+                "active": False,
+                "workspace": "/repo",
+                "manifest": {
+                    "mode": "codex-mcp-proxy",
+                },
+            },
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Removed" in output
+    assert "Guard removed the managed wrapper configuration for this harness." in output
+
+
+def test_guard_install_render_skips_notes_when_manifest_is_missing_and_active(capsys) -> None:
+    emit_guard_payload(
+        "install",
+        {
+            "managed_install": {
+                "harness": "codex",
+                "active": True,
+                "workspace": "/repo",
+            },
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Installed" in output
+    assert "Guard removed the managed wrapper configuration for this harness." not in output
+    assert "Notes" not in output

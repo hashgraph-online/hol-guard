@@ -29,6 +29,12 @@ except ModuleNotFoundError:
     Text = Any  # type: ignore[misc,assignment]
 
 
+_MODE_ACRONYMS = frozenset({"mcp", "api", "cli"})
+_KNOWN_MANAGED_INSTALL_MODES = {
+    "codex-mcp-proxy": "Codex MCP proxy",
+}
+
+
 def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) -> None:
     """Render Guard payloads as JSON or human-friendly rich output."""
 
@@ -418,13 +424,22 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
 
 def _render_single_managed_install(console: Console, managed_install: dict[str, object]) -> None:
     manifest = managed_install.get("manifest")
-    notes = _coerce_string_list(manifest.get("notes")) if isinstance(manifest, dict) else []
+    notes = _managed_install_notes(managed_install, manifest)
     body = Table.grid(padding=(0, 1))
     body.add_row("Harness", f"[bold]{managed_install.get('harness', 'unknown')}[/bold]")
-    body.add_row("Active", _bool_label(bool(managed_install.get("active"))))
+    body.add_row("Protection", _managed_install_state_text(managed_install))
     body.add_row("Workspace", str(managed_install.get("workspace") or "current shell"))
     if isinstance(manifest, dict):
+        mode = _managed_install_mode_text(manifest.get("mode"))
+        if mode is not None:
+            body.add_row("Mode", mode)
         body.add_row("Config", str(manifest.get("config_path") or "no config changed"))
+        managed_servers = _coerce_string_list(manifest.get("managed_servers"))
+        if managed_servers:
+            body.add_row("Managed servers", str(len(managed_servers)))
+        skipped_servers = _coerce_string_list(manifest.get("skipped_servers"))
+        if skipped_servers:
+            body.add_row("Skipped servers", str(len(skipped_servers)))
         if manifest.get("shim_command"):
             body.add_row("Launcher", str(manifest.get("shim_command")))
     console.print(Panel(body, title="Guard install state", border_style="cyan"))
@@ -528,7 +543,53 @@ def _render_sync(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Inventory tracked", str(payload.get("inventory_tracked", payload.get("inventory")) or 0))
     body.add_row("Receipts stored", str(payload.get("receipts_stored") or 0))
     body.add_row("Advisories stored", str(payload.get("advisories_stored") or 0))
+    remote_policies_stored = payload.get("remote_policies_stored")
+    exceptions_stored = payload.get("exceptions_stored")
+    pain_signals_uploaded = payload.get("pain_signals_uploaded")
+    if remote_policies_stored is not None:
+        body.add_row("Remote policies", str(remote_policies_stored or 0))
+    if exceptions_stored is not None:
+        body.add_row("Exceptions stored", str(exceptions_stored or 0))
+    if pain_signals_uploaded is not None:
+        body.add_row("Pain signals uploaded", str(pain_signals_uploaded or 0))
     console.print(Panel(body, title="Guard sync complete", border_style="green"))
+
+
+def _managed_install_state_text(managed_install: dict[str, object]) -> str:
+    return "Installed" if bool(managed_install.get("active")) else "Removed"
+
+
+def _managed_install_mode_text(mode: object) -> str | None:
+    if not isinstance(mode, str) or not mode.strip():
+        return None
+    normalized = mode.strip().lower()
+    if normalized in _KNOWN_MANAGED_INSTALL_MODES:
+        return _KNOWN_MANAGED_INSTALL_MODES[normalized]
+    words = []
+    for part in normalized.split("-"):
+        lowered = part.lower()
+        if lowered in _MODE_ACRONYMS:
+            words.append(lowered.upper())
+        else:
+            words.append(lowered.capitalize())
+    return " ".join(words)
+
+
+def _managed_install_notes(managed_install: dict[str, object], manifest: object) -> list[str]:
+    if not isinstance(manifest, dict):
+        if not bool(managed_install.get("active")):
+            return ["Guard removed the managed wrapper configuration for this harness."]
+        return []
+    notes = _coerce_string_list(manifest.get("notes"))
+    skipped_servers = _coerce_string_list(manifest.get("skipped_servers"))
+    if skipped_servers:
+        notes.append(f"Skipped existing server entries: {', '.join(skipped_servers)}")
+    source_config_paths = _coerce_string_list(manifest.get("source_config_paths"))
+    if source_config_paths:
+        notes.append(f"Source configs: {', '.join(source_config_paths)}")
+    if not notes and not bool(managed_install.get("active")):
+        notes.append("Guard removed the managed wrapper configuration for this harness.")
+    return notes
 
 
 def _render_update(console: Console, payload: dict[str, object]) -> None:
