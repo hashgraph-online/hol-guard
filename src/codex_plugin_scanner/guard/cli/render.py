@@ -464,8 +464,14 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
         should_render_sync_counts = False
         if isinstance(sync_payload, dict):
             receipts_stored = int(sync_payload.get("receipts_stored") or 0)
-            inventory_tracked = int(sync_payload.get("inventory_tracked", sync_payload.get("inventory")) or 0)
-            should_render_sync_counts = milestone == "first_sync_succeeded" or receipts_stored > 0 or inventory_tracked > 0
+            inventory_tracked = int(
+                sync_payload.get("inventory_tracked", sync_payload.get("inventory")) or 0
+            )
+            should_render_sync_counts = (
+                milestone == "first_sync_succeeded"
+                or receipts_stored > 0
+                or inventory_tracked > 0
+            )
             if should_render_sync_counts:
                 body.add_row("Receipts stored", str(receipts_stored))
                 body.add_row("Inventory tracked", str(inventory_tracked))
@@ -597,7 +603,10 @@ def _connect_sync_note_text(payload: dict[str, object]) -> str | None:
     if _connect_reason_requires_login(reason):
         return "Local protection is active. Sign in on the Guard connect page to finish Guard Cloud setup."
     if _connect_reason_requires_paid_plan(reason):
-        return "Local protection is active. Upgrade your Guard plan to sync shared proof, receipts, and devices to Guard Cloud."
+        return (
+            "Local protection is active. Upgrade your Guard plan to sync shared "
+            "proof, receipts, and devices to Guard Cloud."
+        )
     return message
 
 
