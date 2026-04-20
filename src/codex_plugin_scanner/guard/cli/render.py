@@ -551,7 +551,7 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
     error = str(payload.get("error") or "").strip()
     if notes:
         console.print(Panel("\n".join(f"• {note}" for note in notes), title="Notes", border_style="blue"))
-    if status == "updated" and stdout and stdout != str(payload.get("message") or "").strip():
+    if status in {"updated", "failed"} and stdout and stdout != str(payload.get("message") or "").strip():
         console.print(Panel(stdout, title="stdout", border_style="green"))
     if status == "failed" and stderr:
         console.print(Panel(stderr, title="stderr", border_style="yellow"))

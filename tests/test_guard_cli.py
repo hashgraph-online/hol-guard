@@ -3005,6 +3005,29 @@ args = ["workspace-skill.js", "--changed"]
         assert "stdout" not in output
         assert "stderr" not in output
 
+    def test_guard_update_failed_output_keeps_stdout_details(self, capsys):
+        emit_guard_payload(
+            "update",
+            {
+                "current_version": "2.0.36",
+                "installer": "pipx",
+                "command": ["pipx", "upgrade", "hol-guard"],
+                "dry_run": False,
+                "status": "failed",
+                "message": "HOL Guard update failed.",
+                "stdout": "pipx could not upgrade hol-guard in the current environment",
+                "stderr": "",
+                "error": "",
+            },
+            False,
+        )
+
+        output = capsys.readouterr().out
+
+        assert "Guard update: failed" in output
+        assert "stdout" in output
+        assert "pipx could not upgrade hol-guard in the current environment" in output
+
     def test_guard_uninstall_auto_detects_managed_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
