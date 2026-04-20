@@ -609,6 +609,13 @@ def _connect_reason_requires_paid_plan(reason: str) -> bool:
             "paid plan",
             "guard plan required",
             "pro or team plan",
+            "requires a pro",
+            "requires a team",
+            "upgrade your plan",
+            "upgrade to",
+            "subscription required",
+            "not included in your plan",
+            "guard sync requires",
         )
     )
 
