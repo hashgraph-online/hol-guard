@@ -532,15 +532,28 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
         body.add_row("Resulting version", str(payload.get("resulting_version")))
     if payload.get("editable_install") is not None:
         body.add_row("Editable install", _bool_label(bool(payload.get("editable_install"))))
+    if payload.get("changed") is not None:
+        body.add_row("Changed", _bool_label(bool(payload.get("changed"))))
+    if payload.get("message"):
+        body.add_row("Message", str(payload.get("message")))
     status = str(payload.get("status") or "unknown")
-    border_style = "green" if status in {"planned", "updated"} else "red"
+    border_style = {
+        "planned": "blue",
+        "current": "blue",
+        "updated": "green",
+        "skipped": "yellow",
+        "failed": "red",
+    }.get(status, "red")
     console.print(Panel(body, title=f"Guard update: {status}", border_style=border_style))
+    notes = _coerce_string_list(payload.get("notes"))
     stdout = str(payload.get("stdout") or "").strip()
     stderr = str(payload.get("stderr") or "").strip()
     error = str(payload.get("error") or "").strip()
-    if stdout:
+    if notes:
+        console.print(Panel("\n".join(f"• {note}" for note in notes), title="Notes", border_style="blue"))
+    if status in {"updated", "failed"} and stdout and stdout != str(payload.get("message") or "").strip():
         console.print(Panel(stdout, title="stdout", border_style="green"))
-    if stderr:
+    if status == "failed" and stderr:
         console.print(Panel(stderr, title="stderr", border_style="yellow"))
     if error:
         console.print(Panel(error, title="error", border_style="red"))
