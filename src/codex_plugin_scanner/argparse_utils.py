@@ -66,7 +66,7 @@ def _rewrite_invalid_choice_message(parser: argparse.ArgumentParser, message: st
     if not visible_choices:
         return message
     rewritten = f"invalid choice: '{match.group(1)}' (choose from {', '.join(visible_choices)})"
-    return f"{message[:match.start()]}{rewritten}{message[match.end():]}"
+    return f"{message[: match.start()]}{rewritten}{message[match.end() :]}"
 
 
 def _visible_subparser_choices(parser: argparse.ArgumentParser) -> list[str]:
