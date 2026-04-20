@@ -500,12 +500,15 @@ def _contains_encoded_or_encrypted_shell_command(
     normalized = command_text.strip()
     if not normalized:
         return False
-    if any(pattern.search(normalized) for pattern in _ENCODED_EXECUTION_PATTERNS):
+    executable_surface = _shell_text_without_quoted_literals(normalized)
+    if any(pattern.search(executable_surface) for pattern in _ENCODED_EXECUTION_PATTERNS):
+        return True
+    if _contains_command_substitution_decode_exec(normalized):
         return True
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
-    for payload in _decoded_shell_payloads(normalized):
+    for payload in _decoded_shell_payloads(executable_surface):
         if _decoded_payload_looks_sensitive(
             payload,
             cwd=cwd,
@@ -547,6 +550,148 @@ def _contains_encoded_or_encrypted_shell_command(
         ):
             return True
     return False
+
+
+def _contains_command_substitution_decode_exec(command_text: str) -> bool:
+    substitution_payloads = _shell_command_substitution_payloads(command_text)
+    if not substitution_payloads:
+        return False
+    if not any(_contains_decode_primitive(payload) for payload in substitution_payloads):
+        return False
+    lowered = command_text.lower()
+    if re.search(r"\b(?:ash|bash|dash|sh|zsh)\b[^\n;|&]*-[A-Za-z]*c[A-Za-z]*", lowered):
+        return True
+    return bool(re.search(r"\beval\b[^\n;|&]*\$\(", lowered))
+
+
+def _contains_decode_primitive(command_text: str) -> bool:
+    lowered = command_text.lower()
+    return bool(
+        re.search(r"\bbase64\b(?=[^\n|;]*\s(?:--decode|-[A-Za-z]*[dD][A-Za-z]*))", lowered)
+        or re.search(r"\bxxd\s+(?:-r\s+-p|-rp)\b", lowered)
+        or re.search(r"\bopenssl\s+enc\b[^\n|;]*\s-(?:d|decrypt)\b", lowered)
+        or re.search(r"\b(?:gpg|gpg2)\b[^\n|;]*(?:--decrypt|-d)\b", lowered)
+    )
+
+
+def _shell_text_without_quoted_literals(command_text: str) -> str:
+    characters: list[str] = []
+    index = 0
+    single_quoted = False
+    double_quoted = False
+    while index < len(command_text):
+        character = command_text[index]
+        if single_quoted:
+            if character == "'":
+                single_quoted = False
+            characters.append(" ")
+            index += 1
+            continue
+        if double_quoted:
+            if character == "\\":
+                characters.append(" ")
+                if index + 1 < len(command_text):
+                    characters.append(" ")
+                    index += 2
+                else:
+                    index += 1
+                continue
+            if character == '"':
+                double_quoted = False
+                characters.append(" ")
+                index += 1
+                continue
+            if character == "$" and index + 1 < len(command_text) and command_text[index + 1] == "(":
+                payload, next_index = _read_command_substitution(command_text, index + 2)
+                characters.append(f"$({payload})")
+                index = next_index
+                continue
+            characters.append(" ")
+            index += 1
+            continue
+        if character == "'":
+            single_quoted = True
+            characters.append(" ")
+            index += 1
+            continue
+        if character == '"':
+            double_quoted = True
+            characters.append(" ")
+            index += 1
+            continue
+        characters.append(character)
+        index += 1
+    return "".join(characters)
+
+
+def _shell_command_substitution_payloads(command_text: str) -> tuple[str, ...]:
+    payloads: list[str] = []
+    index = 0
+    while index < len(command_text):
+        if command_text[index] == "$" and index + 1 < len(command_text) and command_text[index + 1] == "(":
+            payload, next_index = _read_command_substitution(command_text, index + 2)
+            if payload.strip():
+                payloads.append(payload)
+            index = next_index
+            continue
+        index += 1
+    return tuple(payloads)
+
+
+def _read_command_substitution(command_text: str, start_index: int) -> tuple[str, int]:
+    index = start_index
+    depth = 1
+    payload_characters: list[str] = []
+    single_quoted = False
+    double_quoted = False
+    while index < len(command_text):
+        character = command_text[index]
+        if single_quoted:
+            payload_characters.append(character)
+            if character == "'":
+                single_quoted = False
+            index += 1
+            continue
+        if double_quoted:
+            payload_characters.append(character)
+            if character == "\\" and index + 1 < len(command_text):
+                payload_characters.append(command_text[index + 1])
+                index += 2
+                continue
+            if character == '"':
+                double_quoted = False
+            index += 1
+            continue
+        if character == "'":
+            single_quoted = True
+            payload_characters.append(character)
+            index += 1
+            continue
+        if character == '"':
+            double_quoted = True
+            payload_characters.append(character)
+            index += 1
+            continue
+        if character == "$" and index + 1 < len(command_text) and command_text[index + 1] == "(":
+            nested_payload, next_index = _read_command_substitution(command_text, index + 2)
+            payload_characters.append(f"$({nested_payload})")
+            index = next_index
+            continue
+        if character == "(":
+            depth += 1
+            payload_characters.append(character)
+            index += 1
+            continue
+        if character == ")":
+            depth -= 1
+            if depth == 0:
+                return "".join(payload_characters), index + 1
+            payload_characters.append(character)
+            index += 1
+            continue
+        payload_characters.append(character)
+        index += 1
+    return "".join(payload_characters), index
 
 
 def _decoded_payload_looks_sensitive(

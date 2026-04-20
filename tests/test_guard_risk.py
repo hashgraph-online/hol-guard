@@ -1277,6 +1277,15 @@ def test_tool_action_request_classifier_ignores_echo_frombase64string_text():
     assert request is None
 
 
+def test_tool_action_request_classifier_ignores_quoted_encoded_pipeline_literal_text():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo 'cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash'"},
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_ignores_ls_long_flag_with_encoded_named_file(tmp_path):
     workspace_dir = tmp_path / "workspace"
     _write_text(
@@ -1306,6 +1315,16 @@ def test_tool_action_request_classifier_detects_bash_c_destructive_command():
 
     assert request is not None
     assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_bash_c_command_substitution_decode_exec():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash -c \"$(echo ZWNobyBoaQ== | base64 -d)\""},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
 
 
 def test_tool_action_request_classifier_detects_bash_norc_c_destructive_command():
