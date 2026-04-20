@@ -309,22 +309,6 @@ class FallbackSecretStore:
         except Exception:
             return None
 
-    def get_secret_candidates(self, secret_id: str) -> list[str]:
-        candidates: list[str] = []
-        try:
-            primary_value = self.primary.get_secret(secret_id)
-        except Exception:
-            primary_value = None
-        if primary_value is not None:
-            candidates.append(primary_value)
-        try:
-            fallback_value = self.fallback.get_secret(secret_id)
-        except Exception:
-            fallback_value = None
-        if fallback_value is not None and fallback_value not in candidates:
-            candidates.append(fallback_value)
-        return candidates
-
     def promote_secret(self, secret_id: str, value: str) -> None:
         try:
             primary_value = self.primary.get_secret(secret_id)
@@ -378,9 +362,26 @@ class GuardStore:
         if isinstance(self._secret_store, FallbackSecretStore):
             self._secret_store.promote_secret(secret_id, value)
 
-    def _get_secret_candidates(self, secret_id: str) -> list[str]:
+    def _get_secret_from_store(self, store: SecretStore, secret_id: str) -> str | None:
+        try:
+            return store.get_secret(secret_id)
+        except Exception:
+            return None
+
+    def _get_secret_candidates(self, secret_id: str, expected_hash_value: str | None) -> list[str]:
         if isinstance(self._secret_store, FallbackSecretStore):
-            return self._secret_store.get_secret_candidates(secret_id)
+            primary_token = self._get_secret_from_store(self._secret_store.primary, secret_id)
+            if primary_token is not None:
+                if expected_hash_value is None or _token_sha256(primary_token) == expected_hash_value:
+                    return [primary_token]
+                fallback_token = self._get_secret_from_store(self._secret_store.fallback, secret_id)
+                if fallback_token is None or fallback_token == primary_token:
+                    return [primary_token]
+                return [primary_token, fallback_token]
+            fallback_token = self._get_secret_from_store(self._secret_store.fallback, secret_id)
+            if fallback_token is None:
+                return []
+            return [fallback_token]
         token = self._secret_store.get_secret(secret_id)
         if token is None:
             return []
@@ -1785,7 +1786,7 @@ class GuardStore:
                 reference_candidates.append(token_reference)
 
             for secret_ref in reference_candidates:
-                for token in self._get_secret_candidates(secret_ref):
+                for token in self._get_secret_candidates(secret_ref, expected_hash_value):
                     if expected_hash_value is not None and _token_sha256(token) != expected_hash_value:
                         continue
                     if token_reference != self._sync_token_ref:
