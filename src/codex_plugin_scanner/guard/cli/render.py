@@ -464,13 +464,14 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
         should_render_sync_counts = False
         if isinstance(sync_payload, dict):
             receipts_stored = int(sync_payload.get("receipts_stored") or 0)
-            inventory_tracked = int(
-                sync_payload.get("inventory_tracked", sync_payload.get("inventory")) or 0
-            )
-            should_render_sync_counts = (
-                milestone == "first_sync_succeeded"
-                or receipts_stored > 0
-                or inventory_tracked > 0
+            inventory_value = sync_payload.get("inventory_tracked", sync_payload.get("inventory"))
+            inventory_tracked = int(inventory_value or 0)
+            should_render_sync_counts = any(
+                (
+                    milestone == "first_sync_succeeded",
+                    receipts_stored > 0,
+                    inventory_tracked > 0,
+                )
             )
             if should_render_sync_counts:
                 body.add_row("Receipts stored", str(receipts_stored))
@@ -588,21 +589,27 @@ def _connect_reason_text(payload: dict[str, object]) -> str:
 
 
 def _connect_reason_requires_login(reason: str) -> bool:
-    return (
-        "not logged in" in reason
-        or "sign in" in reason
-        or "logged out" in reason
-        or "login" in reason
-        or "logout" in reason
+    return any(
+        marker in reason
+        for marker in (
+            "not logged in",
+            "sign in",
+            "logged out",
+            "login",
+            "logout",
+        )
     )
 
 
 def _connect_reason_requires_paid_plan(reason: str) -> bool:
-    return (
-        "paid guard plan" in reason
-        or "paid plan" in reason
-        or "guard plan required" in reason
-        or "pro or team plan" in reason
+    return any(
+        marker in reason
+        for marker in (
+            "paid guard plan",
+            "paid plan",
+            "guard plan required",
+            "pro or team plan",
+        )
     )
 
 
