@@ -1085,6 +1085,422 @@ def test_tool_action_request_classifier_detects_shell_wrapper_script_command():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_base64_decode_and_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_bsd_base64_decode_and_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -D | bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_path_qualified_base64_decode_and_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | /bin/bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_clustered_base64_decode_and_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -di | bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_base64_decode_and_dash_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | dash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_base64_decode_and_env_wrapped_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_base64_decode_and_env_option_wrapped_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env -i bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_base64_decode_and_path_qualified_env_wrapped_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | /usr/bin/env -i bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_base64_decode_and_env_unset_wrapped_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env -u FOO bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_base64_decode_and_env_unset_equals_wrapped_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | env --unset=FOO bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_base64_decode_when_flag_not_first():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -i -d | bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_xxd_compact_reverse_hex_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "printf 726d202d662064616e6765726f75732d6d61726b65722e6a736f6e0a | xxd -rp | bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_ignores_non_path_command_name_with_same_named_local_file(tmp_path):
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / "echo",
+        """
+#!/bin/sh
+set -eu
+echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
+""".strip()
+        + "\n",
+    )
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo hello"},
+        cwd=workspace_dir,
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_ignores_bash_lc_with_same_named_local_file(tmp_path):
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / "ls",
+        """
+#!/bin/sh
+set -eu
+echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
+""".strip()
+        + "\n",
+    )
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash -lc ls"},
+        cwd=workspace_dir,
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_ignores_bash_s_stdin_mode_with_same_named_local_file(tmp_path):
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / "ls",
+        """
+#!/bin/sh
+set -eu
+echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
+""".strip()
+        + "\n",
+    )
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash -s ls"},
+        cwd=workspace_dir,
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_ignores_echo_frombase64string_text():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo 'frombase64string('"},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_ignores_quoted_encoded_pipeline_literal_text():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo 'cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash'"},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_ignores_ls_long_flag_with_encoded_named_file(tmp_path):
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / "encoded-wrapper.sh",
+        """
+#!/bin/sh
+set -eu
+echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
+""".strip()
+        + "\n",
+    )
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "ls -l ./encoded-wrapper.sh"},
+        cwd=workspace_dir,
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_detects_bash_c_destructive_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash -c 'rm -rf dangerous-marker.json'"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_bash_c_command_substitution_decode_exec():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash -c \"$(echo ZWNobyBoaQ== | base64 -d)\""},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_bash_norc_c_destructive_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash --norc -c 'rm -rf dangerous-marker.json'"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_encrypted_decrypt_and_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "openssl enc -d -aes-256-cbc -base64 -in payload.enc | bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_gpg2_decrypt_and_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "gpg2 --decrypt payload.asc | bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_pwsh_short_encoded_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "pwsh -ec ZQBjAGgAbwAgAGQAYQBuAGcAZQByAA=="},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_local_shell_script_with_encoded_payload(tmp_path):
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / "encoded-wrapper.sh",
+        """
+#!/bin/sh
+set -eu
+echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
+""".strip()
+        + "\n",
+    )
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "sh ./encoded-wrapper.sh"},
+        cwd=workspace_dir,
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_direct_local_shell_script_with_encoded_payload(tmp_path):
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / "encoded-wrapper.sh",
+        """
+#!/bin/sh
+set -eu
+echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
+""".strip()
+        + "\n",
+    )
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "./encoded-wrapper.sh"},
+        cwd=workspace_dir,
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_slash_path_local_shell_script_with_encoded_payload(tmp_path):
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / "scripts" / "encoded-wrapper.sh",
+        """
+#!/bin/sh
+set -eu
+echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
+""".strip()
+        + "\n",
+    )
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "scripts/encoded-wrapper.sh"},
+        cwd=workspace_dir,
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_bash_norc_local_shell_script_with_encoded_payload(tmp_path):
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / "encoded-wrapper.sh",
+        """
+#!/bin/sh
+set -eu
+echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
+""".strip()
+        + "\n",
+    )
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash --norc ./encoded-wrapper.sh"},
+        cwd=workspace_dir,
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_bash_assignment_prefixed_local_shell_script_with_encoded_payload(
+    tmp_path,
+):
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / "encoded-wrapper.sh",
+        """
+#!/bin/sh
+set -eu
+echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
+""".strip()
+        + "\n",
+    )
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash VAR=1 ./encoded-wrapper.sh"},
+        cwd=workspace_dir,
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
+def test_tool_action_request_classifier_detects_source_local_shell_script_with_encoded_payload(tmp_path):
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / "encoded-wrapper.sh",
+        """
+#!/bin/sh
+set -eu
+echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
+""".strip()
+        + "\n",
+    )
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "source ./encoded-wrapper.sh"},
+        cwd=workspace_dir,
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
 def test_tool_action_request_classifier_detects_env_wrapped_destructive_command():
     request = extract_sensitive_tool_action_request(
         "bash",
