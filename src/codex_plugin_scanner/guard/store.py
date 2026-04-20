@@ -316,8 +316,14 @@ class GuardStore:
         self.guard_home = guard_home
         self.guard_home.mkdir(parents=True, exist_ok=True)
         self._secret_store = _build_secret_store(self.guard_home)
+        self._sync_token_ref = self._build_sync_token_ref()
         self.path = self.guard_home / "guard.db"
         self._initialize()
+
+    def _build_sync_token_ref(self) -> str:
+        scoped_home = str(self.guard_home.expanduser().resolve())
+        scoped_hash = sha256(scoped_home.encode("utf-8")).hexdigest()[:16]
+        return f"{_SYNC_TOKEN_REF}:{scoped_hash}"
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -1710,10 +1716,25 @@ class GuardStore:
             return None
         token_reference = payload.get("token_ref")
         if isinstance(token_reference, str) and token_reference:
-            token = self._secret_store.get_secret(token_reference)
-            if token is None:
-                return None
-            return {"sync_url": sync_url, "token": token}
+            expected_hash = payload.get(_SYNC_TOKEN_HASH_KEY)
+            expected_hash_value = expected_hash if isinstance(expected_hash, str) and expected_hash else None
+
+            reference_candidates = [self._sync_token_ref]
+            if token_reference != self._sync_token_ref:
+                reference_candidates.append(token_reference)
+
+            for secret_ref in reference_candidates:
+                token = self._secret_store.get_secret(secret_ref)
+                if token is None:
+                    continue
+                if expected_hash_value is not None and _token_sha256(token) != expected_hash_value:
+                    continue
+                if token_reference != self._sync_token_ref:
+                    now = _now()
+                    with self._connect() as connection:
+                        self._set_sync_credentials_in_connection(connection, sync_url, token, now)
+                return {"sync_url": sync_url, "token": token}
+            return None
         legacy_token = payload.get("token")
         if isinstance(legacy_token, str) and legacy_token:
             now = _now()
@@ -1871,10 +1892,10 @@ class GuardStore:
         token: str,
         now: str,
     ) -> None:
-        self._secret_store.set_secret(_SYNC_TOKEN_REF, token)
+        self._secret_store.set_secret(self._sync_token_ref, token)
         payload = {
             "sync_url": sync_url,
-            "token_ref": _SYNC_TOKEN_REF,
+            "token_ref": self._sync_token_ref,
             _SYNC_TOKEN_HASH_KEY: _token_sha256(token),
         }
         previous_row = connection.execute(

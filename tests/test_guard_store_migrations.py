@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 
@@ -22,7 +23,8 @@ def test_sync_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path):
     assert row is not None
     payload = json.loads(str(row[0]))
     assert payload["sync_url"] == "https://hol.org/api/guard/receipts/sync"
-    assert payload.get("token_ref") == "guard-cloud-token"
+    assert isinstance(payload.get("token_ref"), str)
+    assert str(payload["token_ref"]).startswith("guard-cloud-token:")
     assert isinstance(payload.get("token_sha256"), str)
     assert "token" not in payload
     assert store.get_sync_credentials() == {
@@ -62,8 +64,73 @@ def test_legacy_plaintext_sync_payload_is_migrated_on_read(tmp_path):
 
     payload = json.loads(str(row[0])) if row is not None else {}
     assert "token" not in payload
-    assert payload.get("token_ref") == "guard-cloud-token"
+    assert isinstance(payload.get("token_ref"), str)
+    assert str(payload["token_ref"]).startswith("guard-cloud-token:")
     assert isinstance(payload.get("token_sha256"), str)
+
+
+def test_sync_credentials_are_scoped_per_guard_home(tmp_path):
+    home_a = tmp_path / "guard-home-a"
+    home_b = tmp_path / "guard-home-b"
+    store_a = GuardStore(home_a)
+    store_b = GuardStore(home_b)
+
+    store_a.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-a",
+        "2026-04-19T00:00:00+00:00",
+    )
+    store_b.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-b",
+        "2026-04-19T00:00:05+00:00",
+    )
+
+    assert store_a.get_sync_credentials() == {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "token": "token-a",
+    }
+    assert store_b.get_sync_credentials() == {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "token": "token-b",
+    }
+
+
+def test_legacy_token_reference_is_migrated_to_scoped_reference(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    legacy_token = "legacy-token-ref"
+    legacy_ref = "guard-cloud-token"
+    store._secret_store.set_secret(legacy_ref, legacy_token)
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """
+            insert into sync_state (state_key, payload_json, updated_at)
+            values ('credentials', ?, ?)
+            on conflict(state_key) do update set payload_json = excluded.payload_json, updated_at = excluded.updated_at
+            """,
+            (
+                json.dumps(
+                    {
+                        "sync_url": "https://hol.org/api/guard/receipts/sync",
+                        "token_ref": legacy_ref,
+                        "token_sha256": hashlib.sha256(legacy_token.encode("utf-8")).hexdigest(),
+                    }
+                ),
+                "2026-04-19T00:00:00+00:00",
+            ),
+        )
+
+    credentials = store.get_sync_credentials()
+    assert credentials == {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "token": legacy_token,
+    }
+    assert store._secret_store.get_secret(store._sync_token_ref) == legacy_token
+
+    with sqlite3.connect(store.path) as connection:
+        row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
+    payload = json.loads(str(row[0])) if row is not None else {}
+    assert payload["token_ref"] == store._sync_token_ref
 
 
 def test_sync_token_rotation_with_same_url_clears_cloud_sync_payloads(tmp_path):
