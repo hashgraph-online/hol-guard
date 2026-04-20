@@ -29,6 +29,12 @@ except ModuleNotFoundError:
     Text = Any  # type: ignore[misc,assignment]
 
 
+_MODE_ACRONYMS = frozenset({"mcp", "api", "cli"})
+_KNOWN_MANAGED_INSTALL_MODES = {
+    "codex-mcp-proxy": "Codex MCP proxy",
+}
+
+
 def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) -> None:
     """Render Guard payloads as JSON or human-friendly rich output."""
 
@@ -537,12 +543,15 @@ def _render_sync(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Inventory tracked", str(payload.get("inventory_tracked", payload.get("inventory")) or 0))
     body.add_row("Receipts stored", str(payload.get("receipts_stored") or 0))
     body.add_row("Advisories stored", str(payload.get("advisories_stored") or 0))
-    if payload.get("remote_policies_stored") is not None:
-        body.add_row("Remote policies", str(payload.get("remote_policies_stored") or 0))
-    if payload.get("exceptions_stored") is not None:
-        body.add_row("Exceptions stored", str(payload.get("exceptions_stored") or 0))
-    if payload.get("pain_signals_uploaded") is not None:
-        body.add_row("Pain signals uploaded", str(payload.get("pain_signals_uploaded") or 0))
+    remote_policies_stored = payload.get("remote_policies_stored")
+    exceptions_stored = payload.get("exceptions_stored")
+    pain_signals_uploaded = payload.get("pain_signals_uploaded")
+    if remote_policies_stored is not None:
+        body.add_row("Remote policies", str(remote_policies_stored or 0))
+    if exceptions_stored is not None:
+        body.add_row("Exceptions stored", str(exceptions_stored or 0))
+    if pain_signals_uploaded is not None:
+        body.add_row("Pain signals uploaded", str(pain_signals_uploaded or 0))
     console.print(Panel(body, title="Guard sync complete", border_style="green"))
 
 
@@ -553,16 +562,13 @@ def _managed_install_state_text(managed_install: dict[str, object]) -> str:
 def _managed_install_mode_text(mode: object) -> str | None:
     if not isinstance(mode, str) or not mode.strip():
         return None
-    known_modes = {
-        "codex-mcp-proxy": "Codex MCP proxy",
-    }
     normalized = mode.strip().lower()
-    if normalized in known_modes:
-        return known_modes[normalized]
+    if normalized in _KNOWN_MANAGED_INSTALL_MODES:
+        return _KNOWN_MANAGED_INSTALL_MODES[normalized]
     words = []
     for part in normalized.split("-"):
         lowered = part.lower()
-        if lowered in {"mcp", "api", "cli"}:
+        if lowered in _MODE_ACRONYMS:
             words.append(lowered.upper())
         else:
             words.append(lowered.capitalize())
@@ -570,9 +576,11 @@ def _managed_install_mode_text(mode: object) -> str | None:
 
 
 def _managed_install_notes(managed_install: dict[str, object], manifest: object) -> list[str]:
-    notes = _coerce_string_list(manifest.get("notes")) if isinstance(manifest, dict) else []
     if not isinstance(manifest, dict):
-        return notes
+        if not bool(managed_install.get("active")):
+            return ["Guard removed the managed wrapper configuration for this harness."]
+        return []
+    notes = _coerce_string_list(manifest.get("notes"))
     skipped_servers = _coerce_string_list(manifest.get("skipped_servers"))
     if skipped_servers:
         notes.append(f"Skipped existing server entries: {', '.join(skipped_servers)}")
