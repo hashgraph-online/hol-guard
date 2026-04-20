@@ -304,14 +304,22 @@ class FallbackSecretStore:
             primary_value = None
         if primary_value is not None:
             return primary_value
-        fallback_value = self.fallback.get_secret(secret_id)
-        if fallback_value is None:
-            return None
         try:
-            self.primary.set_secret(secret_id, fallback_value)
+            return self.fallback.get_secret(secret_id)
         except Exception:
-            return fallback_value
-        return fallback_value
+            return None
+
+    def promote_secret(self, secret_id: str, value: str) -> None:
+        try:
+            primary_value = self.primary.get_secret(secret_id)
+        except Exception:
+            primary_value = None
+        if primary_value == value:
+            return
+        try:
+            self.primary.set_secret(secret_id, value)
+        except Exception:
+            return
 
 
 def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
@@ -349,6 +357,10 @@ class GuardStore:
         scoped_home = str(self.guard_home.expanduser().resolve())
         scoped_hash = sha256(scoped_home.encode("utf-8")).hexdigest()[:16]
         return f"{_SYNC_TOKEN_REF}:{scoped_hash}"
+
+    def _promote_secret_to_primary(self, secret_id: str, value: str) -> None:
+        if isinstance(self._secret_store, FallbackSecretStore):
+            self._secret_store.promote_secret(secret_id, value)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -1758,6 +1770,8 @@ class GuardStore:
                     now = _now()
                     with self._connect() as connection:
                         self._set_sync_credentials_in_connection(connection, sync_url, token, now)
+                else:
+                    self._promote_secret_to_primary(secret_ref, token)
                 return {"sync_url": sync_url, "token": token}
             return None
         legacy_token = payload.get("token")

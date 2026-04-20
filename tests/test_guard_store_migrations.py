@@ -186,7 +186,7 @@ def test_fallback_secret_store_uses_secondary_backend_when_primary_fails():
     assert store.get_secret("guard-token") == "value-123"
 
 
-def test_fallback_secret_store_migrates_fallback_reads_to_primary():
+def test_fallback_secret_store_promotes_secret_to_primary():
     class MemoryStore:
         def __init__(self) -> None:
             self._data: dict[str, str] = {}
@@ -204,6 +204,10 @@ def test_fallback_secret_store_migrates_fallback_reads_to_primary():
     store = FallbackSecretStore(primary, fallback)
 
     assert store.get_secret("guard-token") == "value-123"
+    assert primary.get_secret("guard-token") is None
+
+    store.promote_secret("guard-token", "value-123")
+
     assert primary.get_secret("guard-token") == "value-123"
 
 
@@ -268,7 +272,7 @@ def test_sync_credentials_do_not_shell_out_to_keychain_when_file_store_is_availa
     assert any((guard_home / "secrets").glob("*.enc"))
 
 
-def test_keychain_fallback_reads_are_migrated_into_encrypted_file_store(tmp_path, monkeypatch):
+def test_validated_keychain_fallback_reads_are_migrated_into_encrypted_file_store(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
 
@@ -285,9 +289,31 @@ def test_keychain_fallback_reads_are_migrated_into_encrypted_file_store(tmp_path
         )
 
     monkeypatch.setattr(subprocess, "run", keychain_lookup)
-    secret_store = _build_secret_store(guard_home)
+    store = GuardStore(guard_home)
 
-    assert secret_store.get_secret("guard-token") == "legacy-token"
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """
+            insert into sync_state (state_key, payload_json, updated_at)
+            values ('credentials', ?, ?)
+            on conflict(state_key) do update set payload_json = excluded.payload_json, updated_at = excluded.updated_at
+            """,
+            (
+                json.dumps(
+                    {
+                        "sync_url": "https://hol.org/api/guard/receipts/sync",
+                        "token_ref": store._sync_token_ref,
+                        "token_sha256": hashlib.sha256(b"legacy-token").hexdigest(),
+                    }
+                ),
+                "2026-04-19T00:00:00+00:00",
+            ),
+        )
+
+    assert store.get_sync_credentials() == {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "token": "legacy-token",
+    }
     assert keychain_reads == 1
     assert any((guard_home / "secrets").glob("*.enc"))
 
@@ -296,7 +322,57 @@ def test_keychain_fallback_reads_are_migrated_into_encrypted_file_store(tmp_path
 
     monkeypatch.setattr(subprocess, "run", fail_on_keychain)
 
-    assert secret_store.get_secret("guard-token") == "legacy-token"
+    assert store.get_sync_credentials() == {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "token": "legacy-token",
+    }
+
+
+def test_invalid_keychain_fallback_token_is_not_migrated_into_encrypted_file_store(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+
+    keychain_reads = 0
+
+    def keychain_lookup(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal keychain_reads
+        keychain_reads += 1
+        return subprocess.CompletedProcess(
+            args=["/usr/bin/security"],
+            returncode=0,
+            stdout="stale-token\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", keychain_lookup)
+    store = GuardStore(guard_home)
+
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            """
+            insert into sync_state (state_key, payload_json, updated_at)
+            values ('credentials', ?, ?)
+            on conflict(state_key) do update set payload_json = excluded.payload_json, updated_at = excluded.updated_at
+            """,
+            (
+                json.dumps(
+                    {
+                        "sync_url": "https://hol.org/api/guard/receipts/sync",
+                        "token_ref": store._sync_token_ref,
+                        "token_sha256": hashlib.sha256(b"fresh-token").hexdigest(),
+                    }
+                ),
+                "2026-04-19T00:00:00+00:00",
+            ),
+        )
+
+    assert store.get_sync_credentials() is None
+    assert keychain_reads == 1
+    assert list((guard_home / "secrets").glob("*.enc")) == []
+
+    assert store.get_sync_credentials() is None
+    assert keychain_reads == 2
+    assert list((guard_home / "secrets").glob("*.enc")) == []
 
 
 def test_device_identity_and_label_management_are_persistent(tmp_path):
