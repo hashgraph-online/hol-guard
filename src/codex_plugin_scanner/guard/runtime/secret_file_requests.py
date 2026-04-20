@@ -170,7 +170,7 @@ _ENCODED_EXECUTION_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.IGNORECASE,
     ),
     re.compile(r"\b(?:powershell|pwsh)\b[^\n;]*\s-(?:e|ec|enc|encodedcommand)\b", re.IGNORECASE),
-    re.compile(r"\bfrombase64string\s*\(", re.IGNORECASE),
+    re.compile(r"\b(?:powershell|pwsh)\b[^\n;]*\bfrombase64string\s*\(", re.IGNORECASE),
 )
 _BASE64_LITERAL_PATTERN = re.compile(r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{20,}={0,2}(?![A-Za-z0-9+/=])")
 _HEX_LITERAL_PATTERN = re.compile(r"(?<![A-Fa-f0-9])[A-Fa-f0-9]{24,}(?![A-Fa-f0-9])")
@@ -1542,14 +1542,7 @@ def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
 
 
 def _shell_command_scripts(parts: list[str]) -> tuple[str, ...]:
-    scripts: list[str] = []
-    for index, part in enumerate(parts[:-1]):
-        if not _is_shell_command_flag(part):
-            continue
-        script = parts[index + 1].strip()
-        if script:
-            scripts.append(script)
-    return tuple(scripts)
+    return _script_interpreter_texts(parts)
 
 
 def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:

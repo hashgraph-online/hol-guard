@@ -1258,6 +1258,36 @@ echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
     assert request is None
 
 
+def test_tool_action_request_classifier_ignores_echo_frombase64string_text():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo 'frombase64string('"},
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_ignores_ls_long_flag_with_encoded_named_file(tmp_path):
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        workspace_dir / "encoded-wrapper.sh",
+        """
+#!/bin/sh
+set -eu
+echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | bash
+""".strip()
+        + "\n",
+    )
+
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "ls -l ./encoded-wrapper.sh"},
+        cwd=workspace_dir,
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_detects_encrypted_decrypt_and_exec_command():
     request = extract_sensitive_tool_action_request(
         "bash",
