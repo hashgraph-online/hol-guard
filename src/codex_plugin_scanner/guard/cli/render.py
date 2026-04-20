@@ -463,9 +463,9 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
         sync_payload = payload.get("sync")
         should_render_sync_counts = False
         if isinstance(sync_payload, dict):
-            receipts_stored = int(sync_payload.get("receipts_stored") or 0)
+            receipts_stored = _coerce_int(sync_payload.get("receipts_stored"))
             inventory_value = sync_payload.get("inventory_tracked", sync_payload.get("inventory"))
-            inventory_tracked = int(inventory_value or 0)
+            inventory_tracked = _coerce_int(inventory_value)
             should_render_sync_counts = any(
                 (
                     milestone == "first_sync_succeeded",
@@ -1338,6 +1338,24 @@ def _coerce_string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if isinstance(item, str) and item]
+
+
+def _coerce_int(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return 0
+        try:
+            return int(stripped)
+        except ValueError:
+            return 0
+    return 0
 
 
 def _short_path(value: object) -> str:
