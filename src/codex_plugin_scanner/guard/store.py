@@ -309,6 +309,22 @@ class FallbackSecretStore:
         except Exception:
             return None
 
+    def get_secret_candidates(self, secret_id: str) -> list[str]:
+        candidates: list[str] = []
+        try:
+            primary_value = self.primary.get_secret(secret_id)
+        except Exception:
+            primary_value = None
+        if primary_value is not None:
+            candidates.append(primary_value)
+        try:
+            fallback_value = self.fallback.get_secret(secret_id)
+        except Exception:
+            fallback_value = None
+        if fallback_value is not None and fallback_value not in candidates:
+            candidates.append(fallback_value)
+        return candidates
+
     def promote_secret(self, secret_id: str, value: str) -> None:
         try:
             primary_value = self.primary.get_secret(secret_id)
@@ -361,6 +377,14 @@ class GuardStore:
     def _promote_secret_to_primary(self, secret_id: str, value: str) -> None:
         if isinstance(self._secret_store, FallbackSecretStore):
             self._secret_store.promote_secret(secret_id, value)
+
+    def _get_secret_candidates(self, secret_id: str) -> list[str]:
+        if isinstance(self._secret_store, FallbackSecretStore):
+            return self._secret_store.get_secret_candidates(secret_id)
+        token = self._secret_store.get_secret(secret_id)
+        if token is None:
+            return []
+        return [token]
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -1761,18 +1785,16 @@ class GuardStore:
                 reference_candidates.append(token_reference)
 
             for secret_ref in reference_candidates:
-                token = self._secret_store.get_secret(secret_ref)
-                if token is None:
-                    continue
-                if expected_hash_value is not None and _token_sha256(token) != expected_hash_value:
-                    continue
-                if token_reference != self._sync_token_ref:
-                    now = _now()
-                    with self._connect() as connection:
-                        self._set_sync_credentials_in_connection(connection, sync_url, token, now)
-                else:
-                    self._promote_secret_to_primary(secret_ref, token)
-                return {"sync_url": sync_url, "token": token}
+                for token in self._get_secret_candidates(secret_ref):
+                    if expected_hash_value is not None and _token_sha256(token) != expected_hash_value:
+                        continue
+                    if token_reference != self._sync_token_ref:
+                        now = _now()
+                        with self._connect() as connection:
+                            self._set_sync_credentials_in_connection(connection, sync_url, token, now)
+                    else:
+                        self._promote_secret_to_primary(secret_ref, token)
+                    return {"sync_url": sync_url, "token": token}
             return None
         legacy_token = payload.get("token")
         if isinstance(legacy_token, str) and legacy_token:
