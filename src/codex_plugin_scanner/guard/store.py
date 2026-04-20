@@ -145,7 +145,13 @@ class KeychainSecretStore:
 
 
 class EncryptedFileSecretStore:
-    """Encrypted file-based fallback secret store."""
+    """Encrypted file-based secret store for predictable cross-platform Guard credentials.
+
+    This keeps sync tokens out of plaintext SQLite and avoids OS-specific keychain prompts
+    during CLI flows. The Fernet key and encrypted payloads both live inside the same
+    per-user Guard directory, so this is a portability and encrypted-at-rest improvement,
+    not stronger isolation than an OS keychain against same-user local compromise.
+    """
 
     def __init__(self, guard_home: Path) -> None:
         self.base_dir = guard_home / "secrets"
@@ -156,17 +162,16 @@ class EncryptedFileSecretStore:
         if self._fernet is not None:
             return
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(self.base_dir, 0o700)
         if not self.key_path.exists():
-            self.key_path.write_bytes(Fernet.generate_key())
-            os.chmod(self.key_path, 0o600)
+            self._atomic_write_bytes(self.key_path, Fernet.generate_key(), 0o600)
         self._fernet = Fernet(self._load_fernet_key())
 
     def set_secret(self, secret_id: str, value: str) -> None:
         self._ensure_ready()
         payload = self._encrypt_fernet(value)
         path = self._path_for(secret_id)
-        path.write_text(json.dumps(payload), encoding="utf-8")
-        os.chmod(path, 0o600)
+        self._atomic_write_text(path, json.dumps(payload), 0o600)
 
     def get_secret(self, secret_id: str) -> str | None:
         self._ensure_ready()
@@ -196,8 +201,7 @@ class EncryptedFileSecretStore:
         existing = self.key_path.read_bytes().strip()
         if not existing:
             key = Fernet.generate_key()
-            self.key_path.write_bytes(key)
-            os.chmod(self.key_path, 0o600)
+            self._atomic_write_bytes(self.key_path, key, 0o600)
             return key
         try:
             decoded = base64.urlsafe_b64decode(existing)
@@ -206,19 +210,33 @@ class EncryptedFileSecretStore:
         if len(decoded) == 32:
             if len(existing) == 32:
                 upgraded = base64.urlsafe_b64encode(existing)
-                self.key_path.write_bytes(upgraded)
-                os.chmod(self.key_path, 0o600)
+                self._atomic_write_bytes(self.key_path, upgraded, 0o600)
                 return upgraded
             return existing
         if len(existing) == 32:
             upgraded = base64.urlsafe_b64encode(existing)
-            self.key_path.write_bytes(upgraded)
-            os.chmod(self.key_path, 0o600)
+            self._atomic_write_bytes(self.key_path, upgraded, 0o600)
             return upgraded
         key = Fernet.generate_key()
-        self.key_path.write_bytes(key)
-        os.chmod(self.key_path, 0o600)
+        self._atomic_write_bytes(self.key_path, key, 0o600)
         return key
+
+    def _atomic_write_bytes(self, path: Path, payload: bytes, mode: int) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+        try:
+            with tmp_path.open("wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.chmod(tmp_path, mode)
+            os.replace(tmp_path, path)
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
+
+    def _atomic_write_text(self, path: Path, payload: str, mode: int) -> None:
+        self._atomic_write_bytes(path, payload.encode("utf-8"), mode)
 
     def _encrypt_fernet(self, value: str) -> dict[str, str]:
         fernet = self._fernet
@@ -286,7 +304,14 @@ class FallbackSecretStore:
             primary_value = None
         if primary_value is not None:
             return primary_value
-        return self.fallback.get_secret(secret_id)
+        fallback_value = self.fallback.get_secret(secret_id)
+        if fallback_value is None:
+            return None
+        try:
+            self.primary.set_secret(secret_id, fallback_value)
+        except Exception:
+            return fallback_value
+        return fallback_value
 
 
 def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:

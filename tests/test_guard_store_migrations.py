@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import subprocess
 
@@ -185,6 +186,27 @@ def test_fallback_secret_store_uses_secondary_backend_when_primary_fails():
     assert store.get_secret("guard-token") == "value-123"
 
 
+def test_fallback_secret_store_migrates_fallback_reads_to_primary():
+    class MemoryStore:
+        def __init__(self) -> None:
+            self._data: dict[str, str] = {}
+
+        def set_secret(self, secret_id: str, value: str) -> None:
+            self._data[secret_id] = value
+
+        def get_secret(self, secret_id: str) -> str | None:
+            return self._data.get(secret_id)
+
+    primary = MemoryStore()
+    fallback = MemoryStore()
+    fallback.set_secret("guard-token", "value-123")
+
+    store = FallbackSecretStore(primary, fallback)
+
+    assert store.get_secret("guard-token") == "value-123"
+    assert primary.get_secret("guard-token") == "value-123"
+
+
 def test_secret_store_prefers_encrypted_file_backend_when_keychain_is_available(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
@@ -194,6 +216,33 @@ def test_secret_store_prefers_encrypted_file_backend_when_keychain_is_available(
     assert isinstance(secret_store, FallbackSecretStore)
     assert isinstance(secret_store.primary, EncryptedFileSecretStore)
     assert isinstance(secret_store.fallback, KeychainSecretStore)
+
+
+def test_encrypted_file_secret_store_secures_secret_directory_permissions(tmp_path):
+    secret_store = EncryptedFileSecretStore(tmp_path / "guard-home")
+
+    secret_store.set_secret("guard-token", "value-123")
+
+    assert secret_store.base_dir.stat().st_mode & 0o777 == 0o700
+    assert secret_store.key_path.stat().st_mode & 0o777 == 0o600
+    assert secret_store._path_for("guard-token").stat().st_mode & 0o777 == 0o600
+
+
+def test_encrypted_file_secret_store_writes_key_and_payload_atomically(tmp_path, monkeypatch):
+    secret_store = EncryptedFileSecretStore(tmp_path / "guard-home")
+    recorded_replacements: list[tuple[str, str]] = []
+    original_replace = os.replace
+
+    def tracking_replace(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+        recorded_replacements.append((os.fspath(src), os.fspath(dst)))
+        original_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", tracking_replace)
+
+    secret_store.set_secret("guard-token", "value-123")
+
+    assert any(dst.endswith("key.bin") for _, dst in recorded_replacements)
+    assert any(dst.endswith("guard-token.enc") for _, dst in recorded_replacements)
 
 
 def test_sync_credentials_do_not_shell_out_to_keychain_when_file_store_is_available(tmp_path, monkeypatch):
@@ -217,6 +266,37 @@ def test_sync_credentials_do_not_shell_out_to_keychain_when_file_store_is_availa
         "token": "secret-token-value",
     }
     assert any((guard_home / "secrets").glob("*.enc"))
+
+
+def test_keychain_fallback_reads_are_migrated_into_encrypted_file_store(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+
+    keychain_reads = 0
+
+    def keychain_lookup(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal keychain_reads
+        keychain_reads += 1
+        return subprocess.CompletedProcess(
+            args=["/usr/bin/security"],
+            returncode=0,
+            stdout="legacy-token\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", keychain_lookup)
+    secret_store = _build_secret_store(guard_home)
+
+    assert secret_store.get_secret("guard-token") == "legacy-token"
+    assert keychain_reads == 1
+    assert any((guard_home / "secrets").glob("*.enc"))
+
+    def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("fallback keychain should not be used after migration")
+
+    monkeypatch.setattr(subprocess, "run", fail_on_keychain)
+
+    assert secret_store.get_secret("guard-token") == "legacy-token"
 
 
 def test_device_identity_and_label_management_are_persistent(tmp_path):
