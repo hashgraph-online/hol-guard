@@ -9,6 +9,8 @@ import zipfile
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner import cli as cli_module
 from codex_plugin_scanner.cli import format_json, format_text, main
 from codex_plugin_scanner.models import IntegrationResult
@@ -159,6 +161,13 @@ class TestMain:
     def test_returns_1_for_nonexistent_dir(self):
         rc = main(["/nonexistent/path/that/does/not/exist"])
         assert rc == 1
+
+    def test_invalid_top_level_command_suggests_closest_match(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            main(["verfy"])
+
+        assert exc_info.value.code == 2
+        assert "Did you mean `verify`?" in capsys.readouterr().err
 
     def test_returns_0_for_file_not_dir(self):
         rc = main([str(FIXTURES / "good-plugin" / "README.md")])

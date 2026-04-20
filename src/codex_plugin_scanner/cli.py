@@ -10,6 +10,7 @@ import zipfile
 from dataclasses import asdict, replace
 from pathlib import Path
 
+from .argparse_utils import FriendlyArgumentParser, should_default_to_scan_target
 from .cli_ui import (
     build_cli_epilog,
     build_plain_text,
@@ -77,7 +78,7 @@ def _is_scanner_program(program_name: str) -> bool:
 
 def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentParser:
     if program_mode == "guard":
-        parser = argparse.ArgumentParser(
+        parser = FriendlyArgumentParser(
             prog=program_name,
             description="Protect local harnesses before tools run.",
             epilog=build_cli_epilog(program_name, include_guard=False),
@@ -91,7 +92,7 @@ def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentP
     if program_mode == "combined":
         description = "Run HOL Guard locally or scan plugin ecosystems for CI and publish readiness."
 
-    parser = argparse.ArgumentParser(
+    parser = FriendlyArgumentParser(
         prog=program_name,
         description=description,
         epilog=build_cli_epilog(program_name, include_guard=program_mode == "combined"),
@@ -99,7 +100,7 @@ def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentP
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--list-ecosystems", action="store_true", help="List supported plugin ecosystems and exit")
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(dest="command", parser_class=FriendlyArgumentParser)
 
     scan_parser = subparsers.add_parser(
         "scan",
@@ -214,6 +215,8 @@ def _resolve_legacy_args(argv: list[str] | None, *, program_mode: str) -> list[s
     if program_mode == "combined":
         known_commands.add("guard")
     if argv[0] in known_commands:
+        return argv
+    if not should_default_to_scan_target(argv[0], known_commands=known_commands):
         return argv
     return ["scan", *argv]
 
