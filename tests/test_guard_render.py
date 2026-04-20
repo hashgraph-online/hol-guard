@@ -51,6 +51,31 @@ def test_guard_connect_render_tolerates_non_numeric_sync_counts(capsys) -> None:
     assert "0" in output
 
 
+def test_guard_connect_render_tolerates_non_finite_sync_counts(capsys) -> None:
+    emit_guard_payload(
+        "connect",
+        {
+            "connected": True,
+            "browser_opened": True,
+            "status": "connected",
+            "milestone": "first_sync_succeeded",
+            "completed_at": "2026-04-17T00:00:00Z",
+            "connect_url": "https://hol.org/guard/connect",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "sync": {
+                "receipts_stored": float("nan"),
+                "inventory_tracked": float("inf"),
+            },
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Receipts stored" in output
+    assert "Inventory tracked" in output
+    assert "0" in output
+
+
 def test_guard_connect_render_clarifies_browser_approval_wait(capsys) -> None:
     emit_guard_payload(
         "connect",

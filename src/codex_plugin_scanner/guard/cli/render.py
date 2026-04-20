@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 import textwrap
@@ -1346,6 +1347,8 @@ def _coerce_int(value: object) -> int:
     if isinstance(value, int):
         return value
     if isinstance(value, float):
+        if not math.isfinite(value):
+            return 0
         return int(value)
     if isinstance(value, str):
         stripped = value.strip()
