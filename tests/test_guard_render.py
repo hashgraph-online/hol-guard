@@ -26,6 +26,28 @@ def test_guard_connect_render_clarifies_paid_plan_pending_state(capsys) -> None:
     assert "Upgrade to sync this device to Guard Cloud" in output
 
 
+def test_guard_connect_render_defaults_sync_not_available_to_upgrade_guidance(capsys) -> None:
+    emit_guard_payload(
+        "connect",
+        {
+            "connected": True,
+            "browser_opened": True,
+            "status": "connected",
+            "milestone": "sync_not_available",
+            "reason": "Sync is not available right now.",
+            "completed_at": "2026-04-17T00:00:00Z",
+            "connect_url": "https://hol.org/guard/connect",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "This device is protected locally" in output
+    assert "Upgrade to sync this device to Guard Cloud" in output
+    assert "First Guard Cloud proof is on the way" not in output
+
+
 def test_guard_connect_render_tolerates_non_numeric_sync_counts(capsys) -> None:
     emit_guard_payload(
         "connect",

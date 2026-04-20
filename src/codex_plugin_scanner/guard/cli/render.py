@@ -549,7 +549,9 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
 def _connect_status_text(payload: dict[str, object]) -> str:
     status = str(payload.get("status") or "unknown")
     milestone = str(payload.get("milestone") or "")
-    if status == "connected" and milestone in {"first_sync_pending", "sync_not_available"}:
+    if status == "connected" and milestone == "sync_not_available":
+        return "This device is protected locally"
+    if status == "connected" and milestone == "first_sync_pending":
         reason = _connect_reason_text(payload)
         if _connect_reason_requires_login(reason) or _connect_reason_requires_paid_plan(reason):
             return "This device is protected locally"
@@ -569,7 +571,9 @@ def _connect_milestone_text(payload: dict[str, object]) -> str:
     milestone = str(payload.get("milestone") or "")
     if milestone == "waiting_for_browser":
         return "Waiting for browser approval"
-    if milestone in {"first_sync_pending", "sync_not_available"}:
+    if milestone == "sync_not_available":
+        return "Upgrade to sync this device to Guard Cloud"
+    if milestone == "first_sync_pending":
         reason = _connect_reason_text(payload)
         if _connect_reason_requires_login(reason):
             return "Sign in to finish Guard Cloud setup"
