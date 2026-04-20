@@ -305,7 +305,7 @@ def _expand_keystream(*, key: bytes, nonce: bytes, length: int) -> bytes:
 def _build_secret_store(guard_home: Path) -> SecretStore:
     fallback_store = EncryptedFileSecretStore(guard_home)
     if KeychainSecretStore._is_available():
-        return FallbackSecretStore(KeychainSecretStore(service_name="hol-guard.sync"), fallback_store)
+        return FallbackSecretStore(fallback_store, KeychainSecretStore(service_name="hol-guard.sync"))
     return fallback_store
 
 

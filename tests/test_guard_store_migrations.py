@@ -5,8 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import subprocess
 
-from codex_plugin_scanner.guard.store import FallbackSecretStore, GuardStore
+from codex_plugin_scanner.guard.store import (
+    EncryptedFileSecretStore,
+    FallbackSecretStore,
+    GuardStore,
+    KeychainSecretStore,
+    _build_secret_store,
+)
 
 
 def test_sync_credentials_are_not_persisted_in_plaintext_sqlite(tmp_path):
@@ -176,6 +183,40 @@ def test_fallback_secret_store_uses_secondary_backend_when_primary_fails():
     store.set_secret("guard-token", "value-123")
 
     assert store.get_secret("guard-token") == "value-123"
+
+
+def test_secret_store_prefers_encrypted_file_backend_when_keychain_is_available(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+
+    secret_store = _build_secret_store(guard_home)
+
+    assert isinstance(secret_store, FallbackSecretStore)
+    assert isinstance(secret_store.primary, EncryptedFileSecretStore)
+    assert isinstance(secret_store.fallback, KeychainSecretStore)
+
+
+def test_sync_credentials_do_not_shell_out_to_keychain_when_file_store_is_available(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(KeychainSecretStore, "_is_available", staticmethod(lambda: True))
+
+    def fail_on_keychain(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise AssertionError("keychain should not be used for sync credential writes")
+
+    monkeypatch.setattr(subprocess, "run", fail_on_keychain)
+    store = GuardStore(guard_home)
+
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "secret-token-value",
+        "2026-04-19T00:00:00+00:00",
+    )
+
+    assert store.get_sync_credentials() == {
+        "sync_url": "https://hol.org/api/guard/receipts/sync",
+        "token": "secret-token-value",
+    }
+    assert any((guard_home / "secrets").glob("*.enc"))
 
 
 def test_device_identity_and_label_management_are_persistent(tmp_path):
