@@ -588,11 +588,22 @@ def _connect_reason_text(payload: dict[str, object]) -> str:
 
 
 def _connect_reason_requires_login(reason: str) -> bool:
-    return "not logged in" in reason or "sign in" in reason or "logged out" in reason
+    return (
+        "not logged in" in reason
+        or "sign in" in reason
+        or "logged out" in reason
+        or "login" in reason
+        or "logout" in reason
+    )
 
 
 def _connect_reason_requires_paid_plan(reason: str) -> bool:
-    return "paid guard plan" in reason or "paid plan" in reason or "guard plan required" in reason
+    return (
+        "paid guard plan" in reason
+        or "paid plan" in reason
+        or "guard plan required" in reason
+        or "pro or team plan" in reason
+    )
 
 
 def _connect_sync_note_text(payload: dict[str, object]) -> str | None:
