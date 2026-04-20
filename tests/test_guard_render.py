@@ -275,3 +275,40 @@ def test_guard_sync_render_surfaces_policy_and_alert_details(capsys) -> None:
     assert "5" in output
     assert "2" in output
     assert "1" in output
+
+
+def test_guard_uninstall_render_adds_removal_note_without_manifest(capsys) -> None:
+    emit_guard_payload(
+        "uninstall",
+        {
+            "managed_install": {
+                "harness": "codex",
+                "active": False,
+                "workspace": "/repo",
+            },
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Removed" in output
+    assert "Guard removed the managed wrapper configuration for this harness." in output
+
+
+def test_guard_install_render_skips_notes_when_manifest_is_missing_and_active(capsys) -> None:
+    emit_guard_payload(
+        "install",
+        {
+            "managed_install": {
+                "harness": "codex",
+                "active": True,
+                "workspace": "/repo",
+            },
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Installed" in output
+    assert "Guard removed the managed wrapper configuration for this harness." not in output
+    assert "Notes" not in output
