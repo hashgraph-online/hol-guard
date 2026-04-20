@@ -1101,15 +1101,16 @@ def run_guard_command(args: argparse.Namespace) -> int:
             runtime_artifact_hash = artifact_hash(runtime_artifact)
             artifact_id = runtime_artifact.artifact_id
             artifact_name = runtime_artifact.name
+            stored_policy_action = store.resolve_policy(
+                args.harness,
+                artifact_id,
+                runtime_artifact_hash,
+                str(runtime_workspace) if runtime_workspace else None,
+            )
             policy_action = _coalesce_string(
                 getattr(args, "policy_action", None),
+                stored_policy_action,
                 payload.get("policy_action"),
-                store.resolve_policy(
-                    args.harness,
-                    artifact_id,
-                    runtime_artifact_hash,
-                    str(runtime_workspace) if runtime_workspace else None,
-                ),
             )
             if policy_action not in VALID_GUARD_ACTIONS:
                 policy_action = SAFE_CHANGED_HASH_ACTION
@@ -1290,15 +1291,16 @@ def run_guard_command(args: argparse.Namespace) -> int:
             payload.get("tool_name"),
             artifact_id,
         )
+        stored_policy_action = store.resolve_policy(
+            args.harness,
+            artifact_id,
+            str(payload.get("artifact_hash")) if isinstance(payload.get("artifact_hash"), str) else None,
+            str(runtime_workspace) if runtime_workspace else None,
+        )
         policy_action = _coalesce_string(
             getattr(args, "policy_action", None),
+            stored_policy_action,
             payload.get("policy_action"),
-            store.resolve_policy(
-                args.harness,
-                artifact_id,
-                str(payload.get("artifact_hash")) if isinstance(payload.get("artifact_hash"), str) else None,
-                str(workspace) if workspace else None,
-            ),
             config.default_action,
         )
         if policy_action not in VALID_GUARD_ACTIONS:
