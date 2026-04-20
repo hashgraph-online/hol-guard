@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 import textwrap
@@ -455,20 +456,29 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
             "Browser paired",
             _bool_label(bool(payload.get("completed_at")) or str(payload.get("status") or "") == "connected"),
         )
-        body.add_row("Guard status", _connect_status_text(payload))
+        body.add_row("Connection", _connect_status_text(payload))
         if milestone:
-            body.add_row("Stage", _connect_milestone_text(payload))
+            body.add_row("Next step", _connect_milestone_text(payload))
         body.add_row("Connect URL", str(payload.get("connect_url") or "unknown"))
         body.add_row("Sync endpoint", str(payload.get("sync_url") or "unknown"))
         sync_payload = payload.get("sync")
+        should_render_sync_counts = False
         if isinstance(sync_payload, dict):
-            body.add_row("Receipts stored", str(sync_payload.get("receipts_stored") or 0))
-            body.add_row(
-                "Inventory tracked",
-                str(sync_payload.get("inventory_tracked", sync_payload.get("inventory")) or 0),
+            receipts_stored = _coerce_int(sync_payload.get("receipts_stored"))
+            inventory_value = sync_payload.get("inventory_tracked", sync_payload.get("inventory"))
+            inventory_tracked = _coerce_int(inventory_value)
+            should_render_sync_counts = any(
+                (
+                    milestone == "first_sync_succeeded",
+                    receipts_stored > 0,
+                    inventory_tracked > 0,
+                )
             )
-        sync_message = payload.get("sync_message")
-        if isinstance(sync_message, str) and sync_message.strip():
+            if should_render_sync_counts:
+                body.add_row("Receipts stored", str(receipts_stored))
+                body.add_row("Inventory tracked", str(inventory_tracked))
+        sync_message = _connect_sync_note_text(payload)
+        if sync_message is not None:
             body.add_row("Sync note", sync_message)
         console.print(Panel(body, title="Guard connect", border_style="green"))
         return
@@ -539,13 +549,15 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
 def _connect_status_text(payload: dict[str, object]) -> str:
     status = str(payload.get("status") or "unknown")
     milestone = str(payload.get("milestone") or "")
+    if status == "connected" and milestone == "sync_not_available":
+        return "This device is protected locally"
     if status == "connected" and milestone == "first_sync_pending":
-        reason = str(payload.get("reason") or payload.get("sync_message") or "").lower()
-        if "paid guard plan" in reason or "paid plan" in reason or "guard plan required" in reason:
-            return "Machine registered"
-        return "Machine registered, first proof pending"
+        reason = _connect_reason_text(payload)
+        if _connect_reason_requires_login(reason) or _connect_reason_requires_paid_plan(reason):
+            return "This device is protected locally"
+        return "This device is connected"
     if status == "connected" and milestone == "first_sync_succeeded":
-        return "Connected"
+        return "This device is connected to Guard Cloud"
     if status == "waiting":
         return "Browser approval pending"
     if status == "retry_required":
@@ -559,18 +571,73 @@ def _connect_milestone_text(payload: dict[str, object]) -> str:
     milestone = str(payload.get("milestone") or "")
     if milestone == "waiting_for_browser":
         return "Waiting for browser approval"
+    if milestone == "sync_not_available":
+        return "Upgrade to sync this device to Guard Cloud"
     if milestone == "first_sync_pending":
-        reason = str(payload.get("reason") or payload.get("sync_message") or "").lower()
-        if "paid guard plan" in reason or "paid plan" in reason or "guard plan required" in reason:
-            return "Shared proof sync needs a paid Guard plan"
-        return "Dashboard proof is still syncing"
+        reason = _connect_reason_text(payload)
+        if _connect_reason_requires_login(reason):
+            return "Sign in to finish Guard Cloud setup"
+        if _connect_reason_requires_paid_plan(reason):
+            return "Upgrade to sync this device to Guard Cloud"
+        return "First Guard Cloud proof is on the way"
     if milestone == "first_sync_succeeded":
-        return "First shared proof reached the dashboard"
+        return "Guard Cloud is tracking this device"
     if milestone == "first_sync_failed":
         return "First shared proof needs another try"
     if milestone == "expired":
         return "The request expired before pairing finished"
     return milestone.replace("_", " ")
+
+
+def _connect_reason_text(payload: dict[str, object]) -> str:
+    return str(payload.get("reason") or payload.get("sync_message") or "").strip().lower()
+
+
+def _connect_reason_requires_login(reason: str) -> bool:
+    return any(
+        marker in reason
+        for marker in (
+            "not logged in",
+            "sign in",
+            "logged out",
+            "login",
+            "logout",
+        )
+    )
+
+
+def _connect_reason_requires_paid_plan(reason: str) -> bool:
+    return any(
+        marker in reason
+        for marker in (
+            "paid guard plan",
+            "paid plan",
+            "guard plan required",
+            "pro or team plan",
+            "requires a pro",
+            "requires a team",
+            "upgrade your plan",
+            "upgrade to",
+            "subscription required",
+            "not included in your plan",
+            "guard sync requires",
+        )
+    )
+
+
+def _connect_sync_note_text(payload: dict[str, object]) -> str | None:
+    message = str(payload.get("sync_message") or "").strip()
+    if not message:
+        return None
+    reason = message.lower()
+    if _connect_reason_requires_login(reason):
+        return "Local protection is active. Sign in on the Guard connect page to finish Guard Cloud setup."
+    if _connect_reason_requires_paid_plan(reason):
+        return (
+            "Local protection is active. Upgrade your Guard plan to sync shared "
+            "proof, receipts, and devices to Guard Cloud."
+        )
+    return message
 
 
 def _render_hook(console: Console, payload: dict[str, object]) -> None:
@@ -1276,6 +1343,26 @@ def _coerce_string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if isinstance(item, str) and item]
+
+
+def _coerce_int(value: object) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return 0
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return 0
+        try:
+            return int(stripped)
+        except ValueError:
+            return 0
+    return 0
 
 
 def _short_path(value: object) -> str:

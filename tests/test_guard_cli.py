@@ -3514,6 +3514,83 @@ args = ["workspace-skill.js", "--changed"]
         assert connect_output["reason"] == "Guard sync requires a Pro or Team plan."
         assert connect_output["sync_message"] == "Guard sync requires a Pro or Team plan."
 
+    def test_guard_connect_pending_output_uses_product_copy_for_sign_in_gap(self, capsys):
+        emit_guard_payload(
+            "connect",
+            {
+                "browser_opened": True,
+                "completed_at": "2026-04-20T00:00:00Z",
+                "status": "connected",
+                "milestone": "first_sync_pending",
+                "connect_url": "https://hol.org/guard/connect",
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+                "sync": {
+                    "receipts_stored": 0,
+                    "inventory_tracked": 0,
+                },
+                "sync_message": "Guard is not logged in.",
+            },
+            False,
+        )
+
+        output = capsys.readouterr().out
+
+        assert "This device is protected locally" in output
+        assert "Sign in to finish Guard Cloud setup" in output
+        assert "Local protection is active." in output
+        assert "Sign in on the Guard connect page" in output
+        assert "Machine registered, first proof pending" not in output
+        assert "Dashboard proof is still syncing" not in output
+        assert "Guard is not logged in." not in output
+        assert "Receipts stored" not in output
+        assert "Inventory tracked" not in output
+
+    def test_guard_connect_pending_output_uses_product_copy_for_plan_limit(self, capsys):
+        emit_guard_payload(
+            "connect",
+            {
+                "browser_opened": True,
+                "completed_at": "2026-04-20T00:00:00Z",
+                "status": "connected",
+                "milestone": "sync_not_available",
+                "connect_url": "https://hol.org/guard/connect",
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+                "sync_message": "Guard Cloud sync requires a paid Guard plan",
+            },
+            False,
+        )
+
+        output = capsys.readouterr().out
+
+        assert "This device is protected locally" in output
+        assert "Upgrade to sync this device to Guard Cloud" in output
+        assert "Local protection is active." in output
+        assert "Upgrade your Guard plan" in output
+        assert "shared proof" in output
+        assert "devices to Guard Cloud" in output
+        assert "Shared proof sync needs a paid Guard plan" not in output
+
+    def test_guard_connect_pending_output_treats_upgrade_copy_as_plan_limit(self, capsys):
+        emit_guard_payload(
+            "connect",
+            {
+                "browser_opened": True,
+                "completed_at": "2026-04-20T00:00:00Z",
+                "status": "connected",
+                "milestone": "sync_not_available",
+                "connect_url": "https://hol.org/guard/connect",
+                "sync_url": "https://hol.org/api/guard/receipts/sync",
+                "sync_message": "Upgrade your plan to sync Guard Cloud receipts.",
+            },
+            False,
+        )
+
+        output = capsys.readouterr().out
+
+        assert "This device is protected locally" in output
+        assert "Upgrade to sync this device to Guard Cloud" in output
+        assert "First Guard Cloud proof is on the way" not in output
+
     def test_guard_connect_rejects_invalid_sync_url(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
