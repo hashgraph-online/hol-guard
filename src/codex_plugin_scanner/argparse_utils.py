@@ -27,7 +27,9 @@ def should_default_to_scan_target(token: str, *, known_commands: set[str]) -> bo
     candidate = Path(token)
     if candidate.exists() or token in {".", ".."}:
         return True
-    return "/" in token or "\\" in token
+    if "/" in token or "\\" in token:
+        return True
+    return not _looks_like_command_typo(token, known_commands)
 
 
 def _error_hint(message: str, prog: str) -> str | None:
@@ -79,6 +81,10 @@ def _guard_help_command(prog: str) -> str:
     if prog.endswith(" guard") or _is_guard_prog(prog):
         return f"{prog} --help"
     return f"{prog} guard --help"
+
+
+def _looks_like_command_typo(token: str, known_commands: set[str]) -> bool:
+    return bool(difflib.get_close_matches(token, sorted(known_commands), n=1, cutoff=0.55))
 
 
 def _is_guard_prog(prog: str) -> bool:

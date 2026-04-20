@@ -169,6 +169,14 @@ class TestMain:
         assert exc_info.value.code == 2
         assert "Did you mean `verify`?" in capsys.readouterr().err
 
+    def test_missing_relative_scan_target_keeps_legacy_scan_fallback(self, capsys):
+        rc = main(["missing-plugin"])
+        error_output = capsys.readouterr().err
+
+        assert rc == 1
+        assert "missing-plugin" in error_output
+        assert "is not a directory." in error_output
+
     def test_returns_0_for_file_not_dir(self):
         rc = main([str(FIXTURES / "good-plugin" / "README.md")])
         assert rc == 1
