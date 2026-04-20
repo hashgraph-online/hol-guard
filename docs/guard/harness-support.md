@@ -4,7 +4,9 @@ Current Guard support in this repo:
 
 - `codex`
   - detects global and project `config.toml`
+  - detects Guard-managed `.codex/hooks.json` Bash hook entries
   - parses configured MCP servers
+  - installs Guard-owned Codex `PreToolUse` Bash hooks so native shell commands can be denied before execution even when Codex itself is running in YOLO mode
   - supports wrapper-mode `guard run codex`
   - uses same-chat MCP elicitation for live managed MCP tool approvals in the interactive CLI and Codex App
   - falls back to the local approval center only for nonresponsive or headless Codex sessions such as `codex exec`

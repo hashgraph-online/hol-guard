@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
+import shlex
 import sys
 from pathlib import Path
 
@@ -36,6 +39,149 @@ def _read_toml(path: Path) -> dict[str, object]:
         return {}
 
 
+_MANAGED_HOOK_STATUS_MESSAGE = "HOL Guard checking Bash command"
+
+
+def _json_object(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _strict_json_object(path: Path, *, label: str) -> dict[str, object]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Guard refused to overwrite unreadable {label} at {path}") from exc
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"Guard refused to overwrite non-object {label} at {path}")
+    return payload
+
+
+def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
+    guard_args = [
+        "guard",
+        "hook",
+        "--guard-home",
+        str(context.guard_home),
+        "--harness",
+        "codex",
+    ]
+    if context.home_dir.resolve() != Path.home().resolve():
+        guard_args.extend(["--home", str(context.home_dir)])
+    if context.workspace_dir is not None:
+        guard_args.extend(["--workspace", str(context.workspace_dir)])
+    launcher_env = merge_guard_launcher_env()
+    pythonpath = launcher_env.get("PYTHONPATH", "")
+    if not pythonpath.strip():
+        return (sys.executable, "-m", "codex_plugin_scanner.cli", *guard_args)
+    path_entries = [entry for entry in pythonpath.split(os.pathsep) if entry.strip()]
+    code = (
+        "import sys;"
+        f"sys.path[:0]={path_entries!r};"
+        "from codex_plugin_scanner.cli import main;"
+        f"raise SystemExit(main({guard_args!r}))"
+    )
+    return (sys.executable, "-c", code)
+
+
+def _hook_command(context: HarnessContext) -> str:
+    return shlex.join(_hook_command_parts(context))
+
+
+def _hook_group(context: HarnessContext) -> dict[str, object]:
+    return {
+        "matcher": "Bash",
+        "hooks": [
+            {
+                "type": "command",
+                "command": _hook_command(context),
+                "timeoutSec": 30,
+                "statusMessage": _MANAGED_HOOK_STATUS_MESSAGE,
+            }
+        ],
+    }
+
+
+def _is_managed_hook_command(command: object) -> bool:
+    if not isinstance(command, str):
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    if len(tokens) < 3:
+        return False
+    executable = Path(tokens[0]).name.lower()
+    if not executable.startswith("python"):
+        return False
+    if tokens[1] == "-m":
+        if len(tokens) < 5:
+            return False
+        return (
+            tokens[2] == "codex_plugin_scanner.cli"
+            and tokens[3] == "guard"
+            and tokens[4] == "hook"
+            and _argv_targets_codex(tokens[5:])
+        )
+    if tokens[1] != "-c":
+        return False
+    code = tokens[2]
+    return (
+        "codex_plugin_scanner.cli" in code
+        and "main([" in code
+        and "'guard'" in code
+        and "'hook'" in code
+        and "'--harness'" in code
+        and "'codex'" in code
+    )
+
+
+def _argv_targets_codex(argv: list[str]) -> bool:
+    for index, token in enumerate(argv):
+        if token == "--harness" and index + 1 < len(argv) and argv[index + 1] == "codex":
+            return True
+        if token.startswith("--harness=") and token.split("=", 1)[1] == "codex":
+            return True
+    return False
+
+
+def _is_managed_hook_group(group: object) -> bool:
+    if not isinstance(group, dict):
+        return False
+    matcher = group.get("matcher")
+    if not isinstance(matcher, str) or matcher != "Bash":
+        return False
+    hooks = group.get("hooks")
+    if not isinstance(hooks, list):
+        return False
+    return any(
+        isinstance(entry, dict)
+        and entry.get("type") == "command"
+        and entry.get("statusMessage") == _MANAGED_HOOK_STATUS_MESSAGE
+        and _is_managed_hook_command(entry.get("command"))
+        for entry in hooks
+    )
+
+
+def _merge_hook_groups(groups: object, managed_group: dict[str, object]) -> list[object]:
+    normalized = list(groups) if isinstance(groups, list) else []
+    preserved = [group for group in normalized if not _is_managed_hook_group(group)]
+    return [*preserved, managed_group]
+
+
+def _remove_hook_groups(groups: object) -> list[object]:
+    if not isinstance(groups, list):
+        return []
+    return [group for group in groups if not _is_managed_hook_group(group)]
+
+
 class CodexHarnessAdapter(HarnessAdapter):
     """Discover Codex MCP servers and wrapper surfaces."""
 
@@ -43,12 +189,12 @@ class CodexHarnessAdapter(HarnessAdapter):
     executable = "codex"
     approval_tier = "native-or-center"
     approval_summary = (
-        "Guard prefers same-chat Codex approvals for live MCP tool calls and falls back to the "
-        "local approval center only when Codex cannot answer."
+        "Guard installs native Codex Bash hooks for shell interception, keeps same-chat approvals for "
+        "managed MCP tool calls, and falls back to the local approval center when Codex cannot answer."
     )
     fallback_hint = (
-        "If Codex cannot render or return the inline approval request, Guard will queue it in the "
-        "local approval center."
+        "If Codex cannot render or return the inline approval request, or a native Bash hook blocks a "
+        "sensitive command, Guard will queue it in the local approval center."
     )
     approval_prompt_channel = "native"
     approval_auto_open_browser = False
@@ -63,6 +209,12 @@ class CodexHarnessAdapter(HarnessAdapter):
         if context.workspace_dir is not None:
             return context.workspace_dir / ".codex" / "config.toml"
         return context.home_dir / ".codex" / "config.toml"
+
+    @staticmethod
+    def _hooks_path(context: HarnessContext) -> Path:
+        if context.workspace_dir is not None:
+            return context.workspace_dir / ".codex" / "hooks.json"
+        return context.home_dir / ".codex" / "hooks.json"
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         config_paths = [context.home_dir / ".codex" / "config.toml"]
@@ -111,6 +263,35 @@ class CodexHarnessAdapter(HarnessAdapter):
                             },
                         )
                     )
+        hooks_path = self._hooks_path(context)
+        hooks_payload = _json_object(hooks_path)
+        hooks = hooks_payload.get("hooks")
+        if isinstance(hooks, dict):
+            found_paths.append(str(hooks_path))
+            scope = self._scope_for(context, hooks_path)
+            hook_groups = hooks.get("PreToolUse")
+            if isinstance(hook_groups, list):
+                for group_index, group in enumerate(hook_groups):
+                    if not isinstance(group, dict):
+                        continue
+                    handlers = group.get("hooks")
+                    if not isinstance(handlers, list):
+                        continue
+                    for handler_index, handler in enumerate(handlers):
+                        if not isinstance(handler, dict):
+                            continue
+                        command = handler.get("command")
+                        artifacts.append(
+                            GuardArtifact(
+                                artifact_id=f"codex:{scope}:pretooluse:{group_index}:{handler_index}",
+                                name="PreToolUse",
+                                harness=self.harness,
+                                artifact_type="hook",
+                                source_scope=scope,
+                                config_path=str(hooks_path),
+                                command=command if isinstance(command, str) else None,
+                            )
+                        )
         return HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
@@ -134,6 +315,11 @@ class CodexHarnessAdapter(HarnessAdapter):
         mcp_servers = payload.get("mcp_servers")
         if not isinstance(mcp_servers, dict):
             mcp_servers = {}
+        features = payload.get("features")
+        if not isinstance(features, dict):
+            features = {}
+        features["codex_hooks"] = True
+        payload["features"] = features
         existing_workspace_server_names = {
             name for name, value in mcp_servers.items() if isinstance(name, str) and isinstance(value, dict)
         }
@@ -147,6 +333,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             mcp_servers[server.name] = self._proxy_server_entry(context, server)
         payload["mcp_servers"] = mcp_servers
         write_toml_payload(target_config_path, payload)
+        hooks_path = self._install_hooks(context)
         shim_manifest = install_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
@@ -155,6 +342,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "mode": "codex-mcp-proxy",
             "managed_config_path": str(target_config_path),
+            "managed_hooks_path": str(hooks_path),
             "backup_path": str(backup_path),
             "managed_servers": [server.name for server in managed_servers],
             "skipped_servers": list(skipped_servers),
@@ -172,6 +360,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             elif target_config_path.is_file():
                 target_config_path.unlink()
             backup_path.unlink()
+        hooks_path = self._remove_hooks(context)
         shim_manifest = remove_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
@@ -180,6 +369,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "mode": "codex-mcp-proxy",
             "managed_config_path": str(target_config_path),
+            "managed_hooks_path": str(hooks_path),
             "backup_path": str(backup_path),
         }
 
@@ -224,3 +414,34 @@ class CodexHarnessAdapter(HarnessAdapter):
         if server.source_scope == "project":
             return False
         return server.name in existing_workspace_server_names
+
+    def _install_hooks(self, context: HarnessContext) -> Path:
+        hooks_path = self._hooks_path(context)
+        payload = _strict_json_object(hooks_path, label="Codex hooks file")
+        hooks = payload.get("hooks")
+        if not isinstance(hooks, dict):
+            hooks = {}
+        hooks["PreToolUse"] = _merge_hook_groups(hooks.get("PreToolUse"), _hook_group(context))
+        payload["hooks"] = hooks
+        hooks_path.parent.mkdir(parents=True, exist_ok=True)
+        hooks_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        return hooks_path
+
+    def _remove_hooks(self, context: HarnessContext) -> Path:
+        hooks_path = self._hooks_path(context)
+        payload = _strict_json_object(hooks_path, label="Codex hooks file")
+        hooks = payload.get("hooks")
+        if isinstance(hooks, dict):
+            remaining = _remove_hook_groups(hooks.get("PreToolUse"))
+            if remaining:
+                hooks["PreToolUse"] = remaining
+            else:
+                hooks.pop("PreToolUse", None)
+            if not hooks:
+                payload.pop("hooks", None)
+        if payload:
+            hooks_path.parent.mkdir(parents=True, exist_ok=True)
+            hooks_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        elif hooks_path.exists():
+            hooks_path.unlink()
+        return hooks_path

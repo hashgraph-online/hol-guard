@@ -63,18 +63,28 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     managed_install = output["managed_install"]
     manifest = managed_install["manifest"]
     config_text = (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8")
+    hooks_path = workspace_dir / ".codex" / "hooks.json"
+    hooks_payload = json.loads(hooks_path.read_text(encoding="utf-8"))
 
     assert rc == 0
     assert managed_install["active"] is True
     assert manifest["mode"] == "codex-mcp-proxy"
     assert manifest["managed_config_path"] == str(workspace_dir / ".codex" / "config.toml")
+    assert manifest["managed_hooks_path"] == str(hooks_path)
     assert set(manifest["managed_servers"]) == {"global_tools", "workspace_skill"}
     assert "--server-name" in config_text
     assert "guard" in config_text
     assert "codex-mcp-proxy" in config_text
     assert 'approval_policy = "never"' in config_text
+    assert "codex_hooks = true" in config_text
     assert 'API_BASE = "https://hol.org"' in config_text
     assert 'FEATURE_FLAG = "1"' in config_text
+    assert hooks_payload["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
+    handler = hooks_payload["hooks"]["PreToolUse"][0]["hooks"][0]
+    assert handler["type"] == "command"
+    assert "codex_plugin_scanner.cli" in handler["command"]
+    assert "hook" in handler["command"]
+    assert "codex" in handler["command"]
 
 
 def test_guard_uninstall_codex_restores_original_workspace_config(tmp_path, capsys):
@@ -114,6 +124,88 @@ def test_guard_uninstall_codex_restores_original_workspace_config(tmp_path, caps
     assert uninstall_rc == 0
     assert uninstall_output["managed_install"]["active"] is False
     assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_text
+    assert (workspace_dir / ".codex" / "hooks.json").exists() is False
+
+
+def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entries(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+    _write_text(
+        workspace_dir / ".codex" / "hooks.json",
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash",
+                            "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
+                        }
+                    ],
+                    "SessionStart": [
+                        {
+                            "matcher": "startup|resume",
+                            "hooks": [{"type": "command", "command": "python3 custom-start.py"}],
+                        }
+                    ],
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+    )
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    hooks_payload = json.loads((workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+
+    uninstall_rc = main(
+        [
+            "guard",
+            "uninstall",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    restored_hooks = json.loads((workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+
+    assert install_rc == 0
+    assert uninstall_rc == 0
+    assert len(hooks_payload["hooks"]["PreToolUse"]) == 2
+    assert hooks_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == "python3 custom-pre.py"
+    managed_group = hooks_payload["hooks"]["PreToolUse"][1]
+    assert managed_group["matcher"] == "Bash"
+    assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]
+    assert "hook" in managed_group["hooks"][0]["command"]
+    assert "codex" in managed_group["hooks"][0]["command"]
+    assert restored_hooks["hooks"]["PreToolUse"] == [
+        {
+            "matcher": "Bash",
+            "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
+        }
+    ]
+    assert restored_hooks["hooks"]["SessionStart"] == [
+        {
+            "matcher": "startup|resume",
+            "hooks": [{"type": "command", "command": "python3 custom-start.py"}],
+        }
+    ]
 
 
 def test_guard_install_codex_encodes_dash_prefixed_server_args_safely(tmp_path, capsys):
