@@ -295,6 +295,27 @@ def test_guard_uninstall_render_adds_removal_note_without_manifest(capsys) -> No
     assert "Guard removed the managed wrapper configuration for this harness." in output
 
 
+def test_guard_uninstall_render_adds_removal_note_without_manifest_notes(capsys) -> None:
+    emit_guard_payload(
+        "uninstall",
+        {
+            "managed_install": {
+                "harness": "codex",
+                "active": False,
+                "workspace": "/repo",
+                "manifest": {
+                    "mode": "codex-mcp-proxy",
+                },
+            },
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Removed" in output
+    assert "Guard removed the managed wrapper configuration for this harness." in output
+
+
 def test_guard_install_render_skips_notes_when_manifest_is_missing_and_active(capsys) -> None:
     emit_guard_payload(
         "install",
