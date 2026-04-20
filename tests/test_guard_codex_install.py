@@ -11,6 +11,8 @@ except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -206,6 +208,65 @@ def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entr
             "hooks": [{"type": "command", "command": "python3 custom-start.py"}],
         }
     ]
+
+
+def test_guard_detect_codex_collects_global_and_workspace_hooks(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        home_dir / ".codex" / "hooks.json",
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash",
+                            "hooks": [{"type": "command", "command": "python3 global-pre.py"}],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+    )
+    _write_text(
+        workspace_dir / ".codex" / "hooks.json",
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash",
+                            "hooks": [{"type": "command", "command": "python3 workspace-pre.py"}],
+                        }
+                    ]
+                }
+            },
+            indent=2,
+        )
+        + "\n",
+    )
+
+    detection = CodexHarnessAdapter().detect(
+        HarnessContext(
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+            guard_home=tmp_path / "guard-home",
+        )
+    )
+
+    hook_artifacts = [artifact for artifact in detection.artifacts if artifact.artifact_type == "hook"]
+
+    assert {artifact.command for artifact in hook_artifacts} == {
+        "python3 global-pre.py",
+        "python3 workspace-pre.py",
+    }
+    assert {artifact.source_scope for artifact in hook_artifacts} == {"global", "project"}
+    assert set(detection.config_paths) == {
+        str(home_dir / ".codex" / "hooks.json"),
+        str(workspace_dir / ".codex" / "hooks.json"),
+    }
 
 
 def test_guard_install_codex_encodes_dash_prefixed_server_args_safely(tmp_path, capsys):

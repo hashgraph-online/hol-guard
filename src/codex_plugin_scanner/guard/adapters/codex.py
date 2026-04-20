@@ -263,35 +263,40 @@ class CodexHarnessAdapter(HarnessAdapter):
                             },
                         )
                     )
-        hooks_path = self._hooks_path(context)
-        hooks_payload = _json_object(hooks_path)
-        hooks = hooks_payload.get("hooks")
-        if isinstance(hooks, dict):
+        hooks_paths = [context.home_dir / ".codex" / "hooks.json"]
+        if context.workspace_dir is not None:
+            hooks_paths.append(context.workspace_dir / ".codex" / "hooks.json")
+        for hooks_path in hooks_paths:
+            hooks_payload = _json_object(hooks_path)
+            hooks = hooks_payload.get("hooks")
+            if not isinstance(hooks, dict):
+                continue
             found_paths.append(str(hooks_path))
             scope = self._scope_for(context, hooks_path)
             hook_groups = hooks.get("PreToolUse")
-            if isinstance(hook_groups, list):
-                for group_index, group in enumerate(hook_groups):
-                    if not isinstance(group, dict):
+            if not isinstance(hook_groups, list):
+                continue
+            for group_index, group in enumerate(hook_groups):
+                if not isinstance(group, dict):
+                    continue
+                handlers = group.get("hooks")
+                if not isinstance(handlers, list):
+                    continue
+                for handler_index, handler in enumerate(handlers):
+                    if not isinstance(handler, dict):
                         continue
-                    handlers = group.get("hooks")
-                    if not isinstance(handlers, list):
-                        continue
-                    for handler_index, handler in enumerate(handlers):
-                        if not isinstance(handler, dict):
-                            continue
-                        command = handler.get("command")
-                        artifacts.append(
-                            GuardArtifact(
-                                artifact_id=f"codex:{scope}:pretooluse:{group_index}:{handler_index}",
-                                name="PreToolUse",
-                                harness=self.harness,
-                                artifact_type="hook",
-                                source_scope=scope,
-                                config_path=str(hooks_path),
-                                command=command if isinstance(command, str) else None,
-                            )
+                    command = handler.get("command")
+                    artifacts.append(
+                        GuardArtifact(
+                            artifact_id=f"codex:{scope}:pretooluse:{group_index}:{handler_index}",
+                            name="PreToolUse",
+                            harness=self.harness,
+                            artifact_type="hook",
+                            source_scope=scope,
+                            config_path=str(hooks_path),
+                            command=command if isinstance(command, str) else None,
                         )
+                    )
         return HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
