@@ -110,14 +110,7 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
 def _render_bootstrap(console: Console, payload: dict[str, object]) -> None:
     harness = payload.get("recommended_harness") or "none"
     bootstrap_install = payload.get("bootstrap_install")
-    install_summary = "not changed"
-    if isinstance(bootstrap_install, dict):
-        if bool(bootstrap_install.get("installed")):
-            install_summary = f"installed for {bootstrap_install.get('harness', harness)}"
-        elif bootstrap_install.get("reason") == "already_managed":
-            install_summary = f"already managing {bootstrap_install.get('harness', harness)}"
-        else:
-            install_summary = str(bootstrap_install.get("reason") or install_summary)
+    install_summary = _bootstrap_install_summary(bootstrap_install, fallback_harness=str(harness))
     body = Table.grid(padding=(0, 1))
     body.add_row("Recommended harness", str(harness))
     body.add_row("Approval center", str(payload.get("approval_center_url") or "not running"))
@@ -128,6 +121,24 @@ def _render_bootstrap(console: Console, payload: dict[str, object]) -> None:
         body.add_row("Protect alias", str(alias.get("snippet") or "not configured"))
     console.print(Panel(body, title="Guard bootstrap", border_style="cyan"))
     console.print(_build_steps_panel(_coerce_dict_list(payload.get("next_steps"))))
+
+
+def _bootstrap_install_summary(bootstrap_install: object, *, fallback_harness: str) -> str:
+    if not isinstance(bootstrap_install, dict):
+        return "not changed"
+    harness = str(bootstrap_install.get("harness") or fallback_harness)
+    reason = str(bootstrap_install.get("reason") or "")
+    if bool(bootstrap_install.get("installed")):
+        if reason == "repaired_managed_install":
+            return f"repaired Guard install for {harness}"
+        return f"installed for {harness}"
+    if reason == "already_managed":
+        return f"already managing {harness}"
+    if reason == "skipped_by_flag":
+        return "Install skipped for now"
+    if reason == "no_harness_detected":
+        return "No supported harness detected yet"
+    return reason.replace("_", " ").strip() or "not changed"
 
 
 def _render_doctor(console: Console, payload: dict[str, object]) -> None:
@@ -872,16 +883,30 @@ def _build_product_table(harnesses: list[dict[str, object]]) -> Table:
     table.add_column("Managed")
     table.add_column("Artifacts", justify="right")
     table.add_column("Review", justify="right")
-    table.add_column("Next step")
+    table.add_column("Recommended action")
     for harness in harnesses:
         table.add_row(
             str(harness.get("harness", "unknown")),
             _bool_label(bool(harness.get("managed"))),
             str(harness.get("artifact_count", 0)),
             str(harness.get("review_count", 0)),
-            str(harness.get("next_action", "install")),
+            _next_action_label(harness),
         )
     return table
+
+
+def _next_action_label(harness: dict[str, object]) -> str:
+    next_action = str(harness.get("next_action") or "install")
+    review_count = _coerce_int(harness.get("review_count"))
+    if next_action == "install-harness":
+        return "Install harness first"
+    if next_action == "install":
+        return "Install Guard"
+    if next_action == "review":
+        return f"Review {review_count} change{'s' if review_count != 1 else ''}"
+    if next_action == "run":
+        return "Run through Guard"
+    return next_action.replace("-", " ").strip() or "Check status"
 
 
 def _build_steps_panel(steps: list[dict[str, object]]) -> Panel:

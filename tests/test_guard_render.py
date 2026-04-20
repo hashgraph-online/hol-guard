@@ -117,3 +117,105 @@ def test_guard_connect_render_clarifies_browser_approval_wait(capsys) -> None:
     assert "Browser paired" in output
     assert "Browser approval pending" in output
     assert "Waiting for browser approval" in output
+
+
+def test_guard_status_render_rewrites_internal_next_action_labels(capsys) -> None:
+    emit_guard_payload(
+        "status",
+        {
+            "managed_harnesses": 1,
+            "receipt_count": 3,
+            "pending_approvals": 1,
+            "sync_configured": False,
+            "cloud_state": "local_only",
+            "cloud_state_label": "Local only",
+            "cloud_state_detail": "Guard is protecting this machine locally.",
+            "dashboard_url": "https://hol.org/guard",
+            "connect_url": "https://hol.org/guard/connect",
+            "advisory_count": 0,
+            "harnesses": [
+                {
+                    "harness": "codex",
+                    "managed": False,
+                    "artifact_count": 2,
+                    "review_count": 0,
+                    "next_action": "install",
+                },
+                {
+                    "harness": "claude-code",
+                    "managed": True,
+                    "artifact_count": 4,
+                    "review_count": 2,
+                    "next_action": "review",
+                },
+                {
+                    "harness": "copilot",
+                    "managed": True,
+                    "artifact_count": 1,
+                    "review_count": 0,
+                    "next_action": "run",
+                },
+                {
+                    "harness": "cursor",
+                    "managed": False,
+                    "artifact_count": 0,
+                    "review_count": 0,
+                    "next_action": "install-harness",
+                },
+            ],
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Recommended action" in output
+    assert "Install Guard" in output
+    assert "Review 2 changes" in output
+    assert "Run through Guard" in output
+    assert "Install harness first" in output
+
+
+def test_guard_bootstrap_render_rewrites_skip_reason_labels(capsys) -> None:
+    emit_guard_payload(
+        "bootstrap",
+        {
+            "recommended_harness": "codex",
+            "approval_center_url": "http://127.0.0.1:4781",
+            "approval_center_reachable": True,
+            "bootstrap_install": {
+                "installed": False,
+                "harness": "codex",
+                "reason": "skipped_by_flag",
+            },
+            "shell_alias": {
+                "snippet": "alias guardp='hol-guard protect'",
+            },
+            "next_steps": [],
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "Install skipped for now" in output
+    assert "skipped_by_flag" not in output
+
+
+def test_guard_bootstrap_render_rewrites_missing_harness_reason(capsys) -> None:
+    emit_guard_payload(
+        "bootstrap",
+        {
+            "recommended_harness": None,
+            "approval_center_url": "http://127.0.0.1:4781",
+            "approval_center_reachable": True,
+            "bootstrap_install": {
+                "installed": False,
+                "reason": "no_harness_detected",
+            },
+            "next_steps": [],
+        },
+        False,
+    )
+
+    output = capsys.readouterr().out
+    assert "No supported harness detected yet" in output
+    assert "no_harness_detected" not in output
