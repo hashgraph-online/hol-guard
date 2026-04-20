@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import threading
 import urllib.parse
 import urllib.request
@@ -229,7 +230,30 @@ class TestGuardCli:
             main(["guard"])
 
         assert exc_info.value.code == 2
-        assert "the following arguments are required" in capsys.readouterr().err
+        error_output = capsys.readouterr().err
+
+        assert "the following arguments are required" in error_output
+        assert "guard --help" in error_output
+
+    def test_guard_invalid_subcommand_suggests_closest_match(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            main(["guard", "updte"])
+
+        assert exc_info.value.code == 2
+        error_output = capsys.readouterr().err
+
+        assert "Did you mean `update`?" in error_output
+        assert "hook" not in error_output
+        assert "daemon" not in error_output
+
+    def test_root_guard_missing_subcommand_points_to_root_help(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["hol-guard"])
+
+        with pytest.raises(SystemExit) as exc_info:
+            main([])
+
+        assert exc_info.value.code == 2
+        assert "Run `hol-guard --help` to inspect available Guard commands." in capsys.readouterr().err
 
     def test_guard_detect_reports_supported_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -2895,6 +2919,70 @@ args = ["workspace-skill.js", "--changed"]
         assert commands == [["pipx", "upgrade", "hol-guard"]]
         assert output["status"] == "updated"
 
+    def test_guard_update_marks_already_current_pipx_runs_as_current(self, monkeypatch, capsys):
+        commands: list[list[str]] = []
+
+        def fake_run(command: list[str], **_: object):
+            commands.append(command)
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=(
+                    "hol-guard is already at latest version 2.0.36 "
+                    "(location: /tmp/hol-guard-user/.local/pipx/venvs/hol-guard)"
+                ),
+                stderr="upgrading shared libraries...\nupgrading hol-guard...\n",
+            )
+
+        monkeypatch.setattr(guard_update_commands_module.subprocess, "run", fake_run)
+        monkeypatch.setattr(guard_update_commands_module.sys, "prefix", "/mock-home/.local/pipx/venvs/hol-guard")
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.36")
+        monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.36")
+
+        rc = main(["guard", "update", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["installer"] == "pipx"
+        assert commands == [["pipx", "upgrade", "hol-guard"]]
+        assert output["status"] == "current"
+        assert output["message"] == "HOL Guard is already current."
+        assert output["notes"] == ["upgrading shared libraries...", "upgrading hol-guard..."]
+        assert output["stdout"].startswith("hol-guard is already at latest version 2.0.36")
+        assert output["stderr"] == "upgrading shared libraries...\nupgrading hol-guard..."
+
+    def test_guard_update_treats_first_install_as_updated_when_only_dependencies_are_current(self, monkeypatch, capsys):
+        commands: list[list[str]] = []
+
+        def fake_run(command: list[str], **_: object):
+            commands.append(command)
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=(
+                    "Requirement already satisfied: pip in /mock/python/site-packages\n"
+                    "Successfully installed hol-guard-2.0.36"
+                ),
+                stderr="",
+            )
+
+        monkeypatch.setattr(guard_update_commands_module.subprocess, "run", fake_run)
+        monkeypatch.setattr(guard_update_commands_module.sys, "prefix", "/opt/guard-venv")
+        monkeypatch.setattr(guard_update_commands_module.sys, "executable", "/opt/guard-venv/bin/python")
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "unknown")
+        monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.36")
+
+        rc = main(["guard", "update", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert commands == [["/opt/guard-venv/bin/python", "-m", "pip", "install", "--upgrade", "hol-guard"]]
+        assert output["status"] == "updated"
+        assert output["changed"] is True
+        assert output["message"] == "HOL Guard update completed successfully."
+
     def test_guard_update_dry_run_emits_planned_command(self, monkeypatch, capsys):
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
 
@@ -2920,6 +3008,56 @@ args = ["workspace-skill.js", "--changed"]
         assert output["status"] == "skipped"
         assert output["editable_install"] is True
         assert "disabled for editable installs" in output["error"]
+
+    def test_guard_update_human_output_uses_notes_instead_of_stderr_for_current(self, capsys):
+        emit_guard_payload(
+            "update",
+            {
+                "current_version": "2.0.36",
+                "installer": "pipx",
+                "command": ["pipx", "upgrade", "hol-guard"],
+                "dry_run": False,
+                "resulting_version": "2.0.36",
+                "status": "current",
+                "message": "HOL Guard is already current.",
+                "notes": ["upgrading shared libraries...", "upgrading hol-guard..."],
+                "stdout": "hol-guard is already at latest version 2.0.36",
+                "stderr": "upgrading shared libraries...\nupgrading hol-guard...",
+            },
+            False,
+        )
+
+        output = capsys.readouterr().out
+
+        assert "Guard update: current" in output
+        assert "HOL Guard is already current." in output
+        assert "Notes" in output
+        assert "upgrading shared libraries..." in output
+        assert "stdout" not in output
+        assert "stderr" not in output
+
+    def test_guard_update_failed_output_keeps_stdout_details(self, capsys):
+        emit_guard_payload(
+            "update",
+            {
+                "current_version": "2.0.36",
+                "installer": "pipx",
+                "command": ["pipx", "upgrade", "hol-guard"],
+                "dry_run": False,
+                "status": "failed",
+                "message": "HOL Guard update failed.",
+                "stdout": "pipx could not upgrade hol-guard in the current environment",
+                "stderr": "",
+                "error": "",
+            },
+            False,
+        )
+
+        output = capsys.readouterr().out
+
+        assert "Guard update: failed" in output
+        assert "stdout" in output
+        assert "pipx could not upgrade hol-guard in the current environment" in output
 
     def test_guard_uninstall_auto_detects_managed_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

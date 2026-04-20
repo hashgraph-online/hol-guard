@@ -14,6 +14,7 @@ import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from ...argparse_utils import FriendlyArgumentParser
 from ...models import ScanOptions
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
@@ -124,6 +125,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     guard_subparsers = guard_parser.add_subparsers(
         dest="guard_command",
         required=True,
+        parser_class=FriendlyArgumentParser,
         metavar=(
             "{start,status,bootstrap,detect,install,update,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
             "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,login,sync,device,bridge}"
@@ -314,7 +316,11 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     device_parser = guard_subparsers.add_parser("device", help="Manage local Guard installation identity")
     _add_guard_common_args(device_parser)
     device_parser.add_argument("--json", action="store_true")
-    device_subparsers = device_parser.add_subparsers(dest="device_command", required=True)
+    device_subparsers = device_parser.add_subparsers(
+        dest="device_command",
+        required=True,
+        parser_class=FriendlyArgumentParser,
+    )
 
     device_show_parser = device_subparsers.add_parser("show", help="Show local installation ID and label")
     device_show_parser.add_argument("--json", action="store_true")
@@ -324,7 +330,11 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
 
     device_label_parser = device_subparsers.add_parser("label", help="Manage local device label")
     device_label_parser.add_argument("--json", action="store_true")
-    device_label_subparsers = device_label_parser.add_subparsers(dest="device_label_command", required=True)
+    device_label_subparsers = device_label_parser.add_subparsers(
+        dest="device_label_command",
+        required=True,
+        parser_class=FriendlyArgumentParser,
+    )
     device_label_set_parser = device_label_subparsers.add_parser("set", help="Set local device label")
     device_label_set_parser.add_argument("label")
     device_label_set_parser.add_argument("--json", action="store_true")
