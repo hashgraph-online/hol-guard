@@ -150,7 +150,8 @@ _WRAPPER_FLAGS_WITH_VALUES = {
     "time": frozenset({"-f", "--format", "-o", "--output"}),
 }
 _ENCODED_EXECUTION_TARGET_PATTERN = (
-    r"(?:env(?:(?:\s+--?[A-Za-z][A-Za-z-]*(?:=\S+)?|\s+--|\s+[A-Za-z_][A-Za-z0-9_]*=\S+|\s+\S+))*\s+)?"
+    r"(?:(?:[A-Za-z0-9_./~-]+/)?env"
+    r"(?:(?:\s+--?[A-Za-z][A-Za-z-]*(?:=\S+)?|\s+--|\s+[A-Za-z_][A-Za-z0-9_]*=\S+|\s+\S+))*\s+)?"
     r"(?:[A-Za-z0-9_./~-]+/)?(?:ash|bash|dash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b"
 )
 _ENCODED_EXECUTION_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -1632,10 +1633,24 @@ def _interpreter_flag_payload(parts: list[str], index: int) -> _InterpreterFlagP
     normalized_token = parts[index].strip().lstrip("(").rstrip(")")
     if not normalized_token.startswith("-"):
         return None
+    if normalized_token.startswith("--"):
+        for long_flag in ("--command", "--eval", "--execute"):
+            if normalized_token == long_flag:
+                if index + 1 >= len(parts):
+                    return None
+                next_script = parts[index + 1].strip()
+                if not next_script:
+                    return None
+                return _InterpreterFlagPayload(script_text=next_script, tokens_consumed=2)
+            if normalized_token.startswith(f"{long_flag}="):
+                attached_script = normalized_token.split("=", 1)[1].strip()
+                if not attached_script:
+                    return None
+                return _InterpreterFlagPayload(script_text=attached_script, tokens_consumed=1)
+        return None
     flag_text = normalized_token[1:]
-    for flag_name in ("c", "e"):
-        flag_index = flag_text.find(flag_name)
-        if flag_index == -1:
+    for flag_index, flag_name in enumerate(flag_text):
+        if flag_name not in {"c", "e"}:
             continue
         attached_script = flag_text[flag_index + 1 :].strip()
         if attached_script:

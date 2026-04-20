@@ -1155,6 +1155,16 @@ def test_tool_action_request_classifier_detects_base64_decode_and_env_option_wra
     assert request.action_class == "encoded or encrypted shell command"
 
 
+def test_tool_action_request_classifier_detects_base64_decode_and_path_qualified_env_wrapped_exec_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "echo cm0gLWYgZGFuZ2Vyb3VzLW1hcmtlci5qc29uCg== | base64 -d | /usr/bin/env -i bash"},
+    )
+
+    assert request is not None
+    assert request.action_class == "encoded or encrypted shell command"
+
+
 def test_tool_action_request_classifier_detects_base64_decode_and_env_unset_wrapped_exec_command():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -1292,6 +1302,16 @@ def test_tool_action_request_classifier_detects_bash_c_destructive_command():
     request = extract_sensitive_tool_action_request(
         "bash",
         {"command": "bash -c 'rm -rf dangerous-marker.json'"},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_bash_norc_c_destructive_command():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": "bash --norc -c 'rm -rf dangerous-marker.json'"},
     )
 
     assert request is not None
