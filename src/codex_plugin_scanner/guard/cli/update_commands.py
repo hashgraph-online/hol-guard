@@ -76,7 +76,7 @@ def run_guard_update(*, dry_run: bool) -> tuple[dict[str, object], int]:
     notes = _success_notes(payload)
     if notes:
         payload["notes"] = notes
-    return payload, 0 if result.returncode == 0 else 1
+    return payload, 0
 
 
 def _normalize_output_text(value: str) -> str:

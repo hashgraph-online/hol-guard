@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import threading
 import urllib.parse
 import urllib.request
@@ -244,6 +245,15 @@ class TestGuardCli:
         assert "Did you mean `update`?" in error_output
         assert "hook" not in error_output
         assert "daemon" not in error_output
+
+    def test_root_guard_missing_subcommand_points_to_root_help(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["hol-guard"])
+
+        with pytest.raises(SystemExit) as exc_info:
+            main([])
+
+        assert exc_info.value.code == 2
+        assert "Run `hol-guard --help` to inspect available Guard commands." in capsys.readouterr().err
 
     def test_guard_detect_reports_supported_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

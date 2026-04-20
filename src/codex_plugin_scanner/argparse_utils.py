@@ -38,10 +38,6 @@ def _error_hint(message: str, prog: str) -> str | None:
         if _is_guard_prog(prog):
             return f"Run `{_guard_help_command(prog)}` to inspect available Guard commands."
         return f"Run `{prog} --help` to inspect available commands."
-    if "the following arguments are required: guard_command" in message:
-        return f"Run `{_guard_help_command(prog)}` to inspect available Guard commands."
-    if "the following arguments are required: command" in message:
-        return f"Run `{prog} --help` to inspect available commands."
     return None
 
 
@@ -50,7 +46,7 @@ def _invalid_choice_hint(message: str) -> str | None:
     if match is None:
         return None
     attempted = match.group(1)
-    raw_choices = [item.strip().strip("'") for item in match.group(2).split(",")]
+    raw_choices = [item.strip("' ") for item in match.group(2).split(",")]
     choices = [item for item in raw_choices if item]
     closest = difflib.get_close_matches(attempted, choices, n=1, cutoff=0.55)
     if not closest:
@@ -80,7 +76,7 @@ def _visible_subparser_choices(parser: argparse.ArgumentParser) -> list[str]:
 
 
 def _guard_help_command(prog: str) -> str:
-    if prog.endswith(" guard"):
+    if prog.endswith(" guard") or _is_guard_prog(prog):
         return f"{prog} --help"
     return f"{prog} guard --help"
 
