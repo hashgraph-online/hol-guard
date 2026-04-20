@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import os
@@ -38,8 +40,10 @@ _COMMAND_LIST_KEYS = ("argv", "command_args", "commandArgs")
 _DOCKER_SUBCOMMANDS = frozenset({"build", "compose", "login", "push", "run"})
 _SHELL_TOOL_NAMES = frozenset(
     {
+        "ash",
         "bash",
         "cmd",
+        "dash",
         "powershell",
         "pwsh",
         "run_command",
@@ -50,6 +54,8 @@ _SHELL_TOOL_NAMES = frozenset(
         "zsh",
     }
 )
+_SHELL_SCRIPT_INTERPRETER_COMMANDS = frozenset({"ash", "bash", "dash", "sh", "zsh", ".", "source"})
+_SHELL_COMMAND_STRING_INTERPRETERS = frozenset({"ash", "bash", "dash", "sh", "zsh"})
 _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
     {
         "chmod",
@@ -143,6 +149,53 @@ _WRAPPER_FLAGS_WITH_VALUES = {
     "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
     "time": frozenset({"-f", "--format", "-o", "--output"}),
 }
+_ENCODED_EXECUTION_TARGET_PATTERN = (
+    r"(?:(?:[A-Za-z0-9_./~-]+/)?env"
+    r"(?:(?:\s+--?[A-Za-z][A-Za-z-]*(?:=\S+)?|\s+--|\s+[A-Za-z_][A-Za-z0-9_]*=\S+|\s+\S+))*\s+)?"
+    r"(?:[A-Za-z0-9_./~-]+/)?(?:ash|bash|dash|sh|zsh|python(?:3)?|node|perl|ruby|pwsh|powershell)\b"
+)
+_ENCODED_EXECUTION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        rf"\bbase64\b(?=[^\n|;]*\s(?:--decode|-[A-Za-z]*[dD][A-Za-z]*))[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\bxxd\s+(?:-r\s+-p|-rp)\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\bopenssl\s+enc\b[^\n|;]*\s-(?:d|decrypt)\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:gpg|gpg2)\b[^\n|;]*(?:--decrypt|-d)\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(?:powershell|pwsh)\b[^\n;]*\s-(?:e|ec|enc|encodedcommand)\b", re.IGNORECASE),
+    re.compile(r"\b(?:powershell|pwsh)\b[^\n;]*\bfrombase64string\s*\(", re.IGNORECASE),
+)
+_BASE64_LITERAL_PATTERN = re.compile(r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{20,}={0,2}(?![A-Za-z0-9+/=])")
+_HEX_LITERAL_PATTERN = re.compile(r"(?<![A-Fa-f0-9])[A-Fa-f0-9]{24,}(?![A-Fa-f0-9])")
+_MAX_DECODED_PAYLOAD_BYTES = 32 * 1024
+_SENSITIVE_DECODED_PAYLOAD_TOKENS = (
+    ".env",
+    ".ssh/",
+    ".aws/credentials",
+    ".git-credentials",
+    "process.env",
+    "os.environ",
+    "getenv(",
+    "curl ",
+    "wget ",
+    "requests.",
+    "fetch(",
+    "axios.",
+    "approval_policy",
+    "hol-guard",
+    "guard-bypass",
+    ".codex/config.toml",
+    "scp ",
+)
 _SENSITIVE_BASENAME_LABELS = {
     ".npmrc": "npm registry credentials",
     ".pypirc": "Python package credentials",
@@ -352,6 +405,8 @@ def extract_sensitive_tool_action_request(
             tool_name=requested_tool_name,
             normalized_tool_name=normalized_tool_name,
             command_text=command_text,
+            cwd=cwd,
+            home_dir=home_dir,
         )
         if destructive_shell_request is not None:
             return destructive_shell_request
@@ -402,9 +457,22 @@ def _destructive_shell_tool_action_request(
     tool_name: str,
     normalized_tool_name: str,
     command_text: str,
+    cwd: Path | None,
+    home_dir: Path | None,
 ) -> ToolActionRequestMatch | None:
     if normalized_tool_name not in _SHELL_TOOL_NAMES:
         return None
+    if _contains_encoded_or_encrypted_shell_command(command_text, cwd=cwd, home_dir=home_dir):
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="encoded or encrypted shell command",
+            reason=(
+                "Guard treats encoded or encrypted decode-and-exec shell flows as sensitive and inspects bounded "
+                "payloads in-process without executing them during evaluation."
+            ),
+        )
     if not _looks_destructive_shell_command(command_text):
         return None
     return ToolActionRequestMatch(
@@ -416,6 +484,387 @@ def _destructive_shell_tool_action_request(
             "Guard treats destructive shell writes and delete operations as sensitive because they can mutate the "
             "local machine before the user confirms the action."
         ),
+    )
+
+
+def _contains_encoded_or_encrypted_shell_command(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    depth: int = 0,
+    visited_script_paths: frozenset[str] = frozenset(),
+) -> bool:
+    if depth > 4:
+        return False
+    normalized = command_text.strip()
+    if not normalized:
+        return False
+    executable_surface = _shell_text_without_quoted_literals(normalized)
+    if any(pattern.search(executable_surface) for pattern in _ENCODED_EXECUTION_PATTERNS):
+        return True
+    if _contains_command_substitution_decode_exec(normalized):
+        return True
+    parts = _split_shell_parts(normalized)
+    if not parts:
+        return False
+    for payload in _decoded_shell_payloads(executable_surface):
+        if _decoded_payload_looks_sensitive(
+            payload,
+            cwd=cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+            visited_script_paths=visited_script_paths,
+        ):
+            return True
+    for env_split_string in _env_split_string_payloads(parts):
+        if _contains_encoded_or_encrypted_shell_command(
+            env_split_string,
+            cwd=cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+            visited_script_paths=visited_script_paths,
+        ):
+            return True
+    for shell_script in _shell_command_scripts(parts):
+        if _contains_encoded_or_encrypted_shell_command(
+            shell_script,
+            cwd=cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+            visited_script_paths=visited_script_paths,
+        ):
+            return True
+    for script_text, script_cwd, script_path in _local_shell_script_payloads(
+        parts,
+        cwd=cwd,
+        home_dir=home_dir,
+        visited_script_paths=visited_script_paths,
+    ):
+        if _contains_encoded_or_encrypted_shell_command(
+            script_text,
+            cwd=script_cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+            visited_script_paths=visited_script_paths | frozenset({script_path}),
+        ):
+            return True
+    return False
+
+
+def _contains_command_substitution_decode_exec(command_text: str) -> bool:
+    substitution_payloads = _shell_command_substitution_payloads(command_text)
+    if not substitution_payloads:
+        return False
+    if not any(_contains_decode_primitive(payload) for payload in substitution_payloads):
+        return False
+    lowered = command_text.lower()
+    if re.search(r"\b(?:ash|bash|dash|sh|zsh)\b[^\n;|&]*-[A-Za-z]*c[A-Za-z]*", lowered):
+        return True
+    return bool(re.search(r"\beval\b[^\n;|&]*\$\(", lowered))
+
+
+def _contains_decode_primitive(command_text: str) -> bool:
+    lowered = command_text.lower()
+    return bool(
+        re.search(r"\bbase64\b(?=[^\n|;]*\s(?:--decode|-[A-Za-z]*[dD][A-Za-z]*))", lowered)
+        or re.search(r"\bxxd\s+(?:-r\s+-p|-rp)\b", lowered)
+        or re.search(r"\bopenssl\s+enc\b[^\n|;]*\s-(?:d|decrypt)\b", lowered)
+        or re.search(r"\b(?:gpg|gpg2)\b[^\n|;]*(?:--decrypt|-d)\b", lowered)
+    )
+
+
+def _shell_text_without_quoted_literals(command_text: str) -> str:
+    characters: list[str] = []
+    index = 0
+    single_quoted = False
+    double_quoted = False
+    while index < len(command_text):
+        character = command_text[index]
+        if single_quoted:
+            if character == "'":
+                single_quoted = False
+            characters.append(" ")
+            index += 1
+            continue
+        if double_quoted:
+            if character == "\\":
+                characters.append(" ")
+                if index + 1 < len(command_text):
+                    characters.append(" ")
+                    index += 2
+                else:
+                    index += 1
+                continue
+            if character == '"':
+                double_quoted = False
+                characters.append(" ")
+                index += 1
+                continue
+            if character == "$" and index + 1 < len(command_text) and command_text[index + 1] == "(":
+                payload, next_index = _read_command_substitution(command_text, index + 2)
+                characters.append(f"$({payload})")
+                index = next_index
+                continue
+            characters.append(" ")
+            index += 1
+            continue
+        if character == "'":
+            single_quoted = True
+            characters.append(" ")
+            index += 1
+            continue
+        if character == '"':
+            double_quoted = True
+            characters.append(" ")
+            index += 1
+            continue
+        characters.append(character)
+        index += 1
+    return "".join(characters)
+
+
+def _shell_command_substitution_payloads(command_text: str) -> tuple[str, ...]:
+    payloads: list[str] = []
+    index = 0
+    while index < len(command_text):
+        if command_text[index] == "$" and index + 1 < len(command_text) and command_text[index + 1] == "(":
+            payload, next_index = _read_command_substitution(command_text, index + 2)
+            if payload.strip():
+                payloads.append(payload)
+            index = next_index
+            continue
+        index += 1
+    return tuple(payloads)
+
+
+def _read_command_substitution(command_text: str, start_index: int) -> tuple[str, int]:
+    index = start_index
+    depth = 1
+    payload_characters: list[str] = []
+    single_quoted = False
+    double_quoted = False
+    while index < len(command_text):
+        character = command_text[index]
+        if single_quoted:
+            payload_characters.append(character)
+            if character == "'":
+                single_quoted = False
+            index += 1
+            continue
+        if double_quoted:
+            payload_characters.append(character)
+            if character == "\\" and index + 1 < len(command_text):
+                payload_characters.append(command_text[index + 1])
+                index += 2
+                continue
+            if character == '"':
+                double_quoted = False
+            index += 1
+            continue
+        if character == "'":
+            single_quoted = True
+            payload_characters.append(character)
+            index += 1
+            continue
+        if character == '"':
+            double_quoted = True
+            payload_characters.append(character)
+            index += 1
+            continue
+        if character == "$" and index + 1 < len(command_text) and command_text[index + 1] == "(":
+            nested_payload, next_index = _read_command_substitution(command_text, index + 2)
+            payload_characters.append(f"$({nested_payload})")
+            index = next_index
+            continue
+        if character == "(":
+            depth += 1
+            payload_characters.append(character)
+            index += 1
+            continue
+        if character == ")":
+            depth -= 1
+            if depth == 0:
+                return "".join(payload_characters), index + 1
+            payload_characters.append(character)
+            index += 1
+            continue
+        payload_characters.append(character)
+        index += 1
+    return "".join(payload_characters), index
+
+
+def _decoded_payload_looks_sensitive(
+    payload: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    depth: int,
+    visited_script_paths: frozenset[str],
+) -> bool:
+    lowered = payload.lower()
+    if _looks_destructive_shell_command(payload):
+        return True
+    if any(token in lowered for token in _SENSITIVE_DECODED_PAYLOAD_TOKENS):
+        return True
+    return _contains_encoded_or_encrypted_shell_command(
+        payload,
+        cwd=cwd,
+        home_dir=home_dir,
+        depth=depth,
+        visited_script_paths=visited_script_paths,
+    )
+
+
+def _decoded_shell_payloads(command_text: str) -> tuple[str, ...]:
+    lowered = command_text.lower()
+    payloads: list[str] = []
+    if any(
+        token in lowered
+        for token in ("base64", "b64decode", "frombase64string", "-encodedcommand", " -enc ", "openssl", "gpg")
+    ):
+        for literal in _BASE64_LITERAL_PATTERN.findall(command_text):
+            decoded = _decode_base64_literal(literal)
+            if decoded is not None:
+                payloads.append(decoded)
+    if "xxd" in lowered:
+        for literal in _HEX_LITERAL_PATTERN.findall(command_text):
+            decoded = _decode_hex_literal(literal)
+            if decoded is not None:
+                payloads.append(decoded)
+    return tuple(payloads)
+
+
+def _decode_base64_literal(literal: str) -> str | None:
+    try:
+        decoded_bytes = base64.b64decode(literal, validate=True)
+    except binascii.Error:
+        return None
+    return _decoded_bytes_to_text(decoded_bytes)
+
+
+def _decode_hex_literal(literal: str) -> str | None:
+    if len(literal) % 2 != 0:
+        return None
+    try:
+        decoded_bytes = binascii.unhexlify(literal)
+    except binascii.Error:
+        return None
+    return _decoded_bytes_to_text(decoded_bytes)
+
+
+def _decoded_bytes_to_text(decoded_bytes: bytes) -> str | None:
+    if not decoded_bytes or len(decoded_bytes) > _MAX_DECODED_PAYLOAD_BYTES:
+        return None
+    for encoding in ("utf-8", "utf-16-le"):
+        try:
+            text = decoded_bytes.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+        if _text_is_probably_source(text):
+            return text
+    return None
+
+
+def _text_is_probably_source(text: str) -> bool:
+    if not text.strip():
+        return False
+    printable = sum(1 for character in text if character.isprintable() or character in "\n\r\t")
+    return printable / len(text) >= 0.85
+
+
+def _local_shell_script_payloads(
+    parts: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    visited_script_paths: frozenset[str],
+) -> tuple[tuple[str, Path | None, str], ...]:
+    payloads: list[tuple[str, Path | None, str]] = []
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_index is None:
+            continue
+        script_path = _shell_script_path_for_segment(segment, command_name=command_name, command_index=command_index)
+        if script_path is None:
+            continue
+        normalized_script_path = _normalize_path(_expand_home(script_path, home_dir), cwd)
+        if normalized_script_path in visited_script_paths:
+            continue
+        script_file = Path(normalized_script_path)
+        if not script_file.is_file():
+            continue
+        try:
+            if script_file.stat().st_size > _MAX_DECODED_PAYLOAD_BYTES:
+                continue
+            script_text = script_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        payloads.append((script_text, script_file.parent, normalized_script_path))
+    return tuple(payloads)
+
+
+def _shell_script_path_for_segment(
+    segment: list[str],
+    *,
+    command_name: str | None,
+    command_index: int,
+) -> str | None:
+    if command_name in _SHELL_SCRIPT_INTERPRETER_COMMANDS:
+        return _shell_script_path_from_segment(segment[command_index + 1 :])
+    command_token = segment[command_index].strip()
+    if not command_token or command_token.startswith("-") or _SHELL_ASSIGNMENT_PATTERN.match(command_token):
+        return None
+    if not _is_explicit_shell_script_path_token(command_token):
+        return None
+    return command_token
+
+
+def _shell_script_path_from_segment(segment_args: list[str]) -> str | None:
+    index = 0
+    while index < len(segment_args):
+        token = segment_args[index].strip()
+        if not token:
+            index += 1
+            continue
+        if token == "--":
+            index += 1
+            break
+        if _SHELL_ASSIGNMENT_PATTERN.match(token):
+            index += 1
+            continue
+        if token == "-s":
+            return None
+        if token.startswith("-") and not token.startswith("--") and "c" in token[1:]:
+            return None
+        if not token.startswith("-") and not token.startswith("+"):
+            return token
+        if token in {"-c", "--command"} or token.startswith(("-c", "--command=")):
+            return None
+        if token in {"-O", "-o", "+O", "+o", "--rcfile", "--init-file"}:
+            index += 2
+            continue
+        if token.startswith(("--rcfile=", "--init-file=")):
+            index += 1
+            continue
+        index += 1
+    while index < len(segment_args):
+        token = segment_args[index].strip()
+        if token:
+            return token
+        index += 1
+    return None
+
+
+def _is_explicit_shell_script_path_token(token: str) -> bool:
+    normalized_token = token.strip()
+    if not normalized_token:
+        return False
+    return (
+        normalized_token.startswith((".", "/", "~"))
+        or normalized_token.startswith("../")
+        or normalized_token.startswith("./")
+        or "/" in normalized_token
     )
 
 
@@ -1241,12 +1690,18 @@ def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
 
 def _shell_command_scripts(parts: list[str]) -> tuple[str, ...]:
     scripts: list[str] = []
-    for index, part in enumerate(parts[:-1]):
-        if not _is_shell_command_flag(part):
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name not in _SHELL_COMMAND_STRING_INTERPRETERS or command_index is None:
             continue
-        script = parts[index + 1].strip()
-        if script:
-            scripts.append(script)
+        index = command_index + 1
+        while index < len(segment):
+            flag_payload = _interpreter_flag_payload(segment, index)
+            if flag_payload is not None:
+                scripts.append(flag_payload.script_text)
+                index += flag_payload.tokens_consumed
+                continue
+            index += 1
     return tuple(scripts)
 
 
@@ -1323,10 +1778,24 @@ def _interpreter_flag_payload(parts: list[str], index: int) -> _InterpreterFlagP
     normalized_token = parts[index].strip().lstrip("(").rstrip(")")
     if not normalized_token.startswith("-"):
         return None
+    if normalized_token.startswith("--"):
+        for long_flag in ("--command", "--eval", "--execute"):
+            if normalized_token == long_flag:
+                if index + 1 >= len(parts):
+                    return None
+                next_script = parts[index + 1].strip()
+                if not next_script:
+                    return None
+                return _InterpreterFlagPayload(script_text=next_script, tokens_consumed=2)
+            if normalized_token.startswith(f"{long_flag}="):
+                attached_script = normalized_token.split("=", 1)[1].strip()
+                if not attached_script:
+                    return None
+                return _InterpreterFlagPayload(script_text=attached_script, tokens_consumed=1)
+        return None
     flag_text = normalized_token[1:]
-    for flag_name in ("c", "e"):
-        flag_index = flag_text.find(flag_name)
-        if flag_index == -1:
+    for flag_index, flag_name in enumerate(flag_text):
+        if flag_name not in {"c", "e"}:
             continue
         attached_script = flag_text[flag_index + 1 :].strip()
         if attached_script:
