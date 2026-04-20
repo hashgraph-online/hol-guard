@@ -15,6 +15,7 @@ CONNECT_STATE_MILESTONE_VALUES = {
     "first_sync_pending",
     "first_sync_succeeded",
     "first_sync_failed",
+    "sync_not_available",
     "expired",
 }
 

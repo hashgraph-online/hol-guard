@@ -479,6 +479,75 @@ def test_start_guard_runtime_session_falls_back_when_daemon_start_fails() -> Non
     assert runtime_session["surface"] == "cli"
 
 
+def test_guard_connect_recovers_from_legacy_daemon_state_without_auth_token(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    store = GuardStore(home_dir)
+
+    ensure_calls: list[Path] = []
+    clear_calls: list[Path] = []
+    load_attempts = {"count": 0}
+
+    class _DaemonClient:
+        daemon_url = "http://127.0.0.1:9999"
+
+        def create_connect_request(self, *, sync_url: str, allowed_origin: str) -> dict[str, object]:
+            return {
+                "request_id": "connect-legacy-recovery",
+                "pairing_secret": "pairing-secret",
+                "expires_at": "2026-04-16T00:05:00+00:00",
+            }
+
+    def _ensure_guard_daemon(path: Path) -> str:
+        ensure_calls.append(path)
+        return "http://127.0.0.1:9999"
+
+    def _clear_guard_daemon_state(path: Path) -> None:
+        clear_calls.append(path)
+
+    def _load_guard_surface_daemon_client(path: Path) -> _DaemonClient:
+        load_attempts["count"] += 1
+        if load_attempts["count"] == 1:
+            raise RuntimeError("Guard daemon state is incomplete.")
+        return _DaemonClient()
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.ensure_guard_daemon",
+        _ensure_guard_daemon,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.clear_guard_daemon_state",
+        _clear_guard_daemon_state,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.load_guard_surface_daemon_client",
+        _load_guard_surface_daemon_client,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.wait_for_connect_transition",
+        lambda **kwargs: None,
+    )
+
+    payload = run_guard_connect_command(
+        guard_home=home_dir,
+        store=store,
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        connect_url="https://hol.org/guard/connect",
+        opener=lambda url: True,
+        wait_timeout_seconds=5,
+    )
+
+    assert payload["status"] == "waiting"
+    assert payload["milestone"] == "waiting_for_browser"
+    assert load_attempts["count"] == 2
+    assert len(clear_calls) == 1
+    assert len(ensure_calls) >= 2
+
+
 def test_guard_connect_recovers_when_browser_pairing_completed_before_cli_sync(
     tmp_path,
     monkeypatch,

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import subprocess
 import urllib.error
 import urllib.parse
@@ -74,10 +75,20 @@ _GUARD_BYPASS_PROMPT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
+_SYNC_HTTP_TIMEOUT_SECONDS = 20
+_SYNC_HTTP_RETRY_TIMEOUT_SECONDS = 120
+_RUNTIME_SYNC_TIMEOUT_SECONDS = 10
+_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS = 90
+_PAIN_SIGNAL_TIMEOUT_SECONDS = 10
+_PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS = 90
 
 
 class GuardSyncNotConfiguredError(RuntimeError):
     """Raised when Guard Cloud sync is requested before the machine is paired."""
+
+
+class GuardSyncNotAvailableError(RuntimeError):
+    """Raised when the sync endpoint returns 403 (free-plan restriction)."""
 
 
 def guard_run(
@@ -412,11 +423,19 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         headers=_guard_sync_headers(str(credentials["token"])),
     )
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        payload = _urlopen_json_with_timeout_retry(
+            request=request,
+            timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
+            retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
+        )
     except urllib.error.HTTPError as error:
+        if error.code == 403:
+            _is_plan, _msg = _check_plan_restriction_403(error)
+            if _is_plan:
+                raise GuardSyncNotAvailableError(_msg) from error
+            raise RuntimeError(_msg) from error
         raise RuntimeError(_sync_http_error_message(error)) from error
-    except urllib.error.URLError as error:
+    except OSError as error:
         raise RuntimeError(_sync_url_error_message(error)) from error
     now = _sync_timestamp(payload)
     advisories = payload.get("advisories")
@@ -485,8 +504,11 @@ def sync_runtime_session(
         headers=_guard_sync_headers(str(credentials["token"])),
     )
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        payload = _urlopen_json_with_timeout_retry(
+            request=request,
+            timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
+            retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
+        )
     except urllib.error.HTTPError as error:
         if error.code == 404:
             recorded_at = _now()
@@ -501,6 +523,8 @@ def sync_runtime_session(
             store.set_sync_payload("runtime_session_summary", summary, recorded_at)
             return summary
         raise RuntimeError(_sync_http_error_message(error)) from error
+    except OSError as error:
+        raise RuntimeError(_sync_url_error_message(error)) from error
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
     synced_at = _sync_timestamp(payload)
@@ -541,8 +565,11 @@ def sync_pain_signals(store: GuardStore) -> int:
                 headers=_guard_sync_headers(str(credentials["token"])),
             )
             try:
-                with urllib.request.urlopen(request, timeout=10):
-                    pass
+                _urlopen_with_timeout_retry(
+                    request=request,
+                    timeout_seconds=_PAIN_SIGNAL_TIMEOUT_SECONDS,
+                    retry_timeout_seconds=_PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS,
+                )
             except urllib.error.HTTPError as error:
                 if error.code == 404:
                     current_event_id = last_processed_event_id
@@ -553,7 +580,7 @@ def sync_pain_signals(store: GuardStore) -> int:
                     )
                     return uploaded_count
                 raise RuntimeError(_sync_http_error_message(error)) from error
-            except urllib.error.URLError as error:
+            except OSError as error:
                 raise RuntimeError(_sync_url_error_message(error)) from error
             uploaded_count += len(signal_items)
         current_event_id = last_processed_event_id
@@ -661,13 +688,108 @@ def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
     return f"HTTP Error {error.code}: {error.reason}"
 
 
-def _sync_url_error_message(error: urllib.error.URLError) -> str:
-    reason = getattr(error, "reason", None)
+_PLAN_403_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "sync_not_available",
+        "plan_restriction",
+        "requires a pro",
+        "requires a team",
+        "upgrade your plan",
+        "upgrade to",
+        "subscription required",
+        "not included in your plan",
+        "guard sync requires",
+    }
+)
+
+
+def _check_plan_restriction_403(
+    error: urllib.error.HTTPError,
+) -> tuple[bool, str]:
+    """Read a 403 response body exactly once.
+
+    Returns (is_plan_restriction, error_message) so callers never
+    drain the stream more than once regardless of which branch they take.
+    Checks both machine-readable fields (syncEnabled, error, code) and
+    human-readable error messages for plan-restriction signals.
+    """
+    try:
+        raw_body = error.read().decode("utf-8", errors="replace")
+    except OSError:
+        raw_body = ""
+    try:
+        payload: object = json.loads(raw_body) if raw_body else None
+    except json.JSONDecodeError:
+        payload = None
+    fallback = raw_body.strip() or f"HTTP Error {error.code}: {error.reason}"
+    if not isinstance(payload, dict):
+        return False, fallback
+    message = payload.get("error")
+    message_str = message.strip() if isinstance(message, str) and message.strip() else fallback
+    if payload.get("syncEnabled") is False:
+        return True, message_str
+    error_field = str(payload.get("error") or "").lower()
+    code_field = str(payload.get("code") or "").lower()
+    combined = f"{error_field} {code_field}"
+    if any(kw in combined for kw in _PLAN_403_KEYWORDS):
+        return True, message_str
+    return False, message_str
+
+
+def _sync_url_error_message(error: OSError) -> str:
+    reason = getattr(error, "reason", error)
     if reason is not None:
         reason_text = str(reason).strip()
         if reason_text:
             return f"Guard sync failed: {reason_text}"
     return "Guard sync failed because the remote endpoint could not be reached."
+
+
+def _is_timeout_error(error: OSError) -> bool:
+    if isinstance(error, TimeoutError | socket.timeout):
+        return True
+    reason = getattr(error, "reason", error)
+    if isinstance(reason, TimeoutError | socket.timeout):
+        return True
+    reason_text = str(reason).strip().lower()
+    if not reason_text:
+        return False
+    return reason_text == "timed out" or reason_text.endswith(" timed out") or "timed out" in reason_text
+
+
+def _urlopen_json_with_timeout_retry(
+    *,
+    request: urllib.request.Request,
+    timeout_seconds: int,
+    retry_timeout_seconds: int,
+) -> dict[str, object]:
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except OSError as error:
+        if not _is_timeout_error(error):
+            raise
+        with urllib.request.urlopen(request, timeout=retry_timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError("Invalid sync response")
+    return payload
+
+
+def _urlopen_with_timeout_retry(
+    *,
+    request: urllib.request.Request,
+    timeout_seconds: int,
+    retry_timeout_seconds: int,
+) -> None:
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds):
+            return
+    except OSError as error:
+        if not _is_timeout_error(error):
+            raise
+        with urllib.request.urlopen(request, timeout=retry_timeout_seconds):
+            return
 
 
 def _remote_harness(value: object, *, allow_wildcard: bool = True) -> str | None:

@@ -59,6 +59,11 @@ class CodexHarnessAdapter(HarnessAdapter):
             return "project"
         return "global"
 
+    def policy_path(self, context: HarnessContext) -> Path:
+        if context.workspace_dir is not None:
+            return context.workspace_dir / ".codex" / "config.toml"
+        return context.home_dir / ".codex" / "config.toml"
+
     def detect(self, context: HarnessContext) -> HarnessDetection:
         config_paths = [context.home_dir / ".codex" / "config.toml"]
         if context.workspace_dir is not None:

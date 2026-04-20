@@ -12,11 +12,21 @@ from pathlib import Path
 
 from ..daemon import ensure_guard_daemon, load_guard_surface_daemon_client
 from ..daemon.client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
-from ..runtime import sync_receipts, sync_runtime_session
+from ..daemon.manager import clear_guard_daemon_state
+from ..runtime import GuardSyncNotAvailableError, sync_receipts, sync_runtime_session
 from ..store import GuardStore
 
 DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
 DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
+
+
+def _load_connect_daemon_client(guard_home: Path) -> GuardSurfaceDaemonClient:
+    try:
+        return load_guard_surface_daemon_client(guard_home)
+    except RuntimeError:
+        clear_guard_daemon_state(guard_home)
+        ensure_guard_daemon(guard_home)
+        return load_guard_surface_daemon_client(guard_home)
 
 
 def run_guard_connect_command(
@@ -29,7 +39,7 @@ def run_guard_connect_command(
     wait_timeout_seconds: int,
 ) -> dict[str, object]:
     ensure_guard_daemon(guard_home)
-    daemon_client = load_guard_surface_daemon_client(guard_home)
+    daemon_client = _load_connect_daemon_client(guard_home)
     normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
     connect_request = daemon_client.create_connect_request(
         sync_url=sync_url,
@@ -95,10 +105,30 @@ def run_guard_connect_command(
         }
     try:
         sync_payload = sync_receipts(store)
+    except GuardSyncNotAvailableError as plan_error:
+        plan_msg = str(plan_error).strip() or "Cloud sync requires a paid Guard plan."
+        pending_state = _record_connect_result(
+            daemon_client=daemon_client,
+            store=store,
+            request_id=str(connect_request["request_id"]),
+            status="connected",
+            milestone="sync_not_available",
+            reason=plan_msg,
+        )
+        return build_connect_payload(
+            state=pending_state,
+            browser_opened=browser_opened,
+            connect_url=browser_url,
+            sync_url=sync_url,
+            connected=True,
+            sync_available=False,
+            sync_message=plan_msg,
+        )
     except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
         sync_message = str(error)
         if runtime_sync_error and not _is_paid_plan_sync_error(sync_message):
             sync_message = runtime_sync_error
+        sync_is_plan_limited = _is_paid_plan_sync_error(sync_message)
         pending_sync_payload = dict(runtime_sync_summary)
         pending_sync_payload["synced_at"] = None
         pending_state = _record_connect_result(
@@ -118,6 +148,7 @@ def run_guard_connect_command(
             connected=True,
             sync=pending_sync_payload,
             sync_message=sync_message,
+            sync_available=False if sync_is_plan_limited else None,
         )
     sync_payload["runtime_session_synced_at"] = runtime_sync_summary["runtime_session_synced_at"]
     sync_payload["runtime_session_id"] = runtime_sync_summary["runtime_session_id"]
@@ -160,6 +191,7 @@ def run_guard_connect_command(
         sync_url=sync_url,
         connected=True,
         sync=sync_payload,
+        sync_available=True,
     )
 
 
@@ -225,8 +257,10 @@ def wait_for_connect_transition(
         except GuardDaemonTransportError:
             time.sleep(poll_interval_seconds)
             continue
+        except GuardDaemonRequestError:
+            raise
         if not isinstance(state, dict):
-            raise GuardDaemonRequestError("Guard daemon request failed: invalid connect state response")
+            raise RuntimeError("Guard daemon request failed: invalid connect state response")
         if str(state.get("status")) in {"connected", "retry_required", "expired"}:
             return state
         if str(state.get("milestone")) == "first_sync_pending":
@@ -244,6 +278,7 @@ def build_connect_payload(
     connected: bool,
     sync: dict[str, object] | None = None,
     sync_message: str | None = None,
+    sync_available: bool | None = None,
 ) -> dict[str, object]:
     milestones = [
         {
@@ -261,6 +296,7 @@ def build_connect_payload(
     ]
     payload = {
         "connected": connected,
+        "sync_available": sync_available if sync_available is not None else connected,
         "browser_opened": browser_opened,
         "connect_url": connect_url,
         "sync_url": sync_url,
@@ -317,6 +353,8 @@ def _resolve_first_sync_milestone(state: dict[str, object]) -> str:
         return "failed"
     if milestone == "first_sync_pending":
         return "waiting"
+    if milestone == "sync_not_available":
+        return "skipped"
     return "pending"
 
 
@@ -333,7 +371,7 @@ def _start_guard_runtime_session(daemon_client: GuardSurfaceDaemonClient) -> dic
                 client_version=None,
                 capabilities=["approval-resolution", "receipt-view", "runtime-sync"],
             )
-        except (GuardDaemonRequestError, GuardDaemonTransportError):
+        except RuntimeError:
             pass
     now = datetime.now(timezone.utc).isoformat()
     return {
