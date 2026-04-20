@@ -1180,18 +1180,6 @@ def run_guard_command(args: argparse.Namespace) -> int:
                         ),
                     )
                     return 0
-                if _should_emit_native_hook_response(args):
-                    _emit_native_hook_response(
-                        harness=args.harness,
-                        policy_action=policy_action,
-                        reason=_native_hook_reason_for_harness(
-                            args.harness,
-                            response_payload.get("why_now"),
-                            response_payload.get("risk_headline"),
-                            response_payload.get("path_summary"),
-                        ),
-                    )
-                    return 0
                 approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
                 approval_center_url = ensure_guard_daemon(guard_home)
                 runtime_detection = _runtime_detection(args.harness, runtime_artifact)
