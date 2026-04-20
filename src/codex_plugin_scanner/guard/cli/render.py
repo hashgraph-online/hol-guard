@@ -418,13 +418,22 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
 
 def _render_single_managed_install(console: Console, managed_install: dict[str, object]) -> None:
     manifest = managed_install.get("manifest")
-    notes = _coerce_string_list(manifest.get("notes")) if isinstance(manifest, dict) else []
+    notes = _managed_install_notes(managed_install, manifest)
     body = Table.grid(padding=(0, 1))
     body.add_row("Harness", f"[bold]{managed_install.get('harness', 'unknown')}[/bold]")
-    body.add_row("Active", _bool_label(bool(managed_install.get("active"))))
+    body.add_row("Protection", _managed_install_state_text(managed_install))
     body.add_row("Workspace", str(managed_install.get("workspace") or "current shell"))
     if isinstance(manifest, dict):
+        mode = _managed_install_mode_text(manifest.get("mode"))
+        if mode is not None:
+            body.add_row("Mode", mode)
         body.add_row("Config", str(manifest.get("config_path") or "no config changed"))
+        managed_servers = _coerce_string_list(manifest.get("managed_servers"))
+        if managed_servers:
+            body.add_row("Managed servers", str(len(managed_servers)))
+        skipped_servers = _coerce_string_list(manifest.get("skipped_servers"))
+        if skipped_servers:
+            body.add_row("Skipped servers", str(len(skipped_servers)))
         if manifest.get("shim_command"):
             body.add_row("Launcher", str(manifest.get("shim_command")))
     console.print(Panel(body, title="Guard install state", border_style="cyan"))
@@ -528,7 +537,51 @@ def _render_sync(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Inventory tracked", str(payload.get("inventory_tracked", payload.get("inventory")) or 0))
     body.add_row("Receipts stored", str(payload.get("receipts_stored") or 0))
     body.add_row("Advisories stored", str(payload.get("advisories_stored") or 0))
+    if payload.get("remote_policies_stored") is not None:
+        body.add_row("Remote policies", str(payload.get("remote_policies_stored") or 0))
+    if payload.get("exceptions_stored") is not None:
+        body.add_row("Exceptions stored", str(payload.get("exceptions_stored") or 0))
+    if payload.get("pain_signals_uploaded") is not None:
+        body.add_row("Pain signals uploaded", str(payload.get("pain_signals_uploaded") or 0))
     console.print(Panel(body, title="Guard sync complete", border_style="green"))
+
+
+def _managed_install_state_text(managed_install: dict[str, object]) -> str:
+    return "Installed" if bool(managed_install.get("active")) else "Removed"
+
+
+def _managed_install_mode_text(mode: object) -> str | None:
+    if not isinstance(mode, str) or not mode.strip():
+        return None
+    known_modes = {
+        "codex-mcp-proxy": "Codex MCP proxy",
+    }
+    normalized = mode.strip().lower()
+    if normalized in known_modes:
+        return known_modes[normalized]
+    words = []
+    for part in normalized.split("-"):
+        lowered = part.lower()
+        if lowered in {"mcp", "api", "cli"}:
+            words.append(lowered.upper())
+        else:
+            words.append(lowered.capitalize())
+    return " ".join(words)
+
+
+def _managed_install_notes(managed_install: dict[str, object], manifest: object) -> list[str]:
+    notes = _coerce_string_list(manifest.get("notes")) if isinstance(manifest, dict) else []
+    if not isinstance(manifest, dict):
+        return notes
+    skipped_servers = _coerce_string_list(manifest.get("skipped_servers"))
+    if skipped_servers:
+        notes.append(f"Skipped existing server entries: {', '.join(skipped_servers)}")
+    source_config_paths = _coerce_string_list(manifest.get("source_config_paths"))
+    if source_config_paths:
+        notes.append(f"Source configs: {', '.join(source_config_paths)}")
+    if not notes and not bool(managed_install.get("active")):
+        notes.append("Guard removed the managed wrapper configuration for this harness.")
+    return notes
 
 
 def _render_update(console: Console, payload: dict[str, object]) -> None:
