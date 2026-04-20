@@ -435,7 +435,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
                 raise GuardSyncNotAvailableError(_msg) from error
             raise RuntimeError(_msg) from error
         raise RuntimeError(_sync_http_error_message(error)) from error
-    except urllib.error.URLError as error:
+    except OSError as error:
         raise RuntimeError(_sync_url_error_message(error)) from error
     now = _sync_timestamp(payload)
     advisories = payload.get("advisories")
@@ -523,6 +523,8 @@ def sync_runtime_session(
             store.set_sync_payload("runtime_session_summary", summary, recorded_at)
             return summary
         raise RuntimeError(_sync_http_error_message(error)) from error
+    except OSError as error:
+        raise RuntimeError(_sync_url_error_message(error)) from error
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
     synced_at = _sync_timestamp(payload)
@@ -578,7 +580,7 @@ def sync_pain_signals(store: GuardStore) -> int:
                     )
                     return uploaded_count
                 raise RuntimeError(_sync_http_error_message(error)) from error
-            except urllib.error.URLError as error:
+            except OSError as error:
                 raise RuntimeError(_sync_url_error_message(error)) from error
             uploaded_count += len(signal_items)
         current_event_id = last_processed_event_id
@@ -734,8 +736,8 @@ def _check_plan_restriction_403(
     return False, message_str
 
 
-def _sync_url_error_message(error: urllib.error.URLError) -> str:
-    reason = getattr(error, "reason", None)
+def _sync_url_error_message(error: OSError) -> str:
+    reason = getattr(error, "reason", error)
     if reason is not None:
         reason_text = str(reason).strip()
         if reason_text:
@@ -743,13 +745,16 @@ def _sync_url_error_message(error: urllib.error.URLError) -> str:
     return "Guard sync failed because the remote endpoint could not be reached."
 
 
-def _is_timeout_url_error(error: urllib.error.URLError) -> bool:
-    reason = getattr(error, "reason", None)
+def _is_timeout_error(error: OSError) -> bool:
+    if isinstance(error, TimeoutError | socket.timeout):
+        return True
+    reason = getattr(error, "reason", error)
     if isinstance(reason, TimeoutError | socket.timeout):
         return True
-    if isinstance(reason, str) and "timed out" in reason.lower():
-        return True
-    return "timed out" in str(reason).lower()
+    reason_text = str(reason).strip().lower()
+    if not reason_text:
+        return False
+    return reason_text == "timed out" or reason_text.endswith(" timed out") or "timed out" in reason_text
 
 
 def _urlopen_json_with_timeout_retry(
@@ -761,8 +766,8 @@ def _urlopen_json_with_timeout_retry(
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.URLError as error:
-        if not _is_timeout_url_error(error):
+    except OSError as error:
+        if not _is_timeout_error(error):
             raise
         with urllib.request.urlopen(request, timeout=retry_timeout_seconds) as response:
             payload = json.loads(response.read().decode("utf-8"))
@@ -780,8 +785,8 @@ def _urlopen_with_timeout_retry(
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds):
             return
-    except urllib.error.URLError as error:
-        if not _is_timeout_url_error(error):
+    except OSError as error:
+        if not _is_timeout_error(error):
             raise
         with urllib.request.urlopen(request, timeout=retry_timeout_seconds):
             return

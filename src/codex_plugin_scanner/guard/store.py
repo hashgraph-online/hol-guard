@@ -1719,9 +1719,9 @@ class GuardStore:
             expected_hash = payload.get(_SYNC_TOKEN_HASH_KEY)
             expected_hash_value = expected_hash if isinstance(expected_hash, str) and expected_hash else None
 
-            reference_candidates = [token_reference]
-            if self._sync_token_ref not in reference_candidates:
-                reference_candidates.append(self._sync_token_ref)
+            reference_candidates = [self._sync_token_ref]
+            if token_reference != self._sync_token_ref:
+                reference_candidates.append(token_reference)
 
             for secret_ref in reference_candidates:
                 token = self._secret_store.get_secret(secret_ref)
@@ -1729,7 +1729,7 @@ class GuardStore:
                     continue
                 if expected_hash_value is not None and _token_sha256(token) != expected_hash_value:
                     continue
-                if secret_ref != token_reference:
+                if token_reference != self._sync_token_ref:
                     now = _now()
                     with self._connect() as connection:
                         self._set_sync_credentials_in_connection(connection, sync_url, token, now)

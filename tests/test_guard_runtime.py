@@ -5475,3 +5475,60 @@ def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):
 
     assert timeouts == [10, 90]
     assert payload["runtime_session_id"] == "session-1"
+
+
+def test_sync_runtime_session_retries_once_after_read_timeout(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-04-19T00:00:00+00:00",
+    )
+    timeouts: list[int] = []
+
+    class _Response:
+        def __init__(self, should_timeout: bool) -> None:
+            self._should_timeout = should_timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            if self._should_timeout:
+                raise TimeoutError("timed out")
+            return json.dumps(
+                {
+                    "generatedAt": "2026-04-19T00:00:10+00:00",
+                    "items": [{"sessionId": "session-read-timeout"}],
+                }
+            ).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        timeouts.append(timeout)
+        return _Response(should_timeout=len(timeouts) == 1)
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    payload = guard_runner_module.sync_runtime_session(
+        store,
+        session={
+            "session_id": "session-read-timeout",
+            "harness": "hermes",
+            "surface": "agent-sdk",
+            "status": "active",
+            "client_name": "Hermes",
+            "client_title": "Hermes Agent",
+            "client_version": "1.0.0",
+            "workspace": "prod-e2e",
+            "capabilities": ["chat"],
+            "started_at": "2026-04-19T00:00:00+00:00",
+            "updated_at": "2026-04-19T00:00:00+00:00",
+            "operations": [],
+        },
+    )
+
+    assert timeouts == [10, 90]
+    assert payload["runtime_session_id"] == "session-read-timeout"
