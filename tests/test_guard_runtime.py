@@ -5730,6 +5730,107 @@ def test_guard_hook_blocks_sensitive_runtime_file_read_until_exactly_approved(tm
     assert third_output["policy_action"] == "require-reapproval"
 
 
+def test_guard_hook_keeps_artifact_approval_for_same_sensitive_tool_action_retry(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    blocked_event = {
+        "hookName": "preToolUse",
+        "toolName": "bash",
+        "toolArgs": {"command": "echo MALICIOUS > dangerous-marker.json"},
+        "policyAction": "block",
+        "sourceScope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
+
+    first_rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+            "--json",
+        ]
+    )
+    first_output = json.loads(capsys.readouterr().out)
+    approval_request = first_output["approval_requests"][0]
+
+    approval_rc = main(
+        [
+            "guard",
+            "approvals",
+            "approve",
+            str(approval_request["request_id"]),
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
+    second_rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+            "--json",
+        ]
+    )
+    second_output = json.loads(capsys.readouterr().out)
+
+    different_event = {
+        "hookName": "preToolUse",
+        "toolName": "bash",
+        "toolArgs": {"command": "echo MALICIOUS > danger-two.json"},
+        "policyAction": "block",
+        "sourceScope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(different_event)))
+    third_rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+            "--json",
+        ]
+    )
+    third_output = json.loads(capsys.readouterr().out)
+
+    assert first_rc == 1
+    assert first_output["policy_action"] == "block"
+    assert first_output["artifact_type"] == "tool_action_request"
+    assert "destructive shell command" in first_output["risk_summary"].lower()
+    assert approval_request["recommended_scope"] == "artifact"
+    assert approval_rc == 0
+    assert second_rc == 0
+    assert second_output["policy_action"] == "allow"
+    assert second_output.get("approval_requests") in (None, [])
+    assert third_rc == 1
+    assert third_output["policy_action"] == "block"
+    assert len(third_output["approval_requests"]) == 1
+
+
 def test_guard_hook_allows_non_sensitive_read_file_requests(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
