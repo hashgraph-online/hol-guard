@@ -24,7 +24,6 @@ from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.policy import decide_action
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
@@ -4413,7 +4412,7 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
-    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 5\n")
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 8\n")
 
     store = GuardStore(home_dir)
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
@@ -4423,8 +4422,10 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
         lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
     )
 
+    stop_resolver = threading.Event()
+
     def resolve_pending() -> None:
-        for _ in range(100):
+        while not stop_resolver.is_set():
             pending = store.list_approval_requests(limit=10)
             if pending:
                 for request in pending:
@@ -4438,7 +4439,7 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
                     )
                 if not store.list_approval_requests(limit=10):
                     return
-            threading.Event().wait(0.05)
+            threading.Event().wait(0.03)
 
     worker = threading.Thread(target=resolve_pending, daemon=True)
     worker.start()
@@ -4454,6 +4455,8 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
             str(workspace_dir),
         ]
     )
+    stop_resolver.set()
+    worker.join(timeout=1.0)
     output = capsys.readouterr().out
 
     assert rc == 0
@@ -5385,3 +5388,147 @@ def test_guard_daemon_serves_health_and_receipt_state(tmp_path):
     assert health_payload["ok"] is True
     assert health_payload["receipts"] == 1
     assert receipts_payload["items"][0]["artifact_id"] == "codex:workspace_skill"
+
+
+def test_sync_receipts_retries_once_after_timeout(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-04-19T00:00:00+00:00",
+    )
+    timeouts: list[int] = []
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({"syncedAt": "2026-04-19T00:00:10+00:00", "receiptsStored": 0}).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        timeouts.append(timeout)
+        if len(timeouts) == 1:
+            raise urllib.error.URLError(TimeoutError("timed out"))
+        return _Response()
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    payload = guard_runner_module.sync_receipts(store)
+
+    assert timeouts == [20, 120]
+    assert payload["synced_at"] == "2026-04-19T00:00:10+00:00"
+
+
+def test_sync_runtime_session_retries_once_after_timeout(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-04-19T00:00:00+00:00",
+    )
+    timeouts: list[int] = []
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "generatedAt": "2026-04-19T00:00:10+00:00",
+                    "items": [{"sessionId": "session-1"}],
+                }
+            ).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        timeouts.append(timeout)
+        if len(timeouts) == 1:
+            raise urllib.error.URLError(TimeoutError("timed out"))
+        return _Response()
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    payload = guard_runner_module.sync_runtime_session(
+        store,
+        session={
+            "session_id": "session-1",
+            "harness": "hermes",
+            "surface": "agent-sdk",
+            "status": "active",
+            "client_name": "Hermes",
+            "client_title": "Hermes Agent",
+            "client_version": "1.0.0",
+            "workspace": "prod-e2e",
+            "capabilities": ["chat"],
+            "started_at": "2026-04-19T00:00:00+00:00",
+            "updated_at": "2026-04-19T00:00:00+00:00",
+            "operations": [],
+        },
+    )
+
+    assert timeouts == [10, 90]
+    assert payload["runtime_session_id"] == "session-1"
+
+
+def test_sync_runtime_session_retries_once_after_read_timeout(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "guard-live-token",
+        "2026-04-19T00:00:00+00:00",
+    )
+    timeouts: list[int] = []
+
+    class _Response:
+        def __init__(self, should_timeout: bool) -> None:
+            self._should_timeout = should_timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            if self._should_timeout:
+                raise TimeoutError("timed out")
+            return json.dumps(
+                {
+                    "generatedAt": "2026-04-19T00:00:10+00:00",
+                    "items": [{"sessionId": "session-read-timeout"}],
+                }
+            ).encode("utf-8")
+
+    def _fake_urlopen(request, timeout):
+        timeouts.append(timeout)
+        return _Response(should_timeout=len(timeouts) == 1)
+
+    monkeypatch.setattr(guard_runner_module.urllib.request, "urlopen", _fake_urlopen)
+
+    payload = guard_runner_module.sync_runtime_session(
+        store,
+        session={
+            "session_id": "session-read-timeout",
+            "harness": "hermes",
+            "surface": "agent-sdk",
+            "status": "active",
+            "client_name": "Hermes",
+            "client_title": "Hermes Agent",
+            "client_version": "1.0.0",
+            "workspace": "prod-e2e",
+            "capabilities": ["chat"],
+            "started_at": "2026-04-19T00:00:00+00:00",
+            "updated_at": "2026-04-19T00:00:00+00:00",
+            "operations": [],
+        },
+    )
+
+    assert timeouts == [10, 90]
+    assert payload["runtime_session_id"] == "session-read-timeout"
