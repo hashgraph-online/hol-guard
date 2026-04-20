@@ -12,8 +12,6 @@ from pathlib import Path
 _ALREADY_CURRENT_HINTS = (
     "already at latest version",
     "already up-to-date",
-    "already installed",
-    "requirement already satisfied",
 )
 
 
@@ -98,10 +96,10 @@ def _success_status(payload: dict[str, object]) -> str:
         and current_version != resulting_version
     ):
         return "updated"
-    output_text = "\n".join(
-        part for part in [str(payload.get("stdout") or "").lower(), str(payload.get("stderr") or "").lower()] if part
-    )
+    output_text = str(payload.get("stdout") or "").lower()
     if any(hint in output_text for hint in _ALREADY_CURRENT_HINTS):
+        return "current"
+    if "requirement already satisfied: hol-guard" in output_text or "hol-guard is already installed" in output_text:
         return "current"
     return "updated"
 

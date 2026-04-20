@@ -2952,6 +2952,37 @@ args = ["workspace-skill.js", "--changed"]
         assert output["stdout"].startswith("hol-guard is already at latest version 2.0.36")
         assert output["stderr"] == "upgrading shared libraries...\nupgrading hol-guard..."
 
+    def test_guard_update_treats_first_install_as_updated_when_only_dependencies_are_current(self, monkeypatch, capsys):
+        commands: list[list[str]] = []
+
+        def fake_run(command: list[str], **_: object):
+            commands.append(command)
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=(
+                    "Requirement already satisfied: pip in /mock/python/site-packages\n"
+                    "Successfully installed hol-guard-2.0.36"
+                ),
+                stderr="",
+            )
+
+        monkeypatch.setattr(guard_update_commands_module.subprocess, "run", fake_run)
+        monkeypatch.setattr(guard_update_commands_module.sys, "prefix", "/opt/guard-venv")
+        monkeypatch.setattr(guard_update_commands_module.sys, "executable", "/opt/guard-venv/bin/python")
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "unknown")
+        monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.36")
+
+        rc = main(["guard", "update", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert commands == [["/opt/guard-venv/bin/python", "-m", "pip", "install", "--upgrade", "hol-guard"]]
+        assert output["status"] == "updated"
+        assert output["changed"] is True
+        assert output["message"] == "HOL Guard update completed successfully."
+
     def test_guard_update_dry_run_emits_planned_command(self, monkeypatch, capsys):
         monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
 
