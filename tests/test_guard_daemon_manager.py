@@ -80,3 +80,39 @@ def test_ensure_guard_daemon_serializes_parallel_start_attempts(tmp_path, monkey
     assert results == ["http://127.0.0.1:5410"] * 8
     assert len(launched_commands) == 1
     assert launched_commands[0][-2:] == ["--port", "5410"]
+
+
+def test_ensure_guard_daemon_advances_ports_after_early_process_exit(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    launched_commands: list[list[str]] = []
+    poll_count = {"value": 0}
+
+    class FakeProcess:
+        def __init__(self, *, alive: bool) -> None:
+            self._alive = alive
+
+        def poll(self) -> int | None:
+            if self._alive:
+                return None
+            return 1
+
+    def fake_load_guard_daemon_url(_guard_home):
+        if poll_count["value"] < 4:
+            poll_count["value"] += 1
+            return None
+        return "http://127.0.0.1:5411"
+
+    def fake_popen(command, **_kwargs):
+        launched_commands.append(list(command))
+        return FakeProcess(alive=len(launched_commands) > 1)
+
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
+    monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home: None)
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5410, 5411])
+    monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
+
+    url = daemon_manager_module.ensure_guard_daemon(guard_home)
+
+    assert url == "http://127.0.0.1:5411"
+    assert [command[-1] for command in launched_commands] == ["5410", "5411"]

@@ -13,6 +13,7 @@ import urllib.error
 import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
+from typing import BinaryIO
 
 from ...version import __version__
 
@@ -63,8 +64,12 @@ def ensure_guard_daemon(guard_home: Path) -> str:
                 kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
             else:
                 kwargs["start_new_session"] = True
-            subprocess.Popen(command, **kwargs)
-            url = _wait_for_guard_daemon_url(guard_home, timeout=GUARD_DAEMON_START_TIMEOUT_SECONDS)
+            process = subprocess.Popen(command, **kwargs)
+            url = _wait_for_guard_daemon_url(
+                guard_home,
+                timeout=GUARD_DAEMON_START_TIMEOUT_SECONDS,
+                process=process,
+            )
             if url is not None:
                 return url
     raise RuntimeError(f"Guard approval center did not start. Expected state file at {state_path}.")
@@ -160,12 +165,19 @@ def _guard_daemon_pid_is_running(pid: int) -> bool:
     return True
 
 
-def _wait_for_guard_daemon_url(guard_home: Path, *, timeout: float) -> str | None:
+def _wait_for_guard_daemon_url(
+    guard_home: Path,
+    *,
+    timeout: float,
+    process: subprocess.Popen[bytes] | None = None,
+) -> str | None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         url = load_guard_daemon_url(guard_home)
         if url is not None:
             return url
+        if process is not None and process.poll() is not None:
+            return None
         time.sleep(GUARD_DAEMON_POLL_INTERVAL_SECONDS)
     return None
 
@@ -186,23 +198,28 @@ def _guard_daemon_start_lock(guard_home: Path):
                 _unlock_daemon_start_file(handle)
 
 
-def _lock_daemon_start_file(handle) -> None:
+def _lock_daemon_start_file(handle: BinaryIO) -> None:
     if os.name == "nt":
         import msvcrt
 
         handle.seek(0)
-        if handle.tell() == 0:
+        if os.fstat(handle.fileno()).st_size == 0:
             handle.write(b"0")
             handle.flush()
         handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        while True:
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                return
+            except OSError:
+                time.sleep(GUARD_DAEMON_POLL_INTERVAL_SECONDS)
         return
     import fcntl
 
     fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
 
 
-def _unlock_daemon_start_file(handle) -> None:
+def _unlock_daemon_start_file(handle: BinaryIO) -> None:
     if os.name == "nt":
         import msvcrt
 
