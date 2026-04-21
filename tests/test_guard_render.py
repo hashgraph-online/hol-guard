@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+from codex_plugin_scanner.guard.cli import render
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 
 
@@ -374,8 +377,34 @@ def test_guard_batch_install_render_surfaces_auto_detected_summary(capsys) -> No
     assert "Mode" in output
     assert "Installed" in output
     assert "Removed" in output
-    assert "Codex MCP proxy" in output
-    assert "Managed servers" in output
+    assert "Codex" in output
+    assert "MCP" in output
+    assert "proxy" in output
+    assert "Servers" in output
+
+
+def test_guard_batch_install_render_shortens_home_relative_config_paths(capsys) -> None:
+    emit_guard_payload(
+        "install",
+        {
+            "managed_installs": [
+                {
+                    "harness": "codex",
+                    "active": True,
+                    "workspace": "/repo",
+                    "manifest": {
+                        "mode": "codex-mcp-proxy",
+                        "config_path": str(Path.home() / ".codex" / "config.toml"),
+                        "managed_servers": ["global_tools"],
+                    },
+                }
+            ],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out).replace(" ", "")
+    assert "~/.codex/config.toml" in output
 
 
 def test_guard_batch_install_render_collects_per_harness_notes(capsys) -> None:
@@ -405,4 +434,25 @@ def test_guard_batch_install_render_collects_per_harness_notes(capsys) -> None:
     output = _normalize_render_output(capsys.readouterr().out)
     assert "Notes" in output
     assert "codex: Skipped existing server entries: existing_global" in output
-    assert "claude-code: Guard removed the managed wrapper configuration for this harness." in output
+    assert "claude-code: Guard removed the managed wrapper configuration" in output
+
+
+def test_emit_guard_payload_uses_adaptive_console_width(monkeypatch) -> None:
+    captured_kwargs: dict[str, object] = {}
+
+    class FakeConsole:
+        def __init__(self, **kwargs: object) -> None:
+            captured_kwargs.update(kwargs)
+
+    def _fake_renderer(console: object, payload: dict[str, object]) -> None:
+        return None
+
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+    monkeypatch.setattr(render, "Console", FakeConsole)
+    monkeypatch.setitem(render._RENDERERS, "status", _fake_renderer)
+
+    emit_guard_payload("status", {"harnesses": []}, False)
+
+    assert captured_kwargs["file"] is not None
+    assert captured_kwargs["soft_wrap"] is True
+    assert "width" not in captured_kwargs

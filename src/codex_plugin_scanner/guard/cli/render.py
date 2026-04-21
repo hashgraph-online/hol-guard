@@ -42,7 +42,7 @@ def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) 
         print(json.dumps(payload, indent=2))
         return
 
-    console = Console(file=sys.stdout, soft_wrap=True, width=120)
+    console = Console(file=sys.stdout, soft_wrap=True)
     renderer = _RENDERERS.get(command, _render_fallback)
     renderer(console, payload)
 
@@ -415,7 +415,7 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
     console.print(_managed_install_batch_table(managed_installs))
     notes = _managed_install_batch_notes(managed_installs)
     if notes:
-        console.print(Panel("\n".join(f"• {note}" for note in notes), title="Notes", border_style="blue"))
+        console.print(_notes_panel(notes))
 
 
 def _render_single_managed_install(console: Console, managed_install: dict[str, object]) -> None:
@@ -440,7 +440,7 @@ def _render_single_managed_install(console: Console, managed_install: dict[str, 
             body.add_row("Launcher", str(manifest.get("shim_command")))
     console.print(Panel(body, title="Guard install state", border_style="cyan"))
     if notes:
-        console.print(Panel("\n".join(f"• {note}" for note in notes), title="Notes", border_style="blue"))
+        console.print(_notes_panel(notes))
 
 
 def _managed_install_batch_summary(payload: dict[str, object], managed_installs: list[dict[str, object]]) -> Table:
@@ -455,12 +455,12 @@ def _managed_install_batch_summary(payload: dict[str, object], managed_installs:
 
 
 def _managed_install_batch_table(managed_installs: list[dict[str, object]]) -> Table:
-    table = Table(box=box.SIMPLE_HEAVY, show_header=True)
-    table.add_column("Harness", style="bold")
-    table.add_column("Protection")
-    table.add_column("Mode")
-    table.add_column("Managed servers", justify="right")
-    table.add_column("Config")
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True, expand=True)
+    table.add_column("Harness", style="bold", no_wrap=True)
+    table.add_column("State", no_wrap=True)
+    table.add_column("Mode", overflow="fold")
+    table.add_column("Servers", justify="right", no_wrap=True)
+    table.add_column("Config", overflow="fold")
     for item in managed_installs:
         manifest = item.get("manifest")
         mode = _managed_install_mode_text(manifest.get("mode")) if isinstance(manifest, dict) else None
@@ -471,7 +471,7 @@ def _managed_install_batch_table(managed_installs: list[dict[str, object]]) -> T
             _managed_install_state_text(item),
             mode or "—",
             str(len(managed_servers)) if managed_servers else "—",
-            str(config_path or "no config changed"),
+            _short_path(config_path) if config_path else "no config changed",
         )
     return table
 
@@ -484,6 +484,14 @@ def _managed_install_batch_notes(managed_installs: list[dict[str, object]]) -> l
         for note in _managed_install_notes(item, manifest):
             notes.append(f"{harness}: {note}")
     return notes
+
+
+def _notes_panel(notes: list[str]) -> Panel:
+    return Panel(
+        Text("\n".join(f"• {note}" for note in notes), overflow="fold", no_wrap=False),
+        title="Notes",
+        border_style="blue",
+    )
 
 
 def _render_decision(console: Console, payload: dict[str, object]) -> None:
