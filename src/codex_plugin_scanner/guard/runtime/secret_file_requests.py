@@ -946,6 +946,12 @@ def _shell_command_substitution_payloads(command_text: str) -> tuple[str, ...]:
                 payloads.append(payload)
             index = next_index
             continue
+        if command_text[index] in "<>" and index + 1 < len(command_text) and command_text[index + 1] == "(":
+            payload, next_index = _read_command_substitution(command_text, index + 2)
+            if payload.strip():
+                payloads.append(payload)
+            index = next_index
+            continue
         if command_text[index] == "`":
             payload, next_index = _read_backtick_command_substitution(command_text, index + 1)
             if payload.strip():
