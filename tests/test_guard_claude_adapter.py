@@ -107,6 +107,7 @@ def test_claude_install_writes_nested_hook_schema_and_is_idempotent(tmp_path):
     pre_tool_use = payload["hooks"]["PreToolUse"]
     post_tool_use = payload["hooks"]["PostToolUse"]
     prompt_submit = payload["hooks"]["UserPromptSubmit"]
+    notification = payload["hooks"]["Notification"]
 
     assert len(pre_tool_use) == 1
     assert pre_tool_use[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
@@ -115,6 +116,9 @@ def test_claude_install_writes_nested_hook_schema_and_is_idempotent(tmp_path):
     assert len(post_tool_use) == 1
     assert len(prompt_submit) == 1
     assert "matcher" not in prompt_submit[0]
+    assert len(notification) == 1
+    assert notification[0]["matcher"] == "permission_prompt"
+    assert notification[0]["hooks"][0]["timeout"] == 10
 
 
 def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
