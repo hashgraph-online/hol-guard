@@ -1509,24 +1509,25 @@ def _emit_copilot_permission_request_response(
 
 
 def _emit_native_hook_response(*, harness: str, policy_action: str, reason: str) -> None:
-    payload = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": _native_hook_permission_decision(policy_action, harness=harness),
-        }
-    }
-    if payload["hookSpecificOutput"]["permissionDecision"] != "allow":
-        payload["hookSpecificOutput"]["permissionDecisionReason"] = reason
+    permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
+    hook_specific_output: dict[str, object] = {"hookEventName": "PreToolUse"}
+    if permission_decision is not None:
+        hook_specific_output["permissionDecision"] = permission_decision
+        if permission_decision != "allow":
+            hook_specific_output["permissionDecisionReason"] = reason
+    payload = {"hookSpecificOutput": hook_specific_output}
     print(json.dumps(payload, separators=(",", ":")))
 
 
-def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str:
+def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str | None:
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action == "require-reapproval":
         if harness == "codex":
             return "deny"
         return "ask"
+    if harness == "codex":
+        return None
     return "allow"
 
 
