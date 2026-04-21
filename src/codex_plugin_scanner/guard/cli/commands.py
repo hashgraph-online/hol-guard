@@ -488,9 +488,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
         workspace_dir=workspace,
         guard_home=guard_home,
     )
-    config = load_guard_config(guard_home, workspace=workspace)
     store = GuardStore(guard_home)
-    config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
 
     if args.guard_command == "update":
         payload, exit_code = run_guard_update(
@@ -502,6 +500,9 @@ def run_guard_command(args: argparse.Namespace) -> int:
         )
         _emit("update", payload, getattr(args, "json", False))
         return exit_code
+
+    config = load_guard_config(guard_home, workspace=workspace)
+    config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
 
     if args.guard_command == "protect":
         _refresh_cloud_policy_bundle(store)

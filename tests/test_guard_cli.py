@@ -3036,6 +3036,22 @@ args = ["workspace-skill.js", "--changed"]
         assert output["editable_install"] is True
         assert "disabled for editable installs" in output["error"]
 
+    def test_guard_update_ignores_malformed_guard_config(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        _write_text(home_dir / "config.toml", "[broken\n")
+        monkeypatch.setattr(
+            guard_commands_module,
+            "run_guard_update",
+            lambda **_: ({"status": "updated", "message": "ok"}, 0),
+        )
+
+        rc = main(["guard", "update", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["status"] == "updated"
+        assert output["message"] == "ok"
+
     def test_guard_update_repairs_stale_codex_native_hooks(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(
