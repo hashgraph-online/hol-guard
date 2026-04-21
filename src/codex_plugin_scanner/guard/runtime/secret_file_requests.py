@@ -103,9 +103,14 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
     }
 )
 _CURL_AT_FILE_FLAGS_WITH_VALUE = frozenset({"--data", "--data-ascii", "--data-binary", "--json", "-d"})
+_CURL_CONFIG_FLAGS_WITH_VALUE = frozenset({"--config", "-K"})
 _CURL_DATA_URLENCODE_FLAGS_WITH_VALUE = frozenset({"--data-urlencode", "--url-query"})
+_CURL_EXPAND_FLAGS_WITH_VALUE = frozenset(
+    {"--expand-data", "--expand-header", "--expand-url", "--expand-user", "--expand-variable"}
+)
 _CURL_FORM_FLAGS_WITH_VALUE = frozenset({"--form", "-F"})
 _CURL_DIRECT_FILE_FLAGS_WITH_VALUE = frozenset({"--upload-file", "-T"})
+_CURL_VARIABLE_FLAGS_WITH_VALUE = frozenset({"--variable"})
 _CURL_SHORT_FLAGS_WITH_VALUES = frozenset(
     {
         "A",
@@ -651,7 +656,10 @@ def _contains_shell_network_file_upload(
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
-    if any(_segment_uses_network_file_upload(segment) for segment in _iter_shell_command_segments(parts)):
+    if any(
+        _segment_uses_network_file_upload(segment, cwd=cwd, home_dir=home_dir)
+        for segment in _iter_shell_command_segments(parts)
+    ):
         return True
     for env_split_string in _env_split_string_payloads(parts):
         if _contains_shell_network_file_upload(
@@ -697,24 +705,43 @@ def _contains_shell_network_file_upload(
     return False
 
 
-def _segment_uses_network_file_upload(segment: list[str]) -> bool:
+def _segment_uses_network_file_upload(segment: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
     command_name, command_index = _shell_segment_primary_command(segment)
     if command_name is None or command_index is None:
         return False
     segment_args = segment[command_index + 1 :]
     if command_name == "curl":
-        return _curl_segment_uses_file_upload(segment_args)
+        return _curl_segment_uses_file_upload(segment_args, cwd=cwd, home_dir=home_dir)
     if command_name == "wget":
         return _wget_segment_uses_file_upload(segment_args)
     return False
 
 
-def _curl_segment_uses_file_upload(segment_args: list[str]) -> bool:
+def _curl_segment_uses_file_upload(
+    segment_args: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    visited_config_paths: frozenset[str] = frozenset(),
+) -> bool:
     index = 0
+    saw_variable_file_input = False
+    saw_variable_expansion = False
     while index < len(segment_args):
         token = segment_args[index]
         if token == "--":
             return False
+        if token in _CURL_CONFIG_FLAGS_WITH_VALUE:
+            value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
+            if _curl_config_uses_file_upload(
+                value,
+                cwd=cwd,
+                home_dir=home_dir,
+                visited_config_paths=visited_config_paths,
+            ):
+                return True
+            index += 2
+            continue
         if (
             token in _CURL_AT_FILE_FLAGS_WITH_VALUE
             or token in _CURL_DATA_URLENCODE_FLAGS_WITH_VALUE
@@ -726,6 +753,22 @@ def _curl_segment_uses_file_upload(segment_args: list[str]) -> bool:
                 return True
             index += 2
             continue
+        if token in _CURL_VARIABLE_FLAGS_WITH_VALUE:
+            value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
+            saw_variable_file_input = saw_variable_file_input or _curl_variable_value_uses_local_file(value)
+            index += 2
+            continue
+        if token in _CURL_EXPAND_FLAGS_WITH_VALUE:
+            saw_variable_expansion = True
+            index += 2
+            continue
+        if token.startswith("--config=") and _curl_config_uses_file_upload(
+            token.split("=", 1)[1],
+            cwd=cwd,
+            home_dir=home_dir,
+            visited_config_paths=visited_config_paths,
+        ):
+            return True
         if token.startswith("--data=") and _curl_upload_value_uses_local_file("--data", token.split("=", 1)[1]):
             return True
         if token.startswith("--data-ascii=") and _curl_upload_value_uses_local_file(
@@ -754,6 +797,16 @@ def _curl_segment_uses_file_upload(segment_args: list[str]) -> bool:
             "--upload-file", token.split("=", 1)[1]
         ):
             return True
+        if token.startswith("--variable="):
+            saw_variable_file_input = saw_variable_file_input or _curl_variable_value_uses_local_file(
+                token.split("=", 1)[1]
+            )
+            index += 1
+            continue
+        if token.startswith("--expand-"):
+            saw_variable_expansion = True
+            index += 1
+            continue
         clustered_upload_value = _curl_clustered_short_flag_value(segment_args, index, "T")
         if clustered_upload_value is not None and _curl_upload_value_uses_local_file("-T", clustered_upload_value):
             return True
@@ -764,7 +817,7 @@ def _curl_segment_uses_file_upload(segment_args: list[str]) -> bool:
         if clustered_data_value is not None and _curl_upload_value_uses_local_file("-d", clustered_data_value):
             return True
         index += 1
-    return False
+    return saw_variable_file_input and saw_variable_expansion
 
 
 def _wget_segment_uses_file_upload(segment_args: list[str]) -> bool:
@@ -822,6 +875,67 @@ def _curl_data_urlencode_value_uses_local_file(value: str) -> bool:
     if "=" in name:
         return False
     return _direct_file_operand_uses_local_file(file_candidate)
+
+
+def _curl_variable_value_uses_local_file(value: str) -> bool:
+    stripped_value = _strip_cli_value(value)
+    if "@" not in stripped_value:
+        return False
+    variable_name, file_candidate = stripped_value.split("@", 1)
+    normalized_name = variable_name.lstrip("%")
+    if not normalized_name or "=" in normalized_name:
+        return False
+    return _direct_file_operand_uses_local_file(file_candidate)
+
+
+def _curl_config_uses_file_upload(
+    value: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    visited_config_paths: frozenset[str],
+) -> bool:
+    config_file = _resolved_runtime_path(value, cwd=cwd, home_dir=home_dir)
+    normalized_config_path = str(config_file)
+    if normalized_config_path in visited_config_paths or not config_file.is_file():
+        return False
+    try:
+        if config_file.stat().st_size > _MAX_DECODED_PAYLOAD_BYTES:
+            return False
+        config_text = config_file.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    config_args = _curl_config_arguments(config_text)
+    if not config_args:
+        return False
+    return _curl_segment_uses_file_upload(
+        config_args,
+        cwd=config_file.parent,
+        home_dir=home_dir,
+        visited_config_paths=visited_config_paths | frozenset({normalized_config_path}),
+    )
+
+
+def _curl_config_arguments(config_text: str) -> list[str]:
+    arguments: list[str] = []
+    for raw_line in config_text.splitlines():
+        stripped_line = raw_line.strip()
+        if not stripped_line or stripped_line.startswith("#"):
+            continue
+        try:
+            tokens = shlex.split(stripped_line, comments=True, posix=True)
+        except ValueError:
+            continue
+        if not tokens:
+            continue
+        if len(tokens) >= 3 and tokens[1] == "=":
+            tokens = [tokens[0], *tokens[2:]]
+        first_token = tokens[0]
+        if not first_token.startswith("-"):
+            first_token = f"--{first_token}"
+        tokens[0] = first_token
+        arguments.extend(tokens)
+    return arguments
 
 
 def _curl_clustered_short_flag_value(segment_args: list[str], index: int, flag_character: str) -> str | None:
@@ -927,10 +1041,33 @@ def _shell_command_substitution_payloads(command_text: str) -> tuple[str, ...]:
     payloads: list[str] = []
     index = 0
     single_quoted = False
+    double_quoted = False
     while index < len(command_text):
         if single_quoted:
             if command_text[index] == "'":
                 single_quoted = False
+            index += 1
+            continue
+        if double_quoted:
+            if command_text[index] == "\\" and index + 1 < len(command_text):
+                index += 2
+                continue
+            if command_text[index] == '"':
+                double_quoted = False
+                index += 1
+                continue
+            if command_text[index] == "$" and index + 1 < len(command_text) and command_text[index + 1] == "(":
+                payload, next_index = _read_command_substitution(command_text, index + 2)
+                if payload.strip():
+                    payloads.append(payload)
+                index = next_index
+                continue
+            if command_text[index] == "`":
+                payload, next_index = _read_backtick_command_substitution(command_text, index + 1)
+                if payload.strip():
+                    payloads.append(payload)
+                index = next_index
+                continue
             index += 1
             continue
         if command_text[index] == "\\" and index + 1 < len(command_text):
@@ -938,6 +1075,10 @@ def _shell_command_substitution_payloads(command_text: str) -> tuple[str, ...]:
             continue
         if command_text[index] == "'":
             single_quoted = True
+            index += 1
+            continue
+        if command_text[index] == '"':
+            double_quoted = True
             index += 1
             continue
         if command_text[index] == "$" and index + 1 < len(command_text) and command_text[index + 1] == "(":
@@ -1339,6 +1480,12 @@ def _normalize_path(value: str, cwd: Path | None) -> str:
     if cwd is not None:
         return os.path.normpath(os.path.join(str(cwd), value))
     return os.path.normpath(value)
+
+
+def _resolved_runtime_path(value: str, *, cwd: Path | None, home_dir: Path | None) -> Path:
+    stripped_value = _strip_cli_value(value)
+    expanded_value = _expand_home(stripped_value, home_dir)
+    return Path(_normalize_path(expanded_value, cwd))
 
 
 def _normalize_tool_name(tool_name: object) -> str | None:

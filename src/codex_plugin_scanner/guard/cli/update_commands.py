@@ -279,10 +279,35 @@ def _codex_repair_target(context: HarnessContext, store: GuardStore) -> tuple[Ha
 
 
 def _codex_backup_repair_target(context: HarnessContext) -> tuple[HarnessContext, str | None] | None:
-    if not CodexHarnessAdapter._backup_path(context).is_file():
-        return None
-    repair_workspace = str(context.workspace_dir) if context.workspace_dir is not None else None
-    return context, repair_workspace
+    for repair_context in _codex_backup_repair_contexts(context):
+        if not CodexHarnessAdapter._backup_path(repair_context).is_file():
+            continue
+        repair_workspace = str(repair_context.workspace_dir) if repair_context.workspace_dir is not None else None
+        return repair_context, repair_workspace
+    return None
+
+
+def _codex_backup_repair_contexts(context: HarnessContext) -> tuple[HarnessContext, ...]:
+    contexts: list[HarnessContext] = [context]
+    if context.workspace_dir is not None:
+        return tuple(contexts)
+    home_dir = context.home_dir.resolve()
+    seen_workspaces: set[Path] = set()
+    current_dir = Path.cwd().resolve()
+    for candidate_dir in (current_dir, *current_dir.parents):
+        if candidate_dir == home_dir or candidate_dir in seen_workspaces:
+            continue
+        if not (candidate_dir / ".codex").exists():
+            continue
+        seen_workspaces.add(candidate_dir)
+        contexts.append(
+            HarnessContext(
+                home_dir=context.home_dir,
+                workspace_dir=candidate_dir,
+                guard_home=context.guard_home,
+            )
+        )
+    return tuple(contexts)
 
 
 __all__ = ["run_guard_update"]
