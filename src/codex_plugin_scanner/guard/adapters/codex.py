@@ -462,7 +462,8 @@ class CodexHarnessAdapter(HarnessAdapter):
         managed_group = _hook_group(context)
         hook_payloads = payloads or self._load_hook_payloads(context)
         for hooks_path in self._all_hook_paths(context):
-            payload = dict(hook_payloads.get(hooks_path, {}))
+            original_payload = dict(hook_payloads.get(hooks_path, {}))
+            payload = dict(original_payload)
             hooks = payload.get("hooks")
             if not isinstance(hooks, dict):
                 hooks = {}
@@ -480,14 +481,15 @@ class CodexHarnessAdapter(HarnessAdapter):
                         payload["hooks"] = hooks
                     else:
                         payload.pop("hooks", None)
-            self._write_hooks_payload(hooks_path, payload)
+            self._write_hooks_payload(hooks_path, payload, original_payload=original_payload)
         return target_hooks_path
 
     def _remove_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
         target_hooks_path = self._hooks_path(context)
         hook_payloads = payloads or {}
         for hooks_path in self._all_hook_paths(context):
-            payload = dict(hook_payloads.get(hooks_path, _json_object(hooks_path)))
+            original_payload = dict(hook_payloads.get(hooks_path, _json_object(hooks_path)))
+            payload = dict(original_payload)
             if not payload and hooks_path.exists():
                 continue
             hooks = payload.get("hooks")
@@ -502,11 +504,18 @@ class CodexHarnessAdapter(HarnessAdapter):
                         payload["hooks"] = hooks
                     else:
                         payload.pop("hooks", None)
-            self._write_hooks_payload(hooks_path, payload)
+            self._write_hooks_payload(hooks_path, payload, original_payload=original_payload)
         return target_hooks_path
 
     @staticmethod
-    def _write_hooks_payload(hooks_path: Path, payload: dict[str, object]) -> None:
+    def _write_hooks_payload(
+        hooks_path: Path,
+        payload: dict[str, object],
+        *,
+        original_payload: dict[str, object] | None = None,
+    ) -> None:
+        if original_payload is not None and payload == original_payload:
+            return
         if payload:
             hooks_path.parent.mkdir(parents=True, exist_ok=True)
             hooks_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
