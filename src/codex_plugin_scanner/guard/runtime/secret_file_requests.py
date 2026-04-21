@@ -930,11 +930,7 @@ def _printf_stdout_payloads(segment_args: list[str]) -> tuple[str, ...]:
     args = list(segment_args)
     if args and args[0] == "--":
         args = args[1:]
-    decoded_args = tuple(
-        decoded
-        for decoded in (_decode_shell_text_literal(arg) for arg in args)
-        if decoded
-    )
+    decoded_args = tuple(decoded for decoded in (_decode_shell_text_literal(arg) for arg in args) if decoded)
     if not decoded_args:
         return ()
     if len(decoded_args) == 1:
