@@ -1457,7 +1457,9 @@ def _should_emit_prequeue_native_hook_response(args: argparse.Namespace) -> bool
     return args.harness == "claude-code" and not getattr(args, "json", False)
 
 
-def _claude_permission_notice_state_key(session_id: str) -> str:
+def _claude_permission_notice_state_key(session_id: str, tool_name: str | None = None) -> str:
+    if tool_name is not None:
+        return f"claude_permission_notice:{session_id}:{tool_name}"
     return f"claude_permission_notice:{session_id}"
 
 
@@ -1480,14 +1482,31 @@ def _record_claude_permission_notice(
     }
     if tool_name is not None:
         notice_payload["tool_name"] = tool_name
-    store.set_sync_payload(_claude_permission_notice_state_key(session_id), notice_payload, _now())
+    try:
+        store.set_sync_payload(_claude_permission_notice_state_key(session_id, tool_name), notice_payload, _now())
+    except (OSError, sqlite3.Error):
+        return
 
 
 def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]) -> dict[str, object] | None:
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
         return None
-    persisted = store.get_sync_payload(_claude_permission_notice_state_key(session_id))
+    tool_name = _optional_string(payload.get("tool_name"))
+    try:
+        persisted = store.get_sync_payload(_claude_permission_notice_state_key(session_id, tool_name))
+        loaded_generic = False
+        if persisted is None and tool_name is not None:
+            persisted = store.get_sync_payload(_claude_permission_notice_state_key(session_id))
+            loaded_generic = persisted is not None
+        if tool_name is not None:
+            store.delete_sync_payload(_claude_permission_notice_state_key(session_id, tool_name))
+            if loaded_generic:
+                store.delete_sync_payload(_claude_permission_notice_state_key(session_id))
+        else:
+            store.delete_sync_payload(_claude_permission_notice_state_key(session_id))
+    except (OSError, sqlite3.Error):
+        return None
     if isinstance(persisted, dict):
         return persisted
     return None
