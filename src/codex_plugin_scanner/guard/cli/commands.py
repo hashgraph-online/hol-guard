@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import shlex
+import sqlite3
 import subprocess
 import sys
 import urllib.error
@@ -488,9 +489,15 @@ def run_guard_command(args: argparse.Namespace) -> int:
         workspace_dir=workspace,
         guard_home=guard_home,
     )
-    store = GuardStore(guard_home)
 
     if args.guard_command == "update":
+        store: GuardStore | None
+        update_store_error: OSError | RuntimeError | sqlite3.Error | None = None
+        try:
+            store = GuardStore(guard_home)
+        except (OSError, RuntimeError, sqlite3.Error) as error:
+            store = None
+            update_store_error = error
         payload, exit_code = run_guard_update(
             dry_run=bool(getattr(args, "dry_run", False)),
             context=context,
@@ -498,9 +505,14 @@ def run_guard_command(args: argparse.Namespace) -> int:
             workspace=str(workspace) if workspace else None,
             now=_now(),
         )
+        if update_store_error is not None:
+            notes = [str(item) for item in payload.get("notes", []) if isinstance(item, str)]
+            notes.append(f"Skipped local Guard repair during update: {update_store_error}")
+            payload["notes"] = notes
         _emit("update", payload, getattr(args, "json", False))
         return exit_code
 
+    store = GuardStore(guard_home)
     config = load_guard_config(guard_home, workspace=workspace)
     config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
 

@@ -234,7 +234,7 @@ def _repair_codex_install(
         return None, None
     try:
         hook_state = codex_native_hook_state(context)
-    except RuntimeError as error:
+    except (OSError, RuntimeError) as error:
         return None, f"Could not inspect Codex protection during update: {error}"
     if not bool(hook_state["config_present"]) or bool(hook_state["protection_active"]):
         return None, None
@@ -248,7 +248,7 @@ def _repair_codex_install(
             workspace,
             now,
         )
-    except RuntimeError as error:
+    except (OSError, RuntimeError) as error:
         return None, f"Could not repair Codex protection during update: {error}"
     managed_install = payload.get("managed_install")
     return (managed_install if isinstance(managed_install, dict) else None), None

@@ -102,13 +102,13 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
         "--title",
     }
 )
-_CURL_AT_FILE_FLAGS_WITH_VALUE = frozenset({"--data", "--data-ascii", "--data-binary", "-d"})
+_CURL_AT_FILE_FLAGS_WITH_VALUE = frozenset({"--data", "--data-ascii", "--data-binary", "--json", "-d"})
 _CURL_DATA_URLENCODE_FLAGS_WITH_VALUE = frozenset({"--data-urlencode"})
 _CURL_FORM_FLAGS_WITH_VALUE = frozenset({"--form", "-F"})
 _CURL_DIRECT_FILE_FLAGS_WITH_VALUE = frozenset({"--upload-file", "-T"})
 _WGET_UPLOAD_FLAGS_WITH_VALUE = frozenset({"--body-file", "--post-file"})
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
-_SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "time"})
+_SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
 _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _SHELL_NEWLINE_SEPARATOR = ";"
 _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
@@ -152,6 +152,24 @@ _WRAPPER_FLAGS_WITH_VALUES = {
     "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
     "nice": frozenset({"-n", "--adjustment"}),
     "stdbuf": frozenset({"-i", "--input", "-o", "--output", "-e", "--error"}),
+    "sudo": frozenset(
+        {
+            "-C",
+            "-R",
+            "-T",
+            "-g",
+            "-h",
+            "-p",
+            "-u",
+            "--chroot",
+            "--close-from",
+            "--command-timeout",
+            "--group",
+            "--host",
+            "--prompt",
+            "--user",
+        }
+    ),
     "time": frozenset({"-f", "--format", "-o", "--output"}),
 }
 _ENCODED_EXECUTION_TARGET_PATTERN = (
@@ -671,6 +689,8 @@ def _curl_segment_uses_file_upload(segment_args: list[str]) -> bool:
         if token.startswith("--data-binary=") and _curl_upload_value_uses_local_file(
             "--data-binary", token.split("=", 1)[1]
         ):
+            return True
+        if token.startswith("--json=") and _curl_upload_value_uses_local_file("--json", token.split("=", 1)[1]):
             return True
         if token.startswith("--data-urlencode=") and _curl_upload_value_uses_local_file(
             "--data-urlencode", token.split("=", 1)[1]
@@ -1861,6 +1881,18 @@ def _wrapper_flag_has_attached_value(command_name: str, token: str) -> bool:
         return token.startswith(("--input=", "--output=", "--error=")) or (
             len(token) > 2 and token[:2] in {"-i", "-o", "-e"}
         )
+    if command_name == "sudo":
+        return token.startswith(
+            (
+                "--chroot=",
+                "--close-from=",
+                "--command-timeout=",
+                "--group=",
+                "--host=",
+                "--prompt=",
+                "--user=",
+            )
+        ) or (len(token) > 2 and token[:2] in {"-C", "-R", "-T", "-g", "-h", "-p", "-u"})
     if command_name == "time":
         return token.startswith(("--format=", "--output=")) or (len(token) > 2 and token[:2] in {"-f", "-o"})
     return False
@@ -1884,7 +1916,7 @@ def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
         if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", normalized_token):
             continue
         normalized_command = _normalized_shell_command_name(normalized_token)
-        if normalized_command in {"env", "command", "builtin", "nohup", "nice", "time", "stdbuf"}:
+        if normalized_command in {"env", "command", "builtin", "nohup", "nice", "sudo", "time", "stdbuf"}:
             expect_command = True
             continue
         command_names.append(normalized_command)
