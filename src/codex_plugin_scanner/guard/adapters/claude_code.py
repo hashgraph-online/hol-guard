@@ -395,7 +395,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         package_root = Path(__file__).resolve().parents[3]
         code = (
             "import sys;"
-            f"sys.path[:0]=[{str(package_root)!r}];"
+            f"sys.path.insert(0, {str(package_root)!r});"
             "from codex_plugin_scanner.cli import main;"
             f"raise SystemExit(main({guard_args!r}))"
         )

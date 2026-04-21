@@ -4092,6 +4092,28 @@ def test_guard_hook_emits_claude_native_deny_response_for_sandbox_required_reque
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
+    artifact = GuardArtifact(
+        artifact_id="claude-code:project:tool-action:test",
+        name="destructive shell command",
+        harness="claude-code",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/tmp/settings.local.json",
+        metadata={},
+    )
+    long_summary = "x" * 240
+
+    reason = guard_commands_module._runtime_artifact_native_reason(
+        artifact,
+        {"risk_summary": long_summary},
+    )
+
+    assert reason.startswith("HOL Guard flagged this request: ")
+    assert len(reason) < len("HOL Guard flagged this request: ") + len(long_summary)
+    assert reason.endswith("...")
+
+
 def test_guard_hook_emits_claude_user_prompt_submit_context_for_overridable_prompts(
     tmp_path,
     capsys,

@@ -1180,14 +1180,13 @@ def run_guard_command(args: argparse.Namespace) -> int:
             }
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
                 native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
-                additional_context = None
-                if (
-                    args.harness == "claude-code"
-                    and event_name == "UserPromptSubmit"
-                    and policy_action == "require-reapproval"
-                    and not _prompt_requires_hard_block(runtime_artifact)
-                ):
-                    additional_context = native_reason
+                additional_context = _claude_prompt_additional_context(
+                    harness=args.harness,
+                    event_name=event_name,
+                    policy_action=policy_action,
+                    artifact=runtime_artifact,
+                    native_reason=native_reason,
+                )
                 if _should_emit_copilot_hook_response(args):
                     _emit_copilot_hook_response(
                         policy_action=policy_action,
@@ -1469,8 +1468,30 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
         )
     risk_summary = response_payload.get("risk_summary")
     if isinstance(risk_summary, str) and risk_summary.strip():
-        return f"HOL Guard flagged this request: {risk_summary.strip()}"
+        trimmed_summary = risk_summary.strip()
+        if len(trimmed_summary) > 180:
+            trimmed_summary = f"{trimmed_summary[:177].rstrip()}..."
+        return f"HOL Guard flagged this request: {trimmed_summary}"
     return "HOL Guard flagged this request for review."
+
+
+def _claude_prompt_additional_context(
+    *,
+    harness: str,
+    event_name: str,
+    policy_action: str,
+    artifact: GuardArtifact,
+    native_reason: str,
+) -> str | None:
+    if harness != "claude-code":
+        return None
+    if event_name != "UserPromptSubmit":
+        return None
+    if policy_action != "require-reapproval":
+        return None
+    if _prompt_requires_hard_block(artifact):
+        return None
+    return native_reason
 
 
 def _copilot_hook_reason(*values: object | None) -> str:

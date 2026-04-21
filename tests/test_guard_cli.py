@@ -15,6 +15,7 @@ from typing import ClassVar
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters import claude_code as claude_adapter_module
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
@@ -225,6 +226,18 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
 
 
 class TestGuardCli:
+    def test_claude_guard_hook_command_detection_handles_legacy_and_pinned_commands(self):
+        legacy_command = "/opt/python/bin/python3 -m codex_plugin_scanner.cli guard hook --guard-home /tmp/guard"
+        pinned_command = (
+            "/opt/python/bin/python3 -c "
+            "\"import sys;sys.path.insert(0, '/tmp/src');from codex_plugin_scanner.cli import main;"
+            "raise SystemExit(main(['guard', 'hook']))\""
+        )
+
+        assert claude_adapter_module._is_guard_hook_command(legacy_command) is True
+        assert claude_adapter_module._is_guard_hook_command(pinned_command) is True
+        assert claude_adapter_module._is_guard_hook_command("python something-else.py") is False
+
     def test_guard_requires_a_subcommand(self, capsys):
         with pytest.raises(SystemExit) as exc_info:
             main(["guard"])
