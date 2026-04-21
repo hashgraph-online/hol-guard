@@ -489,8 +489,6 @@ class CodexHarnessAdapter(HarnessAdapter):
         for hooks_path in self._all_hook_paths(context):
             payload = dict(hook_payloads.get(hooks_path, _json_object(hooks_path)))
             if not payload and hooks_path.exists():
-                if hooks_path == target_hooks_path:
-                    hooks_path.unlink()
                 continue
             hooks = payload.get("hooks")
             if isinstance(hooks, dict):
