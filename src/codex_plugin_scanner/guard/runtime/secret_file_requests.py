@@ -659,11 +659,20 @@ def _contains_shell_network_file_upload(
         return False
     if _curl_stdin_config_uses_file_upload(normalized, parts, cwd=cwd, home_dir=home_dir):
         return True
-    if any(
-        _segment_uses_network_file_upload(segment, cwd=cwd, home_dir=home_dir)
-        for segment in _iter_shell_command_segments(parts)
-    ):
-        return True
+    for pipeline in _iter_shell_pipelines(parts):
+        for index, segment in enumerate(pipeline):
+            if _segment_uses_network_file_upload(
+                segment,
+                cwd=cwd,
+                home_dir=home_dir,
+                stdin_uses_local_file=_shell_pipeline_stdin_uses_local_file(
+                    pipeline,
+                    index,
+                    cwd=cwd,
+                    home_dir=home_dir,
+                ),
+            ):
+                return True
     for env_split_string in _env_split_string_payloads(parts):
         if _contains_shell_network_file_upload(
             env_split_string,
@@ -708,13 +717,24 @@ def _contains_shell_network_file_upload(
     return False
 
 
-def _segment_uses_network_file_upload(segment: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
+def _segment_uses_network_file_upload(
+    segment: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    stdin_uses_local_file: bool = False,
+) -> bool:
     command_name, command_index = _shell_segment_primary_command(segment)
     if command_name is None or command_index is None:
         return False
     segment_args = segment[command_index + 1 :]
     if command_name == "curl":
-        return _curl_segment_uses_file_upload(segment_args, cwd=cwd, home_dir=home_dir)
+        return _curl_segment_uses_file_upload(
+            segment_args,
+            cwd=cwd,
+            home_dir=home_dir,
+            stdin_uses_local_file=stdin_uses_local_file,
+        )
     if command_name == "wget":
         return _wget_segment_uses_file_upload(segment_args)
     return False
@@ -727,6 +747,7 @@ def _curl_segment_uses_file_upload(
     home_dir: Path | None,
     visited_config_paths: frozenset[str] = frozenset(),
     stdin_config_payloads: tuple[tuple[str, Path | None], ...] = (),
+    stdin_uses_local_file: bool = False,
 ) -> bool:
     index = 0
     saw_variable_file_input = False
@@ -754,7 +775,7 @@ def _curl_segment_uses_file_upload(
             or token in _CURL_DIRECT_FILE_FLAGS_WITH_VALUE
         ):
             value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
-            if _curl_upload_value_uses_local_file(token, value):
+            if _curl_upload_value_uses_local_file(token, value, stdin_uses_local_file=stdin_uses_local_file):
                 return True
             index += 2
             continue
@@ -775,32 +796,58 @@ def _curl_segment_uses_file_upload(
             stdin_config_payloads=stdin_config_payloads,
         ):
             return True
-        if token.startswith("--data=") and _curl_upload_value_uses_local_file("--data", token.split("=", 1)[1]):
+        if token.startswith("--data=") and _curl_upload_value_uses_local_file(
+            "--data",
+            token.split("=", 1)[1],
+            stdin_uses_local_file=stdin_uses_local_file,
+        ):
             return True
         if token.startswith("--data-ascii=") and _curl_upload_value_uses_local_file(
-            "--data-ascii", token.split("=", 1)[1]
+            "--data-ascii",
+            token.split("=", 1)[1],
+            stdin_uses_local_file=stdin_uses_local_file,
         ):
             return True
         if token.startswith("--data-binary=") and _curl_upload_value_uses_local_file(
-            "--data-binary", token.split("=", 1)[1]
+            "--data-binary",
+            token.split("=", 1)[1],
+            stdin_uses_local_file=stdin_uses_local_file,
         ):
             return True
-        if token.startswith("--json=") and _curl_upload_value_uses_local_file("--json", token.split("=", 1)[1]):
+        if token.startswith("--json=") and _curl_upload_value_uses_local_file(
+            "--json",
+            token.split("=", 1)[1],
+            stdin_uses_local_file=stdin_uses_local_file,
+        ):
             return True
         if token.startswith("--url-query=") and _curl_upload_value_uses_local_file(
-            "--url-query", token.split("=", 1)[1]
+            "--url-query",
+            token.split("=", 1)[1],
+            stdin_uses_local_file=stdin_uses_local_file,
         ):
             return True
         if token.startswith("--data-urlencode=") and _curl_upload_value_uses_local_file(
-            "--data-urlencode", token.split("=", 1)[1]
+            "--data-urlencode",
+            token.split("=", 1)[1],
+            stdin_uses_local_file=stdin_uses_local_file,
         ):
             return True
-        if token.startswith("--data-raw=") and _curl_upload_value_uses_local_file("--data-raw", token.split("=", 1)[1]):
+        if token.startswith("--data-raw=") and _curl_upload_value_uses_local_file(
+            "--data-raw",
+            token.split("=", 1)[1],
+            stdin_uses_local_file=stdin_uses_local_file,
+        ):
             return True
-        if token.startswith("--form=") and _curl_upload_value_uses_local_file("--form", token.split("=", 1)[1]):
+        if token.startswith("--form=") and _curl_upload_value_uses_local_file(
+            "--form",
+            token.split("=", 1)[1],
+            stdin_uses_local_file=stdin_uses_local_file,
+        ):
             return True
         if token.startswith("--upload-file=") and _curl_upload_value_uses_local_file(
-            "--upload-file", token.split("=", 1)[1]
+            "--upload-file",
+            token.split("=", 1)[1],
+            stdin_uses_local_file=stdin_uses_local_file,
         ):
             return True
         if token.startswith("--variable="):
@@ -814,7 +861,11 @@ def _curl_segment_uses_file_upload(
             index += 1
             continue
         clustered_upload_value = _curl_clustered_short_flag_value(segment_args, index, "T")
-        if clustered_upload_value is not None and _curl_upload_value_uses_local_file("-T", clustered_upload_value):
+        if clustered_upload_value is not None and _curl_upload_value_uses_local_file(
+            "-T",
+            clustered_upload_value,
+            stdin_uses_local_file=stdin_uses_local_file,
+        ):
             return True
         clustered_config_value = _curl_clustered_short_flag_value(segment_args, index, "K")
         if clustered_config_value is not None and _curl_config_uses_file_upload(
@@ -855,11 +906,18 @@ def _curl_stdin_config_uses_file_upload(
                 cwd=cwd,
                 home_dir=home_dir,
             )
+            pipeline_stdin_uses_local_file = _shell_pipeline_stdin_uses_local_file(
+                pipeline,
+                index,
+                cwd=cwd,
+                home_dir=home_dir,
+            )
             if pipeline_stdin_payloads and _curl_segment_uses_file_upload(
                 segment_args,
                 cwd=cwd,
                 home_dir=home_dir,
                 stdin_config_payloads=pipeline_stdin_payloads,
+                stdin_uses_local_file=pipeline_stdin_uses_local_file,
             ):
                 return True
             if (
@@ -908,6 +966,18 @@ def _curl_inline_config_text_uses_file_upload(config_text: str, *, cwd: Path | N
     return _curl_segment_uses_file_upload(config_args, cwd=cwd, home_dir=home_dir)
 
 
+def _shell_pipeline_stdin_uses_local_file(
+    pipeline: list[list[str]],
+    index: int,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    return (index > 0 and _shell_stdout_uses_local_file(pipeline[index - 1], cwd=cwd, home_dir=home_dir)) or (
+        _shell_stdin_redirect_uses_local_file(pipeline[index], cwd=cwd, home_dir=home_dir)
+    )
+
+
 def _shell_pipeline_stdin_payloads(
     pipeline: list[list[str]],
     index: int,
@@ -941,6 +1011,18 @@ def _shell_stdout_payloads(
     if command_name == "cat":
         return _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir)
     return ()
+
+
+def _shell_stdout_uses_local_file(
+    segment: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    command_name, command_index = _shell_segment_primary_command(segment)
+    if command_name != "cat" or command_index is None:
+        return False
+    return _cat_reads_local_file(segment[command_index + 1 :], cwd=cwd, home_dir=home_dir)
 
 
 def _printf_stdout_payloads(segment_args: list[str]) -> tuple[str, ...]:
@@ -994,6 +1076,26 @@ def _cat_stdout_payloads(
     return tuple(payloads)
 
 
+def _cat_reads_local_file(
+    segment_args: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    consume_all = False
+    for token in segment_args:
+        if token == "--":
+            consume_all = True
+            continue
+        if not consume_all and token.startswith("-"):
+            continue
+        if token == "-":
+            continue
+        if _looks_like_local_stdin_source(token):
+            return True
+    return False
+
+
 def _shell_stdin_redirect_payloads(
     segment: list[str],
     *,
@@ -1034,6 +1136,34 @@ def _shell_stdin_redirect_payloads(
     return tuple(payloads)
 
 
+def _shell_stdin_redirect_uses_local_file(
+    segment: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    command_name, command_index = _shell_segment_primary_command(segment)
+    if command_name is None or command_index is None:
+        return False
+    segment_args = segment[command_index + 1 :]
+    index = 0
+    while index < len(segment_args):
+        token = segment_args[index]
+        if token == "<" and index + 1 < len(segment_args):
+            if _stdin_redirect_uses_local_file(segment_args[index + 1], cwd=cwd, home_dir=home_dir):
+                return True
+            index += 2
+            continue
+        if token.startswith("<") and not token.startswith("<<") and _stdin_redirect_uses_local_file(
+            token[1:],
+            cwd=cwd,
+            home_dir=home_dir,
+        ):
+            return True
+        index += 1
+    return False
+
+
 def _stdin_redirect_payload(
     target: str,
     *,
@@ -1047,6 +1177,25 @@ def _stdin_redirect_payload(
         return config_path.read_text(encoding="utf-8"), config_path.parent
     except (OSError, UnicodeDecodeError):
         return None
+
+
+def _stdin_redirect_uses_local_file(
+    target: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    return _looks_like_local_stdin_source(target)
+
+
+def _looks_like_local_stdin_source(value: str) -> bool:
+    stripped_value = _strip_cli_value(value).lower()
+    return bool(
+        stripped_value
+        and stripped_value not in {"-", "@-"}
+        and stripped_value not in _SAFE_SHELL_REDIRECT_TARGETS
+        and not stripped_value.startswith("&")
+    )
 
 
 def _decode_shell_text_literal(value: str) -> str | None:
@@ -1079,10 +1228,10 @@ def _wget_segment_uses_file_upload(segment_args: list[str]) -> bool:
     return False
 
 
-def _curl_upload_value_uses_local_file(flag: str, value: str) -> bool:
+def _curl_upload_value_uses_local_file(flag: str, value: str, *, stdin_uses_local_file: bool = False) -> bool:
     stripped_value = value.strip()
     if flag in _CURL_DIRECT_FILE_FLAGS_WITH_VALUE:
-        return _direct_file_operand_uses_local_file(stripped_value)
+        return _direct_file_operand_uses_local_file(stripped_value, stdin_uses_local_file=stdin_uses_local_file)
     if flag in _CURL_FORM_FLAGS_WITH_VALUE:
         return _curl_form_value_uses_local_file(stripped_value)
     if flag in _CURL_DATA_URLENCODE_FLAGS_WITH_VALUE:
@@ -1240,9 +1389,13 @@ def _curl_clustered_short_flag_value(segment_args: list[str], index: int, flag_c
     return None
 
 
-def _direct_file_operand_uses_local_file(value: str) -> bool:
+def _direct_file_operand_uses_local_file(value: str, *, stdin_uses_local_file: bool = False) -> bool:
     stripped_value = _strip_cli_value(value)
-    return bool(stripped_value and stripped_value not in {"-", "@-"})
+    if not stripped_value:
+        return False
+    if stripped_value in {"-", "@-"}:
+        return stdin_uses_local_file
+    return True
 
 
 def _strip_cli_value(value: str) -> str:
