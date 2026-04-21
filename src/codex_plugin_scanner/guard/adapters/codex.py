@@ -468,10 +468,14 @@ class CodexHarnessAdapter(HarnessAdapter):
             hooks = payload.get("hooks")
             if not isinstance(hooks, dict):
                 hooks = {}
-            remaining = _remove_hook_groups(hooks.get("PreToolUse"))
+            original_groups = deepcopy(hooks.get("PreToolUse"))
+            remaining = _remove_hook_groups(original_groups)
+            managed_removed = isinstance(original_groups, list) and remaining != original_groups
             if hooks_path == target_hooks_path:
                 hooks["PreToolUse"] = _merge_hook_groups(remaining, managed_group)
                 payload["hooks"] = hooks
+            elif not managed_removed:
+                payload = deepcopy(original_payload)
             else:
                 if remaining:
                     hooks["PreToolUse"] = remaining
@@ -495,8 +499,12 @@ class CodexHarnessAdapter(HarnessAdapter):
                 continue
             hooks = payload.get("hooks")
             if isinstance(hooks, dict):
-                remaining = _remove_hook_groups(hooks.get("PreToolUse"))
-                if remaining:
+                original_groups = deepcopy(hooks.get("PreToolUse"))
+                remaining = _remove_hook_groups(original_groups)
+                managed_removed = isinstance(original_groups, list) and remaining != original_groups
+                if not managed_removed:
+                    payload = deepcopy(original_payload)
+                elif remaining:
                     hooks["PreToolUse"] = remaining
                     payload["hooks"] = hooks
                 else:

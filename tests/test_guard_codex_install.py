@@ -511,6 +511,73 @@ def test_guard_uninstall_codex_skips_unchanged_read_only_alternate_hook_file(tmp
     assert home_hooks_path.read_text(encoding="utf-8") == original_hooks + "\n"
 
 
+def test_guard_install_codex_preserves_unchanged_empty_alternate_hook_file(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+    home_hooks_path = home_dir / ".codex" / "hooks.json"
+    original_hooks = '{\n  "hooks": {}\n}\n'
+    _write_text(home_hooks_path, original_hooks)
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    assert install_rc == 0
+    assert home_hooks_path.read_text(encoding="utf-8") == original_hooks
+
+
+def test_guard_uninstall_codex_preserves_unchanged_empty_alternate_hook_file(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+    home_hooks_path = home_dir / ".codex" / "hooks.json"
+    original_hooks = '{\n  "hooks": {}\n}\n'
+    _write_text(home_hooks_path, original_hooks)
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    uninstall_rc = main(
+        [
+            "guard",
+            "uninstall",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    assert install_rc == 0
+    assert uninstall_rc == 0
+    assert home_hooks_path.read_text(encoding="utf-8") == original_hooks
+
+
 def test_guard_detect_codex_collects_global_and_workspace_hooks(tmp_path):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
