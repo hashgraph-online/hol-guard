@@ -1492,22 +1492,15 @@ def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
         return None
-    tool_name = _optional_string(payload.get("tool_name"))
+    tool_name = _claude_notification_tool_name(payload)
     try:
         selected_key = _claude_permission_notice_state_key(session_id, tool_name)
         persisted = store.get_sync_payload(selected_key)
         if persisted is None and tool_name is not None:
             selected_key = _claude_permission_notice_state_key(session_id)
             persisted = store.get_sync_payload(selected_key)
-        if persisted is None and tool_name is None:
-            prefix = f"{_claude_permission_notice_state_key(session_id)}:"
-            for candidate in store.list_sync_payloads_by_prefix(prefix, limit=1):
-                candidate_payload = candidate.get("payload")
-                if isinstance(candidate_payload, dict):
-                    persisted = candidate_payload
-                    selected_key = str(candidate["state_key"])
-                    break
-        store.delete_sync_payload(selected_key)
+        if persisted is not None:
+            store.delete_sync_payload(selected_key)
     except (OSError, sqlite3.Error):
         return None
     if isinstance(persisted, dict):
@@ -1528,7 +1521,7 @@ def _claude_permission_prompt_system_message(
     payload: dict[str, object],
     notice: dict[str, object] | None,
 ) -> str:
-    tool_name = _optional_string(payload.get("tool_name"))
+    tool_name = _claude_notification_tool_name(payload)
     if tool_name is None and notice is not None:
         tool_name = _optional_string(notice.get("tool_name"))
     reason = _optional_string(notice.get("reason")) if notice is not None else None
@@ -1551,6 +1544,20 @@ def _claude_permission_prompt_additional_context(notice: dict[str, object] | Non
         "HOL Guard requested the active approval prompt for a sensitive tool action. "
         "If the user denies it, do not retry the same action."
     )
+
+
+def _claude_notification_tool_name(payload: dict[str, object]) -> str | None:
+    direct_name = _optional_string(payload.get("tool_name"))
+    if direct_name is not None:
+        return direct_name
+    for key in ("message", "title"):
+        value = _optional_string(payload.get(key))
+        if value is None:
+            continue
+        match = re.search(r"\buse\s+([A-Za-z][A-Za-z0-9_]*)\b", value)
+        if match is not None:
+            return match.group(1)
+    return None
 
 
 def _approval_delivery_payload(
