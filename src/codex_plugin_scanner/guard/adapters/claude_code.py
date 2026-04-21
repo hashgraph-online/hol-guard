@@ -95,9 +95,7 @@ def _prune_guard_hook_entries(entries: list[object]) -> list[object]:
             remaining.append(entry)
             continue
         filtered_hooks = [
-            item
-            for item in hooks
-            if not (isinstance(item, dict) and _is_guard_hook_command(item.get("command")))
+            item for item in hooks if not (isinstance(item, dict) and _is_guard_hook_command(item.get("command")))
         ]
         if filtered_hooks:
             updated_entry = dict(entry)

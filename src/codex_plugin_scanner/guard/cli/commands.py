@@ -1299,7 +1299,10 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     harness=args.harness,
                     policy_action=policy_action,
                     event_name=event_name,
-                    reason=_runtime_artifact_native_reason(runtime_artifact, response_payload),
+                    reason=_native_hook_reason_for_harness(
+                        args.harness,
+                        _runtime_artifact_native_reason(runtime_artifact, response_payload),
+                    ),
                 )
                 return 0
             _emit("hook", response_payload, getattr(args, "json", False))
@@ -1420,7 +1423,9 @@ def _native_hook_reason(*values: object | None) -> str:
 
 def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str:
     reason = _native_hook_reason(*values)
-    if harness != "codex" or "approve" in reason.lower():
+    if harness != "codex":
+        return reason
+    if "approve it in hol guard, then retry." in reason.lower():
         return reason
     return f"{reason} Approve it in HOL Guard, then retry."
 
