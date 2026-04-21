@@ -106,6 +106,9 @@ _CURL_AT_FILE_FLAGS_WITH_VALUE = frozenset({"--data", "--data-ascii", "--data-bi
 _CURL_DATA_URLENCODE_FLAGS_WITH_VALUE = frozenset({"--data-urlencode"})
 _CURL_FORM_FLAGS_WITH_VALUE = frozenset({"--form", "-F"})
 _CURL_DIRECT_FILE_FLAGS_WITH_VALUE = frozenset({"--upload-file", "-T"})
+_CURL_SHORT_FLAGS_WITH_VALUES = frozenset(
+    {"A", "b", "c", "d", "D", "e", "E", "F", "H", "K", "m", "o", "P", "T", "u", "U", "w", "x", "y", "Y", "z"}
+)
 _WGET_UPLOAD_FLAGS_WITH_VALUE = frozenset({"--body-file", "--post-file"})
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
 _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
@@ -710,11 +713,14 @@ def _curl_segment_uses_file_upload(segment_args: list[str]) -> bool:
             "--upload-file", token.split("=", 1)[1]
         ):
             return True
-        if token.startswith("-T") and token != "-T" and _curl_upload_value_uses_local_file("-T", token[2:]):
+        clustered_upload_value = _curl_clustered_short_flag_value(segment_args, index, "T")
+        if clustered_upload_value is not None and _curl_upload_value_uses_local_file("-T", clustered_upload_value):
             return True
-        if token.startswith("-F") and token != "-F" and _curl_upload_value_uses_local_file("-F", token[2:]):
+        clustered_form_value = _curl_clustered_short_flag_value(segment_args, index, "F")
+        if clustered_form_value is not None and _curl_upload_value_uses_local_file("-F", clustered_form_value):
             return True
-        if token.startswith("-d") and token != "-d" and _curl_upload_value_uses_local_file("-d", token[2:]):
+        clustered_data_value = _curl_clustered_short_flag_value(segment_args, index, "d")
+        if clustered_data_value is not None and _curl_upload_value_uses_local_file("-d", clustered_data_value):
             return True
         index += 1
     return False
@@ -775,6 +781,22 @@ def _curl_data_urlencode_value_uses_local_file(value: str) -> bool:
     if "=" in name:
         return False
     return _direct_file_operand_uses_local_file(file_candidate)
+
+
+def _curl_clustered_short_flag_value(segment_args: list[str], index: int, flag_character: str) -> str | None:
+    token = segment_args[index]
+    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
+        return None
+    cluster = token[1:]
+    for flag_index, cluster_flag in enumerate(cluster):
+        if cluster_flag == flag_character:
+            attached_value = cluster[flag_index + 1 :]
+            if attached_value:
+                return attached_value
+            return segment_args[index + 1] if index + 1 < len(segment_args) else ""
+        if cluster_flag in _CURL_SHORT_FLAGS_WITH_VALUES:
+            return None
+    return None
 
 
 def _direct_file_operand_uses_local_file(value: str) -> bool:
