@@ -210,6 +210,54 @@ def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entr
     ]
 
 
+def test_guard_install_codex_workspace_cleans_stale_global_managed_hook(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(
+        home_dir / ".codex" / "config.toml",
+        '[mcp_servers.global_tools]\ncommand = "python3"\nargs = ["-m", "http.server", "9000"]\n',
+    )
+    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+
+    global_install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    workspace_install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+
+    home_hooks_path = home_dir / ".codex" / "hooks.json"
+    workspace_hooks_path = workspace_dir / ".codex" / "hooks.json"
+    workspace_hooks = json.loads(workspace_hooks_path.read_text(encoding="utf-8"))
+
+    assert global_install_rc == 0
+    assert workspace_install_rc == 0
+    assert home_hooks_path.exists() is False
+    assert len(workspace_hooks["hooks"]["PreToolUse"]) == 1
+    managed_group = workspace_hooks["hooks"]["PreToolUse"][0]
+    assert managed_group["matcher"] == "Bash"
+    assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]
+
+
 def test_guard_detect_codex_collects_global_and_workspace_hooks(tmp_path):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

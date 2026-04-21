@@ -216,6 +216,13 @@ class CodexHarnessAdapter(HarnessAdapter):
             return context.workspace_dir / ".codex" / "hooks.json"
         return context.home_dir / ".codex" / "hooks.json"
 
+    @staticmethod
+    def _all_hook_paths(context: HarnessContext) -> tuple[Path, ...]:
+        paths = [context.home_dir / ".codex" / "hooks.json"]
+        if context.workspace_dir is not None:
+            paths.append(context.workspace_dir / ".codex" / "hooks.json")
+        return tuple(paths)
+
     def detect(self, context: HarnessContext) -> HarnessDetection:
         config_paths = [context.home_dir / ".codex" / "config.toml"]
         if context.workspace_dir is not None:
@@ -421,32 +428,53 @@ class CodexHarnessAdapter(HarnessAdapter):
         return server.name in existing_workspace_server_names
 
     def _install_hooks(self, context: HarnessContext) -> Path:
-        hooks_path = self._hooks_path(context)
-        payload = _strict_json_object(hooks_path, label="Codex hooks file")
-        hooks = payload.get("hooks")
-        if not isinstance(hooks, dict):
-            hooks = {}
-        hooks["PreToolUse"] = _merge_hook_groups(hooks.get("PreToolUse"), _hook_group(context))
-        payload["hooks"] = hooks
-        hooks_path.parent.mkdir(parents=True, exist_ok=True)
-        hooks_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        return hooks_path
+        target_hooks_path = self._hooks_path(context)
+        managed_group = _hook_group(context)
+        for hooks_path in self._all_hook_paths(context):
+            payload = _strict_json_object(hooks_path, label="Codex hooks file")
+            hooks = payload.get("hooks")
+            if not isinstance(hooks, dict):
+                hooks = {}
+            remaining = _remove_hook_groups(hooks.get("PreToolUse"))
+            if hooks_path == target_hooks_path:
+                hooks["PreToolUse"] = [*remaining, managed_group]
+                payload["hooks"] = hooks
+            else:
+                if remaining:
+                    hooks["PreToolUse"] = remaining
+                    payload["hooks"] = hooks
+                else:
+                    hooks.pop("PreToolUse", None)
+                    if hooks:
+                        payload["hooks"] = hooks
+                    else:
+                        payload.pop("hooks", None)
+            self._write_hooks_payload(hooks_path, payload)
+        return target_hooks_path
 
     def _remove_hooks(self, context: HarnessContext) -> Path:
-        hooks_path = self._hooks_path(context)
-        payload = _strict_json_object(hooks_path, label="Codex hooks file")
-        hooks = payload.get("hooks")
-        if isinstance(hooks, dict):
-            remaining = _remove_hook_groups(hooks.get("PreToolUse"))
-            if remaining:
-                hooks["PreToolUse"] = remaining
-            else:
-                hooks.pop("PreToolUse", None)
-            if not hooks:
-                payload.pop("hooks", None)
+        target_hooks_path = self._hooks_path(context)
+        for hooks_path in self._all_hook_paths(context):
+            payload = _strict_json_object(hooks_path, label="Codex hooks file")
+            hooks = payload.get("hooks")
+            if isinstance(hooks, dict):
+                remaining = _remove_hook_groups(hooks.get("PreToolUse"))
+                if remaining:
+                    hooks["PreToolUse"] = remaining
+                    payload["hooks"] = hooks
+                else:
+                    hooks.pop("PreToolUse", None)
+                    if hooks:
+                        payload["hooks"] = hooks
+                    else:
+                        payload.pop("hooks", None)
+            self._write_hooks_payload(hooks_path, payload)
+        return target_hooks_path
+
+    @staticmethod
+    def _write_hooks_payload(hooks_path: Path, payload: dict[str, object]) -> None:
         if payload:
             hooks_path.parent.mkdir(parents=True, exist_ok=True)
             hooks_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         elif hooks_path.exists():
             hooks_path.unlink()
-        return hooks_path
