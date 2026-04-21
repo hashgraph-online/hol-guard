@@ -973,8 +973,18 @@ def _shell_pipeline_stdin_uses_local_file(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> bool:
-    return (index > 0 and _shell_stdout_uses_local_file(pipeline[index - 1], cwd=cwd, home_dir=home_dir)) or (
-        _shell_stdin_redirect_uses_local_file(pipeline[index], cwd=cwd, home_dir=home_dir)
+    stdin_uses_local_file = False
+    for upstream_segment in pipeline[:index]:
+        stdin_uses_local_file = _shell_segment_stdout_uses_local_file(
+            upstream_segment,
+            stdin_uses_local_file=stdin_uses_local_file,
+            cwd=cwd,
+            home_dir=home_dir,
+        )
+    return stdin_uses_local_file or _shell_stdin_redirect_uses_local_file(
+        pipeline[index],
+        cwd=cwd,
+        home_dir=home_dir,
     )
 
 
@@ -1023,6 +1033,26 @@ def _shell_stdout_uses_local_file(
     if command_name != "cat" or command_index is None:
         return False
     return _cat_reads_local_file(segment[command_index + 1 :], cwd=cwd, home_dir=home_dir)
+
+
+def _shell_segment_stdout_uses_local_file(
+    segment: list[str],
+    *,
+    stdin_uses_local_file: bool,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    command_name, command_index = _shell_segment_primary_command(segment)
+    if command_name is None or command_index is None:
+        return stdin_uses_local_file
+    if _shell_stdin_redirect_uses_local_file(segment, cwd=cwd, home_dir=home_dir):
+        return True
+    segment_args = segment[command_index + 1 :]
+    if command_name == "cat":
+        return _cat_reads_local_file(segment_args, cwd=cwd, home_dir=home_dir) or stdin_uses_local_file
+    if command_name in {"echo", "printf"}:
+        return False
+    return stdin_uses_local_file
 
 
 def _printf_stdout_payloads(segment_args: list[str]) -> tuple[str, ...]:
@@ -1128,10 +1158,16 @@ def _shell_stdin_redirect_payloads(
                 payloads.append((payload_text, cwd))
             index += 1
             continue
-        if token.startswith("<") and not token.startswith("<<"):
-            redirect_payload = _stdin_redirect_payload(token[1:], cwd=cwd, home_dir=home_dir)
+        redirect_target, tokens_consumed = _stdin_redirect_target_from_token(
+            token,
+            next_token=segment_args[index + 1] if index + 1 < len(segment_args) else None,
+        )
+        if redirect_target is not None:
+            redirect_payload = _stdin_redirect_payload(redirect_target, cwd=cwd, home_dir=home_dir)
             if redirect_payload is not None:
                 payloads.append(redirect_payload)
+            index += tokens_consumed
+            continue
         index += 1
     return tuple(payloads)
 
@@ -1154,13 +1190,17 @@ def _shell_stdin_redirect_uses_local_file(
                 return True
             index += 2
             continue
-        if token.startswith("<") and not token.startswith("<<") and _stdin_redirect_uses_local_file(
-            token[1:],
+        redirect_target, tokens_consumed = _stdin_redirect_target_from_token(
+            token,
+            next_token=segment_args[index + 1] if index + 1 < len(segment_args) else None,
+        )
+        if redirect_target is not None and _stdin_redirect_uses_local_file(
+            redirect_target,
             cwd=cwd,
             home_dir=home_dir,
         ):
             return True
-        index += 1
+        index += tokens_consumed if redirect_target is not None else 1
     return False
 
 
@@ -1196,6 +1236,19 @@ def _looks_like_local_stdin_source(value: str) -> bool:
         and stripped_value not in _SAFE_SHELL_REDIRECT_TARGETS
         and not stripped_value.startswith("&")
     )
+
+
+def _stdin_redirect_target_from_token(token: str, *, next_token: str | None) -> tuple[str | None, int]:
+    if token.startswith("<<"):
+        return None, 1
+    if token in {"<", "0<"}:
+        if next_token is None:
+            return None, 1
+        return next_token, 2
+    match = re.fullmatch(r"(?P<fd>\d*)<(?P<target>.+)", token)
+    if match is None or match.group("fd") not in {"", "0"}:
+        return None, 1
+    return match.group("target"), 1
 
 
 def _decode_shell_text_literal(value: str) -> str | None:
@@ -1324,6 +1377,10 @@ def _curl_config_arguments(config_text: str) -> list[str]:
             continue
         if not tokens:
             continue
+        if len(tokens) == 1 and not tokens[0].startswith("-") and ":" in tokens[0] and not tokens[0].endswith(":"):
+            option_name, option_value = tokens[0].split(":", 1)
+            if option_name and option_value:
+                tokens = [option_name, option_value]
         if tokens[0].endswith(":"):
             tokens[0] = tokens[0][:-1]
         elif len(tokens) >= 3 and tokens[1] in {"=", ":"}:
