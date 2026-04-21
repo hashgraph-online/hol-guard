@@ -147,6 +147,7 @@ _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
 _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
 _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _SHELL_NEWLINE_SEPARATOR = ";"
+_HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
 _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
     {
         "appendFile",
@@ -656,6 +657,8 @@ def _contains_shell_network_file_upload(
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
+    if _curl_stdin_config_uses_file_upload(normalized, parts, cwd=cwd, home_dir=home_dir):
+        return True
     if any(
         _segment_uses_network_file_upload(segment, cwd=cwd, home_dir=home_dir)
         for segment in _iter_shell_command_segments(parts)
@@ -828,6 +831,221 @@ def _curl_segment_uses_file_upload(
     return saw_variable_file_input and saw_variable_expansion
 
 
+def _curl_stdin_config_uses_file_upload(
+    command_text: str,
+    parts: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> bool:
+    heredoc_payloads = _shell_heredoc_payloads(command_text)
+    for pipeline in _iter_shell_pipelines(parts):
+        for index, segment in enumerate(pipeline):
+            command_name, command_index = _shell_segment_primary_command(segment)
+            if command_name != "curl" or command_index is None:
+                continue
+            segment_args = segment[command_index + 1 :]
+            if not _curl_segment_reads_config_from_stdin(segment_args):
+                continue
+            for payload_text, payload_cwd in _shell_pipeline_stdin_payloads(
+                pipeline,
+                index,
+                cwd=cwd,
+                home_dir=home_dir,
+            ):
+                if _curl_inline_config_text_uses_file_upload(payload_text, cwd=payload_cwd, home_dir=home_dir):
+                    return True
+            for heredoc_payload in heredoc_payloads:
+                if _curl_inline_config_text_uses_file_upload(heredoc_payload, cwd=cwd, home_dir=home_dir):
+                    return True
+    return False
+
+
+def _curl_segment_reads_config_from_stdin(segment_args: list[str]) -> bool:
+    index = 0
+    while index < len(segment_args):
+        token = segment_args[index]
+        if token == "--":
+            return False
+        if token in _CURL_CONFIG_FLAGS_WITH_VALUE:
+            value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
+            if _strip_cli_value(value) == "-":
+                return True
+            index += 2
+            continue
+        if token.startswith("--config=") and _strip_cli_value(token.split("=", 1)[1]) == "-":
+            return True
+        clustered_config_value = _curl_clustered_short_flag_value(segment_args, index, "K")
+        if clustered_config_value is not None and _strip_cli_value(clustered_config_value) == "-":
+            return True
+        index += 1
+    return False
+
+
+def _curl_inline_config_text_uses_file_upload(config_text: str, *, cwd: Path | None, home_dir: Path | None) -> bool:
+    if not config_text or len(config_text.encode("utf-8", errors="ignore")) > _MAX_DECODED_PAYLOAD_BYTES:
+        return False
+    config_args = _curl_config_arguments(config_text)
+    if not config_args:
+        return False
+    return _curl_segment_uses_file_upload(config_args, cwd=cwd, home_dir=home_dir)
+
+
+def _shell_pipeline_stdin_payloads(
+    pipeline: list[list[str]],
+    index: int,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> tuple[tuple[str, Path | None], ...]:
+    payloads: list[tuple[str, Path | None]] = []
+    if index > 0:
+        payloads.extend(_shell_stdout_payloads(pipeline[index - 1], cwd=cwd, home_dir=home_dir))
+    payloads.extend(_shell_stdin_redirect_payloads(pipeline[index], cwd=cwd, home_dir=home_dir))
+    return tuple(payloads)
+
+
+def _shell_stdout_payloads(
+    segment: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> tuple[tuple[str, Path | None], ...]:
+    command_name, command_index = _shell_segment_primary_command(segment)
+    if command_name is None or command_index is None:
+        return ()
+    segment_args = segment[command_index + 1 :]
+    if command_name == "printf":
+        payloads = _printf_stdout_payloads(segment_args)
+        return tuple((payload, cwd) for payload in payloads)
+    if command_name == "echo":
+        payload = _echo_stdout_payload(segment_args)
+        return ((payload, cwd),) if payload else ()
+    if command_name == "cat":
+        return _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir)
+    return ()
+
+
+def _printf_stdout_payloads(segment_args: list[str]) -> tuple[str, ...]:
+    args = list(segment_args)
+    if args and args[0] == "--":
+        args = args[1:]
+    decoded_args = tuple(
+        decoded
+        for decoded in (_decode_shell_text_literal(arg) for arg in args)
+        if decoded
+    )
+    if not decoded_args:
+        return ()
+    if len(decoded_args) == 1:
+        return decoded_args
+    return (*decoded_args, "\n".join(decoded_args))
+
+
+def _echo_stdout_payload(segment_args: list[str]) -> str | None:
+    args = list(segment_args)
+    while args and args[0] in {"-n", "-e", "-E"}:
+        args = args[1:]
+    if not args:
+        return None
+    decoded_parts = [decoded for decoded in (_decode_shell_text_literal(arg) for arg in args) if decoded]
+    if not decoded_parts:
+        return None
+    return " ".join(decoded_parts)
+
+
+def _cat_stdout_payloads(
+    segment_args: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> tuple[tuple[str, Path | None], ...]:
+    payloads: list[tuple[str, Path | None]] = []
+    consume_all = False
+    for token in segment_args:
+        if token == "--":
+            consume_all = True
+            continue
+        if not consume_all and token.startswith("-"):
+            continue
+        if token == "-":
+            continue
+        config_path = _resolved_runtime_path(token, cwd=cwd, home_dir=home_dir)
+        try:
+            if not config_path.is_file() or config_path.stat().st_size > _MAX_DECODED_PAYLOAD_BYTES:
+                continue
+            payload_text = config_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        payloads.append((payload_text, config_path.parent))
+    return tuple(payloads)
+
+
+def _shell_stdin_redirect_payloads(
+    segment: list[str],
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> tuple[tuple[str, Path | None], ...]:
+    command_name, command_index = _shell_segment_primary_command(segment)
+    if command_name is None or command_index is None:
+        return ()
+    segment_args = segment[command_index + 1 :]
+    payloads: list[tuple[str, Path | None]] = []
+    index = 0
+    while index < len(segment_args):
+        token = segment_args[index]
+        if token == "<" and index + 1 < len(segment_args):
+            redirect_payload = _stdin_redirect_payload(segment_args[index + 1], cwd=cwd, home_dir=home_dir)
+            if redirect_payload is not None:
+                payloads.append(redirect_payload)
+            index += 2
+            continue
+        if token == "<<<" and index + 1 < len(segment_args):
+            payload_text = _decode_shell_text_literal(segment_args[index + 1])
+            if payload_text:
+                payloads.append((payload_text, cwd))
+            index += 2
+            continue
+        if token.startswith("<<<"):
+            payload_text = _decode_shell_text_literal(token[3:])
+            if payload_text:
+                payloads.append((payload_text, cwd))
+            index += 1
+            continue
+        if token.startswith("<") and not token.startswith("<<"):
+            redirect_payload = _stdin_redirect_payload(token[1:], cwd=cwd, home_dir=home_dir)
+            if redirect_payload is not None:
+                payloads.append(redirect_payload)
+        index += 1
+    return tuple(payloads)
+
+
+def _stdin_redirect_payload(
+    target: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> tuple[str, Path | None] | None:
+    config_path = _resolved_runtime_path(target, cwd=cwd, home_dir=home_dir)
+    try:
+        if not config_path.is_file() or config_path.stat().st_size > _MAX_DECODED_PAYLOAD_BYTES:
+            return None
+        return config_path.read_text(encoding="utf-8"), config_path.parent
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _decode_shell_text_literal(value: str) -> str | None:
+    stripped_value = _strip_cli_value(value)
+    if not stripped_value:
+        return None
+    try:
+        return bytes(stripped_value, "utf-8").decode("unicode_escape")
+    except UnicodeDecodeError:
+        return stripped_value
+
+
 def _wget_segment_uses_file_upload(segment_args: list[str]) -> bool:
     index = 0
     while index < len(segment_args):
@@ -944,6 +1162,34 @@ def _curl_config_arguments(config_text: str) -> list[str]:
         tokens[0] = first_token
         arguments.extend(tokens)
     return arguments
+
+
+def _shell_heredoc_payloads(command_text: str) -> tuple[str, ...]:
+    payloads: list[str] = []
+    lines = command_text.splitlines()
+    line_index = 0
+    while line_index < len(lines):
+        line = lines[line_index]
+        match = _HEREDOC_PATTERN.search(line)
+        if match is None:
+            line_index += 1
+            continue
+        delimiter = match.group(2)
+        strip_tabs = line[match.start() :].startswith("<<-")
+        body_lines: list[str] = []
+        line_index += 1
+        while line_index < len(lines):
+            candidate_line = lines[line_index]
+            normalized_line = candidate_line.lstrip("\t") if strip_tabs else candidate_line
+            if normalized_line == delimiter:
+                line_index += 1
+                break
+            body_lines.append(normalized_line if strip_tabs else candidate_line)
+            line_index += 1
+        payload = "\n".join(body_lines).strip()
+        if payload:
+            payloads.append(payload)
+    return tuple(payloads)
 
 
 def _curl_clustered_short_flag_value(segment_args: list[str], index: int, flag_character: str) -> str | None:
@@ -1626,6 +1872,35 @@ def _iter_shell_command_segments(parts: list[str]) -> list[list[str]]:
     if current_segment:
         segments.append(current_segment)
     return segments
+
+
+def _iter_shell_pipelines(parts: list[str]) -> list[list[list[str]]]:
+    pipelines: list[list[list[str]]] = []
+    current_pipeline: list[list[str]] = []
+    current_segment: list[str] = []
+    for part in parts:
+        token = part.strip()
+        if not token:
+            continue
+        if token in {"|", "|&"}:
+            if current_segment:
+                current_pipeline.append(current_segment)
+                current_segment = []
+            continue
+        if token in _SHELL_COMMAND_SEPARATORS:
+            if current_segment:
+                current_pipeline.append(current_segment)
+                current_segment = []
+            if current_pipeline:
+                pipelines.append(current_pipeline)
+                current_pipeline = []
+            continue
+        current_segment.append(token)
+    if current_segment:
+        current_pipeline.append(current_segment)
+    if current_pipeline:
+        pipelines.append(current_pipeline)
+    return pipelines
 
 
 def _shell_segment_primary_command(segment: list[str]) -> tuple[str | None, int | None]:
