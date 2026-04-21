@@ -405,21 +405,17 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
     if not managed_installs:
         _render_fallback(console, payload)
         return
-    summary = Table(title="Guard managed harnesses")
-    summary.add_column("Harness", style="bold")
-    summary.add_column("Active")
-    summary.add_column("Workspace")
-    summary.add_column("Config")
-    for item in managed_installs:
-        manifest = item.get("manifest")
-        config_path = manifest.get("config_path") if isinstance(manifest, dict) else None
-        summary.add_row(
-            str(item.get("harness") or "unknown"),
-            _bool_label(bool(item.get("active"))),
-            str(item.get("workspace") or "current shell"),
-            str(config_path or "no config changed"),
+    console.print(
+        Panel(
+            _managed_install_batch_summary(payload, managed_installs),
+            title="Guard managed harnesses",
+            border_style="cyan",
         )
-    console.print(summary)
+    )
+    console.print(_managed_install_batch_table(managed_installs))
+    notes = _managed_install_batch_notes(managed_installs)
+    if notes:
+        console.print(_notes_panel(notes))
 
 
 def _render_single_managed_install(console: Console, managed_install: dict[str, object]) -> None:
@@ -444,7 +440,58 @@ def _render_single_managed_install(console: Console, managed_install: dict[str, 
             body.add_row("Launcher", str(manifest.get("shim_command")))
     console.print(Panel(body, title="Guard install state", border_style="cyan"))
     if notes:
-        console.print(Panel("\n".join(f"• {note}" for note in notes), title="Notes", border_style="blue"))
+        console.print(_notes_panel(notes))
+
+
+def _managed_install_batch_summary(payload: dict[str, object], managed_installs: list[dict[str, object]]) -> Table:
+    installed_count = sum(1 for item in managed_installs if bool(item.get("active")))
+    removed_count = len(managed_installs) - installed_count
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Harnesses", str(len(managed_installs)))
+    if payload.get("auto_detected") is not None:
+        body.add_row("Selection", "Auto-detected" if bool(payload.get("auto_detected")) else "Requested")
+    body.add_row("Protection", f"{installed_count} installed • {removed_count} removed")
+    return body
+
+
+def _managed_install_batch_table(managed_installs: list[dict[str, object]]) -> Table:
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True, expand=True)
+    table.add_column("Harness", style="bold", no_wrap=True)
+    table.add_column("State", no_wrap=True)
+    table.add_column("Mode", overflow="fold")
+    table.add_column("Servers", justify="right", no_wrap=True)
+    table.add_column("Config", overflow="fold")
+    for item in managed_installs:
+        manifest = item.get("manifest")
+        mode = _managed_install_mode_text(manifest.get("mode")) if isinstance(manifest, dict) else None
+        managed_servers = _coerce_string_list(manifest.get("managed_servers")) if isinstance(manifest, dict) else []
+        config_path = manifest.get("config_path") if isinstance(manifest, dict) else None
+        table.add_row(
+            str(item.get("harness") or "unknown"),
+            _managed_install_state_text(item),
+            mode or "—",
+            str(len(managed_servers)) if managed_servers else "—",
+            _short_path(config_path) if config_path else "no config changed",
+        )
+    return table
+
+
+def _managed_install_batch_notes(managed_installs: list[dict[str, object]]) -> list[str]:
+    notes: list[str] = []
+    for item in managed_installs:
+        harness = str(item.get("harness") or "unknown")
+        manifest = item.get("manifest")
+        for note in _managed_install_notes(item, manifest):
+            notes.append(f"{harness}: {note}")
+    return notes
+
+
+def _notes_panel(notes: list[str]) -> Panel:
+    return Panel(
+        Text("\n".join(f"• {note}" for note in notes), overflow="fold", no_wrap=False),
+        title="Notes",
+        border_style="blue",
+    )
 
 
 def _render_decision(console: Console, payload: dict[str, object]) -> None:
