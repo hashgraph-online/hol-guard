@@ -102,8 +102,8 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
         "--title",
     }
 )
-_CURL_AT_FILE_FLAGS_WITH_VALUE = frozenset({"--data", "--data-ascii", "--data-binary", "--json", "--url-query", "-d"})
-_CURL_DATA_URLENCODE_FLAGS_WITH_VALUE = frozenset({"--data-urlencode"})
+_CURL_AT_FILE_FLAGS_WITH_VALUE = frozenset({"--data", "--data-ascii", "--data-binary", "--json", "-d"})
+_CURL_DATA_URLENCODE_FLAGS_WITH_VALUE = frozenset({"--data-urlencode", "--url-query"})
 _CURL_FORM_FLAGS_WITH_VALUE = frozenset({"--form", "-F"})
 _CURL_DIRECT_FILE_FLAGS_WITH_VALUE = frozenset({"--upload-file", "-T"})
 _CURL_SHORT_FLAGS_WITH_VALUES = frozenset(
@@ -628,6 +628,15 @@ def _contains_shell_network_file_upload(
     for env_split_string in _env_split_string_payloads(parts):
         if _contains_shell_network_file_upload(
             env_split_string,
+            cwd=cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+            visited_script_paths=visited_script_paths,
+        ):
+            return True
+    for substitution_payload in _shell_command_substitution_payloads(normalized):
+        if _contains_shell_network_file_upload(
+            substitution_payload,
             cwd=cwd,
             home_dir=home_dir,
             depth=depth + 1,
