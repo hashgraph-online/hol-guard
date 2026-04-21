@@ -872,6 +872,11 @@ def _shell_text_without_quoted_literals(command_text: str) -> str:
                 characters.append(f"$({payload})")
                 index = next_index
                 continue
+            if character == "`":
+                payload, next_index = _read_backtick_command_substitution(command_text, index + 1)
+                characters.append(f"`{payload}`")
+                index = next_index
+                continue
             characters.append(" ")
             index += 1
             continue
@@ -893,9 +898,28 @@ def _shell_text_without_quoted_literals(command_text: str) -> str:
 def _shell_command_substitution_payloads(command_text: str) -> tuple[str, ...]:
     payloads: list[str] = []
     index = 0
+    single_quoted = False
     while index < len(command_text):
+        if single_quoted:
+            if command_text[index] == "'":
+                single_quoted = False
+            index += 1
+            continue
+        if command_text[index] == "\\" and index + 1 < len(command_text):
+            index += 2
+            continue
+        if command_text[index] == "'":
+            single_quoted = True
+            index += 1
+            continue
         if command_text[index] == "$" and index + 1 < len(command_text) and command_text[index + 1] == "(":
             payload, next_index = _read_command_substitution(command_text, index + 2)
+            if payload.strip():
+                payloads.append(payload)
+            index = next_index
+            continue
+        if command_text[index] == "`":
+            payload, next_index = _read_backtick_command_substitution(command_text, index + 1)
             if payload.strip():
                 payloads.append(payload)
             index = next_index
@@ -955,6 +979,28 @@ def _read_command_substitution(command_text: str, start_index: int) -> tuple[str
             payload_characters.append(character)
             index += 1
             continue
+        payload_characters.append(character)
+        index += 1
+    return "".join(payload_characters), index
+
+
+def _read_backtick_command_substitution(command_text: str, start_index: int) -> tuple[str, int]:
+    index = start_index
+    payload_characters: list[str] = []
+    while index < len(command_text):
+        character = command_text[index]
+        if character == "\\" and index + 1 < len(command_text):
+            payload_characters.append(character)
+            payload_characters.append(command_text[index + 1])
+            index += 2
+            continue
+        if character == "$" and index + 1 < len(command_text) and command_text[index + 1] == "(":
+            nested_payload, next_index = _read_command_substitution(command_text, index + 2)
+            payload_characters.append(f"$({nested_payload})")
+            index = next_index
+            continue
+        if character == "`":
+            return "".join(payload_characters), index + 1
         payload_characters.append(character)
         index += 1
     return "".join(payload_characters), index
