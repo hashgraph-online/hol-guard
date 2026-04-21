@@ -107,7 +107,35 @@ _CURL_DATA_URLENCODE_FLAGS_WITH_VALUE = frozenset({"--data-urlencode", "--url-qu
 _CURL_FORM_FLAGS_WITH_VALUE = frozenset({"--form", "-F"})
 _CURL_DIRECT_FILE_FLAGS_WITH_VALUE = frozenset({"--upload-file", "-T"})
 _CURL_SHORT_FLAGS_WITH_VALUES = frozenset(
-    {"A", "b", "c", "d", "D", "e", "E", "F", "H", "K", "m", "o", "P", "T", "u", "U", "w", "x", "X", "y", "Y", "z"}
+    {
+        "A",
+        "b",
+        "C",
+        "c",
+        "d",
+        "D",
+        "e",
+        "E",
+        "F",
+        "H",
+        "h",
+        "K",
+        "m",
+        "o",
+        "P",
+        "Q",
+        "r",
+        "t",
+        "T",
+        "u",
+        "U",
+        "w",
+        "x",
+        "X",
+        "y",
+        "Y",
+        "z",
+    }
 )
 _WGET_UPLOAD_FLAGS_WITH_VALUE = frozenset({"--body-file", "--post-file"})
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
