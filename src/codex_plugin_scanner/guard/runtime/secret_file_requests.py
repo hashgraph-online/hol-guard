@@ -995,11 +995,16 @@ def _shell_pipeline_stdin_payloads(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> tuple[tuple[str, Path | None], ...]:
-    payloads: list[tuple[str, Path | None]] = []
-    if index > 0:
-        payloads.extend(_shell_stdout_payloads(pipeline[index - 1], cwd=cwd, home_dir=home_dir))
-    payloads.extend(_shell_stdin_redirect_payloads(pipeline[index], cwd=cwd, home_dir=home_dir))
-    return tuple(payloads)
+    payloads: tuple[tuple[str, Path | None], ...] = ()
+    for upstream_segment in pipeline[:index]:
+        payloads = _shell_segment_stdout_payloads(
+            upstream_segment,
+            stdin_payloads=payloads,
+            cwd=cwd,
+            home_dir=home_dir,
+        )
+    current_redirect_payloads = _shell_stdin_redirect_payloads(pipeline[index], cwd=cwd, home_dir=home_dir)
+    return current_redirect_payloads or payloads
 
 
 def _shell_stdout_payloads(
@@ -1020,6 +1025,32 @@ def _shell_stdout_payloads(
         return ((payload, cwd),) if payload else ()
     if command_name == "cat":
         return _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir)
+    return ()
+
+
+def _shell_segment_stdout_payloads(
+    segment: list[str],
+    *,
+    stdin_payloads: tuple[tuple[str, Path | None], ...],
+    cwd: Path | None,
+    home_dir: Path | None,
+) -> tuple[tuple[str, Path | None], ...]:
+    command_name, command_index = _shell_segment_primary_command(segment)
+    if command_name is None or command_index is None:
+        return stdin_payloads
+    segment_args = segment[command_index + 1 :]
+    redirected_input_payloads = _shell_stdin_redirect_payloads(segment, cwd=cwd, home_dir=home_dir)
+    effective_input_payloads = redirected_input_payloads or stdin_payloads
+    if command_name == "printf":
+        payloads = _printf_stdout_payloads(segment_args)
+        return tuple((payload, cwd) for payload in payloads)
+    if command_name == "echo":
+        payload = _echo_stdout_payload(segment_args)
+        return ((payload, cwd),) if payload else ()
+    if command_name == "cat":
+        return _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir) or effective_input_payloads
+    if command_name in {"sed", "tr"}:
+        return effective_input_payloads
     return ()
 
 
@@ -1132,22 +1163,12 @@ def _shell_stdin_redirect_payloads(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> tuple[tuple[str, Path | None], ...]:
-    command_name, command_index = _shell_segment_primary_command(segment)
-    if command_name is None or command_index is None:
-        return ()
-    segment_args = segment[command_index + 1 :]
     payloads: list[tuple[str, Path | None]] = []
     index = 0
-    while index < len(segment_args):
-        token = segment_args[index]
-        if token == "<" and index + 1 < len(segment_args):
-            redirect_payload = _stdin_redirect_payload(segment_args[index + 1], cwd=cwd, home_dir=home_dir)
-            if redirect_payload is not None:
-                payloads.append(redirect_payload)
-            index += 2
-            continue
-        if token == "<<<" and index + 1 < len(segment_args):
-            payload_text = _decode_shell_text_literal(segment_args[index + 1])
+    while index < len(segment):
+        token = segment[index]
+        if token == "<<<" and index + 1 < len(segment):
+            payload_text = _decode_shell_text_literal(segment[index + 1])
             if payload_text:
                 payloads.append((payload_text, cwd))
             index += 2
@@ -1160,7 +1181,7 @@ def _shell_stdin_redirect_payloads(
             continue
         redirect_target, tokens_consumed = _stdin_redirect_target_from_token(
             token,
-            next_token=segment_args[index + 1] if index + 1 < len(segment_args) else None,
+            next_token=segment[index + 1] if index + 1 < len(segment) else None,
         )
         if redirect_target is not None:
             redirect_payload = _stdin_redirect_payload(redirect_target, cwd=cwd, home_dir=home_dir)
@@ -1178,21 +1199,17 @@ def _shell_stdin_redirect_uses_local_file(
     cwd: Path | None,
     home_dir: Path | None,
 ) -> bool:
-    command_name, command_index = _shell_segment_primary_command(segment)
-    if command_name is None or command_index is None:
-        return False
-    segment_args = segment[command_index + 1 :]
     index = 0
-    while index < len(segment_args):
-        token = segment_args[index]
-        if token == "<" and index + 1 < len(segment_args):
-            if _stdin_redirect_uses_local_file(segment_args[index + 1], cwd=cwd, home_dir=home_dir):
+    while index < len(segment):
+        token = segment[index]
+        if token == "<" and index + 1 < len(segment):
+            if _stdin_redirect_uses_local_file(segment[index + 1], cwd=cwd, home_dir=home_dir):
                 return True
             index += 2
             continue
         redirect_target, tokens_consumed = _stdin_redirect_target_from_token(
             token,
-            next_token=segment_args[index + 1] if index + 1 < len(segment_args) else None,
+            next_token=segment[index + 1] if index + 1 < len(segment) else None,
         )
         if redirect_target is not None and _stdin_redirect_uses_local_file(
             redirect_target,
@@ -2148,6 +2165,13 @@ def _iter_shell_pipelines(parts: list[str]) -> list[list[list[str]]]:
 def _shell_segment_primary_command(segment: list[str]) -> tuple[str | None, int | None]:
     index = 0
     while index < len(segment):
+        redirect_tokens_consumed = _leading_shell_redirection_tokens_consumed(
+            segment,
+            index,
+        )
+        if redirect_tokens_consumed > 0:
+            index += redirect_tokens_consumed
+            continue
         normalized_token = segment[index].lstrip("(").rstrip(")")
         if _SHELL_ASSIGNMENT_PATTERN.match(normalized_token):
             index += 1
@@ -2173,6 +2197,21 @@ def _shell_segment_primary_command(segment: list[str]) -> tuple[str | None, int 
             continue
         return command_name, index
     return None, None
+
+
+def _leading_shell_redirection_tokens_consumed(segment: list[str], index: int) -> int:
+    token = segment[index]
+    redirect_target, tokens_consumed = _stdin_redirect_target_from_token(
+        token,
+        next_token=segment[index + 1] if index + 1 < len(segment) else None,
+    )
+    if redirect_target is not None:
+        return tokens_consumed
+    if token in {">", ">>", ">|", "0>", "0>>", "0>|", "1>", "1>>", "1>|", "2>", "2>>", "2>|"}:
+        return 2 if index + 1 < len(segment) else 1
+    if re.fullmatch(r"(?P<fd>[0-2]?)(?P<op>>\||>>|>)(?P<target>.+)", token):
+        return 1
+    return 0
 
 
 def _segment_contains_destructive_node_inline_eval(segment_args: list[str]) -> bool:

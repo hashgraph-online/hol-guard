@@ -297,8 +297,6 @@ def _codex_backup_repair_contexts(context: HarnessContext) -> tuple[HarnessConte
     for candidate_dir in (current_dir, *current_dir.parents):
         if candidate_dir == home_dir or candidate_dir in seen_workspaces:
             continue
-        if not (candidate_dir / ".codex").exists():
-            continue
         seen_workspaces.add(candidate_dir)
         contexts.append(
             HarnessContext(
