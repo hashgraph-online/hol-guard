@@ -54,6 +54,8 @@ def _json_object(path: Path) -> dict[str, object]:
 
 
 def _strict_json_object(path: Path, *, label: str) -> dict[str, object]:
+    if path.exists() and not path.is_file():
+        raise RuntimeError(f"Guard refused to overwrite non-file {label} at {path}")
     if not path.is_file():
         return {}
     try:

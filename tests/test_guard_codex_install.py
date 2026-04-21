@@ -333,6 +333,33 @@ def test_guard_install_codex_refuses_invalid_alternate_hook_file_before_config_w
     assert (home_dir / ".codex" / "hooks.json").read_text(encoding="utf-8") == '{"hooks": '
 
 
+def test_guard_install_codex_refuses_non_file_alternate_hook_path_before_config_write(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    original_config = 'approval_policy = "never"\n'
+    _write_text(workspace_dir / ".codex" / "config.toml", original_config)
+    (home_dir / ".codex" / "hooks.json").mkdir(parents=True)
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 1
+    assert "Guard refused to overwrite non-file Codex hooks file" in captured.err
+    assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_config
+    assert (home_dir / ".codex" / "hooks.json").is_dir() is True
+
+
 def test_guard_uninstall_codex_succeeds_when_alternate_hook_file_is_invalid(tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
