@@ -676,6 +676,8 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
         console.print(Panel(stderr, title="stderr", border_style="yellow"))
     if error:
         console.print(Panel(error, title="error", border_style="red"))
+    if payload.get("managed_install") or payload.get("managed_installs"):
+        _render_managed_install(console, payload)
 
 
 def _connect_status_text(payload: dict[str, object]) -> str:

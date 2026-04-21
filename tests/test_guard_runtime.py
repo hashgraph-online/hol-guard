@@ -6093,6 +6093,40 @@ def test_guard_hook_codex_emits_native_deny_for_sensitive_bash_command(tmp_path,
     assert "Approve it in HOL Guard, then retry." in output
 
 
+def test_guard_hook_codex_emits_minimal_native_allow_response_for_safe_requests(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    safe_event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "gh auth status"},
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(safe_event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    pending = GuardStore(home_dir).list_approval_requests(limit=10)
+
+    assert rc == 0
+    assert output["hookSpecificOutput"] == {"hookEventName": "PreToolUse"}
+    assert pending == []
+
+
 def test_guard_hook_codex_queues_approval_before_native_deny_output(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
