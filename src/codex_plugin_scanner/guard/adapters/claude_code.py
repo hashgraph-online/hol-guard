@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _json_payload, _run_command_probe
@@ -32,13 +30,21 @@ def _guard_hook_group(matcher: str | None, command: str, *, timeout: int) -> dic
     return payload
 
 
+def _is_guard_hook_command(command: object) -> bool:
+    if not isinstance(command, str):
+        return False
+    if "codex_plugin_scanner.cli" not in command:
+        return False
+    return "guard hook" in command or "'guard', 'hook'" in command or '"guard", "hook"' in command
+
+
 def _merge_hook_group(
-    entries: list[dict[str, object]],
+    entries: list[object],
     matcher: str | None,
     command: str,
     *,
     timeout: int,
-) -> list[dict[str, object]]:
+) -> list[object]:
     normalized = [entry for entry in entries if isinstance(entry, dict)]
     matcher_key = matcher.strip() if isinstance(matcher, str) and matcher.strip() else None
     handler = _guard_hook_handler(command, timeout=timeout)
@@ -62,25 +68,64 @@ def _merge_hook_group(
     return normalized
 
 
-def _remove_guard_hook_handler(entries: list[dict[str, object]], command: str) -> list[dict[str, object]]:
-    remaining: list[dict[str, object]] = []
+def _group_has_command(entry: object, command: str) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    hooks = entry.get("hooks")
+    if not isinstance(hooks, list):
+        return False
+    for hook in hooks:
+        if not isinstance(hook, dict):
+            continue
+        if hook.get("type") == "command" and hook.get("command") == command:
+            return True
+    return False
+
+
+def _prune_guard_hook_entries(entries: list[object]) -> list[object]:
+    remaining: list[object] = []
     for entry in entries:
         if not isinstance(entry, dict):
             remaining.append(entry)
             continue
-        if str(entry.get("command", "")) == command:
+        if _is_guard_hook_command(entry.get("command")):
             continue
         hooks = entry.get("hooks")
         if not isinstance(hooks, list):
             remaining.append(entry)
             continue
         filtered_hooks = [
-            item for item in hooks if not (isinstance(item, dict) and str(item.get("command", "")) == command)
+            item for item in hooks if not (isinstance(item, dict) and _is_guard_hook_command(item.get("command")))
         ]
         if filtered_hooks:
             updated_entry = dict(entry)
             updated_entry["hooks"] = filtered_hooks
             remaining.append(updated_entry)
+    return remaining
+
+
+def _remove_hook_entry(entries: list[object], command: str) -> list[object]:
+    remaining: list[object] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            remaining.append(entry)
+            continue
+        legacy_command = entry.get("command")
+        if isinstance(legacy_command, str) and legacy_command == command:
+            continue
+        if _group_has_command(entry, command):
+            hooks = entry.get("hooks")
+            if not isinstance(hooks, list):
+                continue
+            filtered_hooks = [
+                item for item in hooks if not (isinstance(item, dict) and str(item.get("command", "")) == command)
+            ]
+            if filtered_hooks:
+                updated_entry = dict(entry)
+                updated_entry["hooks"] = filtered_hooks
+                remaining.append(updated_entry)
+            continue
+        remaining.append(entry)
     return remaining
 
 
@@ -345,14 +390,10 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             guard_args.extend(["--home", str(context.home_dir)])
         if context.workspace_dir is not None:
             guard_args.extend(["--workspace", str(context.workspace_dir)])
-        launcher_env = merge_guard_launcher_env()
-        pythonpath = launcher_env.get("PYTHONPATH", "")
-        if not pythonpath.strip():
-            return (sys.executable, "-m", "codex_plugin_scanner.cli", *guard_args)
-        path_entries = [entry for entry in pythonpath.split(os.pathsep) if entry.strip()]
+        package_root = Path(__file__).resolve().parents[3]
         code = (
             "import sys;"
-            f"sys.path[:0]={path_entries!r};"
+            f"sys.path.insert(0, {str(package_root)!r});"
             "from codex_plugin_scanner.cli import main;"
             f"raise SystemExit(main({guard_args!r}))"
         )
@@ -382,16 +423,18 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             payload["hooks"] = hooks
         for key in ("PreToolUse", "PostToolUse"):
             existing_entries = hooks.get(key)
-            entries = existing_entries if isinstance(existing_entries, list) else []
+            entries = _prune_guard_hook_entries(existing_entries if isinstance(existing_entries, list) else [])
             hooks[key] = _merge_hook_group(
                 entries,
                 CLAUDE_GUARD_TOOL_MATCHER,
                 hook_command,
                 timeout=CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS,
             )
-        prompt_entries = hooks.get("UserPromptSubmit")
+        prompt_entries = _prune_guard_hook_entries(
+            hooks.get("UserPromptSubmit") if isinstance(hooks.get("UserPromptSubmit"), list) else []
+        )
         hooks["UserPromptSubmit"] = _merge_hook_group(
-            prompt_entries if isinstance(prompt_entries, list) else [],
+            prompt_entries,
             None,
             hook_command,
             timeout=CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS,
@@ -425,7 +468,10 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         if isinstance(hooks, dict):
             for key in ("PreToolUse", "PostToolUse", "UserPromptSubmit"):
                 entries = hooks.get(key)
-                hooks[key] = _remove_guard_hook_handler(entries if isinstance(entries, list) else [], hook_command)
+                hooks[key] = _remove_hook_entry(
+                    _prune_guard_hook_entries(entries if isinstance(entries, list) else []),
+                    hook_command,
+                )
             settings_path.parent.mkdir(parents=True, exist_ok=True)
             settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return {
