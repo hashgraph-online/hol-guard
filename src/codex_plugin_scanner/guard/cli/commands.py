@@ -1111,6 +1111,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             harness=args.harness,
             payload=payload,
             home_dir=context.home_dir,
+            guard_home=context.guard_home,
             workspace=runtime_workspace,
         )
         if runtime_artifact is not None:
@@ -1838,6 +1839,7 @@ def _hook_runtime_artifact(
     harness: str,
     payload: dict[str, object],
     home_dir: Path,
+    guard_home: Path,
     workspace: Path | None,
 ) -> GuardArtifact | None:
     event_name = _hook_event_name(payload)
@@ -1854,7 +1856,7 @@ def _hook_runtime_artifact(
             )
             prompt_context = HarnessContext(
                 home_dir=home_dir,
-                guard_home=home_dir,
+                guard_home=guard_home,
                 workspace_dir=workspace,
             )
             prompt_requests = extract_prompt_requests(prompt_text)

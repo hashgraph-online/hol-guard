@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from ..launcher import merge_guard_launcher_env
@@ -82,6 +83,34 @@ def _remove_guard_hook_handler(entries: list[dict[str, object]], command: str) -
 
 def _claude_digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _discover_project_markdown_artifacts(
+    *,
+    base_dir: Path,
+    pattern: str,
+    harness: str,
+    artifact_type: str,
+    artifact_id_prefix: str,
+    name_for_path: Callable[[Path, Path], str],
+) -> list[GuardArtifact]:
+    if not base_dir.is_dir():
+        return []
+    artifacts: list[GuardArtifact] = []
+    for artifact_path in sorted(path for path in base_dir.glob(pattern) if path.is_file()):
+        artifact_name = name_for_path(artifact_path, base_dir)
+        artifacts.append(
+            GuardArtifact(
+                artifact_id=f"claude-code:project:{artifact_id_prefix}:{artifact_name}",
+                name=artifact_name,
+                harness=harness,
+                artifact_type=artifact_type,
+                source_scope="project",
+                config_path=str(artifact_path),
+                metadata={"content_digest": _claude_digest(artifact_path)},
+            )
+        )
+    return artifacts
 
 
 class ClaudeCodeHarnessAdapter(HarnessAdapter):
@@ -217,62 +246,54 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             agents_dir = context.workspace_dir / ".claude" / "agents"
             if agents_dir.is_dir():
                 found_paths.append(str(agents_dir))
-                for agent_path in sorted(path for path in agents_dir.glob("*.md") if path.is_file()):
-                    artifacts.append(
-                        GuardArtifact(
-                            artifact_id=f"claude-code:agent:{agent_path.stem}",
-                            name=agent_path.stem,
-                            harness=self.harness,
-                            artifact_type="agent",
-                            source_scope="project",
-                            config_path=str(agent_path),
-                            metadata={"content_digest": _claude_digest(agent_path)},
-                        )
+                artifacts.extend(
+                    _discover_project_markdown_artifacts(
+                        base_dir=agents_dir,
+                        pattern="*.md",
+                        harness=self.harness,
+                        artifact_type="agent",
+                        artifact_id_prefix="agent",
+                        name_for_path=lambda artifact_path, _base_dir: artifact_path.stem,
                     )
+                )
             skills_dir = context.workspace_dir / ".claude" / "skills"
             if skills_dir.is_dir():
-                for skill_path in sorted(path for path in skills_dir.glob("**/SKILL.md") if path.is_file()):
-                    relative_parent = skill_path.parent.relative_to(skills_dir)
-                    skill_name = relative_parent.as_posix() or skill_path.parent.name
-                    artifacts.append(
-                        GuardArtifact(
-                            artifact_id=f"claude-code:project:skill:{skill_name}",
-                            name=skill_name,
-                            harness=self.harness,
-                            artifact_type="skill",
-                            source_scope="project",
-                            config_path=str(skill_path),
-                            metadata={"content_digest": _claude_digest(skill_path)},
-                        )
+                artifacts.extend(
+                    _discover_project_markdown_artifacts(
+                        base_dir=skills_dir,
+                        pattern="**/SKILL.md",
+                        harness=self.harness,
+                        artifact_type="skill",
+                        artifact_id_prefix="skill",
+                        name_for_path=lambda artifact_path, base_dir: (
+                            artifact_path.parent.relative_to(base_dir).as_posix() or artifact_path.parent.name
+                        ),
                     )
+                )
             commands_dir = context.workspace_dir / ".claude" / "commands"
             if commands_dir.is_dir():
-                for command_path in sorted(path for path in commands_dir.glob("*.md") if path.is_file()):
-                    artifacts.append(
-                        GuardArtifact(
-                            artifact_id=f"claude-code:project:command:{command_path.stem}",
-                            name=command_path.stem,
-                            harness=self.harness,
-                            artifact_type="command",
-                            source_scope="project",
-                            config_path=str(command_path),
-                            metadata={"content_digest": _claude_digest(command_path)},
-                        )
+                artifacts.extend(
+                    _discover_project_markdown_artifacts(
+                        base_dir=commands_dir,
+                        pattern="*.md",
+                        harness=self.harness,
+                        artifact_type="command",
+                        artifact_id_prefix="command",
+                        name_for_path=lambda artifact_path, _base_dir: artifact_path.stem,
                     )
+                )
             rules_dir = context.workspace_dir / ".claude" / "rules"
             if rules_dir.is_dir():
-                for rule_path in sorted(path for path in rules_dir.glob("*.md") if path.is_file()):
-                    artifacts.append(
-                        GuardArtifact(
-                            artifact_id=f"claude-code:project:instruction:{rule_path.stem}",
-                            name=rule_path.stem,
-                            harness=self.harness,
-                            artifact_type="instruction",
-                            source_scope="project",
-                            config_path=str(rule_path),
-                            metadata={"content_digest": _claude_digest(rule_path)},
-                        )
+                artifacts.extend(
+                    _discover_project_markdown_artifacts(
+                        base_dir=rules_dir,
+                        pattern="*.md",
+                        harness=self.harness,
+                        artifact_type="instruction",
+                        artifact_id_prefix="instruction",
+                        name_for_path=lambda artifact_path, _base_dir: artifact_path.stem,
                     )
+                )
             project_claude_md = context.workspace_dir / "CLAUDE.md"
             if project_claude_md.is_file():
                 artifacts.append(

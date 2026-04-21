@@ -601,9 +601,7 @@ def _parse_claude_mcp_target(name: str, raw_payload: str) -> ProtectTarget:
     if command_or_url is None and isinstance(payload.get("command"), str):
         command_or_url = payload["command"]
     source_url = (
-        command_or_url
-        if isinstance(command_or_url, str) and _is_remote_transport(command_or_url, transport)
-        else None
+        command_or_url if isinstance(command_or_url, str) and _is_remote_transport(command_or_url, transport) else None
     )
     return ProtectTarget(
         artifact_id=f"install:claude-code:mcp:{name}",
