@@ -43,7 +43,7 @@ dev = [
     "pyyaml>=6.0.3",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
-    "ruff>=0.15.10",
+    "ruff>=0.15.11",
 ]
 publish = [
     "twine>=6.2.0",
