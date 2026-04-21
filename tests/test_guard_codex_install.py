@@ -258,6 +258,81 @@ def test_guard_install_codex_workspace_cleans_stale_global_managed_hook(tmp_path
     assert "codex_plugin_scanner.cli" in managed_group["hooks"][0]["command"]
 
 
+def test_guard_uninstall_codex_preserves_user_hooks_in_managed_bash_group(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    hooks_path = workspace_dir / ".codex" / "hooks.json"
+    hooks_payload = json.loads(hooks_path.read_text(encoding="utf-8"))
+    hooks_payload["hooks"]["PreToolUse"][0]["hooks"].append({"type": "command", "command": "python3 custom-pre.py"})
+    hooks_path.write_text(json.dumps(hooks_payload, indent=2) + "\n", encoding="utf-8")
+
+    uninstall_rc = main(
+        [
+            "guard",
+            "uninstall",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    restored_hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
+
+    assert install_rc == 0
+    assert uninstall_rc == 0
+    assert restored_hooks["hooks"]["PreToolUse"] == [
+        {
+            "matcher": "Bash",
+            "hooks": [{"type": "command", "command": "python3 custom-pre.py"}],
+        }
+    ]
+
+
+def test_guard_install_codex_refuses_invalid_alternate_hook_file_before_config_write(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    original_config = 'approval_policy = "never"\n'
+    _write_text(workspace_dir / ".codex" / "config.toml", original_config)
+    _write_text(home_dir / ".codex" / "hooks.json", '{"hooks": ')
+
+    rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 1
+    assert "Guard refused to overwrite unreadable Codex hooks file" in captured.err
+    assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_config
+    assert (home_dir / ".codex" / "hooks.json").read_text(encoding="utf-8") == '{"hooks": '
+
+
 def test_guard_detect_codex_collects_global_and_workspace_hooks(tmp_path):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

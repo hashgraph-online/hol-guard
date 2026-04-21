@@ -161,25 +161,48 @@ def _is_managed_hook_group(group: object) -> bool:
     hooks = group.get("hooks")
     if not isinstance(hooks, list):
         return False
-    return any(
+    return any(_is_managed_hook_entry(entry) for entry in hooks)
+
+
+def _is_managed_hook_entry(entry: object) -> bool:
+    return (
         isinstance(entry, dict)
         and entry.get("type") == "command"
         and entry.get("statusMessage") == _MANAGED_HOOK_STATUS_MESSAGE
         and _is_managed_hook_command(entry.get("command"))
-        for entry in hooks
     )
 
 
+def _remove_managed_hook_entries(group: object) -> object | None:
+    if not isinstance(group, dict):
+        return group
+    matcher = group.get("matcher")
+    hooks = group.get("hooks")
+    if not isinstance(matcher, str) or matcher != "Bash" or not isinstance(hooks, list):
+        return group
+    remaining_hooks = [entry for entry in hooks if not _is_managed_hook_entry(entry)]
+    if len(remaining_hooks) == len(hooks):
+        return group
+    if not remaining_hooks:
+        return None
+    updated_group = dict(group)
+    updated_group["hooks"] = remaining_hooks
+    return updated_group
+
+
 def _merge_hook_groups(groups: object, managed_group: dict[str, object]) -> list[object]:
-    normalized = list(groups) if isinstance(groups, list) else []
-    preserved = [group for group in normalized if not _is_managed_hook_group(group)]
-    return [*preserved, managed_group]
+    return [*_remove_hook_groups(groups), managed_group]
 
 
 def _remove_hook_groups(groups: object) -> list[object]:
     if not isinstance(groups, list):
         return []
-    return [group for group in groups if not _is_managed_hook_group(group)]
+    remaining: list[object] = []
+    for group in groups:
+        cleaned_group = _remove_managed_hook_entries(group)
+        if cleaned_group is not None:
+            remaining.append(cleaned_group)
+    return remaining
 
 
 class CodexHarnessAdapter(HarnessAdapter):
@@ -318,6 +341,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         managed_servers = managed_stdio_servers(detection)
         skipped_servers = skipped_stdio_server_names(detection)
         target_config_path = self._target_config_path(context)
+        hook_payloads = self._load_hook_payloads(context)
         original_text = target_config_path.read_text(encoding="utf-8") if target_config_path.is_file() else None
         backup_path = self._backup_path(context)
         if not backup_path.exists():
@@ -345,7 +369,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             mcp_servers[server.name] = self._proxy_server_entry(context, server)
         payload["mcp_servers"] = mcp_servers
         write_toml_payload(target_config_path, payload)
-        hooks_path = self._install_hooks(context)
+        hooks_path = self._install_hooks(context, payloads=hook_payloads)
         shim_manifest = install_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
@@ -364,6 +388,7 @@ class CodexHarnessAdapter(HarnessAdapter):
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         target_config_path = self._target_config_path(context)
         backup_path = self._backup_path(context)
+        hook_payloads = self._load_hook_payloads(context)
         if backup_path.is_file():
             original_text = backup_path.read_text(encoding="utf-8")
             if original_text:
@@ -372,7 +397,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             elif target_config_path.is_file():
                 target_config_path.unlink()
             backup_path.unlink()
-        hooks_path = self._remove_hooks(context)
+        hooks_path = self._remove_hooks(context, payloads=hook_payloads)
         shim_manifest = remove_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
@@ -427,17 +452,24 @@ class CodexHarnessAdapter(HarnessAdapter):
             return False
         return server.name in existing_workspace_server_names
 
-    def _install_hooks(self, context: HarnessContext) -> Path:
+    def _load_hook_payloads(self, context: HarnessContext) -> dict[Path, dict[str, object]]:
+        return {
+            hooks_path: _strict_json_object(hooks_path, label="Codex hooks file")
+            for hooks_path in self._all_hook_paths(context)
+        }
+
+    def _install_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
         target_hooks_path = self._hooks_path(context)
         managed_group = _hook_group(context)
+        hook_payloads = payloads or self._load_hook_payloads(context)
         for hooks_path in self._all_hook_paths(context):
-            payload = _strict_json_object(hooks_path, label="Codex hooks file")
+            payload = dict(hook_payloads.get(hooks_path, {}))
             hooks = payload.get("hooks")
             if not isinstance(hooks, dict):
                 hooks = {}
             remaining = _remove_hook_groups(hooks.get("PreToolUse"))
             if hooks_path == target_hooks_path:
-                hooks["PreToolUse"] = [*remaining, managed_group]
+                hooks["PreToolUse"] = _merge_hook_groups(remaining, managed_group)
                 payload["hooks"] = hooks
             else:
                 if remaining:
@@ -452,10 +484,11 @@ class CodexHarnessAdapter(HarnessAdapter):
             self._write_hooks_payload(hooks_path, payload)
         return target_hooks_path
 
-    def _remove_hooks(self, context: HarnessContext) -> Path:
+    def _remove_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
         target_hooks_path = self._hooks_path(context)
+        hook_payloads = payloads or self._load_hook_payloads(context)
         for hooks_path in self._all_hook_paths(context):
-            payload = _strict_json_object(hooks_path, label="Codex hooks file")
+            payload = dict(hook_payloads.get(hooks_path, {}))
             hooks = payload.get("hooks")
             if isinstance(hooks, dict):
                 remaining = _remove_hook_groups(hooks.get("PreToolUse"))
