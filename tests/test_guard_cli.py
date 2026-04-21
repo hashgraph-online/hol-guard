@@ -15,6 +15,7 @@ from typing import ClassVar
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.adapters import claude_code as claude_adapter_module
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
@@ -225,6 +226,18 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
 
 
 class TestGuardCli:
+    def test_claude_guard_hook_command_detection_handles_legacy_and_pinned_commands(self):
+        legacy_command = "/opt/python/bin/python3 -m codex_plugin_scanner.cli guard hook --guard-home /tmp/guard"
+        pinned_command = (
+            "/opt/python/bin/python3 -c "
+            "\"import sys;sys.path.insert(0, '/tmp/src');from codex_plugin_scanner.cli import main;"
+            "raise SystemExit(main(['guard', 'hook']))\""
+        )
+
+        assert claude_adapter_module._is_guard_hook_command(legacy_command) is True
+        assert claude_adapter_module._is_guard_hook_command(pinned_command) is True
+        assert claude_adapter_module._is_guard_hook_command("python something-else.py") is False
+
     def test_guard_requires_a_subcommand(self, capsys):
         with pytest.raises(SystemExit) as exc_info:
             main(["guard"])
@@ -2090,6 +2103,71 @@ args = ["workspace-skill.js", "--changed"]
         assert rc == 0
         assert output["managed_install"]["active"] is False
         assert payload["hooks"]["PreToolUse"] == ["unexpected-entry"]
+
+    def test_guard_install_replaces_legacy_claude_guard_hook_entries(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        settings_local = workspace_dir / ".claude" / "settings.local.json"
+        legacy_command = ClaudeCodeHarnessAdapter._hook_command(
+            HarnessContext(
+                home_dir=home_dir,
+                workspace_dir=workspace_dir,
+                guard_home=tmp_path / "legacy-guard-home",
+            )
+        )
+        _write_json(
+            settings_local,
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+                            "hooks": [{"type": "command", "command": legacy_command, "timeout": 30}],
+                        }
+                    ],
+                    "PostToolUse": [
+                        {
+                            "matcher": "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+                            "hooks": [{"type": "command", "command": legacy_command, "timeout": 30}],
+                        }
+                    ],
+                    "UserPromptSubmit": [
+                        {
+                            "hooks": [{"type": "command", "command": legacy_command, "timeout": 20}],
+                        }
+                    ],
+                }
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "claude-code",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        payload = json.loads(settings_local.read_text(encoding="utf-8"))
+
+        assert rc == 0
+        assert output["managed_install"]["active"] is True
+        assert len(payload["hooks"]["PreToolUse"]) == 1
+        assert len(payload["hooks"]["PostToolUse"]) == 1
+        assert len(payload["hooks"]["UserPromptSubmit"]) == 1
+        pretool_commands = [
+            hook["command"]
+            for hook in payload["hooks"]["PreToolUse"][0]["hooks"]
+            if isinstance(hook, dict) and isinstance(hook.get("command"), str)
+        ]
+        assert len(pretool_commands) == 1
+        assert legacy_command not in pretool_commands
 
     def test_guard_install_auto_detects_configured_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
