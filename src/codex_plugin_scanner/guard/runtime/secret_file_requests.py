@@ -102,7 +102,7 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
         "--title",
     }
 )
-_CURL_AT_FILE_FLAGS_WITH_VALUE = frozenset({"--data", "--data-ascii", "--data-binary", "--json", "-d"})
+_CURL_AT_FILE_FLAGS_WITH_VALUE = frozenset({"--data", "--data-ascii", "--data-binary", "--json", "--url-query", "-d"})
 _CURL_DATA_URLENCODE_FLAGS_WITH_VALUE = frozenset({"--data-urlencode"})
 _CURL_FORM_FLAGS_WITH_VALUE = frozenset({"--form", "-F"})
 _CURL_DIRECT_FILE_FLAGS_WITH_VALUE = frozenset({"--upload-file", "-T"})
@@ -700,6 +700,10 @@ def _curl_segment_uses_file_upload(segment_args: list[str]) -> bool:
         ):
             return True
         if token.startswith("--json=") and _curl_upload_value_uses_local_file("--json", token.split("=", 1)[1]):
+            return True
+        if token.startswith("--url-query=") and _curl_upload_value_uses_local_file(
+            "--url-query", token.split("=", 1)[1]
+        ):
             return True
         if token.startswith("--data-urlencode=") and _curl_upload_value_uses_local_file(
             "--data-urlencode", token.split("=", 1)[1]
