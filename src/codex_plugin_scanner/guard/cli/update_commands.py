@@ -86,13 +86,15 @@ def run_guard_update(
     notes = _success_notes(payload)
     if notes:
         payload["notes"] = notes
-    repaired_installs = _repair_supported_harnesses(
+    repaired_installs, repair_notes = _repair_supported_harnesses(
         context=context,
         store=store,
         workspace=workspace,
         now=now,
         dry_run=dry_run,
     )
+    if repair_notes:
+        payload["notes"] = [*notes, *repair_notes]
     if repaired_installs:
         payload["managed_installs"] = repaired_installs
         if len(repaired_installs) == 1:
@@ -207,11 +209,18 @@ def _repair_supported_harnesses(
     workspace: str | None,
     now: str | None,
     dry_run: bool,
-) -> list[dict[str, object]]:
+) -> tuple[list[dict[str, object]], list[str]]:
     if dry_run or context is None or store is None or now is None:
-        return []
-    repaired_codex = _repair_codex_install(context=context, store=store, workspace=workspace, now=now)
-    return [repaired_codex] if repaired_codex is not None else []
+        return [], []
+    repaired_codex, codex_warning = _repair_codex_install(
+        context=context,
+        store=store,
+        workspace=workspace,
+        now=now,
+    )
+    repaired_installs = [repaired_codex] if repaired_codex is not None else []
+    repair_notes = [codex_warning] if codex_warning is not None else []
+    return repaired_installs, repair_notes
 
 
 def _repair_codex_install(
@@ -220,21 +229,27 @@ def _repair_codex_install(
     store: GuardStore,
     workspace: str | None,
     now: str,
-) -> dict[str, object] | None:
-    hook_state = codex_native_hook_state(context)
+) -> tuple[dict[str, object] | None, str | None]:
+    try:
+        hook_state = codex_native_hook_state(context)
+    except RuntimeError as error:
+        return None, f"Could not inspect Codex protection during update: {error}"
     if not bool(hook_state["config_present"]) or bool(hook_state["protection_active"]):
-        return None
-    payload = apply_managed_install(
-        "install",
-        "codex",
-        False,
-        context,
-        store,
-        workspace,
-        now,
-    )
+        return None, None
+    try:
+        payload = apply_managed_install(
+            "install",
+            "codex",
+            False,
+            context,
+            store,
+            workspace,
+            now,
+        )
+    except RuntimeError as error:
+        return None, f"Could not repair Codex protection during update: {error}"
     managed_install = payload.get("managed_install")
-    return managed_install if isinstance(managed_install, dict) else None
+    return (managed_install if isinstance(managed_install, dict) else None), None
 
 
 __all__ = ["run_guard_update"]

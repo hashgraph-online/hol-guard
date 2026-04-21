@@ -36,7 +36,7 @@ def _read_toml(path: Path) -> dict[str, object]:
         with path.open("rb") as handle:
             payload = tomllib.load(handle)
         return payload if isinstance(payload, dict) else {}
-    except OSError:
+    except (OSError, tomllib.TOMLDecodeError):
         return {}
 
 

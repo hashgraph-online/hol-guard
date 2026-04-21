@@ -676,9 +676,7 @@ def _curl_segment_uses_file_upload(segment_args: list[str]) -> bool:
             "--data-urlencode", token.split("=", 1)[1]
         ):
             return True
-        if token.startswith("--data-raw=") and _curl_upload_value_uses_local_file(
-            "--data-raw", token.split("=", 1)[1]
-        ):
+        if token.startswith("--data-raw=") and _curl_upload_value_uses_local_file("--data-raw", token.split("=", 1)[1]):
             return True
         if token.startswith("--form=") and _curl_upload_value_uses_local_file("--form", token.split("=", 1)[1]):
             return True
@@ -743,7 +741,12 @@ def _curl_data_urlencode_value_uses_local_file(value: str) -> bool:
     stripped_value = _strip_cli_value(value)
     if not stripped_value:
         return False
-    encoded_value = stripped_value.split("=", 1)[1] if "=" in stripped_value else stripped_value
+    if "=" in stripped_value:
+        encoded_value = stripped_value.split("=", 1)[1]
+    elif "@" in stripped_value and not stripped_value.startswith("@"):
+        encoded_value = f"@{stripped_value.split('@', 1)[1]}"
+    else:
+        encoded_value = stripped_value
     return _value_uses_local_file(encoded_value)
 
 
