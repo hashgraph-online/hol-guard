@@ -1494,17 +1494,20 @@ def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]
         return None
     tool_name = _optional_string(payload.get("tool_name"))
     try:
-        persisted = store.get_sync_payload(_claude_permission_notice_state_key(session_id, tool_name))
-        loaded_generic = False
+        selected_key = _claude_permission_notice_state_key(session_id, tool_name)
+        persisted = store.get_sync_payload(selected_key)
         if persisted is None and tool_name is not None:
-            persisted = store.get_sync_payload(_claude_permission_notice_state_key(session_id))
-            loaded_generic = persisted is not None
-        if tool_name is not None:
-            store.delete_sync_payload(_claude_permission_notice_state_key(session_id, tool_name))
-            if loaded_generic:
-                store.delete_sync_payload(_claude_permission_notice_state_key(session_id))
-        else:
-            store.delete_sync_payload(_claude_permission_notice_state_key(session_id))
+            selected_key = _claude_permission_notice_state_key(session_id)
+            persisted = store.get_sync_payload(selected_key)
+        if persisted is None and tool_name is None:
+            prefix = f"{_claude_permission_notice_state_key(session_id)}:"
+            for candidate in store.list_sync_payloads_by_prefix(prefix, limit=1):
+                candidate_payload = candidate.get("payload")
+                if isinstance(candidate_payload, dict):
+                    persisted = candidate_payload
+                    selected_key = str(candidate["state_key"])
+                    break
+        store.delete_sync_payload(selected_key)
     except (OSError, sqlite3.Error):
         return None
     if isinstance(persisted, dict):

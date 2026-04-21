@@ -1698,6 +1698,32 @@ class GuardStore:
                 (state_key,),
             )
 
+    def list_sync_payloads_by_prefix(self, prefix: str, *, limit: int = 10) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                select state_key, payload_json, updated_at
+                from sync_state
+                where state_key like ?
+                order by updated_at desc, state_key desc
+                limit ?
+                """,
+                (f"{prefix}%", limit),
+            ).fetchall()
+        items: list[dict[str, object]] = []
+        for row in rows:
+            payload = json.loads(str(row["payload_json"]))
+            if not isinstance(payload, (dict, list)):
+                continue
+            items.append(
+                {
+                    "state_key": str(row["state_key"]),
+                    "payload": payload,
+                    "updated_at": str(row["updated_at"]),
+                }
+            )
+        return items
+
     def add_event(self, event_name: str, payload: dict[str, object], now: str) -> None:
         with self._connect() as connection:
             connection.execute(

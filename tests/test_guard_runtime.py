@@ -4496,6 +4496,65 @@ def test_guard_hook_claude_notification_notice_is_tool_scoped_and_consumed(tmp_p
     )
 
 
+def test_guard_hook_claude_notification_notice_falls_back_when_tool_name_is_missing(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    pre_tool_event = {
+        "session_id": "session-claude-5",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(pre_tool_event)))
+
+    pre_tool_rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+        ]
+    )
+    capsys.readouterr()
+
+    notification_event = {
+        "session_id": "session-claude-5",
+        "hook_event_name": "Notification",
+        "notification_type": "permission_prompt",
+        "title": "Permission needed",
+        "message": "Claude needs your permission to use Read",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(notification_event)))
+
+    notification_rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+        ]
+    )
+    notification_output = json.loads(capsys.readouterr().out)
+
+    assert pre_tool_rc == 0
+    assert notification_rc == 0
+    assert "local secret access" in notification_output["systemMessage"]
+
+
 def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
