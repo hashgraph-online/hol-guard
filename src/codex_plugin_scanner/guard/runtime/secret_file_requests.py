@@ -810,6 +810,14 @@ def _curl_segment_uses_file_upload(
         clustered_upload_value = _curl_clustered_short_flag_value(segment_args, index, "T")
         if clustered_upload_value is not None and _curl_upload_value_uses_local_file("-T", clustered_upload_value):
             return True
+        clustered_config_value = _curl_clustered_short_flag_value(segment_args, index, "K")
+        if clustered_config_value is not None and _curl_config_uses_file_upload(
+            clustered_config_value,
+            cwd=cwd,
+            home_dir=home_dir,
+            visited_config_paths=visited_config_paths,
+        ):
+            return True
         clustered_form_value = _curl_clustered_short_flag_value(segment_args, index, "F")
         if clustered_form_value is not None and _curl_upload_value_uses_local_file("-F", clustered_form_value):
             return True
