@@ -7,6 +7,7 @@ import json
 import os
 import shlex
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 try:  # pragma: no cover - Python 3.11+
@@ -462,8 +463,8 @@ class CodexHarnessAdapter(HarnessAdapter):
         managed_group = _hook_group(context)
         hook_payloads = payloads or self._load_hook_payloads(context)
         for hooks_path in self._all_hook_paths(context):
-            original_payload = dict(hook_payloads.get(hooks_path, {}))
-            payload = dict(original_payload)
+            original_payload = deepcopy(hook_payloads.get(hooks_path, {}))
+            payload = deepcopy(original_payload)
             hooks = payload.get("hooks")
             if not isinstance(hooks, dict):
                 hooks = {}
@@ -488,8 +489,8 @@ class CodexHarnessAdapter(HarnessAdapter):
         target_hooks_path = self._hooks_path(context)
         hook_payloads = payloads or {}
         for hooks_path in self._all_hook_paths(context):
-            original_payload = dict(hook_payloads.get(hooks_path, _json_object(hooks_path)))
-            payload = dict(original_payload)
+            original_payload = deepcopy(hook_payloads.get(hooks_path, _json_object(hooks_path)))
+            payload = deepcopy(original_payload)
             if not payload and hooks_path.exists():
                 continue
             hooks = payload.get("hooks")
