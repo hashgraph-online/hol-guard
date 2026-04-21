@@ -92,7 +92,7 @@ def test_claude_install_bakes_launcher_pythonpath_into_hook_command(monkeypatch,
     assert install_output["active"] is True
     assert "from codex_plugin_scanner.cli import main" in hook_command
     assert "/repo/src" in hook_command
-    assert "\"guard\", \"hook\"" not in hook_command
+    assert '"guard", "hook"' not in hook_command
 
 
 def test_claude_install_writes_nested_hook_schema_and_is_idempotent(tmp_path):
@@ -148,6 +148,34 @@ def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
             "hooks": [{"type": "command", "command": "python3 custom-pre.py", "timeout": 5}],
         }
     ]
+
+
+def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    legacy_command = adapter._hook_command(context)
+    _write_json(
+        settings_path,
+        {
+            "hooks": {
+                "PreToolUse": [{"command": legacy_command}],
+                "PostToolUse": [{"command": legacy_command}],
+            }
+        },
+    )
+
+    adapter.install(context)
+
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    pre_tool_use = payload["hooks"]["PreToolUse"]
+    post_tool_use = payload["hooks"]["PostToolUse"]
+
+    assert len(pre_tool_use) == 1
+    assert "command" not in pre_tool_use[0]
+    assert pre_tool_use[0]["hooks"][0]["command"] == legacy_command
+    assert len(post_tool_use) == 1
+    assert "command" not in post_tool_use[0]
 
 
 def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path):
@@ -218,3 +246,25 @@ def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path
     assert "claude-code:project:command:deploy" in artifacts
     assert "claude-code:project:instruction:secrets" in artifacts
     assert "claude-code:project:instruction:claude-md" in artifacts
+
+
+def test_claude_detect_tolerates_unreadable_markdown_artifacts(monkeypatch, tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    skill_path = context.workspace_dir / ".claude" / "skills" / "review" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True, exist_ok=True)
+    skill_path.write_text("---\nname: review\ndescription: Review skill\n---\n", encoding="utf-8")
+    original_read_bytes = Path.read_bytes
+
+    def _guarded_read_bytes(path: Path) -> bytes:
+        if path == skill_path:
+            raise OSError("permission denied")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", _guarded_read_bytes)
+
+    detection = adapter.detect(context)
+    artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
+
+    assert "claude-code:project:skill:review" in artifacts
+    assert artifacts["claude-code:project:skill:review"].metadata == {}

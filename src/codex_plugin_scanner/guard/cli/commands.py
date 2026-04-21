@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shlex
@@ -1834,6 +1835,41 @@ def _string_list(value: object | None) -> list[str]:
     return [str(item) for item in value if isinstance(item, str) and item.strip()]
 
 
+def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]) -> GuardArtifact:
+    if len(artifacts) == 1:
+        return artifacts[0]
+    prompt_signals: list[str] = []
+    prompt_matched_texts: list[str] = []
+    prompt_request_classes: list[str] = []
+    request_identity = "|".join(sorted(artifact.artifact_id for artifact in artifacts))
+    for artifact in artifacts:
+        metadata = artifact.metadata
+        prompt_signals.extend(_string_list(metadata.get("prompt_signals")))
+        matched_text = metadata.get("prompt_matched_text")
+        if isinstance(matched_text, str) and matched_text.strip():
+            prompt_matched_texts.append(matched_text.strip())
+        request_class = metadata.get("prompt_request_class")
+        if isinstance(request_class, str) and request_class.strip():
+            prompt_request_classes.append(request_class.strip())
+    deduped_signals = list(dict.fromkeys(prompt_signals))
+    deduped_matches = list(dict.fromkeys(prompt_matched_texts))
+    deduped_classes = list(dict.fromkeys(prompt_request_classes))
+    return GuardArtifact(
+        artifact_id=f"{harness}:session:prompt:multi:{hashlib.sha256(request_identity.encode('utf-8')).hexdigest()[:24]}",
+        name="prompt multi-signal request",
+        harness=harness,
+        artifact_type="prompt_request",
+        source_scope=artifacts[0].source_scope,
+        config_path=artifacts[0].config_path,
+        metadata={
+            "prompt_signals": deduped_signals,
+            "prompt_summary": "Prompt matches multiple guarded request classes.",
+            "prompt_matched_texts": deduped_matches,
+            "prompt_request_classes": deduped_classes,
+        },
+    )
+
+
 def _hook_runtime_artifact(
     *,
     harness: str,
@@ -1867,7 +1903,7 @@ def _hook_runtime_artifact(
                     requests=prompt_requests,
                 )
                 if prompt_artifacts:
-                    return prompt_artifacts[0]
+                    return _merged_prompt_runtime_artifact(harness, prompt_artifacts)
     request = extract_sensitive_file_read_request(
         payload.get("tool_name"),
         payload.get("tool_input", payload.get("arguments")),

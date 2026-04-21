@@ -42,7 +42,10 @@ def _merge_hook_group(
     normalized = [entry for entry in entries if isinstance(entry, dict)]
     matcher_key = matcher.strip() if isinstance(matcher, str) and matcher.strip() else None
     handler = _guard_hook_handler(command, timeout=timeout)
-    for entry in normalized:
+    for index, entry in enumerate(normalized):
+        if str(entry.get("command", "")) == command:
+            normalized[index] = _guard_hook_group(matcher_key, command, timeout=timeout)
+            return normalized
         entry_matcher = entry.get("matcher")
         entry_matcher_key = entry_matcher.strip() if isinstance(entry_matcher, str) and entry_matcher.strip() else None
         if entry_matcher_key != matcher_key:
@@ -85,6 +88,14 @@ def _claude_digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _metadata_with_digest(path: Path) -> dict[str, object]:
+    try:
+        digest = _claude_digest(path)
+    except OSError:
+        return {}
+    return {"content_digest": digest}
+
+
 def _discover_project_markdown_artifacts(
     *,
     base_dir: Path,
@@ -107,7 +118,7 @@ def _discover_project_markdown_artifacts(
                 artifact_type=artifact_type,
                 source_scope="project",
                 config_path=str(artifact_path),
-                metadata={"content_digest": _claude_digest(artifact_path)},
+                metadata=_metadata_with_digest(artifact_path),
             )
         )
     return artifacts
@@ -304,7 +315,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                         artifact_type="instruction",
                         source_scope="project",
                         config_path=str(project_claude_md),
-                        metadata={"content_digest": _claude_digest(project_claude_md)},
+                        metadata=_metadata_with_digest(project_claude_md),
                     )
                 )
         resolved_executable = self.resolved_executable(context)

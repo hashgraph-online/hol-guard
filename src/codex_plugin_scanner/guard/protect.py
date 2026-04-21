@@ -298,8 +298,11 @@ def _parse_codex_request(command: list[str]) -> ProtectRequest:
 
 def _parse_claude_request(command: list[str]) -> ProtectRequest:
     if len(command) >= 5 and command[1:3] == ["mcp", "add"]:
-        name = command[3]
-        command_or_url = command[4]
+        positional = _remaining_positionals(command[3:])
+        if len(positional) < 2:
+            return _parse_custom_request(command)
+        name = positional[0]
+        command_or_url = positional[1]
         target = ProtectTarget(
             artifact_id=f"install:claude-code:mcp:{name}",
             artifact_name=name,
@@ -313,8 +316,11 @@ def _parse_claude_request(command: list[str]) -> ProtectRequest:
         )
         return ProtectRequest(tuple(command), "harness_registration", "claude", None, "claude-code", (target,))
     if len(command) >= 5 and command[1:3] == ["mcp", "add-json"]:
-        name = command[3]
-        target = _parse_claude_mcp_target(name, command[4])
+        positional = _remaining_positionals(command[3:])
+        if len(positional) < 2:
+            return _parse_custom_request(command)
+        name = positional[0]
+        target = _parse_claude_mcp_target(name, positional[1])
         return ProtectRequest(tuple(command), "harness_registration", "claude", None, "claude-code", (target,))
     return _parse_custom_request(command)
 
@@ -553,6 +559,31 @@ def _option_value(command: list[str], option: str) -> str | None:
         if value == option and index + 1 < len(command):
             return command[index + 1]
     return None
+
+
+def _remaining_positionals(args: list[str]) -> list[str]:
+    positionals: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            positionals.extend(args[index + 1 :])
+            break
+        if token.startswith("--"):
+            if "=" not in token and index + 1 < len(args) and not args[index + 1].startswith("-"):
+                index += 2
+                continue
+            index += 1
+            continue
+        if token.startswith("-") and token != "-":
+            if len(token) == 2 and index + 1 < len(args) and not args[index + 1].startswith("-"):
+                index += 2
+                continue
+            index += 1
+            continue
+        positionals.append(token)
+        index += 1
+    return positionals
 
 
 def _first_url(command: list[str]) -> str | None:
