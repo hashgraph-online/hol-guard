@@ -102,20 +102,10 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
         "--title",
     }
 )
-_CURL_UPLOAD_FLAGS_WITH_VALUE = frozenset(
-    {
-        "--data",
-        "--data-ascii",
-        "--data-binary",
-        "--data-raw",
-        "--form",
-        "--form-string",
-        "--upload-file",
-        "-F",
-        "-T",
-        "-d",
-    }
-)
+_CURL_AT_FILE_FLAGS_WITH_VALUE = frozenset({"--data", "--data-ascii", "--data-binary", "-d"})
+_CURL_DATA_URLENCODE_FLAGS_WITH_VALUE = frozenset({"--data-urlencode"})
+_CURL_FORM_FLAGS_WITH_VALUE = frozenset({"--form", "-F"})
+_CURL_DIRECT_FILE_FLAGS_WITH_VALUE = frozenset({"--upload-file", "-T"})
 _WGET_UPLOAD_FLAGS_WITH_VALUE = frozenset({"--body-file", "--post-file"})
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
 _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "time"})
@@ -661,7 +651,12 @@ def _curl_segment_uses_file_upload(segment_args: list[str]) -> bool:
         token = segment_args[index]
         if token == "--":
             return False
-        if token in _CURL_UPLOAD_FLAGS_WITH_VALUE:
+        if (
+            token in _CURL_AT_FILE_FLAGS_WITH_VALUE
+            or token in _CURL_DATA_URLENCODE_FLAGS_WITH_VALUE
+            or token in _CURL_FORM_FLAGS_WITH_VALUE
+            or token in _CURL_DIRECT_FILE_FLAGS_WITH_VALUE
+        ):
             value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
             if _curl_upload_value_uses_local_file(token, value):
                 return True
@@ -677,15 +672,15 @@ def _curl_segment_uses_file_upload(segment_args: list[str]) -> bool:
             "--data-binary", token.split("=", 1)[1]
         ):
             return True
+        if token.startswith("--data-urlencode=") and _curl_upload_value_uses_local_file(
+            "--data-urlencode", token.split("=", 1)[1]
+        ):
+            return True
         if token.startswith("--data-raw=") and _curl_upload_value_uses_local_file(
             "--data-raw", token.split("=", 1)[1]
         ):
             return True
         if token.startswith("--form=") and _curl_upload_value_uses_local_file("--form", token.split("=", 1)[1]):
-            return True
-        if token.startswith("--form-string=") and _curl_upload_value_uses_local_file(
-            "--form-string", token.split("=", 1)[1]
-        ):
             return True
         if token.startswith("--upload-file=") and _curl_upload_value_uses_local_file(
             "--upload-file", token.split("=", 1)[1]
@@ -709,13 +704,13 @@ def _wget_segment_uses_file_upload(segment_args: list[str]) -> bool:
             return False
         if token in _WGET_UPLOAD_FLAGS_WITH_VALUE:
             value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
-            if _value_uses_local_file(value):
+            if _direct_file_operand_uses_local_file(value):
                 return True
             index += 2
             continue
-        if token.startswith("--body-file=") and _value_uses_local_file(token.split("=", 1)[1]):
+        if token.startswith("--body-file=") and _direct_file_operand_uses_local_file(token.split("=", 1)[1]):
             return True
-        if token.startswith("--post-file=") and _value_uses_local_file(token.split("=", 1)[1]):
+        if token.startswith("--post-file=") and _direct_file_operand_uses_local_file(token.split("=", 1)[1]):
             return True
         index += 1
     return False
@@ -723,15 +718,46 @@ def _wget_segment_uses_file_upload(segment_args: list[str]) -> bool:
 
 def _curl_upload_value_uses_local_file(flag: str, value: str) -> bool:
     stripped_value = value.strip()
-    if flag in {"--upload-file", "-T"}:
-        return _value_uses_local_file(stripped_value)
-    if flag in {"--form", "--form-string", "-F"}:
-        return "@" in stripped_value and _value_uses_local_file(stripped_value.split("@", 1)[1])
+    if flag in _CURL_DIRECT_FILE_FLAGS_WITH_VALUE:
+        return _direct_file_operand_uses_local_file(stripped_value)
+    if flag in _CURL_FORM_FLAGS_WITH_VALUE:
+        return _curl_form_value_uses_local_file(stripped_value)
+    if flag in _CURL_DATA_URLENCODE_FLAGS_WITH_VALUE:
+        return _curl_data_urlencode_value_uses_local_file(stripped_value)
+    if flag == "--data-raw":
+        return False
     return _value_uses_local_file(stripped_value)
 
 
+def _curl_form_value_uses_local_file(value: str) -> bool:
+    stripped_value = _strip_cli_value(value)
+    if not stripped_value:
+        return False
+    field_value = stripped_value.split("=", 1)[1] if "=" in stripped_value else stripped_value
+    if not field_value or field_value[0] not in {"@", "<"}:
+        return False
+    return _direct_file_operand_uses_local_file(re.split(r"[;,]", field_value[1:], maxsplit=1)[0])
+
+
+def _curl_data_urlencode_value_uses_local_file(value: str) -> bool:
+    stripped_value = _strip_cli_value(value)
+    if not stripped_value:
+        return False
+    encoded_value = stripped_value.split("=", 1)[1] if "=" in stripped_value else stripped_value
+    return _value_uses_local_file(encoded_value)
+
+
+def _direct_file_operand_uses_local_file(value: str) -> bool:
+    stripped_value = _strip_cli_value(value)
+    return bool(stripped_value and stripped_value not in {"-", "@-"})
+
+
+def _strip_cli_value(value: str) -> str:
+    return value.strip().strip("'").strip('"')
+
+
 def _value_uses_local_file(value: str) -> bool:
-    stripped_value = value.strip().strip("'").strip('"')
+    stripped_value = _strip_cli_value(value)
     if not stripped_value or stripped_value == "@-":
         return False
     if stripped_value.startswith("@"):
