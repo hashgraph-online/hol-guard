@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shlex
@@ -62,7 +63,13 @@ from ..proxy import (
 )
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_summary
-from ..runtime.runner import GuardSyncNotConfiguredError, guard_run, sync_receipts
+from ..runtime.runner import (
+    GuardSyncNotConfiguredError,
+    extract_prompt_requests,
+    guard_run,
+    prompt_requests_to_artifacts,
+    sync_receipts,
+)
 from ..runtime.secret_file_requests import (
     build_file_read_request_artifact,
     build_tool_action_request_artifact,
@@ -1105,6 +1112,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             harness=args.harness,
             payload=payload,
             home_dir=context.home_dir,
+            guard_home=context.guard_home,
             workspace=runtime_workspace,
         )
         if runtime_artifact is not None:
@@ -1184,6 +1192,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     _emit_native_hook_response(
                         harness=args.harness,
                         policy_action=policy_action,
+                        event_name=_hook_event_name(payload) or "PreToolUse",
                         reason=_native_hook_reason_for_harness(
                             args.harness,
                             response_payload.get("why_now"),
@@ -1284,6 +1293,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 _emit_native_hook_response(
                     harness=args.harness,
                     policy_action=policy_action,
+                    event_name=_hook_event_name(payload) or "PreToolUse",
                     reason=_native_hook_reason_for_harness(
                         args.harness,
                         response_payload.get("why_now"),
@@ -1351,6 +1361,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             _emit_native_hook_response(
                 harness=args.harness,
                 policy_action=policy_action,
+                event_name=_hook_event_name(payload) or "PreToolUse",
                 reason=_native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason")),
             )
             return 0
@@ -1484,10 +1495,24 @@ def _emit_copilot_permission_request_response(
     print(json.dumps(payload, separators=(",", ":")))
 
 
-def _emit_native_hook_response(*, harness: str, policy_action: str, reason: str) -> None:
+def _emit_native_hook_response(
+    *,
+    harness: str,
+    policy_action: str,
+    reason: str,
+    event_name: str = "PreToolUse",
+) -> None:
+    if event_name == "UserPromptSubmit":
+        payload: dict[str, object] = {}
+        if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+            payload["decision"] = "block"
+            payload["reason"] = reason
+        if payload:
+            print(json.dumps(payload, separators=(",", ":")))
+        return
     payload = {
         "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
+            "hookEventName": event_name,
             "permissionDecision": _native_hook_permission_decision(policy_action, harness=harness),
         }
     }
@@ -1690,6 +1715,7 @@ def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
         ("artifactHash", "artifact_hash"),
         ("artifactName", "artifact_name"),
         ("changedCapabilities", "changed_capabilities"),
+        ("hookEventName", "hook_event_name"),
         ("hookName", "hook_name"),
         ("policyAction", "policy_action"),
         ("sourceScope", "source_scope"),
@@ -1784,12 +1810,20 @@ def _optional_string(value: object | None) -> str | None:
     return None
 
 
+def _hook_event_name(payload: dict[str, object]) -> str | None:
+    for key in ("event", "hook_event_name", "hookEventName", "hook_name"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def _artifact_id_from_event(harness: str, payload: dict[str, object]) -> str:
     source_scope = _coalesce_string(payload.get("source_scope"), "project")
     tool_name = payload.get("tool_name")
     if isinstance(tool_name, str) and tool_name.strip():
         return f"{harness}:{source_scope}:{tool_name.strip()}"
-    event_name = payload.get("event")
+    event_name = _hook_event_name(payload)
     if isinstance(event_name, str) and event_name.strip():
         return f"{harness}:{source_scope}:{event_name.strip().lower()}"
     return f"{harness}:{source_scope}:hook"
@@ -1801,13 +1835,75 @@ def _string_list(value: object | None) -> list[str]:
     return [str(item) for item in value if isinstance(item, str) and item.strip()]
 
 
+def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]) -> GuardArtifact:
+    if len(artifacts) == 1:
+        return artifacts[0]
+    prompt_signals: list[str] = []
+    prompt_matched_texts: list[str] = []
+    prompt_request_classes: list[str] = []
+    request_identity = "|".join(sorted(artifact.artifact_id for artifact in artifacts))
+    for artifact in artifacts:
+        metadata = artifact.metadata
+        prompt_signals.extend(_string_list(metadata.get("prompt_signals")))
+        matched_text = metadata.get("prompt_matched_text")
+        if isinstance(matched_text, str) and matched_text.strip():
+            prompt_matched_texts.append(matched_text.strip())
+        request_class = metadata.get("prompt_request_class")
+        if isinstance(request_class, str) and request_class.strip():
+            prompt_request_classes.append(request_class.strip())
+    deduped_signals = list(dict.fromkeys(prompt_signals))
+    deduped_matches = list(dict.fromkeys(prompt_matched_texts))
+    deduped_classes = list(dict.fromkeys(prompt_request_classes))
+    return GuardArtifact(
+        artifact_id=f"{harness}:session:prompt:multi:{hashlib.sha256(request_identity.encode('utf-8')).hexdigest()[:24]}",
+        name="prompt multi-signal request",
+        harness=harness,
+        artifact_type="prompt_request",
+        source_scope=artifacts[0].source_scope,
+        config_path=artifacts[0].config_path,
+        metadata={
+            "prompt_signals": deduped_signals,
+            "prompt_summary": "Prompt matches multiple guarded request classes.",
+            "prompt_matched_texts": deduped_matches,
+            "prompt_request_classes": deduped_classes,
+        },
+    )
+
+
 def _hook_runtime_artifact(
     *,
     harness: str,
     payload: dict[str, object],
     home_dir: Path,
+    guard_home: Path,
     workspace: Path | None,
 ) -> GuardArtifact | None:
+    event_name = _hook_event_name(payload)
+    if event_name == "UserPromptSubmit":
+        prompt_text = payload.get("prompt")
+        if isinstance(prompt_text, str) and prompt_text.strip():
+            config_path = str(_runtime_policy_path(harness, home_dir, workspace))
+            prompt_detection = HarnessDetection(
+                harness=harness,
+                installed=True,
+                command_available=True,
+                config_paths=(config_path,),
+                artifacts=(),
+            )
+            prompt_context = HarnessContext(
+                home_dir=home_dir,
+                guard_home=guard_home,
+                workspace_dir=workspace,
+            )
+            prompt_requests = extract_prompt_requests(prompt_text)
+            if prompt_requests:
+                prompt_artifacts = prompt_requests_to_artifacts(
+                    detection=prompt_detection,
+                    context=prompt_context,
+                    requests=prompt_requests,
+                )
+                if prompt_artifacts:
+                    return _merged_prompt_runtime_artifact(harness, prompt_artifacts)
     request = extract_sensitive_file_read_request(
         payload.get("tool_name"),
         payload.get("tool_input", payload.get("arguments")),

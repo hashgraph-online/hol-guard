@@ -212,6 +212,7 @@ def parse_protect_command(command: list[str]) -> ProtectRequest:
         "pip": _parse_pip_request,
         "uv": _parse_uv_request,
         "go": _parse_go_request,
+        "claude": _parse_claude_request,
         "codex": _parse_codex_request,
         "cursor": _parse_cursor_request,
         "antigravity": _parse_antigravity_request,
@@ -292,6 +293,35 @@ def _parse_codex_request(command: list[str]) -> ProtectRequest:
             harness="codex",
         )
         return ProtectRequest(tuple(command), "harness_registration", "codex", None, "codex", (target,))
+    return _parse_custom_request(command)
+
+
+def _parse_claude_request(command: list[str]) -> ProtectRequest:
+    if len(command) >= 5 and command[1:3] == ["mcp", "add"]:
+        positional = _remaining_positionals(command[3:])
+        if len(positional) < 2:
+            return _parse_custom_request(command)
+        name = positional[0]
+        command_or_url = positional[1]
+        target = ProtectTarget(
+            artifact_id=f"install:claude-code:mcp:{name}",
+            artifact_name=name,
+            artifact_type="mcp_server",
+            ecosystem="claude-code",
+            package_name=name,
+            raw_spec=command_or_url,
+            version=None,
+            source_url=command_or_url if command_or_url.startswith(("http://", "https://")) else None,
+            harness="claude-code",
+        )
+        return ProtectRequest(tuple(command), "harness_registration", "claude", None, "claude-code", (target,))
+    if len(command) >= 5 and command[1:3] == ["mcp", "add-json"]:
+        positional = _remaining_positionals(command[3:])
+        if len(positional) < 2:
+            return _parse_custom_request(command)
+        name = positional[0]
+        target = _parse_claude_mcp_target(name, positional[1])
+        return ProtectRequest(tuple(command), "harness_registration", "claude", None, "claude-code", (target,))
     return _parse_custom_request(command)
 
 
@@ -531,6 +561,31 @@ def _option_value(command: list[str], option: str) -> str | None:
     return None
 
 
+def _remaining_positionals(args: list[str]) -> list[str]:
+    positionals: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            positionals.extend(args[index + 1 :])
+            break
+        if token.startswith("--"):
+            if "=" not in token and index + 1 < len(args) and not args[index + 1].startswith("-"):
+                index += 2
+                continue
+            index += 1
+            continue
+        if token.startswith("-") and token != "-":
+            if len(token) == 2 and index + 1 < len(args) and not args[index + 1].startswith("-"):
+                index += 2
+                continue
+            index += 1
+            continue
+        positionals.append(token)
+        index += 1
+    return positionals
+
+
 def _first_url(command: list[str]) -> str | None:
     for value in command:
         if value.startswith(("http://", "https://", "git+", "file:")):
@@ -562,6 +617,33 @@ def _parse_antigravity_mcp_target(raw_payload: str) -> ProtectTarget:
         version=None,
         source_url=source_url,
         harness="antigravity",
+    )
+
+
+def _parse_claude_mcp_target(name: str, raw_payload: str) -> ProtectTarget:
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    transport = payload.get("transport") if isinstance(payload.get("transport"), str) else None
+    command_or_url = payload.get("url") if isinstance(payload.get("url"), str) else None
+    if command_or_url is None and isinstance(payload.get("command"), str):
+        command_or_url = payload["command"]
+    source_url = (
+        command_or_url if isinstance(command_or_url, str) and _is_remote_transport(command_or_url, transport) else None
+    )
+    return ProtectTarget(
+        artifact_id=f"install:claude-code:mcp:{name}",
+        artifact_name=name,
+        artifact_type="mcp_server",
+        ecosystem="claude-code",
+        package_name=name,
+        raw_spec=raw_payload,
+        version=None,
+        source_url=source_url,
+        harness="claude-code",
     )
 
 
