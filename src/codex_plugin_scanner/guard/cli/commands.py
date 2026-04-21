@@ -1180,10 +1180,12 @@ def run_guard_command(args: argparse.Namespace) -> int:
                         ),
                     )
                     return 0
-                if _should_emit_claude_hook_response(args):
-                    _emit_claude_hook_response(
+                if _should_emit_prequeue_native_hook_response(args):
+                    _emit_native_hook_response(
+                        harness=args.harness,
                         policy_action=policy_action,
-                        reason=_native_hook_reason(
+                        reason=_native_hook_reason_for_harness(
+                            args.harness,
                             response_payload.get("why_now"),
                             response_payload.get("risk_headline"),
                             response_payload.get("path_summary"),
@@ -1278,10 +1280,12 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     ),
                 )
                 return 0
-            if _should_emit_claude_hook_response(args):
-                _emit_claude_hook_response(
+            if _should_emit_native_hook_response(args):
+                _emit_native_hook_response(
+                    harness=args.harness,
                     policy_action=policy_action,
-                    reason=_native_hook_reason(
+                    reason=_native_hook_reason_for_harness(
+                        args.harness,
                         response_payload.get("why_now"),
                         response_payload.get("review_hint"),
                         response_payload.get("risk_headline"),
@@ -1343,10 +1347,11 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 reason=_copilot_hook_reason(payload.get("permission_decision_reason")),
             )
             return 0
-        if _should_emit_claude_hook_response(args):
-            _emit_claude_hook_response(
+        if _should_emit_native_hook_response(args):
+            _emit_native_hook_response(
+                harness=args.harness,
                 policy_action=policy_action,
-                reason=_native_hook_reason(payload.get("permission_decision_reason")),
+                reason=_native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason")),
             )
             return 0
         _emit(
@@ -1374,7 +1379,11 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
     return args.harness == "copilot" and not getattr(args, "json", False)
 
 
-def _should_emit_claude_hook_response(args: argparse.Namespace) -> bool:
+def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
+    return args.harness in {"claude-code", "codex"} and not getattr(args, "json", False)
+
+
+def _should_emit_prequeue_native_hook_response(args: argparse.Namespace) -> bool:
     return args.harness == "claude-code" and not getattr(args, "json", False)
 
 
@@ -1396,6 +1405,13 @@ def _native_hook_reason(*values: object | None) -> str:
     if messages:
         return " ".join(messages)
     return "HOL Guard flagged this tool call for review."
+
+
+def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str:
+    reason = _native_hook_reason(*values)
+    if harness != "codex" or "approve" in reason.lower():
+        return reason
+    return f"{reason} Approve it in HOL Guard, then retry."
 
 
 def _copilot_hook_reason(*values: object | None) -> str:
@@ -1468,11 +1484,11 @@ def _emit_copilot_permission_request_response(
     print(json.dumps(payload, separators=(",", ":")))
 
 
-def _emit_claude_hook_response(*, policy_action: str, reason: str) -> None:
+def _emit_native_hook_response(*, harness: str, policy_action: str, reason: str) -> None:
     payload = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "permissionDecision": _native_hook_permission_decision(policy_action),
+            "permissionDecision": _native_hook_permission_decision(policy_action, harness=harness),
         }
     }
     if payload["hookSpecificOutput"]["permissionDecision"] != "allow":
@@ -1480,10 +1496,12 @@ def _emit_claude_hook_response(*, policy_action: str, reason: str) -> None:
     print(json.dumps(payload, separators=(",", ":")))
 
 
-def _native_hook_permission_decision(policy_action: str) -> str:
+def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str:
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action == "require-reapproval":
+        if harness == "codex":
+            return "deny"
         return "ask"
     return "allow"
 

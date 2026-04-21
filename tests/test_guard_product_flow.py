@@ -108,7 +108,8 @@ class TestGuardProductFlow:
         assert codex_summary["next_action"] == "install"
         assert codex_summary["approval_flow"]["prompt_channel"] == "native"
         assert codex_summary["approval_flow"]["auto_open_browser"] is False
-        assert "same-chat Codex approvals" in codex_summary["approval_flow"]["summary"]
+        assert "native Codex Bash hooks" in codex_summary["approval_flow"]["summary"]
+        assert "same-chat approvals" in codex_summary["approval_flow"]["summary"]
         assert output["next_steps"][0]["command"] == "hol-guard install codex"
         assert output["next_steps"][1]["command"] == "hol-guard run codex --dry-run"
 
