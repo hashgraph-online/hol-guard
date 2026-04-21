@@ -78,20 +78,20 @@ def test_claude_detect_ignores_non_executable_local_cli_candidate_when_not_on_pa
     assert detection.command_available is False
 
 
-def test_claude_install_bakes_launcher_pythonpath_into_hook_command(monkeypatch, tmp_path):
+def test_claude_install_bakes_current_source_root_into_hook_command(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
-    monkeypatch.setenv("PYTHONPATH", str(Path("/repo/src")))
 
     install_output = adapter.install(context)
 
     settings_path = context.workspace_dir / ".claude" / "settings.local.json"
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     hook_command = str(payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"])
+    expected_source_root = str(Path(__file__).resolve().parents[1] / "src")
 
     assert install_output["active"] is True
     assert "from codex_plugin_scanner.cli import main" in hook_command
-    assert "/repo/src" in hook_command
+    assert expected_source_root in hook_command
     assert '"guard", "hook"' not in hook_command
 
 

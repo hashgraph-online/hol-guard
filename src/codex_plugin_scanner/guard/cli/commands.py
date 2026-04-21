@@ -1463,6 +1463,9 @@ def _native_prompt_context(artifact: GuardArtifact) -> str:
 
 def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: dict[str, object]) -> str:
     if artifact.artifact_type == "prompt_request":
+        policy_action = response_payload.get("policy_action")
+        if policy_action in {"block", "sandbox-required"} and not _prompt_requires_hard_block(artifact):
+            return "HOL Guard blocked this prompt because it requests guarded local secret access."
         return _native_prompt_context(artifact)
     path_class = artifact.metadata.get("path_class")
     tool_name = artifact.metadata.get("tool_name")
