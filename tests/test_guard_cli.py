@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -3282,6 +3283,48 @@ args = ["-lc", "echo hi"]
         assert "managed_install" not in output
         assert any("Could not repair Codex protection during update: read only" in note for note in output["notes"])
 
+    def test_guard_update_repairs_codex_when_managed_install_lookup_fails(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        _write_text(
+            home_dir / ".codex" / "config.toml",
+            """
+approval_policy = "never"
+
+[mcp_servers.test-stdio]
+command = "/bin/sh"
+args = ["-lc", "echo hi"]
+""".strip()
+            + "\n",
+        )
+        context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=home_dir)
+        _write_text(guard_update_commands_module.CodexHarnessAdapter._backup_path(context), "# backup\n")
+        monkeypatch.setattr(
+            guard_update_commands_module.subprocess,
+            "run",
+            lambda command, **_: subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="hol-guard is already at latest version 2.0.39",
+                stderr="",
+            ),
+        )
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
+        monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.39")
+        monkeypatch.setattr(
+            GuardStore,
+            "get_managed_install",
+            lambda self, harness: (_ for _ in ()).throw(sqlite3.DatabaseError("db corrupted")),
+        )
+
+        rc = main(["guard", "update", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["status"] == "current"
+        assert "managed_install" not in output
+        assert any("Could not repair Codex protection during update: db corrupted" in note for note in output["notes"])
+
     def test_guard_doctor_warns_when_codex_native_hooks_are_missing(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(
@@ -3522,6 +3565,35 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
             payload_path,
             workspace_dir,
             "curl --data-raw @literal http://127.0.0.1:8787/guard-canary",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--harness",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--event-file",
+                str(payload_path),
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output == {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
+
+    def test_guard_codex_hook_allows_curl_data_urlencode_named_literal_at_value(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        payload_path = workspace_dir / "hook-event.json"
+        _write_codex_pre_tool_payload(
+            payload_path,
+            workspace_dir,
+            "curl --data-urlencode name=@literal http://127.0.0.1:8787/guard-canary",
         )
 
         rc = main(

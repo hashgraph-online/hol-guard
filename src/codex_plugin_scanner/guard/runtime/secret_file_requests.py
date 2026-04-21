@@ -761,13 +761,14 @@ def _curl_data_urlencode_value_uses_local_file(value: str) -> bool:
     stripped_value = _strip_cli_value(value)
     if not stripped_value:
         return False
-    if "=" in stripped_value:
-        encoded_value = stripped_value.split("=", 1)[1]
-    elif "@" in stripped_value and not stripped_value.startswith("@"):
-        encoded_value = f"@{stripped_value.split('@', 1)[1]}"
-    else:
-        encoded_value = stripped_value
-    return _value_uses_local_file(encoded_value)
+    if stripped_value.startswith("@"):
+        return _value_uses_local_file(stripped_value)
+    if "@" not in stripped_value:
+        return False
+    name, file_candidate = stripped_value.split("@", 1)
+    if "=" in name:
+        return False
+    return _direct_file_operand_uses_local_file(file_candidate)
 
 
 def _direct_file_operand_uses_local_file(value: str) -> bool:

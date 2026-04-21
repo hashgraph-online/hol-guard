@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import importlib.metadata
 import json
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -248,14 +249,17 @@ def _repair_codex_install(
             workspace,
             now,
         )
-    except (OSError, RuntimeError) as error:
+    except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
         return None, f"Could not repair Codex protection during update: {error}"
     managed_install = payload.get("managed_install")
     return (managed_install if isinstance(managed_install, dict) else None), None
 
 
 def _has_existing_codex_managed_install(context: HarnessContext, store: GuardStore) -> bool:
-    managed_install = store.get_managed_install("codex")
+    try:
+        managed_install = store.get_managed_install("codex")
+    except (json.JSONDecodeError, sqlite3.Error):
+        return CodexHarnessAdapter._backup_path(context).is_file()
     if managed_install is not None and bool(managed_install.get("active")):
         return True
     return CodexHarnessAdapter._backup_path(context).is_file()
