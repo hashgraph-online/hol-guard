@@ -25,6 +25,8 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard install codex
    ```
 
+   For Codex, install now enables Guard-owned `PreToolUse` Bash hooks in `.codex/hooks.json` and turns on the Codex hooks feature. That native hook path still runs when Codex itself is in YOLO mode, so Guard can pause sensitive Bash commands before execution instead of forcing a slower Codex approval mode.
+
    After upgrading later, run `hol-guard update` to update the installed `hol-guard` package in that environment.
 
 3. Run one dry pass so Guard records the current state:
@@ -218,14 +220,17 @@ For a real Codex canary, point `~/.codex/config.toml` or `<workspace>/.codex/con
 
 ## Codex-specific approval behavior
 
-Guard now has two real runtime paths for Codex MCP tool calls:
+Guard now has three real runtime paths for Codex:
 
-1. interactive Codex CLI and Codex App
+1. native Codex Bash tool calls
+   Guard installs a Codex `PreToolUse` hook in `.codex/hooks.json`, so sensitive Bash commands are denied before they run and routed into HOL Guard approval
+2. interactive Codex CLI and Codex App MCP tool calls
    Guard sends an MCP `elicitation/create` approval request, so the user can approve or deny in the same Codex chat
-2. noninteractive Codex runs such as `codex exec`
+3. noninteractive Codex runs such as `codex exec`
    if Codex does not answer the elicitation request, Guard queues a localhost approval request and returns the request id plus approval URL in the same tool-call error
 
-That means the user should never get a silent pass-through on a risky MCP tool call:
+That means the user should never get a silent pass-through on a risky Codex action that Guard manages:
 
-- same-chat approve or deny when Codex can render the inline prompt
+- native Bash deny plus HOL Guard approval-center recovery for sensitive shell actions
+- same-chat approve or deny when Codex can render the inline MCP prompt
 - explicit approval-center recovery when the session cannot
