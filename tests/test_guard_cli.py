@@ -3065,6 +3065,13 @@ args = ["-lc", "echo hi"]
 """.strip()
             + "\n",
         )
+        GuardStore(home_dir).set_managed_install(
+            "codex",
+            True,
+            None,
+            {"backup_path": str(home_dir / "managed" / "codex" / "repair.backup.toml")},
+            "2026-04-21T00:00:00+00:00",
+        )
 
         monkeypatch.setattr(
             guard_update_commands_module.subprocess,
@@ -3095,6 +3102,13 @@ args = ["-lc", "echo hi"]
     def test_guard_update_repairs_malformed_codex_config(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(home_dir / ".codex" / "config.toml", "[broken\n")
+        GuardStore(home_dir).set_managed_install(
+            "codex",
+            True,
+            None,
+            {"backup_path": str(home_dir / "managed" / "codex" / "repair.backup.toml")},
+            "2026-04-21T00:00:00+00:00",
+        )
         monkeypatch.setattr(
             guard_update_commands_module.subprocess,
             "run",
@@ -3117,6 +3131,41 @@ args = ["-lc", "echo hi"]
         assert output["managed_install"]["harness"] == "codex"
         assert output["managed_install"]["active"] is True
 
+    def test_guard_update_does_not_adopt_unmanaged_codex_config(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        _write_text(
+            home_dir / ".codex" / "config.toml",
+            """
+approval_policy = "never"
+
+[mcp_servers.test-stdio]
+command = "/bin/sh"
+args = ["-lc", "echo hi"]
+""".strip()
+            + "\n",
+        )
+        monkeypatch.setattr(
+            guard_update_commands_module.subprocess,
+            "run",
+            lambda command, **_: subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="hol-guard is already at latest version 2.0.39",
+                stderr="",
+            ),
+        )
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(guard_update_commands_module, "_current_version", lambda: "2.0.39")
+        monkeypatch.setattr(guard_update_commands_module, "_current_version_from_subprocess", lambda: "2.0.39")
+
+        rc = main(["guard", "update", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["status"] == "current"
+        assert "managed_install" not in output
+        assert (home_dir / ".codex" / "hooks.json").exists() is False
+
     def test_guard_update_reports_malformed_codex_hooks_without_crashing(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         _write_text(
@@ -3131,6 +3180,13 @@ args = ["-lc", "echo hi"]
             + "\n",
         )
         _write_text(home_dir / ".codex" / "hooks.json", "{not-json")
+        GuardStore(home_dir).set_managed_install(
+            "codex",
+            True,
+            None,
+            {"backup_path": str(home_dir / "managed" / "codex" / "repair.backup.toml")},
+            "2026-04-21T00:00:00+00:00",
+        )
         monkeypatch.setattr(
             guard_update_commands_module.subprocess,
             "run",

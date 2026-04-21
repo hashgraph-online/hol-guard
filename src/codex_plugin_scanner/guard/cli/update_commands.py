@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 from ..adapters.base import HarnessContext
-from ..adapters.codex import codex_native_hook_state
+from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 
@@ -230,6 +230,8 @@ def _repair_codex_install(
     workspace: str | None,
     now: str,
 ) -> tuple[dict[str, object] | None, str | None]:
+    if not _has_existing_codex_managed_install(context, store):
+        return None, None
     try:
         hook_state = codex_native_hook_state(context)
     except RuntimeError as error:
@@ -250,6 +252,13 @@ def _repair_codex_install(
         return None, f"Could not repair Codex protection during update: {error}"
     managed_install = payload.get("managed_install")
     return (managed_install if isinstance(managed_install, dict) else None), None
+
+
+def _has_existing_codex_managed_install(context: HarnessContext, store: GuardStore) -> bool:
+    managed_install = store.get_managed_install("codex")
+    if managed_install is not None and bool(managed_install.get("active")):
+        return True
+    return CodexHarnessAdapter._backup_path(context).is_file()
 
 
 __all__ = ["run_guard_update"]
