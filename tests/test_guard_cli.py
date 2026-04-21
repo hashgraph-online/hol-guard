@@ -2091,6 +2091,71 @@ args = ["workspace-skill.js", "--changed"]
         assert output["managed_install"]["active"] is False
         assert payload["hooks"]["PreToolUse"] == ["unexpected-entry"]
 
+    def test_guard_install_replaces_legacy_claude_guard_hook_entries(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        settings_local = workspace_dir / ".claude" / "settings.local.json"
+        legacy_command = ClaudeCodeHarnessAdapter._hook_command(
+            HarnessContext(
+                home_dir=home_dir,
+                workspace_dir=workspace_dir,
+                guard_home=tmp_path / "legacy-guard-home",
+            )
+        )
+        _write_json(
+            settings_local,
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+                            "hooks": [{"type": "command", "command": legacy_command, "timeout": 30}],
+                        }
+                    ],
+                    "PostToolUse": [
+                        {
+                            "matcher": "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+                            "hooks": [{"type": "command", "command": legacy_command, "timeout": 30}],
+                        }
+                    ],
+                    "UserPromptSubmit": [
+                        {
+                            "hooks": [{"type": "command", "command": legacy_command, "timeout": 20}],
+                        }
+                    ],
+                }
+            },
+        )
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "claude-code",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        payload = json.loads(settings_local.read_text(encoding="utf-8"))
+
+        assert rc == 0
+        assert output["managed_install"]["active"] is True
+        assert len(payload["hooks"]["PreToolUse"]) == 1
+        assert len(payload["hooks"]["PostToolUse"]) == 1
+        assert len(payload["hooks"]["UserPromptSubmit"]) == 1
+        pretool_commands = [
+            hook["command"]
+            for hook in payload["hooks"]["PreToolUse"][0]["hooks"]
+            if isinstance(hook, dict) and isinstance(hook.get("command"), str)
+        ]
+        assert len(pretool_commands) == 1
+        assert legacy_command not in pretool_commands
+
     def test_guard_install_auto_detects_configured_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
