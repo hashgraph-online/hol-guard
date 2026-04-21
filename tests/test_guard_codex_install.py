@@ -333,6 +333,49 @@ def test_guard_install_codex_refuses_invalid_alternate_hook_file_before_config_w
     assert (home_dir / ".codex" / "hooks.json").read_text(encoding="utf-8") == '{"hooks": '
 
 
+def test_guard_uninstall_codex_succeeds_when_alternate_hook_file_is_invalid(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    original_config = 'approval_policy = "never"\n'
+    _write_text(workspace_dir / ".codex" / "config.toml", original_config)
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    _write_text(home_dir / ".codex" / "hooks.json", '{"hooks": ')
+
+    uninstall_rc = main(
+        [
+            "guard",
+            "uninstall",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    uninstall_output = json.loads(capsys.readouterr().out)
+
+    assert install_rc == 0
+    assert uninstall_rc == 0
+    assert uninstall_output["managed_install"]["active"] is False
+    assert (workspace_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == original_config
+    assert (workspace_dir / ".codex" / "hooks.json").exists() is False
+    assert (home_dir / ".codex" / "hooks.json").read_text(encoding="utf-8") == '{"hooks": '
+
+
 def test_guard_detect_codex_collects_global_and_workspace_hooks(tmp_path):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

@@ -5908,6 +5908,42 @@ def test_guard_hook_codex_queues_approval_before_native_deny_output(tmp_path, ca
     assert pending[0]["artifact_type"] == "tool_action_request"
 
 
+def test_guard_hook_claude_native_block_does_not_queue_approval_center_request(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    blocked_event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo MALICIOUS > dangerous-marker.json"},
+        "policy_action": "block",
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    pending = GuardStore(home_dir).list_approval_requests(limit=10)
+
+    assert rc == 0
+    assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert pending == []
+
+
 def test_guard_hook_codex_keeps_artifact_approval_for_same_sensitive_tool_action_retry(
     tmp_path,
     capsys,

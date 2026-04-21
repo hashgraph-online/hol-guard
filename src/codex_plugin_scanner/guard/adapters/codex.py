@@ -388,7 +388,6 @@ class CodexHarnessAdapter(HarnessAdapter):
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         target_config_path = self._target_config_path(context)
         backup_path = self._backup_path(context)
-        hook_payloads = self._load_hook_payloads(context)
         if backup_path.is_file():
             original_text = backup_path.read_text(encoding="utf-8")
             if original_text:
@@ -397,7 +396,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             elif target_config_path.is_file():
                 target_config_path.unlink()
             backup_path.unlink()
-        hooks_path = self._remove_hooks(context, payloads=hook_payloads)
+        hooks_path = self._remove_hooks(context)
         shim_manifest = remove_guard_shim(self.harness, context)
         return {
             "harness": self.harness,
@@ -486,9 +485,13 @@ class CodexHarnessAdapter(HarnessAdapter):
 
     def _remove_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
         target_hooks_path = self._hooks_path(context)
-        hook_payloads = payloads or self._load_hook_payloads(context)
+        hook_payloads = payloads or {}
         for hooks_path in self._all_hook_paths(context):
-            payload = dict(hook_payloads.get(hooks_path, {}))
+            payload = dict(hook_payloads.get(hooks_path, _json_object(hooks_path)))
+            if not payload and hooks_path.exists():
+                if hooks_path == target_hooks_path:
+                    hooks_path.unlink()
+                continue
             hooks = payload.get("hooks")
             if isinstance(hooks, dict):
                 remaining = _remove_hook_groups(hooks.get("PreToolUse"))
