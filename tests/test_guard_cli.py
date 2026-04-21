@@ -2079,9 +2079,12 @@ args = ["workspace-skill.js", "--changed"]
         )
         assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == expected_hook_command
         assert install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"] == expected_hook_command
+        assert install_settings_payload["hooks"]["Notification"][0]["matcher"] == "permission_prompt"
+        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["command"] == expected_hook_command
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
         assert settings_payload["hooks"]["PreToolUse"] == []
+        assert settings_payload["hooks"]["Notification"] == []
 
     def test_guard_uninstall_handles_non_dict_claude_hook_entries(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -2157,6 +2160,12 @@ args = ["workspace-skill.js", "--changed"]
                             "hooks": [{"type": "command", "command": legacy_command, "timeout": 20}],
                         }
                     ],
+                    "Notification": [
+                        {
+                            "matcher": "permission_prompt",
+                            "hooks": [{"type": "command", "command": legacy_command, "timeout": 10}],
+                        }
+                    ],
                 }
             },
         )
@@ -2181,6 +2190,7 @@ args = ["workspace-skill.js", "--changed"]
         assert len(payload["hooks"]["PreToolUse"]) == 1
         assert len(payload["hooks"]["PostToolUse"]) == 1
         assert len(payload["hooks"]["UserPromptSubmit"]) == 1
+        assert len(payload["hooks"]["Notification"]) == 1
         pretool_commands = [
             hook["command"]
             for hook in payload["hooks"]["PreToolUse"][0]["hooks"]
@@ -2188,6 +2198,13 @@ args = ["workspace-skill.js", "--changed"]
         ]
         assert len(pretool_commands) == 1
         assert legacy_command not in pretool_commands
+        notification_commands = [
+            hook["command"]
+            for hook in payload["hooks"]["Notification"][0]["hooks"]
+            if isinstance(hook, dict) and isinstance(hook.get("command"), str)
+        ]
+        assert len(notification_commands) == 1
+        assert legacy_command not in notification_commands
 
     def test_guard_install_auto_detects_configured_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

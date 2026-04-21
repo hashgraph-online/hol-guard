@@ -1139,6 +1139,27 @@ def run_guard_command(args: argparse.Namespace) -> int:
             guard_home=context.guard_home,
             workspace=runtime_workspace,
         )
+        if _is_claude_permission_prompt_notification(args, payload):
+            notice = _load_claude_permission_notice(store, payload)
+            store.add_event(
+                "claude/permission_prompt",
+                {
+                    "session_id": payload.get("session_id"),
+                    "notification_type": payload.get("notification_type"),
+                    "tool_name": payload.get("tool_name"),
+                    "notice": notice or {},
+                },
+                _now(),
+            )
+            _emit_native_hook_response(
+                harness=args.harness,
+                policy_action="allow",
+                event_name="Notification",
+                reason="HOL Guard requested this Claude approval prompt.",
+                system_message=_claude_permission_prompt_system_message(payload=payload, notice=notice),
+                additional_context=_claude_permission_prompt_additional_context(notice),
+            )
+            return 0
         if runtime_artifact is not None:
             event_name = _hook_event_name(payload) or "PreToolUse"
             runtime_artifact_hash = artifact_hash(runtime_artifact)
@@ -1211,6 +1232,17 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     artifact=runtime_artifact,
                     native_reason=native_reason,
                 )
+                if (
+                    args.harness == "claude-code"
+                    and event_name == "PreToolUse"
+                    and policy_action == "require-reapproval"
+                ):
+                    _record_claude_permission_notice(
+                        store=store,
+                        payload=payload,
+                        reason=native_reason,
+                        artifact=runtime_artifact,
+                    )
                 if _should_emit_copilot_hook_response(args):
                     _emit_copilot_hook_response(
                         policy_action=policy_action,
@@ -1425,6 +1457,80 @@ def _should_emit_prequeue_native_hook_response(args: argparse.Namespace) -> bool
     return args.harness == "claude-code" and not getattr(args, "json", False)
 
 
+def _claude_permission_notice_state_key(session_id: str) -> str:
+    return f"claude_permission_notice:{session_id}"
+
+
+def _record_claude_permission_notice(
+    *,
+    store: GuardStore,
+    payload: dict[str, object],
+    reason: str,
+    artifact: GuardArtifact,
+) -> None:
+    session_id = _optional_string(payload.get("session_id"))
+    if session_id is None:
+        return
+    tool_name = _optional_string(payload.get("tool_name"))
+    notice_payload: dict[str, object] = {
+        "saved_at": _now(),
+        "reason": reason,
+        "artifact_id": artifact.artifact_id,
+        "artifact_name": artifact.name,
+    }
+    if tool_name is not None:
+        notice_payload["tool_name"] = tool_name
+    store.set_sync_payload(_claude_permission_notice_state_key(session_id), notice_payload, _now())
+
+
+def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]) -> dict[str, object] | None:
+    session_id = _optional_string(payload.get("session_id"))
+    if session_id is None:
+        return None
+    persisted = store.get_sync_payload(_claude_permission_notice_state_key(session_id))
+    if isinstance(persisted, dict):
+        return persisted
+    return None
+
+
+def _is_claude_permission_prompt_notification(args: argparse.Namespace, payload: dict[str, object]) -> bool:
+    return (
+        args.harness == "claude-code"
+        and _hook_event_name(payload) == "Notification"
+        and _optional_string(payload.get("notification_type")) == "permission_prompt"
+    )
+
+
+def _claude_permission_prompt_system_message(
+    *,
+    payload: dict[str, object],
+    notice: dict[str, object] | None,
+) -> str:
+    tool_name = _optional_string(payload.get("tool_name"))
+    if tool_name is None and notice is not None:
+        tool_name = _optional_string(notice.get("tool_name"))
+    reason = _optional_string(notice.get("reason")) if notice is not None else None
+    intro = "HOL Guard requested this Claude approval prompt."
+    if tool_name is not None:
+        intro = f"HOL Guard requested this Claude approval prompt for {tool_name}."
+    if reason is not None:
+        return f"{intro} {reason}"
+    return f"{intro} Review the action details below before allowing it."
+
+
+def _claude_permission_prompt_additional_context(notice: dict[str, object] | None) -> str:
+    reason = _optional_string(notice.get("reason")) if notice is not None else None
+    if reason is not None:
+        return (
+            "HOL Guard requested the active approval prompt. "
+            f"{reason} If the user denies it, do not retry the same sensitive access."
+        )
+    return (
+        "HOL Guard requested the active approval prompt for a sensitive tool action. "
+        "If the user denies it, do not retry the same action."
+    )
+
+
 def _approval_delivery_payload(
     harness: str,
     *,
@@ -1603,6 +1709,7 @@ def _emit_native_hook_response(
     reason: str,
     event_name: str = "PreToolUse",
     additional_context: str | None = None,
+    system_message: str | None = None,
 ) -> None:
     if event_name == "UserPromptSubmit":
         payload: dict[str, object] = {}
@@ -1610,6 +1717,18 @@ def _emit_native_hook_response(
             payload["decision"] = "block"
             payload["reason"] = reason
         elif additional_context:
+            payload["hookSpecificOutput"] = {
+                "hookEventName": event_name,
+                "additionalContext": additional_context,
+            }
+        if payload:
+            print(json.dumps(payload, separators=(",", ":")))
+        return
+    if event_name == "Notification":
+        payload = {}
+        if isinstance(system_message, str) and system_message.strip():
+            payload["systemMessage"] = system_message.strip()
+        if additional_context:
             payload["hookSpecificOutput"] = {
                 "hookEventName": event_name,
                 "additionalContext": additional_context,
