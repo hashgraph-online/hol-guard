@@ -491,15 +491,19 @@ def run_guard_command(args: argparse.Namespace) -> int:
     )
 
     if args.guard_command == "update":
+        dry_run = bool(getattr(args, "dry_run", False))
         store: GuardStore | None
         update_store_error: OSError | RuntimeError | sqlite3.Error | None = None
-        try:
-            store = GuardStore(guard_home)
-        except (OSError, RuntimeError, sqlite3.Error) as error:
+        if dry_run:
             store = None
-            update_store_error = error
+        else:
+            try:
+                store = GuardStore(guard_home)
+            except (OSError, RuntimeError, sqlite3.Error) as error:
+                store = None
+                update_store_error = error
         payload, exit_code = run_guard_update(
-            dry_run=bool(getattr(args, "dry_run", False)),
+            dry_run=dry_run,
             context=context,
             store=store,
             workspace=str(workspace) if workspace else None,

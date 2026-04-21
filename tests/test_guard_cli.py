@@ -3021,6 +3021,23 @@ args = ["workspace-skill.js", "--changed"]
         assert output["dry_run"] is True
         assert output["command"]
 
+    def test_guard_update_dry_run_skips_guard_store_init(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        monkeypatch.setattr(guard_update_commands_module, "_direct_url_payload", lambda: None)
+        monkeypatch.setattr(
+            guard_commands_module,
+            "GuardStore",
+            lambda _guard_home: (_ for _ in ()).throw(OSError("db unavailable")),
+        )
+
+        rc = main(["guard", "update", "--home", str(home_dir), "--dry-run", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["status"] == "planned"
+        assert output["dry_run"] is True
+        assert "notes" not in output
+
     def test_guard_update_skips_editable_installs(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         monkeypatch.setattr(
