@@ -36,7 +36,7 @@ def _read_toml(path: Path) -> dict[str, object]:
         with path.open("rb") as handle:
             payload = tomllib.load(handle)
         return payload if isinstance(payload, dict) else {}
-    except OSError:
+    except (OSError, tomllib.TOMLDecodeError):
         return {}
 
 
@@ -206,6 +206,30 @@ def _remove_hook_groups(groups: object) -> list[object]:
         if cleaned_group is not None:
             remaining.append(cleaned_group)
     return remaining
+
+
+def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
+    config_path = CodexHarnessAdapter._target_config_path(context)
+    hooks_path = CodexHarnessAdapter._hooks_path(context)
+    config_payload = _read_toml(config_path)
+    features = config_payload.get("features") if isinstance(config_payload, dict) else None
+    hooks_payload = _json_object(hooks_path)
+    hooks = hooks_payload.get("hooks") if isinstance(hooks_payload, dict) else None
+    hook_groups = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
+    managed_hook_installed = isinstance(hook_groups, list) and any(
+        _is_managed_hook_group(group) for group in hook_groups
+    )
+    return {
+        "config_path": str(config_path),
+        "config_present": config_path.is_file(),
+        "hooks_path": str(hooks_path),
+        "hooks_present": hooks_path.is_file(),
+        "codex_hooks_enabled": isinstance(features, dict) and features.get("codex_hooks") is True,
+        "managed_hook_installed": managed_hook_installed,
+        "protection_active": isinstance(features, dict)
+        and features.get("codex_hooks") is True
+        and managed_hook_installed,
+    }
 
 
 class CodexHarnessAdapter(HarnessAdapter):
@@ -411,6 +435,24 @@ class CodexHarnessAdapter(HarnessAdapter):
             "managed_hooks_path": str(hooks_path),
             "backup_path": str(backup_path),
         }
+
+    def diagnostics(self, context: HarnessContext) -> dict[str, object]:
+        payload = super().diagnostics(context)
+        hook_state = codex_native_hook_state(context)
+        warnings = [str(item) for item in payload.get("warnings", []) if isinstance(item, str)]
+        if bool(hook_state["config_present"]) and not bool(hook_state["codex_hooks_enabled"]):
+            warnings.append(
+                "Codex config was found, but native Bash hooks are disabled. Run `hol-guard install codex` or "
+                "`hol-guard update` to repair protection."
+            )
+        if bool(hook_state["config_present"]) and not bool(hook_state["managed_hook_installed"]):
+            warnings.append(
+                "Codex config was found, but Guard's managed PreToolUse Bash hook is missing. Run "
+                "`hol-guard install codex` or `hol-guard update` to repair protection."
+            )
+        payload["warnings"] = warnings
+        payload["native_hook_state"] = hook_state
+        return payload
 
     @staticmethod
     def _target_config_path(context: HarnessContext) -> Path:

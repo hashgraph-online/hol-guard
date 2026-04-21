@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 import shlex
+import sqlite3
 import subprocess
 import sys
 import urllib.error
@@ -173,6 +174,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         "update",
         help="Update the installed hol-guard package in the current environment",
     )
+    _add_guard_common_args(update_parser)
     update_parser.add_argument("--dry-run", action="store_true")
     update_parser.add_argument("--json", action="store_true")
 
@@ -486,11 +488,6 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 return 2
         return 0
 
-    if args.guard_command == "update":
-        payload, exit_code = run_guard_update(dry_run=bool(getattr(args, "dry_run", False)))
-        _emit("update", payload, getattr(args, "json", False))
-        return exit_code
-
     home_override = getattr(args, "home", None)
     guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
     workspace = Path(args.workspace).resolve() if getattr(args, "workspace", None) else None
@@ -499,8 +496,35 @@ def run_guard_command(args: argparse.Namespace) -> int:
         workspace_dir=workspace,
         guard_home=guard_home,
     )
-    config = load_guard_config(guard_home, workspace=workspace)
+
+    if args.guard_command == "update":
+        dry_run = bool(getattr(args, "dry_run", False))
+        store: GuardStore | None
+        update_store_error: OSError | RuntimeError | sqlite3.Error | None = None
+        if dry_run:
+            store = None
+        else:
+            try:
+                store = GuardStore(guard_home)
+            except (OSError, RuntimeError, sqlite3.Error) as error:
+                store = None
+                update_store_error = error
+        payload, exit_code = run_guard_update(
+            dry_run=dry_run,
+            context=context,
+            store=store,
+            workspace=str(workspace) if workspace else None,
+            now=_now(),
+        )
+        if update_store_error is not None:
+            notes = [str(item) for item in payload.get("notes", []) if isinstance(item, str)]
+            notes.append(f"Skipped local Guard repair during update: {update_store_error}")
+            payload["notes"] = notes
+        _emit("update", payload, getattr(args, "json", False))
+        return exit_code
+
     store = GuardStore(guard_home)
+    config = load_guard_config(guard_home, workspace=workspace)
     config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
 
     if args.guard_command == "protect":
@@ -1593,24 +1617,25 @@ def _emit_native_hook_response(
         if payload:
             print(json.dumps(payload, separators=(",", ":")))
         return
-    payload = {
-        "hookSpecificOutput": {
-            "hookEventName": event_name,
-            "permissionDecision": _native_hook_permission_decision(policy_action, harness=harness),
-        }
-    }
-    if payload["hookSpecificOutput"]["permissionDecision"] != "allow":
-        payload["hookSpecificOutput"]["permissionDecisionReason"] = reason
+    permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
+    hook_specific_output: dict[str, object] = {"hookEventName": event_name}
+    if permission_decision is not None:
+        hook_specific_output["permissionDecision"] = permission_decision
+        if permission_decision != "allow":
+            hook_specific_output["permissionDecisionReason"] = reason
+    payload = {"hookSpecificOutput": hook_specific_output}
     print(json.dumps(payload, separators=(",", ":")))
 
 
-def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str:
+def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str | None:
     if policy_action in {"block", "sandbox-required"}:
         return "deny"
     if policy_action == "require-reapproval":
         if harness == "codex":
             return "deny"
         return "ask"
+    if harness == "codex":
+        return None
     return "allow"
 
 

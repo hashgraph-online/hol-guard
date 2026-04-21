@@ -21,7 +21,7 @@ def read_toml_payload(path: Path) -> dict[str, object]:
     try:
         with path.open("rb") as handle:
             payload = tomllib.load(handle)
-    except OSError:
+    except (OSError, tomllib.TOMLDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
 
