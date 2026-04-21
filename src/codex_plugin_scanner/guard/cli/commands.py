@@ -1116,6 +1116,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             workspace=runtime_workspace,
         )
         if runtime_artifact is not None:
+            event_name = _hook_event_name(payload) or "PreToolUse"
             runtime_artifact_hash = artifact_hash(runtime_artifact)
             artifact_id = runtime_artifact.artifact_id
             artifact_name = runtime_artifact.name
@@ -1178,6 +1179,14 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 "path_summary": _runtime_requested_path(runtime_artifact),
             }
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+                native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
+                additional_context = _claude_prompt_additional_context(
+                    harness=args.harness,
+                    event_name=event_name,
+                    policy_action=policy_action,
+                    artifact=runtime_artifact,
+                    native_reason=native_reason,
+                )
                 if _should_emit_copilot_hook_response(args):
                     _emit_copilot_hook_response(
                         policy_action=policy_action,
@@ -1192,13 +1201,9 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     _emit_native_hook_response(
                         harness=args.harness,
                         policy_action=policy_action,
-                        event_name=_hook_event_name(payload) or "PreToolUse",
-                        reason=_native_hook_reason_for_harness(
-                            args.harness,
-                            response_payload.get("why_now"),
-                            response_payload.get("risk_headline"),
-                            response_payload.get("path_summary"),
-                        ),
+                        event_name=event_name,
+                        reason=native_reason,
+                        additional_context=additional_context,
                     )
                     return 0
                 approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
@@ -1293,12 +1298,10 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 _emit_native_hook_response(
                     harness=args.harness,
                     policy_action=policy_action,
-                    event_name=_hook_event_name(payload) or "PreToolUse",
+                    event_name=event_name,
                     reason=_native_hook_reason_for_harness(
                         args.harness,
-                        response_payload.get("why_now"),
-                        response_payload.get("review_hint"),
-                        response_payload.get("risk_headline"),
+                        _runtime_artifact_native_reason(runtime_artifact, response_payload),
                     ),
                 )
                 return 0
@@ -1420,9 +1423,83 @@ def _native_hook_reason(*values: object | None) -> str:
 
 def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str:
     reason = _native_hook_reason(*values)
-    if harness != "codex" or "approve" in reason.lower():
+    if harness != "codex":
+        return reason
+    if "approve it in hol guard, then retry." in reason.lower():
         return reason
     return f"{reason} Approve it in HOL Guard, then retry."
+
+
+def _prompt_requires_hard_block(artifact: GuardArtifact) -> bool:
+    prompt_classes = artifact.metadata.get("prompt_request_classes")
+    if isinstance(prompt_classes, list):
+        return "guard_bypass_intent" in {str(item) for item in prompt_classes}
+    prompt_class = artifact.metadata.get("prompt_request_class")
+    return isinstance(prompt_class, str) and prompt_class == "guard_bypass_intent"
+
+
+def _native_prompt_context(artifact: GuardArtifact) -> str:
+    if _prompt_requires_hard_block(artifact):
+        return "HOL Guard blocked this prompt because it asks to bypass or disable Guard."
+    prompt_classes = {
+        str(item)
+        for item in (
+            artifact.metadata.get("prompt_request_classes")
+            if isinstance(artifact.metadata.get("prompt_request_classes"), list)
+            else [artifact.metadata.get("prompt_request_class")]
+        )
+        if isinstance(item, str) and item.strip()
+    }
+    if "secret_read" in prompt_classes:
+        return (
+            "HOL Guard flagged this prompt because it asks for direct local secret access. "
+            "If that is intentional, continue and Guard will ask again on the actual tool call."
+        )
+    return (
+        "HOL Guard flagged this prompt as higher risk. Continue only if you expect the next tool call to need "
+        "explicit approval."
+    )
+
+
+def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: dict[str, object]) -> str:
+    if artifact.artifact_type == "prompt_request":
+        policy_action = response_payload.get("policy_action")
+        if policy_action in {"block", "sandbox-required"} and not _prompt_requires_hard_block(artifact):
+            return "HOL Guard blocked this prompt because it requests guarded local secret access."
+        return _native_prompt_context(artifact)
+    path_class = artifact.metadata.get("path_class")
+    tool_name = artifact.metadata.get("tool_name")
+    if isinstance(path_class, str) and isinstance(tool_name, str):
+        return (
+            f"HOL Guard flagged this as local secret access via {tool_name} ({path_class}). "
+            "Approve only if you intended to expose it."
+        )
+    risk_summary = response_payload.get("risk_summary")
+    if isinstance(risk_summary, str) and risk_summary.strip():
+        trimmed_summary = risk_summary.strip()
+        if len(trimmed_summary) > 180:
+            trimmed_summary = f"{trimmed_summary[:177].rstrip()}..."
+        return f"HOL Guard flagged this request: {trimmed_summary}"
+    return "HOL Guard flagged this request for review."
+
+
+def _claude_prompt_additional_context(
+    *,
+    harness: str,
+    event_name: str,
+    policy_action: str,
+    artifact: GuardArtifact,
+    native_reason: str,
+) -> str | None:
+    if harness != "claude-code":
+        return None
+    if event_name != "UserPromptSubmit":
+        return None
+    if policy_action != "require-reapproval":
+        return None
+    if _prompt_requires_hard_block(artifact):
+        return None
+    return native_reason
 
 
 def _copilot_hook_reason(*values: object | None) -> str:
@@ -1501,12 +1578,18 @@ def _emit_native_hook_response(
     policy_action: str,
     reason: str,
     event_name: str = "PreToolUse",
+    additional_context: str | None = None,
 ) -> None:
     if event_name == "UserPromptSubmit":
         payload: dict[str, object] = {}
-        if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+        if policy_action in {"block", "sandbox-required", "require-reapproval"} and not additional_context:
             payload["decision"] = "block"
             payload["reason"] = reason
+        elif additional_context:
+            payload["hookSpecificOutput"] = {
+                "hookEventName": event_name,
+                "additionalContext": additional_context,
+            }
         if payload:
             print(json.dumps(payload, separators=(",", ":")))
         return
