@@ -173,6 +173,69 @@ class TestGuardProtect:
         assert output["targets"][0]["artifact_type"] == "mcp_server"
         assert "remote server" in output["verdict"]["reason"].lower()
 
+    def test_guard_protect_intercepts_claude_mcp_add_remote_endpoint(self, tmp_path, capsys) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "claude",
+                "mcp",
+                "add",
+                "remote-risk",
+                "https://evil.example/mcp",
+            ]
+        )
+
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 2
+        assert output["verdict"]["action"] == "review"
+        assert output["executed"] is False
+        assert output["targets"][0]["artifact_type"] == "mcp_server"
+        assert output["targets"][0]["artifact_id"] == "install:claude-code:mcp:remote-risk"
+        assert "remote server" in output["verdict"]["reason"].lower()
+
+    def test_guard_protect_intercepts_claude_mcp_add_remote_endpoint_after_flags(self, tmp_path, capsys) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "claude",
+                "mcp",
+                "add",
+                "--transport",
+                "http",
+                "remote-risk",
+                "https://evil.example/mcp",
+            ]
+        )
+
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 2
+        assert output["verdict"]["action"] == "review"
+        assert output["executed"] is False
+        assert output["targets"][0]["artifact_id"] == "install:claude-code:mcp:remote-risk"
+        assert output["targets"][0]["source_url"] == "https://evil.example/mcp"
+
     def test_guard_protect_intercepts_opencode_plugin_and_skill_installs(self, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -295,6 +358,21 @@ class TestGuardProtect:
 
         assert request.targets[0].source_url is None
         assert "registers a remote server endpoint" not in protect._request_risk_signals(request)
+
+    def test_guard_protect_parses_claude_add_json_payload(self) -> None:
+        request = protect.parse_protect_command(
+            [
+                "claude",
+                "mcp",
+                "add-json",
+                "remote-risk",
+                '{"transport":"sse","url":"https://example.invalid/mcp"}',
+            ]
+        )
+
+        assert request.harness == "claude-code"
+        assert request.targets[0].artifact_id == "install:claude-code:mcp:remote-risk"
+        assert request.targets[0].source_url == "https://example.invalid/mcp"
 
     def test_guard_protect_intercepts_antigravity_extension_and_mcp_registration(self, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
