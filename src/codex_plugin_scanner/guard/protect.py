@@ -212,6 +212,7 @@ def parse_protect_command(command: list[str]) -> ProtectRequest:
         "pip": _parse_pip_request,
         "uv": _parse_uv_request,
         "go": _parse_go_request,
+        "claude": _parse_claude_request,
         "codex": _parse_codex_request,
         "cursor": _parse_cursor_request,
         "antigravity": _parse_antigravity_request,
@@ -292,6 +293,29 @@ def _parse_codex_request(command: list[str]) -> ProtectRequest:
             harness="codex",
         )
         return ProtectRequest(tuple(command), "harness_registration", "codex", None, "codex", (target,))
+    return _parse_custom_request(command)
+
+
+def _parse_claude_request(command: list[str]) -> ProtectRequest:
+    if len(command) >= 5 and command[1:3] == ["mcp", "add"]:
+        name = command[3]
+        command_or_url = command[4]
+        target = ProtectTarget(
+            artifact_id=f"install:claude-code:mcp:{name}",
+            artifact_name=name,
+            artifact_type="mcp_server",
+            ecosystem="claude-code",
+            package_name=name,
+            raw_spec=command_or_url,
+            version=None,
+            source_url=command_or_url if command_or_url.startswith(("http://", "https://")) else None,
+            harness="claude-code",
+        )
+        return ProtectRequest(tuple(command), "harness_registration", "claude", None, "claude-code", (target,))
+    if len(command) >= 5 and command[1:3] == ["mcp", "add-json"]:
+        name = command[3]
+        target = _parse_claude_mcp_target(name, command[4])
+        return ProtectRequest(tuple(command), "harness_registration", "claude", None, "claude-code", (target,))
     return _parse_custom_request(command)
 
 
@@ -562,6 +586,35 @@ def _parse_antigravity_mcp_target(raw_payload: str) -> ProtectTarget:
         version=None,
         source_url=source_url,
         harness="antigravity",
+    )
+
+
+def _parse_claude_mcp_target(name: str, raw_payload: str) -> ProtectTarget:
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    transport = payload.get("transport") if isinstance(payload.get("transport"), str) else None
+    command_or_url = payload.get("url") if isinstance(payload.get("url"), str) else None
+    if command_or_url is None and isinstance(payload.get("command"), str):
+        command_or_url = payload["command"]
+    source_url = (
+        command_or_url
+        if isinstance(command_or_url, str) and _is_remote_transport(command_or_url, transport)
+        else None
+    )
+    return ProtectTarget(
+        artifact_id=f"install:claude-code:mcp:{name}",
+        artifact_name=name,
+        artifact_type="mcp_server",
+        ecosystem="claude-code",
+        package_name=name,
+        raw_spec=raw_payload,
+        version=None,
+        source_url=source_url,
+        harness="claude-code",
     )
 
 

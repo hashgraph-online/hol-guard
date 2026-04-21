@@ -2040,7 +2040,12 @@ args = ["workspace-skill.js", "--changed"]
                 guard_home=home_dir,
             )
         )
-        assert install_settings_payload["hooks"]["PreToolUse"][0]["command"] == expected_hook_command
+        assert (
+            install_settings_payload["hooks"]["PreToolUse"][0]["matcher"]
+            == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+        )
+        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == expected_hook_command
+        assert install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"] == expected_hook_command
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
         assert settings_payload["hooks"]["PreToolUse"] == []
