@@ -9,13 +9,25 @@ import subprocess
 import sys
 from pathlib import Path
 
+from ..adapters.base import HarnessContext
+from ..adapters.codex import codex_native_hook_state
+from ..store import GuardStore
+from .install_commands import apply_managed_install
+
 _ALREADY_CURRENT_HINTS = (
     "already at latest version",
     "already up-to-date",
 )
 
 
-def run_guard_update(*, dry_run: bool) -> tuple[dict[str, object], int]:
+def run_guard_update(
+    *,
+    dry_run: bool,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    workspace: str | None = None,
+    now: str | None = None,
+) -> tuple[dict[str, object], int]:
     current_version = _current_version()
     installer = _installer_kind()
     command = _update_command(installer)
@@ -74,6 +86,17 @@ def run_guard_update(*, dry_run: bool) -> tuple[dict[str, object], int]:
     notes = _success_notes(payload)
     if notes:
         payload["notes"] = notes
+    repaired_installs = _repair_supported_harnesses(
+        context=context,
+        store=store,
+        workspace=workspace,
+        now=now,
+        dry_run=dry_run,
+    )
+    if repaired_installs:
+        payload["managed_installs"] = repaired_installs
+        if len(repaired_installs) == 1:
+            payload["managed_install"] = repaired_installs[0]
     return payload, 0
 
 
@@ -175,6 +198,43 @@ def _current_version_from_subprocess() -> str:
         return _current_version()
     version = result.stdout.strip()
     return version or _current_version()
+
+
+def _repair_supported_harnesses(
+    *,
+    context: HarnessContext | None,
+    store: GuardStore | None,
+    workspace: str | None,
+    now: str | None,
+    dry_run: bool,
+) -> list[dict[str, object]]:
+    if dry_run or context is None or store is None or now is None:
+        return []
+    repaired_codex = _repair_codex_install(context=context, store=store, workspace=workspace, now=now)
+    return [repaired_codex] if repaired_codex is not None else []
+
+
+def _repair_codex_install(
+    *,
+    context: HarnessContext,
+    store: GuardStore,
+    workspace: str | None,
+    now: str,
+) -> dict[str, object] | None:
+    hook_state = codex_native_hook_state(context)
+    if not bool(hook_state["config_present"]) or bool(hook_state["protection_active"]):
+        return None
+    payload = apply_managed_install(
+        "install",
+        "codex",
+        False,
+        context,
+        store,
+        workspace,
+        now,
+    )
+    managed_install = payload.get("managed_install")
+    return managed_install if isinstance(managed_install, dict) else None
 
 
 __all__ = ["run_guard_update"]

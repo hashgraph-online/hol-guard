@@ -166,6 +166,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         "update",
         help="Update the installed hol-guard package in the current environment",
     )
+    _add_guard_common_args(update_parser)
     update_parser.add_argument("--dry-run", action="store_true")
     update_parser.add_argument("--json", action="store_true")
 
@@ -479,11 +480,6 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 return 2
         return 0
 
-    if args.guard_command == "update":
-        payload, exit_code = run_guard_update(dry_run=bool(getattr(args, "dry_run", False)))
-        _emit("update", payload, getattr(args, "json", False))
-        return exit_code
-
     home_override = getattr(args, "home", None)
     guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
     workspace = Path(args.workspace).resolve() if getattr(args, "workspace", None) else None
@@ -495,6 +491,17 @@ def run_guard_command(args: argparse.Namespace) -> int:
     config = load_guard_config(guard_home, workspace=workspace)
     store = GuardStore(guard_home)
     config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
+
+    if args.guard_command == "update":
+        payload, exit_code = run_guard_update(
+            dry_run=bool(getattr(args, "dry_run", False)),
+            context=context,
+            store=store,
+            workspace=str(workspace) if workspace else None,
+            now=_now(),
+        )
+        _emit("update", payload, getattr(args, "json", False))
+        return exit_code
 
     if args.guard_command == "protect":
         _refresh_cloud_policy_bundle(store)

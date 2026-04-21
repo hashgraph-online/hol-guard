@@ -102,6 +102,21 @@ _NODE_OPTION_FLAGS_WITH_VALUE = frozenset(
         "--title",
     }
 )
+_CURL_UPLOAD_FLAGS_WITH_VALUE = frozenset(
+    {
+        "--data",
+        "--data-ascii",
+        "--data-binary",
+        "--data-raw",
+        "--form",
+        "--form-string",
+        "--upload-file",
+        "-F",
+        "-T",
+        "-d",
+    }
+)
+_WGET_UPLOAD_FLAGS_WITH_VALUE = frozenset({"--body-file", "--post-file"})
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
 _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "time"})
 _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
@@ -473,6 +488,17 @@ def _destructive_shell_tool_action_request(
                 "payloads in-process without executing them during evaluation."
             ),
         )
+    if _contains_shell_network_file_upload(command_text, cwd=cwd, home_dir=home_dir):
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="shell file upload command",
+            reason=(
+                "Guard treats shell-driven local file uploads as sensitive because they can exfiltrate local file "
+                "contents to a network endpoint before the user confirms the action."
+            ),
+        )
     if not _looks_destructive_shell_command(command_text):
         return None
     return ToolActionRequestMatch(
@@ -562,6 +588,155 @@ def _contains_command_substitution_decode_exec(command_text: str) -> bool:
     if re.search(r"\b(?:ash|bash|dash|sh|zsh)\b[^\n;|&]*-[A-Za-z]*c[A-Za-z]*", lowered):
         return True
     return bool(re.search(r"\beval\b[^\n;|&]*\$\(", lowered))
+
+
+def _contains_shell_network_file_upload(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    depth: int = 0,
+    visited_script_paths: frozenset[str] = frozenset(),
+) -> bool:
+    if depth > 4:
+        return False
+    normalized = command_text.strip()
+    if not normalized:
+        return False
+    parts = _split_shell_parts(normalized)
+    if not parts:
+        return False
+    if any(_segment_uses_network_file_upload(segment) for segment in _iter_shell_command_segments(parts)):
+        return True
+    for env_split_string in _env_split_string_payloads(parts):
+        if _contains_shell_network_file_upload(
+            env_split_string,
+            cwd=cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+            visited_script_paths=visited_script_paths,
+        ):
+            return True
+    for shell_script in _shell_command_scripts(parts):
+        if _contains_shell_network_file_upload(
+            shell_script,
+            cwd=cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+            visited_script_paths=visited_script_paths,
+        ):
+            return True
+    for script_text, script_cwd, script_path in _local_shell_script_payloads(
+        parts,
+        cwd=cwd,
+        home_dir=home_dir,
+        visited_script_paths=visited_script_paths,
+    ):
+        if _contains_shell_network_file_upload(
+            script_text,
+            cwd=script_cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+            visited_script_paths=visited_script_paths | frozenset({script_path}),
+        ):
+            return True
+    return False
+
+
+def _segment_uses_network_file_upload(segment: list[str]) -> bool:
+    command_name, command_index = _shell_segment_primary_command(segment)
+    if command_name is None or command_index is None:
+        return False
+    segment_args = segment[command_index + 1 :]
+    if command_name == "curl":
+        return _curl_segment_uses_file_upload(segment_args)
+    if command_name == "wget":
+        return _wget_segment_uses_file_upload(segment_args)
+    return False
+
+
+def _curl_segment_uses_file_upload(segment_args: list[str]) -> bool:
+    index = 0
+    while index < len(segment_args):
+        token = segment_args[index]
+        if token == "--":
+            return False
+        if token in _CURL_UPLOAD_FLAGS_WITH_VALUE:
+            value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
+            if _curl_upload_value_uses_local_file(token, value):
+                return True
+            index += 2
+            continue
+        if token.startswith("--data=") and _curl_upload_value_uses_local_file("--data", token.split("=", 1)[1]):
+            return True
+        if token.startswith("--data-ascii=") and _curl_upload_value_uses_local_file(
+            "--data-ascii", token.split("=", 1)[1]
+        ):
+            return True
+        if token.startswith("--data-binary=") and _curl_upload_value_uses_local_file(
+            "--data-binary", token.split("=", 1)[1]
+        ):
+            return True
+        if token.startswith("--data-raw=") and _curl_upload_value_uses_local_file(
+            "--data-raw", token.split("=", 1)[1]
+        ):
+            return True
+        if token.startswith("--form=") and _curl_upload_value_uses_local_file("--form", token.split("=", 1)[1]):
+            return True
+        if token.startswith("--form-string=") and _curl_upload_value_uses_local_file(
+            "--form-string", token.split("=", 1)[1]
+        ):
+            return True
+        if token.startswith("--upload-file=") and _curl_upload_value_uses_local_file(
+            "--upload-file", token.split("=", 1)[1]
+        ):
+            return True
+        if token.startswith("-T") and token != "-T" and _curl_upload_value_uses_local_file("-T", token[2:]):
+            return True
+        if token.startswith("-F") and token != "-F" and _curl_upload_value_uses_local_file("-F", token[2:]):
+            return True
+        if token.startswith("-d") and token != "-d" and _curl_upload_value_uses_local_file("-d", token[2:]):
+            return True
+        index += 1
+    return False
+
+
+def _wget_segment_uses_file_upload(segment_args: list[str]) -> bool:
+    index = 0
+    while index < len(segment_args):
+        token = segment_args[index]
+        if token == "--":
+            return False
+        if token in _WGET_UPLOAD_FLAGS_WITH_VALUE:
+            value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
+            if _value_uses_local_file(value):
+                return True
+            index += 2
+            continue
+        if token.startswith("--body-file=") and _value_uses_local_file(token.split("=", 1)[1]):
+            return True
+        if token.startswith("--post-file=") and _value_uses_local_file(token.split("=", 1)[1]):
+            return True
+        index += 1
+    return False
+
+
+def _curl_upload_value_uses_local_file(flag: str, value: str) -> bool:
+    stripped_value = value.strip()
+    if flag in {"--upload-file", "-T"}:
+        return _value_uses_local_file(stripped_value)
+    if flag in {"--form", "--form-string", "-F"}:
+        return "@" in stripped_value and _value_uses_local_file(stripped_value.split("@", 1)[1])
+    return _value_uses_local_file(stripped_value)
+
+
+def _value_uses_local_file(value: str) -> bool:
+    stripped_value = value.strip().strip("'").strip('"')
+    if not stripped_value or stripped_value == "@-":
+        return False
+    if stripped_value.startswith("@"):
+        return stripped_value[1:] != "-"
+    return False
 
 
 def _contains_decode_primitive(command_text: str) -> bool:
