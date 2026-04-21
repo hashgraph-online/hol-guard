@@ -7,10 +7,13 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
+from typing import BinaryIO
 
 from ...version import __version__
 
@@ -18,6 +21,11 @@ DEFAULT_GUARD_DAEMON_PORT = 4781
 GUARD_DAEMON_PORT_RANGE = 1000
 REQUIRED_DAEMON_TABLES = frozenset({"guard_connect_states"})
 GUARD_DAEMON_COMPATIBILITY_VERSION = 2
+GUARD_DAEMON_START_TIMEOUT_SECONDS = 5.0
+GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
+
+_START_LOCKS: dict[str, threading.Lock] = {}
+_START_LOCKS_GUARD = threading.Lock()
 
 
 def ensure_guard_daemon(guard_home: Path) -> str:
@@ -25,36 +33,45 @@ def ensure_guard_daemon(guard_home: Path) -> str:
     existing_url = load_guard_daemon_url(guard_home)
     if existing_url is not None:
         return existing_url
-    clear_guard_daemon_state(guard_home)
-    for candidate_port in _candidate_ports(guard_home):
-        command = [
-            sys.executable,
-            "-m",
-            "codex_plugin_scanner.cli",
-            "guard",
-            "daemon",
-            "--serve",
-            "--guard-home",
-            str(guard_home),
-            "--port",
-            str(candidate_port),
-        ]
-        kwargs: dict[str, object] = {
-            "stdin": subprocess.DEVNULL,
-            "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.DEVNULL,
-        }
-        if os.name == "nt":
-            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-        else:
-            kwargs["start_new_session"] = True
-        subprocess.Popen(command, **kwargs)
-        deadline = time.monotonic() + 1.5
-        while time.monotonic() < deadline:
-            url = load_guard_daemon_url(guard_home)
+    with _guard_daemon_start_lock(guard_home):
+        existing_url = load_guard_daemon_url(guard_home)
+        if existing_url is not None:
+            return existing_url
+        if _guard_daemon_start_in_progress(guard_home):
+            inflight_url = _wait_for_guard_daemon_url(guard_home, timeout=GUARD_DAEMON_START_TIMEOUT_SECONDS)
+            if inflight_url is not None:
+                return inflight_url
+        clear_guard_daemon_state(guard_home)
+        for candidate_port in _candidate_ports(guard_home):
+            command = [
+                sys.executable,
+                "-m",
+                "codex_plugin_scanner.cli",
+                "guard",
+                "daemon",
+                "--serve",
+                "--guard-home",
+                str(guard_home),
+                "--port",
+                str(candidate_port),
+            ]
+            kwargs: dict[str, object] = {
+                "stdin": subprocess.DEVNULL,
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+            }
+            if os.name == "nt":
+                kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+            else:
+                kwargs["start_new_session"] = True
+            process = subprocess.Popen(command, **kwargs)
+            url = _wait_for_guard_daemon_url(
+                guard_home,
+                timeout=GUARD_DAEMON_START_TIMEOUT_SECONDS,
+                process=process,
+            )
             if url is not None:
                 return url
-            time.sleep(0.1)
     raise RuntimeError(f"Guard approval center did not start. Expected state file at {state_path}.")
 
 
@@ -123,6 +140,95 @@ def _load_state(guard_home: Path) -> dict[str, object] | None:
 
 def _state_path(guard_home: Path) -> Path:
     return guard_home / "daemon-state.json"
+
+
+def _guard_daemon_start_in_progress(guard_home: Path) -> bool:
+    payload = _load_state(guard_home)
+    if not isinstance(payload, dict):
+        return False
+    compatibility_version = payload.get("compatibility_version")
+    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
+        return False
+    pid = payload.get("pid")
+    return isinstance(pid, int) and pid > 0 and _guard_daemon_pid_is_running(pid)
+
+
+def _guard_daemon_pid_is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _wait_for_guard_daemon_url(
+    guard_home: Path,
+    *,
+    timeout: float,
+    process: subprocess.Popen[bytes] | None = None,
+) -> str | None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        url = load_guard_daemon_url(guard_home)
+        if url is not None:
+            return url
+        if process is not None and process.poll() is not None:
+            return None
+        time.sleep(GUARD_DAEMON_POLL_INTERVAL_SECONDS)
+    return None
+
+
+@contextmanager
+def _guard_daemon_start_lock(guard_home: Path):
+    lock_key = str(guard_home.resolve())
+    with _START_LOCKS_GUARD:
+        thread_lock = _START_LOCKS.setdefault(lock_key, threading.Lock())
+    with thread_lock:
+        lock_path = guard_home / "daemon-start.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+b") as handle:
+            _lock_daemon_start_file(handle)
+            try:
+                yield
+            finally:
+                _unlock_daemon_start_file(handle)
+
+
+def _lock_daemon_start_file(handle: BinaryIO) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        handle.seek(0)
+        if os.fstat(handle.fileno()).st_size == 0:
+            handle.write(b"0")
+            handle.flush()
+        handle.seek(0)
+        while True:
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                return
+            except OSError:
+                time.sleep(GUARD_DAEMON_POLL_INTERVAL_SECONDS)
+        return
+    import fcntl
+
+    fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_daemon_start_file(handle: BinaryIO) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+    import fcntl
+
+    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _configured_port(guard_home: Path) -> int | None:

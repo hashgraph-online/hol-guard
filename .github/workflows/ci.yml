@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
           enable-cache: true
       - run: uv sync --frozen --extra dev --extra cisco --python 3.12
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
           enable-cache: true
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}

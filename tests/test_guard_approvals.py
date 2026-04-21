@@ -524,7 +524,7 @@ class TestGuardApprovals:
         launched_commands: list[list[str]] = []
         guard_home = tmp_path / "guard-home"
         expected_port = daemon_manager_module._configured_port(guard_home)
-        responses = iter([None, f"http://127.0.0.1:{expected_port}"])
+        responses = iter([None, None, f"http://127.0.0.1:{expected_port}"])
 
         monkeypatch.delenv("GUARD_DAEMON_PORT", raising=False)
         monkeypatch.setattr(
