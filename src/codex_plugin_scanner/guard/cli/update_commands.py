@@ -231,10 +231,12 @@ def _repair_codex_install(
     workspace: str | None,
     now: str,
 ) -> tuple[dict[str, object] | None, str | None]:
-    if not _has_existing_codex_managed_install(context, store):
+    repair_target = _codex_repair_target(context, store)
+    if repair_target is None:
         return None, None
+    repair_context, repair_workspace = repair_target
     try:
-        hook_state = codex_native_hook_state(context)
+        hook_state = codex_native_hook_state(repair_context)
     except (OSError, RuntimeError) as error:
         return None, f"Could not inspect Codex protection during update: {error}"
     if bool(hook_state["protection_active"]):
@@ -244,9 +246,9 @@ def _repair_codex_install(
             "install",
             "codex",
             False,
-            context,
+            repair_context,
             store,
-            workspace,
+            repair_workspace,
             now,
         )
     except (OSError, RuntimeError, json.JSONDecodeError, sqlite3.Error) as error:
@@ -255,14 +257,32 @@ def _repair_codex_install(
     return (managed_install if isinstance(managed_install, dict) else None), None
 
 
-def _has_existing_codex_managed_install(context: HarnessContext, store: GuardStore) -> bool:
+def _codex_repair_target(context: HarnessContext, store: GuardStore) -> tuple[HarnessContext, str | None] | None:
     try:
         managed_install = store.get_managed_install("codex")
     except (json.JSONDecodeError, sqlite3.Error):
-        return CodexHarnessAdapter._backup_path(context).is_file()
+        return _codex_backup_repair_target(context)
     if managed_install is not None and bool(managed_install.get("active")):
-        return True
-    return CodexHarnessAdapter._backup_path(context).is_file()
+        managed_workspace = managed_install.get("workspace")
+        if isinstance(managed_workspace, str) and managed_workspace.strip():
+            workspace_path = Path(managed_workspace).expanduser().resolve()
+            return (
+                HarnessContext(
+                    home_dir=context.home_dir,
+                    workspace_dir=workspace_path,
+                    guard_home=context.guard_home,
+                ),
+                str(workspace_path),
+            )
+        return HarnessContext(context.home_dir, None, context.guard_home), None
+    return _codex_backup_repair_target(context)
+
+
+def _codex_backup_repair_target(context: HarnessContext) -> tuple[HarnessContext, str | None] | None:
+    if not CodexHarnessAdapter._backup_path(context).is_file():
+        return None
+    repair_workspace = str(context.workspace_dir) if context.workspace_dir is not None else None
+    return context, repair_workspace
 
 
 __all__ = ["run_guard_update"]

@@ -1840,6 +1840,10 @@ def _wrapper_option_tokens_consumed(command_name: str, token: str) -> int:
         env_short_option_tokens = _env_short_option_tokens_consumed(token)
         if env_short_option_tokens is not None:
             return env_short_option_tokens
+    if command_name == "sudo":
+        sudo_short_option_tokens = _sudo_short_option_tokens_consumed(token)
+        if sudo_short_option_tokens is not None:
+            return sudo_short_option_tokens
     exact_flags = _WRAPPER_FLAGS_WITH_VALUES.get(command_name, frozenset())
     if token in exact_flags:
         return 2
@@ -1853,6 +1857,18 @@ def _env_short_option_tokens_consumed(token: str) -> int | None:
         return None
     for index, flag_character in enumerate(token[1:], start=1):
         if flag_character not in {"C", "S", "u"}:
+            continue
+        if index < len(token) - 1:
+            return 1
+        return 2
+    return 1
+
+
+def _sudo_short_option_tokens_consumed(token: str) -> int | None:
+    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
+        return None
+    for index, flag_character in enumerate(token[1:], start=1):
+        if flag_character not in {"C", "D", "R", "T", "g", "h", "p", "r", "t", "u"}:
             continue
         if index < len(token) - 1:
             return 1
@@ -1902,9 +1918,19 @@ def _wrapper_flag_has_attached_value(command_name: str, token: str) -> bool:
                 "--type=",
                 "--user=",
             )
-        ) or (len(token) > 2 and token[:2] in {"-C", "-D", "-R", "-T", "-g", "-h", "-p", "-r", "-t", "-u"})
+        ) or _sudo_short_option_has_attached_value(token)
     if command_name == "time":
         return token.startswith(("--format=", "--output=")) or (len(token) > 2 and token[:2] in {"-f", "-o"})
+    return False
+
+
+def _sudo_short_option_has_attached_value(token: str) -> bool:
+    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
+        return False
+    for index, flag_character in enumerate(token[1:], start=1):
+        if flag_character not in {"C", "D", "R", "T", "g", "h", "p", "r", "t", "u"}:
+            continue
+        return index < len(token) - 1
     return False
 
 
