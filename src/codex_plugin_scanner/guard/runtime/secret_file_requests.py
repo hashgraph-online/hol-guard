@@ -726,6 +726,7 @@ def _curl_segment_uses_file_upload(
     cwd: Path | None,
     home_dir: Path | None,
     visited_config_paths: frozenset[str] = frozenset(),
+    stdin_config_payloads: tuple[tuple[str, Path | None], ...] = (),
 ) -> bool:
     index = 0
     saw_variable_file_input = False
@@ -733,7 +734,7 @@ def _curl_segment_uses_file_upload(
     while index < len(segment_args):
         token = segment_args[index]
         if token == "--":
-            return False
+            break
         if token in _CURL_CONFIG_FLAGS_WITH_VALUE:
             value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
             if _curl_config_uses_file_upload(
@@ -741,6 +742,7 @@ def _curl_segment_uses_file_upload(
                 cwd=cwd,
                 home_dir=home_dir,
                 visited_config_paths=visited_config_paths,
+                stdin_config_payloads=stdin_config_payloads,
             ):
                 return True
             index += 2
@@ -770,6 +772,7 @@ def _curl_segment_uses_file_upload(
             cwd=cwd,
             home_dir=home_dir,
             visited_config_paths=visited_config_paths,
+            stdin_config_payloads=stdin_config_payloads,
         ):
             return True
         if token.startswith("--data=") and _curl_upload_value_uses_local_file("--data", token.split("=", 1)[1]):
@@ -819,6 +822,7 @@ def _curl_segment_uses_file_upload(
             cwd=cwd,
             home_dir=home_dir,
             visited_config_paths=visited_config_paths,
+            stdin_config_payloads=stdin_config_payloads,
         ):
             return True
         clustered_form_value = _curl_clustered_short_flag_value(segment_args, index, "F")
@@ -845,19 +849,32 @@ def _curl_stdin_config_uses_file_upload(
             if command_name != "curl" or command_index is None:
                 continue
             segment_args = segment[command_index + 1 :]
-            if not _curl_segment_reads_config_from_stdin(segment_args):
-                continue
-            for payload_text, payload_cwd in _shell_pipeline_stdin_payloads(
+            pipeline_stdin_payloads = _shell_pipeline_stdin_payloads(
                 pipeline,
                 index,
                 cwd=cwd,
                 home_dir=home_dir,
+            )
+            if pipeline_stdin_payloads and _curl_segment_uses_file_upload(
+                segment_args,
+                cwd=cwd,
+                home_dir=home_dir,
+                stdin_config_payloads=pipeline_stdin_payloads,
             ):
-                if _curl_inline_config_text_uses_file_upload(payload_text, cwd=payload_cwd, home_dir=home_dir):
-                    return True
-            for heredoc_payload in heredoc_payloads:
-                if _curl_inline_config_text_uses_file_upload(heredoc_payload, cwd=cwd, home_dir=home_dir):
-                    return True
+                return True
+            if (
+                heredoc_payloads
+                and not pipeline_stdin_payloads
+                and _curl_segment_reads_config_from_stdin(segment_args)
+                and _command_uses_curl_stdin_heredoc(command_text)
+                and _curl_segment_uses_file_upload(
+                    segment_args,
+                    cwd=cwd,
+                    home_dir=home_dir,
+                    stdin_config_payloads=tuple((payload, cwd) for payload in heredoc_payloads),
+                )
+            ):
+                return True
     return False
 
 
@@ -1116,7 +1133,14 @@ def _curl_config_uses_file_upload(
     cwd: Path | None,
     home_dir: Path | None,
     visited_config_paths: frozenset[str],
+    stdin_config_payloads: tuple[tuple[str, Path | None], ...] = (),
 ) -> bool:
+    stripped_value = _strip_cli_value(value)
+    if stripped_value == "-":
+        return any(
+            _curl_inline_config_text_uses_file_upload(payload_text, cwd=payload_cwd, home_dir=home_dir)
+            for payload_text, payload_cwd in stdin_config_payloads
+        )
     config_file = _resolved_runtime_path(value, cwd=cwd, home_dir=home_dir)
     normalized_config_path = str(config_file)
     if normalized_config_path in visited_config_paths or not config_file.is_file():
@@ -1135,6 +1159,7 @@ def _curl_config_uses_file_upload(
         cwd=config_file.parent,
         home_dir=home_dir,
         visited_config_paths=visited_config_paths | frozenset({normalized_config_path}),
+        stdin_config_payloads=stdin_config_payloads,
     )
 
 
@@ -1150,7 +1175,9 @@ def _curl_config_arguments(config_text: str) -> list[str]:
             continue
         if not tokens:
             continue
-        if len(tokens) >= 3 and tokens[1] == "=":
+        if tokens[0].endswith(":"):
+            tokens[0] = tokens[0][:-1]
+        elif len(tokens) >= 3 and tokens[1] in {"=", ":"}:
             tokens = [tokens[0], *tokens[2:]]
         first_token = tokens[0]
         if not first_token.startswith("-"):
@@ -1158,6 +1185,15 @@ def _curl_config_arguments(config_text: str) -> list[str]:
         tokens[0] = first_token
         arguments.extend(tokens)
     return arguments
+
+
+def _command_uses_curl_stdin_heredoc(command_text: str) -> bool:
+    return bool(
+        re.search(
+            r"\bcurl\b[^\n;|&]*(?:--config(?:=|\s+)-|-K(?:\s+-|-?[^\s;|&]*))[^\n;|&]*<<",
+            command_text,
+        )
+    )
 
 
 def _shell_heredoc_payloads(command_text: str) -> tuple[str, ...]:
