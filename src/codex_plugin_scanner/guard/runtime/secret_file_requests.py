@@ -155,18 +155,24 @@ _WRAPPER_FLAGS_WITH_VALUES = {
     "sudo": frozenset(
         {
             "-C",
+            "-D",
             "-R",
             "-T",
             "-g",
             "-h",
             "-p",
+            "-r",
+            "-t",
             "-u",
+            "--chdir",
             "--chroot",
             "--close-from",
             "--command-timeout",
             "--group",
             "--host",
             "--prompt",
+            "--role",
+            "--type",
             "--user",
         }
     ),
@@ -1885,15 +1891,18 @@ def _wrapper_flag_has_attached_value(command_name: str, token: str) -> bool:
     if command_name == "sudo":
         return token.startswith(
             (
+                "--chdir=",
                 "--chroot=",
                 "--close-from=",
                 "--command-timeout=",
                 "--group=",
                 "--host=",
                 "--prompt=",
+                "--role=",
+                "--type=",
                 "--user=",
             )
-        ) or (len(token) > 2 and token[:2] in {"-C", "-R", "-T", "-g", "-h", "-p", "-u"})
+        ) or (len(token) > 2 and token[:2] in {"-C", "-D", "-R", "-T", "-g", "-h", "-p", "-r", "-t", "-u"})
     if command_name == "time":
         return token.startswith(("--format=", "--output=")) or (len(token) > 2 and token[:2] in {"-f", "-o"})
     return False

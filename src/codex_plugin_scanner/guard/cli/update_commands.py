@@ -237,7 +237,7 @@ def _repair_codex_install(
         hook_state = codex_native_hook_state(context)
     except (OSError, RuntimeError) as error:
         return None, f"Could not inspect Codex protection during update: {error}"
-    if not bool(hook_state["config_present"]) or bool(hook_state["protection_active"]):
+    if bool(hook_state["protection_active"]):
         return None, None
     try:
         payload = apply_managed_install(
