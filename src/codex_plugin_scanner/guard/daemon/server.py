@@ -377,12 +377,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "missing_required_fields"}, status=400)
             return
         metadata = payload.get("metadata")
-        operation = self.server.runtime.start_operation(  # type: ignore[attr-defined]
-            session_id=session_id,
-            operation_type=operation_type,
-            harness=harness,
-            metadata=metadata if isinstance(metadata, dict) else {},
-        )
+        try:
+            operation = self.server.runtime.start_operation(  # type: ignore[attr-defined]
+                session_id=session_id,
+                operation_type=operation_type,
+                harness=harness,
+                metadata=metadata if isinstance(metadata, dict) else {},
+            )
+        except ValueError:
+            self._write_json({"error": "not_found"}, status=404)
+            return
         self._write_json(operation)
 
     def _handle_operation_block(self, payload: dict[str, object]) -> None:

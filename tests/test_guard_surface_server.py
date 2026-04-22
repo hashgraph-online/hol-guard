@@ -334,6 +334,54 @@ class TestGuardSurfaceServer:
         assert missing_error.code == 404
         assert json.loads(missing_error.read().decode("utf-8")) == {"error": "not_found"}
 
+    def test_guard_daemon_returns_not_found_for_unknown_operation_start_sessions(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            initialize_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                data=json.dumps(
+                    {
+                        "client_name": "approval-center-web",
+                        "surface": "approval-center",
+                        "supported_protocol_versions": ["1.1", "1.0"],
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(initialize_request, timeout=5) as response:
+                initialize_payload = json.loads(response.read().decode("utf-8"))
+
+            missing_start_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/operations/start",
+                data=json.dumps(
+                    {
+                        "session_id": "missing-session",
+                        "operation_type": "run",
+                        "harness": "codex",
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": initialize_payload["auth_token"],
+                },
+                method="POST",
+            )
+            missing_error = None
+            try:
+                urllib.request.urlopen(missing_start_request, timeout=5)
+            except urllib.error.HTTPError as error:
+                missing_error = error
+        finally:
+            daemon.stop()
+
+        assert missing_error is not None
+        assert missing_error.code == 404
+        assert json.loads(missing_error.read().decode("utf-8")) == {"error": "not_found"}
+
     def test_guard_daemon_session_and_operation_endpoints_drive_runtime(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
