@@ -176,7 +176,11 @@ def get_connect_state(
     if row is None:
         return None
     payload = _build_connect_state_payload(row)
-    if now is not None and payload["status"] == "waiting":
+    if (
+        now is not None
+        and payload["status"] == "waiting"
+        and payload["milestone"] == "waiting_for_browser"
+    ):
         expires_at = _parse_timestamp(str(payload["expires_at"]))
         if expires_at <= _parse_timestamp(now):
             connection.execute(
@@ -245,7 +249,8 @@ def mark_connect_pairing_completed(
     connection.execute(
         """
         update guard_connect_states
-        set milestone = 'first_sync_pending',
+        set status = 'connected',
+            milestone = 'first_sync_pending',
             reason = 'waiting_for_first_sync',
             updated_at = ?,
             completed_at = ?,

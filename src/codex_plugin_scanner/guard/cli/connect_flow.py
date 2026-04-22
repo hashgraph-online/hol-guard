@@ -6,7 +6,12 @@ import time
 import urllib.parse
 from pathlib import Path
 
-from ..daemon import ensure_guard_daemon, load_guard_surface_daemon_client
+from ..daemon import (
+    clear_guard_daemon_state,
+    ensure_guard_daemon,
+    load_guard_daemon_auth_token,
+    load_guard_surface_daemon_client,
+)
 from ..runtime import sync_receipts
 from ..store import GuardStore
 
@@ -23,8 +28,7 @@ def run_guard_connect_command(
     opener,
     wait_timeout_seconds: int,
 ) -> dict[str, object]:
-    daemon_url = ensure_guard_daemon(guard_home)
-    daemon_client = load_guard_surface_daemon_client(guard_home)
+    daemon_url, daemon_client = _resolve_guard_connect_daemon(guard_home)
     normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
     connect_request = daemon_client.create_connect_request(
         sync_url=sync_url,
@@ -160,3 +164,15 @@ def _resolve_connect_handoff(
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+
+
+def _resolve_guard_connect_daemon(guard_home: Path):
+    daemon_url = ensure_guard_daemon(guard_home)
+    try:
+        return daemon_url, load_guard_surface_daemon_client(guard_home)
+    except RuntimeError as error:
+        if load_guard_daemon_auth_token(guard_home) is not None:
+            raise error
+    clear_guard_daemon_state(guard_home)
+    daemon_url = ensure_guard_daemon(guard_home)
+    return daemon_url, load_guard_surface_daemon_client(guard_home)

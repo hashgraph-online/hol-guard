@@ -220,3 +220,104 @@ def test_guard_connect_returns_next_destination_after_first_sync(
     assert payload["headline_state"] == "connected"
     assert payload["next_destination"] == "https://hol.org/guard/dashboard"
     assert payload["next_destination_label"] == "Open Guard Home"
+
+
+def test_guard_connect_restarts_daemon_when_auth_token_is_missing(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    store = GuardStore(home_dir)
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    state_path = home_dir / "daemon-state.json"
+    original_state = json.loads(state_path.read_text(encoding="utf-8"))
+    state_path.write_text(json.dumps({"port": original_state["port"]}), encoding="utf-8")
+
+    ensure_calls: list[str] = []
+    create_calls: list[str] = []
+
+    class FakeDaemonClient:
+        def create_connect_request(
+            self,
+            *,
+            sync_url: str,
+            allowed_origin: str,
+        ) -> dict[str, object]:
+            create_calls.append(sync_url)
+            return {
+                "request_id": "connect-restarted",
+                "pairing_secret": "pairing-secret",
+            }
+
+    def fake_ensure_guard_daemon(guard_home: Path) -> str:
+        ensure_calls.append(str(guard_home))
+        if len(ensure_calls) > 1:
+            state_path.write_text(json.dumps(original_state), encoding="utf-8")
+        return f"http://127.0.0.1:{daemon.port}"
+
+    load_attempts = {"count": 0}
+
+    def fake_load_guard_surface_daemon_client(guard_home: Path) -> FakeDaemonClient:
+        load_attempts["count"] += 1
+        if load_attempts["count"] == 1:
+            raise RuntimeError(f"Guard daemon state is incomplete for {guard_home}.")
+        return FakeDaemonClient()
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.ensure_guard_daemon",
+        fake_ensure_guard_daemon,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.load_guard_surface_daemon_client",
+        fake_load_guard_surface_daemon_client,
+    )
+
+    payload = run_guard_connect_command(
+        guard_home=home_dir,
+        store=store,
+        sync_url="https://hol.org/registry/api/v1",
+        connect_url="https://hol.org/guard/connect",
+        opener=lambda url: True,
+        wait_timeout_seconds=1,
+    )
+
+    daemon.stop()
+
+    assert payload["connected"] is False
+    assert payload["status"] == "waiting_for_browser"
+    assert create_calls == ["https://hol.org/registry/api/v1"]
+    assert len(ensure_calls) == 2
+    assert load_attempts["count"] == 2
+
+
+def test_guard_connect_state_stays_connected_while_first_sync_is_pending(
+    tmp_path,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    request = store.create_guard_connect_request(
+        sync_url="https://hol.org/registry/api/v1",
+        allowed_origin="https://hol.org",
+        now="2026-04-22T12:00:00+00:00",
+    )
+
+    store.complete_guard_connect_request(
+        request_id=str(request["request_id"]),
+        pairing_secret=str(request["pairing_secret"]),
+        token="session-token-123",
+        now="2026-04-22T12:01:00+00:00",
+    )
+
+    state = store.get_guard_connect_state(
+        str(request["request_id"]),
+        now="2026-04-22T12:06:30+00:00",
+    )
+
+    assert state is not None
+    assert state["status"] == "connected"
+    assert state["milestone"] == "first_sync_pending"
+    assert state["reason"] == "waiting_for_first_sync"
