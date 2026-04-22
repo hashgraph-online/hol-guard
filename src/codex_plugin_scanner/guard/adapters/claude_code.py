@@ -4,19 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import subprocess
 import sys
 import urllib.parse
 from collections.abc import Callable
 from pathlib import Path
 
+from ..daemon.manager import guard_daemon_url_for_home, load_guard_daemon_url
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _json_payload, _run_command_probe
 
-CLAUDE_GUARD_DEFAULT_DAEMON_PORT = 4781
-CLAUDE_GUARD_DAEMON_PORT_RANGE = 1000
 CLAUDE_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
 CLAUDE_GUARD_NOTIFICATION_MATCHER = "permission_prompt"
 CLAUDE_GUARD_SESSION_START_MATCHERS = ("startup", "resume", "clear", "compact")
@@ -164,21 +162,6 @@ def _remove_hook_entry(entries: list[object], handler: dict[str, object]) -> lis
 
 def _claude_digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _guard_daemon_port_for_home(guard_home: Path) -> int:
-    raw_port = os.environ.get("GUARD_DAEMON_PORT")
-    if isinstance(raw_port, str) and raw_port.strip():
-        try:
-            configured_port = int(raw_port)
-        except ValueError:
-            configured_port = 0
-        if configured_port > 0:
-            return configured_port
-    encoded_path = str(guard_home.resolve()).encode("utf-8")
-    digest = hashlib.sha256(encoded_path).hexdigest()
-    offset = int(digest[:8], 16) % CLAUDE_GUARD_DAEMON_PORT_RANGE
-    return CLAUDE_GUARD_DEFAULT_DAEMON_PORT + offset
 
 
 def _metadata_with_digest(path: Path) -> dict[str, object]:
@@ -459,6 +442,13 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
     @staticmethod
     def _session_start_command_parts(context: HarnessContext) -> tuple[str, ...]:
         package_root = Path(__file__).resolve().parents[3]
+        sync_call = ""
+        if context.workspace_dir is not None:
+            sync_call = (
+                "from codex_plugin_scanner.guard.adapters.claude_code import sync_claude_workspace_hook_urls;"
+                f"sync_claude_workspace_hook_urls(Path({str(context.guard_home)!r}), Path({str(context.home_dir)!r}), "
+                f"Path({str(context.workspace_dir)!r}));"
+            )
         code = (
             "import sys;"
             f"sys.path.insert(0, {str(package_root)!r});"
@@ -466,6 +456,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "from pathlib import Path;"
             "from codex_plugin_scanner.guard.daemon import ensure_guard_daemon;"
             f"ensure_guard_daemon(Path({str(context.guard_home)!r}));"
+            f"{sync_call}"
             "print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', "
             "'additionalContext': 'HOL Guard protection is active for this workspace.'}}, "
             "separators=(',', ':')))"
@@ -474,7 +465,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _hook_url(context: HarnessContext) -> str:
-        daemon_url = f"http://127.0.0.1:{_guard_daemon_port_for_home(context.guard_home)}"
+        daemon_url = load_guard_daemon_url(context.guard_home) or guard_daemon_url_for_home(context.guard_home)
         query: dict[str, str] = {"guard-home": str(context.guard_home)}
         if context.home_dir.resolve() != Path.home().resolve():
             query["home"] = str(context.home_dir)
@@ -601,3 +592,51 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                 *[str(note) for note in shim_manifest.get("notes", [])],
             ],
         }
+
+
+def sync_claude_workspace_hook_urls(guard_home: Path, home_dir: Path, workspace_dir: Path) -> None:
+    context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
+    settings_path = workspace_dir / ".claude" / "settings.local.json"
+    payload = _json_payload(settings_path)
+    hooks = payload.get("hooks")
+    if not isinstance(hooks, dict):
+        return
+    hook_url = ClaudeCodeHarnessAdapter._hook_url(context)
+    updated = False
+    for key, timeout in (
+        ("PreToolUse", CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
+        ("PostToolUse", CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
+        ("UserPromptSubmit", CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS),
+        ("Notification", CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
+    ):
+        entries = hooks.get(key)
+        if not isinstance(entries, list):
+            continue
+        expected_handler = _guard_http_handler(hook_url, timeout=timeout)
+        refreshed_entries: list[object] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                refreshed_entries.append(entry)
+                continue
+            handlers = entry.get("hooks")
+            if not isinstance(handlers, list):
+                refreshed_entries.append(entry)
+                continue
+            refreshed_handlers = [
+                expected_handler
+                if isinstance(handler, dict) and _is_guard_hook_handler(handler)
+                else handler
+                for handler in handlers
+            ]
+            if refreshed_handlers != handlers:
+                updated = True
+                refreshed_entry = dict(entry)
+                refreshed_entry["hooks"] = refreshed_handlers
+                refreshed_entries.append(refreshed_entry)
+                continue
+            refreshed_entries.append(entry)
+        hooks[key] = refreshed_entries
+    if not updated:
+        return
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

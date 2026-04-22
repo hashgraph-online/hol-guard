@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from codex_plugin_scanner.guard.adapters import claude_code as claude_code_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 
@@ -95,6 +96,7 @@ def test_claude_install_bakes_current_source_root_into_session_start_command(tmp
     assert "SessionStart" in hook_command
     assert "HOL Guard protection is active for this workspace." in hook_command
     assert expected_source_root in hook_command
+    assert "sync_claude_workspace_hook_urls" in hook_command
     assert '"guard", "hook"' not in hook_command
 
 
@@ -128,6 +130,33 @@ def test_claude_install_writes_session_start_and_http_hook_schema_and_is_idempot
     assert notification[0]["matcher"] == "permission_prompt"
     assert notification[0]["hooks"][0]["type"] == "http"
     assert notification[0]["hooks"][0]["timeout"] == 10
+
+
+def test_claude_sync_workspace_hook_urls_uses_active_daemon_port(tmp_path, monkeypatch):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    adapter.install(context)
+    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    initial_payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    initial_url = initial_payload["hooks"]["PreToolUse"][0]["hooks"][0]["url"]
+
+    monkeypatch.setattr(
+        claude_code_module,
+        "load_guard_daemon_url",
+        lambda _guard_home: "http://127.0.0.1:5999",
+    )
+
+    claude_code_module.sync_claude_workspace_hook_urls(
+        context.guard_home,
+        context.home_dir,
+        context.workspace_dir,
+    )
+
+    updated_payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    updated_url = updated_payload["hooks"]["PreToolUse"][0]["hooks"][0]["url"]
+
+    assert initial_url != updated_url
+    assert updated_url.startswith("http://127.0.0.1:5999/")
 
 
 def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):

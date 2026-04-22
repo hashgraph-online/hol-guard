@@ -13,6 +13,7 @@ def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, mon
     guard_home = tmp_path / "guard-home"
     responses = iter((None, None, "http://127.0.0.1:5409"))
 
+    monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
     monkeypatch.setattr(
         daemon_manager_module,
         "load_guard_daemon_url",

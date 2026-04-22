@@ -7,12 +7,10 @@ import io
 import json
 import mimetypes
 import os
-import sys
 import threading
 import time
 import uuid
 import webbrowser
-from contextlib import redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -640,15 +638,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             json=False,
         )
         buffer = io.StringIO()
-        with _CLAUDE_HOOK_EXECUTION_LOCK, redirect_stdout(buffer):
+        with _CLAUDE_HOOK_EXECUTION_LOCK:
             from ..cli.commands import run_guard_command
 
-            original_stdin = sys.stdin
-            try:
-                sys.stdin = io.StringIO(json.dumps(payload))
-                exit_code = run_guard_command(args)
-            finally:
-                sys.stdin = original_stdin
+            exit_code = run_guard_command(args, input_text=json.dumps(payload), output_stream=buffer)
         raw_response = buffer.getvalue().strip()
         if not raw_response:
             self._write_json({"error": "empty_hook_response", "exit_code": exit_code}, status=502)

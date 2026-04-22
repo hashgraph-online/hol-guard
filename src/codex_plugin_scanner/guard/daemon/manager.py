@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import signal
 import subprocess
 import sys
@@ -33,6 +34,7 @@ _EPHEMERAL_GUARD_DAEMON_MAX_STATES = 512
 _START_LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS_GUARD = threading.Lock()
 _LAST_EPHEMERAL_REAP_AT = 0.0
+_RUNTIME_FINGERPRINT_CACHE: str | None = None
 
 
 def ensure_guard_daemon(guard_home: Path) -> str:
@@ -281,10 +283,14 @@ def _elapsed_seconds_from_ps(value: str) -> float:
 
 
 def _guard_home_from_command(command: str) -> Path | None:
-    match = re.search(r"--guard-home\s+(\S+)", command)
-    if match is None:
+    try:
+        parts = shlex.split(command)
+    except ValueError:
         return None
-    return Path(match.group(1))
+    for index, part in enumerate(parts):
+        if part == "--guard-home" and index + 1 < len(parts):
+            return Path(parts[index + 1])
+    return None
 
 
 def _guard_daemon_state_matches_current_runtime(payload: dict[str, object]) -> bool:
@@ -303,6 +309,9 @@ def _current_guard_daemon_source_root() -> str:
 
 
 def _current_guard_daemon_runtime_fingerprint() -> str:
+    global _RUNTIME_FINGERPRINT_CACHE
+    if _RUNTIME_FINGERPRINT_CACHE is not None:
+        return _RUNTIME_FINGERPRINT_CACHE
     source_root = Path(_current_guard_daemon_source_root())
     package_root = source_root / "codex_plugin_scanner"
     digest = hashlib.sha256()
@@ -315,7 +324,8 @@ def _current_guard_daemon_runtime_fingerprint() -> str:
         digest.update(str(path.relative_to(source_root)).encode("utf-8"))
         digest.update(str(stat_result.st_mtime_ns).encode("utf-8"))
         digest.update(str(stat_result.st_size).encode("utf-8"))
-    return digest.hexdigest()
+    _RUNTIME_FINGERPRINT_CACHE = digest.hexdigest()
+    return _RUNTIME_FINGERPRINT_CACHE
 
 
 def _guard_daemon_start_in_progress(guard_home: Path) -> bool:

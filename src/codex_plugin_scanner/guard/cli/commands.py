@@ -15,6 +15,7 @@ import urllib.parse
 import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import TextIO
 
 from ...argparse_utils import FriendlyArgumentParser
 from ...models import ScanOptions
@@ -467,7 +468,12 @@ def _run_consumer_scan_with_mode(
     return run_consumer_scan(target, intended_harness=intended_harness, options=options)
 
 
-def run_guard_command(args: argparse.Namespace) -> int:
+def run_guard_command(
+    args: argparse.Namespace,
+    *,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
     """Execute a Guard subcommand."""
 
     if args.guard_command == "scan":
@@ -917,7 +923,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
         return 0
 
     if args.guard_command == "hook":
-        payload = _load_hook_payload(getattr(args, "event_file", None))
+        payload = _load_hook_payload(getattr(args, "event_file", None), input_text=input_text)
         managed_install = _managed_install_for(store, args.harness)
         payload_cwd = payload.get("cwd")
         workspace_was_explicit = workspace is not None
@@ -966,7 +972,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     remember=False,
                 )
                 if _should_emit_copilot_hook_response(args):
-                    _emit_copilot_hook_response(policy_action="allow", reason="")
+                    _emit_copilot_hook_response(policy_action="allow", reason="", output_stream=output_stream)
                     return 0
             else:
                 if policy_action in {"block", "sandbox-required"}:
@@ -982,6 +988,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     _emit_copilot_hook_response(
                         policy_action=policy_action,
                         reason=_copilot_hook_reason(decision.summary, runtime_artifact.name),
+                        output_stream=output_stream,
                     )
                     return 0
         copilot_permission_request = (
@@ -1055,7 +1062,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     remember=False,
                 )
                 if _should_emit_copilot_hook_response(args):
-                    _emit_copilot_permission_request_response(behavior="allow")
+                    _emit_copilot_permission_request_response(behavior="allow", output_stream=output_stream)
                     return 0
                 _emit("hook", response_payload, getattr(args, "json", False))
                 return 0
@@ -1128,6 +1135,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                         f"Approve the exact call in Guard, then retry."
                     ),
                     interrupt=True,
+                    output_stream=output_stream,
                 )
                 return 0
             _emit("hook", response_payload, getattr(args, "json", False))
@@ -1158,6 +1166,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 reason="HOL Guard intercepted the tool request and opened this Claude approval prompt.",
                 system_message=_claude_permission_prompt_system_message(payload=payload, notice=notice),
                 additional_context=_claude_permission_prompt_additional_context(notice),
+                output_stream=output_stream,
             )
             return 0
         if runtime_artifact is not None:
@@ -1251,6 +1260,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                             response_payload.get("risk_headline"),
                             response_payload.get("path_summary"),
                         ),
+                        output_stream=output_stream,
                     )
                     return 0
                 if _should_emit_prequeue_native_hook_response(args):
@@ -1260,6 +1270,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                         event_name=event_name,
                         reason=native_reason,
                         additional_context=additional_context,
+                        output_stream=output_stream,
                     )
                     return 0
                 approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
@@ -1348,6 +1359,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                         response_payload.get("review_hint"),
                         response_payload.get("risk_headline"),
                     ),
+                    output_stream=output_stream,
                 )
                 return 0
             if _should_emit_native_hook_response(args):
@@ -1359,6 +1371,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                         args.harness,
                         _runtime_artifact_native_reason(runtime_artifact, response_payload),
                     ),
+                    output_stream=output_stream,
                 )
                 return 0
             _emit("hook", response_payload, getattr(args, "json", False))
@@ -1414,6 +1427,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
             _emit_copilot_hook_response(
                 policy_action=policy_action,
                 reason=_copilot_hook_reason(payload.get("permission_decision_reason")),
+                output_stream=output_stream,
             )
             return 0
         if _should_emit_native_hook_response(args):
@@ -1422,6 +1436,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 policy_action=policy_action,
                 event_name=_hook_event_name(payload) or "PreToolUse",
                 reason=_native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason")),
+                output_stream=output_stream,
             )
             return 0
         _emit(
@@ -1742,11 +1757,22 @@ def _append_guard_context_args(command: list[str], args: argparse.Namespace) -> 
             command.extend([flag, value])
 
 
-def _emit_copilot_hook_response(*, policy_action: str, reason: str) -> None:
+def _write_json_line(payload: dict[str, object], *, output_stream: TextIO | None = None) -> None:
+    stream = output_stream or sys.stdout
+    stream.write(f"{json.dumps(payload, separators=(',', ':'))}\n")
+    stream.flush()
+
+
+def _emit_copilot_hook_response(
+    *,
+    policy_action: str,
+    reason: str,
+    output_stream: TextIO | None = None,
+) -> None:
     payload = {"permissionDecision": _copilot_hook_permission_decision(policy_action)}
     if payload["permissionDecision"] != "allow":
         payload["permissionDecisionReason"] = reason
-    print(json.dumps(payload, separators=(",", ":")))
+    _write_json_line(payload, output_stream=output_stream)
 
 
 def _emit_copilot_permission_request_response(
@@ -1754,13 +1780,14 @@ def _emit_copilot_permission_request_response(
     behavior: str,
     message: str | None = None,
     interrupt: bool | None = None,
+    output_stream: TextIO | None = None,
 ) -> None:
     payload: dict[str, object] = {"behavior": behavior}
     if isinstance(message, str) and message.strip():
         payload["message"] = message.strip()
     if isinstance(interrupt, bool):
         payload["interrupt"] = interrupt
-    print(json.dumps(payload, separators=(",", ":")))
+    _write_json_line(payload, output_stream=output_stream)
 
 
 def _emit_native_hook_response(
@@ -1771,6 +1798,7 @@ def _emit_native_hook_response(
     event_name: str = "PreToolUse",
     additional_context: str | None = None,
     system_message: str | None = None,
+    output_stream: TextIO | None = None,
 ) -> None:
     if event_name == "UserPromptSubmit":
         payload: dict[str, object] = {}
@@ -1783,7 +1811,7 @@ def _emit_native_hook_response(
                 "additionalContext": additional_context,
             }
         if payload:
-            print(json.dumps(payload, separators=(",", ":")))
+            _write_json_line(payload, output_stream=output_stream)
         return
     if event_name == "Notification":
         payload = {}
@@ -1795,7 +1823,7 @@ def _emit_native_hook_response(
                 "additionalContext": additional_context,
             }
         if payload:
-            print(json.dumps(payload, separators=(",", ":")))
+            _write_json_line(payload, output_stream=output_stream)
         return
     permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
     hook_specific_output: dict[str, object] = {"hookEventName": event_name}
@@ -1804,7 +1832,7 @@ def _emit_native_hook_response(
         if permission_decision != "allow":
             hook_specific_output["permissionDecisionReason"] = reason
     payload = {"hookSpecificOutput": hook_specific_output}
-    print(json.dumps(payload, separators=(",", ":")))
+    _write_json_line(payload, output_stream=output_stream)
 
 
 def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str | None:
@@ -1985,11 +2013,11 @@ def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[st
     return config_policy
 
 
-def _load_hook_payload(event_file: str | None) -> dict[str, object]:
+def _load_hook_payload(event_file: str | None, *, input_text: str | None = None) -> dict[str, object]:
     if event_file:
         payload = json.loads(Path(event_file).read_text(encoding="utf-8"))
         return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
-    raw = sys.stdin.read().strip()
+    raw = input_text.strip() if isinstance(input_text, str) else sys.stdin.read().strip()
     if not raw:
         return {}
     payload = json.loads(raw)
