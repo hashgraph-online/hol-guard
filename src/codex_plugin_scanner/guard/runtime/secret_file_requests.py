@@ -736,7 +736,7 @@ def _segment_uses_network_file_upload(
             stdin_uses_local_file=stdin_uses_local_file,
         )
     if command_name == "wget":
-        return _wget_segment_uses_file_upload(segment_args)
+        return _wget_segment_uses_file_upload(segment_args, stdin_uses_local_file=stdin_uses_local_file)
     return False
 
 
@@ -860,6 +860,7 @@ def _curl_segment_uses_file_upload(
             saw_variable_expansion = True
             index += 1
             continue
+        clustered_tokens_consumed = _curl_clustered_short_flag_tokens_consumed(segment_args, index)
         clustered_upload_value = _curl_clustered_short_flag_value(segment_args, index, "T")
         if clustered_upload_value is not None and _curl_upload_value_uses_local_file(
             "-T",
@@ -880,9 +881,13 @@ def _curl_segment_uses_file_upload(
         if clustered_form_value is not None and _curl_upload_value_uses_local_file("-F", clustered_form_value):
             return True
         clustered_data_value = _curl_clustered_short_flag_value(segment_args, index, "d")
-        if clustered_data_value is not None and _curl_upload_value_uses_local_file("-d", clustered_data_value):
+        if clustered_data_value is not None and _curl_upload_value_uses_local_file(
+            "-d",
+            clustered_data_value,
+            stdin_uses_local_file=stdin_uses_local_file,
+        ):
             return True
-        index += 1
+        index += clustered_tokens_consumed
     return saw_variable_file_input and saw_variable_expansion
 
 
@@ -1278,7 +1283,7 @@ def _decode_shell_text_literal(value: str) -> str | None:
         return stripped_value
 
 
-def _wget_segment_uses_file_upload(segment_args: list[str]) -> bool:
+def _wget_segment_uses_file_upload(segment_args: list[str], *, stdin_uses_local_file: bool = False) -> bool:
     index = 0
     while index < len(segment_args):
         token = segment_args[index]
@@ -1286,13 +1291,17 @@ def _wget_segment_uses_file_upload(segment_args: list[str]) -> bool:
             return False
         if token in _WGET_UPLOAD_FLAGS_WITH_VALUE:
             value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
-            if _direct_file_operand_uses_local_file(value):
+            if _direct_file_operand_uses_local_file(value, stdin_uses_local_file=stdin_uses_local_file):
                 return True
             index += 2
             continue
-        if token.startswith("--body-file=") and _direct_file_operand_uses_local_file(token.split("=", 1)[1]):
+        if token.startswith("--body-file=") and _direct_file_operand_uses_local_file(
+            token.split("=", 1)[1], stdin_uses_local_file=stdin_uses_local_file
+        ):
             return True
-        if token.startswith("--post-file=") and _direct_file_operand_uses_local_file(token.split("=", 1)[1]):
+        if token.startswith("--post-file=") and _direct_file_operand_uses_local_file(
+            token.split("=", 1)[1], stdin_uses_local_file=stdin_uses_local_file
+        ):
             return True
         index += 1
     return False
@@ -1308,7 +1317,7 @@ def _curl_upload_value_uses_local_file(flag: str, value: str, *, stdin_uses_loca
         return _curl_data_urlencode_value_uses_local_file(stripped_value)
     if flag == "--data-raw":
         return False
-    return _value_uses_local_file(stripped_value)
+    return _value_uses_local_file(stripped_value, stdin_uses_local_file=stdin_uses_local_file)
 
 
 def _curl_form_value_uses_local_file(value: str) -> bool:
@@ -1463,6 +1472,21 @@ def _curl_clustered_short_flag_value(segment_args: list[str], index: int, flag_c
     return None
 
 
+def _curl_clustered_short_flag_tokens_consumed(segment_args: list[str], index: int) -> int:
+    token = segment_args[index]
+    if not token.startswith("-") or token.startswith("--") or len(token) <= 2:
+        return 1
+    cluster = token[1:]
+    for flag_index, cluster_flag in enumerate(cluster):
+        if cluster_flag not in _CURL_SHORT_FLAGS_WITH_VALUES:
+            continue
+        attached_value = cluster[flag_index + 1 :]
+        if attached_value:
+            return 1
+        return 2 if index + 1 < len(segment_args) else 1
+    return 1
+
+
 def _direct_file_operand_uses_local_file(value: str, *, stdin_uses_local_file: bool = False) -> bool:
     stripped_value = _strip_cli_value(value)
     if not stripped_value:
@@ -1476,10 +1500,12 @@ def _strip_cli_value(value: str) -> str:
     return value.strip().strip("'").strip('"')
 
 
-def _value_uses_local_file(value: str) -> bool:
+def _value_uses_local_file(value: str, *, stdin_uses_local_file: bool = False) -> bool:
     stripped_value = _strip_cli_value(value)
-    if not stripped_value or stripped_value == "@-":
+    if not stripped_value:
         return False
+    if stripped_value == "@-":
+        return stdin_uses_local_file
     if stripped_value.startswith("@"):
         return stripped_value[1:] != "-"
     return False
@@ -2207,6 +2233,8 @@ def _leading_shell_redirection_tokens_consumed(segment: list[str], index: int) -
     )
     if redirect_target is not None:
         return tokens_consumed
+    if token in {"<<", "<<-", "<<<"}:
+        return 2 if index + 1 < len(segment) else 1
     if token in {">", ">>", ">|", "0>", "0>>", "0>|", "1>", "1>>", "1>|", "2>", "2>>", "2>|"}:
         return 2 if index + 1 < len(segment) else 1
     if re.fullmatch(r"(?P<fd>[0-2]?)(?P<op>>\||>>|>)(?P<target>.+)", token):

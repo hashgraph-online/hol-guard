@@ -28,6 +28,19 @@ _START_LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS_GUARD = threading.Lock()
 
 
+def _daemon_launcher_env() -> dict[str, str]:
+    env = dict(os.environ)
+    pythonpath_entries: list[str] = []
+    for raw_value in (env.get("PYTHONPATH", ""), str(Path(__file__).resolve().parents[3])):
+        for entry in raw_value.split(os.pathsep):
+            normalized = entry.strip()
+            if normalized and normalized not in pythonpath_entries:
+                pythonpath_entries.append(normalized)
+    if pythonpath_entries:
+        env["PYTHONPATH"] = os.pathsep.join(pythonpath_entries)
+    return env
+
+
 def ensure_guard_daemon(guard_home: Path) -> str:
     state_path = _state_path(guard_home)
     existing_url = load_guard_daemon_url(guard_home)
@@ -59,6 +72,7 @@ def ensure_guard_daemon(guard_home: Path) -> str:
                 "stdin": subprocess.DEVNULL,
                 "stdout": subprocess.DEVNULL,
                 "stderr": subprocess.DEVNULL,
+                "env": _daemon_launcher_env(),
             }
             if os.name == "nt":
                 kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
