@@ -384,8 +384,7 @@ def _connect_or_dashboard_step(cloud_state: str, connect_url: str, dashboard_url
         "title": "Open Guard Home",
         "command": dashboard_url,
         "detail": (
-            "Guard Cloud is already paired. Use the signed-in command center for Home, "
-            "Fleet, Evidence, and upgrades."
+            "Guard Cloud is already paired. Use the signed-in command center for Home, Fleet, Evidence, and upgrades."
         ),
     }
 

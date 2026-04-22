@@ -7,6 +7,7 @@ import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
@@ -342,6 +343,7 @@ def _now() -> str:
 
 def _build_runtime_cloud_context(store: GuardStore) -> dict[str, object]:
     credentials = store.get_sync_credentials()
+    sync_url = credentials["sync_url"] if credentials is not None else None
     sync_summary = store.get_sync_payload("sync_summary") or {}
     remote_policy = store.get_sync_payload("policy") or {}
     team_policy_pack = store.get_sync_payload("team_policy_pack") or {}
@@ -352,15 +354,16 @@ def _build_runtime_cloud_context(store: GuardStore) -> dict[str, object]:
         sync_completed=bool(sync_summary),
         remote_payload_active=remote_payload_active,
     )
+    dashboard_url, inbox_url, fleet_url, connect_url = _resolve_guard_urls(sync_url)
     return {
         "sync_configured": credentials is not None,
         "cloud_state": cloud_state,
         "cloud_state_label": _runtime_cloud_state_label(cloud_state),
         "cloud_state_detail": _runtime_cloud_state_detail(cloud_state),
-        "dashboard_url": GUARD_DASHBOARD_URL,
-        "inbox_url": GUARD_INBOX_URL,
-        "fleet_url": GUARD_FLEET_URL,
-        "connect_url": GUARD_CONNECT_URL,
+        "dashboard_url": dashboard_url,
+        "inbox_url": inbox_url,
+        "fleet_url": fleet_url,
+        "connect_url": connect_url,
     }
 
 
@@ -392,9 +395,22 @@ def _runtime_cloud_state_detail(cloud_state: str) -> str:
             "This machine is connected to Guard Cloud. Open Home, Inbox, or Fleet in the portal "
             "to continue with shared review and proof."
         )
+    return "Guard is protecting this machine locally. Connect when you want Home, Inbox, Fleet, and shared team memory."
+
+
+def _resolve_guard_urls(sync_url: object) -> tuple[str, str, str, str]:
+    if not isinstance(sync_url, str) or not sync_url:
+        return GUARD_DASHBOARD_URL, GUARD_INBOX_URL, GUARD_FLEET_URL, GUARD_CONNECT_URL
+    parsed = urlparse(sync_url)
+    if not parsed.scheme or not parsed.netloc:
+        return GUARD_DASHBOARD_URL, GUARD_INBOX_URL, GUARD_FLEET_URL, GUARD_CONNECT_URL
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    dashboard_url = f"{origin}/guard"
     return (
-        "Guard is protecting this machine locally. Connect when you want Home, Inbox, Fleet, "
-        "and shared team memory."
+        dashboard_url,
+        f"{dashboard_url}/inbox",
+        f"{dashboard_url}/fleet",
+        f"{dashboard_url}/connect",
     )
 
 

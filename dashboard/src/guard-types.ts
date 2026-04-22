@@ -59,7 +59,7 @@ export type GuardRuntimeSnapshot = {
   headline_label: string;
   headline_detail: string;
   sync_configured: boolean;
-  cloud_state: string;
+  cloud_state: "local_only" | "paired_waiting" | "paired_active";
   cloud_state_label: string;
   cloud_state_detail: string;
   dashboard_url: string;

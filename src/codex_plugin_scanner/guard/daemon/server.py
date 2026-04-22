@@ -853,7 +853,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/inbox",
             "/fleet",
             "/evidence",
-            "/receipts",
             "/requests",
             "/approvals",
         }:

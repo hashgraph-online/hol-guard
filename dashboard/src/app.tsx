@@ -85,7 +85,7 @@ function resolveView(pathname: string): "home" | "inbox" | "fleet" | "evidence" 
   if (pathname === "/fleet") {
     return "fleet";
   }
-  if (pathname === "/receipts" || pathname === "/evidence") {
+  if (pathname === "/evidence") {
     return "evidence";
   }
   if (
@@ -267,7 +267,8 @@ function HomeWorkspace(props: {
   const queuedCount = props.requests.kind === "ready" ? props.requests.items.length : 0;
   const latestReceipts = snapshot.latest_receipts
     .slice(0, 3)
-    .map((receipt) => receipt.artifact_name);
+    .map((receipt) => receipt.artifact_name ?? receipt.artifact_id)
+    .filter((receiptName) => receiptName.length > 0);
 
   return (
     <div className="space-y-6">
