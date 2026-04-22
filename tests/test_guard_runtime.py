@@ -4191,6 +4191,42 @@ def test_guard_hook_emits_claude_user_prompt_submit_context_for_overridable_prom
     assert any(receipt["artifact_id"].startswith("claude-code:session:prompt") for receipt in receipts)
 
 
+def test_guard_hook_emits_generic_claude_user_prompt_submit_context_for_non_secret_prompts(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use Bash to run rm -rf ./dist and then stop.",
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert "protecting your local secrets" not in output["hookSpecificOutput"]["additionalContext"].lower()
+    assert "hol guard is requesting approval for the next sensitive action" in (
+        output["hookSpecificOutput"]["additionalContext"].lower()
+    )
+
+
 def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continue_guidance(
     tmp_path,
     capsys,

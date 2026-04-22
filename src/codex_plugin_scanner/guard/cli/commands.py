@@ -1611,18 +1611,16 @@ def _prompt_requires_hard_block(artifact: GuardArtifact) -> bool:
     return isinstance(prompt_class, str) and prompt_class == "guard_bypass_intent"
 
 
+def _prompt_request_classes(artifact: GuardArtifact) -> set[str]:
+    prompt_classes = artifact.metadata.get("prompt_request_classes")
+    values = prompt_classes if isinstance(prompt_classes, list) else [artifact.metadata.get("prompt_request_class")]
+    return {str(item) for item in values if isinstance(item, str) and item.strip()}
+
+
 def _native_prompt_context(artifact: GuardArtifact) -> str:
     if _prompt_requires_hard_block(artifact):
         return "HOL Guard blocked this prompt because it asks to bypass or disable Guard."
-    prompt_classes = {
-        str(item)
-        for item in (
-            artifact.metadata.get("prompt_request_classes")
-            if isinstance(artifact.metadata.get("prompt_request_classes"), list)
-            else [artifact.metadata.get("prompt_request_class")]
-        )
-        if isinstance(item, str) and item.strip()
-    }
+    prompt_classes = _prompt_request_classes(artifact)
     if "secret_read" in prompt_classes:
         return (
             "HOL Guard flagged this prompt because it asks for direct local secret access and is protecting your "
@@ -1673,10 +1671,15 @@ def _claude_prompt_additional_context(
         return None
     if _prompt_requires_hard_block(artifact):
         return None
+    briefing_sentence = "HOL Guard is requesting approval for the next sensitive action."
+    if "secret_read" in _prompt_request_classes(artifact):
+        briefing_sentence = (
+            "HOL Guard is protecting your local secrets and is requesting approval for the next sensitive action."
+        )
     return (
         f"{_ensure_terminal_punctuation(native_reason)} "
         "Before you use the first sensitive tool for this request, tell the user exactly: "
-        "'HOL Guard is protecting your local secrets and is requesting approval for the next sensitive action.' "
+        f"'{briefing_sentence}' "
         "Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive "
         "action automatically. Instead, tell the user approval is required in Claude to continue."
     )
