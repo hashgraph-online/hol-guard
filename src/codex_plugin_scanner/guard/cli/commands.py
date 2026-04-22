@@ -1529,7 +1529,10 @@ def _claude_permission_prompt_system_message(
     if tool_name is not None:
         intro = f"HOL Guard requested this Claude approval prompt for {tool_name}."
     if reason is not None:
-        return f"{intro} This is not Claude's default permission prompt. {reason}"
+        return (
+            f"{intro} This is not Claude's default permission prompt. "
+            f"{_ensure_terminal_punctuation(reason)}"
+        )
     return (
         f"{intro} This is not Claude's default permission prompt. "
         "Review the action details below before allowing it."
@@ -1541,7 +1544,7 @@ def _claude_permission_prompt_additional_context(notice: dict[str, object] | Non
     if reason is not None:
         return (
             "HOL Guard requested the active approval prompt. This is not Claude's default permission prompt. "
-            f"{reason} If the user denies it, do not retry the same sensitive access."
+            f"{_ensure_terminal_punctuation(reason)} If the user denies it, do not retry the same sensitive access."
         )
     return (
         "HOL Guard requested the active approval prompt for a sensitive tool action. "
@@ -1582,6 +1585,13 @@ def _native_hook_reason(*values: object | None) -> str:
     if messages:
         return " ".join(messages)
     return "HOL Guard flagged this tool call for review."
+
+
+def _ensure_terminal_punctuation(message: str) -> str:
+    trimmed = message.strip()
+    if trimmed.endswith((".", "!", "?")):
+        return trimmed
+    return f"{trimmed}."
 
 
 def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str:
@@ -1664,11 +1674,11 @@ def _claude_prompt_additional_context(
     if _prompt_requires_hard_block(artifact):
         return None
     return (
-        f"{native_reason} "
-        "Before you use the first sensitive tool for this request, tell the user in one short sentence that HOL Guard "
-        "is requesting approval for the next sensitive action. Attempt that sensitive tool at most once. If HOL Guard "
-        "or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval "
-        "is required in Claude to continue."
+        f"{_ensure_terminal_punctuation(native_reason)} "
+        "Before you use the first sensitive tool for this request, tell the user exactly: "
+        "'HOL Guard is protecting your local secrets and is requesting approval for the next sensitive action.' "
+        "Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive "
+        "action automatically. Instead, tell the user approval is required in Claude to continue."
     )
 
 

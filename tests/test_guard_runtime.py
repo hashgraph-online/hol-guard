@@ -4181,6 +4181,10 @@ def test_guard_hook_emits_claude_user_prompt_submit_context_for_overridable_prom
     assert "direct local secret access" in output["hookSpecificOutput"]["additionalContext"]
     assert "protecting your local secrets" in output["hookSpecificOutput"]["additionalContext"].lower()
     assert "before you use the first sensitive tool" in output["hookSpecificOutput"]["additionalContext"].lower()
+    assert "tell the user exactly" in output["hookSpecificOutput"]["additionalContext"].lower()
+    assert "hol guard is protecting your local secrets and is requesting approval" in (
+        output["hookSpecificOutput"]["additionalContext"].lower()
+    )
     assert "do not retry the same sensitive action automatically" in (
         output["hookSpecificOutput"]["additionalContext"].lower()
     )
