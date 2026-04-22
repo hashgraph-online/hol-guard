@@ -186,6 +186,9 @@ class GuardSurfaceRuntime:
         harness: str,
         metadata: dict[str, object] | None = None,
     ) -> dict[str, object]:
+        session = self.store.get_guard_session(session_id)
+        if session is None:
+            raise ValueError(f"Unknown guard session: {session_id}")
         operation = self.store.upsert_guard_operation(
             operation_id=uuid.uuid4().hex,
             session_id=session_id,
@@ -197,7 +200,8 @@ class GuardSurfaceRuntime:
             metadata=metadata or {},
             now=_now(),
         )
-        self._set_session_status(session_id, "active")
+        if str(session.get("status")) != "active":
+            self._set_session_status(session_id, "active")
         self.store.add_event("operation/started", {"operation": operation}, _now())
         return operation
 

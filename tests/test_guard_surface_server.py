@@ -7,6 +7,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
@@ -130,6 +132,20 @@ class TestGuardSurfaceServer:
         assert sessions[0]["session_id"] == session["session_id"]
         assert operations[0]["operation_id"] == operation["operation_id"]
         assert items[0]["payload"]["artifact_id"] == "codex:project:workspace_skill"
+
+    def test_surface_runtime_rejects_unknown_session_before_persisting_operation(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store)
+
+        with pytest.raises(ValueError, match="Unknown guard session"):
+            runtime.start_operation(
+                session_id="missing-session",
+                operation_type="run",
+                harness="codex",
+                metadata={"command": "hol-guard run codex"},
+            )
+
+        assert store.list_guard_operations() == []
 
     def test_guard_daemon_initializes_surface_client_and_tracks_attachments(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
@@ -275,6 +291,48 @@ class TestGuardSurfaceServer:
         assert attached_resume_payload["operations"] == []
         assert active_resume_payload["session"]["status"] == "active"
         assert active_resume_payload["operations"][0]["operation_id"] == operation_payload["operation_id"]
+
+    def test_guard_daemon_returns_not_found_for_unknown_operation_status_updates(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            initialize_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                data=json.dumps(
+                    {
+                        "client_name": "approval-center-web",
+                        "surface": "approval-center",
+                        "supported_protocol_versions": ["1.1", "1.0"],
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(initialize_request, timeout=5) as response:
+                initialize_payload = json.loads(response.read().decode("utf-8"))
+
+            missing_status_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/operations/missing/status",
+                data=json.dumps({"status": "completed"}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": initialize_payload["auth_token"],
+                },
+                method="POST",
+            )
+            missing_error = None
+            try:
+                urllib.request.urlopen(missing_status_request, timeout=5)
+            except urllib.error.HTTPError as error:
+                missing_error = error
+        finally:
+            daemon.stop()
+
+        assert missing_error is not None
+        assert missing_error.code == 404
+        assert json.loads(missing_error.read().decode("utf-8")) == {"error": "not_found"}
 
     def test_guard_daemon_session_and_operation_endpoints_drive_runtime(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
