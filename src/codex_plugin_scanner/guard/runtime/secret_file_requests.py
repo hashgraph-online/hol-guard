@@ -881,7 +881,11 @@ def _curl_segment_uses_file_upload(
         if clustered_form_value is not None and _curl_upload_value_uses_local_file("-F", clustered_form_value):
             return True
         clustered_data_value = _curl_clustered_short_flag_value(segment_args, index, "d")
-        if clustered_data_value is not None and _curl_upload_value_uses_local_file("-d", clustered_data_value):
+        if clustered_data_value is not None and _curl_upload_value_uses_local_file(
+            "-d",
+            clustered_data_value,
+            stdin_uses_local_file=stdin_uses_local_file,
+        ):
             return True
         index += clustered_tokens_consumed
     return saw_variable_file_input and saw_variable_expansion
