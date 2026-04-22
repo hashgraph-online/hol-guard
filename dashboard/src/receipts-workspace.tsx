@@ -33,9 +33,9 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
   return (
     <div className="space-y-4">
       <div>
-        <SectionLabel>Recent receipts</SectionLabel>
+        <SectionLabel>Recent decisions</SectionLabel>
         <h2 className="mt-1 text-lg font-semibold tracking-tight text-brand-dark">
-          Local Guard history from this shared runtime
+          Local evidence from this protected machine
         </h2>
       </div>
       <div className="space-y-3">

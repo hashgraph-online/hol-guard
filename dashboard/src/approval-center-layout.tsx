@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useState, useEffect, useCallback } from "react";
 
 import {
@@ -13,6 +14,7 @@ import {
   SectionLabel
 } from "./approval-center-primitives";
 import { ReceiptsWorkspace } from "./receipts-workspace";
+import { RuntimeOverview } from "./runtime-overview";
 import {
   buildPauseLine,
   buildRecommendation,
@@ -62,13 +64,15 @@ type RuntimeState =
   | { kind: "error"; message: string }
   | { kind: "ready"; snapshot: GuardRuntimeSnapshot };
 type LayoutProps = {
-  view: "queue" | "receipts";
+  view: "home" | "inbox" | "fleet" | "evidence";
   requests: RequestState;
   detail: DetailState;
   receipts: ReceiptsState;
   runtime: RuntimeState;
   activeRequestId: string | null;
   resolutionMessage: string | null;
+  homeContent: ReactNode;
+  fleetContent: ReactNode;
   onGoHome: () => void;
   onOpenRequest: (requestId: string) => void;
   onResolve: (payload: {
@@ -98,12 +102,17 @@ export function ApprovalCenterLayout(props: LayoutProps) {
       <ShellHeader queuedCount={queuedItems.length} activeHarness={activeHarness} view={props.view} />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <RuntimeBanner runtime={props.runtime} />
-        {props.view === "receipts" ? (
+        {props.view === "home" ? (
+          props.homeContent
+        ) : props.view === "evidence" ? (
           <ReceiptsWorkspace receipts={props.receipts} />
+        ) : props.view === "fleet" ? (
+          props.fleetContent
         ) : (
           <QueueWorkspace
             requests={props.requests}
             detail={props.detail}
+            runtime={props.runtime}
             activeRequestId={props.activeRequestId}
             resolutionMessage={props.resolutionMessage}
             onOpenRequest={props.onOpenRequest}
@@ -124,50 +133,24 @@ function RuntimeBanner(props: { runtime: RuntimeState }) {
   if (props.runtime.kind === "error") {
     return (
       <Surface className="mb-6" tone="warning">
-        <SectionLabel>Local runtime</SectionLabel>
+        <SectionLabel>Runtime health</SectionLabel>
+        <h2 className="mt-1 text-lg font-semibold tracking-tight text-brand-dark">
+          Guard is not connected to the local runtime right now
+        </h2>
         <p className="mt-2 text-sm text-brand-dark/80">{props.runtime.message}</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Restart with hol-guard bootstrap if the local approval center stopped or if the daemon lost its session.
+        </p>
       </Surface>
     );
   }
-  const { snapshot } = props.runtime;
-  const sessionId = snapshot.runtime_state?.session_id.slice(0, 8) ?? "offline";
-  const lastHeartbeat = snapshot.runtime_state?.last_heartbeat_at
-    ? new Date(snapshot.runtime_state.last_heartbeat_at).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit"
-      })
-    : "offline";
-  return (
-    <Surface className="mb-6" tone="accent">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <SectionLabel>Local runtime</SectionLabel>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight text-brand-dark">
-            One Guard session, shared across the CLI and approval center
-          </h2>
-          <p className="mt-1 text-sm text-brand-dark/75">
-            Keep this page open to review new approval requests as they arrive. Guard will bring each decision here so
-            you stay in one place, with links to more detail whenever you need it.
-          </p>
-        </div>
-        <KeyValueGrid
-          columns={2}
-          items={[
-            ["Session", sessionId],
-            ["Queue", `${snapshot.pending_count} pending`],
-            ["Receipts", `${snapshot.receipt_count} stored`],
-            ["Heartbeat", lastHeartbeat],
-            ["URL", snapshot.approval_center_url ?? "offline"]
-          ]}
-        />
-      </div>
-    </Surface>
-  );
+  return <RuntimeOverview snapshot={props.runtime.snapshot} />;
 }
 
 function QueueWorkspace(props: {
   requests: RequestState;
   detail: DetailState;
+  runtime: RuntimeState;
   activeRequestId: string | null;
   resolutionMessage: string | null;
   onOpenRequest: (requestId: string) => void;
@@ -190,12 +173,20 @@ function QueueWorkspace(props: {
     );
   }
   if (props.requests.items.length === 0) {
-    return <WelcomeState resolutionMessage={props.resolutionMessage} />;
+    return (
+      <WelcomeState
+        connectUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.connect_url : null}
+        dashboardUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.dashboard_url : null}
+        fleetUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.fleet_url : null}
+        inboxUrl={props.runtime.kind === "ready" ? props.runtime.snapshot.inbox_url : null}
+        resolutionMessage={props.resolutionMessage}
+      />
+    );
   }
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
       <aside className="space-y-2">
-        <SectionLabel>Blocked items</SectionLabel>
+        <SectionLabel>Current request</SectionLabel>
         {props.requests.items.map((item) => (
           <QueueCard
             key={item.request_id}
@@ -468,7 +459,7 @@ function RuleBuilder(props: {
           type="text"
           value={props.reason}
           onChange={(e) => props.onReasonChange(e.target.value)}
-          className="mt-1 h-9 w-full rounded-md border border-border bg-white px-3 text-sm text-brand-dark placeholder:text-muted-foreground focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 transition-colors"
+          className="mt-1 min-h-11 w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-brand-dark placeholder:text-muted-foreground transition-colors focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           placeholder="Why are you allowing or blocking?"
         />
       </div>

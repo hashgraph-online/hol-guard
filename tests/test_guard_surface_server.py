@@ -21,6 +21,77 @@ from codex_plugin_scanner.guard.store import GuardStore
 
 
 class TestGuardSurfaceServer:
+    def test_guard_daemon_serves_dashboard_shell_for_home_and_section_routes(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            for route in ("/", "/home", "/inbox", "/fleet", "/evidence"):
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{daemon.port}{route}",
+                    timeout=5,
+                ) as response:
+                    body = response.read().decode("utf-8")
+
+                assert response.status == 200
+                assert "text/html" in response.headers.get("Content-Type", "")
+                assert "Loading Local approval center" in body
+        finally:
+            daemon.stop()
+
+    def test_guard_daemon_runtime_snapshot_exposes_cloud_handoff_state(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_credentials(
+            "https://hol.org/api/guard/receipts/sync",
+            "guard-token",
+            "2026-04-22T00:00:00Z",
+        )
+        store.set_sync_payload(
+            "sync_summary",
+            {"synced_at": "2026-04-22T00:05:00Z"},
+            "2026-04-22T00:05:00Z",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert payload["headline_state"] == "protected"
+        assert payload["headline_label"] == "Protected"
+        assert payload["cloud_state"] == "paired_active"
+        assert payload["cloud_state_label"] == "Connected"
+        assert payload["dashboard_url"] == "https://hol.org/guard"
+        assert payload["inbox_url"] == "https://hol.org/guard/inbox"
+        assert payload["fleet_url"] == "https://hol.org/guard/fleet"
+        assert payload["connect_url"] == "https://hol.org/guard/connect"
+
+    def test_guard_daemon_runtime_snapshot_derives_cloud_urls_from_sync_origin(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        store.set_sync_credentials(
+            "https://guard.example.com/api/guard/receipts/sync",
+            "guard-token",
+            "2026-04-22T00:00:00Z",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/runtime", timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert payload["cloud_state"] == "paired_waiting"
+        assert payload["dashboard_url"] == "https://guard.example.com/guard"
+        assert payload["inbox_url"] == "https://guard.example.com/guard/inbox"
+        assert payload["fleet_url"] == "https://guard.example.com/guard/fleet"
+        assert payload["connect_url"] == "https://guard.example.com/guard/connect"
+
     def test_surface_server_contract_is_exposed_during_initialize(self, tmp_path) -> None:
         contract = build_surface_server_contract()
         assert contract["schema_version"] == "guard-surface-server.v1"

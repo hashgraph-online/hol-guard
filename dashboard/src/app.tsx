@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 
 import {
+  ActionButton,
+  Badge,
+  EmptyState,
+  SectionLabel,
+  Surface,
+  Tag
+} from "./approval-center-primitives";
+import {
   fetchDiff,
   fetchLatestReceipt,
   fetchPolicy,
@@ -10,6 +18,7 @@ import {
   resolveRequest
 } from "./guard-api";
 import { ApprovalCenterLayout } from "./approval-center-layout";
+import { FleetWorkspace } from "./fleet-workspace";
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
@@ -72,11 +81,23 @@ function parseRequestId(pathname: string): string | null {
   return null;
 }
 
-function resolveView(pathname: string): "queue" | "receipts" {
-  if (pathname === "/receipts") {
-    return "receipts";
+function resolveView(pathname: string): "home" | "inbox" | "fleet" | "evidence" {
+  if (pathname === "/fleet") {
+    return "fleet";
   }
-  return "queue";
+  if (pathname === "/evidence") {
+    return "evidence";
+  }
+  if (
+    pathname === "/inbox" ||
+    pathname === "/requests" ||
+    pathname === "/approvals" ||
+    pathname.startsWith("/requests/") ||
+    pathname.startsWith("/approvals/")
+  ) {
+    return "inbox";
+  }
+  return "home";
 }
 
 async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kind: "idle" | "loading" }>> {
@@ -186,6 +207,15 @@ export function App() {
       runtime={runtime}
       activeRequestId={activeRequestId}
       resolutionMessage={resolutionMessage}
+      homeContent={
+        <HomeWorkspace
+          requests={requests}
+          runtime={runtime}
+          onOpenInbox={() => navigate("/inbox")}
+          onOpenFleet={() => navigate("/fleet")}
+          onOpenEvidence={() => navigate("/evidence")}
+        />
+      }
       onGoHome={() => navigate("/")}
       onOpenRequest={(nextRequestId) => navigate(`/requests/${nextRequestId}`)}
       onResolve={async (payload) => {
@@ -197,6 +227,141 @@ export function App() {
         setRequests({ kind: "ready", items: nextSnapshot.items });
         setReceipts({ kind: "ready", items: nextReceipts });
       }}
+      fleetContent={
+        runtime.kind === "ready" ? (
+          <FleetWorkspace runtime={runtime.snapshot} />
+        ) : null
+      }
     />
+  );
+}
+
+function HomeWorkspace(props: {
+  requests: RequestState;
+  runtime: RuntimeState;
+  onOpenInbox: () => void;
+  onOpenFleet: () => void;
+  onOpenEvidence: () => void;
+}) {
+  if (props.runtime.kind === "loading" || props.requests.kind === "loading") {
+    return (
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="guard-skeleton h-40 w-full" />
+        <div className="guard-skeleton h-40 w-full" />
+        <div className="guard-skeleton h-40 w-full" />
+      </div>
+    );
+  }
+
+  if (props.runtime.kind === "error") {
+    return (
+      <EmptyState
+        title="Local Home is waiting for the runtime"
+        body={props.runtime.message}
+        action={<ActionButton onClick={props.onOpenInbox}>Open Inbox anyway</ActionButton>}
+      />
+    );
+  }
+
+  const snapshot = props.runtime.snapshot;
+  const queuedCount = props.requests.kind === "ready" ? props.requests.items.length : 0;
+  const latestReceipts = snapshot.latest_receipts
+    .slice(0, 3)
+    .map((receipt) => receipt.artifact_name ?? receipt.artifact_id)
+    .filter((receiptName) => receiptName.length > 0);
+
+  return (
+    <div className="space-y-6">
+      <Surface tone="accent">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <SectionLabel>Local Home</SectionLabel>
+              <Badge tone={queuedCount > 0 ? "warning" : "success"}>
+                {queuedCount > 0 ? `${queuedCount} queued` : "Queue clear"}
+              </Badge>
+              <Tag tone={snapshot.cloud_state === "local_only" ? "slate" : "blue"}>
+                {snapshot.cloud_state_label}
+              </Tag>
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-xl font-semibold tracking-tight text-brand-dark">
+                See the local queue, machine coverage, and cloud handoff from one place
+              </h2>
+              <p className="max-w-3xl text-sm leading-relaxed text-brand-dark/80">
+                Home keeps the current queue, the protected machine, and the next cloud step visible without dropping you straight into a decision lane.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <ActionButton onClick={props.onOpenInbox}>Open Inbox</ActionButton>
+            <ActionButton variant="outline" onClick={props.onOpenFleet}>
+              Open Fleet
+            </ActionButton>
+            <ActionButton variant="outline" onClick={props.onOpenEvidence}>
+              Open Evidence
+            </ActionButton>
+            {snapshot.cloud_state === "local_only" ? (
+              <ActionButton href={snapshot.connect_url} variant="secondary">
+                Connect this machine
+              </ActionButton>
+            ) : null}
+          </div>
+        </div>
+      </Surface>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Surface>
+          <SectionLabel>Inbox</SectionLabel>
+          <h3 className="mt-2 text-lg font-semibold tracking-tight text-brand-dark">
+            {queuedCount > 0 ? "Work is waiting" : "Nothing needs review"}
+          </h3>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            {queuedCount > 0
+              ? "Open Inbox to review the current blocked launch and keep the same harness flow moving."
+              : "Inbox stays quiet until a changed tool or blocked launch needs a real decision."}
+          </p>
+          <div className="mt-4">
+            <ActionButton onClick={props.onOpenInbox}>
+              {queuedCount > 0 ? "Review current queue" : "Open Inbox"}
+            </ActionButton>
+          </div>
+        </Surface>
+
+        <Surface>
+          <SectionLabel>Fleet</SectionLabel>
+          <h3 className="mt-2 text-lg font-semibold tracking-tight text-brand-dark">
+            {snapshot.runtime_state ? "This machine is connected" : "Runtime offline"}
+          </h3>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            {snapshot.runtime_state
+              ? "Fleet shows the active machine, the current session, and whether the cloud handoff has started."
+              : "Guard is not publishing runtime state right now. Restart the local daemon before expecting fresh machine coverage."}
+          </p>
+          <div className="mt-4">
+            <ActionButton variant="outline" onClick={props.onOpenFleet}>
+              Open Fleet
+            </ActionButton>
+          </div>
+        </Surface>
+
+        <Surface>
+          <SectionLabel>Evidence</SectionLabel>
+          <h3 className="mt-2 text-lg font-semibold tracking-tight text-brand-dark">
+            {snapshot.receipt_count > 0 ? `${snapshot.receipt_count} stored decisions` : "No local evidence yet"}
+          </h3>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            {latestReceipts.length > 0
+              ? `Recent memory: ${latestReceipts.join(", ")}.`
+              : "The first local proof appears here after Guard evaluates or approves a tool on this machine."}
+          </p>
+          <div className="mt-4">
+            <ActionButton variant="outline" onClick={props.onOpenEvidence}>
+              Open Evidence
+            </ActionButton>
+          </div>
+        </Surface>
+      </div>
+    </div>
   );
 }

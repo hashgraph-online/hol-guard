@@ -1,4 +1,10 @@
 export type DecisionScope = "artifact" | "workspace" | "publisher" | "harness" | "global";
+export type GuardHeadlineState =
+  | "setup"
+  | "protected"
+  | "blocked"
+  | "local_only"
+  | "connected";
 
 export type GuardApprovalRequest = {
   request_id: string;
@@ -46,6 +52,17 @@ export type GuardRuntimeSnapshot = {
   runtime_state: GuardRuntimeState | null;
   pending_count: number;
   receipt_count: number;
+  headline_state: GuardHeadlineState;
+  headline_label: string;
+  headline_detail: string;
+  sync_configured: boolean;
+  cloud_state: "local_only" | "paired_waiting" | "paired_active";
+  cloud_state_label: string;
+  cloud_state_detail: string;
+  dashboard_url: string;
+  inbox_url: string;
+  fleet_url: string;
+  connect_url: string;
   items: GuardApprovalRequest[];
   latest_receipts: GuardReceipt[];
 };
