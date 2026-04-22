@@ -435,10 +435,7 @@ def _runtime_headline_label(headline_state: str) -> str:
     labels = {
         "setup": "Setup required",
         "protected": "Protected",
-        "needs_review": "Needs review",
         "blocked": "Blocked",
-        "stale": "Stale",
-        "team_incident": "Team incident",
         "local_only": "Local only",
         "connected": "Connected",
     }
@@ -449,10 +446,7 @@ def _runtime_headline_detail(headline_state: str) -> str:
     details = {
         "setup": "The local Guard runtime is offline. Start the daemon or rerun hol-guard bootstrap.",
         "protected": "This machine is protected and the local queue is clear.",
-        "needs_review": "Guard found changes that need a fresh decision before the next launch.",
         "blocked": "A blocked launch is waiting for review in the current request queue.",
-        "stale": "Coverage is stale and should be refreshed before the next risky launch.",
-        "team_incident": "A shared Guard incident needs attention.",
         "local_only": "This machine is protected locally and can connect later when shared memory matters.",
         "connected": "This machine is connected to Guard Cloud and waiting for the first shared proof to appear.",
     }

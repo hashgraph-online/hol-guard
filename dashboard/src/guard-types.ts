@@ -2,10 +2,7 @@ export type DecisionScope = "artifact" | "workspace" | "publisher" | "harness" |
 export type GuardHeadlineState =
   | "setup"
   | "protected"
-  | "needs_review"
   | "blocked"
-  | "stale"
-  | "team_incident"
   | "local_only"
   | "connected";
 

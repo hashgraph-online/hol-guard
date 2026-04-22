@@ -6,7 +6,7 @@ type RuntimeOverviewProps = {
 };
 
 function headlineTone(state: GuardRuntimeSnapshot["headline_state"]): "info" | "success" | "warning" | "destructive" {
-  if (state === "blocked" || state === "team_incident") {
+  if (state === "blocked") {
     return "destructive";
   }
   if (state === "connected" || state === "local_only") {
