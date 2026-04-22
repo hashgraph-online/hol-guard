@@ -47,6 +47,21 @@ export async function fetchRuntimeSnapshot(): Promise<GuardRuntimeSnapshot> {
       },
       pending_count: demoRequests.length,
       receipt_count: demoReceipts.length,
+      headline_state: demoRequests.length > 0 ? "blocked" : "connected",
+      headline_label: demoRequests.length > 0 ? "Blocked" : "Connected",
+      headline_detail:
+        demoRequests.length > 0
+          ? "A blocked launch is waiting for review in the current request queue."
+          : "This machine is connected to Guard Cloud and waiting for the first shared proof to appear.",
+      sync_configured: true,
+      cloud_state: "paired_waiting",
+      cloud_state_label: "Connected",
+      cloud_state_detail:
+        "This machine is connected to Guard Cloud, but the first shared proof has not landed yet. Open Fleet while the first sync settles.",
+      dashboard_url: "https://hol.org/guard",
+      inbox_url: "https://hol.org/guard/inbox",
+      fleet_url: "https://hol.org/guard/fleet",
+      connect_url: "https://hol.org/guard/connect",
       items: demoRequests,
       latest_receipts: demoReceipts.slice(0, 10)
     };

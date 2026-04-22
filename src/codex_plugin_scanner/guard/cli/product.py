@@ -17,6 +17,8 @@ HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "hermes", "cursor", "anti
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
 GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
+GUARD_INBOX_URL = f"{GUARD_DASHBOARD_URL}/inbox"
+GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/fleet"
 
 
 def build_guard_start_payload(
@@ -211,7 +213,7 @@ def _resolve_runtime_status(runtime_state: dict[str, object] | None, approval_ce
 def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     credentials = store.get_sync_credentials()
     sync_url = credentials["sync_url"] if credentials is not None else None
-    dashboard_url, connect_url = _resolve_guard_urls(sync_url)
+    dashboard_url, connect_url, inbox_url, fleet_url = _resolve_guard_urls(sync_url)
     advisories = store.list_cached_advisories(limit=3)
     alert_preferences = _coerce_payload_dict(store.get_sync_payload("alert_preferences"))
     remote_policy = _coerce_payload_dict(store.get_sync_payload("policy"))
@@ -230,6 +232,8 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
         "cloud_state_detail": _cloud_state_detail(cloud_state, connect_url, dashboard_url),
         "sync_url": sync_url,
         "dashboard_url": dashboard_url,
+        "inbox_url": inbox_url,
+        "fleet_url": fleet_url,
         "connect_url": connect_url,
         "connect_command": f"{GUARD_COMMAND} connect",
         "sync_command": f"{GUARD_COMMAND} sync",
@@ -251,6 +255,8 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
     recommended = _recommended_summary(payload)
     dashboard_url = str(payload.get("dashboard_url") or GUARD_DASHBOARD_URL)
     connect_url = str(payload.get("connect_url") or GUARD_CONNECT_URL)
+    inbox_url = str(payload.get("inbox_url") or GUARD_INBOX_URL)
+    fleet_url = str(payload.get("fleet_url") or GUARD_FLEET_URL)
     steps: list[dict[str, str]]
     if cloud_state == "local_only":
         steps = [
@@ -273,6 +279,16 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
         ]
         if recommended is not None:
             steps.append(_run_step(recommended))
+        steps.append(
+            {
+                "title": "Open Guard Home",
+                "command": dashboard_url,
+                "detail": (
+                    "Home stays useful before sync is on. Use it to watch this machine "
+                    "and decide when shared memory becomes worth it."
+                ),
+            }
+        )
         return steps
     if cloud_state == "paired_waiting":
         steps = [
@@ -289,31 +305,52 @@ def _build_connect_steps(payload: dict[str, object]) -> list[dict[str, str]]:
             steps.append(_run_step(recommended))
         steps.append(
             {
-                "title": "Open the Guard dashboard",
-                "command": dashboard_url,
-                "detail": "Use the signed-in dashboard to confirm pairing and watch your first device appear.",
+                "title": "Open Guard Fleet",
+                "command": fleet_url,
+                "detail": (
+                    "Fleet is the fastest place to confirm the connected machine while "
+                    "the first shared proof is still warming up."
+                ),
             }
         )
         return steps
-    steps = [
-        {
-            "title": "Open the Guard dashboard",
-            "command": dashboard_url,
-            "detail": "Review receipts, devices, changes, and upgrade prompts from the signed-in command center.",
-        }
-    ]
     if int(payload.get("pending_approvals") or 0) > 0:
-        steps.append(_approvals_step())
+        steps = [
+            {
+                "title": "Open Guard Inbox",
+                "command": inbox_url,
+                "detail": "Inbox is the fastest place to resolve live review pressure after this machine connects.",
+            },
+            _approvals_step(),
+        ]
     elif recommended is not None and str(recommended.get("next_action")) == "review":
-        steps.append(_install_or_review_step(recommended))
+        steps = [
+            {
+                "title": "Open Guard Inbox",
+                "command": inbox_url,
+                "detail": (
+                    "Guard already sees review pressure. Start in Inbox, then drop back "
+                    "to the local approval center only when needed."
+                ),
+            },
+            _install_or_review_step(recommended),
+        ]
     else:
-        steps.append(
+        steps = [
             {
                 "title": "Check local Guard status",
                 "command": f"{GUARD_COMMAND} status",
                 "detail": "See what is protected locally, what synced last, and what Guard thinks you should do next.",
             }
-        )
+        ]
+    steps.insert(
+        0,
+        {
+            "title": "Open Guard Home",
+            "command": dashboard_url,
+            "detail": "Review Home, Inbox, Fleet, Evidence, and upgrade prompts from the signed-in command center.",
+        },
+    )
     if bool(payload.get("team_policy_active")):
         steps.append(
             {
@@ -339,14 +376,16 @@ def _connect_or_dashboard_step(cloud_state: str, connect_url: str, dashboard_url
             "title": "Optional cloud connect",
             "command": f"{GUARD_COMMAND} connect",
             "detail": (
-                "Keep receipts local by default, then run one command when you want shared history, "
-                "trust checks, or team policy."
+                "Keep local protection free by default, then run one command when you want shared inbox state, "
+                "fleet continuity, evidence, or team policy."
             ),
         }
     return {
-        "title": "Open the Guard dashboard",
+        "title": "Open Guard Home",
         "command": dashboard_url,
-        "detail": "Guard Cloud is already paired. Use the signed-in dashboard for devices, receipts, and upgrades.",
+        "detail": (
+            "Guard Cloud is already paired. Use the signed-in command center for Home, Fleet, Evidence, and upgrades."
+        ),
     }
 
 
@@ -360,14 +399,19 @@ def _recommended_summary(payload: dict[str, object]) -> dict[str, object] | None
     return None
 
 
-def _resolve_guard_urls(sync_url: str | None) -> tuple[str, str]:
+def _resolve_guard_urls(sync_url: str | None) -> tuple[str, str, str, str]:
     if not isinstance(sync_url, str) or not sync_url:
-        return GUARD_DASHBOARD_URL, GUARD_CONNECT_URL
+        return GUARD_DASHBOARD_URL, GUARD_CONNECT_URL, GUARD_INBOX_URL, GUARD_FLEET_URL
     parsed = urlparse(sync_url)
     if not parsed.scheme or not parsed.netloc:
-        return GUARD_DASHBOARD_URL, GUARD_CONNECT_URL
+        return GUARD_DASHBOARD_URL, GUARD_CONNECT_URL, GUARD_INBOX_URL, GUARD_FLEET_URL
     origin = f"{parsed.scheme}://{parsed.netloc}"
-    return f"{origin}/guard", f"{origin}/guard/connect"
+    return (
+        f"{origin}/guard",
+        f"{origin}/guard/connect",
+        f"{origin}/guard/inbox",
+        f"{origin}/guard/fleet",
+    )
 
 
 def _resolve_cloud_state(*, sync_configured: bool, sync_completed: bool, remote_payload_active: bool) -> str:
@@ -395,8 +439,8 @@ def _cloud_state_detail(cloud_state: str, connect_url: str, dashboard_url: str) 
         )
     if cloud_state == "paired_active":
         return (
-            "Guard is paired with Guard Cloud. Use the local CLI for protection and the signed-in dashboard "
-            f"at {dashboard_url} for receipts, devices, upgrades, and team workflows."
+            "Guard is paired with Guard Cloud. Use the local CLI for protection and the signed-in command center "
+            f"at {dashboard_url} for Home, Inbox, Fleet, Evidence, upgrades, and team workflows."
         )
     return (
         "Receipts stay on this machine until you choose to pair Guard Cloud. "

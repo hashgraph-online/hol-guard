@@ -769,7 +769,7 @@ def _connect_sync_note_text(payload: dict[str, object]) -> str | None:
     if _connect_reason_requires_paid_plan(reason):
         return (
             "Local protection is active. Upgrade your Guard plan to sync shared "
-            "proof, receipts, and devices to Guard Cloud."
+            "proof, receipts, and Fleet history to Guard Cloud."
         )
     return message
 
@@ -1400,7 +1400,11 @@ def _build_cloud_summary_panel(payload: dict[str, object]) -> Panel:
     body = Table.grid(padding=(0, 1))
     body.add_row("State", f"[bold]{payload.get('cloud_state_label', 'Local only')}[/bold]")
     body.add_row("Summary", str(payload.get("cloud_state_detail") or "Guard is protecting this machine locally."))
-    body.add_row("Dashboard", str(payload.get("dashboard_url") or "https://hol.org/guard"))
+    body.add_row("Home", str(payload.get("dashboard_url") or "https://hol.org/guard"))
+    if payload.get("inbox_url"):
+        body.add_row("Inbox", str(payload.get("inbox_url")))
+    if payload.get("fleet_url"):
+        body.add_row("Fleet", str(payload.get("fleet_url")))
     body.add_row("Connect guide", str(payload.get("connect_url") or "https://hol.org/guard/connect"))
     if payload.get("sync_url"):
         body.add_row("Sync endpoint", str(payload.get("sync_url")))

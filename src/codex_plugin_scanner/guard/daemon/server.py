@@ -160,9 +160,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/assets/") or parsed.path.startswith("/brand/"):
             self._write_static_asset(parsed.path.removeprefix("/"))
             return
-        if parsed.path == "/receipts":
-            self._write_json({"items": store.list_receipts(limit=200)})
-            return
         if parsed.path == "/v1/events/stream":
             if not self._token_is_valid(parsed.query):
                 self._write_json({"error": "unauthorized"}, status=401)
@@ -849,7 +846,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _is_dashboard_route(path: str) -> bool:
-        if path in {"/", "/requests", "/approvals"}:
+        if path in {
+            "/",
+            "/home",
+            "/dashboard",
+            "/inbox",
+            "/fleet",
+            "/evidence",
+            "/requests",
+            "/approvals",
+        }:
             return True
         if path.startswith("/requests/"):
             return True
