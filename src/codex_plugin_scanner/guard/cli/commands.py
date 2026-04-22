@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shlex
 import sqlite3
@@ -1350,6 +1351,14 @@ def run_guard_command(args: argparse.Namespace) -> int:
                     ),
                 )
                 return 0
+            if _should_emit_native_hook_exit_block(args, event_name=event_name, policy_action=policy_action):
+                _emit_native_hook_block_stderr(
+                    _native_hook_reason_for_harness(
+                        args.harness,
+                        _runtime_artifact_native_reason(runtime_artifact, response_payload),
+                    )
+                )
+                return 2
             if _should_emit_native_hook_response(args):
                 _emit_native_hook_response(
                     harness=args.harness,
@@ -1388,39 +1397,51 @@ def run_guard_command(args: argparse.Namespace) -> int:
         )
         if policy_action not in VALID_GUARD_ACTIONS:
             policy_action = SAFE_CHANGED_HASH_ACTION
+        hook_event_name = _hook_event_name(payload) or "PreToolUse"
         changed_capabilities = _string_list(payload.get("changed_capabilities"))
         if not changed_capabilities and isinstance(payload.get("event"), str):
             changed_capabilities = [str(payload["event"])]
-        receipt = build_receipt(
-            harness=args.harness,
-            artifact_id=artifact_id,
-            artifact_hash=str(payload.get("artifact_hash", f"hook:{artifact_id}")),
-            policy_decision=policy_action,
-            capabilities_summary=_coalesce_string(
-                payload.get("capabilities_summary"),
-                f"hook artifact • {args.harness}",
-            ),
-            changed_capabilities=changed_capabilities or ["hook"],
-            provenance_summary=_coalesce_string(
-                payload.get("provenance_summary"),
-                f"hook event for {artifact_name}",
-            ),
-            artifact_name=artifact_name,
-            source_scope=_coalesce_string(payload.get("source_scope"), "project"),
-            user_override=_optional_string(payload.get("user_override")),
+        should_record_generic_hook_receipt = not (
+            args.harness == "codex"
+            and hook_event_name == "PreToolUse"
+            and policy_action not in {"block", "sandbox-required", "require-reapproval"}
         )
-        store.add_receipt(receipt)
+        if should_record_generic_hook_receipt:
+            receipt = build_receipt(
+                harness=args.harness,
+                artifact_id=artifact_id,
+                artifact_hash=str(payload.get("artifact_hash", f"hook:{artifact_id}")),
+                policy_decision=policy_action,
+                capabilities_summary=_coalesce_string(
+                    payload.get("capabilities_summary"),
+                    f"hook artifact • {args.harness}",
+                ),
+                changed_capabilities=changed_capabilities or ["hook"],
+                provenance_summary=_coalesce_string(
+                    payload.get("provenance_summary"),
+                    f"hook event for {artifact_name}",
+                ),
+                artifact_name=artifact_name,
+                source_scope=_coalesce_string(payload.get("source_scope"), "project"),
+                user_override=_optional_string(payload.get("user_override")),
+            )
+            store.add_receipt(receipt)
         if _should_emit_copilot_hook_response(args):
             _emit_copilot_hook_response(
                 policy_action=policy_action,
                 reason=_copilot_hook_reason(payload.get("permission_decision_reason")),
             )
             return 0
+        if _should_emit_native_hook_exit_block(args, event_name=hook_event_name, policy_action=policy_action):
+            _emit_native_hook_block_stderr(
+                _native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason"))
+            )
+            return 2
         if _should_emit_native_hook_response(args):
             _emit_native_hook_response(
                 harness=args.harness,
                 policy_action=policy_action,
-                event_name=_hook_event_name(payload) or "PreToolUse",
+                event_name=hook_event_name,
                 reason=_native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason")),
             )
             return 0
@@ -1451,6 +1472,19 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
     return args.harness in {"claude-code", "codex"} and not getattr(args, "json", False)
+
+
+def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
+    codex_runtime_marker = (
+        os.environ.get("CODEX_HOME", "").strip() or os.environ.get("CODEX_MANAGED_BY_BUN", "").strip()
+    )
+    return (
+        args.harness == "codex"
+        and event_name == "PreToolUse"
+        and policy_action in {"block", "sandbox-required", "require-reapproval"}
+        and not getattr(args, "json", False)
+        and bool(codex_runtime_marker)
+    )
 
 
 def _should_emit_prequeue_native_hook_response(args: argparse.Namespace) -> bool:
@@ -1786,6 +1820,8 @@ def _emit_native_hook_response(
             print(json.dumps(payload, separators=(",", ":")))
         return
     permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
+    if harness == "codex" and event_name == "PreToolUse" and permission_decision is None:
+        return
     hook_specific_output: dict[str, object] = {"hookEventName": event_name}
     if permission_decision is not None:
         hook_specific_output["permissionDecision"] = permission_decision
@@ -1793,6 +1829,10 @@ def _emit_native_hook_response(
             hook_specific_output["permissionDecisionReason"] = reason
     payload = {"hookSpecificOutput": hook_specific_output}
     print(json.dumps(payload, separators=(",", ":")))
+
+
+def _emit_native_hook_block_stderr(reason: str) -> None:
+    print(reason, file=sys.stderr)
 
 
 def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str | None:
