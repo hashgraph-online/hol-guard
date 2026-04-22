@@ -1529,13 +1529,9 @@ def _claude_permission_prompt_system_message(
     if tool_name is not None:
         intro = f"HOL Guard requested this Claude approval prompt for {tool_name}."
     if reason is not None:
-        return (
-            f"{intro} This is not Claude's default permission prompt. "
-            f"{_ensure_terminal_punctuation(reason)}"
-        )
+        return f"{intro} This is not Claude's default permission prompt. {_ensure_terminal_punctuation(reason)}"
     return (
-        f"{intro} This is not Claude's default permission prompt. "
-        "Review the action details below before allowing it."
+        f"{intro} This is not Claude's default permission prompt. Review the action details below before allowing it."
     )
 
 
