@@ -4182,9 +4182,10 @@ def test_guard_hook_emits_claude_user_prompt_submit_context_for_overridable_prom
     assert "protecting your local secrets" in output["hookSpecificOutput"]["additionalContext"].lower()
     assert "before you use the first sensitive tool" in output["hookSpecificOutput"]["additionalContext"].lower()
     assert "tell the user exactly" in output["hookSpecificOutput"]["additionalContext"].lower()
-    assert "hol guard is protecting your local secrets and is requesting approval" in (
-        output["hookSpecificOutput"]["additionalContext"].lower()
-    )
+    assert (
+        "hol guard intercepted claude's next attempt to access local secrets and opened the approval dialog "
+        "shown below to protect you"
+    ) in output["hookSpecificOutput"]["additionalContext"].lower()
     assert "do not retry the same sensitive action automatically" in (
         output["hookSpecificOutput"]["additionalContext"].lower()
     )
@@ -4222,9 +4223,9 @@ def test_guard_hook_emits_generic_claude_user_prompt_submit_context_for_non_secr
 
     assert rc == 0
     assert "protecting your local secrets" not in output["hookSpecificOutput"]["additionalContext"].lower()
-    assert "hol guard is requesting approval for the next sensitive action" in (
-        output["hookSpecificOutput"]["additionalContext"].lower()
-    )
+    assert (
+        "hol guard intercepted claude's next sensitive action and opened the approval dialog shown below"
+    ) in output["hookSpecificOutput"]["additionalContext"].lower()
 
 
 def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continue_guidance(
@@ -4414,15 +4415,19 @@ def test_guard_hook_emits_claude_notification_notice_for_permission_prompt(tmp_p
     assert pre_tool_rc == 0
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert notification_rc == 0
-    assert "HOL Guard requested this Claude approval prompt for Read." in notification_output["systemMessage"]
-    assert "not Claude's default permission prompt" in notification_output["systemMessage"]
-    assert "protecting your local secrets" in notification_output["systemMessage"].lower()
-    assert "local secret access" in notification_output["systemMessage"]
+    assert "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt." in (
+        notification_output["systemMessage"]
+    )
+    assert "came from HOL Guard, not from Claude alone" in notification_output["systemMessage"]
+    assert "protect your local secrets" in notification_output["systemMessage"].lower()
+    assert "opened this approval prompt" in notification_output["systemMessage"]
     assert notification_output["hookSpecificOutput"]["hookEventName"] == "Notification"
-    assert "HOL Guard requested the active approval prompt." in (
+    assert "HOL Guard intercepted the sensitive request and opened the Claude approval dialog" in (
         notification_output["hookSpecificOutput"]["additionalContext"]
     )
-    assert "not Claude's default permission prompt" in notification_output["hookSpecificOutput"]["additionalContext"]
+    assert "came from HOL Guard, not from Claude alone" in (
+        notification_output["hookSpecificOutput"]["additionalContext"]
+    )
 
 
 def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reason(tmp_path, capsys, monkeypatch):
@@ -4455,11 +4460,13 @@ def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reas
 
     assert rc == 0
     assert output["systemMessage"] == (
-        "HOL Guard requested this Claude approval prompt for Bash. "
-        "This is not Claude's default permission prompt. "
+        "HOL Guard intercepted Claude's attempt to use Bash and opened this approval prompt. "
+        "This approval dialog came from HOL Guard, not from Claude alone. "
         "Review the action details below before allowing it."
     )
-    assert "sensitive tool action" in output["hookSpecificOutput"]["additionalContext"]
+    assert "HOL Guard intercepted the sensitive request and opened the Claude approval dialog" in (
+        output["hookSpecificOutput"]["additionalContext"]
+    )
 
 
 def test_guard_hook_claude_notification_notice_is_tool_scoped_and_consumed(tmp_path, capsys, monkeypatch):
@@ -4537,12 +4544,12 @@ def test_guard_hook_claude_notification_notice_is_tool_scoped_and_consumed(tmp_p
     second_output = json.loads(capsys.readouterr().out)
 
     assert first_rc == 0
-    assert "protecting your local secrets" in first_output["systemMessage"].lower()
-    assert "local secret access" in first_output["systemMessage"]
+    assert "protect your local secrets" in first_output["systemMessage"].lower()
+    assert "came from HOL Guard, not from Claude alone" in first_output["systemMessage"]
     assert second_rc == 0
     assert second_output["systemMessage"] == (
-        "HOL Guard requested this Claude approval prompt for Read. "
-        "This is not Claude's default permission prompt. "
+        "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt. "
+        "This approval dialog came from HOL Guard, not from Claude alone. "
         "Review the action details below before allowing it."
     )
 
@@ -4603,7 +4610,7 @@ def test_guard_hook_claude_notification_notice_falls_back_when_tool_name_is_miss
 
     assert pre_tool_rc == 0
     assert notification_rc == 0
-    assert "local secret access" in notification_output["systemMessage"]
+    assert "opened this approval prompt" in notification_output["systemMessage"]
 
 
 def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(tmp_path, capsys, monkeypatch):
@@ -4666,8 +4673,8 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert notification_rc == 0
     assert notification_output["systemMessage"] == (
-        "HOL Guard requested this Claude approval prompt for Read. "
-        "This is not Claude's default permission prompt. "
+        "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt. "
+        "This approval dialog came from HOL Guard, not from Claude alone. "
         "Review the action details below before allowing it."
     )
 

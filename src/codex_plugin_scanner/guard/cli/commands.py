@@ -1155,7 +1155,7 @@ def run_guard_command(args: argparse.Namespace) -> int:
                 harness=args.harness,
                 policy_action="allow",
                 event_name="Notification",
-                reason="HOL Guard requested this Claude approval prompt.",
+                reason="HOL Guard intercepted the tool request and opened this Claude approval prompt.",
                 system_message=_claude_permission_prompt_system_message(payload=payload, notice=notice),
                 additional_context=_claude_permission_prompt_additional_context(notice),
             )
@@ -1525,13 +1525,17 @@ def _claude_permission_prompt_system_message(
     if tool_name is None and notice is not None:
         tool_name = _optional_string(notice.get("tool_name"))
     reason = _optional_string(notice.get("reason")) if notice is not None else None
-    intro = "HOL Guard requested this Claude approval prompt."
+    intro = "HOL Guard intercepted a sensitive request and opened this Claude approval prompt."
     if tool_name is not None:
-        intro = f"HOL Guard requested this Claude approval prompt for {tool_name}."
+        intro = f"HOL Guard intercepted Claude's attempt to use {tool_name} and opened this approval prompt."
     if reason is not None:
-        return f"{intro} This is not Claude's default permission prompt. {_ensure_terminal_punctuation(reason)}"
+        return (
+            f"{intro} This approval dialog came from HOL Guard, not from Claude alone. "
+            f"{_ensure_terminal_punctuation(reason)}"
+        )
     return (
-        f"{intro} This is not Claude's default permission prompt. Review the action details below before allowing it."
+        f"{intro} This approval dialog came from HOL Guard, not from Claude alone. "
+        "Review the action details below before allowing it."
     )
 
 
@@ -1539,12 +1543,14 @@ def _claude_permission_prompt_additional_context(notice: dict[str, object] | Non
     reason = _optional_string(notice.get("reason")) if notice is not None else None
     if reason is not None:
         return (
-            "HOL Guard requested the active approval prompt. This is not Claude's default permission prompt. "
+            "HOL Guard intercepted the sensitive request and opened the Claude approval dialog that is currently "
+            "open. "
+            "This approval dialog came from HOL Guard, not from Claude alone. "
             f"{_ensure_terminal_punctuation(reason)} If the user denies it, do not retry the same sensitive access."
         )
     return (
-        "HOL Guard requested the active approval prompt for a sensitive tool action. "
-        "This is not Claude's default permission prompt. "
+        "HOL Guard intercepted the sensitive request and opened the Claude approval dialog that is currently open. "
+        "This approval dialog came from HOL Guard, not from Claude alone. "
         "If the user denies it, do not retry the same action."
     )
 
@@ -1639,7 +1645,8 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
     tool_name = artifact.metadata.get("tool_name")
     if isinstance(path_class, str) and isinstance(tool_name, str):
         return (
-            f"HOL Guard is protecting your local secrets from local secret access via {tool_name} ({path_class}). "
+            f"HOL Guard intercepted Claude's attempt to use {tool_name} for {path_class} and opened this approval "
+            "prompt to protect your local secrets. "
             "Approve only if you intended to expose them."
         )
     risk_summary = response_payload.get("risk_summary")
@@ -1667,10 +1674,15 @@ def _claude_prompt_additional_context(
         return None
     if _prompt_requires_hard_block(artifact):
         return None
-    briefing_sentence = "HOL Guard is requesting approval for the next sensitive action."
+    briefing_sentence = "HOL Guard intercepted the next sensitive action and opened the approval dialog below."
     if "secret_read" in _prompt_request_classes(artifact):
         briefing_sentence = (
-            "HOL Guard is protecting your local secrets and is requesting approval for the next sensitive action."
+            "HOL Guard intercepted Claude's next attempt to access local secrets and opened the approval dialog "
+            "shown below to protect you."
+        )
+    else:
+        briefing_sentence = (
+            "HOL Guard intercepted Claude's next sensitive action and opened the approval dialog shown below."
         )
     return (
         f"{_ensure_terminal_punctuation(native_reason)} "
