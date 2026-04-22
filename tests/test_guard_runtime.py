@@ -4179,6 +4179,7 @@ def test_guard_hook_emits_claude_user_prompt_submit_context_for_overridable_prom
     assert output["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     assert "additionalContext" in output["hookSpecificOutput"]
     assert "direct local secret access" in output["hookSpecificOutput"]["additionalContext"]
+    assert "protecting your local secrets" in output["hookSpecificOutput"]["additionalContext"].lower()
     assert "before you use the first sensitive tool" in output["hookSpecificOutput"]["additionalContext"].lower()
     assert "do not retry the same sensitive action automatically" in (
         output["hookSpecificOutput"]["additionalContext"].lower()
@@ -4375,6 +4376,7 @@ def test_guard_hook_emits_claude_notification_notice_for_permission_prompt(tmp_p
     assert notification_rc == 0
     assert "HOL Guard requested this Claude approval prompt for Read." in notification_output["systemMessage"]
     assert "not Claude's default permission prompt" in notification_output["systemMessage"]
+    assert "protecting your local secrets" in notification_output["systemMessage"].lower()
     assert "local secret access" in notification_output["systemMessage"]
     assert notification_output["hookSpecificOutput"]["hookEventName"] == "Notification"
     assert "HOL Guard requested the active approval prompt." in (
@@ -4495,6 +4497,7 @@ def test_guard_hook_claude_notification_notice_is_tool_scoped_and_consumed(tmp_p
     second_output = json.loads(capsys.readouterr().out)
 
     assert first_rc == 0
+    assert "protecting your local secrets" in first_output["systemMessage"].lower()
     assert "local secret access" in first_output["systemMessage"]
     assert second_rc == 0
     assert second_output["systemMessage"] == (

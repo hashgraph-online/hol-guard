@@ -1615,7 +1615,8 @@ def _native_prompt_context(artifact: GuardArtifact) -> str:
     }
     if "secret_read" in prompt_classes:
         return (
-            "HOL Guard flagged this prompt because it asks for direct local secret access. "
+            "HOL Guard flagged this prompt because it asks for direct local secret access and is protecting your "
+            "local secrets. "
             "If that is intentional, continue and Guard will ask again on the actual tool call."
         )
     return (
@@ -1634,8 +1635,8 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
     tool_name = artifact.metadata.get("tool_name")
     if isinstance(path_class, str) and isinstance(tool_name, str):
         return (
-            f"HOL Guard flagged this as local secret access via {tool_name} ({path_class}). "
-            "Approve only if you intended to expose it."
+            f"HOL Guard is protecting your local secrets from local secret access via {tool_name} ({path_class}). "
+            "Approve only if you intended to expose them."
         )
     risk_summary = response_payload.get("risk_summary")
     if isinstance(risk_summary, str) and risk_summary.strip():
