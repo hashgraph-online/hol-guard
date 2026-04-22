@@ -4179,6 +4179,10 @@ def test_guard_hook_emits_claude_user_prompt_submit_context_for_overridable_prom
     assert output["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     assert "additionalContext" in output["hookSpecificOutput"]
     assert "direct local secret access" in output["hookSpecificOutput"]["additionalContext"]
+    assert "before you use the first sensitive tool" in output["hookSpecificOutput"]["additionalContext"].lower()
+    assert "do not retry the same sensitive action automatically" in (
+        output["hookSpecificOutput"]["additionalContext"].lower()
+    )
     assert any(receipt["artifact_id"].startswith("claude-code:session:prompt") for receipt in receipts)
 
 
@@ -4370,11 +4374,13 @@ def test_guard_hook_emits_claude_notification_notice_for_permission_prompt(tmp_p
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert notification_rc == 0
     assert "HOL Guard requested this Claude approval prompt for Read." in notification_output["systemMessage"]
+    assert "not Claude's default permission prompt" in notification_output["systemMessage"]
     assert "local secret access" in notification_output["systemMessage"]
     assert notification_output["hookSpecificOutput"]["hookEventName"] == "Notification"
     assert "HOL Guard requested the active approval prompt." in (
         notification_output["hookSpecificOutput"]["additionalContext"]
     )
+    assert "not Claude's default permission prompt" in notification_output["hookSpecificOutput"]["additionalContext"]
 
 
 def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reason(tmp_path, capsys, monkeypatch):
@@ -4408,6 +4414,7 @@ def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reas
     assert rc == 0
     assert output["systemMessage"] == (
         "HOL Guard requested this Claude approval prompt for Bash. "
+        "This is not Claude's default permission prompt. "
         "Review the action details below before allowing it."
     )
     assert "sensitive tool action" in output["hookSpecificOutput"]["additionalContext"]
@@ -4492,6 +4499,7 @@ def test_guard_hook_claude_notification_notice_is_tool_scoped_and_consumed(tmp_p
     assert second_rc == 0
     assert second_output["systemMessage"] == (
         "HOL Guard requested this Claude approval prompt for Read. "
+        "This is not Claude's default permission prompt. "
         "Review the action details below before allowing it."
     )
 
@@ -4616,6 +4624,7 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
     assert notification_rc == 0
     assert notification_output["systemMessage"] == (
         "HOL Guard requested this Claude approval prompt for Read. "
+        "This is not Claude's default permission prompt. "
         "Review the action details below before allowing it."
     )
 

@@ -1529,19 +1529,23 @@ def _claude_permission_prompt_system_message(
     if tool_name is not None:
         intro = f"HOL Guard requested this Claude approval prompt for {tool_name}."
     if reason is not None:
-        return f"{intro} {reason}"
-    return f"{intro} Review the action details below before allowing it."
+        return f"{intro} This is not Claude's default permission prompt. {reason}"
+    return (
+        f"{intro} This is not Claude's default permission prompt. "
+        "Review the action details below before allowing it."
+    )
 
 
 def _claude_permission_prompt_additional_context(notice: dict[str, object] | None) -> str:
     reason = _optional_string(notice.get("reason")) if notice is not None else None
     if reason is not None:
         return (
-            "HOL Guard requested the active approval prompt. "
+            "HOL Guard requested the active approval prompt. This is not Claude's default permission prompt. "
             f"{reason} If the user denies it, do not retry the same sensitive access."
         )
     return (
         "HOL Guard requested the active approval prompt for a sensitive tool action. "
+        "This is not Claude's default permission prompt. "
         "If the user denies it, do not retry the same action."
     )
 
@@ -1658,7 +1662,13 @@ def _claude_prompt_additional_context(
         return None
     if _prompt_requires_hard_block(artifact):
         return None
-    return native_reason
+    return (
+        f"{native_reason} "
+        "Before you use the first sensitive tool for this request, tell the user in one short sentence that HOL Guard "
+        "is requesting approval for the next sensitive action. Attempt that sensitive tool at most once. If HOL Guard "
+        "or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval "
+        "is required in Claude to continue."
+    )
 
 
 def _copilot_hook_reason(*values: object | None) -> str:
