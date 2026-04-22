@@ -14,8 +14,10 @@ from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _json_payload, _run_command_probe
 
 CLAUDE_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+CLAUDE_GUARD_NOTIFICATION_MATCHER = "permission_prompt"
 CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS = 30
 CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS = 20
+CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS = 10
 CLAUDE_SETTINGS_FILES = ("settings.json", "settings.local.json")
 
 
@@ -439,6 +441,15 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             hook_command,
             timeout=CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS,
         )
+        notification_entries = _prune_guard_hook_entries(
+            hooks.get("Notification") if isinstance(hooks.get("Notification"), list) else []
+        )
+        hooks["Notification"] = _merge_hook_group(
+            notification_entries,
+            CLAUDE_GUARD_NOTIFICATION_MATCHER,
+            hook_command,
+            timeout=CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS,
+        )
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return {
@@ -466,7 +477,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         hook_command = self._hook_command(context)
         hooks = payload.get("hooks")
         if isinstance(hooks, dict):
-            for key in ("PreToolUse", "PostToolUse", "UserPromptSubmit"):
+            for key in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Notification"):
                 entries = hooks.get(key)
                 hooks[key] = _remove_hook_entry(
                     _prune_guard_hook_entries(entries if isinstance(entries, list) else []),

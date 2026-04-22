@@ -1691,6 +1691,13 @@ class GuardStore:
             return payload
         return None
 
+    def delete_sync_payload(self, state_key: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "delete from sync_state where state_key = ?",
+                (state_key,),
+            )
+
     def add_event(self, event_name: str, payload: dict[str, object], now: str) -> None:
         with self._connect() as connection:
             connection.execute(
