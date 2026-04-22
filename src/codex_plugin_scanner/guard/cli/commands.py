@@ -1474,12 +1474,10 @@ def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
     return args.harness in {"claude-code", "codex"} and not getattr(args, "json", False)
 
 
-def _should_emit_native_hook_exit_block(
-    args: argparse.Namespace, *, event_name: str, policy_action: str
-) -> bool:
-    codex_runtime_marker = os.environ.get("CODEX_HOME", "").strip() or os.environ.get(
-        "CODEX_MANAGED_BY_BUN", ""
-    ).strip()
+def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
+    codex_runtime_marker = (
+        os.environ.get("CODEX_HOME", "").strip() or os.environ.get("CODEX_MANAGED_BY_BUN", "").strip()
+    )
     return (
         args.harness == "codex"
         and event_name == "PreToolUse"
