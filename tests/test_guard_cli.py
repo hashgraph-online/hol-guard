@@ -4889,10 +4889,10 @@ url = http://127.0.0.1:8787/guard-canary
                 str(payload_path),
             ]
         )
-        output = json.loads(capsys.readouterr().out)
+        output = capsys.readouterr().out
 
         assert rc == 0
-        assert output == {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
+        assert output == ""
 
     def test_guard_codex_hook_allows_curl_data_raw_literal_at_value(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -4918,10 +4918,10 @@ url = http://127.0.0.1:8787/guard-canary
                 str(payload_path),
             ]
         )
-        output = json.loads(capsys.readouterr().out)
+        output = capsys.readouterr().out
 
         assert rc == 0
-        assert output == {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
+        assert output == ""
 
     def test_guard_codex_hook_allows_curl_data_urlencode_named_literal_at_value(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -4947,10 +4947,10 @@ url = http://127.0.0.1:8787/guard-canary
                 str(payload_path),
             ]
         )
-        output = json.loads(capsys.readouterr().out)
+        output = capsys.readouterr().out
 
         assert rc == 0
-        assert output == {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
+        assert output == ""
 
     def test_guard_codex_hook_allows_clustered_curl_request_method(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -4976,10 +4976,10 @@ url = http://127.0.0.1:8787/guard-canary
                 str(payload_path),
             ]
         )
-        output = json.loads(capsys.readouterr().out)
+        output = capsys.readouterr().out
 
         assert rc == 0
-        assert output == {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
+        assert output == ""
 
     def test_guard_codex_hook_allows_clustered_curl_quote_command(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -5005,10 +5005,10 @@ url = http://127.0.0.1:8787/guard-canary
                 str(payload_path),
             ]
         )
-        output = json.loads(capsys.readouterr().out)
+        output = capsys.readouterr().out
 
         assert rc == 0
-        assert output == {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
+        assert output == ""
 
     def test_guard_codex_hook_allows_clustered_curl_telnet_option(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -5034,10 +5034,10 @@ url = http://127.0.0.1:8787/guard-canary
                 str(payload_path),
             ]
         )
-        output = json.loads(capsys.readouterr().out)
+        output = capsys.readouterr().out
 
         assert rc == 0
-        assert output == {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
+        assert output == ""
 
     def test_guard_codex_hook_allows_clustered_curl_range(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -5063,10 +5063,10 @@ url = http://127.0.0.1:8787/guard-canary
                 str(payload_path),
             ]
         )
-        output = json.loads(capsys.readouterr().out)
+        output = capsys.readouterr().out
 
         assert rc == 0
-        assert output == {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
+        assert output == ""
 
     def test_guard_update_human_output_uses_notes_instead_of_stderr_for_current(self, capsys):
         emit_guard_payload(
