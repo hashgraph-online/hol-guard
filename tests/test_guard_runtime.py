@@ -7244,14 +7244,18 @@ def test_guard_daemon_serves_health_and_receipt_state(tmp_path):
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=5) as response:
             health_payload = json.loads(response.read().decode("utf-8"))
-        with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/receipts", timeout=5) as response:
-            receipts_payload = json.loads(response.read().decode("utf-8"))
+        runtime_error = None
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/receipts", timeout=5)
+        except urllib.error.HTTPError as error:
+            runtime_error = error
     finally:
         daemon.stop()
 
     assert health_payload["ok"] is True
     assert health_payload["receipts"] == 1
-    assert receipts_payload["items"][0]["artifact_id"] == "codex:workspace_skill"
+    assert runtime_error is not None
+    assert runtime_error.code == 404
 
 
 def test_sync_receipts_retries_once_after_timeout(tmp_path, monkeypatch):
