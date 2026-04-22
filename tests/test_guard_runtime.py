@@ -4179,7 +4179,52 @@ def test_guard_hook_emits_claude_user_prompt_submit_context_for_overridable_prom
     assert output["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     assert "additionalContext" in output["hookSpecificOutput"]
     assert "direct local secret access" in output["hookSpecificOutput"]["additionalContext"]
+    assert "protecting your local secrets" in output["hookSpecificOutput"]["additionalContext"].lower()
+    assert "before you use the first sensitive tool" in output["hookSpecificOutput"]["additionalContext"].lower()
+    assert "tell the user exactly" in output["hookSpecificOutput"]["additionalContext"].lower()
+    assert "hol guard is protecting your local secrets and is requesting approval" in (
+        output["hookSpecificOutput"]["additionalContext"].lower()
+    )
+    assert "do not retry the same sensitive action automatically" in (
+        output["hookSpecificOutput"]["additionalContext"].lower()
+    )
     assert any(receipt["artifact_id"].startswith("claude-code:session:prompt") for receipt in receipts)
+
+
+def test_guard_hook_emits_generic_claude_user_prompt_submit_context_for_non_secret_prompts(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use Bash to run rm -rf ./dist and then stop.",
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert "protecting your local secrets" not in output["hookSpecificOutput"]["additionalContext"].lower()
+    assert "hol guard is requesting approval for the next sensitive action" in (
+        output["hookSpecificOutput"]["additionalContext"].lower()
+    )
 
 
 def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continue_guidance(
@@ -4370,11 +4415,14 @@ def test_guard_hook_emits_claude_notification_notice_for_permission_prompt(tmp_p
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert notification_rc == 0
     assert "HOL Guard requested this Claude approval prompt for Read." in notification_output["systemMessage"]
+    assert "not Claude's default permission prompt" in notification_output["systemMessage"]
+    assert "protecting your local secrets" in notification_output["systemMessage"].lower()
     assert "local secret access" in notification_output["systemMessage"]
     assert notification_output["hookSpecificOutput"]["hookEventName"] == "Notification"
     assert "HOL Guard requested the active approval prompt." in (
         notification_output["hookSpecificOutput"]["additionalContext"]
     )
+    assert "not Claude's default permission prompt" in notification_output["hookSpecificOutput"]["additionalContext"]
 
 
 def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reason(tmp_path, capsys, monkeypatch):
@@ -4408,6 +4456,7 @@ def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reas
     assert rc == 0
     assert output["systemMessage"] == (
         "HOL Guard requested this Claude approval prompt for Bash. "
+        "This is not Claude's default permission prompt. "
         "Review the action details below before allowing it."
     )
     assert "sensitive tool action" in output["hookSpecificOutput"]["additionalContext"]
@@ -4488,10 +4537,12 @@ def test_guard_hook_claude_notification_notice_is_tool_scoped_and_consumed(tmp_p
     second_output = json.loads(capsys.readouterr().out)
 
     assert first_rc == 0
+    assert "protecting your local secrets" in first_output["systemMessage"].lower()
     assert "local secret access" in first_output["systemMessage"]
     assert second_rc == 0
     assert second_output["systemMessage"] == (
         "HOL Guard requested this Claude approval prompt for Read. "
+        "This is not Claude's default permission prompt. "
         "Review the action details below before allowing it."
     )
 
@@ -4616,6 +4667,7 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
     assert notification_rc == 0
     assert notification_output["systemMessage"] == (
         "HOL Guard requested this Claude approval prompt for Read. "
+        "This is not Claude's default permission prompt. "
         "Review the action details below before allowing it."
     )
 

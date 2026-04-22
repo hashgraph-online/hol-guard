@@ -1529,19 +1529,22 @@ def _claude_permission_prompt_system_message(
     if tool_name is not None:
         intro = f"HOL Guard requested this Claude approval prompt for {tool_name}."
     if reason is not None:
-        return f"{intro} {reason}"
-    return f"{intro} Review the action details below before allowing it."
+        return f"{intro} This is not Claude's default permission prompt. {_ensure_terminal_punctuation(reason)}"
+    return (
+        f"{intro} This is not Claude's default permission prompt. Review the action details below before allowing it."
+    )
 
 
 def _claude_permission_prompt_additional_context(notice: dict[str, object] | None) -> str:
     reason = _optional_string(notice.get("reason")) if notice is not None else None
     if reason is not None:
         return (
-            "HOL Guard requested the active approval prompt. "
-            f"{reason} If the user denies it, do not retry the same sensitive access."
+            "HOL Guard requested the active approval prompt. This is not Claude's default permission prompt. "
+            f"{_ensure_terminal_punctuation(reason)} If the user denies it, do not retry the same sensitive access."
         )
     return (
         "HOL Guard requested the active approval prompt for a sensitive tool action. "
+        "This is not Claude's default permission prompt. "
         "If the user denies it, do not retry the same action."
     )
 
@@ -1580,6 +1583,13 @@ def _native_hook_reason(*values: object | None) -> str:
     return "HOL Guard flagged this tool call for review."
 
 
+def _ensure_terminal_punctuation(message: str) -> str:
+    trimmed = message.strip()
+    if trimmed.endswith((".", "!", "?")):
+        return trimmed
+    return f"{trimmed}."
+
+
 def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str:
     reason = _native_hook_reason(*values)
     if harness != "codex":
@@ -1597,21 +1607,20 @@ def _prompt_requires_hard_block(artifact: GuardArtifact) -> bool:
     return isinstance(prompt_class, str) and prompt_class == "guard_bypass_intent"
 
 
+def _prompt_request_classes(artifact: GuardArtifact) -> set[str]:
+    prompt_classes = artifact.metadata.get("prompt_request_classes")
+    values = prompt_classes if isinstance(prompt_classes, list) else [artifact.metadata.get("prompt_request_class")]
+    return {str(item) for item in values if isinstance(item, str) and item.strip()}
+
+
 def _native_prompt_context(artifact: GuardArtifact) -> str:
     if _prompt_requires_hard_block(artifact):
         return "HOL Guard blocked this prompt because it asks to bypass or disable Guard."
-    prompt_classes = {
-        str(item)
-        for item in (
-            artifact.metadata.get("prompt_request_classes")
-            if isinstance(artifact.metadata.get("prompt_request_classes"), list)
-            else [artifact.metadata.get("prompt_request_class")]
-        )
-        if isinstance(item, str) and item.strip()
-    }
+    prompt_classes = _prompt_request_classes(artifact)
     if "secret_read" in prompt_classes:
         return (
-            "HOL Guard flagged this prompt because it asks for direct local secret access. "
+            "HOL Guard flagged this prompt because it asks for direct local secret access and is protecting your "
+            "local secrets. "
             "If that is intentional, continue and Guard will ask again on the actual tool call."
         )
     return (
@@ -1630,8 +1639,8 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
     tool_name = artifact.metadata.get("tool_name")
     if isinstance(path_class, str) and isinstance(tool_name, str):
         return (
-            f"HOL Guard flagged this as local secret access via {tool_name} ({path_class}). "
-            "Approve only if you intended to expose it."
+            f"HOL Guard is protecting your local secrets from local secret access via {tool_name} ({path_class}). "
+            "Approve only if you intended to expose them."
         )
     risk_summary = response_payload.get("risk_summary")
     if isinstance(risk_summary, str) and risk_summary.strip():
@@ -1658,7 +1667,18 @@ def _claude_prompt_additional_context(
         return None
     if _prompt_requires_hard_block(artifact):
         return None
-    return native_reason
+    briefing_sentence = "HOL Guard is requesting approval for the next sensitive action."
+    if "secret_read" in _prompt_request_classes(artifact):
+        briefing_sentence = (
+            "HOL Guard is protecting your local secrets and is requesting approval for the next sensitive action."
+        )
+    return (
+        f"{_ensure_terminal_punctuation(native_reason)} "
+        "Before you use the first sensitive tool for this request, tell the user exactly: "
+        f"'{briefing_sentence}' "
+        "Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive "
+        "action automatically. Instead, tell the user approval is required in Claude to continue."
+    )
 
 
 def _copilot_hook_reason(*values: object | None) -> str:
