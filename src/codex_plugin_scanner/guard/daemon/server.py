@@ -644,6 +644,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             exit_code = run_guard_command(args, input_text=json.dumps(payload), output_stream=buffer)
         raw_response = buffer.getvalue().strip()
         if not raw_response:
+            if exit_code == 0:
+                self._write_json({})
+                return
             self._write_json({"error": "empty_hook_response", "exit_code": exit_code}, status=502)
             return
         try:

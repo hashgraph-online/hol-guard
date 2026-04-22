@@ -16,6 +16,7 @@ import time
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
 
@@ -193,6 +194,8 @@ def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = Non
             continue
         if _state_path_age_seconds(state_path) < _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS:
             continue
+        if not _ephemeral_guard_home_is_inactive(guard_home, fallback_age_seconds=_state_path_age_seconds(state_path)):
+            continue
         payload = _load_state(guard_home)
         if not isinstance(payload, dict):
             clear_guard_daemon_state(guard_home)
@@ -207,6 +210,8 @@ def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = Non
         except OSError:
             continue
         if exclude_resolved is not None and resolved_guard_home == exclude_resolved:
+            continue
+        if not _ephemeral_guard_home_is_inactive(guard_home, fallback_age_seconds=elapsed_seconds):
             continue
         _retire_guard_daemon_pid(pid)
         clear_guard_daemon_state(guard_home)
@@ -228,6 +233,34 @@ def _state_path_age_seconds(state_path: Path) -> float:
 
 def _guard_home_is_ephemeral(guard_home: Path) -> bool:
     return any(part.startswith("pytest-") or "pytest-of-" in part for part in guard_home.parts)
+
+
+def _ephemeral_guard_home_is_inactive(guard_home: Path, *, fallback_age_seconds: float) -> bool:
+    heartbeat_age_seconds = _runtime_state_age_seconds(guard_home)
+    if heartbeat_age_seconds is None:
+        return fallback_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
+    return heartbeat_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
+
+
+def _runtime_state_age_seconds(guard_home: Path) -> float | None:
+    try:
+        from ..store import GuardStore
+
+        runtime_state = GuardStore(guard_home).get_runtime_state()
+    except Exception:
+        return None
+    if not isinstance(runtime_state, dict):
+        return None
+    last_heartbeat_at = runtime_state.get("last_heartbeat_at")
+    if not isinstance(last_heartbeat_at, str) or not last_heartbeat_at.strip():
+        return None
+    try:
+        heartbeat = datetime.fromisoformat(last_heartbeat_at)
+    except ValueError:
+        return None
+    if heartbeat.tzinfo is None:
+        heartbeat = heartbeat.replace(tzinfo=timezone.utc)
+    return max(0.0, (datetime.now(timezone.utc) - heartbeat).total_seconds())
 
 
 def _running_ephemeral_guard_daemon_processes() -> list[tuple[int, Path, float]]:

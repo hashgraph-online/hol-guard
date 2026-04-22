@@ -117,6 +117,36 @@ class TestGuardSurfaceServer:
             notification_payload["hookSpecificOutput"]["additionalContext"]
         )
 
+    def test_guard_daemon_claude_hook_endpoint_accepts_empty_allow_response(self, tmp_path) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        store = GuardStore(home_dir)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            hook_request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
+                    f"home={urllib.parse.quote(str(home_dir))}&workspace={urllib.parse.quote(str(workspace_dir))}"
+                ),
+                data=json.dumps(
+                    {
+                        "hook_event_name": "UserPromptSubmit",
+                        "prompt": "hi",
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(hook_request, timeout=5) as response:
+                hook_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert hook_payload == {}
+
     def test_guard_daemon_background_start_auto_stops_after_idle_timeout(self, tmp_path) -> None:
         guard_home = tmp_path / "pytest-of-user" / "guard-home"
         store = GuardStore(guard_home)
