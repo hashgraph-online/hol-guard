@@ -92,6 +92,40 @@ from .product import build_guard_start_payload, build_guard_status_payload
 from .update_commands import run_guard_update
 
 _GUARD_CLIENT_VERSION = "2.0.0"
+_GUARD_HELP_GROUPS = (
+    "Everyday protection:\n"
+    "  start        First-run setup and the Guard operating loop\n"
+    "  status       Current local protection state and next actions\n"
+    "  run          Enforce Guard before a harness launch\n"
+    "  approvals    Resolve the current request queue\n"
+    "  receipts     Review recent local decisions\n"
+    "\n"
+    "Team and cloud coordination:\n"
+    "  connect      Pair this machine to Guard Cloud\n"
+    "  login        Compatibility alias for browser pairing\n"
+    "  sync         Send local decisions to Guard Cloud\n"
+    "  device       Inspect or rotate this machine identity\n"
+    "  bridge       Forward Guard signals to external channels\n"
+    "\n"
+    "Advanced and diagnostics:\n"
+    "  detect       Discover harnesses and managed artifacts\n"
+    "  protect      Wrap installs before they land\n"
+    "  preflight    Scan a target before you add it\n"
+    "  scan         Run a consumer-mode artifact scan\n"
+    "  diff         Compare current artifacts to stored snapshots\n"
+    "  inventory    Inspect tracked artifacts\n"
+    "  abom         Export the local AI-BOM\n"
+    "  explain      Show evidence for one artifact\n"
+    "  policies     Inspect local Guard policy state\n"
+    "  exceptions   Inspect active exception windows\n"
+    "  advisories   Inspect cached Guard Cloud advisories\n"
+    "  events       Review Guard lifecycle events\n"
+    "  doctor       Run local diagnostics\n"
+    "  bootstrap    Detect, install, and launch the approval center\n"
+    "  install      Enable Guard management for a harness\n"
+    "  uninstall    Disable Guard management for a harness\n"
+    "  update       Update hol-guard in the current environment"
+)
 
 
 def _now() -> str:
@@ -106,15 +140,16 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
         "guard",
         help="Run local harness protection workflows",
         description=(
-            "HOL Guard watches local harness config, records approval receipts, and surfaces "
-            "changed tools before launch."
+            "HOL Guard watches local harness config, records approval receipts, and keeps "
+            "Home, Inbox, and Fleet aligned with what this machine is doing."
         ),
         epilog=(
             "Examples:\n"
             f"  {program_name} guard detect\n"
             f"  {program_name} guard doctor cursor\n"
             f"  {program_name} guard run codex --dry-run\n"
-            f"  {program_name} guard install claude-code --workspace ."
+            f"  {program_name} guard install claude-code --workspace .\n\n"
+            f"{_GUARD_HELP_GROUPS}"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -125,6 +160,7 @@ def add_guard_root_parser(parser: argparse.ArgumentParser) -> None:
     """Register Guard as the top-level CLI surface."""
 
     parser.description = "Protect local harnesses before new or changed tools run."
+    parser.epilog = _GUARD_HELP_GROUPS
     parser.set_defaults(command="guard")
     _configure_guard_parser(parser)
 

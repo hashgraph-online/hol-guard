@@ -244,7 +244,25 @@ class TestGuardProductFlow:
         assert output["sync_configured"] is False
         assert output["connect_url"] == "https://hol.org/guard/connect"
         assert output["dashboard_url"] == "https://hol.org/guard"
+        assert output["inbox_url"] == "https://hol.org/guard/inbox"
+        assert output["fleet_url"] == "https://hol.org/guard/fleet"
         assert output["connect_command"] == "hol-guard connect"
+
+    def test_guard_help_groups_commands_by_everyday_cloud_and_advanced_work(self, capsys, monkeypatch):
+        monkeypatch.setattr(sys, "argv", ["hol-guard"])
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["guard", "--help"])
+
+        output = capsys.readouterr().out
+
+        assert excinfo.value.code == 0
+        assert "Everyday protection:" in output
+        assert "Team and cloud coordination:" in output
+        assert "Advanced and diagnostics:" in output
+        assert "start        First-run setup and the Guard operating loop" in output
+        assert "connect      Pair this machine to Guard Cloud" in output
+        assert "doctor       Run local diagnostics" in output
 
     def test_guard_start_human_output_highlights_guard_loop(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

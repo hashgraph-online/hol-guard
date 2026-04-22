@@ -5793,7 +5793,7 @@ url = http://127.0.0.1:8787/guard-canary
         assert "Local protection is active." in output
         assert "Upgrade your Guard plan" in output
         assert "shared proof" in output
-        assert "devices to Guard Cloud" in output
+        assert "Fleet history to Guard Cloud" in output
         assert "Shared proof sync needs a paid Guard plan" not in output
 
     def test_guard_connect_pending_output_treats_upgrade_copy_as_plan_limit(self, capsys):

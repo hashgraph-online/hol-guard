@@ -38,7 +38,7 @@ const footerSections = [
 export function ShellHeader(props: {
   queuedCount: number;
   activeHarness: string | null;
-  view: "queue" | "receipts";
+  view: "home" | "inbox" | "fleet" | "evidence";
 }) {
   return (
     <header
@@ -52,8 +52,10 @@ export function ShellHeader(props: {
               <img src="/brand/Logo_Whole.png" alt="HOL" className="h-8 w-auto sm:h-9" />
             </a>
             <nav className="flex items-center gap-1" aria-label="Primary">
-              <NavPill href="/" active={props.view === "queue"}>Queue</NavPill>
-              <NavPill href="/receipts" active={props.view === "receipts"}>Receipts</NavPill>
+              <NavPill href="/" active={props.view === "home"}>Home</NavPill>
+              <NavPill href="/inbox" active={props.view === "inbox"}>Inbox</NavPill>
+              <NavPill href="/fleet" active={props.view === "fleet"}>Fleet</NavPill>
+              <NavPill href="/evidence" active={props.view === "evidence"}>Evidence</NavPill>
               <NavPill href="https://hol.org/guard" external>hol.org</NavPill>
             </nav>
           </div>
@@ -199,7 +201,7 @@ function NavPill(props: { href: string; children: ReactNode; active?: boolean; e
       href={props.href}
       target={props.external ? "_blank" : undefined}
       rel={props.external ? "noreferrer" : undefined}
-      className={`inline-flex items-center rounded-md px-3 py-1.5 font-medium no-underline transition-colors duration-200 ${
+      className={`inline-flex min-h-11 items-center rounded-md px-3 py-1.5 font-medium no-underline transition-colors duration-200 ${
         props.active
           ? "bg-white/15 text-white"
           : "text-white/80 hover:bg-white/10 hover:text-white"
@@ -251,7 +253,7 @@ function navBadgeToneClass(tone: "default" | "success" | "warning" | undefined):
 
 function actionButtonClass(variant: "primary" | "secondary" | "danger" | "outline" | "ghost" | undefined): string {
   const base = "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-[color,background-color,border-color,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-w-0";
-  const sizeDefault = "min-h-10 h-auto px-4 py-2";
+  const sizeDefault = "min-h-11 h-auto px-4 py-2";
   if (variant === "outline") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
   if (variant === "secondary") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
   if (variant === "ghost") return `${base} ${sizeDefault} hover:bg-slate-100 hover:text-slate-900`;
@@ -291,7 +293,13 @@ function FooterLinkList(props: {
   );
 }
 
-export function WelcomeState(props: { resolutionMessage: string | null }) {
+export function WelcomeState(props: {
+  resolutionMessage: string | null;
+  dashboardUrl: string | null;
+  inboxUrl: string | null;
+  fleetUrl: string | null;
+  connectUrl: string | null;
+}) {
   return (
     <div className="guard-surface-in flex flex-col items-center justify-center py-16 text-center sm:py-24">
       {props.resolutionMessage && (
@@ -313,10 +321,31 @@ export function WelcomeState(props: { resolutionMessage: string | null }) {
       <div className="mt-12 text-left w-full max-w-3xl">
         <div className="rounded-xl border border-border bg-card p-6 shadow-[0_4px_20px_rgba(85,153,254,0.04)]">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue mb-4">Sync your decisions</p>
-          <div className="flex items-center gap-3 rounded-lg bg-surface-1 px-5 py-3 font-mono text-sm">
-            <span className="text-muted-foreground">$</span>
-            <span className="text-brand-dark">hol-guard connect</span>
-          </div>
+          {props.connectUrl ? (
+            <div className="flex flex-wrap gap-3">
+              <ActionButton href={props.connectUrl}>Open pairing flow</ActionButton>
+              {props.dashboardUrl ? (
+                <ActionButton href={props.dashboardUrl} variant="outline">
+                  Open Home
+                </ActionButton>
+              ) : null}
+              {props.inboxUrl ? (
+                <ActionButton href={props.inboxUrl} variant="outline">
+                  Open Inbox
+                </ActionButton>
+              ) : null}
+              {props.fleetUrl ? (
+                <ActionButton href={props.fleetUrl} variant="outline">
+                  Open Fleet
+                </ActionButton>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 rounded-lg bg-surface-1 px-5 py-3 font-mono text-sm">
+              <span className="text-muted-foreground">$</span>
+              <span className="text-brand-dark">hol-guard connect</span>
+            </div>
+          )}
           <p className="mt-3 text-xs text-muted-foreground">
             Open the browser pairing flow, sign in once, and let Guard finish the first sync automatically.
           </p>
