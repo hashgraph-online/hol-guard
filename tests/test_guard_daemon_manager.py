@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
@@ -116,3 +118,30 @@ def test_ensure_guard_daemon_advances_ports_after_early_process_exit(tmp_path, m
 
     assert url == "http://127.0.0.1:5411"
     assert [command[-1] for command in launched_commands] == ["5410", "5411"]
+
+
+def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    responses = iter((None, None, "http://127.0.0.1:5412"))
+    captured_env: dict[str, str] = {}
+
+    def fake_load_guard_daemon_url(_guard_home):
+        return next(responses, "http://127.0.0.1:5412")
+
+    def fake_popen(_command, **kwargs):
+        captured_env.update(kwargs.get("env", {}))
+        return SimpleNamespace(poll=lambda: None)
+
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
+    monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home: None)
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5412])
+    monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
+
+    url = daemon_manager_module.ensure_guard_daemon(guard_home)
+
+    assert url == "http://127.0.0.1:5412"
+    assert str(Path(daemon_manager_module.__file__).resolve().parents[3]) in captured_env["PYTHONPATH"].split(
+        os.pathsep
+    )
