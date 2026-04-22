@@ -154,7 +154,11 @@ def test_ensure_guard_daemon_retires_stale_daemon_from_different_source_root(tmp
         },
     )
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, expected_guard_home=None: True,
+    )
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(daemon_manager_module.os, "kill", lambda pid, _signal: killed.append(pid))
     monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5412])
@@ -229,7 +233,11 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
     )
     monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, expected_guard_home=None: True,
+    )
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(daemon_manager_module.os, "kill", lambda pid, _signal: killed.append(pid))
     monkeypatch.setattr(
@@ -278,7 +286,11 @@ def test_ensure_guard_daemon_keeps_ephemeral_state_with_recent_runtime_heartbeat
     monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", lambda _guard_home: 1.0)
     monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, expected_guard_home=None: True,
+    )
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(daemon_manager_module.os, "kill", lambda pid, _signal: killed.append(pid))
     monkeypatch.setattr(
@@ -318,7 +330,11 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_processes_without_state_file(
     )
     monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", lambda _guard_home: None)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, expected_guard_home=None: True,
+    )
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(daemon_manager_module.os, "kill", lambda pid, _signal: killed.append(pid))
     monkeypatch.setattr(
@@ -332,3 +348,23 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_processes_without_state_file(
     assert url == "http://127.0.0.1:5414"
     assert killed == [33333, 33333]
     assert json.loads((stale_guard_home / "daemon-state.json").read_text(encoding="utf-8")) == {}
+
+
+def test_retire_guard_daemon_process_skips_recycled_pid_for_different_guard_home(tmp_path, monkeypatch):
+    killed: list[int] = []
+    payload = {
+        "pid": 55555,
+        "guard_home": str(tmp_path / "expected-home"),
+    }
+
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, expected_guard_home=None: False,
+    )
+    monkeypatch.setattr(daemon_manager_module.os, "kill", lambda pid, _signal: killed.append(pid))
+
+    daemon_manager_module._retire_guard_daemon_process(payload)
+
+    assert killed == []

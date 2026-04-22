@@ -50,7 +50,7 @@ def ensure_guard_daemon(guard_home: Path) -> str:
             return existing_url
         stale_state = _load_state(guard_home)
         if isinstance(stale_state, dict) and not _guard_daemon_state_matches_current_runtime(stale_state):
-            _retire_guard_daemon_process(stale_state)
+            _retire_guard_daemon_process({**stale_state, "guard_home": str(guard_home)})
         if _guard_daemon_start_in_progress(guard_home):
             inflight_url = _wait_for_guard_daemon_url(guard_home, timeout=GUARD_DAEMON_START_TIMEOUT_SECONDS)
             if inflight_url is not None:
@@ -138,6 +138,7 @@ def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str) -> No
     state_path.write_text(
         json.dumps(
             {
+                "guard_home": str(guard_home),
                 "port": port,
                 "auth_token": auth_token,
                 "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
@@ -200,6 +201,7 @@ def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = Non
         if not isinstance(payload, dict):
             clear_guard_daemon_state(guard_home)
             continue
+        payload = {**payload, "guard_home": str(guard_home)}
         _retire_guard_daemon_process(payload)
         clear_guard_daemon_state(guard_home)
     for pid, guard_home, elapsed_seconds in _running_ephemeral_guard_daemon_processes():
@@ -213,7 +215,7 @@ def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = Non
             continue
         if not _ephemeral_guard_home_is_inactive(guard_home, fallback_age_seconds=elapsed_seconds):
             continue
-        _retire_guard_daemon_pid(pid)
+        _retire_guard_daemon_pid(pid, expected_guard_home=guard_home)
         clear_guard_daemon_state(guard_home)
 
 
@@ -384,7 +386,7 @@ def _guard_daemon_pid_is_running(pid: int) -> bool:
     return True
 
 
-def _guard_daemon_pid_matches_command(pid: int) -> bool:
+def _guard_daemon_pid_matches_command(pid: int, expected_guard_home: Path | None = None) -> bool:
     if os.name == "nt":
         return True
     try:
@@ -397,20 +399,32 @@ def _guard_daemon_pid_matches_command(pid: int) -> bool:
     except OSError:
         return False
     command = result.stdout.strip()
-    return "codex_plugin_scanner.cli" in command and "guard daemon --serve" in command
+    if "codex_plugin_scanner.cli" not in command or "guard daemon --serve" not in command:
+        return False
+    if expected_guard_home is None:
+        return True
+    command_guard_home = _guard_home_from_command(command)
+    if command_guard_home is None:
+        return False
+    try:
+        return command_guard_home.resolve() == expected_guard_home.resolve()
+    except OSError:
+        return command_guard_home == expected_guard_home
 
 
 def _retire_guard_daemon_process(payload: dict[str, object]) -> None:
     pid = payload.get("pid")
     if not isinstance(pid, int) or pid <= 0:
         return
-    _retire_guard_daemon_pid(pid)
+    guard_home = payload.get("guard_home")
+    expected_guard_home = Path(guard_home) if isinstance(guard_home, str) and guard_home.strip() else None
+    _retire_guard_daemon_pid(pid, expected_guard_home=expected_guard_home)
 
 
-def _retire_guard_daemon_pid(pid: int) -> None:
+def _retire_guard_daemon_pid(pid: int, *, expected_guard_home: Path | None = None) -> None:
     if not _guard_daemon_pid_is_running(pid):
         return
-    if not _guard_daemon_pid_matches_command(pid):
+    if not _guard_daemon_pid_matches_command(pid, expected_guard_home):
         return
     try:
         os.kill(pid, signal.SIGTERM)

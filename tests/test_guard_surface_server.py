@@ -194,6 +194,15 @@ class TestGuardSurfaceServer:
         assert runtime_state is not None
         assert daemon_thread_alive is True
 
+    def test_guard_daemon_idle_timeout_ignores_invalid_env_value(self, tmp_path, monkeypatch) -> None:
+        guard_home = tmp_path / "guard-home"
+        monkeypatch.setenv("GUARD_DAEMON_IDLE_TIMEOUT_SECONDS", "ten")
+        monkeypatch.setattr(daemon_server_module, "_guard_home_is_ephemeral", lambda _guard_home: False)
+
+        idle_timeout = daemon_server_module._guard_daemon_idle_timeout_seconds(guard_home)
+
+        assert idle_timeout == 30 * 60
+
     def test_surface_server_contract_is_exposed_during_initialize(self, tmp_path) -> None:
         contract = build_surface_server_contract()
         assert contract["schema_version"] == "guard-surface-server.v1"

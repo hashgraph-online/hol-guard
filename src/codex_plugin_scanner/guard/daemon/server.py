@@ -1057,8 +1057,8 @@ def _guard_daemon_idle_timeout_seconds(
         try:
             parsed_timeout = float(configured_timeout.strip())
         except ValueError:
-            parsed_timeout = 0.0
-        if parsed_timeout > 0:
+            parsed_timeout = None
+        if isinstance(parsed_timeout, float) and parsed_timeout > 0:
             return parsed_timeout
         if parsed_timeout == 0:
             return None
