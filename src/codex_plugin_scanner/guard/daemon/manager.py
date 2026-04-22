@@ -170,6 +170,25 @@ def _load_state(guard_home: Path) -> dict[str, object] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _looks_like_guard_daemon_state(payload: dict[str, object], *, guard_home: Path) -> bool:
+    compatibility_version = payload.get("compatibility_version")
+    source_root = payload.get("source_root")
+    runtime_fingerprint = payload.get("runtime_fingerprint")
+    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
+        return False
+    if not isinstance(source_root, str) or not source_root.strip():
+        return False
+    if not isinstance(runtime_fingerprint, str) or not runtime_fingerprint.strip():
+        return False
+    payload_guard_home = payload.get("guard_home")
+    if isinstance(payload_guard_home, str) and payload_guard_home.strip():
+        try:
+            return Path(payload_guard_home).resolve() == guard_home.resolve()
+        except OSError:
+            return Path(payload_guard_home) == guard_home
+    return True
+
+
 def _state_path(guard_home: Path) -> Path:
     return guard_home / "daemon-state.json"
 
@@ -198,8 +217,7 @@ def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = Non
         if not _ephemeral_guard_home_is_inactive(guard_home, fallback_age_seconds=_state_path_age_seconds(state_path)):
             continue
         payload = _load_state(guard_home)
-        if not isinstance(payload, dict):
-            clear_guard_daemon_state(guard_home)
+        if not isinstance(payload, dict) or not _looks_like_guard_daemon_state(payload, guard_home=guard_home):
             continue
         payload = {**payload, "guard_home": str(guard_home)}
         _retire_guard_daemon_process(payload)
