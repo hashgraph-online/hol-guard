@@ -132,6 +132,29 @@ def test_claude_install_writes_session_start_and_http_hook_schema_and_is_idempot
     assert notification[0]["hooks"][0]["timeout"] == 10
 
 
+def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):
+    initial_context = _build_context(tmp_path)
+    changed_context = HarnessContext(
+        home_dir=tmp_path / "different-home",
+        workspace_dir=initial_context.workspace_dir,
+        guard_home=tmp_path / "different-guard-home",
+    )
+    adapter = ClaudeCodeHarnessAdapter()
+
+    adapter.install(initial_context)
+    adapter.install(changed_context)
+
+    settings_path = initial_context.workspace_dir / ".claude" / "settings.local.json"
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    session_start = payload["hooks"]["SessionStart"]
+    hook_commands = [entry["hooks"][0]["command"] for entry in session_start]
+
+    assert len(session_start) == 4
+    assert all(len(entry["hooks"]) == 1 for entry in session_start)
+    assert all(str(changed_context.guard_home) in command for command in hook_commands)
+    assert all(str(initial_context.guard_home) not in command for command in hook_commands)
+
+
 def test_claude_sync_workspace_hook_urls_uses_active_daemon_port(tmp_path, monkeypatch):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()

@@ -44,9 +44,9 @@ def _guard_hook_group(matcher: str | None, handler: dict[str, object]) -> dict[s
 def _is_guard_hook_command(command: object) -> bool:
     if not isinstance(command, str):
         return False
-    if "codex_plugin_scanner.cli" not in command:
-        return False
-    return "guard hook" in command or "'guard', 'hook'" in command or '"guard", "hook"' in command
+    if "codex_plugin_scanner.cli" in command:
+        return "guard hook" in command or "'guard', 'hook'" in command or '"guard", "hook"' in command
+    return "ensure_guard_daemon(" in command and "HOL Guard protection is active for this workspace." in command
 
 
 def _is_guard_hook_url(url: object) -> bool:

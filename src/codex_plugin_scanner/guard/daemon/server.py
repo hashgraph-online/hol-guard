@@ -34,6 +34,8 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     auth_token: str
     idle_timeout_seconds: float | None
     last_activity_monotonic: float
+    active_stream_clients: int
+    active_stream_clients_lock: threading.Lock
 
 
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -676,6 +678,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             last_heartbeat_at=_now(),
         )
 
+    def _increment_active_stream_clients(self) -> None:
+        with self.server.active_stream_clients_lock:  # type: ignore[attr-defined]
+            self.server.active_stream_clients += 1  # type: ignore[attr-defined]
+
+    def _decrement_active_stream_clients(self) -> None:
+        with self.server.active_stream_clients_lock:  # type: ignore[attr-defined]
+            self.server.active_stream_clients = max(0, self.server.active_stream_clients - 1)  # type: ignore[attr-defined]
+
     @staticmethod
     def _optional_int(value: object) -> int | None:
         if isinstance(value, int):
@@ -694,17 +704,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.send_header("Connection", "keep-alive")
         self.end_headers()
         next_cursor = cursor
-        while True:
-            items = self.server.store.list_events_after(next_cursor, limit=100)  # type: ignore[attr-defined]
-            for item in items:
-                next_cursor = int(item["event_id"])
-                body = json.dumps(item)
-                try:
-                    self.wfile.write(f"data: {body}\n\n".encode())
-                    self.wfile.flush()
-                except BrokenPipeError:
-                    return
-            time.sleep(0.5)
+        self._increment_active_stream_clients()
+        try:
+            while True:
+                self._touch_runtime_heartbeat("/v1/events/stream")
+                items = self.server.store.list_events_after(next_cursor, limit=100)  # type: ignore[attr-defined]
+                for item in items:
+                    next_cursor = int(item["event_id"])
+                    body = json.dumps(item)
+                    try:
+                        self.wfile.write(f"data: {body}\n\n".encode())
+                        self.wfile.flush()
+                    except BrokenPipeError:
+                        return
+                time.sleep(0.5)
+        finally:
+            self._decrement_active_stream_clients()
 
     def _origin_is_allowed(self) -> bool:
         origin = self.headers.get("Origin")
@@ -932,6 +947,8 @@ class GuardDaemonServer:
             idle_timeout_seconds=idle_timeout_seconds,
         )
         self._server.last_activity_monotonic = time.monotonic()
+        self._server.active_stream_clients = 0
+        self._server.active_stream_clients_lock = threading.Lock()
         self.port = int(self._server.server_address[1])
         self._thread: threading.Thread | None = None
         self._watchdog_thread: threading.Thread | None = None
@@ -1003,6 +1020,11 @@ class GuardDaemonServer:
         if idle_timeout_seconds is None or idle_timeout_seconds <= 0:
             return
         while not self._shutdown_started.is_set():
+            with self._server.active_stream_clients_lock:
+                active_stream_clients = self._server.active_stream_clients
+            if active_stream_clients > 0:
+                time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
+                continue
             if time.monotonic() - self._server.last_activity_monotonic >= idle_timeout_seconds:
                 self._shutdown_started.set()
                 self._server.shutdown()

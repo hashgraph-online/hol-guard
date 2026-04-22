@@ -169,6 +169,31 @@ class TestGuardSurfaceServer:
         assert daemon_thread is not None
         assert daemon_thread.is_alive() is False
 
+    def test_guard_daemon_keeps_stream_clients_alive_past_idle_timeout(self, tmp_path) -> None:
+        guard_home = tmp_path / "pytest-of-user" / "guard-home"
+        store = GuardStore(guard_home)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0.05)
+        daemon.start()
+        response = None
+
+        try:
+            stream_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/events/stream?token={daemon._server.auth_token}",
+                method="GET",
+            )
+            response = urllib.request.urlopen(stream_request, timeout=5)
+            time.sleep(0.15)
+            daemon_thread = daemon._thread
+            daemon_thread_alive = daemon_thread is not None and daemon_thread.is_alive()
+            runtime_state = store.get_runtime_state()
+        finally:
+            if response is not None:
+                response.close()
+            daemon.stop()
+
+        assert runtime_state is not None
+        assert daemon_thread_alive is True
+
     def test_surface_server_contract_is_exposed_during_initialize(self, tmp_path) -> None:
         contract = build_surface_server_contract()
         assert contract["schema_version"] == "guard-surface-server.v1"
