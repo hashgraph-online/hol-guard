@@ -65,3 +65,93 @@ export type GuardPolicyDecision = {
   reason: string | null;
   updated_at: string;
 };
+
+export type GuardSurfaceClientAttachment = {
+  client_id: string;
+  surface: string;
+  session_id: string | null;
+  metadata: Record<string, unknown>;
+  lease_id: string;
+  lease_expires_at: string | null;
+  attached_at: string;
+  last_seen_at: string;
+};
+
+export type GuardSession = {
+  session_id: string;
+  harness: string;
+  surface: string;
+  status: string;
+  client_name: string;
+  client_title: string | null;
+  client_version: string | null;
+  workspace: string | null;
+  capabilities: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type GuardOperation = {
+  operation_id: string;
+  session_id: string;
+  harness: string;
+  operation_type: string;
+  status: string;
+  approval_request_ids: string[];
+  resume_token: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type GuardSessionResume = {
+  session: GuardSession;
+  attachments: GuardSurfaceClientAttachment[];
+  operations: GuardOperation[];
+};
+
+export type GuardRuntimeSummary = {
+  session: GuardSession | null;
+  attachments: GuardSurfaceClientAttachment[];
+  operations: GuardOperation[];
+  activeOperation: GuardOperation | null;
+};
+
+export type GuardConnectState = {
+  request_id: string;
+  sync_url: string;
+  allowed_origin: string;
+  status: string;
+  milestone: string;
+  reason: string | null;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+  completed_at: string | null;
+  proof: Record<string, unknown>;
+  version: string;
+  poll_after_ms: number;
+};
+
+export type GuardLocalStateSummary = {
+  headline_state: string;
+  pending_approvals: number;
+  receipt_count: number;
+  sync_configured: boolean;
+  latest_sync: Record<string, unknown> | null;
+  latest_connect_state: GuardConnectState | null;
+  runtime: {
+    sessions: number;
+    operations: number;
+    latest_session: GuardSession | null;
+    latest_operation: GuardOperation | null;
+  };
+  portal_links: Record<string, string>;
+  guidance: {
+    title: string;
+    body: string;
+    command: string | null;
+    primary_link: string | null;
+  };
+  updated_at: string;
+};

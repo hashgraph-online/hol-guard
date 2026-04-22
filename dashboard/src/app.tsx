@@ -2,19 +2,23 @@ import { useEffect, useState } from "react";
 
 import {
   fetchDiff,
+  fetchLocalStateSummary,
   fetchLatestReceipt,
   fetchPolicy,
   fetchReceipts,
   fetchRequest,
   fetchRequests,
+  fetchRuntimeSummary,
   resolveRequest
 } from "./guard-api";
 import { ApprovalCenterLayout } from "./approval-center-layout";
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
+  GuardLocalStateSummary,
   GuardPolicyDecision,
-  GuardReceipt
+  GuardReceipt,
+  GuardRuntimeSummary
 } from "./guard-types";
 
 type RequestState =
@@ -38,6 +42,16 @@ type ReceiptsState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardReceipt[] };
+
+type RuntimeState =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; item: GuardRuntimeSummary };
+
+type LocalState =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; item: GuardLocalStateSummary };
 
 function usePathname(): string {
   const [pathname, setPathname] = useState(window.location.pathname);
@@ -66,11 +80,20 @@ function parseRequestId(pathname: string): string | null {
   return null;
 }
 
-function resolveView(pathname: string): "queue" | "receipts" {
-  if (pathname === "/receipts") {
-    return "receipts";
+function resolveView(pathname: string): "home" | "inbox" | "fleet" | "evidence" {
+  if (pathname === "/" || pathname === "/home") {
+    return "home";
   }
-  return "queue";
+  if (pathname === "/inbox") {
+    return "inbox";
+  }
+  if (pathname === "/fleet") {
+    return "fleet";
+  }
+  if (pathname === "/receipts" || pathname === "/evidence") {
+    return "evidence";
+  }
+  return "inbox";
 }
 
 async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kind: "idle" | "loading" }>> {
@@ -97,6 +120,8 @@ export function App() {
   const [requests, setRequests] = useState<RequestState>({ kind: "loading" });
   const [detail, setDetail] = useState<DetailState>({ kind: "idle" });
   const [receipts, setReceipts] = useState<ReceiptsState>({ kind: "loading" });
+  const [runtime, setRuntime] = useState<RuntimeState>({ kind: "loading" });
+  const [localState, setLocalState] = useState<LocalState>({ kind: "loading" });
   const [resolutionMessage, setResolutionMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -111,7 +136,7 @@ export function App() {
         if (!cancelled) {
           setRequests({
             kind: "error",
-            message: error instanceof Error ? error.message : "Unable to load the local approval queue."
+            message: error instanceof Error ? error.message : "Unable to load the local Guard inbox."
           });
         }
       });
@@ -132,7 +157,49 @@ export function App() {
         if (!cancelled) {
           setReceipts({
             kind: "error",
-            message: error instanceof Error ? error.message : "Unable to load local receipt history."
+            message: error instanceof Error ? error.message : "Unable to load local Guard evidence."
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchRuntimeSummary()
+      .then((item) => {
+        if (!cancelled) {
+          setRuntime({ kind: "ready", item });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setRuntime({
+            kind: "error",
+            message: error instanceof Error ? error.message : "Unable to load Guard runtime health."
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchLocalStateSummary()
+      .then((item) => {
+        if (!cancelled) {
+          setLocalState({ kind: "ready", item });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setLocalState({
+            kind: "error",
+            message: error instanceof Error ? error.message : "Unable to load Guard local status."
           });
         }
       });
@@ -167,6 +234,8 @@ export function App() {
       requests={requests}
       detail={detail}
       receipts={receipts}
+      runtime={runtime}
+      localState={localState}
       activeRequestId={activeRequestId}
       resolutionMessage={resolutionMessage}
       onGoHome={() => navigate("/")}
@@ -178,6 +247,14 @@ export function App() {
         const [nextRequests, nextReceipts] = await Promise.all([fetchRequests(), fetchReceipts()]);
         setRequests({ kind: "ready", items: nextRequests });
         setReceipts({ kind: "ready", items: nextReceipts });
+        try {
+          setRuntime({ kind: "ready", item: await fetchRuntimeSummary() });
+          setLocalState({ kind: "ready", item: await fetchLocalStateSummary() });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unable to refresh Guard runtime health.";
+          setRuntime({ kind: "error", message });
+          setLocalState({ kind: "error", message });
+        }
       }}
     />
   );

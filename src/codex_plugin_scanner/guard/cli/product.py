@@ -48,17 +48,34 @@ def _build_guard_product_payload(
     recommended = _recommended_harness(harnesses)
     receipt_count = store.count_receipts()
     managed_harnesses = sum(1 for item in harnesses if item["managed"] is True)
+    pending_approvals = store.count_approval_requests()
+    sync_configured = store.get_sync_credentials() is not None
     payload: dict[str, object] = {
         "generated_at": _now(),
         "guard_home": str(context.guard_home),
         "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
-        "sync_configured": store.get_sync_credentials() is not None,
+        "sync_configured": sync_configured,
         "receipt_count": receipt_count,
-        "pending_approvals": store.count_approval_requests(),
+        "pending_approvals": pending_approvals,
         "approval_center_url": load_guard_daemon_url(context.guard_home),
         "managed_harnesses": managed_harnesses,
         "recommended_harness": recommended["harness"] if recommended is not None else None,
         "harnesses": harnesses,
+        "headline_state": _resolve_headline_state(
+            managed_harnesses=managed_harnesses,
+            receipt_count=receipt_count,
+            pending_approvals=pending_approvals,
+            sync_configured=sync_configured,
+        ),
+        "portal_links": (
+            {
+                "home": "https://hol.org/guard/dashboard",
+                "inbox": "https://hol.org/guard/inbox",
+                "fleet": "https://hol.org/guard/fleet",
+            }
+            if sync_configured
+            else {}
+        ),
     }
     if include_steps:
         payload["next_steps"] = _build_next_steps(recommended)
@@ -136,8 +153,13 @@ def _build_next_steps(recommended: dict[str, object] | None) -> list[dict[str, s
                 ),
             }
         ]
-    steps = [_install_or_review_step(recommended), _run_step(recommended), _receipts_step()]
-    steps.append(_approvals_step())
+    steps = [
+        _install_or_review_step(recommended),
+        _run_step(recommended),
+        _approvals_step(),
+        _fleet_step(),
+        _receipts_step(),
+    ]
     steps.append(
         {
             "title": "Optional cloud connect",
@@ -184,22 +206,54 @@ def _run_step(recommended: dict[str, object]) -> dict[str, str]:
 
 def _receipts_step() -> dict[str, str]:
     return {
-        "title": "Inspect receipts",
+        "title": "Review local evidence",
         "command": f"{GUARD_COMMAND} receipts",
-        "detail": "See what Guard approved, blocked, or flagged after local runs.",
+        "detail": "Open Guard evidence to see saved approvals, blocks, and decision history.",
     }
 
 
 def _approvals_step() -> dict[str, str]:
     return {
-        "title": "Resolve queued approvals",
+        "title": "Open the local inbox",
         "command": f"{GUARD_COMMAND} approvals",
-        "detail": "Use the local approval center or the approvals queue when a harness session cannot prompt inline.",
+        "detail": (
+            "Use the local inbox when a harness session cannot prompt inline "
+            "or when drift needs a fresh decision."
+        ),
+    }
+
+
+def _fleet_step() -> dict[str, str]:
+    return {
+        "title": "Check local fleet coverage",
+        "command": f"{GUARD_COMMAND} status",
+        "detail": (
+            "Confirm which harnesses are protected on this machine "
+            "and how much trust memory Guard can already reuse."
+        ),
     }
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _resolve_headline_state(
+    *,
+    managed_harnesses: int,
+    receipt_count: int,
+    pending_approvals: int,
+    sync_configured: bool,
+) -> str:
+    if pending_approvals > 0:
+        return "blocked"
+    if managed_harnesses == 0 and receipt_count == 0:
+        return "setup"
+    if sync_configured:
+        return "connected"
+    if receipt_count > 0:
+        return "local_only"
+    return "protected"
 
 
 __all__ = ["build_guard_start_payload", "build_guard_status_payload"]

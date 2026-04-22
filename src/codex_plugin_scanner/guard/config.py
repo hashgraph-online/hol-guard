@@ -15,6 +15,7 @@ from .models import GuardAction, GuardMode
 DEFAULT_GUARD_DIRNAME = ".ai-plugin-scanner-guard"
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
+VALID_APPROVAL_SURFACE_POLICIES = {"auto-open-once", "notify-only", "never-auto-open"}
 
 
 def _coerce_action_map(payload: object) -> dict[str, GuardAction]:
@@ -49,6 +50,7 @@ class GuardConfig:
     new_network_domain_action: GuardAction = "warn"
     subprocess_action: GuardAction = "warn"
     approval_wait_timeout_seconds: int = 120
+    approval_surface_policy: str = "auto-open-once"
     telemetry: bool = False
     sync: bool = False
     billing: bool = False
@@ -110,6 +112,10 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         new_network_domain_action=str(merged.get("new_network_domain_action", "warn")),  # type: ignore[arg-type]
         subprocess_action=str(merged.get("subprocess_action", "warn")),  # type: ignore[arg-type]
         approval_wait_timeout_seconds=int(merged.get("approval_wait_timeout_seconds", 120)),
+        approval_surface_policy=_coerce_approval_surface_policy(
+            merged.get("approval_surface_policy"),
+            "auto-open-once",
+        ),
         telemetry=bool(merged.get("telemetry", False)),
         sync=bool(merged.get("sync", False)),
         billing=bool(merged.get("billing", False)),
@@ -146,6 +152,10 @@ def overlay_synced_guard_policy(
         payload.get("subprocessAction"),
         config.subprocess_action,
     )
+    approval_surface_policy = _coerce_approval_surface_policy(
+        payload.get("approvalSurfacePolicy"),
+        config.approval_surface_policy,
+    )
     sync_enabled = payload.get("syncEnabled")
     return replace(
         config,
@@ -155,11 +165,18 @@ def overlay_synced_guard_policy(
         changed_hash_action=changed_hash_action,
         new_network_domain_action=new_network_domain_action,
         subprocess_action=subprocess_action,
+        approval_surface_policy=approval_surface_policy,
         sync=bool(sync_enabled) if isinstance(sync_enabled, bool) else config.sync,
     )
 
 
 def _coerce_action_value(value: object, fallback: GuardAction) -> GuardAction:
     if isinstance(value, str) and value in VALID_GUARD_ACTIONS:
+        return value
+    return fallback
+
+
+def _coerce_approval_surface_policy(value: object, fallback: str) -> str:
+    if isinstance(value, str) and value in VALID_APPROVAL_SURFACE_POLICIES:
         return value
     return fallback

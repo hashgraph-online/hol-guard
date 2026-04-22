@@ -43,17 +43,16 @@ def _render_detect(console: Console, payload: dict[str, object]) -> None:
     console.print(_build_harness_table(detections))
     for detection in detections:
         _render_harness_detail(console, detection)
-    if attention_count > 0:
-        console.print(
-            "[yellow]Run `hol-guard doctor <harness>` for harness-specific drift and runtime diagnostics.[/yellow]"
-        )
+    console.print(
+        "[yellow]Run `hol-guard doctor <harness>` for harness-specific drift and runtime diagnostics.[/yellow]"
+    )
 
 
 def _render_start(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     console.print(
         Panel.fit(
-            f"[bold]HOL Guard first run[/bold]\n"
+            f"[bold]HOL Guard setup[/bold]\n"
             f"{len(harnesses)} harnesses detected • {payload.get('receipt_count', 0)} receipts recorded • "
             f"{payload.get('pending_approvals', 0)} approvals waiting",
             border_style="cyan",
@@ -69,7 +68,7 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     console.print(
         Panel.fit(
-            f"[bold]HOL Guard status[/bold]\n"
+            f"[bold]HOL Guard home[/bold]\n"
             f"{payload.get('managed_harnesses', 0)} managed harnesses • "
             f"{payload.get('receipt_count', 0)} receipts • "
             f"{payload.get('pending_approvals', 0)} approvals • "
@@ -77,9 +76,27 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
             border_style="cyan",
         )
     )
+    console.print(
+        f"Headline state: [bold]{payload.get('headline_state') or 'unknown'!s}[/bold]"
+    )
     console.print(_build_product_table(harnesses))
     if payload.get("approval_center_url"):
         console.print(f"Approval center: [bold]{payload.get('approval_center_url')}[/bold]")
+    portal_links = payload.get("portal_links")
+    if isinstance(portal_links, dict) and portal_links:
+        console.print(
+            Panel(
+                "\n".join(
+                    [
+                        f"Home: [bold]{portal_links.get('home', 'n/a')}[/bold]",
+                        f"Inbox: [bold]{portal_links.get('inbox', 'n/a')}[/bold]",
+                        f"Fleet: [bold]{portal_links.get('fleet', 'n/a')}[/bold]",
+                    ]
+                ),
+                title="Cloud links",
+                border_style="blue",
+            )
+        )
     review_items = [item for item in harnesses if int(item.get("review_count", 0)) > 0]
     if review_items:
         console.print(
@@ -87,7 +104,7 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
                 "\n".join(
                     f"• {item.get('harness')}: run [bold]{item.get('review_command')}[/bold]" for item in review_items
                 ),
-                title="Needs review",
+                title="Inbox",
                 border_style="yellow",
             )
         )
@@ -423,6 +440,13 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Browser opened", _bool_label(bool(payload.get("browser_opened"))))
     body.add_row("Connect URL", str(payload.get("connect_url") or "unknown"))
     body.add_row("Sync endpoint", str(payload.get("sync_url") or "unknown"))
+    if payload.get("headline_state"):
+        body.add_row("State", str(payload.get("headline_state")))
+    if payload.get("next_destination"):
+        body.add_row(
+            str(payload.get("next_destination_label") or "Next"),
+            str(payload.get("next_destination")),
+        )
     if isinstance(payload.get("sync"), dict):
         sync_payload = payload["sync"]
         body.add_row("Receipts stored", str(sync_payload.get("receipts_stored") or 0))

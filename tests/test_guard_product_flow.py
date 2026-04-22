@@ -124,8 +124,10 @@ class TestGuardProductFlow:
         output = capsys.readouterr().out
 
         assert rc == 0
-        assert "Install Guard for codex" in output
-        assert "Run Guard before launch" in output
+        assert "HOL Guard setup" in output
+        assert "Open the local inbox" in output
+        assert "Check local fleet coverage" in output
+        assert "Review local evidence" in output
         assert "Optional cloud connect" in output
 
     def test_hol_guard_direct_entrypoint_runs_without_nested_guard_command(self, tmp_path, capsys, monkeypatch):
@@ -176,6 +178,19 @@ class TestGuardProductFlow:
         assert rc == 0
         assert output["recommended_harness"] == "codex"
         assert output["next_steps"][0]["command"] == "hol-guard install codex"
+
+    def test_hol_guard_help_groups_commands_by_mode(self, capsys, monkeypatch):
+        monkeypatch.setattr(sys, "argv", ["hol-guard"])
+
+        with pytest.raises(SystemExit) as excinfo:
+            main(["--help"])
+
+        output = capsys.readouterr().out
+
+        assert excinfo.value.code == 0
+        assert "Everyday protection:" in output
+        assert "Team and cloud coordination:" in output
+        assert "Advanced and diagnostics:" in output
 
     def test_guard_install_creates_wrapper_shim(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

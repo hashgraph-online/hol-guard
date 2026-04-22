@@ -50,7 +50,35 @@ def run_guard_connect_command(
             "sync_url": sync_url,
             "status": "waiting_for_browser",
         }
-    sync_payload = sync_receipts(store)
+    try:
+        sync_payload = sync_receipts(store)
+    except RuntimeError as error:
+        store.record_guard_connect_result(
+            request_id=str(completion["request_id"]),
+            status="retry_required",
+            milestone="first_sync_failed",
+            now=_now(),
+            reason=str(error),
+        )
+        return {
+            "connected": False,
+            "browser_opened": browser_opened,
+            "connect_url": browser_url,
+            "sync_url": sync_url,
+            "status": "retry_required",
+            "milestone": "first_sync_failed",
+            "reason": str(error),
+            "request_id": str(completion["request_id"]),
+            "completed_at": completion.get("completed_at"),
+        }
+    store.record_guard_connect_result(
+        request_id=str(completion["request_id"]),
+        status="connected",
+        milestone="first_sync_succeeded",
+        now=_now(),
+        sync_payload=sync_payload,
+    )
+    handoff = _resolve_connect_handoff(store, sync_payload)
     return {
         "connected": True,
         "browser_opened": browser_opened,
@@ -60,6 +88,9 @@ def run_guard_connect_command(
         "request_id": str(completion["request_id"]),
         "completed_at": completion.get("completed_at"),
         "sync": sync_payload,
+        "headline_state": "connected",
+        "next_destination": handoff["href"],
+        "next_destination_label": handoff["label"],
     }
 
 
@@ -114,3 +145,18 @@ def wait_for_connect_completion(
             return request
         time.sleep(poll_interval_seconds)
     return None
+
+
+def _resolve_connect_handoff(
+    store: GuardStore,
+    sync_payload: dict[str, object],
+) -> dict[str, str]:
+    if store.count_approval_requests() > 0:
+        return {"href": "https://hol.org/guard/inbox", "label": "Open Guard Inbox"}
+    if int(sync_payload.get("receipts_stored") or 0) > 0:
+        return {"href": "https://hol.org/guard/dashboard", "label": "Open Guard Home"}
+    return {"href": "https://hol.org/guard/fleet", "label": "Open Guard Fleet"}
+
+
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())

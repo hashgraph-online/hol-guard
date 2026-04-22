@@ -38,7 +38,7 @@ const footerSections = [
 export function ShellHeader(props: {
   queuedCount: number;
   activeHarness: string | null;
-  view: "queue" | "receipts";
+  view: "home" | "inbox" | "fleet" | "evidence";
 }) {
   return (
     <header
@@ -52,8 +52,10 @@ export function ShellHeader(props: {
               <img src="/brand/Logo_Whole.png" alt="HOL" className="h-8 w-auto sm:h-9" />
             </a>
             <nav className="flex items-center gap-1" aria-label="Primary">
-              <NavPill href="/" active={props.view === "queue"}>Queue</NavPill>
-              <NavPill href="/receipts" active={props.view === "receipts"}>Receipts</NavPill>
+              <NavPill href="/" active={props.view === "home"}>Home</NavPill>
+              <NavPill href="/inbox" active={props.view === "inbox"}>Inbox</NavPill>
+              <NavPill href="/fleet" active={props.view === "fleet"}>Fleet</NavPill>
+              <NavPill href="/evidence" active={props.view === "evidence"}>Evidence</NavPill>
               <NavPill href="https://hol.org/guard" external>hol.org</NavPill>
             </nav>
           </div>
@@ -305,21 +307,21 @@ export function WelcomeState(props: { resolutionMessage: string | null }) {
       <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-brand-green-bg/50 ring-1 ring-brand-green/20">
         <svg className="h-10 w-10 text-brand-green" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
       </div>
-      <h2 className="text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl">Your environment is secure</h2>
+      <h2 className="text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl">Your local Guard inbox is clear</h2>
       <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground">
-        Guard is actively watching your harness configs. When your queue is clear, connect to Guard Cloud for team-wide protection.
+        Guard is actively watching your harness configs. When your inbox is clear, connect to Guard Cloud for shared policy, fleet coverage, and reusable evidence.
       </p>
       
       <div className="mt-12 text-left w-full max-w-3xl">
         <div className="rounded-xl border border-border bg-card p-6 shadow-[0_4px_20px_rgba(85,153,254,0.04)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue mb-4">Sync your decisions</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue mb-4">Sync your evidence</p>
           <div className="flex items-center gap-3 rounded-lg bg-surface-1 px-5 py-3 font-mono text-sm">
             <span className="text-muted-foreground">$</span>
             <span className="text-brand-dark">hol-guard login</span>
             <span className="text-muted-foreground">&&</span>
             <span className="text-brand-dark">hol-guard sync</span>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">Connect this machine to Guard Cloud to share approvals across your team.</p>
+          <p className="mt-3 text-xs text-muted-foreground">Connect this machine to Guard Cloud to share inbox decisions and evidence across your team.</p>
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-3">

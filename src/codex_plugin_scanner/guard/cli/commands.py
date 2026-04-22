@@ -47,6 +47,14 @@ from .prompt import build_prompt_artifacts, resolve_interactive_decisions
 from .render import emit_guard_payload
 
 _GUARD_CLIENT_VERSION = "2.0.0"
+_GUARD_HELP_GROUPS = (
+    "Everyday protection:\n"
+    "  start, status, install, run, approvals, receipts\n\n"
+    "Team and cloud coordination:\n"
+    "  login, connect, sync, policies, exceptions, advisories\n\n"
+    "Advanced and diagnostics:\n"
+    "  bootstrap, detect, protect, preflight, scan, diff, inventory, abom, explain, events, doctor"
+)
 
 
 def _now() -> str:
@@ -80,6 +88,7 @@ def add_guard_root_parser(parser: argparse.ArgumentParser) -> None:
     """Register Guard as the top-level CLI surface."""
 
     parser.description = "Protect local harnesses before new or changed tools run."
+    parser.epilog = _GUARD_HELP_GROUPS
     parser.set_defaults(command="guard")
     _configure_guard_parser(parser)
 
@@ -321,7 +330,7 @@ def _guard_http_url(value: str) -> str:
 
 
 def _build_cisco_scan_options(mode: str) -> ScanOptions:
-    return ScanOptions(cisco_skill_scan=mode, cisco_mcp_scan=mode)
+    return ScanOptions(cisco_skill_scan=mode)
 
 
 def run_guard_command(args: argparse.Namespace) -> int:

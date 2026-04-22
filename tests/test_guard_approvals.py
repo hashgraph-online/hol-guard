@@ -678,7 +678,7 @@ class TestGuardApprovals:
         assert "<img src=x onerror=alert(1)>" not in body
         assert "<script>" not in body
         assert "guard-dashboard-root" in body
-        assert "Local approval center" in body
+        assert "Local Guard inbox" in body
         assert "Hashgraph Online" in body
 
     def test_guard_daemon_rejects_cross_origin_post_requests(self, tmp_path):
@@ -807,7 +807,7 @@ class TestGuardApprovals:
             daemon.stop()
 
         assert "guard-dashboard-root" in body
-        assert "Local approval center" in body
+        assert "Local Guard inbox" in body
         assert "Hashgraph Online" in body
 
     def test_guard_daemon_serves_dashboard_assets_when_present(self, tmp_path):

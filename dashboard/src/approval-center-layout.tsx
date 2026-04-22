@@ -12,7 +12,11 @@ import {
   WelcomeState,
   SectionLabel
 } from "./approval-center-primitives";
+import { FleetWorkspace } from "./fleet-workspace";
+import { HomeWorkspace } from "./home-workspace";
+import { LocalStateBanner } from "./local-state-banner";
 import { ReceiptsWorkspace } from "./receipts-workspace";
+import { RuntimeOverview } from "./runtime-overview";
 import {
   buildPauseLine,
   buildRecommendation,
@@ -31,15 +35,14 @@ import {
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
+  GuardLocalStateSummary,
   GuardPolicyDecision,
   GuardReceipt,
+  GuardRuntimeSummary,
   DecisionScope
 } from "./guard-types";
 
-type RequestState =
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "ready"; items: GuardApprovalRequest[] };
+type RequestState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; items: GuardApprovalRequest[] };
 type DetailState =
   | { kind: "idle" }
   | { kind: "loading" }
@@ -52,15 +55,16 @@ type DetailState =
       policy: GuardPolicyDecision[];
     };
 
-type ReceiptsState =
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "ready"; items: GuardReceipt[] };
+type ReceiptsState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; items: GuardReceipt[] };
+type RuntimeState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; item: GuardRuntimeSummary };
+type LocalState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; item: GuardLocalStateSummary };
 type LayoutProps = {
-  view: "queue" | "receipts";
+  view: "home" | "inbox" | "fleet" | "evidence";
   requests: RequestState;
   detail: DetailState;
   receipts: ReceiptsState;
+  runtime: RuntimeState;
+  localState: LocalState;
   activeRequestId: string | null;
   resolutionMessage: string | null;
   onGoHome: () => void;
@@ -85,18 +89,30 @@ const scopeOptions: Array<{ value: DecisionScope; label: string; description: st
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 export function ApprovalCenterLayout(props: LayoutProps) {
   const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
-  const activeHarness =
-    props.detail.kind === "ready" ? props.detail.item.harness : queuedItems[0]?.harness ?? null;
+  const activeHarness = props.detail.kind === "ready" ? props.detail.item.harness : queuedItems[0]?.harness ?? null;
   return (
     <div className="flex min-h-screen flex-col bg-transparent text-brand-dark">
       <ShellHeader queuedCount={queuedItems.length} activeHarness={activeHarness} view={props.view} />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        {props.view === "receipts" ? (
+        <div className="mb-6">
+          <LocalStateBanner localState={props.localState} />
+        </div>
+        {props.view === "home" ? (
+          <HomeWorkspace
+            requests={props.requests}
+            receipts={props.receipts}
+            runtime={props.runtime}
+            localState={props.localState}
+          />
+        ) : props.view === "evidence" ? (
           <ReceiptsWorkspace receipts={props.receipts} />
+        ) : props.view === "fleet" ? (
+          <FleetWorkspace receipts={props.receipts} requests={props.requests} />
         ) : (
           <QueueWorkspace
             requests={props.requests}
             detail={props.detail}
+            runtime={props.runtime}
             activeRequestId={props.activeRequestId}
             resolutionMessage={props.resolutionMessage}
             onOpenRequest={props.onOpenRequest}
@@ -113,6 +129,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
 function QueueWorkspace(props: {
   requests: RequestState;
   detail: DetailState;
+  runtime: RuntimeState;
   activeRequestId: string | null;
   resolutionMessage: string | null;
   onOpenRequest: (requestId: string) => void;
@@ -138,24 +155,27 @@ function QueueWorkspace(props: {
     return <WelcomeState resolutionMessage={props.resolutionMessage} />;
   }
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
-      <aside className="space-y-2">
-        <SectionLabel>Blocked items</SectionLabel>
-        {props.requests.items.map((item) => (
-          <QueueCard
-            key={item.request_id}
-            item={item}
-            active={item.request_id === props.activeRequestId}
-            onClick={() => props.onOpenRequest(item.request_id)}
+    <div className="space-y-6">
+      <RuntimeOverview runtime={props.runtime} />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
+        <aside className="space-y-2">
+          <SectionLabel>Current request</SectionLabel>
+          {props.requests.items.map((item) => (
+            <QueueCard
+              key={item.request_id}
+              item={item}
+              active={item.request_id === props.activeRequestId}
+              onClick={() => props.onOpenRequest(item.request_id)}
+            />
+          ))}
+        </aside>
+        <div className="min-w-0">
+          <DecisionWorkspace
+            detail={props.detail}
+            onGoHome={props.onGoHome}
+            onResolve={props.onResolve}
           />
-        ))}
-      </aside>
-      <div className="min-w-0">
-        <DecisionWorkspace
-          detail={props.detail}
-          onGoHome={props.onGoHome}
-          onResolve={props.onResolve}
-        />
+        </div>
       </div>
     </div>
   );
@@ -192,7 +212,7 @@ function DecisionWorkspace(props: {
   onResolve: LayoutProps["onResolve"];
 }) {
   const [scope, setScope] = useState<DecisionScope>("artifact");
-  const [reason, setReason] = useState("approved in local approval center");
+  const [reason, setReason] = useState("approved in local Guard inbox");
   const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -240,12 +260,12 @@ function DecisionWorkspace(props: {
     return (
       <Surface tone="danger">
         <p className="text-sm text-red-700">{props.detail.message}</p>
-        <ActionButton variant="outline" onClick={props.onGoHome}>Back to queue</ActionButton>
+        <ActionButton variant="outline" onClick={props.onGoHome}>Back to inbox</ActionButton>
       </Surface>
     );
   }
   if (props.detail.kind === "idle") {
-    return <EmptyState title="Select an item" body="Choose a blocked item from the sidebar to review the evidence and make a decision." />;
+    return <EmptyState title="Select an inbox item" body="Choose a Guard inbox item from the sidebar to review the evidence and make a decision." />;
   }
   const { item, diff, receipt, policy } = props.detail;
   const commonScopeOpts = scopeOptions.filter((option) => commonScopeValues.has(option.value));

@@ -240,7 +240,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         now=now,
     )
     pain_signals_uploaded = sync_pain_signals(store)
-    return {
+    result = {
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": payload.get("receiptsStored"),
         "advisories_stored": advisories_stored,
@@ -250,6 +250,8 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         "receipts": len(receipts),
         "inventory": len(inventory),
     }
+    store.set_sync_payload("latest_sync", result, now)
+    return result
 
 
 def sync_runtime_session(store: GuardStore, *, session: dict[str, object]) -> dict[str, object]:

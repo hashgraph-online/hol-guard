@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from ...models import SEVERITY_ORDER, Severity
+from ...models import SEVERITY_ORDER, ScanOptions, Severity
 from ...scanner import scan_plugin
 
 
@@ -29,10 +29,14 @@ def _install_recommendation(
     return ("allow", "Install-time scan found no blocking issues in the local artifact.")
 
 
-def build_consumer_mode_contract(target: Path, intended_harness: str | None = None) -> dict[str, object]:
+def build_consumer_mode_contract(
+    target: Path,
+    intended_harness: str | None = None,
+    options: ScanOptions | None = None,
+) -> dict[str, object]:
     """Build the stable consumer-mode payload for a local artifact."""
 
-    scan_result = scan_plugin(target)
+    scan_result = scan_plugin(target, options=options)
     summary_payload = {
         "path": str(target),
         "score": scan_result.score,

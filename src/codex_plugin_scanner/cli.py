@@ -148,7 +148,11 @@ def _is_scanner_program(program_name: str) -> bool:
 
 def _build_parser(program_name: str, *, program_mode: str) -> argparse.ArgumentParser:
     if program_mode == "guard":
-        parser = argparse.ArgumentParser(prog=program_name, description="Protect local harnesses before tools run.")
+        parser = argparse.ArgumentParser(
+            prog=program_name,
+            description="Protect local harnesses before tools run.",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
         parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
         add_guard_root_parser(parser)
         return parser

@@ -17,6 +17,7 @@ from ..approvals import apply_approval_resolution
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
+from .local_state import build_guard_local_state_payload
 from .manager import clear_guard_daemon_state, write_guard_daemon_state
 
 
@@ -89,6 +90,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/requests":
             self._write_json({"items": store.list_approval_requests(limit=200)})
+            return
+        if parsed.path == "/v1/local-state":
+            self._write_json(build_guard_local_state_payload(store, now=_now()))
             return
         if parsed.path == "/v1/connect/state":
             self._handle_connect_state_read(parsed.query)
@@ -770,7 +774,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _is_dashboard_route(path: str) -> bool:
-        if path in {"/", "/requests", "/approvals"}:
+        if path in {"/", "/home", "/inbox", "/fleet", "/evidence", "/receipts", "/requests", "/approvals"}:
             return True
         if path.startswith("/requests/"):
             return True
