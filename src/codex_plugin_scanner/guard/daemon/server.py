@@ -322,13 +322,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if client_id is None or surface is None:
             self._write_json({"attached": False, "error": "missing_required_fields"}, status=400)
             return
-        attachment = self.server.runtime.attach_client(  # type: ignore[attr-defined]
-            client_id=client_id,
-            surface=surface,
-            session_id=self._optional_string(payload.get("session_id")),
-            metadata={"title": self._optional_string(payload.get("client_title")) or surface},
-            lease_seconds=self._optional_int(payload.get("lease_seconds")) or 60,
-        )
+        try:
+            attachment = self.server.runtime.attach_client(  # type: ignore[attr-defined]
+                client_id=client_id,
+                surface=surface,
+                session_id=self._optional_string(payload.get("session_id")),
+                metadata={"title": self._optional_string(payload.get("client_title")) or surface},
+                lease_seconds=self._optional_int(payload.get("lease_seconds")) or 60,
+            )
+        except ValueError:
+            self._write_json({"attached": False, "error": "not_found"}, status=404)
+            return
         self._write_json({"attached": True, "item": attachment})
 
     def _handle_client_heartbeat(self, payload: dict[str, object]) -> None:
@@ -434,11 +438,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if item_type is None or not isinstance(item_payload, dict):
             self._write_json({"error": "missing_required_fields"}, status=400)
             return
-        item = self.server.runtime.add_item(  # type: ignore[attr-defined]
-            operation_id=operation_id,
-            item_type=item_type,
-            payload=item_payload,
-        )
+        try:
+            item = self.server.runtime.add_item(  # type: ignore[attr-defined]
+                operation_id=operation_id,
+                item_type=item_type,
+                payload=item_payload,
+            )
+        except ValueError:
+            self._write_json({"error": "not_found"}, status=404)
+            return
         self._write_json({"item": item})
 
     def _handle_operation_status(self, operation_id: str, payload: dict[str, object]) -> None:
