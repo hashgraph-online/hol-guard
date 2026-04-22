@@ -8,11 +8,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from ..approvals import queue_blocked_approvals
 from ..consumer import artifact_hash
-from ..models import HarnessDetection
 from ..receipts import build_receipt
 from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
+from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 
 
@@ -163,14 +162,40 @@ class StdioGuardProxy:
                         if policy_action in {"block", "sandbox-required", "require-reapproval"}:
                             event["decision"] = "block"
                             if self.guard_store is not None and self.approval_center_url is not None:
-                                event["approval_requests"] = queue_blocked_approvals(
-                                    detection=HarnessDetection(
-                                        harness=self.harness,
-                                        installed=True,
-                                        command_available=True,
-                                        config_paths=(runtime_artifact.config_path,),
-                                        artifacts=(runtime_artifact,),
+                                runtime = GuardSurfaceRuntime(self.guard_store)
+                                blocked_operation = runtime.queue_blocked_operation(
+                                    session_id=str(
+                                        runtime.start_session(
+                                            harness=self.harness,
+                                            surface="harness-adapter",
+                                            workspace=str(self.cwd) if self.cwd is not None else None,
+                                            client_name="guard-stdio-proxy",
+                                            capabilities=("approval-resolution", "receipt-view"),
+                                        )["session_id"]
                                     ),
+                                    operation_type=f"tools/call:{tool_name}",
+                                    harness=self.harness,
+                                    metadata={
+                                        "tool_name": tool_name,
+                                        "path_summary": sensitive_request.path_match.normalized_path,
+                                    },
+                                    detection={
+                                        "harness": self.harness,
+                                        "installed": True,
+                                        "command_available": True,
+                                        "config_paths": [runtime_artifact.config_path],
+                                        "artifacts": [
+                                            {
+                                                "artifact_id": runtime_artifact.artifact_id,
+                                                "name": runtime_artifact.name,
+                                                "harness": runtime_artifact.harness,
+                                                "artifact_type": runtime_artifact.artifact_type,
+                                                "source_scope": runtime_artifact.source_scope,
+                                                "config_path": runtime_artifact.config_path,
+                                                "metadata": runtime_artifact.metadata,
+                                            }
+                                        ],
+                                    },
                                     evaluation={
                                         "artifacts": [
                                             {
@@ -186,9 +211,16 @@ class StdioGuardProxy:
                                             }
                                         ]
                                     },
-                                    store=self.guard_store,
                                     approval_center_url=self.approval_center_url,
+                                    approval_surface_policy=str(
+                                        getattr(self.guard_config, "approval_surface_policy", "never-auto-open")
+                                    ),
+                                    open_key=runtime_artifact.artifact_id,
+                                    opener=lambda _url: True,
                                 )
+                                event["approval_requests"] = blocked_operation["approval_requests"]
+                                event["operation_id"] = blocked_operation["operation"]["operation_id"]
+                                event["session_id"] = blocked_operation["operation"]["session_id"]
                             events.append(event)
                             responses.append(
                                 _blocked_tool_response(

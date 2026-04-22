@@ -153,6 +153,20 @@ class TestGuardRuntime:
         assert config.resolve_action_override("codex", None, "hashgraph-online") == "sandbox-required"
         assert config.resolve_action_override("codex", "codex:project:workspace-tools", None) == "block"
 
+    def test_prompt_policy_path_uses_harness_adapter_policy_location(self, tmp_path):
+        context = HarnessContext(
+            home_dir=tmp_path / "home",
+            workspace_dir=tmp_path / "workspace",
+            guard_home=tmp_path / "guard-home",
+        )
+
+        assert guard_runner_module._prompt_policy_path(
+            "codex", context
+        ) == context.workspace_dir / ".codex" / "config.toml"
+        assert guard_runner_module._prompt_policy_path(
+            "claude-code", context
+        ) == context.workspace_dir / ".claude" / "settings.local.json"
+
     def test_guard_load_config_accepts_default_action_inside_override_sections(self, tmp_path):
         guard_home = tmp_path / "guard-home"
         guard_home.mkdir(parents=True, exist_ok=True)

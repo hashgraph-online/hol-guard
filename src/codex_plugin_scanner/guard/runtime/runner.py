@@ -158,7 +158,7 @@ def _prompt_env_artifact(
         harness=harness,
         artifact_type="prompt_request",
         source_scope="session",
-        config_path=str(_prompt_policy_path(context)),
+        config_path=str(_prompt_policy_path(harness, context)),
         metadata={
             "prompt_signals": [prompt_signal],
             "prompt_summary": prompt_summary,
@@ -174,10 +174,8 @@ def _matched_sensitive_prompt_path_class(prompt_text: str) -> str | None:
     return None
 
 
-def _prompt_policy_path(context: HarnessContext) -> Path:
-    if context.workspace_dir is not None:
-        return context.workspace_dir / ".codex" / "config.toml"
-    return context.home_dir / ".codex" / "config.toml"
+def _prompt_policy_path(harness: str, context: HarnessContext) -> Path:
+    return get_adapter(harness).policy_path(context)
 
 
 def sync_receipts(store: GuardStore) -> dict[str, object]:

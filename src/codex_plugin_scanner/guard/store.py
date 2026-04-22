@@ -1710,13 +1710,14 @@ class GuardStore:
         query += " order by last_seen_at desc, client_id asc"
         with self._connect() as connection:
             rows = connection.execute(query, tuple(params)).fetchall()
-        cutoff = datetime.now(timezone.utc).timestamp() - max(active_within_seconds, 0)
+        now_ts = datetime.now(timezone.utc).timestamp()
+        cutoff = now_ts - max(active_within_seconds, 0)
         items: list[dict[str, object]] = []
         for row in rows:
             lease_expires_at = row["lease_expires_at"]
             if lease_expires_at is not None:
                 expires_at = datetime.fromisoformat(str(lease_expires_at)).timestamp()
-                if expires_at < datetime.now(timezone.utc).timestamp():
+                if expires_at < now_ts:
                     continue
             else:
                 last_seen = datetime.fromisoformat(str(row["last_seen_at"])).timestamp()
