@@ -126,6 +126,8 @@ class GuardSurfaceRuntime:
         metadata: dict[str, object] | None = None,
         lease_seconds: int = 60,
     ) -> dict[str, object]:
+        if session_id is not None and self.store.get_guard_session(session_id) is None:
+            raise ValueError(f"Unknown guard session: {session_id}")
         attachment = self.store.attach_guard_client(
             client_id=client_id,
             surface=surface,
@@ -219,6 +221,7 @@ class GuardSurfaceRuntime:
         open_key: str | None,
         opener: Callable[[str], object],
     ) -> dict[str, object]:
+        parsed_detection = _parse_detection(detection)
         operation = self.start_operation(
             session_id=session_id,
             operation_type=operation_type,
@@ -226,7 +229,7 @@ class GuardSurfaceRuntime:
             metadata=metadata,
         )
         queued = queue_blocked_approvals(
-            detection=_parse_detection(detection),
+            detection=parsed_detection,
             evaluation=evaluation,
             store=self.store,
             approval_center_url=approval_center_url,
@@ -305,6 +308,8 @@ class GuardSurfaceRuntime:
         return operation
 
     def add_item(self, *, operation_id: str, item_type: str, payload: dict[str, object]) -> dict[str, object]:
+        if self.store.get_guard_operation(operation_id) is None:
+            raise ValueError(f"Unknown guard operation: {operation_id}")
         item = self.store.add_guard_operation_item(
             item_id=uuid.uuid4().hex,
             operation_id=operation_id,

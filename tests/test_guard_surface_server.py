@@ -147,6 +147,64 @@ class TestGuardSurfaceServer:
 
         assert store.list_guard_operations() == []
 
+    def test_surface_runtime_rejects_unknown_session_before_persisting_attachment(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store)
+
+        with pytest.raises(ValueError, match="Unknown guard session"):
+            runtime.attach_client(
+                client_id="client-1",
+                surface="approval-center",
+                session_id="missing-session",
+            )
+
+        assert store.list_guard_client_attachments() == []
+
+    def test_surface_runtime_rejects_unknown_operation_before_persisting_items(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store)
+
+        with pytest.raises(ValueError, match="Unknown guard operation"):
+            runtime.add_item(
+                operation_id="missing-operation",
+                item_type="approval_requested",
+                payload={"approval_requests": []},
+            )
+
+        assert store.list_guard_operation_items("missing-operation") == []
+
+    def test_surface_runtime_rejects_invalid_block_detection_before_persisting_operation(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store)
+        session = runtime.start_session(
+            harness="codex",
+            surface="cli",
+            workspace=str(tmp_path / "workspace"),
+            client_name="hol-guard",
+        )
+
+        with pytest.raises(ValueError, match="invalid_detection_payload"):
+            runtime.queue_blocked_operation(
+                session_id=str(session["session_id"]),
+                operation_type="run",
+                harness="codex",
+                metadata=None,
+                detection={
+                    "harness": "codex",
+                    "installed": True,
+                    "command_available": True,
+                    "config_paths": [],
+                    "artifacts": "not-a-list",
+                },
+                evaluation={"artifacts": []},
+                approval_center_url="http://127.0.0.1:4791",
+                approval_surface_policy="never-auto-open",
+                open_key=None,
+                opener=lambda _url: True,
+            )
+
+        assert store.list_guard_operations(session_id=str(session["session_id"])) == []
+
     def test_guard_daemon_initializes_surface_client_and_tracks_attachments(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
