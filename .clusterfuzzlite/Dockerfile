@@ -4,6 +4,6 @@ COPY ./.clusterfuzzlite/requirements-atheris.txt $SRC/requirements-atheris.txt
 RUN python3 -m pip install --require-hashes --no-cache-dir --no-binary=:all: --no-deps \
     -r $SRC/requirements-atheris.txt
 
-COPY . $SRC/codex-plugin-scanner
-WORKDIR $SRC/codex-plugin-scanner
+COPY . $SRC/ai-plugin-scanner
+WORKDIR $SRC/ai-plugin-scanner
 COPY ./.clusterfuzzlite/build.sh $SRC/build.sh

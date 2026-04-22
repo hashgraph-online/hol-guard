@@ -10,7 +10,8 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 
 from . import __version__
-from .cli import _build_plain_text, _build_verification_text, _scan_with_policy
+from .cli import _scan_with_policy
+from .cli_ui import build_plain_text, build_verification_text
 from .config import ConfigError, load_scanner_config
 from .github_reporting import (
     build_scan_pr_comment_body,
@@ -104,6 +105,7 @@ def _build_scan_args(
     min_score: int,
     fail_on_severity: str,
     cisco_scan: str,
+    cisco_mcp_scan: str,
     cisco_policy: str,
 ) -> argparse.Namespace:
     return argparse.Namespace(
@@ -116,6 +118,7 @@ def _build_scan_args(
         min_score=min_score,
         fail_on_severity=fail_on_severity,
         cisco_skill_scan=cisco_scan,
+        cisco_mcp_scan=cisco_mcp_scan,
         cisco_policy=cisco_policy,
     )
 
@@ -137,14 +140,14 @@ def _render_scan_output(result, *, output_format: str, profile: str, policy_pass
         return format_markdown(result)
     if output_format == "sarif":
         return format_sarif(result)
-    return _build_plain_text(result)
+    return build_plain_text(result)
 
 
 def _render_verify_output(verification, *, output_format: str) -> str:
     payload = build_verification_payload(verification)
     if output_format == "json":
         return json.dumps(payload, indent=2)
-    return _build_verification_text(payload)
+    return build_verification_text(payload)
 
 
 def _render_lint_output(result, *, output_format: str, profile: str, policy_pass: bool) -> str:
@@ -229,6 +232,7 @@ def main() -> int:
     min_score = int(_read_env("MIN_SCORE", "0"))
     fail_on = _read_env("FAIL_ON", "none")
     cisco_scan = _read_env("CISCO_SCAN", "auto")
+    cisco_mcp_scan = _read_env("CISCO_MCP_SCAN", "auto")
     cisco_policy = _read_env("CISCO_POLICY", "balanced")
     submission_enabled = _read_bool_env("SUBMISSION_ENABLED")
     submission_threshold = int(_read_env("SUBMISSION_SCORE_THRESHOLD", "80"))
@@ -353,12 +357,18 @@ def main() -> int:
             min_score=min_score,
             fail_on_severity=fail_on,
             cisco_scan=cisco_scan,
+            cisco_mcp_scan=cisco_mcp_scan,
             cisco_policy=cisco_policy,
         )
-        raw_result, result, resolved_profile, policy_eval, _effective_score = _scan_with_policy(
-            args,
-            Path(plugin_dir).resolve(),
-        )
+        (
+            raw_result,
+            result,
+            resolved_profile,
+            policy_eval,
+            _effective_score,
+            _config_path,
+            _baseline_path,
+        ) = _scan_with_policy(args, Path(plugin_dir).resolve())
         scan_scope = getattr(result, "scope", "plugin")
         if scan_scope == "repository":
             local_plugin_count = len(result.plugin_results)

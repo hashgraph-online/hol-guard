@@ -40,9 +40,21 @@ def _redact_arg(value: str) -> str:
     if "authorization:" in lower_value or "api-key:" in lower_value or "bearer " in lower_value:
         prefix, _, _ = value.partition(":")
         return f"{prefix}: *****"
-    if any(token in lower_value for token in ("apikey=", "api_key=", "token=", "secret=")):
+    if any(token in lower_value for token in ("apikey=", "api_key=", "api-key=", "token=", "secret=")):
         key, _, _ = value.partition("=")
         return f"{key}=*****"
+    return value
+
+
+def _redact_metadata(value: object, key: str | None = None) -> object:
+    if key is not None and any(
+        token in key.lower() for token in ("key", "token", "auth", "secret", "password", "credential")
+    ):
+        return "*****"
+    if isinstance(value, dict):
+        return {item_key: _redact_metadata(item_value, item_key) for item_key, item_value in value.items()}
+    if isinstance(value, list):
+        return [_redact_metadata(item) for item in value]
     return value
 
 
@@ -67,6 +79,7 @@ class GuardArtifact:
         payload = asdict(self)
         payload["args"] = [_redact_arg(value) for value in self.args]
         payload["url"] = _redact_url(self.url)
+        payload["metadata"] = _redact_metadata(payload.get("metadata", {}))
         return payload
 
 
@@ -169,4 +182,20 @@ class GuardApprovalRequest:
         payload = asdict(self)
         payload["changed_fields"] = list(self.changed_fields)
         payload["risk_signals"] = list(self.risk_signals)
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
+class GuardRuntimeState:
+    """Current local Guard runtime session exposed to thin clients."""
+
+    session_id: str
+    daemon_host: str
+    daemon_port: int
+    started_at: str
+    last_heartbeat_at: str
+
+    def to_dict(self) -> dict[str, object]:
+        payload = asdict(self)
+        payload["approval_center_url"] = f"http://{self.daemon_host}:{self.daemon_port}"
         return payload

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shlex
 import subprocess
@@ -211,8 +212,10 @@ def parse_protect_command(command: list[str]) -> ProtectRequest:
         "pip": _parse_pip_request,
         "uv": _parse_uv_request,
         "go": _parse_go_request,
+        "claude": _parse_claude_request,
         "codex": _parse_codex_request,
         "cursor": _parse_cursor_request,
+        "antigravity": _parse_antigravity_request,
         "gemini": _parse_gemini_request,
         "opencode": _parse_opencode_request,
     }
@@ -293,6 +296,35 @@ def _parse_codex_request(command: list[str]) -> ProtectRequest:
     return _parse_custom_request(command)
 
 
+def _parse_claude_request(command: list[str]) -> ProtectRequest:
+    if len(command) >= 5 and command[1:3] == ["mcp", "add"]:
+        positional = _remaining_positionals(command[3:])
+        if len(positional) < 2:
+            return _parse_custom_request(command)
+        name = positional[0]
+        command_or_url = positional[1]
+        target = ProtectTarget(
+            artifact_id=f"install:claude-code:mcp:{name}",
+            artifact_name=name,
+            artifact_type="mcp_server",
+            ecosystem="claude-code",
+            package_name=name,
+            raw_spec=command_or_url,
+            version=None,
+            source_url=command_or_url if command_or_url.startswith(("http://", "https://")) else None,
+            harness="claude-code",
+        )
+        return ProtectRequest(tuple(command), "harness_registration", "claude", None, "claude-code", (target,))
+    if len(command) >= 5 and command[1:3] == ["mcp", "add-json"]:
+        positional = _remaining_positionals(command[3:])
+        if len(positional) < 2:
+            return _parse_custom_request(command)
+        name = positional[0]
+        target = _parse_claude_mcp_target(name, positional[1])
+        return ProtectRequest(tuple(command), "harness_registration", "claude", None, "claude-code", (target,))
+    return _parse_custom_request(command)
+
+
 def _parse_cursor_request(command: list[str]) -> ProtectRequest:
     if len(command) >= 4 and command[1:3] == ["mcp", "add"]:
         name = command[3]
@@ -326,6 +358,65 @@ def _parse_gemini_request(command: list[str]) -> ProtectRequest:
             harness="gemini",
         )
         return ProtectRequest(tuple(command), "harness_registration", "gemini", None, "gemini", (target,))
+    if len(command) >= 4 and tuple(command[1:3]) in {
+        ("extensions", "link"),
+        ("skills", "install"),
+        ("skills", "link"),
+    }:
+        spec = command[3]
+        name = _target_name_from_spec(spec)
+        artifact_type = "extension" if command[1] == "extensions" else "skill"
+        target = ProtectTarget(
+            artifact_id=f"install:gemini:{artifact_type}:{name}",
+            artifact_name=name,
+            artifact_type=artifact_type,
+            ecosystem="gemini",
+            package_name=name if artifact_type == "extension" else None,
+            raw_spec=spec,
+            version=None,
+            source_url=_spec_url(spec),
+            harness="gemini",
+        )
+        return ProtectRequest(tuple(command), "harness_registration", "gemini", None, "gemini", (target,))
+    if len(command) >= 5 and command[1:3] == ["mcp", "add"]:
+        name = command[3]
+        command_or_url = command[4]
+        transport = _option_value(command, "--transport") or _option_value(command, "--type")
+        source_url = command_or_url if _is_remote_transport(command_or_url, transport) else None
+        target = ProtectTarget(
+            artifact_id=f"install:gemini:mcp:{name}",
+            artifact_name=name,
+            artifact_type="mcp_server",
+            ecosystem="gemini",
+            package_name=name,
+            raw_spec=command_or_url,
+            version=None,
+            source_url=source_url,
+            harness="gemini",
+        )
+        return ProtectRequest(tuple(command), "harness_registration", "gemini", None, "gemini", (target,))
+    return _parse_custom_request(command)
+
+
+def _parse_antigravity_request(command: list[str]) -> ProtectRequest:
+    extension_name = _option_value(command, "--install-extension")
+    if extension_name is not None:
+        target = ProtectTarget(
+            artifact_id=f"install:antigravity:extension:{extension_name}",
+            artifact_name=extension_name,
+            artifact_type="extension",
+            ecosystem="antigravity",
+            package_name=extension_name,
+            raw_spec=extension_name,
+            version=None,
+            source_url=_spec_url(extension_name),
+            harness="antigravity",
+        )
+        return ProtectRequest(tuple(command), "harness_registration", "antigravity", None, "antigravity", (target,))
+    raw_mcp_payload = _option_value(command, "--add-mcp")
+    if raw_mcp_payload is not None:
+        target = _parse_antigravity_mcp_target(raw_mcp_payload)
+        return ProtectRequest(tuple(command), "harness_registration", "antigravity", None, "antigravity", (target,))
     return _parse_custom_request(command)
 
 
@@ -456,6 +547,13 @@ def _spec_url(spec: str) -> str | None:
     return None
 
 
+def _target_name_from_spec(spec: str) -> str:
+    parsed_name = _spec_name(spec)
+    if parsed_name is None:
+        return spec
+    return parsed_name.removesuffix(".git")
+
+
 def _option_value(command: list[str], option: str) -> str | None:
     for index, value in enumerate(command):
         if value == option and index + 1 < len(command):
@@ -463,11 +561,98 @@ def _option_value(command: list[str], option: str) -> str | None:
     return None
 
 
+def _remaining_positionals(args: list[str]) -> list[str]:
+    positionals: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--":
+            positionals.extend(args[index + 1 :])
+            break
+        if token.startswith("--"):
+            if "=" not in token and index + 1 < len(args) and not args[index + 1].startswith("-"):
+                index += 2
+                continue
+            index += 1
+            continue
+        if token.startswith("-") and token != "-":
+            if len(token) == 2 and index + 1 < len(args) and not args[index + 1].startswith("-"):
+                index += 2
+                continue
+            index += 1
+            continue
+        positionals.append(token)
+        index += 1
+    return positionals
+
+
 def _first_url(command: list[str]) -> str | None:
     for value in command:
         if value.startswith(("http://", "https://", "git+", "file:")):
             return value
     return None
+
+
+def _parse_antigravity_mcp_target(raw_payload: str) -> ProtectTarget:
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    name = payload.get("name") if isinstance(payload.get("name"), str) else "antigravity-mcp"
+    command_or_url = payload.get("url") if isinstance(payload.get("url"), str) else None
+    if command_or_url is None and isinstance(payload.get("command"), str):
+        command_or_url = payload["command"]
+    source_url = (
+        command_or_url if isinstance(command_or_url, str) and _is_remote_transport(command_or_url, None) else None
+    )
+    return ProtectTarget(
+        artifact_id=f"install:antigravity:mcp:{name}",
+        artifact_name=name,
+        artifact_type="mcp_server",
+        ecosystem="antigravity",
+        package_name=name,
+        raw_spec=raw_payload,
+        version=None,
+        source_url=source_url,
+        harness="antigravity",
+    )
+
+
+def _parse_claude_mcp_target(name: str, raw_payload: str) -> ProtectTarget:
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    transport = payload.get("transport") if isinstance(payload.get("transport"), str) else None
+    command_or_url = payload.get("url") if isinstance(payload.get("url"), str) else None
+    if command_or_url is None and isinstance(payload.get("command"), str):
+        command_or_url = payload["command"]
+    source_url = (
+        command_or_url if isinstance(command_or_url, str) and _is_remote_transport(command_or_url, transport) else None
+    )
+    return ProtectTarget(
+        artifact_id=f"install:claude-code:mcp:{name}",
+        artifact_name=name,
+        artifact_type="mcp_server",
+        ecosystem="claude-code",
+        package_name=name,
+        raw_spec=raw_payload,
+        version=None,
+        source_url=source_url,
+        harness="claude-code",
+    )
+
+
+def _is_remote_transport(command_or_url: str, transport: str | None) -> bool:
+    if transport == "stdio":
+        return False
+    if transport in {"http", "sse"}:
+        return command_or_url.startswith(("http://", "https://"))
+    return command_or_url.startswith(("http://", "https://"))
 
 
 def _matching_advisories(
@@ -526,6 +711,8 @@ def _request_risk_signals(request: ProtectRequest) -> tuple[str, ...]:
     if request.install_kind == "harness_registration":
         if any(target.source_url is not None for target in request.targets):
             signals.append("registers a remote server endpoint")
+        if any(target.artifact_type in {"extension", "plugin", "skill"} for target in request.targets):
+            signals.append("registers executable harness code")
         if any(value in joined for value in ("http://", "https://", "curl ", "wget ")):
             signals.append("can fetch or talk to a remote server during registration")
     if any(value in joined for value in (".env", "printenv", "process.env", "os.environ", "getenv(")):

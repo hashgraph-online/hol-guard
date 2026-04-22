@@ -40,7 +40,7 @@ def queue_blocked_approvals(
             continue
         artifact = artifacts_by_id.get(artifact_id)
         request_id = uuid.uuid4().hex
-        risk_summary = artifact_risk_summary(artifact) if artifact is not None else None
+        risk_summary = _item_risk_summary(item, artifact)
         launch_target = _launch_target(artifact, item)
         incident = build_incident_context(
             harness=detection.harness,
@@ -74,7 +74,7 @@ def queue_blocked_approvals(
             workspace=_workspace_scope_target(item, artifact),
             publisher=artifact.publisher if artifact is not None else None,
             risk_summary=risk_summary,
-            risk_signals=artifact_risk_signals(artifact) if artifact is not None else (),
+            risk_signals=_item_risk_signals(item, artifact),
             artifact_label=incident["artifact_label"],
             source_label=incident["source_label"],
             trigger_summary=incident["trigger_summary"],
@@ -158,17 +158,67 @@ def approval_center_hint(
     harness: str,
     approval_center_url: str,
     queued: list[dict[str, object]],
+    managed_install: dict[str, object] | None = None,
 ) -> str:
-    adapter = get_adapter(harness)
-    flow = adapter.approval_flow()
+    del context
+    flow = approval_prompt_flow(harness, managed_install=managed_install)
     count = len(queued)
     risk_summary = _queue_risk_summary(queued)
     return (
         f"Guard queued {count} approval request{'s' if count != 1 else ''} for {harness}. "
-        f"Open {approval_center_url} to review them. "
+        f"{flow['summary']} "
+        f"Review them in the Guard approval center at {approval_center_url}. "
         f"{risk_summary} "
         f"{flow['fallback_hint']}"
     )
+
+
+def build_runtime_snapshot(
+    *,
+    store: GuardStore,
+    approval_center_url: str | None,
+    now: str | None = None,
+    request_limit: int = 200,
+    receipt_limit: int = 25,
+) -> dict[str, object]:
+    pending_requests = store.list_approval_requests(limit=request_limit)
+    latest_receipts = store.list_receipts(limit=receipt_limit)
+    return {
+        "generated_at": now or _now(),
+        "approval_center_url": approval_center_url,
+        "runtime_state": store.get_runtime_state(),
+        "pending_count": store.count_approval_requests(),
+        "receipt_count": store.count_receipts(),
+        "items": pending_requests,
+        "latest_receipts": latest_receipts,
+    }
+
+
+def approval_prompt_flow(
+    harness: str,
+    *,
+    managed_install: dict[str, object] | None = None,
+) -> dict[str, object]:
+    try:
+        flow = get_adapter(harness).approval_flow(managed_install=managed_install)
+    except ValueError:
+        flow = {}
+    return {
+        "tier": str(flow.get("tier") or "approval-center"),
+        "summary": str(flow.get("summary") or ""),
+        "fallback_hint": str(flow.get("fallback_hint") or ""),
+        "prompt_channel": str(flow.get("prompt_channel") or "browser"),
+        "auto_open_browser": bool(flow.get("auto_open_browser", True)),
+    }
+
+
+def approval_delivery_payload(flow: dict[str, object]) -> dict[str, object]:
+    auto_open_browser = bool(flow.get("auto_open_browser"))
+    return {
+        "destination": "browser" if auto_open_browser else "harness",
+        "prompt_channel": str(flow.get("prompt_channel") or "browser"),
+        "summary": str(flow.get("summary") or ""),
+    }
 
 
 def wait_for_approval_requests(
@@ -209,15 +259,15 @@ def _config_path(item: dict[str, object], artifact) -> str:
 
 
 def _launch_target(artifact, item: dict[str, object]) -> str | None:
+    value = item.get("launch_target")
+    if isinstance(value, str) and value:
+        return value
     if artifact is not None:
         if artifact.url:
             return artifact.url
         if artifact.command:
             parts = [artifact.command, *artifact.args]
             return " ".join(parts)
-    value = item.get("launch_target")
-    if isinstance(value, str) and value:
-        return value
     return None
 
 
@@ -248,6 +298,22 @@ def _workspace_scope_target(item: dict[str, object], artifact) -> str | None:
     if workspace_value:
         return workspace_value
     return None
+
+
+def _item_risk_summary(item: dict[str, object], artifact) -> str | None:
+    value = item.get("risk_summary")
+    if isinstance(value, str) and value:
+        return value
+    return artifact_risk_summary(artifact) if artifact is not None else None
+
+
+def _item_risk_signals(item: dict[str, object], artifact) -> tuple[str, ...]:
+    value = item.get("risk_signals")
+    if isinstance(value, list):
+        normalized = tuple(str(signal) for signal in value if isinstance(signal, str) and signal)
+        if normalized:
+            return normalized
+    return artifact_risk_signals(artifact) if artifact is not None else ()
 
 
 def _string_list(value: object) -> list[str]:

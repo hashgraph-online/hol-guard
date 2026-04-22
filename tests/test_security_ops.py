@@ -24,7 +24,7 @@ def test_markdown_output_contains_top_findings():
     result = scan_plugin(FIXTURES / "bad-plugin")
     output = format_markdown(result)
 
-    assert "# Codex Plugin Scanner Report" in output
+    assert "# Plugin Scanner Report" in output
     assert "## Top Findings" in output
     assert "Hardcoded secret detected" in output or "Dangerous MCP command pattern detected" in output
 
@@ -34,7 +34,8 @@ def test_sarif_output_contains_results():
     sarif = json.loads(format_sarif(result))
 
     assert sarif["version"] == "2.1.0"
-    assert sarif["runs"][0]["tool"]["driver"]["name"] == "codex-plugin-scanner"
+    assert sarif["runs"][0]["tool"]["driver"]["name"] == "plugin-scanner"
+    assert sarif["runs"][0]["tool"]["driver"]["informationUri"] == "https://github.com/hashgraph-online/ai-plugin-scanner"
     assert sarif["runs"][0]["results"]
 
 

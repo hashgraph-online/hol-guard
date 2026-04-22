@@ -13,11 +13,21 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard bootstrap
    ```
 
+   For a Hermes-first setup:
+
+   ```bash
+   hol-guard hermes bootstrap
+   ```
+
 2. If you prefer the manual path, install Guard in front of the harness you use most:
 
    ```bash
    hol-guard install codex
    ```
+
+   For Codex, install now enables Guard-owned `PreToolUse` Bash hooks in `.codex/hooks.json` and turns on the Codex hooks feature. That native hook path still runs when Codex itself is in YOLO mode, so Guard can pause sensitive Bash commands before execution instead of forcing a slower Codex approval mode.
+
+   After upgrading later, run `hol-guard update` to update the installed `hol-guard` package in that environment.
 
 3. Run one dry pass so Guard records the current state:
 
@@ -58,6 +68,31 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard connect
    ```
 
+9. Inspect or rotate the local installation identity that cloud sync uses:
+
+   ```bash
+   hol-guard device show
+   hol-guard device label set "VPS - Hermes runtime"
+   hol-guard device rotate
+   ```
+
+## Evidence-first decisions
+
+Guard now scores local decisions from structured evidence, not only string heuristics. Each changed artifact carries:
+
+- typed risk signals with confidence and remediation
+- capability deltas like `new_network_host`, `secret_scope_expanded`, and `subprocess_added`
+- provenance state and local history context
+- review priority and suppressibility guidance
+
+Runtime prompt intent is also evaluated as first-class risk input. Guard detects more than direct `.env` reads, including:
+
+- secret-bearing files (`~/.ssh`, `~/.aws/credentials`, `~/.kube/config`, `.npmrc`, `.pypirc`, Docker auth config)
+- exfil-like intent (`upload`, `post`, `webhook`, `gist`, transfer verbs)
+- subprocess and shell-wrapper expansion
+- destructive mutation intent
+- Guard bypass intent
+
 ## Fine-tune local policy
 
 Guard works with local defaults first, then optional overrides for a harness, publisher, or artifact.
@@ -82,10 +117,12 @@ default_action = "sandbox-required"
 Optional project override:
 
 ```toml
-# .ai-plugin-scanner-guard.toml
+# .hol-guard.toml
 [artifacts."codex:project:workspace_tools"]
 default_action = "block"
 ```
+
+Guard still reads the legacy `.ai-plugin-scanner-guard.toml` file if you already have one, but new local overrides should use `.hol-guard.toml`.
 
 Guard resolves decisions in this order:
 
@@ -106,10 +143,25 @@ Use these actions in config or saved decisions:
 
 `guard install <harness>` creates a local launcher shim under Guard’s home directory:
 
-- macOS/Linux: `~/.config/.ai-plugin-scanner-guard/bin/guard-<harness>`
-- Windows: `~/.config/.ai-plugin-scanner-guard/bin/guard-<harness>.cmd`
+- macOS/Linux: `~/.hol-guard/bin/guard-<harness>`
+- Windows: `~/.hol-guard/bin/guard-<harness>.cmd`
 
 Claude Code also gets Guard hook entries in `.claude/settings.local.json` when you install from a workspace.
+
+Copilot CLI gets a Guard-owned repo hook file at `.github/hooks/hol-guard-copilot.json` when you install from a workspace. Guard only reads `~/.copilot/config.json` and `~/.copilot/mcp-config.json`; it does not auto-write user-level Copilot config.
+
+OpenCode gets the normal Guard shim plus a Guard-owned runtime overlay at `<guard-home>/opencode/runtime-config.json`. Guard
+injects that overlay through `OPENCODE_CONFIG_CONTENT` when you launch through Guard so native skill loads stay on ask
+without mutating your checked-in `opencode.json`.
+
+Hermes gets the normal Guard shim plus a Guard-owned bundle at `<guard-home>/hermes/` with:
+
+- `mcp-overlay.json`
+- `pretool-hook.json`
+- `manifest.json`
+
+Guard injects the managed overlay paths through `HERMES_GUARD_MCP_OVERLAY_PATH` and `HERMES_GUARD_PRETOOL_PATH` when
+you launch Hermes through Guard.
 
 ## Harness approval model
 
@@ -123,14 +175,29 @@ Current strategy:
 
 - `claude-code`
   prefers Claude hooks and can hand blocked work to the approval center cleanly
+- `copilot`
+  wraps the `copilot` CLI, watches documented repo hooks and MCP config, and treats workspace `.vscode/mcp.json` as MCP artifact detection only
 - `codex`
-  uses the Guard approval center today; App Server is the long-term richer in-client path
+  uses inline MCP elicitation in the same Codex chat when the interactive CLI or Codex App can answer it, and falls back to the local Guard approval center for `codex exec` or any other nonresponsive session
 - `cursor`
   keeps Cursor’s native tool approval and lets Guard own artifact trust before tool use
+- `antigravity`
+  scans Antigravity settings, installed extensions, and Antigravity-owned MCP or skill roots before launch
 - `opencode`
-  keeps OpenCode’s permission model and lets Guard manage package and provenance policy
+  detects OpenCode MCP servers, commands, plugins, and skills before launch, and `guard install opencode` adds a
+  Guard-owned runtime overlay that keeps native skill loads on ask
+- `hermes`
+  prefers the managed Hermes same-channel path when Guard owns the overlay bundle, falls back to the approval center,
+  and keeps browser auto-open off for blocked requests
 - `gemini`
-  scans extension manifests and routes blocked changes to the approval center
+  scans `.gemini/settings.json`, extension manifests, hooks, MCP registrations, and Gemini skill directories before
+  launch, then routes blocked changes to the approval center
+
+Guard does not claim VS Code Copilot extension-host interception in this pass. A VS Code inline tool prompt by itself is
+not proof that Guard blocked the action, because that prompt can come from VS Code's own permission surface. For Copilot,
+count Guard proof only from CLI hook responses, Guard runtime receipts, or an MCP client that explicitly answers Guard
+elicitation. Guard also does not add Cisco AIBOM runtime policy logic in this pass. AIBOM can come back later only as
+evidence or export.
 
 ## First-party canaries
 
@@ -150,3 +217,20 @@ hol-guard receipts
 ```
 
 For a real Codex canary, point `~/.codex/config.toml` or `<workspace>/.codex/config.toml` at a local `hashnet-mcp` command, then repeat the Guard loop above.
+
+## Codex-specific approval behavior
+
+Guard now has three real runtime paths for Codex:
+
+1. native Codex Bash tool calls
+   Guard installs a Codex `PreToolUse` hook in `.codex/hooks.json`, so sensitive Bash commands are denied before they run and routed into HOL Guard approval
+2. interactive Codex CLI and Codex App MCP tool calls
+   Guard sends an MCP `elicitation/create` approval request, so the user can approve or deny in the same Codex chat
+3. noninteractive Codex runs such as `codex exec`
+   if Codex does not answer the elicitation request, Guard queues a localhost approval request and returns the request id plus approval URL in the same tool-call error
+
+That means the user should never get a silent pass-through on a risky Codex action that Guard manages:
+
+- native Bash deny plus HOL Guard approval-center recovery for sensitive shell actions
+- same-chat approve or deny when Codex can render the inline MCP prompt
+- explicit approval-center recovery when the session cannot

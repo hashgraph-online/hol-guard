@@ -31,3 +31,16 @@ def test_live_cisco_scan_on_good_plugin() -> None:
     assert integration.findings_count == len(cisco_findings)
     assert checks_by_name["Cisco skill scan completed"].passed is True
     assert checks_by_name["No elevated Cisco skill findings"].applicable is True
+
+
+def test_live_cisco_mcp_scan_on_bad_plugin() -> None:
+    if importlib.util.find_spec("mcpscanner") is None:
+        pytest.skip("cisco-ai-mcp-scanner is not installed in this environment")
+
+    result = scan_plugin(FIXTURES / "bad-plugin", ScanOptions(cisco_mcp_scan="on"))
+
+    integration = next(item for item in result.integrations if item.name == "cisco-mcp-scanner")
+    cisco_findings = [finding for finding in result.findings if finding.source == "cisco-mcp-scanner"]
+
+    assert integration.status == CiscoIntegrationStatus.ENABLED
+    assert integration.findings_count == len(cisco_findings)

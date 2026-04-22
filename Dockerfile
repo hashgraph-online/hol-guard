@@ -12,7 +12,7 @@ RUN python3 -m pip install --require-hashes -r /app/docker-requirements.txt
 
 COPY src /app/src
 
-RUN cat <<'EOF' >/usr/local/bin/codex-plugin-scanner
+RUN cat <<'EOF' >/usr/local/bin/plugin-scanner
 #!/usr/bin/env python3
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ from codex_plugin_scanner.cli import main
 
 raise SystemExit(main())
 EOF
-RUN chmod 0755 /usr/local/bin/codex-plugin-scanner
+RUN chmod 0755 /usr/local/bin/plugin-scanner
 
 RUN groupadd --system scanner && \
     useradd --system --gid scanner --create-home --home-dir /home/scanner scanner && \
@@ -48,4 +48,4 @@ WORKDIR /workspace
 
 USER scanner
 
-ENTRYPOINT ["codex-plugin-scanner"]
+ENTRYPOINT ["plugin-scanner"]

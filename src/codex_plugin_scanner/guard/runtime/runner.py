@@ -6,29 +6,32 @@ import hashlib
 import json
 import os
 import re
+import socket
 import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ...version import __version__
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..store import GuardStore
+from ..types import PromptRequest, RemediationAction
 
-
-class GuardSyncNotAvailableError(RuntimeError):
-    """Raised when the Guard sync endpoint returns 403 (plan upgrade required)."""
-
-
-_APPROVAL_METADATA_KEYS = ("approval_center_url", "approval_requests", "approval_wait", "review_hint")
+_APPROVAL_METADATA_KEYS = (
+    "approval_center_url",
+    "approval_delivery",
+    "approval_requests",
+    "approval_wait",
+    "review_hint",
+)
 _PAIN_SIGNAL_EVENTS = frozenset(
     {
         "changed_artifact_caught",
@@ -38,22 +41,56 @@ _PAIN_SIGNAL_EVENTS = frozenset(
     }
 )
 _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
-_ENV_PROMPT_PATTERN = re.compile(r"(?<![\w-])\.env(?:\.[\w.-]+)?\b")
-_SENSITIVE_PROMPT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (_ENV_PROMPT_PATTERN, "local .env file"),
+_SECRET_REQUEST_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"(?<![\w-])\.env(?:\.[\w.-]+)?\b"), "local .env file"),
+    (re.compile(r"(?:^|[\s'\"`])~?/.ssh(?:/|\b)"), "SSH material"),
+    (re.compile(r"(?:^|[\s'\"`])~?/.aws/(?:credentials|config)\b"), "AWS credentials"),
+    (re.compile(r"(?:^|[\s'\"`])~?/.kube/config\b"), "kubeconfig"),
+    (re.compile(r"(?:^|[\s'\"`])~?/.docker/config\.json\b"), "Docker credentials"),
     (re.compile(r"(?<![\w-])\.npmrc\b"), "npm registry credentials"),
     (re.compile(r"(?<![\w-])\.pypirc\b"), "Python package credentials"),
-    (re.compile(r"(?<![\w-])\.netrc\b"), "netrc credentials"),
     (re.compile(r"(?<![\w-])\.git-credentials\b"), "Git credential store"),
-    (re.compile(r"(?<![\w-])(?:~[/\\\\])?\.aws[/\\\\](?:credentials|config)\b"), "AWS shared credentials file"),
-    (
-        re.compile(r"(?<![\w-])(?:~[/\\\\])?\.ssh[/\\\\](?:id_rsa|id_ed25519|id_ecdsa|config)\b"),
-        "SSH private key",
-    ),
 )
-_DEFAULT_GUARD_SYNC_HTTP_TIMEOUT_SECONDS = 120
-_MIN_GUARD_SYNC_HTTP_TIMEOUT_SECONDS = 5
-_MAX_GUARD_SYNC_HTTP_TIMEOUT_SECONDS = 300
+_SECRET_ABSOLUTE_HINTS: tuple[tuple[str, str], ...] = (
+    ("/.ssh/", "SSH material"),
+    ("/.aws/credentials", "AWS credentials"),
+    ("/.aws/config", "AWS credentials"),
+    ("/.kube/config", "kubeconfig"),
+    ("/.docker/config.json", "Docker credentials"),
+)
+_EXFIL_PROMPT_PATTERN = re.compile(
+    r"\b(upload|exfiltrate|send|post|sync|webhook|paste|gist|transfer)\b",
+    re.IGNORECASE,
+)
+_DESTRUCTIVE_PROMPT_PATTERN = re.compile(
+    r"\b(rm\s+-rf|rm\s+|del\s+|truncate\s+|chmod\s+|chown\s+|mv\s+|overwrite)\b",
+    re.IGNORECASE,
+)
+_SUBPROCESS_PROMPT_PATTERN = re.compile(
+    r"\b(?:bash\s+-c|sh\s+-c|zsh\s+-c|powershell|cmd\s+/c|subprocess)\b|(?:exec|spawn)\s*\(",
+    re.IGNORECASE,
+)
+_GUARD_BYPASS_PROMPT_PATTERN = re.compile(
+    r"\b(hol-guard\s+(?:disable|off|uninstall)|disable\s+hol-guard|approval_policy\s*=\s*\"never\"|guard[_-]?bypass)\b",
+    re.IGNORECASE,
+)
+_GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
+_SYNC_HTTP_TIMEOUT_SECONDS = 20
+_SYNC_HTTP_RETRY_TIMEOUT_SECONDS = 120
+_RUNTIME_SYNC_TIMEOUT_SECONDS = 10
+_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS = 90
+_PAIN_SIGNAL_TIMEOUT_SECONDS = 10
+_PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS = 90
+_MIN_SYNC_HTTP_TIMEOUT_SECONDS = 5
+_MAX_SYNC_HTTP_TIMEOUT_SECONDS = 300
+
+
+class GuardSyncNotConfiguredError(RuntimeError):
+    """Raised when Guard Cloud sync is requested before the machine is paired."""
+
+
+class GuardSyncNotAvailableError(RuntimeError):
+    """Raised when the sync endpoint returns 403 (free-plan restriction)."""
 
 
 def guard_run(
@@ -117,65 +154,260 @@ def _detection_with_prompt_artifacts(
     context: HarnessContext,
     passthrough_args: list[str],
 ) -> HarnessDetection:
-    prompt_artifact = _prompt_env_artifact(detection.harness, context, passthrough_args)
-    if prompt_artifact is None:
+    prompt_text = " ".join(value.strip() for value in passthrough_args if value.strip())
+    prompt_requests = extract_prompt_requests(prompt_text)
+    if not prompt_requests:
         return detection
+    prompt_artifacts = prompt_requests_to_artifacts(
+        detection=detection,
+        context=context,
+        requests=prompt_requests,
+    )
     return HarnessDetection(
         harness=detection.harness,
         installed=detection.installed,
         command_available=detection.command_available,
         config_paths=detection.config_paths,
-        artifacts=(*detection.artifacts, prompt_artifact),
+        artifacts=(*detection.artifacts, *prompt_artifacts),
         warnings=detection.warnings,
     )
 
 
-def _prompt_env_artifact(
-    harness: str,
-    context: HarnessContext,
-    passthrough_args: list[str],
-) -> GuardArtifact | None:
-    prompt_text = " ".join(value.strip() for value in passthrough_args if value.strip())
-    normalized_prompt = " ".join(prompt_text.split()).lower()
-    prompt_path_class = _matched_sensitive_prompt_path_class(normalized_prompt)
-    if not normalized_prompt or prompt_path_class is None:
-        return None
-    prompt_hash = hashlib.sha256(normalized_prompt.encode("utf-8")).hexdigest()
-    if prompt_path_class == "local .env file":
-        prompt_signal = "asks the harness to read a local .env file directly"
-        prompt_summary = "Prompt asks the harness to read a local .env file directly."
-        artifact_name = "direct .env prompt access"
-    else:
-        prompt_signal = "asks the harness to read a sensitive local file directly"
-        prompt_summary = (
-            "Prompt asks the harness to read a sensitive local file directly: "
-            f"{prompt_path_class}."
+def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
+    """Extract structured prompt intent requests from passthrough arguments."""
+
+    normalized_prompt = " ".join(prompt_text.split())
+    lowered = normalized_prompt.lower()
+    if not lowered:
+        return []
+    requests: list[PromptRequest] = []
+    seen_secret_labels: set[str] = set()
+
+    def add_secret_request(*, label: str, matched: str) -> None:
+        if label in seen_secret_labels:
+            return
+        seen_secret_labels.add(label)
+        summary = (
+            "Prompt asks the harness to read a local .env file directly."
+            if label == "local .env file"
+            else f"Prompt asks for direct access to {label}."
         )
-        artifact_name = "direct sensitive-file prompt access"
-    return GuardArtifact(
-        artifact_id=f"{harness}:session:prompt-env-read:{prompt_hash}",
-        name=artifact_name,
-        harness=harness,
-        artifact_type="prompt_request",
-        source_scope="session",
-        config_path=str(_prompt_policy_path(harness, context)),
-        metadata={
-            "prompt_signals": [prompt_signal],
-            "prompt_summary": prompt_summary,
-            "prompt_path_class": prompt_path_class,
-        },
+        requests.append(
+            PromptRequest(
+                request_id=_prompt_request_id("secret_read", matched, lowered),
+                request_class="secret_read",
+                summary=summary,
+                matched_text=matched,
+                severity=8,
+                confidence=0.9,
+                remediation=(
+                    RemediationAction(kind="approve_once", label="Approve once", detail="Allow a one-time access."),
+                    RemediationAction(
+                        kind="rotate_exposed_secret",
+                        label="Rotate secret",
+                        detail="Rotate credentials if this read is unexpected.",
+                    ),
+                ),
+            )
+        )
+
+    for pattern, label in _SECRET_REQUEST_PATTERNS:
+        match = pattern.search(normalized_prompt)
+        if match is None:
+            continue
+        add_secret_request(label=label, matched=match.group(0).strip())
+    for hint, label in _SECRET_ABSOLUTE_HINTS:
+        if hint in lowered:
+            add_secret_request(label=label, matched=hint)
+    if _EXFIL_PROMPT_PATTERN.search(normalized_prompt):
+        requests.append(
+            PromptRequest(
+                request_id=_prompt_request_id("exfil_intent", "exfil", lowered),
+                request_class="exfil_intent",
+                summary="Prompt includes exfiltration-oriented transfer intent.",
+                matched_text="exfil-transfer",
+                severity=8,
+                confidence=0.84,
+                remediation=(
+                    RemediationAction(
+                        kind="review_network_destination",
+                        label="Review destination",
+                        detail="Validate destination before data transfer.",
+                    ),
+                    RemediationAction(kind="defer_and_notify_team", label="Notify team", detail="Escalate for review."),
+                ),
+            )
+        )
+    if _DESTRUCTIVE_PROMPT_PATTERN.search(normalized_prompt):
+        requests.append(
+            PromptRequest(
+                request_id=_prompt_request_id("destructive_intent", "destructive", lowered),
+                request_class="destructive_intent",
+                summary="Prompt includes destructive filesystem mutation intent.",
+                matched_text="destructive-operation",
+                severity=8,
+                confidence=0.87,
+                remediation=(
+                    RemediationAction(
+                        kind="approve_once",
+                        label="Approve once",
+                        detail="Require explicit one-time approval.",
+                    ),
+                    RemediationAction(
+                        kind="open_investigation",
+                        label="Open investigation",
+                        detail="Track destructive intent.",
+                    ),
+                ),
+            )
+        )
+    if _SUBPROCESS_PROMPT_PATTERN.search(normalized_prompt):
+        requests.append(
+            PromptRequest(
+                request_id=_prompt_request_id("subprocess_intent", "subprocess", lowered),
+                request_class="subprocess_intent",
+                summary="Prompt asks for subprocess or shell-wrapper execution.",
+                matched_text="subprocess-shell",
+                severity=7,
+                confidence=0.8,
+                remediation=(
+                    RemediationAction(
+                        kind="approve_once",
+                        label="Approve once",
+                        detail="Constrain this run to one approval.",
+                    ),
+                    RemediationAction(
+                        kind="run_in_sandbox",
+                        label="Run in sandbox",
+                        detail="Execute in isolated mode.",
+                    ),
+                ),
+            )
+        )
+    if _GUARD_BYPASS_PROMPT_PATTERN.search(normalized_prompt):
+        requests.append(
+            PromptRequest(
+                request_id=_prompt_request_id("guard_bypass_intent", "guard-bypass", lowered),
+                request_class="guard_bypass_intent",
+                summary="Prompt includes Guard bypass or disable intent.",
+                matched_text="guard-bypass",
+                severity=10,
+                confidence=0.93,
+                remediation=(
+                    RemediationAction(
+                        kind="block_and_remove",
+                        label="Block",
+                        detail="Do not allow bypass behavior.",
+                    ),
+                    RemediationAction(
+                        kind="open_investigation",
+                        label="Investigate",
+                        detail="Escalate bypass attempt.",
+                    ),
+                ),
+            )
+        )
+    deduped: dict[str, PromptRequest] = {}
+    for request in requests:
+        deduped[request.request_id] = request
+    return list(deduped.values())
+
+
+def prompt_requests_to_artifacts(
+    *,
+    detection: HarnessDetection,
+    context: HarnessContext,
+    requests: list[PromptRequest],
+) -> list[GuardArtifact]:
+    """Convert typed prompt requests into pseudo-artifacts for policy evaluation."""
+
+    config_path = str(_prompt_policy_path(detection, context))
+    artifacts: list[GuardArtifact] = []
+    for request in requests:
+        if request.request_class == "secret_read" and ".env" in request.matched_text.lower():
+            artifact_id = f"{detection.harness}:session:prompt-env-read:{request.request_id[:24]}"
+        else:
+            artifact_id = f"{detection.harness}:session:prompt:{request.request_class}:{request.request_id[:24]}"
+        artifacts.append(
+            GuardArtifact(
+                artifact_id=artifact_id,
+                name=f"prompt {request.request_class.replace('_', ' ')}",
+                harness=detection.harness,
+                artifact_type="prompt_request",
+                source_scope="session",
+                config_path=config_path,
+                metadata={
+                    "prompt_signals": [request.summary],
+                    "prompt_summary": request.summary,
+                    "prompt_matched_text": request.matched_text,
+                    "prompt_request_class": request.request_class,
+                    "prompt_confidence": request.confidence,
+                    "prompt_severity": request.severity,
+                },
+            )
+        )
+    return artifacts
+
+
+def should_force_reapproval(prompt_reqs: list[PromptRequest], prior_policy: dict[str, object] | None) -> bool:
+    """Return whether current prompt requests exceed prior approved scope."""
+
+    if not prompt_reqs:
+        return False
+    if prior_policy is None:
+        return True
+    approved_classes = prior_policy.get("approved_prompt_classes")
+    approved = (
+        {str(item) for item in approved_classes if isinstance(item, str)}
+        if isinstance(approved_classes, list)
+        else set()
     )
+    return any(request.request_class not in approved or request.severity >= 8 for request in prompt_reqs)
 
 
-def _matched_sensitive_prompt_path_class(prompt_text: str) -> str | None:
-    for pattern, path_class in _SENSITIVE_PROMPT_PATTERNS:
-        if pattern.search(prompt_text) is not None:
-            return path_class
-    return None
+def _prompt_request_id(request_class: str, matched_text: str, normalized_prompt: str) -> str:
+    fingerprint = hashlib.sha256(f"{request_class}:{matched_text}:{normalized_prompt}".encode()).hexdigest()
+    return fingerprint
 
 
-def _prompt_policy_path(harness: str, context: HarnessContext) -> Path:
-    return get_adapter(harness).policy_path(context)
+def _prompt_policy_path(detection: HarnessDetection | str, context: HarnessContext) -> Path:
+    if isinstance(detection, str):
+        return get_adapter(detection).policy_path(context)
+    config_candidates = _prompt_config_candidates(detection, context)
+    if context.workspace_dir is not None:
+        for config_path in config_candidates:
+            candidate = Path(config_path)
+            if candidate.is_relative_to(context.workspace_dir):
+                return candidate
+    if config_candidates:
+        return Path(config_candidates[0])
+    if detection.harness == "opencode":
+        if context.workspace_dir is not None:
+            return context.workspace_dir / "opencode.json"
+        return context.home_dir / ".config" / "opencode" / "opencode.json"
+    if context.workspace_dir is not None:
+        return context.workspace_dir / ".codex" / "config.toml"
+    return context.home_dir / ".codex" / "config.toml"
+
+
+def _prompt_config_candidates(detection: HarnessDetection, context: HarnessContext) -> tuple[str, ...]:
+    if detection.harness == "opencode":
+        configured_path = os.getenv("OPENCODE_CONFIG")
+        configured_candidate = None
+        if configured_path:
+            candidate = Path(configured_path).expanduser()
+            if not candidate.is_absolute():
+                if context.workspace_dir is not None:
+                    candidate = context.workspace_dir / candidate
+                else:
+                    candidate = Path.cwd() / candidate
+            configured_candidate = str(candidate)
+        return tuple(
+            config_path
+            for config_path in detection.config_paths
+            if Path(config_path).name in {"opencode.json", "opencode.jsonc"} or config_path == configured_candidate
+        )
+    return detection.config_paths
 
 
 def sync_receipts(store: GuardStore) -> dict[str, object]:
@@ -183,28 +415,31 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
 
     credentials = store.get_sync_credentials()
     if credentials is None:
-        raise RuntimeError("Guard is not logged in.")
-    timeout_seconds = _sync_http_timeout_seconds()
+        raise GuardSyncNotConfiguredError("Guard is not logged in.")
+    sync_url = _normalized_receipts_sync_url(str(credentials["sync_url"]))
     receipts = store.list_receipts(limit=200)
     inventory = store.list_inventory()
-    body = json.dumps({"receipts": receipts, "inventory": inventory}).encode("utf-8")
+    body = json.dumps({"receipts": _cloud_sync_receipts_payload(store, receipts)}).encode("utf-8")
     request = urllib.request.Request(
-        str(credentials["sync_url"]),
+        sync_url,
         data=body,
         method="POST",
-        headers={
-            "Authorization": f"Bearer {credentials['token']}",
-            "Content-Type": "application/json",
-        },
+        headers=_guard_sync_headers(str(credentials["token"])),
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        payload = _urlopen_json_with_timeout_retry(
+            request=request,
+            timeout_seconds=_configured_sync_timeout(_SYNC_HTTP_TIMEOUT_SECONDS),
+            retry_timeout_seconds=_configured_sync_timeout(_SYNC_HTTP_RETRY_TIMEOUT_SECONDS),
+        )
     except urllib.error.HTTPError as error:
         if error.code == 403:
-            raise GuardSyncNotAvailableError(_sync_http_error_message(error)) from error
+            _is_plan, _msg = _check_plan_restriction_403(error)
+            if _is_plan:
+                raise GuardSyncNotAvailableError(_msg) from error
+            raise RuntimeError(_msg) from error
         raise RuntimeError(_sync_http_error_message(error)) from error
-    except urllib.error.URLError as error:
+    except OSError as error:
         raise RuntimeError(_sync_url_error_message(error)) from error
     now = _sync_timestamp(payload)
     advisories = payload.get("advisories")
@@ -238,7 +473,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         now=now,
     )
     pain_signals_uploaded = sync_pain_signals(store)
-    result = {
+    summary = {
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": payload.get("receiptsStored"),
         "advisories_stored": advisories_stored,
@@ -246,52 +481,72 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         "remote_policies_stored": len(remote_decisions),
         "pain_signals_uploaded": pain_signals_uploaded,
         "receipts": len(receipts),
-        "inventory": len(inventory),
+        "inventory": 0,
+        "inventory_tracked": len(inventory),
     }
-    store.set_sync_payload("latest_sync", result, now)
-    return result
+    store.set_sync_payload("sync_summary", summary, now)
+    return summary
 
 
-def sync_runtime_session(store: GuardStore, *, session: dict[str, object]) -> dict[str, object]:
-    """Push one runtime session snapshot to the configured sync endpoint."""
+def sync_runtime_session(
+    store: GuardStore,
+    *,
+    session: dict[str, object],
+) -> dict[str, object]:
+    """Publish the active Guard runtime session so the dashboard can show the machine immediately."""
 
     credentials = store.get_sync_credentials()
     if credentials is None:
-        raise RuntimeError("Guard is not logged in.")
-    timeout_seconds = _sync_http_timeout_seconds()
-
-    normalized_session = _normalize_runtime_session_payload(session)
+        raise GuardSyncNotConfiguredError("Guard is not logged in.")
+    sync_url = _normalized_runtime_sessions_sync_url(str(credentials["sync_url"]))
+    session_payload = _cloud_runtime_session_payload(store, session)
+    body = json.dumps({"session": session_payload}).encode("utf-8")
     request = urllib.request.Request(
-        _runtime_session_sync_url(str(credentials["sync_url"])),
-        data=json.dumps({"session": normalized_session}).encode("utf-8"),
+        sync_url,
+        data=body,
         method="POST",
-        headers={
-            "Authorization": f"Bearer {credentials['token']}",
-            "Content-Type": "application/json",
-        },
+        headers=_guard_sync_headers(str(credentials["token"])),
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        payload = _urlopen_json_with_timeout_retry(
+            request=request,
+            timeout_seconds=_configured_sync_timeout(_RUNTIME_SYNC_TIMEOUT_SECONDS),
+            retry_timeout_seconds=_configured_sync_timeout(_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS),
+        )
     except urllib.error.HTTPError as error:
+        if error.code == 404:
+            recorded_at = _now()
+            summary = {
+                "synced_at": None,
+                "runtime_session_synced_at": None,
+                "runtime_session_id": session_payload["sessionId"],
+                "runtime_sessions_visible": 0,
+                "runtime_session_sync_skipped": True,
+                "runtime_session_sync_reason": "runtime_session_endpoint_unavailable",
+            }
+            store.set_sync_payload("runtime_session_summary", summary, recorded_at)
+            return summary
         raise RuntimeError(_sync_http_error_message(error)) from error
-    except urllib.error.URLError as error:
+    except OSError as error:
         raise RuntimeError(_sync_url_error_message(error)) from error
-
-    visible_items = payload.get("items")
-    return {
-        "runtime_session_id": normalized_session.get("sessionId", ""),
-        "runtime_session_synced_at": payload.get("generatedAt") or payload.get("generated_at"),
-        "runtime_sessions_visible": len(visible_items) if isinstance(visible_items, list) else 0,
-        "runtime_session_sync_pending": False,
+    if not isinstance(payload, dict):
+        raise RuntimeError("Invalid sync response")
+    synced_at = _sync_timestamp(payload)
+    summary = {
+        "synced_at": synced_at,
+        "runtime_session_synced_at": synced_at,
+        "runtime_session_id": session_payload["sessionId"],
+        "runtime_sessions_visible": len(payload.get("items", [])) if isinstance(payload.get("items"), list) else 0,
     }
+    store.set_sync_payload("runtime_session_summary", summary, synced_at)
+    return summary
 
 
 def sync_pain_signals(store: GuardStore) -> int:
     credentials = store.get_sync_credentials()
     if credentials is None:
         return 0
-    timeout_seconds = _sync_http_timeout_seconds()
+    normalized_sync_url = _normalized_receipts_sync_url(str(credentials["sync_url"]))
     cursor_payload = store.get_sync_payload("pain_signal_cursor")
     last_event_id = _last_uploaded_event_id(cursor_payload)
     uploaded_count = 0
@@ -308,17 +563,17 @@ def sync_pain_signals(store: GuardStore) -> int:
         signal_items = [payload for item in candidates if (payload := _pain_signal_item(item)) is not None]
         if signal_items:
             request = urllib.request.Request(
-                _pain_signal_sync_url(str(credentials["sync_url"])),
+                _pain_signal_sync_url(normalized_sync_url),
                 data=json.dumps({"items": signal_items}).encode("utf-8"),
                 method="POST",
-                headers={
-                    "Authorization": f"Bearer {credentials['token']}",
-                    "Content-Type": "application/json",
-                },
+                headers=_guard_sync_headers(str(credentials["token"])),
             )
             try:
-                with urllib.request.urlopen(request, timeout=timeout_seconds):
-                    pass
+                _urlopen_with_timeout_retry(
+                    request=request,
+                    timeout_seconds=_PAIN_SIGNAL_TIMEOUT_SECONDS,
+                    retry_timeout_seconds=_PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS,
+                )
             except urllib.error.HTTPError as error:
                 if error.code == 404:
                     current_event_id = last_processed_event_id
@@ -329,7 +584,7 @@ def sync_pain_signals(store: GuardStore) -> int:
                     )
                     return uploaded_count
                 raise RuntimeError(_sync_http_error_message(error)) from error
-            except urllib.error.URLError as error:
+            except OSError as error:
                 raise RuntimeError(_sync_url_error_message(error)) from error
             uploaded_count += len(signal_items)
         current_event_id = last_processed_event_id
@@ -409,38 +664,148 @@ def _build_remote_policy_decisions(payload: dict[str, object]) -> list[PolicyDec
     return decisions
 
 
+def _guard_sync_headers(token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": _GUARD_SYNC_USER_AGENT,
+    }
+
+
+def _configured_sync_timeout(default_seconds: int) -> int:
+    raw_value = os.environ.get("GUARD_SYNC_HTTP_TIMEOUT_SECONDS")
+    if raw_value is None or not raw_value.strip():
+        return default_seconds
+    try:
+        parsed_value = int(raw_value)
+    except ValueError:
+        return default_seconds
+    bounded_value = max(_MIN_SYNC_HTTP_TIMEOUT_SECONDS, min(_MAX_SYNC_HTTP_TIMEOUT_SECONDS, parsed_value))
+    return bounded_value
+
+
 def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
     try:
-        payload = json.loads(error.read().decode("utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        raw_body = error.read().decode("utf-8")
+    except OSError:
+        raw_body = ""
+    try:
+        payload = json.loads(raw_body) if raw_body else None
+    except json.JSONDecodeError:
         payload = None
     if isinstance(payload, dict):
-        error_value = payload.get("error")
-        if isinstance(error_value, str) and error_value.strip():
-            return error_value
-    return f"Guard sync failed with HTTP {error.code}."
+        message = payload.get("error")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+    normalized_body = raw_body.strip()
+    if normalized_body:
+        return normalized_body
+    return f"HTTP Error {error.code}: {error.reason}"
 
 
-def _sync_http_timeout_seconds() -> int:
-    raw_timeout = os.getenv("GUARD_SYNC_HTTP_TIMEOUT_SECONDS")
-    if raw_timeout is None:
-        return _DEFAULT_GUARD_SYNC_HTTP_TIMEOUT_SECONDS
+_PLAN_403_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "sync_not_available",
+        "plan_restriction",
+        "requires a pro",
+        "requires a team",
+        "upgrade your plan",
+        "upgrade to",
+        "subscription required",
+        "not included in your plan",
+        "guard sync requires",
+    }
+)
+
+
+def _check_plan_restriction_403(
+    error: urllib.error.HTTPError,
+) -> tuple[bool, str]:
+    """Read a 403 response body exactly once.
+
+    Returns (is_plan_restriction, error_message) so callers never
+    drain the stream more than once regardless of which branch they take.
+    Checks both machine-readable fields (syncEnabled, error, code) and
+    human-readable error messages for plan-restriction signals.
+    """
     try:
-        parsed_timeout = int(raw_timeout)
-    except ValueError:
-        return _DEFAULT_GUARD_SYNC_HTTP_TIMEOUT_SECONDS
-    if parsed_timeout < _MIN_GUARD_SYNC_HTTP_TIMEOUT_SECONDS:
-        return _MIN_GUARD_SYNC_HTTP_TIMEOUT_SECONDS
-    if parsed_timeout > _MAX_GUARD_SYNC_HTTP_TIMEOUT_SECONDS:
-        return _MAX_GUARD_SYNC_HTTP_TIMEOUT_SECONDS
-    return parsed_timeout
+        raw_body = error.read().decode("utf-8", errors="replace")
+    except OSError:
+        raw_body = ""
+    try:
+        payload: object = json.loads(raw_body) if raw_body else None
+    except json.JSONDecodeError:
+        payload = None
+    fallback = raw_body.strip() or f"HTTP Error {error.code}: {error.reason}"
+    if not isinstance(payload, dict):
+        return False, fallback
+    message = payload.get("error")
+    message_str = message.strip() if isinstance(message, str) and message.strip() else fallback
+    if payload.get("syncEnabled") is False:
+        return True, message_str
+    error_field = str(payload.get("error") or "").lower()
+    code_field = str(payload.get("code") or "").lower()
+    combined = f"{error_field} {code_field}"
+    if any(kw in combined for kw in _PLAN_403_KEYWORDS):
+        return True, message_str
+    return False, message_str
 
 
-def _sync_url_error_message(error: urllib.error.URLError) -> str:
-    reason = getattr(error, "reason", None)
-    if isinstance(reason, str) and reason.strip():
-        return f"Guard sync failed: {reason.strip()}"
+def _sync_url_error_message(error: OSError) -> str:
+    reason = getattr(error, "reason", error)
+    if reason is not None:
+        reason_text = str(reason).strip()
+        if reason_text:
+            return f"Guard sync failed: {reason_text}"
     return "Guard sync failed because the remote endpoint could not be reached."
+
+
+def _is_timeout_error(error: OSError) -> bool:
+    if isinstance(error, TimeoutError | socket.timeout):
+        return True
+    reason = getattr(error, "reason", error)
+    if isinstance(reason, TimeoutError | socket.timeout):
+        return True
+    reason_text = str(reason).strip().lower()
+    if not reason_text:
+        return False
+    return reason_text == "timed out" or reason_text.endswith(" timed out") or "timed out" in reason_text
+
+
+def _urlopen_json_with_timeout_retry(
+    *,
+    request: urllib.request.Request,
+    timeout_seconds: int,
+    retry_timeout_seconds: int,
+) -> dict[str, object]:
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except OSError as error:
+        if not _is_timeout_error(error):
+            raise
+        with urllib.request.urlopen(request, timeout=retry_timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise RuntimeError("Invalid sync response")
+    return payload
+
+
+def _urlopen_with_timeout_retry(
+    *,
+    request: urllib.request.Request,
+    timeout_seconds: int,
+    retry_timeout_seconds: int,
+) -> None:
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds):
+            return
+    except OSError as error:
+        if not _is_timeout_error(error):
+            raise
+        with urllib.request.urlopen(request, timeout=retry_timeout_seconds):
+            return
 
 
 def _remote_harness(value: object, *, allow_wildcard: bool = True) -> str | None:
@@ -553,72 +918,166 @@ def _pain_signal_sync_url(sync_url: str) -> str:
     )
 
 
-def _runtime_session_sync_url(sync_url: str) -> str:
+def _normalized_receipts_sync_url(sync_url: str) -> str:
     parsed = urllib.parse.urlsplit(sync_url)
-    path = parsed.path.rstrip("/")
-    segments = [segment for segment in path.split("/") if segment]
-    if len(segments) >= 2 and segments[-2:] in (["receipts", "sync"], ["inventory", "sync"]):
-        next_segments = [*segments[:-2], "runtime", "sessions", "sync"]
-    elif segments and segments[-1] in {"receipts", "inventory"}:
-        next_segments = [*segments[:-1], "runtime", "sessions", "sync"]
-    else:
-        next_segments = [*segments, "runtime", "sessions", "sync"]
+    if parsed.path.rstrip("/") == "/registry/api/v1":
+        return urllib.parse.urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                "/api/guard/receipts/sync",
+                parsed.query,
+                "",
+            )
+        )
+    return sync_url
+
+
+def _normalized_runtime_sessions_sync_url(sync_url: str) -> str:
+    normalized_receipts_url = _normalized_receipts_sync_url(sync_url)
+    parsed = urllib.parse.urlsplit(normalized_receipts_url)
+    if parsed.path.rstrip("/") == "/api/guard/receipts/sync":
+        return urllib.parse.urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                "/api/guard/runtime/sessions/sync",
+                parsed.query,
+                "",
+            )
+        )
+    if parsed.path.rstrip("/") == "/guard/receipts/sync":
+        return urllib.parse.urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                "/guard/runtime/sessions/sync",
+                parsed.query,
+                "",
+            )
+        )
     return urllib.parse.urlunsplit(
         (
             parsed.scheme,
             parsed.netloc,
-            "/" + "/".join(next_segments),
+            parsed.path.rstrip("/") + "/runtime/sessions/sync",
             parsed.query,
-            parsed.fragment,
+            "",
         )
     )
 
 
-def _normalize_runtime_session_payload(session: dict[str, object]) -> dict[str, object]:
-    operations_value = session.get("operations")
-    operations: list[dict[str, object]] = []
-    if isinstance(operations_value, list):
-        operations = [
-            _normalize_runtime_operation_payload(item)
-            for item in operations_value
-            if isinstance(item, dict)
-        ]
+def _cloud_sync_receipts_payload(store: GuardStore, receipts: list[dict[str, object]]) -> list[dict[str, object]]:
+    device_id, device_name = _guard_device_metadata(store)
+    return [_cloud_sync_receipt_payload(receipt, device_id=device_id, device_name=device_name) for receipt in receipts]
 
+
+def _cloud_sync_receipt_payload(
+    receipt: dict[str, object],
+    *,
+    device_id: str,
+    device_name: str,
+) -> dict[str, object]:
+    receipt_fingerprint = _cloud_sync_receipt_fingerprint(receipt)
+    artifact_id = _optional_string(receipt.get("artifact_id")) or f"guard:local-receipt:{receipt_fingerprint[:24]}"
+    artifact_name = _optional_string(receipt.get("artifact_name")) or artifact_id
+    policy_decision = _optional_string(receipt.get("policy_decision")) or "review"
+    changed_capabilities = [str(item) for item in receipt.get("changed_capabilities", []) if isinstance(item, str)]
+    capabilities_summary = _optional_string(receipt.get("capabilities_summary"))
+    if changed_capabilities:
+        capabilities = changed_capabilities
+    elif capabilities_summary is not None:
+        capabilities = [capabilities_summary]
+    else:
+        capabilities = []
+    payload: dict[str, object] = {
+        "receiptId": _optional_string(receipt.get("receipt_id")) or f"guard-receipt-{receipt_fingerprint}",
+        "artifactId": artifact_id,
+        "artifactName": artifact_name,
+        "artifactType": _cloud_sync_artifact_type(artifact_id),
+        "artifactSlug": _cloud_sync_artifact_slug(artifact_name, artifact_id),
+        "artifactHash": _optional_string(receipt.get("artifact_hash"))
+        or hashlib.sha256(artifact_id.encode("utf-8")).hexdigest(),
+        "capabilities": capabilities,
+        "capturedAt": _optional_string(receipt.get("timestamp")) or _now(),
+        "changedSinceLastApproval": bool(changed_capabilities)
+        or policy_decision in {"require-reapproval", "sandbox-required"},
+        "deviceId": device_id,
+        "deviceName": device_name,
+        "harness": _optional_string(receipt.get("harness")) or "unknown",
+        "policyDecision": policy_decision,
+        "recommendation": _cloud_sync_recommendation(policy_decision),
+        "summary": _optional_string(receipt.get("provenance_summary"))
+        or capabilities_summary
+        or f"Guard recorded a {policy_decision} decision.",
+    }
+    publisher = _optional_string(receipt.get("publisher"))
+    if publisher is not None:
+        payload["publisher"] = publisher
+    return payload
+
+
+def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]) -> dict[str, object]:
+    device_id, device_name = _guard_device_metadata(store)
+    workspace = _optional_string(session.get("workspace")) or os.getcwd()
+    session_id = (
+        _optional_string(session.get("session_id") or session.get("sessionId"))
+        or hashlib.sha256(f"{device_id}:{workspace}".encode()).hexdigest()[:24]
+    )
+    created_at = _optional_string(session.get("created_at") or session.get("createdAt")) or _now()
+    updated_at = _optional_string(session.get("updated_at") or session.get("updatedAt")) or created_at
+    capabilities = [str(item) for item in session.get("capabilities", []) if isinstance(item, str)]
     return {
-        "sessionId": str(
-            session.get("sessionId")
-            or session.get("session_id")
-            or f"guard-session-{hashlib.sha256(str(session).encode('utf-8')).hexdigest()[:12]}"
-        ),
-        "harness": str(session.get("harness") or "unknown"),
-        "surface": str(session.get("surface") or "cli"),
-        "status": str(session.get("status") or "active"),
-        "clientName": str(session.get("clientName") or session.get("client_name") or "hol-guard"),
-        "clientTitle": session.get("clientTitle") or session.get("client_title"),
-        "clientVersion": session.get("clientVersion") or session.get("client_version"),
-        "workspace": session.get("workspace"),
-        "capabilities": list(session.get("capabilities")) if isinstance(session.get("capabilities"), list) else [],
-        "operations": operations,
-        "createdAt": str(session.get("createdAt") or session.get("created_at") or _now()),
-        "updatedAt": str(session.get("updatedAt") or session.get("updated_at") or _now()),
+        "sessionId": session_id,
+        "harness": _optional_string(session.get("harness")) or "hol-guard",
+        "surface": _optional_string(session.get("surface")) or "cli",
+        "status": _optional_string(session.get("status")) or "active",
+        "clientName": _optional_string(session.get("client_name") or session.get("clientName")) or "hol-guard",
+        "clientTitle": _optional_string(session.get("client_title") or session.get("clientTitle"))
+        or f"HOL Guard on {device_name}",
+        "clientVersion": _optional_string(session.get("client_version") or session.get("clientVersion")) or __version__,
+        "workspace": workspace,
+        "capabilities": capabilities,
+        "operations": [],
+        "createdAt": created_at,
+        "updatedAt": updated_at,
     }
 
 
-def _normalize_runtime_operation_payload(item: dict[str, object]) -> dict[str, object]:
-    return {
-        "operationId": str(item.get("operationId") or item.get("operation_id") or f"guard-op-{uuid.uuid4().hex}"),
-        "operationType": str(item.get("operationType") or item.get("operation_type") or "unknown"),
-        "status": str(item.get("status") or "pending"),
-        "approvalRequestIds": list(item.get("approvalRequestIds"))
-        if isinstance(item.get("approvalRequestIds"), list)
-        else list(item.get("approval_request_ids"))
-        if isinstance(item.get("approval_request_ids"), list)
-        else [],
-        "resumeToken": item.get("resumeToken") or item.get("resume_token"),
-        "metadata": item.get("metadata") if isinstance(item.get("metadata"), dict) else {},
-        "createdAt": str(item.get("createdAt") or item.get("created_at") or _now()),
-        "updatedAt": str(item.get("updatedAt") or item.get("updated_at") or _now()),
-    }
+def _cloud_sync_receipt_fingerprint(receipt: dict[str, object]) -> str:
+    encoded_receipt = json.dumps(receipt, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded_receipt.encode("utf-8")).hexdigest()
+
+
+def _cloud_sync_artifact_type(artifact_id: str) -> str:
+    if artifact_id.startswith("skill:") or ":skill:" in artifact_id:
+        return "skill"
+    return "plugin"
+
+
+def _cloud_sync_artifact_slug(artifact_name: str, artifact_id: str) -> str:
+    base_value = artifact_name.strip() or artifact_id.strip() or "artifact"
+    slug = re.sub(r"[^a-z0-9]+", "-", base_value.lower()).strip("-")
+    if slug:
+        return slug
+    fallback = re.sub(r"[^a-z0-9]+", "-", artifact_id.lower()).strip("-")
+    return fallback or "artifact"
+
+
+def _cloud_sync_recommendation(policy_decision: str) -> str:
+    if policy_decision == "block":
+        return "block"
+    if policy_decision in {"review", "require-reapproval", "sandbox-required"}:
+        return "review"
+    return "monitor"
+
+
+def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:
+    if not hasattr(store, "get_device_metadata"):
+        hostname = socket.gethostname().strip() or "guard-machine"
+        return hostname, hostname
+    metadata = store.get_device_metadata()
+    return str(metadata["installation_id"]), str(metadata["device_label"])
 
 
 def _record_synced_alert_events(
@@ -682,6 +1141,9 @@ def _sync_timestamp(payload: dict[str, object]) -> str:
     synced_at = _optional_string(payload.get("syncedAt"))
     if synced_at is not None and _parse_iso_timestamp(synced_at) is not None:
         return synced_at
+    generated_at = _optional_string(payload.get("generatedAt"))
+    if generated_at is not None and _parse_iso_timestamp(generated_at) is not None:
+        return generated_at
     return _now()
 
 

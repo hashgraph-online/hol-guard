@@ -1,5 +1,17 @@
 """Guard runtime helpers."""
 
-from .runner import guard_run, sync_receipts
+from .runner import (
+    GuardSyncNotAvailableError,
+    GuardSyncNotConfiguredError,
+    guard_run,
+    sync_receipts,
+    sync_runtime_session,
+)
 
-__all__ = ["guard_run", "sync_receipts"]
+__all__ = [
+    "GuardSyncNotAvailableError",
+    "GuardSyncNotConfiguredError",
+    "guard_run",
+    "sync_receipts",
+    "sync_runtime_session",
+]

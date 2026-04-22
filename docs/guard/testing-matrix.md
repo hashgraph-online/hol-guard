@@ -15,15 +15,23 @@ Manual verification should include:
 - `hol-guard status`
 - `hol-guard detect codex --json`
 - `hol-guard detect cursor --json`
+- `hol-guard detect antigravity --json`
 - `hol-guard detect gemini --json`
 - `hol-guard detect opencode --json`
+- `hol-guard install opencode --json`
+- `hol-guard update --dry-run --json`
+- `hol-guard run opencode --dry-run --default-action allow --json`
+- `hol-guard run opencode --default-action require-reapproval --json`
+- `hol-guard approvals --json`
 - `hol-guard install codex`
 - `hol-guard run codex --dry-run --default-action allow --json`
 - `hol-guard receipts`
 - `codex mcp list`
 - `cursor-agent mcp list`
+- `antigravity --help`
 - `gemini --help`
 - `opencode --help`
+- `opencode run --help`
 
 First-party canaries for local manual validation:
 
@@ -31,6 +39,15 @@ First-party canaries for local manual validation:
 - a local `registry-broker-skills` checkout for scanner fixtures and trust review
 
 Claude Code smoke tests remain conditional on the local `claude` binary being available.
+
+OpenCode manual validation should include one isolated local workspace where you prove all of the following against the
+real `opencode` binary:
+
+- a newly added MCP server blocks before launch
+- a newly added skill blocks before launch
+- a newly added plugin blocks before launch
+- a blocked prompt request queues an approval
+- approving that request lets Guard hand off to `opencode run --dir <workspace> ...`
 
 Nightly release-bar coverage should include:
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -31,6 +32,16 @@ def _json_payload(path: Path) -> dict[str, object]:
 
 def _command_available(command: str) -> bool:
     return shutil.which(command) is not None
+
+
+def _resolve_command(command: str, candidates: tuple[Path, ...] = ()) -> str | None:
+    resolved = shutil.which(command)
+    if resolved is not None:
+        return resolved
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
 
 
 def _run_command_probe(command: list[str], timeout_seconds: int = 5) -> dict[str, object]:
@@ -76,6 +87,8 @@ class HarnessAdapter:
     approval_tier = "approval-center"
     approval_summary = "Guard pauses the launch and routes approval through the local approval center."
     fallback_hint = "Use `hol-guard approvals` if you want to resolve it from the terminal."
+    approval_prompt_channel = "browser"
+    approval_auto_open_browser = True
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         raise NotImplementedError
@@ -98,8 +111,15 @@ class HarnessAdapter:
             **shim_manifest,
         }
 
+    def executable_candidates(self, context: HarnessContext) -> tuple[Path, ...]:
+        del context
+        return ()
+
+    def resolved_executable(self, context: HarnessContext) -> str | None:
+        return _resolve_command(self.executable, self.executable_candidates(context))
+
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
-        command = [self.executable]
+        command = [self.resolved_executable(context) or self.executable]
         if context.workspace_dir is not None and self.harness in {"opencode", "claude-code"}:
             command.append(str(context.workspace_dir))
         return [*command, *passthrough_args]
@@ -184,11 +204,14 @@ class HarnessAdapter:
             warnings.append(f"{self.executable} diagnostics timed out before Guard could confirm runtime state.")
         return warnings
 
-    def approval_flow(self) -> dict[str, str]:
+    def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
+        del managed_install
         return {
             "tier": self.approval_tier,
             "summary": self.approval_summary,
             "fallback_hint": self.fallback_hint,
+            "prompt_channel": self.approval_prompt_channel,
+            "auto_open_browser": self.approval_auto_open_browser,
         }
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
@@ -211,5 +234,6 @@ __all__ = [
     "HarnessContext",
     "_command_available",
     "_json_payload",
+    "_resolve_command",
     "_run_command_probe",
 ]

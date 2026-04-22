@@ -28,19 +28,22 @@ classifiers = [
 ]
 dependencies = [
     "rich>=13.0",
+    "cryptography>=46.0.0",
     "tomli>=2.0; python_version < '3.11'",
     "cisco-ai-skill-scanner~=2.0.8",
 ]
 
 [project.optional-dependencies]
-cisco = []
+cisco = [
+    "cisco-ai-mcp-scanner~=4.5; python_version >= '3.11'",
+]
 dev = [
     "build>=1.2.2",
     "jsonschema>=4.26.0",
     "pyyaml>=6.0.3",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
-    "ruff>=0.15.10",
+    "ruff>=0.15.11",
 ]
 publish = [
     "twine>=6.2.0",
@@ -50,7 +53,6 @@ publish = [
 hol-guard = "codex_plugin_scanner.cli:main"
 plugin-scanner = "codex_plugin_scanner.cli:main"
 plugin-guard = "codex_plugin_scanner.cli:main"
-codex-plugin-scanner = "codex_plugin_scanner.cli:main"
 plugin-ecosystem-scanner = "codex_plugin_scanner.cli:main"
 
 [project.urls]

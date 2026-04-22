@@ -1,4 +1,4 @@
-"""Codex Plugin Scanner - multi-ecosystem scanner for agent plugin packages."""
+"""Plugin Scanner package exports."""
 
 from .models import (
     GRADE_LABELS,
