@@ -514,3 +514,31 @@ def test_ephemeral_guard_daemon_state_paths_only_scan_pytest_roots_and_honor_lim
 
     assert results == [first_state, second_state]
     assert ignored_state not in results
+
+
+def test_guard_daemon_pid_matches_command_validates_guard_home_on_windows(tmp_path, monkeypatch):
+    expected_guard_home = tmp_path / "guard home"
+    command = (
+        f'python -m codex_plugin_scanner.cli guard daemon --serve --guard-home "{expected_guard_home}" --port 4781'
+    )
+
+    monkeypatch.setattr(daemon_manager_module.os, "name", "nt")
+    monkeypatch.setattr(
+        daemon_manager_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(stdout=command),
+    )
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_home_from_command",
+        lambda _command: expected_guard_home,
+    )
+
+    assert daemon_manager_module._guard_daemon_pid_matches_command(
+        12345,
+        expected_guard_home=expected_guard_home,
+    )
+    assert not daemon_manager_module._guard_daemon_pid_matches_command(
+        12345,
+        expected_guard_home=tmp_path / "other-home",
+    )

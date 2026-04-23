@@ -454,18 +454,9 @@ def _guard_daemon_pid_is_running(pid: int) -> bool:
 
 
 def _guard_daemon_pid_matches_command(pid: int, expected_guard_home: Path | None = None) -> bool:
-    if os.name == "nt":
-        return True
-    try:
-        result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "command="],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
+    command = _guard_daemon_command_for_pid(pid)
+    if command is None:
         return False
-    command = result.stdout.strip()
     if "codex_plugin_scanner.cli" not in command or "guard daemon --serve" not in command:
         return False
     if expected_guard_home is None:
@@ -477,6 +468,29 @@ def _guard_daemon_pid_matches_command(pid: int, expected_guard_home: Path | None
         return command_guard_home.resolve() == expected_guard_home.resolve()
     except OSError:
         return command_guard_home == expected_guard_home
+
+
+def _guard_daemon_command_for_pid(pid: int) -> str | None:
+    if os.name == "nt":
+        command = [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            f'(Get-CimInstance Win32_Process -Filter "ProcessId = {pid}").CommandLine',
+        ]
+    else:
+        command = ["ps", "-p", str(pid), "-o", "command="]
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    stdout = result.stdout.strip()
+    return stdout or None
 
 
 def _retire_guard_daemon_process(payload: dict[str, object]) -> bool:
