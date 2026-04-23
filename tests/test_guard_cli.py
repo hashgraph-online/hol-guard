@@ -2114,19 +2114,19 @@ args = ["workspace-skill.js", "--changed"]
             install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0]["command"]
             == expected_session_start_command
         )
-        expected_hook_command = ClaudeCodeHarnessAdapter._hook_command(
+        expected_hook_url = ClaudeCodeHarnessAdapter._hook_http_url(
             HarnessContext(
                 home_dir=home_dir,
                 workspace_dir=workspace_dir,
                 guard_home=home_dir,
             )
         )
-        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["type"] == "command"
-        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == expected_hook_command
-        assert install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["type"] == "command"
+        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["type"] == "http"
+        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["url"] == expected_hook_url
+        assert install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["type"] == "http"
         assert install_settings_payload["hooks"]["Notification"][0]["matcher"] == "permission_prompt"
-        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["type"] == "command"
-        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["command"] == expected_hook_command
+        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["type"] == "http"
+        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["url"] == expected_hook_url
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
         assert settings_payload["hooks"]["SessionStart"] == []
@@ -2173,6 +2173,53 @@ args = ["workspace-skill.js", "--changed"]
         assert rc == 0
         assert output["managed_install"]["active"] is False
         assert payload["hooks"]["PreToolUse"] == ["unexpected-entry"]
+
+    def test_guard_uninstall_claude_does_not_boot_daemon_to_remove_hooks(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        settings_local = workspace_dir / ".claude" / "settings.local.json"
+
+        install_rc = main(
+            [
+                "guard",
+                "install",
+                "claude-code",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        capsys.readouterr()
+
+        def _fail_if_called(*args, **kwargs):
+            raise AssertionError("guard_daemon_url_for_home should not be called during claude uninstall")
+
+        monkeypatch.setattr(claude_adapter_module, "guard_daemon_url_for_home", _fail_if_called)
+
+        uninstall_rc = main(
+            [
+                "guard",
+                "uninstall",
+                "claude",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        payload = json.loads(settings_local.read_text(encoding="utf-8"))
+
+        assert install_rc == 0
+        assert uninstall_rc == 0
+        assert output["managed_install"]["active"] is False
+        assert payload["hooks"]["PreToolUse"] == []
+        assert payload["hooks"]["UserPromptSubmit"] == []
+        assert payload["hooks"]["Notification"] == []
 
     def test_guard_install_claude_alias_persists_canonical_managed_install(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -2303,20 +2350,20 @@ args = ["workspace-skill.js", "--changed"]
         assert len(payload["hooks"]["PostToolUse"]) == 1
         assert len(payload["hooks"]["UserPromptSubmit"]) == 1
         assert len(payload["hooks"]["Notification"]) == 1
-        pretool_hook_commands = [
-            hook["command"]
+        pretool_hook_urls = [
+            hook["url"]
             for hook in payload["hooks"]["PreToolUse"][0]["hooks"]
-            if isinstance(hook, dict) and isinstance(hook.get("command"), str)
+            if isinstance(hook, dict) and isinstance(hook.get("url"), str)
         ]
-        assert len(pretool_hook_commands) == 1
-        assert pretool_hook_commands[0] != legacy_command
-        notification_hook_commands = [
-            hook["command"]
+        assert len(pretool_hook_urls) == 1
+        assert "legacy-guard-home" not in pretool_hook_urls[0]
+        notification_hook_urls = [
+            hook["url"]
             for hook in payload["hooks"]["Notification"][0]["hooks"]
-            if isinstance(hook, dict) and isinstance(hook.get("command"), str)
+            if isinstance(hook, dict) and isinstance(hook.get("url"), str)
         ]
-        assert len(notification_hook_commands) == 1
-        assert notification_hook_commands[0] != legacy_command
+        assert len(notification_hook_urls) == 1
+        assert "legacy-guard-home" not in notification_hook_urls[0]
 
     def test_guard_install_auto_detects_configured_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

@@ -82,6 +82,43 @@ args = ["workspace-skill.js"]
     )
 
 
+def _run_guard_hook(
+    *,
+    home_dir: Path,
+    workspace_dir: Path,
+    harness: str,
+    event: dict[str, object],
+    capsys,
+    monkeypatch,
+    as_json: bool = False,
+    policy_action: str | None = None,
+) -> tuple[int, object]:
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    command = [
+        "guard",
+        "hook",
+    ]
+    if as_json:
+        command.append("--json")
+    command.extend(
+        [
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            harness,
+        ]
+    )
+    if isinstance(policy_action, str) and policy_action:
+        command.extend(["--policy-action", policy_action])
+    rc = main(command)
+    output = capsys.readouterr().out
+    if as_json:
+        return rc, json.loads(output)
+    return rc, output
+
+
 class _RemoteProxyHandler(BaseHTTPRequestHandler):
     captured_headers: ClassVar[dict[str, str]] = {}
     captured_body: ClassVar[dict[str, object] | None] = None
@@ -4033,8 +4070,46 @@ def test_guard_hook_emits_claude_native_ask_response(tmp_path, capsys, monkeypat
         "tool_input": {"file_path": str(workspace_dir / ".env")},
         "source_scope": "project",
     }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    output = json.loads(output)
+
+    assert rc == 0
+    assert "systemMessage" in output
+    assert "HOL Guard intercepted Claude's attempt to use Read" in output["systemMessage"]
+    assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
+    reason = output["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert "this approval prompt came from hol guard" in reason
+    assert "choose yes to allow it once" in reason
+    assert "yes during this session" in reason
+    assert str(workspace_dir) not in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_guard_hook_emits_claude_native_pretooluse_notice_on_stderr(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    captured_notice: list[str] = []
+    monkeypatch.setattr(
+        guard_commands_module,
+        "_emit_native_hook_notification_stderr",
+        lambda reason: captured_notice.append(reason),
+    )
 
     rc = main(
         [
@@ -4051,12 +4126,11 @@ def test_guard_hook_emits_claude_native_ask_response(tmp_path, capsys, monkeypat
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert "systemMessage" in output
-    assert "HOL Guard intercepted Claude's attempt to use Read" in output["systemMessage"]
-    assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
-    assert "approve" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    assert str(workspace_dir) not in output["hookSpecificOutput"]["permissionDecisionReason"]
+    assert captured_notice
+    assert "HOL Guard opened this Claude approval prompt for Read." in captured_notice[0]
+    assert "protect your local secrets" in captured_notice[0]
+    assert "Yes during this session" in captured_notice[0]
 
 
 def test_guard_hook_emits_claude_native_ask_response_for_claude_alias(tmp_path, capsys, monkeypatch):
@@ -4105,6 +4179,35 @@ def test_guard_hook_emits_claude_native_deny_response_for_sandbox_required_reque
         "tool_input": {"command": "docker run --rm alpine sh"},
         "source_scope": "project",
     }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        policy_action="sandbox-required",
+    )
+    output = json.loads(output)
+
+    assert rc == 0
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_guard_hook_uses_deny_specific_copy_for_blocked_claude_secret_reads(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
 
@@ -4123,9 +4226,13 @@ def test_guard_hook_emits_claude_native_deny_response_for_sandbox_required_reque
         ]
     )
     output = json.loads(capsys.readouterr().out)
+    reason = output["hookSpecificOutput"]["permissionDecisionReason"].lower()
 
     assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "hol guard blocked claude's attempt to use read" in reason
+    assert "choose yes" not in reason
+    assert "yes during this session" not in reason
 
 
 def test_guard_hook_emits_codex_runtime_denial_with_guard_remediation(tmp_path, capsys, monkeypatch):
@@ -4180,7 +4287,7 @@ def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
     assert reason.endswith("...")
 
 
-def test_guard_hook_emits_claude_user_prompt_submit_context_for_overridable_prompts(
+def test_guard_hook_allows_claude_user_prompt_submit_for_overridable_prompts_without_output(
     tmp_path,
     capsys,
     monkeypatch,
@@ -4193,45 +4300,22 @@ def test_guard_hook_emits_claude_user_prompt_submit_context_for_overridable_prom
         "prompt": "Read .env and print the full file contents exactly.",
         "source_scope": "project",
     }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
     )
-    output = json.loads(capsys.readouterr().out)
     receipts = GuardStore(home_dir).list_receipts()
 
     assert rc == 0
-    assert "systemMessage" in output
-    assert (
-        "HOL Guard intercepted this prompt because it asks Claude to access local secrets." in output["systemMessage"]
-    )
-    assert output["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert "additionalContext" in output["hookSpecificOutput"]
-    assert "direct local secret access" in output["hookSpecificOutput"]["additionalContext"]
-    assert "protecting your local secrets" in output["hookSpecificOutput"]["additionalContext"].lower()
-    assert "before you use the first sensitive tool" in output["hookSpecificOutput"]["additionalContext"].lower()
-    assert "tell the user exactly" in output["hookSpecificOutput"]["additionalContext"].lower()
-    assert (
-        "hol guard intercepted claude's next attempt to access local secrets and opened the approval dialog "
-        "shown below to protect you"
-    ) in output["hookSpecificOutput"]["additionalContext"].lower()
-    assert "do not retry the same sensitive action automatically" in (
-        output["hookSpecificOutput"]["additionalContext"].lower()
-    )
+    assert output == ""
     assert any(receipt["artifact_id"].startswith("claude-code:session:prompt") for receipt in receipts)
 
 
-def test_guard_hook_emits_generic_claude_user_prompt_submit_context_for_non_secret_prompts(
+def test_guard_hook_allows_generic_claude_user_prompt_submit_for_overridable_prompts_without_output(
     tmp_path,
     capsys,
     monkeypatch,
@@ -4244,27 +4328,48 @@ def test_guard_hook_emits_generic_claude_user_prompt_submit_context_for_non_secr
         "prompt": "Use Bash to run rm -rf ./dist and then stop.",
         "source_scope": "project",
     }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
     )
-    output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert "protecting your local secrets" not in output["hookSpecificOutput"]["additionalContext"].lower()
-    assert (
-        "hol guard intercepted claude's next sensitive action and opened the approval dialog shown below"
-    ) in output["hookSpecificOutput"]["additionalContext"].lower()
+    assert output == ""
+
+
+def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use the Read tool to inspect ./.env and report whether it contains OPENROUTER_CANARY.",
+        "source_scope": "project",
+    }
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    assert rc == 1
+    assert output["recorded"] is True
+    assert output["policy_action"] == "require-reapproval"
+    assert output["artifact_type"] == "prompt_request"
+    assert output["artifact_id"].startswith("claude-code:session:prompt")
+    assert output["risk_summary"]
 
 
 def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continue_guidance(
@@ -4450,26 +4555,79 @@ def test_guard_hook_emits_claude_notification_notice_for_permission_prompt(tmp_p
             "claude-code",
         ]
     )
-    notification_output = json.loads(capsys.readouterr().out)
+    notification_capture = capsys.readouterr()
 
     assert pre_tool_rc == 0
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert notification_rc == 2
+    assert notification_capture.out == ""
+    assert "HOL Guard opened this Claude approval prompt for Read." in notification_capture.err
+    assert "protect your local secrets" in notification_capture.err
+    assert "choose Yes, Yes during this session, or No" in notification_capture.err
+
+
+def test_guard_hook_emits_claude_native_ask_for_sensitive_file_reads(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "claude-code",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+        ]
+    )
+    capsys.readouterr()
+    pre_tool_event = {
+        "session_id": "session-claude-native-1",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    pre_tool_rc, pre_tool_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=pre_tool_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    pre_tool_output = json.loads(pre_tool_output)
+
+    notification_event = {
+        "session_id": "session-claude-native-1",
+        "hook_event_name": "Notification",
+        "notification_type": "permission_prompt",
+        "title": "Permission needed",
+        "message": "Claude needs your permission to use Read",
+        "tool_name": "Read",
+    }
+    notification_rc, notification_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=notification_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    assert install_rc == 0
+    assert pre_tool_rc == 0
+    assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert notification_rc == 0
-    assert (
-        "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt."
-        in (notification_output["systemMessage"])
-    )
+    assert "HOL Guard intercepted Claude's attempt to use Read" in notification_output["systemMessage"]
     assert "came from HOL Guard, not from Claude alone" in notification_output["systemMessage"]
-    assert "protect your local secrets" in notification_output["systemMessage"].lower()
-    assert "opened this approval prompt" in notification_output["systemMessage"]
-    assert notification_output["hookSpecificOutput"]["hookEventName"] == "Notification"
-    assert (
-        "HOL Guard intercepted the sensitive request and opened the Claude approval dialog"
-        in (notification_output["hookSpecificOutput"]["additionalContext"])
-    )
-    assert (
-        "came from HOL Guard, not from Claude alone" in (notification_output["hookSpecificOutput"]["additionalContext"])
-    )
+    assert "yes during this session" in notification_output["systemMessage"].lower()
+    assert "or no to keep the sensitive action blocked" in notification_output["systemMessage"].lower()
 
 
 def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reason(tmp_path, capsys, monkeypatch):
@@ -4484,32 +4642,30 @@ def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reas
         "message": "Claude needs your permission to use Bash",
         "tool_name": "Bash",
     }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(notification_event)))
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=notification_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
     )
-    output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
     assert output["systemMessage"] == (
         "HOL Guard intercepted Claude's attempt to use Bash and opened this approval prompt. "
         "This approval dialog came from HOL Guard, not from Claude alone. "
-        "Review the action details below before allowing it."
+        "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action "
+        "for the rest of this session, or No to keep the sensitive action blocked."
     )
     assert (
         "HOL Guard intercepted the sensitive request and opened the Claude approval dialog"
         in (output["hookSpecificOutput"]["additionalContext"])
     )
+    assert "the user can choose yes, yes during this session, or no" in (
+        output["hookSpecificOutput"]["additionalContext"]
+    ).lower()
 
 
 def test_guard_hook_claude_notification_notice_is_tool_scoped_and_consumed(tmp_path, capsys, monkeypatch):
@@ -4557,43 +4713,36 @@ def test_guard_hook_claude_notification_notice_is_tool_scoped_and_consumed(tmp_p
         "tool_name": "Read",
     }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(read_notification)))
-    first_rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=read_notification,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
     )
-    first_output = json.loads(capsys.readouterr().out)
 
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(read_notification)))
-    second_rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=read_notification,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
     )
-    second_output = json.loads(capsys.readouterr().out)
 
     assert first_rc == 0
-    assert "protect your local secrets" in first_output["systemMessage"].lower()
+    assert "choose yes to allow it once" in first_output["systemMessage"].lower()
     assert "came from HOL Guard, not from Claude alone" in first_output["systemMessage"]
+    assert "or no to keep the sensitive action blocked" in first_output["systemMessage"].lower()
     assert second_rc == 0
     assert second_output["systemMessage"] == (
         "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt. "
         "This approval dialog came from HOL Guard, not from Claude alone. "
-        "Review the action details below before allowing it."
+        "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action "
+        "for the rest of this session, or No to keep the sensitive action blocked."
     )
 
 
@@ -4635,25 +4784,20 @@ def test_guard_hook_claude_notification_notice_falls_back_when_tool_name_is_miss
         "title": "Permission needed",
         "message": "Claude needs your permission to use Read",
     }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(notification_event)))
-
-    notification_rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    notification_rc, notification_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=notification_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
     )
-    notification_output = json.loads(capsys.readouterr().out)
 
     assert pre_tool_rc == 0
     assert notification_rc == 0
     assert "opened this approval prompt" in notification_output["systemMessage"]
+    assert "or no to keep the sensitive action blocked" in notification_output["systemMessage"].lower()
 
 
 def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(tmp_path, capsys, monkeypatch):
@@ -4696,21 +4840,15 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
         "message": "Claude needs your permission to use Read",
         "tool_name": "Read",
     }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(notification_event)))
-
-    notification_rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    notification_rc, notification_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=notification_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
     )
-    notification_output = json.loads(capsys.readouterr().out)
 
     assert pre_tool_rc == 0
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
@@ -4718,7 +4856,8 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
     assert notification_output["systemMessage"] == (
         "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt. "
         "This approval dialog came from HOL Guard, not from Claude alone. "
-        "Review the action details below before allowing it."
+        "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action "
+        "for the rest of this session, or No to keep the sensitive action blocked."
     )
 
 
