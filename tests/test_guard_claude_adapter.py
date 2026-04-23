@@ -113,7 +113,6 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     post_tool_use = payload["hooks"]["PostToolUse"]
     prompt_submit = payload["hooks"]["UserPromptSubmit"]
     notification = payload["hooks"]["Notification"]
-
     assert len(session_start) == 4
     assert {entry["matcher"] for entry in session_start} == {"startup", "resume", "clear", "compact"}
     assert all(entry["hooks"][0]["type"] == "command" for entry in session_start)
@@ -262,6 +261,9 @@ def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
                     }
                 ]
             },
+            "permissions": {
+                "ask": ["Read(./notes.txt)"],
+            },
             "theme": "dark",
         },
     )
@@ -278,6 +280,7 @@ def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
             "hooks": [{"type": "command", "command": "python3 custom-pre.py", "timeout": 5}],
         }
     ]
+    assert payload["permissions"]["ask"] == ["Read(./notes.txt)"]
 
 
 def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):

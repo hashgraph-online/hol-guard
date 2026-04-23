@@ -1271,13 +1271,13 @@ def run_guard_command(
             }
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
                 native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
-                additional_context = _claude_prompt_additional_context(
-                    harness=args.harness,
-                    event_name=event_name,
-                    policy_action=policy_action,
-                    artifact=runtime_artifact,
-                    native_reason=native_reason,
-                )
+                if (
+                    args.harness == "claude-code"
+                    and event_name == "UserPromptSubmit"
+                    and policy_action == "require-reapproval"
+                    and not _prompt_requires_hard_block(runtime_artifact)
+                ):
+                    return 0
                 if (
                     args.harness == "claude-code"
                     and event_name == "PreToolUse"
@@ -1306,7 +1306,6 @@ def run_guard_command(
                         policy_action=policy_action,
                         event_name=event_name,
                         reason=native_reason,
-                        additional_context=additional_context,
                         output_stream=output_stream,
                     )
                     return 0
@@ -1730,9 +1729,10 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
     tool_name = artifact.metadata.get("tool_name")
     if isinstance(path_class, str) and isinstance(tool_name, str):
         return (
-            f"HOL Guard intercepted Claude's attempt to use {tool_name} for {path_class} and opened this approval "
-            "prompt to protect your local secrets. "
-            "Approve only if you intended to expose them."
+            f"HOL Guard intercepted Claude's attempt to use {tool_name} for {path_class} to protect your local "
+            "secrets. "
+            "Choose Yes to allow it once, Yes during this session to trust the same action for the rest of this "
+            "session, or No to keep the secret private."
         )
     risk_summary = response_payload.get("risk_summary")
     if isinstance(risk_summary, str) and risk_summary.strip():
@@ -1741,41 +1741,6 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
             trimmed_summary = f"{trimmed_summary[:177].rstrip()}..."
         return f"HOL Guard flagged this request: {trimmed_summary}"
     return "HOL Guard flagged this request for review."
-
-
-def _claude_prompt_additional_context(
-    *,
-    harness: str,
-    event_name: str,
-    policy_action: str,
-    artifact: GuardArtifact,
-    native_reason: str,
-) -> str | None:
-    if harness != "claude-code":
-        return None
-    if event_name != "UserPromptSubmit":
-        return None
-    if policy_action != "require-reapproval":
-        return None
-    if _prompt_requires_hard_block(artifact):
-        return None
-    briefing_sentence = "HOL Guard intercepted the next sensitive action and opened the approval dialog below."
-    if "secret_read" in _prompt_request_classes(artifact):
-        briefing_sentence = (
-            "HOL Guard intercepted Claude's next attempt to access local secrets and opened the approval dialog "
-            "shown below to protect you."
-        )
-    else:
-        briefing_sentence = (
-            "HOL Guard intercepted Claude's next sensitive action and opened the approval dialog shown below."
-        )
-    return (
-        f"{_ensure_terminal_punctuation(native_reason)} "
-        "Before you use the first sensitive tool for this request, tell the user exactly: "
-        f"'{briefing_sentence}' "
-        "Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive "
-        "action automatically. Instead, tell the user approval is required in Claude to continue."
-    )
 
 
 def _copilot_hook_reason(*values: object | None) -> str:
