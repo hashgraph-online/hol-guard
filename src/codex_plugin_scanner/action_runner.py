@@ -312,13 +312,16 @@ def main() -> int:
             event_name=github_event_name,
             pull_request_number=pull_request_number,
         ):
-            if github_repository and github_token and pr_comment_body:
+            if github_api_url_error is not None:
+                print(f"Warning: invalid GITHUB_API_URL: {github_api_url_error}", file=sys.stderr)
+                output_values["pr_comment_status"] = "failed"
+            elif github_repository and github_token and pr_comment_body:
                 try:
                     pr_comment_result = upsert_pr_comment(
                         repository=github_repository,
                         pull_request_number=pull_request_number if pull_request_number is not None else 0,
                         token=github_token,
-                        api_base_url=github_api_url,
+                        api_base_url=normalized_github_api_url,
                         body=pr_comment_body,
                     )
                     output_values["pr_comment_status"] = pr_comment_result.status
