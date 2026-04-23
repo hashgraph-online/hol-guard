@@ -1078,7 +1078,7 @@ def run_guard_command(
             now = _now()
             response_payload = {
                 "recorded": True,
-                "harness": args.harness,
+                "harness": _canonical_harness_name(args.harness),
                 "artifact_id": artifact_id,
                 "artifact_name": artifact_name,
                 "artifact_type": runtime_artifact.artifact_type,
@@ -1256,7 +1256,7 @@ def run_guard_command(
             store.add_receipt(receipt)
             response_payload = {
                 "recorded": True,
-                "harness": args.harness,
+                "harness": _canonical_harness_name(args.harness),
                 "artifact_id": artifact_id,
                 "artifact_name": artifact_name,
                 "artifact_type": runtime_artifact.artifact_type,
@@ -1273,6 +1273,13 @@ def run_guard_command(
             }
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
                 native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
+                additional_context = _claude_prompt_additional_context(
+                    harness=args.harness,
+                    event_name=event_name,
+                    policy_action=policy_action,
+                    artifact=runtime_artifact,
+                    native_reason=native_reason,
+                )
                 if (
                     _canonical_harness_name(args.harness) == "claude-code"
                     and event_name == "UserPromptSubmit"
@@ -1318,6 +1325,7 @@ def run_guard_command(
                         event_name=event_name,
                         reason=native_reason,
                         system_message=system_message,
+                        additional_context=additional_context,
                         output_stream=output_stream,
                     )
                     return 0

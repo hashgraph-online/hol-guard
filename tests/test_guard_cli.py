@@ -2143,6 +2143,64 @@ args = ["workspace-skill.js", "--changed"]
         assert output["managed_install"]["active"] is False
         assert payload["hooks"]["PreToolUse"] == ["unexpected-entry"]
 
+    def test_guard_install_claude_alias_persists_canonical_managed_install(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        rc = main(
+            [
+                "guard",
+                "install",
+                "claude",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        store = GuardStore(home_dir)
+
+        assert rc == 0
+        assert output["managed_install"]["harness"] == "claude-code"
+        assert store.get_managed_install("claude-code") is not None
+        assert store.get_managed_install("claude") is None
+
+    def test_guard_uninstall_claude_removes_legacy_claude_code_shim(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        shim_dir = home_dir / "bin"
+        shim_dir.mkdir(parents=True, exist_ok=True)
+        for shim_name in ("guard-claude", "guard-claude.cmd", "guard-claude-code", "guard-claude-code.cmd"):
+            (shim_dir / shim_name).write_text("shim\n", encoding="utf-8")
+
+        rc = main(
+            [
+                "guard",
+                "uninstall",
+                "claude-code",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        removed_paths = {Path(path).name for path in output["managed_install"]["manifest"]["removed_paths"]}
+
+        assert rc == 0
+        assert removed_paths == {
+            "guard-claude",
+            "guard-claude.cmd",
+            "guard-claude-code",
+            "guard-claude-code.cmd",
+        }
+        assert not any((shim_dir / shim_name).exists() for shim_name in removed_paths)
+
     def test_guard_install_replaces_legacy_claude_guard_hook_entries(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

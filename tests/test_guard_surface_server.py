@@ -129,11 +129,13 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert notification_payload["hookSpecificOutput"]["hookEventName"] == "Notification"
-        assert "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt." in (
-            notification_payload["systemMessage"]
+        assert (
+            "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt."
+            in (notification_payload["systemMessage"])
         )
-        assert "HOL Guard intercepted the sensitive request and opened the Claude approval dialog" in (
-            notification_payload["hookSpecificOutput"]["additionalContext"]
+        assert (
+            "HOL Guard intercepted the sensitive request and opened the Claude approval dialog"
+            in (notification_payload["hookSpecificOutput"]["additionalContext"])
         )
 
     def test_guard_daemon_runtime_snapshot_exposes_cloud_handoff_state(self, tmp_path) -> None:

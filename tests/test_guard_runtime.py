@@ -4082,11 +4082,46 @@ def test_guard_hook_emits_claude_native_ask_response(tmp_path, capsys, monkeypat
     output = json.loads(output)
 
     assert rc == 0
+    assert "systemMessage" in output
+    assert "HOL Guard intercepted Claude's attempt to use Read" in output["systemMessage"]
     assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert "choose yes to allow it once" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert "yes during this session" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert str(workspace_dir) not in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_guard_hook_emits_claude_native_ask_response_for_claude_alias(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert "systemMessage" in output
+    assert "HOL Guard intercepted Claude's attempt to use Read" in output["systemMessage"]
+    assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
 def test_guard_hook_emits_claude_native_deny_response_for_sandbox_required_requests(
@@ -4327,6 +4362,7 @@ def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continu
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
+    assert output["systemMessage"] == "HOL Guard blocked this prompt because it requests guarded local secret access."
     assert output["decision"] == "block"
     assert "continue" not in output["reason"].lower()
     assert "blocked this prompt" in output["reason"].lower()
