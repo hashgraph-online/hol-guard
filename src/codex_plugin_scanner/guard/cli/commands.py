@@ -14,6 +14,7 @@ import sys
 import urllib.error
 import urllib.parse
 import webbrowser
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TextIO
@@ -1235,6 +1236,20 @@ def run_guard_command(
                 runtime_artifact_hash,
                 str(runtime_workspace) if runtime_workspace else None,
             )
+            if stored_policy_action is None:
+                legacy_artifact = _legacy_claude_alias_runtime_artifact(
+                    artifact=runtime_artifact,
+                    requested_harness=args.harness,
+                    home_dir=context.home_dir,
+                    workspace=runtime_workspace,
+                )
+                if legacy_artifact is not None:
+                    stored_policy_action = store.resolve_policy(
+                        args.harness,
+                        legacy_artifact.artifact_id,
+                        artifact_hash(legacy_artifact),
+                        str(runtime_workspace) if runtime_workspace else None,
+                    )
             policy_action = _coalesce_string(
                 getattr(args, "policy_action", None),
                 stored_policy_action,
@@ -2822,6 +2837,28 @@ def _hook_runtime_artifact(
         request=tool_request,
         config_path=config_path,
         source_scope=source_scope,
+    )
+
+
+def _legacy_claude_alias_runtime_artifact(
+    *,
+    artifact: GuardArtifact,
+    requested_harness: str,
+    home_dir: Path,
+    workspace: Path | None,
+) -> GuardArtifact | None:
+    if requested_harness == artifact.harness:
+        return None
+    if requested_harness != "claude" or artifact.harness != "claude-code":
+        return None
+    legacy_prefix = "claude-code:"
+    if not artifact.artifact_id.startswith(legacy_prefix):
+        return None
+    return replace(
+        artifact,
+        artifact_id=f"claude:{artifact.artifact_id[len(legacy_prefix):]}",
+        harness="claude",
+        config_path=str(_runtime_policy_path("claude", home_dir, workspace)),
     )
 
 

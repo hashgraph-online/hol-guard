@@ -25,7 +25,7 @@ from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection, PolicyDecision
 from codex_plugin_scanner.guard.policy import decide_action
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
@@ -4240,6 +4240,60 @@ def test_guard_hook_claude_alias_reuses_native_approval_policy_with_canonical_ha
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert any(receipt["harness"] == "claude-code" for receipt in receipts)
+
+
+def test_guard_hook_claude_alias_reuses_legacy_alias_policy_keys(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "session_id": "session-claude-legacy-alias",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    canonical_artifact = guard_commands_module._hook_runtime_artifact(
+        harness="claude",
+        payload=event,
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+    )
+    assert canonical_artifact is not None
+    legacy_artifact = guard_commands_module._legacy_claude_alias_runtime_artifact(
+        artifact=canonical_artifact,
+        requested_harness="claude",
+        home_dir=home_dir,
+        workspace=workspace_dir,
+    )
+    assert legacy_artifact is not None
+    GuardStore(home_dir).upsert_policy(
+        PolicyDecision(
+            harness="claude",
+            scope="artifact",
+            action="block",
+            artifact_id=legacy_artifact.artifact_id,
+            artifact_hash=artifact_hash(legacy_artifact),
+            reason="Legacy alias block",
+            source="claude-native-approval",
+        ),
+        "2026-04-23T00:00:00+00:00",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    payload = json.loads(output)
+
+    assert rc == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_guard_hook_claude_stop_persists_unapproved_native_prompt_as_denied(tmp_path, capsys, monkeypatch):
