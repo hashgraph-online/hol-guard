@@ -1256,7 +1256,7 @@ def run_guard_command(
                 )
                 if saved:
                     receipt = build_receipt(
-                        harness=args.harness,
+                        harness=policy_harness,
                         artifact_id=artifact_id,
                         artifact_hash=runtime_artifact_hash,
                         policy_decision="allow",

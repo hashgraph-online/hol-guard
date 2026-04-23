@@ -4231,6 +4231,7 @@ def test_guard_hook_claude_alias_reuses_native_approval_policy_with_canonical_ha
     )
     first_payload = json.loads(first_output)
     second_payload = json.loads(second_output)
+    receipts = GuardStore(home_dir).list_receipts(limit=20)
 
     assert first_rc == 0
     assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
@@ -4238,6 +4239,7 @@ def test_guard_hook_claude_alias_reuses_native_approval_policy_with_canonical_ha
     assert post_output == ""
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert any(receipt["harness"] == "claude-code" for receipt in receipts)
 
 
 def test_guard_hook_claude_stop_persists_unapproved_native_prompt_as_denied(tmp_path, capsys, monkeypatch):
