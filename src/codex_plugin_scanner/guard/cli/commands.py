@@ -1279,7 +1279,7 @@ def run_guard_command(
                     native_reason=native_reason,
                 )
                 if (
-                    args.harness == "claude-code"
+                    _canonical_harness_name(args.harness) == "claude-code"
                     and event_name == "PreToolUse"
                     and policy_action == "require-reapproval"
                 ):
@@ -1302,7 +1302,7 @@ def run_guard_command(
                     return 0
                 if _should_emit_prequeue_native_hook_response(args):
                     system_message = None
-                    if args.harness == "claude-code":
+                    if _canonical_harness_name(args.harness) == "claude-code":
                         system_message = _claude_prompt_system_message(
                             event_name=event_name,
                             policy_action=policy_action,
@@ -1418,7 +1418,7 @@ def run_guard_command(
                 return 2
             if _should_emit_native_hook_response(args):
                 system_message = None
-                if args.harness == "claude-code":
+                if _canonical_harness_name(args.harness) == "claude-code":
                     system_message = _claude_prompt_system_message(
                         event_name=event_name,
                         policy_action=policy_action,
@@ -1511,7 +1511,11 @@ def run_guard_command(
         if _should_emit_native_hook_response(args):
             system_message = None
             reason = _native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason"))
-            if args.harness == "claude-code" and hook_event_name in {"UserPromptSubmit", "PreToolUse"}:
+            if (
+                _canonical_harness_name(args.harness) == "claude-code"
+                and hook_event_name in {"UserPromptSubmit", "PreToolUse"}
+                and policy_action in {"block", "sandbox-required", "require-reapproval"}
+            ):
                 system_message = _ensure_terminal_punctuation(reason)
             _emit_native_hook_response(
                 harness=args.harness,
@@ -1548,7 +1552,7 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
-    return args.harness in {"claude-code", "codex"} and not getattr(args, "json", False)
+    return _canonical_harness_name(args.harness) in {"claude-code", "codex"} and not getattr(args, "json", False)
 
 
 def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
@@ -1565,7 +1569,7 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
 
 
 def _should_emit_prequeue_native_hook_response(args: argparse.Namespace) -> bool:
-    return args.harness == "claude-code" and not getattr(args, "json", False)
+    return _canonical_harness_name(args.harness) == "claude-code" and not getattr(args, "json", False)
 
 
 def _claude_permission_notice_state_key(session_id: str, tool_name: str | None = None) -> str:
@@ -1621,7 +1625,7 @@ def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]
 
 def _is_claude_permission_prompt_notification(args: argparse.Namespace, payload: dict[str, object]) -> bool:
     return (
-        args.harness == "claude-code"
+        _canonical_harness_name(args.harness) == "claude-code"
         and _hook_event_name(payload) == "Notification"
         and _optional_string(payload.get("notification_type")) == "permission_prompt"
     )
@@ -1777,7 +1781,7 @@ def _claude_prompt_additional_context(
     artifact: GuardArtifact,
     native_reason: str,
 ) -> str | None:
-    if harness != "claude-code":
+    if _canonical_harness_name(harness) != "claude-code":
         return None
     if event_name != "UserPromptSubmit":
         return None
@@ -2608,8 +2612,15 @@ def _runtime_requested_path(artifact: GuardArtifact) -> str | None:
     return None
 
 
+def _canonical_harness_name(harness: str) -> str:
+    try:
+        return get_adapter(harness).harness
+    except ValueError:
+        return harness
+
+
 def _managed_install_for(store: GuardStore, harness: str) -> dict[str, object] | None:
-    managed_install = store.get_managed_install(harness)
+    managed_install = store.get_managed_install(_canonical_harness_name(harness))
     if managed_install is None or not bool(managed_install.get("active")):
         return None
     return managed_install
