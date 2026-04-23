@@ -7,6 +7,7 @@ import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .adapters import get_adapter
 from .adapters.base import HarnessContext
@@ -16,6 +17,10 @@ from .risk import artifact_risk_signals, artifact_risk_summary
 from .store import GuardStore
 
 GUARD_COMMAND = "hol-guard"
+GUARD_DASHBOARD_URL = "https://hol.org/guard"
+GUARD_INBOX_URL = f"{GUARD_DASHBOARD_URL}/inbox"
+GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/fleet"
+GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
 
 
 def queue_blocked_approvals(
@@ -183,14 +188,24 @@ def build_runtime_snapshot(
 ) -> dict[str, object]:
     pending_requests = store.list_approval_requests(limit=request_limit)
     latest_receipts = store.list_receipts(limit=receipt_limit)
+    cloud_context = _build_runtime_cloud_context(store)
+    headline_state = _resolve_runtime_headline_state(
+        pending_count=store.count_approval_requests(),
+        runtime_state=store.get_runtime_state(),
+        cloud_state=str(cloud_context["cloud_state"]),
+    )
     return {
         "generated_at": now or _now(),
         "approval_center_url": approval_center_url,
         "runtime_state": store.get_runtime_state(),
         "pending_count": store.count_approval_requests(),
         "receipt_count": store.count_receipts(),
+        "headline_state": headline_state,
+        "headline_label": _runtime_headline_label(headline_state),
+        "headline_detail": _runtime_headline_detail(headline_state),
         "items": pending_requests,
         "latest_receipts": latest_receipts,
+        **cloud_context,
     }
 
 
@@ -324,6 +339,118 @@ def _string_list(value: object) -> list[str]:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _build_runtime_cloud_context(store: GuardStore) -> dict[str, object]:
+    credentials = store.get_sync_credentials()
+    sync_url = credentials["sync_url"] if credentials is not None else None
+    sync_summary = store.get_sync_payload("sync_summary") or {}
+    remote_policy = store.get_sync_payload("policy") or {}
+    team_policy_pack = store.get_sync_payload("team_policy_pack") or {}
+    alert_preferences = store.get_sync_payload("alert_preferences") or {}
+    remote_payload_active = any((sync_summary, remote_policy, team_policy_pack, alert_preferences))
+    cloud_state = _resolve_runtime_cloud_state(
+        sync_configured=credentials is not None,
+        sync_completed=bool(sync_summary),
+        remote_payload_active=remote_payload_active,
+    )
+    dashboard_url, inbox_url, fleet_url, connect_url = _resolve_guard_urls(sync_url)
+    return {
+        "sync_configured": credentials is not None,
+        "cloud_state": cloud_state,
+        "cloud_state_label": _runtime_cloud_state_label(cloud_state),
+        "cloud_state_detail": _runtime_cloud_state_detail(cloud_state),
+        "dashboard_url": dashboard_url,
+        "inbox_url": inbox_url,
+        "fleet_url": fleet_url,
+        "connect_url": connect_url,
+    }
+
+
+def _resolve_runtime_cloud_state(*, sync_configured: bool, sync_completed: bool, remote_payload_active: bool) -> str:
+    if not sync_configured:
+        return "local_only"
+    if sync_completed or remote_payload_active:
+        return "paired_active"
+    return "paired_waiting"
+
+
+def _runtime_cloud_state_label(cloud_state: str) -> str:
+    labels = {
+        "local_only": "Local only",
+        "paired_waiting": "Connected",
+        "paired_active": "Connected",
+    }
+    return labels.get(cloud_state, "Local only")
+
+
+def _runtime_cloud_state_detail(cloud_state: str) -> str:
+    if cloud_state == "paired_waiting":
+        return (
+            "This machine is connected to Guard Cloud, but the first shared proof has not landed yet. "
+            "Open Fleet while the first sync settles."
+        )
+    if cloud_state == "paired_active":
+        return (
+            "This machine is connected to Guard Cloud. Open Home, Inbox, or Fleet in the portal "
+            "to continue with shared review and proof."
+        )
+    return "Guard is protecting this machine locally. Connect when you want Home, Inbox, Fleet, and shared team memory."
+
+
+def _resolve_guard_urls(sync_url: object) -> tuple[str, str, str, str]:
+    if not isinstance(sync_url, str) or not sync_url:
+        return GUARD_DASHBOARD_URL, GUARD_INBOX_URL, GUARD_FLEET_URL, GUARD_CONNECT_URL
+    parsed = urlparse(sync_url)
+    if not parsed.scheme or not parsed.netloc:
+        return GUARD_DASHBOARD_URL, GUARD_INBOX_URL, GUARD_FLEET_URL, GUARD_CONNECT_URL
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    dashboard_url = f"{origin}/guard"
+    return (
+        dashboard_url,
+        f"{dashboard_url}/inbox",
+        f"{dashboard_url}/fleet",
+        f"{dashboard_url}/connect",
+    )
+
+
+def _resolve_runtime_headline_state(
+    *,
+    pending_count: int,
+    runtime_state: dict[str, object] | None,
+    cloud_state: str,
+) -> str:
+    if runtime_state is None:
+        return "setup"
+    if pending_count > 0:
+        return "blocked"
+    if cloud_state == "local_only":
+        return "local_only"
+    if cloud_state == "paired_waiting":
+        return "connected"
+    return "protected"
+
+
+def _runtime_headline_label(headline_state: str) -> str:
+    labels = {
+        "setup": "Setup required",
+        "protected": "Protected",
+        "blocked": "Blocked",
+        "local_only": "Local only",
+        "connected": "Connected",
+    }
+    return labels.get(headline_state, "Local only")
+
+
+def _runtime_headline_detail(headline_state: str) -> str:
+    details = {
+        "setup": "The local Guard runtime is offline. Start the daemon or rerun hol-guard bootstrap.",
+        "protected": "This machine is protected and the local queue is clear.",
+        "blocked": "A blocked launch is waiting for review in the current request queue.",
+        "local_only": "This machine is protected locally and can connect later when shared memory matters.",
+        "connected": "This machine is connected to Guard Cloud and waiting for the first shared proof to appear.",
+    }
+    return details.get(headline_state, "This machine is protected locally.")
 
 
 def _queue_risk_summary(queued: list[dict[str, object]]) -> str:

@@ -38,6 +38,19 @@ _LAST_EPHEMERAL_REAP_AT = 0.0
 _RUNTIME_FINGERPRINT_CACHE: str | None = None
 
 
+def _daemon_launcher_env() -> dict[str, str]:
+    env = dict(os.environ)
+    pythonpath_entries: list[str] = []
+    for raw_value in (str(Path(__file__).resolve().parents[3]), env.get("PYTHONPATH", "")):
+        for entry in raw_value.split(os.pathsep):
+            normalized = entry.strip()
+            if normalized and normalized not in pythonpath_entries:
+                pythonpath_entries.append(normalized)
+    if pythonpath_entries:
+        env["PYTHONPATH"] = os.pathsep.join(pythonpath_entries)
+    return env
+
+
 def ensure_guard_daemon(guard_home: Path) -> str:
     _reap_stale_ephemeral_guard_daemons(exclude_guard_home=guard_home)
     state_path = _state_path(guard_home)
@@ -57,14 +70,6 @@ def ensure_guard_daemon(guard_home: Path) -> str:
                 return inflight_url
         clear_guard_daemon_state(guard_home)
         for candidate_port in _candidate_ports(guard_home):
-            daemon_env = os.environ.copy()
-            source_root = _current_guard_daemon_source_root()
-            existing_pythonpath = daemon_env.get("PYTHONPATH")
-            daemon_env["PYTHONPATH"] = (
-                source_root
-                if not isinstance(existing_pythonpath, str) or not existing_pythonpath.strip()
-                else f"{source_root}{os.pathsep}{existing_pythonpath}"
-            )
             command = [
                 sys.executable,
                 "-m",
@@ -81,7 +86,7 @@ def ensure_guard_daemon(guard_home: Path) -> str:
                 "stdin": subprocess.DEVNULL,
                 "stdout": subprocess.DEVNULL,
                 "stderr": subprocess.DEVNULL,
-                "env": daemon_env,
+                "env": _daemon_launcher_env(),
             }
             if os.name == "nt":
                 kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS

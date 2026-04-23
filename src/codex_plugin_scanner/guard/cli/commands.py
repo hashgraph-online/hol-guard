@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shlex
 import sqlite3
@@ -92,6 +93,40 @@ from .product import build_guard_start_payload, build_guard_status_payload
 from .update_commands import run_guard_update
 
 _GUARD_CLIENT_VERSION = "2.0.0"
+_GUARD_HELP_GROUPS = (
+    "Everyday protection:\n"
+    "  start        First-run setup and the Guard operating loop\n"
+    "  status       Current local protection state and next actions\n"
+    "  run          Enforce Guard before a harness launch\n"
+    "  approvals    Resolve the current request queue\n"
+    "  receipts     Review recent local decisions\n"
+    "\n"
+    "Team and cloud coordination:\n"
+    "  connect      Pair this machine to Guard Cloud\n"
+    "  login        Compatibility alias for browser pairing\n"
+    "  sync         Send local decisions to Guard Cloud\n"
+    "  device       Inspect or rotate this machine identity\n"
+    "  bridge       Forward Guard signals to external channels\n"
+    "\n"
+    "Advanced and diagnostics:\n"
+    "  detect       Discover harnesses and managed artifacts\n"
+    "  protect      Wrap installs before they land\n"
+    "  preflight    Scan a target before you add it\n"
+    "  scan         Run a consumer-mode artifact scan\n"
+    "  diff         Compare current artifacts to stored snapshots\n"
+    "  inventory    Inspect tracked artifacts\n"
+    "  abom         Export the local AI-BOM\n"
+    "  explain      Show evidence for one artifact\n"
+    "  policies     Inspect local Guard policy state\n"
+    "  exceptions   Inspect active exception windows\n"
+    "  advisories   Inspect cached Guard Cloud advisories\n"
+    "  events       Review Guard lifecycle events\n"
+    "  doctor       Run local diagnostics\n"
+    "  bootstrap    Detect, install, and launch the approval center\n"
+    "  install      Enable Guard management for a harness\n"
+    "  uninstall    Disable Guard management for a harness\n"
+    "  update       Update hol-guard in the current environment"
+)
 
 
 def _now() -> str:
@@ -106,15 +141,16 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
         "guard",
         help="Run local harness protection workflows",
         description=(
-            "HOL Guard watches local harness config, records approval receipts, and surfaces "
-            "changed tools before launch."
+            "HOL Guard watches local harness config, records approval receipts, and keeps "
+            "Home, Inbox, and Fleet aligned with what this machine is doing."
         ),
         epilog=(
             "Examples:\n"
             f"  {program_name} guard detect\n"
             f"  {program_name} guard doctor cursor\n"
             f"  {program_name} guard run codex --dry-run\n"
-            f"  {program_name} guard install claude-code --workspace ."
+            f"  {program_name} guard install claude-code --workspace .\n\n"
+            f"{_GUARD_HELP_GROUPS}"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -125,6 +161,7 @@ def add_guard_root_parser(parser: argparse.ArgumentParser) -> None:
     """Register Guard as the top-level CLI surface."""
 
     parser.description = "Protect local harnesses before new or changed tools run."
+    parser.epilog = _GUARD_HELP_GROUPS
     parser.set_defaults(command="guard")
     _configure_guard_parser(parser)
 
@@ -1362,6 +1399,14 @@ def run_guard_command(
                     output_stream=output_stream,
                 )
                 return 0
+            if _should_emit_native_hook_exit_block(args, event_name=event_name, policy_action=policy_action):
+                _emit_native_hook_block_stderr(
+                    _native_hook_reason_for_harness(
+                        args.harness,
+                        _runtime_artifact_native_reason(runtime_artifact, response_payload),
+                    )
+                )
+                return 2
             if _should_emit_native_hook_response(args):
                 _emit_native_hook_response(
                     harness=args.harness,
@@ -1401,28 +1446,35 @@ def run_guard_command(
         )
         if policy_action not in VALID_GUARD_ACTIONS:
             policy_action = SAFE_CHANGED_HASH_ACTION
+        hook_event_name = _hook_event_name(payload) or "PreToolUse"
         changed_capabilities = _string_list(payload.get("changed_capabilities"))
         if not changed_capabilities and isinstance(payload.get("event"), str):
             changed_capabilities = [str(payload["event"])]
-        receipt = build_receipt(
-            harness=args.harness,
-            artifact_id=artifact_id,
-            artifact_hash=str(payload.get("artifact_hash", f"hook:{artifact_id}")),
-            policy_decision=policy_action,
-            capabilities_summary=_coalesce_string(
-                payload.get("capabilities_summary"),
-                f"hook artifact • {args.harness}",
-            ),
-            changed_capabilities=changed_capabilities or ["hook"],
-            provenance_summary=_coalesce_string(
-                payload.get("provenance_summary"),
-                f"hook event for {artifact_name}",
-            ),
-            artifact_name=artifact_name,
-            source_scope=_coalesce_string(payload.get("source_scope"), "project"),
-            user_override=_optional_string(payload.get("user_override")),
+        should_record_generic_hook_receipt = not (
+            args.harness == "codex"
+            and hook_event_name == "PreToolUse"
+            and policy_action not in {"block", "sandbox-required", "require-reapproval"}
         )
-        store.add_receipt(receipt)
+        if should_record_generic_hook_receipt:
+            receipt = build_receipt(
+                harness=args.harness,
+                artifact_id=artifact_id,
+                artifact_hash=str(payload.get("artifact_hash", f"hook:{artifact_id}")),
+                policy_decision=policy_action,
+                capabilities_summary=_coalesce_string(
+                    payload.get("capabilities_summary"),
+                    f"hook artifact • {args.harness}",
+                ),
+                changed_capabilities=changed_capabilities or ["hook"],
+                provenance_summary=_coalesce_string(
+                    payload.get("provenance_summary"),
+                    f"hook event for {artifact_name}",
+                ),
+                artifact_name=artifact_name,
+                source_scope=_coalesce_string(payload.get("source_scope"), "project"),
+                user_override=_optional_string(payload.get("user_override")),
+            )
+            store.add_receipt(receipt)
         if _should_emit_copilot_hook_response(args):
             _emit_copilot_hook_response(
                 policy_action=policy_action,
@@ -1430,11 +1482,16 @@ def run_guard_command(
                 output_stream=output_stream,
             )
             return 0
+        if _should_emit_native_hook_exit_block(args, event_name=hook_event_name, policy_action=policy_action):
+            _emit_native_hook_block_stderr(
+                _native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason"))
+            )
+            return 2
         if _should_emit_native_hook_response(args):
             _emit_native_hook_response(
                 harness=args.harness,
                 policy_action=policy_action,
-                event_name=_hook_event_name(payload) or "PreToolUse",
+                event_name=hook_event_name,
                 reason=_native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason")),
                 output_stream=output_stream,
             )
@@ -1466,6 +1523,19 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
     return args.harness in {"claude-code", "codex"} and not getattr(args, "json", False)
+
+
+def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
+    codex_runtime_marker = (
+        os.environ.get("CODEX_HOME", "").strip() or os.environ.get("CODEX_MANAGED_BY_BUN", "").strip()
+    )
+    return (
+        args.harness == "codex"
+        and event_name == "PreToolUse"
+        and policy_action in {"block", "sandbox-required", "require-reapproval"}
+        and not getattr(args, "json", False)
+        and bool(codex_runtime_marker)
+    )
 
 
 def _should_emit_prequeue_native_hook_response(args: argparse.Namespace) -> bool:
@@ -1826,6 +1896,8 @@ def _emit_native_hook_response(
             _write_json_line(payload, output_stream=output_stream)
         return
     permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
+    if harness == "codex" and event_name == "PreToolUse" and permission_decision is None:
+        return
     hook_specific_output: dict[str, object] = {"hookEventName": event_name}
     if permission_decision is not None:
         hook_specific_output["permissionDecision"] = permission_decision
@@ -1833,6 +1905,10 @@ def _emit_native_hook_response(
             hook_specific_output["permissionDecisionReason"] = reason
     payload = {"hookSpecificOutput": hook_specific_output}
     _write_json_line(payload, output_stream=output_stream)
+
+
+def _emit_native_hook_block_stderr(reason: str) -> None:
+    print(reason, file=sys.stderr)
 
 
 def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str | None:

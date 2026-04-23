@@ -547,6 +547,21 @@ def test_tool_action_request_classifier_skips_benign_node_inline_transform_call(
     assert request is None
 
 
+def test_tool_action_request_classifier_skips_github_node_review_thread_mutation_script():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                """GH_TOKEN=$(gh auth token) node -e "const token = process.env.GH_TOKEN; """
+                """const query = 'mutation($tid:ID!){resolveReviewThread(input:{threadId:$tid})"""
+                """{thread{id isResolved}}}'; console.log(Boolean(token) && query.length > 0)" """
+            ),
+        },
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_skips_benign_mixed_case_node_identifier():
     request = extract_sensitive_tool_action_request(
         "bash",
