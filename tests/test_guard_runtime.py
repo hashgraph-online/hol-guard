@@ -82,6 +82,36 @@ args = ["workspace-skill.js"]
     )
 
 
+def _run_guard_hook(
+    *,
+    home_dir: Path,
+    workspace_dir: Path,
+    harness: str,
+    event: dict[str, object],
+    capsys,
+    monkeypatch,
+    as_json: bool = False,
+) -> tuple[int, object]:
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    command = [
+        "guard",
+        "hook",
+        "--home",
+        str(home_dir),
+        "--workspace",
+        str(workspace_dir),
+        "--harness",
+        harness,
+    ]
+    if as_json:
+        command.insert(2, "--json")
+    rc = main(command)
+    output = capsys.readouterr().out
+    if as_json:
+        return rc, json.loads(output)
+    return rc, output
+
+
 class _RemoteProxyHandler(BaseHTTPRequestHandler):
     captured_headers: ClassVar[dict[str, str]] = {}
     captured_body: ClassVar[dict[str, object] | None] = None
@@ -4033,22 +4063,16 @@ def test_guard_hook_emits_claude_native_ask_response(tmp_path, capsys, monkeypat
         "tool_input": {"file_path": str(workspace_dir / ".env")},
         "source_scope": "project",
     }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
     )
-    output = json.loads(capsys.readouterr().out)
+    output = json.loads(output)
 
     assert rc == 0
     assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
@@ -4159,21 +4183,14 @@ def test_guard_hook_allows_claude_user_prompt_submit_for_overridable_prompts_wit
         "prompt": "Read .env and print the full file contents exactly.",
         "source_scope": "project",
     }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
     )
-    output = capsys.readouterr().out
     receipts = GuardStore(home_dir).list_receipts()
 
     assert rc == 0
@@ -4194,21 +4211,14 @@ def test_guard_hook_allows_generic_claude_user_prompt_submit_for_overridable_pro
         "prompt": "Use Bash to run rm -rf ./dist and then stop.",
         "source_scope": "project",
     }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
     )
-    output = capsys.readouterr().out
 
     assert rc == 0
     assert output == ""
@@ -4227,22 +4237,15 @@ def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts
         "prompt": "Use the Read tool to inspect ./.env and report whether it contains OPENROUTER_CANARY.",
         "source_scope": "project",
     }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--json",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
     )
-    output = json.loads(capsys.readouterr().out)
 
     assert rc == 1
     assert output["recorded"] is True
