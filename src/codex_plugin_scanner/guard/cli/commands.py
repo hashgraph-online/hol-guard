@@ -1893,7 +1893,7 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
         if harness == "claude-code" and policy_action == "require-reapproval":
             return (
                 f"HOL Guard intercepted Claude's attempt to use {tool_name} for {path_class} to protect your local "
-                "secrets. "
+                "secrets. This approval prompt came from HOL Guard, not from Claude alone. "
                 "Choose Yes to allow it once, Yes during this session to trust the same action for the rest of this "
                 "session, or No to keep the secret private."
             )

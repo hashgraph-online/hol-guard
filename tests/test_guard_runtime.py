@@ -4086,8 +4086,10 @@ def test_guard_hook_emits_claude_native_ask_response(tmp_path, capsys, monkeypat
     assert "HOL Guard intercepted Claude's attempt to use Read" in output["systemMessage"]
     assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
-    assert "choose yes to allow it once" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    assert "yes during this session" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    reason = output["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert "this approval prompt came from hol guard" in reason
+    assert "choose yes to allow it once" in reason
+    assert "yes during this session" in reason
     assert str(workspace_dir) not in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
