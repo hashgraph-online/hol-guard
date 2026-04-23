@@ -73,7 +73,7 @@ def test_verify_plugin_skips_stdio_execution_for_untrusted_servers(tmp_path: Pat
 
     result = verify_plugin(tmp_path)
 
-    assert result.verify_pass is True
+    assert result.verify_pass is False
     assert any(case.name == "stdio execution:demo" for case in result.cases)
     assert any(case.classification == "safety-skip" for case in result.cases)
     assert all(not trace.name.startswith("stdio") for trace in result.traces)
@@ -92,9 +92,9 @@ def test_verify_plugin_reports_stdio_servers_without_spawning_them(tmp_path: Pat
 
     result = verify_plugin(tmp_path)
 
-    assert result.verify_pass is True
+    assert result.verify_pass is False
     expected_message = (
-        "Skipped stdio command execution for safety; review the MCP command manually before trusting it."
+        "Skipped stdio command execution for safety; manual review is required before trusting it."
     )
     assert any(case.message == expected_message for case in result.cases)
 
@@ -127,6 +127,6 @@ def test_doctor_report_explains_when_stdio_execution_is_skipped(tmp_path: Path):
 
     report = build_doctor_report(tmp_path, "mcp")
 
-    assert report["verify_pass"] is True
+    assert report["verify_pass"] is False
     assert report["stdout_log"] == ""
     assert any(case["classification"] == "safety-skip" for case in report["cases"])

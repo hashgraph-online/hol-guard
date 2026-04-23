@@ -355,6 +355,9 @@ def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp
     context = _build_context(tmp_path)
     adapter = CopilotHarnessAdapter()
     config_path = context.home_dir / ".copilot" / "config.json"
+    old_workspace_dir = tmp_path / "old-workspace"
+    old_guard_home = tmp_path / "old-guard"
+    old_home_dir = tmp_path / "old-home"
     _write_json(
         config_path,
         {
@@ -364,15 +367,15 @@ def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp
                         "type": "command",
                         "bash": (
                             "/opt/python/bin/python -m codex_plugin_scanner.cli guard hook "
-                            "--guard-home /tmp/old-guard --harness copilot --home /tmp/old-home "
-                            "--workspace /tmp/old-workspace"
+                            f"--guard-home {old_guard_home} --harness copilot --home {old_home_dir} "
+                            f"--workspace {old_workspace_dir}"
                         ),
                         "powershell": (
                             '"C:\\Python\\python.exe" -m codex_plugin_scanner.cli guard hook '
                             "--guard-home C:\\old-guard --harness copilot --home C:\\old-home "
                             "--workspace C:\\old-workspace"
                         ),
-                        "cwd": "/tmp/old-workspace",
+                        "cwd": str(old_workspace_dir),
                         "timeoutSec": 30,
                     }
                 ],
@@ -381,15 +384,15 @@ def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp
                         "type": "command",
                         "bash": (
                             "/opt/python/bin/python -m codex_plugin_scanner.cli guard hook "
-                            "--guard-home /tmp/old-guard --harness copilot --home /tmp/old-home "
-                            "--workspace /tmp/old-workspace"
+                            f"--guard-home {old_guard_home} --harness copilot --home {old_home_dir} "
+                            f"--workspace {old_workspace_dir}"
                         ),
                         "powershell": (
                             '"C:\\Python\\python.exe" -m codex_plugin_scanner.cli guard hook '
                             "--guard-home C:\\old-guard --harness copilot --home C:\\old-home "
                             "--workspace C:\\old-workspace"
                         ),
-                        "cwd": "/tmp/old-workspace",
+                        "cwd": str(old_workspace_dir),
                         "timeoutSec": 30,
                     }
                 ],
@@ -403,7 +406,7 @@ def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp
     assert len(managed_payload["hooks"]["preToolUse"]) == 1
     assert len(managed_payload["hooks"]["postToolUse"]) == 1
     assert len(managed_payload["hooks"]["permissionRequest"]) == 1
-    assert "--workspace /tmp/old-workspace" not in managed_payload["hooks"]["preToolUse"][0]["bash"]
+    assert str(old_workspace_dir) not in managed_payload["hooks"]["preToolUse"][0]["bash"]
     assert "--workspace" not in managed_payload["hooks"]["preToolUse"][0]["bash"]
     assert managed_payload["hooks"]["preToolUse"][0]["cwd"] == str(context.guard_home)
 

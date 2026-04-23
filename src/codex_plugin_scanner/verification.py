@@ -452,7 +452,7 @@ def _check_mcp_http(remotes: list[dict], *, online: bool) -> list[VerificationCa
     return cases
 
 
-def _check_mcp_stdio(servers: dict) -> tuple[list[VerificationCase], list[RuntimeTrace]]:
+def _check_mcp_stdio(servers: dict) -> list[VerificationCase]:
     cases: list[VerificationCase] = []
     for name, server in servers.items():
         cmd = server.get("command") if isinstance(server, dict) else None
@@ -462,12 +462,12 @@ def _check_mcp_stdio(servers: dict) -> tuple[list[VerificationCase], list[Runtim
             VerificationCase(
                 "mcp",
                 f"stdio execution:{name}",
-                True,
-                "Skipped stdio command execution for safety; review the MCP command manually before trusting it.",
+                False,
+                "Skipped stdio command execution for safety; manual review is required before trusting it.",
                 "safety-skip",
             )
         )
-    return cases, []
+    return cases
 
 
 def _check_mcp(plugin_dir: Path, *, online: bool) -> tuple[list[VerificationCase], list[RuntimeTrace]]:
@@ -491,7 +491,8 @@ def _check_mcp(plugin_dir: Path, *, online: bool) -> tuple[list[VerificationCase
         cases.append(VerificationCase("mcp", "server registry", False, "mcpServers must be an object", "schema"))
         servers = {}
     cases.extend(_check_mcp_http(remotes, online=online))
-    stdio_cases, traces = _check_mcp_stdio(servers)
+    stdio_cases = _check_mcp_stdio(servers)
+    traces: list[RuntimeTrace] = []
     cases.extend(stdio_cases)
     if len(cases) == 1:
         cases.append(VerificationCase("mcp", "mcp config", True, "No remote or stdio MCP surfaces declared"))

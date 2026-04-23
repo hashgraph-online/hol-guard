@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -178,9 +179,21 @@ def test_mcp_security_loads_mcpscanner_from_installed_distribution(monkeypatch, 
     class _FakeDistribution:
         def __init__(self, package_root: Path) -> None:
             self._package_root = package_root
+            self.files = (_FakeDistributionFile("mcpscanner/__init__.py", package_root / "mcpscanner" / "__init__.py"),)
 
         def locate_file(self, path: str) -> Path:
             return self._package_root / path
+
+    class _FakeDistributionFile:
+        def __init__(self, relative_path: str, absolute_path: Path) -> None:
+            self._relative_path = relative_path
+            self._absolute_path = absolute_path
+
+        def __str__(self) -> str:
+            return self._relative_path
+
+        def locate(self) -> Path:
+            return self._absolute_path
 
     monkeypatch.setattr(
         cisco_mcp_module.importlib_metadata,
@@ -191,6 +204,7 @@ def test_mcp_security_loads_mcpscanner_from_installed_distribution(monkeypatch, 
     components = cisco_mcp_module._load_mcp_scanner_components()
 
     assert components["YaraAnalyzer"].__module__ == "mcpscanner"
+    assert Path(sys.modules["mcpscanner"].__file__).resolve() == (trusted_package / "__init__.py").resolve()
 
 
 def test_scan_plugin_includes_cisco_mcp_findings(monkeypatch, tmp_path: Path) -> None:

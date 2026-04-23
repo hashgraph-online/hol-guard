@@ -93,27 +93,48 @@ def _load_distribution_module(distribution_name: str, module_name: str) -> objec
     sys.modules[module_name] = module
     try:
         spec.loader.exec_module(module)
-    finally:
+    except Exception:
         if previous_module is None:
             sys.modules.pop(module_name, None)
         else:
             sys.modules[module_name] = previous_module
+        raise
     return module
 
 
-def _distribution_module_spec(distribution: object, module_name: str):
+def _distribution_module_spec(distribution: importlib_metadata.Distribution, module_name: str):
+    files = distribution.files or ()
+    package_init_relative = f"{module_name}/__init__.py"
+    module_relative = f"{module_name}.py"
+    for package_file in files:
+        if str(package_file).replace("\\", "/") != package_init_relative:
+            continue
+        package_init = Path(package_file.locate())
+        if package_init.is_file():
+            return importlib.util.spec_from_file_location(
+                module_name,
+                package_init,
+                submodule_search_locations=[str(package_init.parent)],
+            )
+    for package_file in files:
+        if str(package_file).replace("\\", "/") != module_relative:
+            continue
+        module_file = Path(package_file.locate())
+        if module_file.is_file():
+            return importlib.util.spec_from_file_location(module_name, module_file)
     locate_file = getattr(distribution, "locate_file", None)
     if not callable(locate_file):
         return None
     package_dir = Path(locate_file(module_name))
-    package_init = package_dir / "__init__.py"
-    if package_init.is_file():
-        return importlib.util.spec_from_file_location(
-            module_name,
-            package_init,
-            submodule_search_locations=[str(package_dir)],
-        )
-    module_file = Path(locate_file(f"{module_name}.py"))
+    if package_dir.is_dir():
+        package_init = package_dir / "__init__.py"
+        if package_init.is_file():
+            return importlib.util.spec_from_file_location(
+                module_name,
+                package_init,
+                submodule_search_locations=[str(package_dir)],
+            )
+    module_file = Path(locate_file(module_relative))
     if module_file.is_file():
         return importlib.util.spec_from_file_location(module_name, module_file)
     return None
