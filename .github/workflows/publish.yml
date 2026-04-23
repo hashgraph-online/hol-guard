@@ -205,8 +205,8 @@ jobs:
         id: release_exists
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
-          VERSION="${{ needs.build.outputs.version }}"
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
@@ -215,10 +215,11 @@ jobs:
       - name: Generate changelog
         if: steps.release_exists.outputs.exists == 'false'
         id: changelog
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
           # Get the range of commits since last tag
           LAST_TAG=$(git describe --tags --abbrev=0 --exclude="v${VERSION}" 2>/dev/null || echo "")
-          VERSION="${{ needs.build.outputs.version }}"
 
           if [ -n "$LAST_TAG" ]; then
             LOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
@@ -293,11 +294,11 @@ jobs:
         if: steps.release_exists.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
           mapfile -t RELEASE_ASSETS <<'EOF'
           ${{ steps.release_assets.outputs.files }}
           EOF
-          VERSION="${{ needs.build.outputs.version }}"
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
             --target main \

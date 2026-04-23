@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import ClassVar
 from urllib.parse import parse_qs, urlsplit
 
+import yaml
+
 from codex_plugin_scanner.action_runner import _build_scan_args, main
 from codex_plugin_scanner.github_reporting import GitHubPrCommentResult, upsert_pr_comment
 
@@ -374,51 +376,55 @@ def test_action_runner_creates_pr_comment_for_pull_request_event(monkeypatch, tm
     output_path = tmp_path / "github-output.txt"
     event_path = tmp_path / "event.json"
     event_path.write_text(json.dumps({"pull_request": {"number": 12}}), encoding="utf-8")
-    _GitHubHandler.comments = []
-    _GitHubHandler.comment_pages = None
-    server, api_base_url = _start_github_server()
-    try:
-        monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
-        monkeypatch.setenv("FORMAT", "json")
-        monkeypatch.setenv("OUTPUT", "")
-        monkeypatch.setenv("MIN_SCORE", "0")
-        monkeypatch.setenv("FAIL_ON", "none")
-        monkeypatch.setenv("CISCO_SCAN", "off")
-        monkeypatch.setenv("CISCO_POLICY", "balanced")
-        monkeypatch.setenv("SUBMISSION_ENABLED", "false")
-        monkeypatch.setenv("SUBMISSION_SCORE_THRESHOLD", "80")
-        monkeypatch.setenv("SUBMISSION_REPOS", "hashgraph-online/awesome-codex-plugins")
-        monkeypatch.setenv("SUBMISSION_TOKEN", "")
-        monkeypatch.setenv("SUBMISSION_LABELS", "plugin-submission")
-        monkeypatch.setenv("SUBMISSION_CATEGORY", "Community Plugins")
-        monkeypatch.setenv("SUBMISSION_PLUGIN_NAME", "")
-        monkeypatch.setenv("SUBMISSION_PLUGIN_URL", "")
-        monkeypatch.setenv("SUBMISSION_PLUGIN_DESCRIPTION", "")
-        monkeypatch.setenv("SUBMISSION_AUTHOR", "")
-        monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
-        monkeypatch.setenv("REGISTRY_PAYLOAD_OUTPUT", "")
-        monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
-        monkeypatch.setenv("GITHUB_TOKEN", "test-token")
-        monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
-        monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
-        monkeypatch.setenv("GITHUB_REPOSITORY", "hashgraph-online/example-good-plugin")
-        monkeypatch.setenv("GITHUB_API_URL", api_base_url)
+    captured: dict[str, str] = {}
 
-        exit_code = main()
-
-        assert exit_code == 0
-        output_lines = output_path.read_text(encoding="utf-8").splitlines()
-        assert "pr_comment_status=created" in output_lines
-        assert "pr_comment_id=101" in output_lines
-        assert (
-            "pr_comment_url=https://github.com/hashgraph-online/example-good-plugin/pull/12#issuecomment-101"
-            in output_lines
+    def _capture_comment(**kwargs: object) -> GitHubPrCommentResult:
+        body = kwargs.get("body")
+        if isinstance(body, str):
+            captured["body"] = body
+        return GitHubPrCommentResult(
+            status="created",
+            comment_id="101",
+            comment_url="https://github.com/hashgraph-online/example-good-plugin/pull/12#issuecomment-101",
         )
-        assert _GitHubHandler.comments
-        assert "## Guard repo scan" in str(_GitHubHandler.comments[0]["body"])
-    finally:
-        server.shutdown()
-        server.server_close()
+
+    monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
+    monkeypatch.setenv("FORMAT", "json")
+    monkeypatch.setenv("OUTPUT", "")
+    monkeypatch.setenv("MIN_SCORE", "0")
+    monkeypatch.setenv("FAIL_ON", "none")
+    monkeypatch.setenv("CISCO_SCAN", "off")
+    monkeypatch.setenv("CISCO_POLICY", "balanced")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "false")
+    monkeypatch.setenv("SUBMISSION_SCORE_THRESHOLD", "80")
+    monkeypatch.setenv("SUBMISSION_REPOS", "hashgraph-online/awesome-codex-plugins")
+    monkeypatch.setenv("SUBMISSION_TOKEN", "")
+    monkeypatch.setenv("SUBMISSION_LABELS", "plugin-submission")
+    monkeypatch.setenv("SUBMISSION_CATEGORY", "Community Plugins")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_NAME", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_URL", "")
+    monkeypatch.setenv("SUBMISSION_PLUGIN_DESCRIPTION", "")
+    monkeypatch.setenv("SUBMISSION_AUTHOR", "")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+    monkeypatch.setenv("REGISTRY_PAYLOAD_OUTPUT", "")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "hashgraph-online/example-good-plugin")
+    monkeypatch.setattr("codex_plugin_scanner.action_runner.upsert_pr_comment", _capture_comment)
+
+    exit_code = main()
+
+    assert exit_code == 0
+    output_lines = output_path.read_text(encoding="utf-8").splitlines()
+    assert "pr_comment_status=created" in output_lines
+    assert "pr_comment_id=101" in output_lines
+    assert (
+        "pr_comment_url=https://github.com/hashgraph-online/example-good-plugin/pull/12#issuecomment-101"
+        in output_lines
+    )
+    assert "## Guard repo scan" in captured["body"]
 
 
 def test_action_runner_pr_comment_failure_is_nonfatal(monkeypatch, tmp_path, capsys) -> None:
@@ -450,7 +456,7 @@ def test_action_runner_pr_comment_failure_is_nonfatal(monkeypatch, tmp_path, cap
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
     monkeypatch.setenv("GITHUB_REPOSITORY", "hashgraph-online/example-good-plugin")
-    monkeypatch.setenv("GITHUB_API_URL", "https://api.github.test")
+    monkeypatch.setenv("GITHUB_API_URL", "https://api.github.com")
     monkeypatch.setattr(
         "codex_plugin_scanner.action_runner.upsert_pr_comment",
         lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
@@ -569,7 +575,7 @@ def test_action_runner_updates_pr_comment_before_gate_failure(monkeypatch, tmp_p
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(event_path))
     monkeypatch.setenv("GITHUB_REPOSITORY", "hashgraph-online/example-good-plugin")
-    monkeypatch.setenv("GITHUB_API_URL", "https://api.github.test")
+    monkeypatch.setenv("GITHUB_API_URL", "https://api.github.com")
 
     def _capture_comment(**kwargs: object) -> GitHubPrCommentResult:
         body = kwargs.get("body")
@@ -664,3 +670,38 @@ pr_comment = "off"
     assert exit_code == 0
     output_lines = output_path.read_text(encoding="utf-8").splitlines()
     assert "pr_comment_status=disabled" in output_lines
+
+
+def test_main_rejects_invalid_github_api_url_before_submission(monkeypatch, capsys) -> None:
+    def fail_submission_lookup(*args, **kwargs):
+        raise AssertionError("submission lookup should not run with an invalid GITHUB_API_URL")
+
+    monkeypatch.setattr("codex_plugin_scanner.action_runner.find_existing_submission_issue", fail_submission_lookup)
+    monkeypatch.setenv("MODE", "scan")
+    monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
+    monkeypatch.setenv("FORMAT", "json")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "true")
+    monkeypatch.setenv("SUBMISSION_SCORE_THRESHOLD", "0")
+    monkeypatch.setenv("SUBMISSION_REPOS", "hashgraph-online/awesome-codex-plugins")
+    monkeypatch.setenv("SUBMISSION_TOKEN", "token-123")
+    monkeypatch.setenv("GITHUB_API_URL", "https://evil.example/api/v3")
+
+    return_code = main()
+
+    captured = capsys.readouterr()
+    assert return_code == 1
+    assert "Invalid GITHUB_API_URL" in captured.err
+
+
+def test_publish_workflow_does_not_inline_version_output_in_shell_scripts() -> None:
+    workflow = yaml.safe_load((Path(__file__).parent.parent / ".github" / "workflows" / "publish.yml").read_text())
+
+    run_blocks = [
+        step["run"]
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if isinstance(step, dict) and isinstance(step.get("run"), str)
+    ]
+
+    assert all("${{ needs.build.outputs.version }}" not in run for run in run_blocks)

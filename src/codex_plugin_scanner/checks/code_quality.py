@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from ..models import CheckResult, Finding, Severity
+from ..path_support import resolves_within_root
 
 CODE_EXTS = {".py", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"}
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", "__pycache__", ".venv", "venv"}
@@ -25,6 +26,8 @@ def _find_code_files(plugin_dir: Path) -> list[Path]:
         if not p.is_file() or p.suffix not in CODE_EXTS:
             continue
         if any(part in EXCLUDED_DIRS for part in p.parts):
+            continue
+        if not resolves_within_root(plugin_dir, p, require_exists=True):
             continue
         files.append(p)
     return files

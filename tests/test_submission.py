@@ -12,6 +12,7 @@ from codex_plugin_scanner.submission import (
     build_submission_payload,
     create_submission_issue,
     find_existing_submission_issue,
+    normalize_github_api_base_url,
     resolve_submission_metadata,
 )
 
@@ -257,3 +258,36 @@ def test_create_submission_issue_rejects_missing_issue_fields(monkeypatch) -> No
         assert "required fields" in str(error)
     else:
         raise AssertionError("Expected create_submission_issue to reject incomplete responses.")
+
+
+def test_normalize_github_api_base_url_accepts_github_dot_com_default() -> None:
+    assert normalize_github_api_base_url("https://api.github.com") == "https://api.github.com"
+
+
+def test_normalize_github_api_base_url_accepts_matching_enterprise_api() -> None:
+    assert (
+        normalize_github_api_base_url(
+            "https://github.enterprise.example/api/v3",
+            github_server_url="https://github.enterprise.example",
+        )
+        == "https://github.enterprise.example/api/v3"
+    )
+
+
+def test_normalize_github_api_base_url_accepts_matching_ghe_com_api() -> None:
+    assert (
+        normalize_github_api_base_url(
+            "https://api.octocorp.ghe.com",
+            github_server_url="https://octocorp.ghe.com",
+        )
+        == "https://api.octocorp.ghe.com"
+    )
+
+
+def test_normalize_github_api_base_url_rejects_untrusted_host() -> None:
+    try:
+        normalize_github_api_base_url("https://evil.example/api/v3")
+    except ValueError as error:
+        assert 'GITHUB_API_URL must match "https://api.github.com"' in str(error)
+    else:
+        raise AssertionError("Expected normalize_github_api_base_url to reject untrusted hosts.")

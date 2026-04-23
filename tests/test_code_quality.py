@@ -3,6 +3,8 @@
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.checks.code_quality import (
     _find_code_files,
     check_no_eval,
@@ -11,6 +13,13 @@ from codex_plugin_scanner.checks.code_quality import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _symlink_or_skip(link_path: Path, target: Path) -> None:
+    try:
+        link_path.symlink_to(target)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlinks are not supported in this environment")
 
 
 class TestCheckNoEval:
@@ -27,6 +36,15 @@ class TestCheckNoEval:
         with tempfile.TemporaryDirectory() as tmpdir:
             r = check_no_eval(Path(tmpdir))
             assert r.passed and r.points == 5
+
+    def test_ignores_symlinked_code_files_outside_root(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            outside = root.parent / "outside-evil.js"
+            outside.write_text("eval('owned')", encoding="utf-8")
+            _symlink_or_skip(root / "linked-evil.js", outside)
+            r = check_no_eval(root)
+            assert r.passed is True
 
 
 class TestCheckNoShellInjection:
@@ -62,6 +80,15 @@ class TestFindCodeFiles:
             (node_dir / "index.js").write_text("eval()")
             files = _find_code_files(Path(tmpdir))
             assert len(files) == 0
+
+    def test_skips_symlinked_code_files_outside_root(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            outside = root.parent / "outside-evil.ts"
+            outside.write_text("eval('owned')", encoding="utf-8")
+            _symlink_or_skip(root / "linked-evil.ts", outside)
+            files = _find_code_files(root)
+            assert files == []
 
 
 class TestRunCodeQualityChecks:
