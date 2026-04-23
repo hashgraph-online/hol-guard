@@ -16,6 +16,19 @@ def is_dot_relative_path(value: str) -> bool:
     return value.startswith("./")
 
 
+def resolves_within_root(root: Path, candidate: Path, *, require_exists: bool = False) -> bool:
+    try:
+        resolved_root = root.resolve()
+        resolved_candidate = candidate.resolve()
+    except (OSError, RuntimeError):
+        return False
+    try:
+        resolved_candidate.relative_to(resolved_root)
+    except ValueError:
+        return False
+    return not (require_exists and not resolved_candidate.exists())
+
+
 def is_safe_relative_path(
     root: Path,
     value: str,
@@ -28,12 +41,21 @@ def is_safe_relative_path(
         return False
     if require_prefix and not is_dot_relative_path(value):
         return False
-    resolved = (root / candidate).resolve()
+    return resolves_within_root(root, root / candidate, require_exists=require_exists)
+
+
+def iter_safe_matching_files(root: Path, base_dir: Path, pattern: str) -> tuple[Path, ...]:
     try:
-        resolved.relative_to(root.resolve())
-    except ValueError:
-        return False
-    return not (require_exists and not resolved.exists())
+        resolved_root = root.resolve()
+    except OSError:
+        return ()
+    if not base_dir.is_dir() or not resolves_within_root(resolved_root, base_dir, require_exists=True):
+        return ()
+    return tuple(
+        candidate
+        for candidate in sorted(base_dir.glob(pattern))
+        if candidate.is_file() and resolves_within_root(resolved_root, candidate, require_exists=True)
+    )
 
 
 def normalize_codex_relative_path(value: str) -> str:

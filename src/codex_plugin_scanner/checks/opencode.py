@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ..ecosystems.types import NormalizedPackage
 from ..models import CheckResult, Finding, Severity
+from ..path_support import is_safe_relative_path
 from .ecosystem_common import has_frontmatter
 
 
@@ -92,12 +95,18 @@ def check_opencode_plugins(package: NormalizedPackage) -> CheckResult:
             if isinstance(item, str):
                 values.append(item)
 
+    unsafe: list[str] = []
     missing: list[str] = []
     for value in values:
-        if value.startswith((".", "/")) and not (root / value).exists():
+        if not value.startswith((".", "/")):
+            continue
+        if not is_safe_relative_path(root, value):
+            unsafe.append(value)
+            continue
+        if not (root / Path(value)).exists():
             missing.append(value)
 
-    if not missing:
+    if not unsafe and not missing:
         return CheckResult(
             name="OpenCode plugin references resolve",
             passed=True,
@@ -105,22 +114,33 @@ def check_opencode_plugins(package: NormalizedPackage) -> CheckResult:
             max_points=4,
             message="OpenCode plugin references resolve locally.",
         )
+    findings = [
+        _finding(
+            "OPENCODE_PLUGIN_PATH_UNSAFE",
+            "OpenCode plugin path escapes the repository",
+            f'The plugin reference "{path}" resolves outside the repository root.',
+            "Use only relative in-repository plugin paths.",
+            file_path=package.manifest_path.name if package.manifest_path else "opencode.json",
+        )
+        for path in unsafe
+    ]
+    findings.extend(
+        _finding(
+            "OPENCODE_PLUGIN_PATH_MISSING",
+            "OpenCode plugin path is missing",
+            f'The plugin reference "{path}" does not exist.',
+            "Fix plugin path references in opencode config.",
+            file_path=package.manifest_path.name if package.manifest_path else "opencode.json",
+        )
+        for path in missing
+    )
     return CheckResult(
         name="OpenCode plugin references resolve",
         passed=False,
         points=0,
         max_points=4,
-        message=f"OpenCode plugin paths missing: {', '.join(missing[:3])}",
-        findings=tuple(
-            _finding(
-                "OPENCODE_PLUGIN_PATH_MISSING",
-                "OpenCode plugin path is missing",
-                f'The plugin reference "{path}" does not exist.',
-                "Fix plugin path references in opencode config.",
-                file_path=package.manifest_path.name if package.manifest_path else "opencode.json",
-            )
-            for path in missing
-        ),
+        message=f"OpenCode plugin path issues: {', '.join([*unsafe, *missing][:3])}",
+        findings=tuple(findings),
     )
 
 

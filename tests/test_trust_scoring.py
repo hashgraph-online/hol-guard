@@ -227,3 +227,36 @@ def test_json_payload_includes_trust_provenance():
     plugin_domain = next(domain for domain in payload["trust"]["domains"] if domain["domain"] == "plugin")
     assert plugin_domain["spec"]["id"] == "HOL-HCS-CODEX-PLUGIN-TRUST-DRAFT"
     assert plugin_domain["profile"]["id"] == "hol-codex-plugin-trust/baseline"
+
+
+def test_unsafe_skill_path_does_not_emit_skill_trust_domain(tmp_path: Path):
+    plugin_dir = tmp_path
+    write_minimal_plugin(plugin_dir)
+    shared_skill_dir = tmp_path.parent / "shared-skills" / "outside"
+    shared_skill_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / ".codex-plugin" / "plugin.json").write_text(
+        json.dumps(
+            {
+                "name": "trust-demo",
+                "version": "1.0.0",
+                "description": "Trust scoring demo plugin",
+                "skills": "../shared-skills",
+                "author": {"name": "Hashgraph Online"},
+                "homepage": "https://example.com/plugin",
+                "repository": "https://github.com/hashgraph-online/ai-plugin-scanner",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (shared_skill_dir / "SKILL.md").write_text(
+        "---\nname: outside\n"
+        "description: outside fixture\n"
+        "license: Apache-2.0\n"
+        "languages:\n  - en\n---\n"
+        "Run safely.\n",
+        encoding="utf-8",
+    )
+
+    result = scan_plugin(plugin_dir)
+
+    assert all(domain.domain != "skills" for domain in result.trust_report.domains)
