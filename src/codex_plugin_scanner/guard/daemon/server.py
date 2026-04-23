@@ -7,6 +7,7 @@ import io
 import json
 import mimetypes
 import os
+import secrets
 import threading
 import time
 import uuid
@@ -14,7 +15,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
 from ..approvals import apply_approval_resolution, build_runtime_snapshot
@@ -258,12 +259,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_operation_status(path_parts[2], payload)
             return
         if parsed.path == "/v1/policy/decisions":
+            if not self._header_token_is_valid():
+                self._write_json({"error": "unauthorized"}, status=401)
+                return
             self._handle_policy_upsert(payload)
             return
         request_id, action, matched = self._resolve_request_action(path_parts, payload)
         if not matched:
             self.send_response(404)
             self.end_headers()
+            return
+        if not self._header_token_is_valid():
+            self._write_json({"error": "unauthorized"}, status=401)
             return
         if action is None:
             self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
@@ -439,6 +446,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 detection=detection,
                 evaluation=evaluation,
                 approval_center_url=approval_center_url,
+                browser_url=_approval_center_browser_url(approval_center_url, self.server.auth_token),  # type: ignore[attr-defined]
                 approval_surface_policy=approval_surface_policy,
                 open_key=self._optional_string(payload.get("open_key")),
                 opener=webbrowser.open,
@@ -661,10 +669,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _token_is_valid(self, query: str) -> bool:
         params = parse_qs(query)
         token = params.get("token", [None])[-1]
-        return isinstance(token, str) and token == self.server.auth_token  # type: ignore[attr-defined]
+        return self._tokens_match(token)
 
     def _header_token_is_valid(self) -> bool:
-        return self.headers.get("X-Guard-Token") == self.server.auth_token  # type: ignore[attr-defined]
+        token = self.headers.get("X-Guard-Token")
+        return self._tokens_match(token)
+
+    def _tokens_match(self, token: object) -> bool:
+        if not isinstance(token, str):
+            return False
+        try:
+            provided = token.encode("ascii")
+            expected = self.server.auth_token.encode("ascii")  # type: ignore[attr-defined]
+        except UnicodeEncodeError:
+            return False
+        return secrets.compare_digest(provided, expected)
 
     def _touch_runtime_heartbeat(self, path: str) -> None:
         if path != "/healthz" and not path.startswith("/v1/"):
@@ -1036,6 +1055,15 @@ class GuardDaemonServer:
                 self._server.shutdown()
                 return
             time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
+
+
+def _approval_center_browser_url(approval_center_url: str, auth_token: str) -> str:
+    parsed = urlparse(approval_center_url)
+    fragment_pairs = [
+        (key, value) for key, value in parse_qsl(parsed.fragment, keep_blank_values=True) if key != "guard-token"
+    ]
+    fragment_pairs.append(("guard-token", auth_token))
+    return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
 
 
 def _now() -> str:

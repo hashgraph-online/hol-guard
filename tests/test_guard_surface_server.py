@@ -1007,7 +1007,12 @@ class TestGuardSurfaceServer:
         assert first_block_response["surface"]["opened"] is True
         assert second_block_response["surface"]["opened"] is False
         assert second_block_response["surface"]["reason"] == "already-opened"
-        assert opened_urls == [f"http://127.0.0.1:{daemon.port}"]
+        opened_url = urllib.parse.urlparse(opened_urls[0])
+        opened_fragment = urllib.parse.parse_qs(opened_url.fragment)
+
+        assert len(opened_urls) == 1
+        assert f"{opened_url.scheme}://{opened_url.netloc}{opened_url.path}" == f"http://127.0.0.1:{daemon.port}"
+        assert opened_fragment["guard-token"] == [initialize_payload["auth_token"]]
 
     def test_guard_daemon_completes_browser_connect_pairing_for_allowed_origin(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

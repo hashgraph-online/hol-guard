@@ -46,6 +46,7 @@ from ..consumer import (
     run_consumer_scan,
 )
 from ..daemon import GuardDaemonServer, ensure_guard_daemon, load_guard_surface_daemon_client
+from ..daemon.manager import load_guard_daemon_auth_token
 from ..incident import build_incident_context
 from ..mcp_tool_calls import (
     allow_tool_call,
@@ -2128,13 +2129,28 @@ def _headless_approval_resolver(
 
 def _open_approval_center(approval_center_url: str, *, store: GuardStore, config, open_key: str | None = None) -> None:
     surface_runtime = GuardSurfaceRuntime(store)
+    auth_token = load_guard_daemon_auth_token(store.guard_home)
     surface_runtime.ensure_surface(
         surface="approval-center",
         approval_center_url=approval_center_url,
+        browser_url=_approval_center_browser_url(approval_center_url, auth_token),
         approval_surface_policy=config.approval_surface_policy,
         open_key=open_key or approval_center_url,
         opener=webbrowser.open,
     )
+
+
+def _approval_center_browser_url(approval_center_url: str, auth_token: str | None) -> str | None:
+    if auth_token is None:
+        return None
+    parsed = urllib.parse.urlparse(approval_center_url)
+    fragment_pairs = [
+        (key, value)
+        for key, value in urllib.parse.parse_qsl(parsed.fragment, keep_blank_values=True)
+        if key != "guard-token"
+    ]
+    fragment_pairs.append(("guard-token", auth_token))
+    return urllib.parse.urlunparse(parsed._replace(fragment=urllib.parse.urlencode(fragment_pairs)))
 
 
 def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[str, object]) -> str:
