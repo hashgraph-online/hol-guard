@@ -9,9 +9,10 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from ...path_support import iter_safe_matching_files, resolves_within_root
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _json_payload, _run_command_probe
+from .base import HarnessAdapter, HarnessContext, _ensure_path_within_root, _json_payload, _run_command_probe
 
 CLAUDE_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
 CLAUDE_GUARD_NOTIFICATION_MATCHER = "permission_prompt"
@@ -169,6 +170,7 @@ def _metadata_with_digest(path: Path) -> dict[str, object]:
 
 def _discover_project_markdown_artifacts(
     *,
+    root_dir: Path,
     base_dir: Path,
     pattern: str,
     harness: str,
@@ -179,7 +181,7 @@ def _discover_project_markdown_artifacts(
     if not base_dir.is_dir():
         return []
     artifacts: list[GuardArtifact] = []
-    for artifact_path in sorted(path for path in base_dir.glob(pattern) if path.is_file()):
+    for artifact_path in iter_safe_matching_files(root_dir, base_dir, pattern):
         artifact_name = name_for_path(artifact_path, base_dir)
         artifacts.append(
             GuardArtifact(
@@ -331,10 +333,11 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                             )
         if context.workspace_dir is not None:
             agents_dir = context.workspace_dir / ".claude" / "agents"
-            if agents_dir.is_dir():
+            if agents_dir.is_dir() and resolves_within_root(context.workspace_dir, agents_dir, require_exists=True):
                 found_paths.append(str(agents_dir))
                 artifacts.extend(
                     _discover_project_markdown_artifacts(
+                        root_dir=context.workspace_dir,
                         base_dir=agents_dir,
                         pattern="*.md",
                         harness=self.harness,
@@ -344,9 +347,10 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                     )
                 )
             skills_dir = context.workspace_dir / ".claude" / "skills"
-            if skills_dir.is_dir():
+            if skills_dir.is_dir() and resolves_within_root(context.workspace_dir, skills_dir, require_exists=True):
                 artifacts.extend(
                     _discover_project_markdown_artifacts(
+                        root_dir=context.workspace_dir,
                         base_dir=skills_dir,
                         pattern="**/SKILL.md",
                         harness=self.harness,
@@ -358,9 +362,10 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                     )
                 )
             commands_dir = context.workspace_dir / ".claude" / "commands"
-            if commands_dir.is_dir():
+            if commands_dir.is_dir() and resolves_within_root(context.workspace_dir, commands_dir, require_exists=True):
                 artifacts.extend(
                     _discover_project_markdown_artifacts(
+                        root_dir=context.workspace_dir,
                         base_dir=commands_dir,
                         pattern="*.md",
                         harness=self.harness,
@@ -370,9 +375,10 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                     )
                 )
             rules_dir = context.workspace_dir / ".claude" / "rules"
-            if rules_dir.is_dir():
+            if rules_dir.is_dir() and resolves_within_root(context.workspace_dir, rules_dir, require_exists=True):
                 artifacts.extend(
                     _discover_project_markdown_artifacts(
+                        root_dir=context.workspace_dir,
                         base_dir=rules_dir,
                         pattern="*.md",
                         harness=self.harness,
@@ -382,7 +388,11 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                     )
                 )
             project_claude_md = context.workspace_dir / "CLAUDE.md"
-            if project_claude_md.is_file():
+            if project_claude_md.is_file() and resolves_within_root(
+                context.workspace_dir,
+                project_claude_md,
+                require_exists=True,
+            ):
                 artifacts.append(
                     GuardArtifact(
                         artifact_id="claude-code:project:instruction:claude-md",
@@ -472,6 +482,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                 **shim_manifest,
             }
         settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+        _ensure_path_within_root(context.workspace_dir, settings_path, label="Claude Code")
         payload = _json_payload(settings_path)
         session_start_command = self._session_start_command(context)
         hook_command = self._hook_command(context)
@@ -542,6 +553,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                 **shim_manifest,
             }
         settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+        _ensure_path_within_root(context.workspace_dir, settings_path, label="Claude Code")
         payload = _json_payload(settings_path)
         session_start_command = self._session_start_command(context)
         hook_command = self._hook_command(context)

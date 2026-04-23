@@ -6,11 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.checks.opencode import check_opencode_config
+from codex_plugin_scanner.checks.gemini import check_context_and_mcp
+from codex_plugin_scanner.checks.opencode import check_opencode_config, check_opencode_plugins
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.ecosystems.detect import detect_packages
 from codex_plugin_scanner.ecosystems.opencode import OpenCodeAdapter
-from codex_plugin_scanner.ecosystems.types import Ecosystem
+from codex_plugin_scanner.ecosystems.types import Ecosystem, NormalizedPackage
 from codex_plugin_scanner.models import ScanOptions
 from codex_plugin_scanner.scanner import scan_plugin
 
@@ -186,3 +187,60 @@ def test_opencode_permission_error_sets_specific_parse_reason(tmp_path: Path, mo
     assert package.manifest_parse_error_reason == "permission-denied"
     assert check.passed is False
     assert "permissions" in check.message
+
+
+def test_gemini_context_file_outside_repo_is_rejected_even_when_it_exists(tmp_path: Path) -> None:
+    outside_file = tmp_path.parent / "outside-context.md"
+    outside_file.write_text("secret", encoding="utf-8")
+    package = NormalizedPackage(
+        ecosystem=Ecosystem.GEMINI,
+        package_kind="extension",
+        root_path=tmp_path,
+        raw_manifest={"contextFileName": "../outside-context.md"},
+    )
+
+    result = check_context_and_mcp(package)
+
+    assert result.passed is False
+    assert any("contextFileName" in finding.description for finding in result.findings)
+
+
+def test_opencode_plugin_reference_outside_repo_is_rejected_even_when_it_exists(tmp_path: Path) -> None:
+    outside_plugin = tmp_path.parent / "outside-plugin"
+    outside_plugin.write_text("{}", encoding="utf-8")
+    package = NormalizedPackage(
+        ecosystem=Ecosystem.OPENCODE,
+        package_kind="plugin",
+        root_path=tmp_path,
+        manifest_path=tmp_path / "opencode.json",
+        raw_manifest={"plugins": ["../outside-plugin"]},
+    )
+
+    result = check_opencode_plugins(package)
+
+    assert result.passed is False
+    assert any("../outside-plugin" in finding.description for finding in result.findings)
+
+
+def test_gemini_context_file_resolve_runtime_error_is_rejected_without_crashing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_resolve = Path.resolve
+
+    def _resolve(self: Path, strict: bool = False) -> Path:
+        if self.name == "loop":
+            raise RuntimeError("symlink loop")
+        return original_resolve(self, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", _resolve)
+    package = NormalizedPackage(
+        ecosystem=Ecosystem.GEMINI,
+        package_kind="extension",
+        root_path=tmp_path,
+        raw_manifest={"contextFileName": "./loop"},
+    )
+
+    result = check_context_and_mcp(package)
+
+    assert result.passed is False
+    assert any(finding.rule_id == "GEMINI_CONTEXT_FILE_UNSAFE" for finding in result.findings)

@@ -7,6 +7,7 @@ from pathlib import Path
 from .checks.manifest import load_manifest
 from .checks.skill_security import SkillSecurityContext
 from .integrations.cisco_skill_scanner import CiscoIntegrationStatus
+from .path_support import is_safe_relative_path, iter_safe_matching_files
 from .trust_helpers import (
     build_adapter_score,
     build_domain_score,
@@ -26,10 +27,12 @@ def _skill_files(plugin_dir: Path, manifest: dict[str, object] | None) -> tuple[
     skills_root = manifest.get("skills")
     if not isinstance(skills_root, str) or not skills_root.strip():
         return ()
+    if not is_safe_relative_path(plugin_dir, skills_root):
+        return ()
     skills_dir = plugin_dir / skills_root
     if not skills_dir.is_dir():
         return ()
-    return tuple(sorted(skills_dir.rglob("SKILL.md")))
+    return iter_safe_matching_files(plugin_dir, skills_dir, "**/SKILL.md")
 
 
 def _normalized_skill_metadata(
