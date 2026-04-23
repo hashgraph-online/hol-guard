@@ -2129,11 +2129,13 @@ args = ["workspace-skill.js", "--changed"]
         assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["type"] == "command"
         assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["command"] == expected_hook_command
         assert "url" not in install_settings_payload["hooks"]["Notification"][0]["hooks"][0]
+        assert install_settings_payload["hooks"]["Stop"][0]["hooks"][0]["command"] == expected_hook_command
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
         assert settings_payload["hooks"]["SessionStart"] == []
         assert settings_payload["hooks"]["PreToolUse"] == []
         assert settings_payload["hooks"]["Notification"] == []
+        assert settings_payload["hooks"]["Stop"] == []
 
     def test_guard_uninstall_handles_non_dict_claude_hook_entries(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -2222,6 +2224,7 @@ args = ["workspace-skill.js", "--changed"]
         assert payload["hooks"]["PreToolUse"] == []
         assert payload["hooks"]["UserPromptSubmit"] == []
         assert payload["hooks"]["Notification"] == []
+        assert payload["hooks"]["Stop"] == []
 
     def test_guard_install_claude_alias_persists_canonical_managed_install(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -2352,6 +2355,7 @@ args = ["workspace-skill.js", "--changed"]
         assert len(payload["hooks"]["PostToolUse"]) == 1
         assert len(payload["hooks"]["UserPromptSubmit"]) == 1
         assert len(payload["hooks"]["Notification"]) == 1
+        assert len(payload["hooks"]["Stop"]) == 1
         pretool_hook_commands = [
             hook["command"]
             for hook in payload["hooks"]["PreToolUse"][0]["hooks"]

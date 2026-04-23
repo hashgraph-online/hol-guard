@@ -14,6 +14,7 @@ import sys
 import urllib.error
 import urllib.parse
 import webbrowser
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TextIO
@@ -55,7 +56,7 @@ from ..mcp_tool_calls import (
     build_tool_call_hash,
     evaluate_tool_call,
 )
-from ..models import GuardArtifact, HarnessDetection
+from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS
 from ..protect import build_protect_payload
 from ..proxy import (
@@ -1215,17 +1216,40 @@ def run_guard_command(
                 output_stream=output_stream,
             )
             return 0
+        if _canonical_harness_name(args.harness) == "claude-code" and _hook_event_name(payload) == "Stop":
+            denied = _persist_claude_pending_permission_denials(store, payload)
+            store.add_event(
+                "claude/turn_stop",
+                {"session_id": payload.get("session_id"), "saved_denials": denied},
+                _now(),
+            )
+            return 0
         if runtime_artifact is not None:
             event_name = _hook_event_name(payload) or "PreToolUse"
             runtime_artifact_hash = artifact_hash(runtime_artifact)
             artifact_id = runtime_artifact.artifact_id
             artifact_name = runtime_artifact.name
+            policy_harness = _canonical_harness_name(args.harness)
             stored_policy_action = store.resolve_policy(
-                args.harness,
+                policy_harness,
                 artifact_id,
                 runtime_artifact_hash,
                 str(runtime_workspace) if runtime_workspace else None,
             )
+            if stored_policy_action is None:
+                legacy_artifact = _legacy_claude_alias_runtime_artifact(
+                    artifact=runtime_artifact,
+                    requested_harness=args.harness,
+                    home_dir=context.home_dir,
+                    workspace=runtime_workspace,
+                )
+                if legacy_artifact is not None:
+                    stored_policy_action = store.resolve_policy(
+                        args.harness,
+                        legacy_artifact.artifact_id,
+                        artifact_hash(legacy_artifact),
+                        str(runtime_workspace) if runtime_workspace else None,
+                    )
             policy_action = _coalesce_string(
                 getattr(args, "policy_action", None),
                 stored_policy_action,
@@ -1233,6 +1257,33 @@ def run_guard_command(
             )
             if policy_action not in VALID_GUARD_ACTIONS:
                 policy_action = SAFE_CHANGED_HASH_ACTION
+            if _canonical_harness_name(args.harness) == "claude-code" and event_name in {
+                "PostToolUse",
+                "PostToolUseFailure",
+            }:
+                saved = _persist_claude_native_permission_for_runtime_artifact(
+                    store=store,
+                    payload=payload,
+                    artifact=runtime_artifact,
+                    artifact_hash=runtime_artifact_hash,
+                    action="allow",
+                    reason="Approved in Claude native approval prompt.",
+                )
+                if saved:
+                    receipt = build_receipt(
+                        harness=policy_harness,
+                        artifact_id=artifact_id,
+                        artifact_hash=runtime_artifact_hash,
+                        policy_decision="allow",
+                        capabilities_summary=_runtime_capabilities_summary(runtime_artifact),
+                        changed_capabilities=[runtime_artifact.artifact_type, "claude-native-approved"],
+                        provenance_summary=f"runtime tool request approved from {runtime_artifact.config_path}",
+                        artifact_name=artifact_name,
+                        source_scope=runtime_artifact.source_scope,
+                        user_override="claude-native-approve",
+                    )
+                    store.add_receipt(receipt)
+                return 0
             changed_capabilities = [runtime_artifact.artifact_type]
             risk_signals = list(artifact_risk_signals(runtime_artifact))
             risk_summary = artifact_risk_summary(runtime_artifact)
@@ -1290,16 +1341,6 @@ def run_guard_command(
                 )
                 if (
                     _canonical_harness_name(args.harness) == "claude-code"
-                    and event_name == "UserPromptSubmit"
-                    and policy_action == "require-reapproval"
-                    and not _prompt_requires_hard_block(runtime_artifact)
-                    and (output_stream is not None or not getattr(args, "json", False))
-                ):
-                    if getattr(args, "json", False) and output_stream is not None:
-                        _write_json_line({}, output_stream=output_stream)
-                    return 0
-                if (
-                    _canonical_harness_name(args.harness) == "claude-code"
                     and event_name == "PreToolUse"
                     and policy_action == "require-reapproval"
                 ):
@@ -1308,6 +1349,7 @@ def run_guard_command(
                         payload=payload,
                         reason=native_reason,
                         artifact=runtime_artifact,
+                        artifact_hash=runtime_artifact_hash,
                     )
                 if _should_emit_copilot_hook_response(args):
                     _emit_copilot_hook_response(
@@ -1668,12 +1710,62 @@ def _claude_permission_notice_state_key(session_id: str, tool_name: str | None =
     return f"claude_permission_notice:{session_id}"
 
 
+def _claude_pending_permission_index_key(session_id: str) -> str:
+    return f"claude_pending_permissions:{session_id}"
+
+
+def _claude_pending_permission_state_key(session_id: str, artifact_id: str) -> str:
+    fingerprint = hashlib.sha256(artifact_id.encode("utf-8")).hexdigest()[:24]
+    return f"claude_pending_permission:{session_id}:{fingerprint}"
+
+
+def _sync_payload_list_from_row(row: sqlite3.Row | None) -> list[str]:
+    if row is None:
+        return []
+    try:
+        payload = json.loads(str(row["payload_json"]))
+    except json.JSONDecodeError:
+        return []
+    return [str(item) for item in payload] if isinstance(payload, list) else []
+
+
+def _append_claude_pending_permission_key(
+    store: GuardStore,
+    *,
+    session_id: str,
+    pending_key: str,
+    now: str,
+) -> None:
+    index_key = _claude_pending_permission_index_key(session_id)
+    with store._connect() as connection:
+        connection.execute("begin immediate")
+        row = connection.execute(
+            "select payload_json from sync_state where state_key = ?",
+            (index_key,),
+        ).fetchone()
+        pending_keys = _sync_payload_list_from_row(row)
+        if pending_key in pending_keys:
+            return
+        pending_keys.append(pending_key)
+        connection.execute(
+            """
+            insert into sync_state (state_key, payload_json, updated_at)
+            values (?, ?, ?)
+            on conflict(state_key) do update set
+              payload_json = excluded.payload_json,
+              updated_at = excluded.updated_at
+            """,
+            (index_key, json.dumps(pending_keys), now),
+        )
+
+
 def _record_claude_permission_notice(
     *,
     store: GuardStore,
     payload: dict[str, object],
     reason: str,
     artifact: GuardArtifact,
+    artifact_hash: str,
 ) -> None:
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
@@ -1683,12 +1775,19 @@ def _record_claude_permission_notice(
         "saved_at": _now(),
         "reason": reason,
         "artifact_id": artifact.artifact_id,
+        "artifact_hash": artifact_hash,
         "artifact_name": artifact.name,
+        "artifact_type": artifact.artifact_type,
+        "config_path": artifact.config_path,
+        "source_scope": artifact.source_scope,
     }
     if tool_name is not None:
         notice_payload["tool_name"] = tool_name
     try:
         store.set_sync_payload(_claude_permission_notice_state_key(session_id, tool_name), notice_payload, _now())
+        pending_key = _claude_pending_permission_state_key(session_id, artifact.artifact_id)
+        store.set_sync_payload(pending_key, notice_payload, _now())
+        _append_claude_pending_permission_key(store, session_id=session_id, pending_key=pending_key, now=_now())
     except (OSError, sqlite3.Error):
         return
 
@@ -1711,6 +1810,205 @@ def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]
     if isinstance(persisted, dict):
         return persisted
     return None
+
+
+def _load_claude_pending_permission(
+    store: GuardStore,
+    payload: dict[str, object],
+    artifact: GuardArtifact,
+) -> dict[str, object] | None:
+    session_id = _optional_string(payload.get("session_id"))
+    if session_id is None:
+        return None
+    pending_key = _claude_pending_permission_state_key(session_id, artifact.artifact_id)
+    try:
+        persisted = store.get_sync_payload(pending_key)
+    except (OSError, sqlite3.Error):
+        return None
+    return persisted if isinstance(persisted, dict) else None
+
+
+def _remove_claude_pending_permission(
+    store: GuardStore,
+    *,
+    session_id: str,
+    pending_key: str,
+) -> None:
+    try:
+        index_key = _claude_pending_permission_index_key(session_id)
+        with store._connect() as connection:
+            connection.execute("begin immediate")
+            connection.execute("delete from sync_state where state_key = ?", (pending_key,))
+            row = connection.execute(
+                "select payload_json from sync_state where state_key = ?",
+                (index_key,),
+            ).fetchone()
+            remaining = [key for key in _sync_payload_list_from_row(row) if key != pending_key]
+            if remaining:
+                connection.execute(
+                    """
+                    insert into sync_state (state_key, payload_json, updated_at)
+                    values (?, ?, ?)
+                    on conflict(state_key) do update set
+                      payload_json = excluded.payload_json,
+                      updated_at = excluded.updated_at
+                    """,
+                    (index_key, json.dumps(remaining), _now()),
+                )
+            else:
+                connection.execute("delete from sync_state where state_key = ?", (index_key,))
+    except (OSError, sqlite3.Error):
+        return
+
+
+def _persist_claude_native_permission_policy(
+    *,
+    store: GuardStore,
+    artifact_id: str,
+    artifact_hash: str,
+    action: str,
+    reason: str,
+    now: str,
+) -> bool:
+    try:
+        store.upsert_policy(
+            PolicyDecision(
+                harness="claude-code",
+                scope="artifact",
+                action="allow" if action == "allow" else "block",
+                artifact_id=artifact_id,
+                artifact_hash=artifact_hash,
+                reason=reason,
+                source="claude-native-approval",
+            ),
+            now,
+        )
+        store.add_event(
+            "claude/native_permission_saved",
+            {
+                "artifact_id": artifact_id,
+                "artifact_hash": artifact_hash,
+                "action": action,
+                "reason": reason,
+            },
+            now,
+        )
+    except (OSError, sqlite3.Error):
+        return False
+    return True
+
+
+def _persist_claude_native_permission_for_runtime_artifact(
+    *,
+    store: GuardStore,
+    payload: dict[str, object],
+    artifact: GuardArtifact,
+    artifact_hash: str,
+    action: str,
+    reason: str,
+) -> bool:
+    pending = _load_claude_pending_permission(store, payload, artifact)
+    if pending is None:
+        return False
+    now = _now()
+    saved_policy = _persist_claude_native_permission_policy(
+        store=store,
+        artifact_id=artifact.artifact_id,
+        artifact_hash=artifact_hash,
+        action=action,
+        reason=reason,
+        now=now,
+    )
+    if not saved_policy:
+        return False
+    try:
+        store.record_inventory_artifact(
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            policy_action="allow" if action == "allow" else "block",
+            changed=False,
+            now=now,
+            approved=action == "allow",
+        )
+    except (OSError, sqlite3.Error):
+        return False
+    session_id = _optional_string(payload.get("session_id"))
+    if session_id is not None:
+        _remove_claude_pending_permission(
+            store,
+            session_id=session_id,
+            pending_key=_claude_pending_permission_state_key(session_id, artifact.artifact_id),
+        )
+    return True
+
+
+def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[str, object]) -> int:
+    session_id = _optional_string(payload.get("session_id"))
+    if session_id is None:
+        return 0
+    index_key = _claude_pending_permission_index_key(session_id)
+    try:
+        index_payload = store.get_sync_payload(index_key)
+    except (OSError, sqlite3.Error):
+        return 0
+    if not isinstance(index_payload, list):
+        return 0
+    pending_keys = [str(item) for item in index_payload]
+    processed_keys: list[str] = []
+    denied = 0
+    for pending_key in pending_keys:
+        try:
+            pending = store.get_sync_payload(pending_key)
+        except (OSError, sqlite3.Error):
+            continue
+        if not isinstance(pending, dict):
+            continue
+        artifact_id = _optional_string(pending.get("artifact_id"))
+        artifact_hash_value = _optional_string(pending.get("artifact_hash"))
+        if artifact_id is None or artifact_hash_value is None:
+            continue
+        reason = _optional_string(pending.get("reason")) or "Denied in Claude's native approval prompt."
+        saved_policy = _persist_claude_native_permission_policy(
+            store=store,
+            artifact_id=artifact_id,
+            artifact_hash=artifact_hash_value,
+            action="block",
+            reason=f"Denied in Claude native approval prompt. {reason}",
+            now=_now(),
+        )
+        if not saved_policy:
+            continue
+        processed_keys.append(pending_key)
+        denied += 1
+    if processed_keys:
+        processed_set = set(processed_keys)
+        try:
+            with store._connect() as connection:
+                connection.execute("begin immediate")
+                for pending_key in processed_keys:
+                    connection.execute("delete from sync_state where state_key = ?", (pending_key,))
+                row = connection.execute(
+                    "select payload_json from sync_state where state_key = ?",
+                    (index_key,),
+                ).fetchone()
+                current_keys = _sync_payload_list_from_row(row)
+                remaining_keys = [pending_key for pending_key in current_keys if pending_key not in processed_set]
+                if remaining_keys:
+                    connection.execute(
+                        """
+                        insert into sync_state (state_key, payload_json, updated_at)
+                        values (?, ?, ?)
+                        on conflict(state_key) do update set
+                          payload_json = excluded.payload_json,
+                          updated_at = excluded.updated_at
+                        """,
+                        (index_key, json.dumps(remaining_keys), _now()),
+                    )
+                else:
+                    connection.execute("delete from sync_state where state_key = ?", (index_key,))
+        except (OSError, sqlite3.Error):
+            return denied
+    return denied
 
 
 def _is_claude_permission_prompt_notification(args: argparse.Namespace, payload: dict[str, object]) -> bool:
@@ -2484,6 +2782,7 @@ def _hook_runtime_artifact(
     guard_home: Path,
     workspace: Path | None,
 ) -> GuardArtifact | None:
+    harness = _canonical_harness_name(harness)
     event_name = _hook_event_name(payload)
     if event_name == "UserPromptSubmit":
         prompt_text = payload.get("prompt")
@@ -2538,6 +2837,28 @@ def _hook_runtime_artifact(
         request=tool_request,
         config_path=config_path,
         source_scope=source_scope,
+    )
+
+
+def _legacy_claude_alias_runtime_artifact(
+    *,
+    artifact: GuardArtifact,
+    requested_harness: str,
+    home_dir: Path,
+    workspace: Path | None,
+) -> GuardArtifact | None:
+    if requested_harness == artifact.harness:
+        return None
+    if requested_harness != "claude" or artifact.harness != "claude-code":
+        return None
+    legacy_prefix = "claude-code:"
+    if not artifact.artifact_id.startswith(legacy_prefix):
+        return None
+    return replace(
+        artifact,
+        artifact_id=f"claude:{artifact.artifact_id[len(legacy_prefix) :]}",
+        harness="claude",
+        config_path=str(_runtime_policy_path("claude", home_dir, workspace)),
     )
 
 

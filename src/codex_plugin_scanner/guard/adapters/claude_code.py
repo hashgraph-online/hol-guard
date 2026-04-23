@@ -25,6 +25,7 @@ CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS = 30
 CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS = 20
 CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS = 10
 CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS = 10
+CLAUDE_GUARD_STOP_TIMEOUT_SECONDS = 10
 CLAUDE_SETTINGS_FILES = ("settings.json", "settings.local.json")
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 
@@ -46,6 +47,7 @@ def _sync_runtime_hook_groups(hooks: dict[str, object], hook_command: str) -> No
         ("PostToolUse", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
         ("UserPromptSubmit", None, CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS),
         ("Notification", CLAUDE_GUARD_NOTIFICATION_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
+        ("Stop", None, CLAUDE_GUARD_STOP_TIMEOUT_SECONDS),
     ):
         existing_entries = hooks.get(key)
         hooks[key] = _merge_hook_group(
@@ -53,6 +55,18 @@ def _sync_runtime_hook_groups(hooks: dict[str, object], hook_command: str) -> No
             matcher,
             _guard_command_handler(hook_command, timeout=timeout),
         )
+
+
+def _remove_unsupported_guard_hook_groups(hooks: dict[str, object]) -> None:
+    for key in ("PermissionDenied",):
+        entries = hooks.get(key)
+        if not isinstance(entries, list):
+            continue
+        remaining = _prune_guard_hook_entries(entries)
+        if remaining:
+            hooks[key] = remaining
+        else:
+            hooks.pop(key, None)
 
 
 def _guard_hook_group(matcher: str | None, handler: dict[str, object]) -> dict[str, object]:
@@ -577,6 +591,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         if not isinstance(hooks, dict):
             return
         _sync_runtime_hook_groups(hooks, self._daemon_hook_command(context))
+        _remove_unsupported_guard_hook_groups(hooks)
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -620,6 +635,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             session_start_entries = _merge_hook_group(session_start_entries, matcher, session_start_handler)
         hooks["SessionStart"] = session_start_entries
         _sync_runtime_hook_groups(hooks, hook_command)
+        _remove_unsupported_guard_hook_groups(hooks)
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return {
@@ -653,9 +669,17 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         payload = _json_payload(settings_path)
         hooks = payload.get("hooks")
         if isinstance(hooks, dict):
-            for key in ("SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit", "Notification"):
+            for key in (
+                "SessionStart",
+                "PreToolUse",
+                "PostToolUse",
+                "UserPromptSubmit",
+                "Notification",
+                "Stop",
+            ):
                 entries = hooks.get(key)
                 hooks[key] = _prune_guard_hook_entries(entries if isinstance(entries, list) else [])
+            _remove_unsupported_guard_hook_groups(hooks)
             settings_path.parent.mkdir(parents=True, exist_ok=True)
             settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return {
