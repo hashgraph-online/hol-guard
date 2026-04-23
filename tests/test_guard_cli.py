@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import ClassVar
 
 import pytest
+from rich.console import Console
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import claude_code as claude_adapter_module
@@ -23,6 +24,7 @@ from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAda
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import connect_flow as guard_connect_flow_module
+from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli import update_commands as guard_update_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -257,6 +259,35 @@ class TestGuardCli:
         assert claude_adapter_module._is_guard_hook_command(legacy_command) is True
         assert claude_adapter_module._is_guard_hook_command(pinned_command) is True
         assert claude_adapter_module._is_guard_hook_command("python something-else.py") is False
+
+    def test_guard_prompt_renders_untrusted_metadata_as_literal_text(self):
+        console = Console(record=True, width=120)
+        artifact = guard_prompt_module.PromptArtifact(
+            harness="codex",
+            artifact_id="codex:project:[blink]workspace[/blink]",
+            artifact_name="[bold red]workspace[/bold red]\x1b[31m-tool",
+            artifact_hash="hash-123",
+            policy_action="review",
+            changed_fields=("args",),
+            provenance_summary="project artifact",
+            recommendation="review",
+            publisher="[green]hashgraph-online[/green]",
+            config_path="/tmp/workspace/.codex/config.toml",
+            source_scope="project",
+            artifact_type="mcp_server",
+            command="node",
+            transport="stdio",
+            metadata={},
+            current_snapshot=None,
+        )
+
+        console.print(guard_prompt_module._build_prompt_panel(artifact))
+        rendered = console.export_text()
+
+        assert "[bold red]workspace[/bold red]" in rendered
+        assert "[blink]workspace[/blink]" in rendered
+        assert "[green]hashgraph-online[/green]" in rendered
+        assert "\x1b" not in rendered
 
     def test_guard_requires_a_subcommand(self, capsys):
         with pytest.raises(SystemExit) as exc_info:

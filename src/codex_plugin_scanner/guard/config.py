@@ -31,6 +31,19 @@ GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
+WORKSPACE_BLOCKED_POLICY_KEYS = frozenset(
+    {
+        "mode",
+        "default_action",
+        "unknown_publisher_action",
+        "changed_hash_action",
+        "new_network_domain_action",
+        "subprocess_action",
+        "harnesses",
+        "publishers",
+        "artifacts",
+    }
+)
 
 
 class GuardHomeMigrationError(RuntimeError):
@@ -290,8 +303,12 @@ def _load_workspace_guard_config(workspace: Path | None) -> dict[str, object]:
         return {}
     merged: dict[str, object] = {}
     for filename in WORKSPACE_CONFIG_FILENAMES:
-        merged = _merge_config_payload(merged, _read_toml(workspace / filename))
+        merged = _merge_config_payload(merged, _sanitize_workspace_guard_config(_read_toml(workspace / filename)))
     return merged
+
+
+def _sanitize_workspace_guard_config(payload: dict[str, object]) -> dict[str, object]:
+    return {key: value for key, value in payload.items() if key not in WORKSPACE_BLOCKED_POLICY_KEYS}
 
 
 def _merge_config_payload(base: dict[str, object], override: dict[str, object]) -> dict[str, object]:

@@ -14,6 +14,7 @@ from typing import Any
 import requests
 
 from ..config import resolve_guard_home
+from ..daemon.manager import load_guard_daemon_auth_token
 from ..store import GuardStore
 
 
@@ -208,6 +209,9 @@ class GuardBridge:
         """Resolve requests through the Guard daemon contract."""
         guard_url = self.config.guard_url or "http://127.0.0.1:4999"
         action_path = "approve" if action == "approve" else "block"
+        auth_token = load_guard_daemon_auth_token(self.store.guard_home)
+        if auth_token is None:
+            return False
         try:
             response = requests.post(
                 f"{guard_url}/v1/requests/{request_id}/{action_path}",
@@ -215,6 +219,7 @@ class GuardBridge:
                     "scope": "artifact",
                     "reason": "resolved from Guard Bridge",
                 },
+                headers={"X-Guard-Token": auth_token},
                 timeout=30,
             )
             if response.status_code != 200:

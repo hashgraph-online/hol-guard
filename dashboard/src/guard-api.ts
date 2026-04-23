@@ -22,6 +22,14 @@ async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+function guardAuthHeaders(): HeadersInit {
+  const fragment = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  const guardToken = new URLSearchParams(fragment).get("guard-token");
+  return guardToken ? { "X-Guard-Token": guardToken } : {};
+}
+
 export async function fetchRequests(): Promise<GuardApprovalRequest[]> {
   if (isGuardDemoMode()) {
     return getDemoRequests();
@@ -146,7 +154,8 @@ export async function resolveRequest(input: {
   await readJson(`/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
     },
     body: JSON.stringify({
       action: input.action,

@@ -215,6 +215,7 @@ class GuardSurfaceRuntime:
         detection: dict[str, object],
         evaluation: dict[str, object],
         approval_center_url: str,
+        browser_url: str | None = None,
         approval_surface_policy: str,
         open_key: str | None,
         opener: Callable[[str], object],
@@ -247,6 +248,7 @@ class GuardSurfaceRuntime:
         surface = self.ensure_surface(
             surface="approval-center",
             approval_center_url=approval_center_url,
+            browser_url=browser_url,
             approval_surface_policy=approval_surface_policy,
             open_key=open_key or str(waiting_operation["operation_id"]),
             opener=opener,
@@ -326,6 +328,7 @@ class GuardSurfaceRuntime:
         *,
         surface: str,
         approval_center_url: str,
+        browser_url: str | None = None,
         approval_surface_policy: str,
         open_key: str,
         opener: Callable[[str], object],
@@ -337,7 +340,7 @@ class GuardSurfaceRuntime:
         if self.has_live_surface(surface):
             return {"surface": surface, "opened": False, "reason": "live-client", "open_key": open_key}
         try:
-            opened = opener(approval_center_url)
+            opened = opener(browser_url or approval_center_url)
         except Exception:
             return {"surface": surface, "opened": False, "reason": "open-failed", "open_key": open_key}
         if opened is False:
