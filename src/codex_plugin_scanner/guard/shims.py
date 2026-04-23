@@ -50,6 +50,7 @@ def remove_guard_shim(
     context: HarnessContext,
     *,
     launcher_name: str | None = None,
+    legacy_launcher_names: tuple[str, ...] = (),
     display_name: str | None = None,
 ) -> dict[str, object]:
     """Remove a previously installed Guard launcher shim."""
@@ -57,13 +58,15 @@ def remove_guard_shim(
     shim_dir = context.guard_home / "bin"
     shim_name = launcher_name or harness
     harness_label = display_name or harness
-    posix_path = shim_dir / f"guard-{shim_name}"
-    windows_path = shim_dir / f"guard-{shim_name}.cmd"
+    shim_paths = [
+        shim_dir / f"guard-{name}{suffix}" for name in (shim_name, *legacy_launcher_names) for suffix in ("", ".cmd")
+    ]
     removed_paths: list[str] = []
-    for path in (posix_path, windows_path):
+    for path in shim_paths:
         if path.exists():
             path.unlink()
             removed_paths.append(str(path))
+    posix_path = shim_dir / f"guard-{shim_name}"
     return {
         "shim_path": str(posix_path),
         "shim_dir": str(shim_dir),
