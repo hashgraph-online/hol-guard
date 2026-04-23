@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -39,6 +40,101 @@ class TestGuardSurfaceServer:
                 assert "Loading Local approval center" in body
         finally:
             daemon.stop()
+
+    def test_guard_daemon_claude_hook_endpoint_returns_native_pretooluse_response(self, tmp_path) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        store = GuardStore(home_dir)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            hook_request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
+                    f"home={urllib.parse.quote(str(home_dir))}&workspace={urllib.parse.quote(str(workspace_dir))}"
+                ),
+                data=json.dumps(
+                    {
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Read",
+                        "tool_input": {"file_path": str(workspace_dir / ".env")},
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(hook_request, timeout=5) as response:
+                hook_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert hook_payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+        assert hook_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+        assert (
+            "HOL Guard intercepted Claude's attempt to use Read for local .env file and opened this approval prompt"
+            in json.dumps(hook_payload)
+        )
+        assert "protect your local secrets" in hook_payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
+
+    def test_guard_daemon_claude_hook_endpoint_returns_notification_context_without_auth(self, tmp_path) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        store = GuardStore(home_dir)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            pretool_request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
+                    f"home={urllib.parse.quote(str(home_dir))}&workspace={urllib.parse.quote(str(workspace_dir))}"
+                ),
+                data=json.dumps(
+                    {
+                        "session_id": "session-http-hook-1",
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "Read",
+                        "tool_input": {"file_path": str(workspace_dir / ".env")},
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(pretool_request, timeout=5):
+                pass
+
+            notification_request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
+                    f"home={urllib.parse.quote(str(home_dir))}&workspace={urllib.parse.quote(str(workspace_dir))}"
+                ),
+                data=json.dumps(
+                    {
+                        "session_id": "session-http-hook-1",
+                        "hook_event_name": "Notification",
+                        "notification_type": "permission_prompt",
+                        "tool_name": "Read",
+                        "message": "Claude needs your permission to use Read",
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(notification_request, timeout=5) as response:
+                notification_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert notification_payload["hookSpecificOutput"]["hookEventName"] == "Notification"
+        assert "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt." in (
+            notification_payload["systemMessage"]
+        )
+        assert "HOL Guard intercepted the sensitive request and opened the Claude approval dialog" in (
+            notification_payload["hookSpecificOutput"]["additionalContext"]
+        )
 
     def test_guard_daemon_runtime_snapshot_exposes_cloud_handoff_state(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
@@ -91,6 +187,92 @@ class TestGuardSurfaceServer:
         assert payload["inbox_url"] == "https://guard.example.com/guard/inbox"
         assert payload["fleet_url"] == "https://guard.example.com/guard/fleet"
         assert payload["connect_url"] == "https://guard.example.com/guard/connect"
+
+    def test_guard_daemon_claude_hook_endpoint_accepts_empty_allow_response(self, tmp_path) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        store = GuardStore(home_dir)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            hook_request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
+                    f"home={urllib.parse.quote(str(home_dir))}&workspace={urllib.parse.quote(str(workspace_dir))}"
+                ),
+                data=json.dumps(
+                    {
+                        "hook_event_name": "UserPromptSubmit",
+                        "prompt": "hi",
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(hook_request, timeout=5) as response:
+                hook_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert hook_payload == {}
+
+    def test_guard_daemon_background_start_auto_stops_after_idle_timeout(self, tmp_path) -> None:
+        guard_home = tmp_path / "pytest-of-user" / "guard-home"
+        store = GuardStore(guard_home)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0.05)
+        daemon.start()
+
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            runtime_state = store.get_runtime_state()
+            daemon_thread = daemon._thread
+            if runtime_state is None and daemon_thread is not None and not daemon_thread.is_alive():
+                break
+            time.sleep(0.02)
+
+        runtime_state = store.get_runtime_state()
+        daemon_thread = daemon._thread
+        daemon.stop()
+
+        assert runtime_state is None
+        assert daemon_thread is not None
+        assert daemon_thread.is_alive() is False
+
+    def test_guard_daemon_keeps_stream_clients_alive_past_idle_timeout(self, tmp_path) -> None:
+        guard_home = tmp_path / "pytest-of-user" / "guard-home"
+        store = GuardStore(guard_home)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0.05)
+        daemon.start()
+        response = None
+
+        try:
+            stream_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/events/stream?token={daemon._server.auth_token}",
+                method="GET",
+            )
+            response = urllib.request.urlopen(stream_request, timeout=5)
+            time.sleep(0.15)
+            daemon_thread = daemon._thread
+            daemon_thread_alive = daemon_thread is not None and daemon_thread.is_alive()
+            runtime_state = store.get_runtime_state()
+        finally:
+            if response is not None:
+                response.close()
+            daemon.stop()
+
+        assert runtime_state is not None
+        assert daemon_thread_alive is True
+
+    def test_guard_daemon_idle_timeout_ignores_invalid_env_value(self, tmp_path, monkeypatch) -> None:
+        guard_home = tmp_path / "guard-home"
+        monkeypatch.setenv("GUARD_DAEMON_IDLE_TIMEOUT_SECONDS", "ten")
+        monkeypatch.setattr(daemon_server_module, "_guard_home_is_ephemeral", lambda _guard_home: False)
+
+        idle_timeout = daemon_server_module._guard_daemon_idle_timeout_seconds(guard_home)
+
+        assert idle_timeout == 30 * 60
 
     def test_surface_server_contract_is_exposed_during_initialize(self, tmp_path) -> None:
         contract = build_surface_server_contract()
