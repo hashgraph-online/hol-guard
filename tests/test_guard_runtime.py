@@ -4887,9 +4887,10 @@ def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reas
         "HOL Guard intercepted the sensitive request and opened the Claude approval dialog"
         in (output["hookSpecificOutput"]["additionalContext"])
     )
-    assert "the user can choose yes, yes during this session, or no" in (
-        output["hookSpecificOutput"]["additionalContext"]
-    ).lower()
+    assert (
+        "the user can choose yes, yes during this session, or no"
+        in (output["hookSpecificOutput"]["additionalContext"]).lower()
+    )
 
 
 def test_guard_hook_claude_notification_notice_is_tool_scoped_and_consumed(tmp_path, capsys, monkeypatch):

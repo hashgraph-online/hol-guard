@@ -2856,7 +2856,7 @@ def _legacy_claude_alias_runtime_artifact(
         return None
     return replace(
         artifact,
-        artifact_id=f"claude:{artifact.artifact_id[len(legacy_prefix):]}",
+        artifact_id=f"claude:{artifact.artifact_id[len(legacy_prefix) :]}",
         harness="claude",
         config_path=str(_runtime_policy_path("claude", home_dir, workspace)),
     )
