@@ -96,15 +96,19 @@ def _run_guard_hook(
     command = [
         "guard",
         "hook",
-        "--home",
-        str(home_dir),
-        "--workspace",
-        str(workspace_dir),
-        "--harness",
-        harness,
     ]
     if as_json:
-        command.insert(2, "--json")
+        command.append("--json")
+    command.extend(
+        [
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            harness,
+        ]
+    )
     rc = main(command)
     output = capsys.readouterr().out
     if as_json:
@@ -4486,21 +4490,15 @@ def test_guard_hook_emits_claude_native_ask_for_sensitive_file_reads(
         "tool_input": {"file_path": str(workspace_dir / ".env")},
         "source_scope": "project",
     }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(pre_tool_event)))
-
-    pre_tool_rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    pre_tool_rc, pre_tool_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=pre_tool_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
     )
-    pre_tool_output = json.loads(capsys.readouterr().out)
+    pre_tool_output = json.loads(pre_tool_output)
 
     notification_event = {
         "session_id": "session-claude-native-1",
@@ -4510,21 +4508,15 @@ def test_guard_hook_emits_claude_native_ask_for_sensitive_file_reads(
         "message": "Claude needs your permission to use Read",
         "tool_name": "Read",
     }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(notification_event)))
-
-    notification_rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-        ]
+    notification_rc, notification_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=notification_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
     )
-    notification_output = json.loads(capsys.readouterr().out)
+    notification_output = json.loads(notification_output)
 
     assert install_rc == 0
     assert pre_tool_rc == 0
