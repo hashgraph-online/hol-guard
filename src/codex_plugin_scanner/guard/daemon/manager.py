@@ -15,7 +15,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
@@ -224,6 +224,9 @@ def _ensure_private_directory(path: Path) -> None:
 
 def _write_private_text(path: Path, text: str) -> None:
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, _GUARD_DAEMON_PRIVATE_FILE_MODE)
+    if os.name != "nt" and hasattr(os, "fchmod"):
+        with suppress(OSError):
+            os.fchmod(descriptor, _GUARD_DAEMON_PRIVATE_FILE_MODE)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         handle.write(text)
     _set_private_mode(path, _GUARD_DAEMON_PRIVATE_FILE_MODE)

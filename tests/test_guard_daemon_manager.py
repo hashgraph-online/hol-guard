@@ -39,6 +39,21 @@ def test_clear_guard_daemon_state_removes_auth_token_file(tmp_path):
     assert not daemon_manager_module._auth_token_path(guard_home).exists()
 
 
+def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    fchmod_calls: list[tuple[int, int]] = []
+
+    def fake_fchmod(descriptor: int, mode: int) -> None:
+        fchmod_calls.append((descriptor, mode))
+
+    monkeypatch.setattr(daemon_manager_module.os, "fchmod", fake_fchmod)
+
+    daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "secret-token")
+
+    assert len(fchmod_calls) == 2
+    assert all(mode == 0o600 for _, mode in fchmod_calls)
+
+
 def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     responses = iter((None, None, "http://127.0.0.1:5409"))
