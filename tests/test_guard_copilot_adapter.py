@@ -223,15 +223,15 @@ def test_copilot_install_and_uninstall_manage_inline_config_hooks_idempotently(t
         assert len(managed_hooks["postToolUse"]) == 1
         assert len(managed_hooks["permissionRequest"]) == 1
         assert managed_hooks["preToolUse"][0]["type"] == "command"
-        assert managed_hooks["preToolUse"][0]["cwd"] == "."
+        assert managed_hooks["preToolUse"][0]["cwd"] == str(context.guard_home)
         assert managed_hooks["preToolUse"][0]["timeoutSec"] == 30
         assert managed_hooks["preToolUse"][0]["env"]["PYTHONPATH"] == original_pythonpath
-        assert "guard hook" in managed_hooks["preToolUse"][0]["bash"]
-        assert "--harness copilot" in managed_hooks["preToolUse"][0]["bash"]
+        assert "from codex_plugin_scanner.cli import main" in managed_hooks["preToolUse"][0]["bash"]
+        assert "copilot" in managed_hooks["preToolUse"][0]["bash"]
         assert "--workspace" not in managed_hooks["preToolUse"][0]["bash"]
-        assert "guard hook" in managed_hooks["preToolUse"][0]["powershell"]
+        assert "from codex_plugin_scanner.cli import main" in managed_hooks["preToolUse"][0]["powershell"]
         assert managed_hooks["postToolUse"][0]["type"] == "command"
-        assert "guard hook" in managed_hooks["postToolUse"][0]["bash"]
+        assert "from codex_plugin_scanner.cli import main" in managed_hooks["postToolUse"][0]["bash"]
         assert len(managed_workspace_hooks["preToolUse"]) == 1
         assert len(managed_workspace_hooks["postToolUse"]) == 1
         assert len(managed_workspace_hooks["permissionRequest"]) == 1
@@ -372,7 +372,7 @@ def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp
                             "--guard-home C:\\old-guard --harness copilot --home C:\\old-home "
                             "--workspace C:\\old-workspace"
                         ),
-                        "cwd": ".",
+                        "cwd": "/tmp/old-workspace",
                         "timeoutSec": 30,
                     }
                 ],
@@ -389,7 +389,7 @@ def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp
                             "--guard-home C:\\old-guard --harness copilot --home C:\\old-home "
                             "--workspace C:\\old-workspace"
                         ),
-                        "cwd": ".",
+                        "cwd": "/tmp/old-workspace",
                         "timeoutSec": 30,
                     }
                 ],
@@ -405,6 +405,7 @@ def test_copilot_install_and_uninstall_match_inline_hooks_after_path_changes(tmp
     assert len(managed_payload["hooks"]["permissionRequest"]) == 1
     assert "--workspace /tmp/old-workspace" not in managed_payload["hooks"]["preToolUse"][0]["bash"]
     assert "--workspace" not in managed_payload["hooks"]["preToolUse"][0]["bash"]
+    assert managed_payload["hooks"]["preToolUse"][0]["cwd"] == str(context.guard_home)
 
     uninstall_payload = adapter.uninstall(context)
 

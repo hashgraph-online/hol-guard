@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from codex_plugin_scanner.checks.mcp_security import resolve_mcp_security_context, run_mcp_security_checks
+from codex_plugin_scanner.integrations import cisco_mcp_scanner as cisco_mcp_module
 from codex_plugin_scanner.integrations.cisco_mcp_scanner import run_cisco_mcp_scan
 from codex_plugin_scanner.integrations.cisco_skill_scanner import CiscoIntegrationStatus
 from codex_plugin_scanner.models import ScanOptions
@@ -157,6 +158,39 @@ def test_mcp_security_handles_loader_failures(monkeypatch, tmp_path: Path) -> No
 
     assert summary.status == CiscoIntegrationStatus.FAILED
     assert "loader boom" in summary.message
+
+
+def test_mcp_security_loads_mcpscanner_from_installed_distribution(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+    trusted_root = tmp_path / "trusted-site"
+    trusted_package = trusted_root / "mcpscanner"
+    trusted_package.mkdir(parents=True)
+    (trusted_package / "__init__.py").write_text(
+        "class YaraAnalyzer:\n    pass\n",
+        encoding="utf-8",
+    )
+    (plugin_dir / "mcpscanner.py").write_text(
+        "raise RuntimeError('workspace import hijack executed')\n",
+        encoding="utf-8",
+    )
+
+    class _FakeDistribution:
+        def __init__(self, package_root: Path) -> None:
+            self._package_root = package_root
+
+        def locate_file(self, path: str) -> Path:
+            return self._package_root / path
+
+    monkeypatch.setattr(
+        cisco_mcp_module.importlib_metadata,
+        "distribution",
+        lambda name: _FakeDistribution(trusted_root),
+    )
+
+    components = cisco_mcp_module._load_mcp_scanner_components()
+
+    assert components["YaraAnalyzer"].__module__ == "mcpscanner"
 
 
 def test_scan_plugin_includes_cisco_mcp_findings(monkeypatch, tmp_path: Path) -> None:

@@ -33,7 +33,7 @@ _DETECTABLE_HOOK_EVENTS = (
     "errorOccurred",
 )
 _MANAGED_HOOK_FILENAME = "hol-guard-copilot.json"
-_MANAGED_HOOK_COMMAND_PATTERNS = (
+_LEGACY_MANAGED_HOOK_PATTERNS = (
     re.compile(r'(^|["\s])-m["\s]+codex_plugin_scanner\.cli(["\s]|$)'),
     re.compile(r'(^|["\s])guard(["\s]|$)'),
     re.compile(r'(^|["\s])hook(["\s]|$)'),
@@ -42,10 +42,8 @@ _MANAGED_HOOK_COMMAND_PATTERNS = (
 
 
 def _hook_command_parts(context: HarnessContext, *, include_workspace: bool) -> tuple[str, ...]:
-    command = [
-        sys.executable,
-        "-m",
-        "codex_plugin_scanner.cli",
+    package_root = Path(__file__).resolve().parents[3]
+    guard_args = [
         "guard",
         "hook",
         "--guard-home",
@@ -54,10 +52,16 @@ def _hook_command_parts(context: HarnessContext, *, include_workspace: bool) -> 
         "copilot",
     ]
     if context.home_dir.resolve() != Path.home().resolve():
-        command.extend(["--home", str(context.home_dir)])
+        guard_args.extend(["--home", str(context.home_dir)])
     if include_workspace and context.workspace_dir is not None:
-        command.extend(["--workspace", str(context.workspace_dir)])
-    return tuple(command)
+        guard_args.extend(["--workspace", str(context.workspace_dir)])
+    code = (
+        "import sys;"
+        f"sys.path.insert(0, {str(package_root)!r});"
+        "from codex_plugin_scanner.cli import main;"
+        f"raise SystemExit(main({guard_args!r}))"
+    )
+    return (sys.executable, "-c", code)
 
 
 def _hook_shell_commands(context: HarnessContext, *, include_workspace: bool) -> tuple[str, str]:
@@ -71,7 +75,7 @@ def _hook_entry(context: HarnessContext, *, include_workspace: bool) -> dict[str
         "type": "command",
         "bash": bash_command,
         "powershell": powershell_command,
-        "cwd": ".",
+        "cwd": str(context.guard_home),
         "timeoutSec": 30,
     }
     env = merge_guard_launcher_env()
@@ -82,7 +86,14 @@ def _hook_entry(context: HarnessContext, *, include_workspace: bool) -> dict[str
 
 def _is_managed_hook_command(command: str) -> bool:
     normalized_command = command.lower()
-    return all(pattern.search(normalized_command) is not None for pattern in _MANAGED_HOOK_COMMAND_PATTERNS)
+    if all(pattern.search(normalized_command) is not None for pattern in _LEGACY_MANAGED_HOOK_PATTERNS):
+        return True
+    return (
+        "codex_plugin_scanner.cli" in normalized_command
+        and "copilot" in normalized_command
+        and "'guard'" in normalized_command
+        and "'hook'" in normalized_command
+    )
 
 
 def _is_managed_hook_entry(entry: object, bash_command: str, powershell_command: str) -> bool:

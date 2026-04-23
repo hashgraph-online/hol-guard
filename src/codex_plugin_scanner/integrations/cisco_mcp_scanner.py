@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import os
+import sys
 from collections.abc import Awaitable
 from dataclasses import dataclass
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 from threading import Thread
 from typing import TypeVar
@@ -70,9 +73,50 @@ def _build_summary(
 
 
 def _load_mcp_scanner_components() -> dict[str, object]:
-    from mcpscanner import YaraAnalyzer
+    module = _load_distribution_module("cisco-ai-mcp-scanner", "mcpscanner")
+    analyzer = getattr(module, "YaraAnalyzer", None)
+    if analyzer is None:
+        raise ImportError("cisco-ai-mcp-scanner does not expose mcpscanner.YaraAnalyzer")
+    return {"YaraAnalyzer": analyzer}
 
-    return {"YaraAnalyzer": YaraAnalyzer}
+
+def _load_distribution_module(distribution_name: str, module_name: str) -> object:
+    try:
+        distribution = importlib_metadata.distribution(distribution_name)
+    except importlib_metadata.PackageNotFoundError as exc:
+        raise ImportError(f"{distribution_name} is not installed") from exc
+    spec = _distribution_module_spec(distribution, module_name)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to resolve {module_name} from {distribution_name}")
+    module = importlib.util.module_from_spec(spec)
+    previous_module = sys.modules.get(module_name)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        if previous_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = previous_module
+    return module
+
+
+def _distribution_module_spec(distribution: object, module_name: str):
+    locate_file = getattr(distribution, "locate_file", None)
+    if not callable(locate_file):
+        return None
+    package_dir = Path(locate_file(module_name))
+    package_init = package_dir / "__init__.py"
+    if package_init.is_file():
+        return importlib.util.spec_from_file_location(
+            module_name,
+            package_init,
+            submodule_search_locations=[str(package_dir)],
+        )
+    module_file = Path(locate_file(f"{module_name}.py"))
+    if module_file.is_file():
+        return importlib.util.spec_from_file_location(module_name, module_file)
+    return None
 
 
 def _relative_path(plugin_dir: Path, file_path: Path) -> str:
