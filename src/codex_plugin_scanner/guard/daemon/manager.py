@@ -225,8 +225,8 @@ def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = Non
         if not isinstance(payload, dict) or not _looks_like_guard_daemon_state(payload, guard_home=guard_home):
             continue
         payload = {**payload, "guard_home": str(guard_home)}
-        _retire_guard_daemon_process(payload)
-        clear_guard_daemon_state(guard_home)
+        if _retire_guard_daemon_process(payload):
+            clear_guard_daemon_state(guard_home)
     for pid, guard_home, elapsed_seconds in _running_ephemeral_guard_daemon_processes():
         if elapsed_seconds < _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS:
             continue
@@ -238,8 +238,8 @@ def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = Non
             continue
         if not _ephemeral_guard_home_is_inactive(guard_home, fallback_age_seconds=elapsed_seconds):
             continue
-        _retire_guard_daemon_pid(pid, expected_guard_home=guard_home)
-        clear_guard_daemon_state(guard_home)
+        if _retire_guard_daemon_pid(pid, expected_guard_home=guard_home):
+            clear_guard_daemon_state(guard_home)
 
 
 def _ephemeral_guard_daemon_state_paths(temp_root: Path) -> list[Path]:
@@ -435,36 +435,37 @@ def _guard_daemon_pid_matches_command(pid: int, expected_guard_home: Path | None
         return command_guard_home == expected_guard_home
 
 
-def _retire_guard_daemon_process(payload: dict[str, object]) -> None:
+def _retire_guard_daemon_process(payload: dict[str, object]) -> bool:
     pid = payload.get("pid")
     if not isinstance(pid, int) or pid <= 0:
-        return
+        return False
     guard_home = payload.get("guard_home")
     expected_guard_home = Path(guard_home) if isinstance(guard_home, str) and guard_home.strip() else None
-    _retire_guard_daemon_pid(pid, expected_guard_home=expected_guard_home)
+    return _retire_guard_daemon_pid(pid, expected_guard_home=expected_guard_home)
 
 
-def _retire_guard_daemon_pid(pid: int, *, expected_guard_home: Path | None = None) -> None:
+def _retire_guard_daemon_pid(pid: int, *, expected_guard_home: Path | None = None) -> bool:
     if not _guard_daemon_pid_is_running(pid):
-        return
+        return True
     if not _guard_daemon_pid_matches_command(pid, expected_guard_home):
-        return
+        return False
     try:
         os.kill(pid, signal.SIGTERM)
     except OSError:
-        return
+        return True
     deadline = time.monotonic() + 1.0
     while time.monotonic() < deadline:
         if not _guard_daemon_pid_is_running(pid):
-            return
+            return True
         time.sleep(GUARD_DAEMON_POLL_INTERVAL_SECONDS)
     sigkill = getattr(signal, "SIGKILL", None)
     if sigkill is None:
-        return
+        return False
     try:
         os.kill(pid, sigkill)
     except OSError:
-        return
+        return True
+    return not _guard_daemon_pid_is_running(pid)
 
 
 def _wait_for_guard_daemon_url(

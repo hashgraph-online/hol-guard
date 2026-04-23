@@ -190,6 +190,7 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
         return SimpleNamespace(poll=lambda: None)
 
     monkeypatch.delenv("PYTHONPATH", raising=False)
+    monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
     monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _guard_home: None)
     monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5412])
@@ -261,14 +262,23 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
         lambda guard_home: 60.0 if guard_home == stale_guard_home else None,
     )
     monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    pid_running = {"value": True}
+
+    def fake_pid_is_running(_pid):
+        return pid_running["value"]
+
+    def fake_kill(pid, _signal):
+        killed.append(pid)
+        pid_running["value"] = False
+
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", fake_pid_is_running)
     monkeypatch.setattr(
         daemon_manager_module,
         "_guard_daemon_pid_matches_command",
         lambda _pid, expected_guard_home=None: True,
     )
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(daemon_manager_module.os, "kill", lambda pid, _signal: killed.append(pid))
+    monkeypatch.setattr(daemon_manager_module.os, "kill", fake_kill)
     monkeypatch.setattr(
         daemon_manager_module.subprocess,
         "Popen",
@@ -278,7 +288,7 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
     url = daemon_manager_module.ensure_guard_daemon(guard_home)
 
     assert url == "http://127.0.0.1:5413"
-    assert killed == [11111, 11111]
+    assert killed == [11111]
     assert json.loads(stale_state_path.read_text(encoding="utf-8")) == {}
     assert json.loads(fresh_state_path.read_text(encoding="utf-8"))["pid"] == 22222
 
@@ -368,6 +378,52 @@ def test_ensure_guard_daemon_does_not_clobber_unowned_ephemeral_state_files(tmp_
     assert foreign_state_path.read_text(encoding="utf-8") == '"not-json-dict"'
 
 
+def test_ensure_guard_daemon_keeps_stale_state_when_pid_no_longer_matches_guard_home(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    stale_guard_home = tmp_path / "pytest-of-user" / "pytest-8" / "test-reused-pid" / "home"
+    stale_guard_home.mkdir(parents=True)
+    stale_state_path = stale_guard_home / "daemon-state.json"
+    stale_payload = {
+        "pid": 66666,
+        "guard_home": str(stale_guard_home),
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "source_root": daemon_manager_module._current_guard_daemon_source_root(),
+        "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
+    }
+    stale_state_path.write_text(json.dumps(stale_payload), encoding="utf-8")
+    launched_commands: list[list[str]] = []
+
+    def fake_load_guard_daemon_url(_guard_home):
+        if launched_commands:
+            return "http://127.0.0.1:5417"
+        return None
+
+    monkeypatch.setattr(daemon_manager_module, "_LAST_EPHEMERAL_REAP_AT", 0.0)
+    monkeypatch.setattr(daemon_manager_module.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", fake_load_guard_daemon_url)
+    monkeypatch.setattr(daemon_manager_module, "_candidate_ports", lambda _guard_home: [5417])
+    monkeypatch.setattr(daemon_manager_module, "_state_path_age_seconds", lambda _path: 60.0)
+    monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", lambda _guard_home: 60.0)
+    monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, expected_guard_home=None: False,
+    )
+    monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        daemon_manager_module.subprocess,
+        "Popen",
+        lambda command, **_kwargs: launched_commands.append(list(command)) or SimpleNamespace(),
+    )
+
+    url = daemon_manager_module.ensure_guard_daemon(guard_home)
+
+    assert url == "http://127.0.0.1:5417"
+    assert json.loads(stale_state_path.read_text(encoding="utf-8")) == stale_payload
+
+
 def test_ensure_guard_daemon_reaps_stale_ephemeral_processes_without_state_file(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     stale_guard_home = tmp_path / "pytest-of-user" / "pytest-9" / "test-stale" / "home"
@@ -391,14 +447,23 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_processes_without_state_file(
         lambda: [(33333, stale_guard_home, 60.0)],
     )
     monkeypatch.setattr(daemon_manager_module, "_runtime_state_age_seconds", lambda _guard_home: None)
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    pid_running = {"value": True}
+
+    def fake_pid_is_running(_pid):
+        return pid_running["value"]
+
+    def fake_kill(pid, _signal):
+        killed.append(pid)
+        pid_running["value"] = False
+
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", fake_pid_is_running)
     monkeypatch.setattr(
         daemon_manager_module,
         "_guard_daemon_pid_matches_command",
         lambda _pid, expected_guard_home=None: True,
     )
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(daemon_manager_module.os, "kill", lambda pid, _signal: killed.append(pid))
+    monkeypatch.setattr(daemon_manager_module.os, "kill", fake_kill)
     monkeypatch.setattr(
         daemon_manager_module.subprocess,
         "Popen",
@@ -408,7 +473,7 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_processes_without_state_file(
     url = daemon_manager_module.ensure_guard_daemon(guard_home)
 
     assert url == "http://127.0.0.1:5414"
-    assert killed == [33333, 33333]
+    assert killed == [33333]
     assert json.loads((stale_guard_home / "daemon-state.json").read_text(encoding="utf-8")) == {}
 
 
@@ -427,6 +492,7 @@ def test_retire_guard_daemon_process_skips_recycled_pid_for_different_guard_home
     )
     monkeypatch.setattr(daemon_manager_module.os, "kill", lambda pid, _signal: killed.append(pid))
 
-    daemon_manager_module._retire_guard_daemon_process(payload)
+    retired = daemon_manager_module._retire_guard_daemon_process(payload)
 
+    assert retired is False
     assert killed == []
