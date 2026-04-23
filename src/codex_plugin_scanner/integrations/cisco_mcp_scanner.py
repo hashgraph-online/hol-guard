@@ -9,6 +9,7 @@ import sys
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from importlib import metadata as importlib_metadata
+from importlib.metadata import Distribution
 from pathlib import Path
 from threading import Thread
 from typing import TypeVar
@@ -102,7 +103,7 @@ def _load_distribution_module(distribution_name: str, module_name: str) -> objec
     return module
 
 
-def _distribution_module_spec(distribution: importlib_metadata.Distribution, module_name: str):
+def _distribution_module_spec(distribution: Distribution, module_name: str):
     files = distribution.files or ()
     package_init_relative = f"{module_name}/__init__.py"
     module_relative = f"{module_name}.py"

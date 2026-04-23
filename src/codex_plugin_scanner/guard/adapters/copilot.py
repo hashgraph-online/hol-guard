@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import importlib.util
 import json
 import os
 import re
@@ -40,6 +42,7 @@ _LEGACY_MANAGED_HOOK_PATTERNS = (
     re.compile(r'(^|["\s])hook(["\s]|$)'),
     re.compile(r'--harness(?:["\s=]+)copilot(["\s]|$)'),
 )
+_INLINE_GUARD_ARGS_PATTERN = re.compile(r"json\.loads\((?P<payload>'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")\)")
 
 
 def _hook_command_parts(context: HarnessContext, *, include_workspace: bool) -> tuple[str, ...]:
@@ -100,12 +103,8 @@ def _is_managed_hook_command(command: str) -> bool:
     if not executable.startswith("python") or tokens[1] != "-c":
         return False
     inline_code = tokens[2]
-    quoted_values = {match.group(2).lower() for match in re.finditer(r"([\"'])([^\"']+)\1", inline_code)}
-    return (
-        "codex_plugin_scanner.cli" in inline_code
-        and "main(" in inline_code
-        and {"guard", "hook", "--harness", "copilot"}.issubset(quoted_values)
-    )
+    inline_args = _inline_guard_args(inline_code)
+    return "codex_plugin_scanner.cli" in inline_code and _argv_targets_copilot(inline_args)
 
 
 def _trusted_pythonpath_entries() -> list[str]:
@@ -115,7 +114,7 @@ def _trusted_pythonpath_entries() -> list[str]:
         for entry in launcher_env.get("PYTHONPATH", "").split(os.pathsep)
         if entry.strip()
     ]
-    package_root = Path(__file__).resolve().parents[3]
+    package_root = _trusted_package_root()
     cli_entrypoint = package_root / "codex_plugin_scanner" / "cli.py"
     if not cli_entrypoint.is_file():
         raise RuntimeError(f"Guard could not locate the trusted CLI entrypoint at {cli_entrypoint}")
@@ -123,6 +122,45 @@ def _trusted_pythonpath_entries() -> list[str]:
     if package_root_str not in path_entries:
         path_entries.insert(0, package_root_str)
     return path_entries
+
+
+def _trusted_package_root() -> Path:
+    spec = importlib.util.find_spec("codex_plugin_scanner")
+    if spec is None:
+        raise RuntimeError("Guard could not locate the codex_plugin_scanner package")
+    if spec.submodule_search_locations:
+        return Path(next(iter(spec.submodule_search_locations))).resolve().parent
+    if spec.origin is None:
+        raise RuntimeError("Guard could not determine the codex_plugin_scanner package root")
+    return Path(spec.origin).resolve().parent.parent
+
+
+def _inline_guard_args(inline_code: str) -> tuple[str, ...]:
+    match = _INLINE_GUARD_ARGS_PATTERN.search(inline_code)
+    if match is None:
+        return ()
+    try:
+        payload = ast.literal_eval(match.group("payload"))
+    except (SyntaxError, ValueError):
+        return ()
+    if not isinstance(payload, str):
+        return ()
+    try:
+        guard_args = json.loads(payload)
+    except json.JSONDecodeError:
+        return ()
+    if not isinstance(guard_args, list) or any(not isinstance(item, str) for item in guard_args):
+        return ()
+    return tuple(item.lower() for item in guard_args)
+
+
+def _argv_targets_copilot(argv: tuple[str, ...]) -> bool:
+    for index, token in enumerate(argv):
+        if token == "--harness" and index + 1 < len(argv) and argv[index + 1] == "copilot":
+            return "guard" in argv and "hook" in argv
+        if token.startswith("--harness=") and token.split("=", 1)[1] == "copilot":
+            return "guard" in argv and "hook" in argv
+    return False
 
 
 def _is_managed_hook_entry(entry: object, bash_command: str, powershell_command: str) -> bool:
