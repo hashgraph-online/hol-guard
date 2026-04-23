@@ -4214,6 +4214,44 @@ def test_guard_hook_allows_generic_claude_user_prompt_submit_for_overridable_pro
     assert output == ""
 
 
+def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use the Read tool to inspect ./.env and report whether it contains OPENROUTER_CANARY.",
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--json",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert output["recorded"] is True
+    assert output["policy_action"] == "require-reapproval"
+    assert output["artifact_type"] == "prompt_request"
+    assert output["artifact_id"].startswith("claude-code:session:prompt")
+    assert output["risk_summary"]
+
+
 def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continue_guidance(
     tmp_path,
     capsys,

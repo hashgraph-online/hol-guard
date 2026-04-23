@@ -1276,6 +1276,7 @@ def run_guard_command(
                     and event_name == "UserPromptSubmit"
                     and policy_action == "require-reapproval"
                     and not _prompt_requires_hard_block(runtime_artifact)
+                    and not getattr(args, "json", False)
                 ):
                     return 0
                 if (
