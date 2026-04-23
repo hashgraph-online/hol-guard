@@ -29,6 +29,8 @@ def expected_github_api_base_url(github_server_url: str = "https://github.com") 
         return "https://api.github.com"
     if parsed.netloc == "github.com":
         return "https://api.github.com"
+    if parsed.netloc.endswith(".ghe.com"):
+        return f"https://api.{parsed.netloc}"
     return f"https://{parsed.netloc}/api/v3"
 
 

@@ -274,6 +274,16 @@ def test_normalize_github_api_base_url_accepts_matching_enterprise_api() -> None
     )
 
 
+def test_normalize_github_api_base_url_accepts_matching_ghe_com_api() -> None:
+    assert (
+        normalize_github_api_base_url(
+            "https://api.octocorp.ghe.com",
+            github_server_url="https://octocorp.ghe.com",
+        )
+        == "https://api.octocorp.ghe.com"
+    )
+
+
 def test_normalize_github_api_base_url_rejects_untrusted_host() -> None:
     try:
         normalize_github_api_base_url("https://evil.example/api/v3")
