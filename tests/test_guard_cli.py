@@ -2195,9 +2195,9 @@ args = ["workspace-skill.js", "--changed"]
         capsys.readouterr()
 
         def _fail_if_called(*args, **kwargs):
-            raise AssertionError("ensure_guard_daemon should not be called during claude uninstall")
+            raise AssertionError("guard_daemon_url_for_home should not be called during claude uninstall")
 
-        monkeypatch.setattr(claude_adapter_module, "ensure_guard_daemon", _fail_if_called)
+        monkeypatch.setattr(claude_adapter_module, "guard_daemon_url_for_home", _fail_if_called)
 
         uninstall_rc = main(
             [

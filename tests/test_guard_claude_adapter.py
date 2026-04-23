@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from codex_plugin_scanner.guard.adapters import claude_code, get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_TOOL_MATCHER, ClaudeCodeHarnessAdapter
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -93,6 +93,7 @@ def test_claude_install_bakes_current_source_root_into_session_start_command(tmp
 
     assert install_output["active"] is True
     assert "ensure_guard_daemon" in hook_command
+    assert "refresh_installed_hook_urls" in hook_command
     assert "hookEventName" in hook_command
     assert "SessionStart" in hook_command
     assert "HOL Guard protection is active for this workspace." in hook_command
@@ -103,20 +104,10 @@ def test_claude_install_bakes_current_source_root_into_session_start_command(tmp
 def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idempotent(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
-    expected_hook_url = (
-        "http://127.0.0.1:5371/v1/hooks/claude-code?"
-        f"guard-home={quote(str(context.guard_home), safe='')}"
-        f"&home={quote(str(context.home_dir), safe='')}"
-        f"&workspace={quote(str(context.workspace_dir), safe='')}"
-    )
+    expected_hook_url = adapter._hook_http_url(context)
 
-    original_ensure_guard_daemon = claude_code.ensure_guard_daemon
-    claude_code.ensure_guard_daemon = lambda _guard_home: "http://127.0.0.1:5371"
-    try:
-        adapter.install(context)
-        adapter.install(context)
-    finally:
-        claude_code.ensure_guard_daemon = original_ensure_guard_daemon
+    adapter.install(context)
+    adapter.install(context)
 
     settings_path = context.workspace_dir / ".claude" / "settings.local.json"
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -209,12 +200,7 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
         },
     )
 
-    original_ensure_guard_daemon = claude_code.ensure_guard_daemon
-    claude_code.ensure_guard_daemon = lambda _guard_home: "http://127.0.0.1:5371"
-    try:
-        adapter.install(context)
-    finally:
-        claude_code.ensure_guard_daemon = original_ensure_guard_daemon
+    adapter.install(context)
 
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     installed_hook_types = [
@@ -230,6 +216,54 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
     ]
 
     assert installed_hook_types == ["http", "http", "http", "http"]
+
+
+def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    _write_json(
+        settings_path,
+        {
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": CLAUDE_GUARD_TOOL_MATCHER,
+                        "hooks": [
+                            {
+                                "type": "http",
+                                "url": "http://127.0.0.1:5371/v1/hooks/claude-code?guard-home=%2Fold",
+                                "timeout": 30,
+                            }
+                        ],
+                    }
+                ],
+                "PostToolUse": [],
+                "UserPromptSubmit": [],
+                "Notification": [],
+            }
+        },
+    )
+
+    original_guard_daemon_url_for_home = claude_code.guard_daemon_url_for_home
+    claude_code.guard_daemon_url_for_home = lambda _guard_home: "http://127.0.0.1:5888"
+    try:
+        adapter.refresh_runtime_hook_urls(context)
+    finally:
+        claude_code.guard_daemon_url_for_home = original_guard_daemon_url_for_home
+
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    expected_hook_url = (
+        "http://127.0.0.1:5888/v1/hooks/claude-code?"
+        f"guard-home={quote(str(context.guard_home), safe='')}"
+        f"&home={quote(str(context.home_dir), safe='')}"
+        f"&workspace={quote(str(context.workspace_dir), safe='')}"
+    )
+
+    assert payload["hooks"]["PreToolUse"][0]["hooks"][0]["url"] == expected_hook_url
+    assert payload["hooks"]["PostToolUse"][0]["hooks"][0]["url"] == expected_hook_url
+    assert payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["url"] == expected_hook_url
+    assert payload["hooks"]["Notification"][0]["hooks"][0]["url"] == expected_hook_url
 
 
 def test_claude_legacy_guard_url_detection_only_matches_local_guard_urls():
@@ -262,15 +296,10 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
         guard_home=tmp_path / "different-guard-home",
     )
     adapter = ClaudeCodeHarnessAdapter()
+    expected_hook_url = adapter._hook_http_url(changed_context)
 
-    original_ensure_guard_daemon = claude_code.ensure_guard_daemon
-    urls = iter(("http://127.0.0.1:5371", "http://127.0.0.1:5372"))
-    claude_code.ensure_guard_daemon = lambda _guard_home: next(urls)
-    try:
-        adapter.install(initial_context)
-        adapter.install(changed_context)
-    finally:
-        claude_code.ensure_guard_daemon = original_ensure_guard_daemon
+    adapter.install(initial_context)
+    adapter.install(changed_context)
 
     settings_path = initial_context.workspace_dir / ".claude" / "settings.local.json"
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -290,7 +319,7 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
     assert all(len(entry["hooks"]) == 1 for entry in session_start)
     assert all(str(changed_context.guard_home) in command for command in hook_commands)
     assert all(str(initial_context.guard_home) not in command for command in hook_commands)
-    assert all("127.0.0.1:5372" in url for url in operational_urls)
+    assert all(url == expected_hook_url for url in operational_urls)
     assert all(quote(str(changed_context.guard_home), safe="") in url for url in operational_urls)
     assert all(quote(str(initial_context.guard_home), safe="") not in url for url in operational_urls)
 
@@ -347,12 +376,7 @@ def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
         },
     )
 
-    original_ensure_guard_daemon = claude_code.ensure_guard_daemon
-    claude_code.ensure_guard_daemon = lambda _guard_home: "http://127.0.0.1:5371"
-    try:
-        adapter.install(context)
-    finally:
-        claude_code.ensure_guard_daemon = original_ensure_guard_daemon
+    adapter.install(context)
 
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     pre_tool_use = payload["hooks"]["PreToolUse"]
