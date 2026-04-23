@@ -20,7 +20,7 @@ def resolves_within_root(root: Path, candidate: Path, *, require_exists: bool = 
     try:
         resolved_root = root.resolve()
         resolved_candidate = candidate.resolve()
-    except OSError:
+    except (OSError, RuntimeError):
         return False
     try:
         resolved_candidate.relative_to(resolved_root)
