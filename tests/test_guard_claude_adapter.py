@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import get_adapter
+from codex_plugin_scanner.guard.adapters import claude_code, get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 
@@ -203,6 +203,17 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
     ]
 
     assert installed_hook_types == ["command", "command", "command", "command"]
+
+
+def test_claude_legacy_guard_url_detection_only_matches_local_guard_urls():
+    assert (
+        claude_code._is_guard_hook_url(
+            "http://127.0.0.1:5371/v1/hooks/claude-code?guard-home=%2Fold&workspace=%2Fworkspace"
+        )
+        is True
+    )
+    assert claude_code._is_guard_hook_url("https://hol.org/v1/hooks/claude-code") is False
+    assert claude_code._is_guard_hook_url("http://localhost:5371/v1/hooks/claude-code") is False
 
 
 def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):

@@ -6,6 +6,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import urllib.parse
 from collections.abc import Callable
 from pathlib import Path
 
@@ -41,7 +42,10 @@ def _is_guard_hook_command(command: object) -> bool:
 
 
 def _is_guard_hook_url(url: object) -> bool:
-    return isinstance(url, str) and "/v1/hooks/claude-code" in url
+    if not isinstance(url, str):
+        return False
+    parsed = urllib.parse.urlparse(url)
+    return parsed.scheme == "http" and parsed.hostname == "127.0.0.1" and parsed.path == "/v1/hooks/claude-code"
 
 
 def _is_guard_hook_handler(handler: object) -> bool:
