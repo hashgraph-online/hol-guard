@@ -623,9 +623,7 @@ def sync_claude_workspace_hook_urls(guard_home: Path, home_dir: Path, workspace_
                 refreshed_entries.append(entry)
                 continue
             refreshed_handlers = [
-                expected_handler
-                if isinstance(handler, dict) and _is_guard_hook_handler(handler)
-                else handler
+                expected_handler if isinstance(handler, dict) and _is_guard_hook_handler(handler) else handler
                 for handler in handlers
             ]
             if refreshed_handlers != handlers:
