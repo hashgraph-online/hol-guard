@@ -15,6 +15,7 @@ import {
   fetchReceipts,
   fetchRequest,
   fetchRuntimeSnapshot,
+  guardAwareHref,
   resolveRequest
 } from "./guard-api";
 import { ApprovalCenterLayout } from "./approval-center-layout";
@@ -67,7 +68,7 @@ function usePathname(): string {
 }
 
 function navigate(pathname: string): void {
-  window.history.pushState({}, "", pathname);
+  window.history.pushState({}, "", guardAwareHref(pathname));
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 

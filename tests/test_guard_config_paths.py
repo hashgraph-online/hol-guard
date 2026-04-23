@@ -234,7 +234,7 @@ def test_resolve_guard_home_keeps_canonical_state_when_legacy_only_has_credentia
     assert resolve_guard_home() == canonical_home
 
 
-def test_load_guard_config_prefers_hol_guard_workspace_override(tmp_path):
+def test_load_guard_config_ignores_workspace_default_action_overrides(tmp_path):
     guard_home = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     guard_home.mkdir(parents=True, exist_ok=True)
@@ -244,10 +244,10 @@ def test_load_guard_config_prefers_hol_guard_workspace_override(tmp_path):
 
     config = load_guard_config(guard_home, workspace_dir)
 
-    assert config.default_action == "block"
+    assert config.default_action == "warn"
 
 
-def test_load_guard_config_merges_nested_workspace_tables_across_legacy_and_hol_guard_files(tmp_path):
+def test_load_guard_config_ignores_workspace_action_tables_across_legacy_and_hol_guard_files(tmp_path):
     guard_home = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     guard_home.mkdir(parents=True, exist_ok=True)
@@ -274,16 +274,23 @@ def test_load_guard_config_merges_nested_workspace_tables_across_legacy_and_hol_
 
     config = load_guard_config(guard_home, workspace_dir)
 
-    assert config.harness_actions == {
-        "codex": "allow",
-        "claude-code": "block",
-    }
+    assert config.harness_actions == {}
 
 
-def test_load_guard_config_new_action_alias_overrides_legacy_alias(tmp_path):
+def test_load_guard_config_preserves_home_action_aliases_when_workspace_tries_to_override(tmp_path):
     guard_home = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     guard_home.mkdir(parents=True, exist_ok=True)
+    _write_text(
+        guard_home / "config.toml",
+        "\n".join(
+            [
+                "[harnesses.codex]",
+                'action = "review"',
+            ]
+        )
+        + "\n",
+    )
     _write_text(
         workspace_dir / ".ai-plugin-scanner-guard.toml",
         "\n".join(
@@ -307,7 +314,7 @@ def test_load_guard_config_new_action_alias_overrides_legacy_alias(tmp_path):
 
     config = load_guard_config(guard_home, workspace_dir)
 
-    assert config.harness_actions == {"codex": "allow"}
+    assert config.harness_actions == {"codex": "review"}
 
 
 def test_run_bridge_uses_resolved_guard_home_by_default(tmp_path, monkeypatch):

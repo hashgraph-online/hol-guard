@@ -4,11 +4,54 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import threading
 from pathlib import Path
 from types import SimpleNamespace
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
+
+
+def test_write_guard_daemon_state_keeps_auth_token_out_of_state_file(tmp_path):
+    guard_home = tmp_path / "guard-home"
+
+    daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "secret-token")
+
+    state_path = daemon_manager_module._state_path(guard_home)
+    token_path = daemon_manager_module._auth_token_path(guard_home)
+    state_payload = json.loads(state_path.read_text(encoding="utf-8"))
+
+    assert state_payload["port"] == 4781
+    assert "auth_token" not in state_payload
+    assert daemon_manager_module.load_guard_daemon_auth_token(guard_home) == "secret-token"
+    assert token_path.read_text(encoding="utf-8") == "secret-token"
+    assert stat.S_IMODE(state_path.stat().st_mode) & 0o077 == 0
+    assert stat.S_IMODE(token_path.stat().st_mode) & 0o077 == 0
+
+
+def test_clear_guard_daemon_state_removes_auth_token_file(tmp_path):
+    guard_home = tmp_path / "guard-home"
+
+    daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "secret-token")
+    daemon_manager_module.clear_guard_daemon_state(guard_home)
+
+    assert json.loads(daemon_manager_module._state_path(guard_home).read_text(encoding="utf-8")) == {}
+    assert not daemon_manager_module._auth_token_path(guard_home).exists()
+
+
+def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    fchmod_calls: list[tuple[int, int]] = []
+
+    def fake_fchmod(descriptor: int, mode: int) -> None:
+        fchmod_calls.append((descriptor, mode))
+
+    monkeypatch.setattr(daemon_manager_module.os, "fchmod", fake_fchmod)
+
+    daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "secret-token")
+
+    assert len(fchmod_calls) == 2
+    assert all(mode == 0o600 for _, mode in fchmod_calls)
 
 
 def test_ensure_guard_daemon_reuses_inflight_pid_before_respawning(tmp_path, monkeypatch):

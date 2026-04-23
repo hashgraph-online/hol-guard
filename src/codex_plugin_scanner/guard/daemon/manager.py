@@ -15,7 +15,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
@@ -31,6 +31,8 @@ GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
 _EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_MAX_STATES = 512
+_GUARD_DAEMON_PRIVATE_FILE_MODE = 0o600
+_GUARD_DAEMON_PRIVATE_DIR_MODE = 0o700
 
 _START_LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS_GUARD = threading.Lock()
@@ -130,6 +132,13 @@ def load_guard_daemon_url(guard_home: Path) -> str | None:
 
 
 def load_guard_daemon_auth_token(guard_home: Path) -> str | None:
+    token_path = _auth_token_path(guard_home)
+    try:
+        token = token_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        token = ""
+    if token:
+        return token
     payload = _load_state(guard_home)
     if payload is None:
         return None
@@ -139,13 +148,13 @@ def load_guard_daemon_auth_token(guard_home: Path) -> str | None:
 
 def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str) -> None:
     state_path = _state_path(guard_home)
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(
+    _ensure_private_directory(state_path.parent)
+    _write_private_text(
+        state_path,
         json.dumps(
             {
                 "guard_home": str(guard_home),
                 "port": port,
-                "auth_token": auth_token,
                 "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
                 "package_version": __version__,
                 "source_root": _current_guard_daemon_source_root(),
@@ -154,14 +163,20 @@ def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str) -> No
             },
             indent=2,
         ),
-        encoding="utf-8",
     )
+    _write_private_text(_auth_token_path(guard_home), auth_token)
 
 
 def clear_guard_daemon_state(guard_home: Path) -> None:
     state_path = _state_path(guard_home)
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text("{}", encoding="utf-8")
+    _ensure_private_directory(state_path.parent)
+    _write_private_text(state_path, "{}")
+    try:
+        _auth_token_path(guard_home).unlink()
+    except FileNotFoundError:
+        return
+    except OSError:
+        return
 
 
 def _load_state(guard_home: Path) -> dict[str, object] | None:
@@ -196,6 +211,34 @@ def _looks_like_guard_daemon_state(payload: dict[str, object], *, guard_home: Pa
 
 def _state_path(guard_home: Path) -> Path:
     return guard_home / "daemon-state.json"
+
+
+def _auth_token_path(guard_home: Path) -> Path:
+    return guard_home / "daemon-auth-token"
+
+
+def _ensure_private_directory(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    _set_private_mode(path, _GUARD_DAEMON_PRIVATE_DIR_MODE)
+
+
+def _write_private_text(path: Path, text: str) -> None:
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, _GUARD_DAEMON_PRIVATE_FILE_MODE)
+    if os.name != "nt" and hasattr(os, "fchmod"):
+        with suppress(OSError):
+            os.fchmod(descriptor, _GUARD_DAEMON_PRIVATE_FILE_MODE)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    _set_private_mode(path, _GUARD_DAEMON_PRIVATE_FILE_MODE)
+
+
+def _set_private_mode(path: Path, mode: int) -> None:
+    if os.name == "nt":
+        return
+    try:
+        os.chmod(path, mode)
+    except OSError:
+        return
 
 
 def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = None) -> None:

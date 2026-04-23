@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { guardAwareHref } from "./guard-api";
+
 const footerSections = [
   {
     title: "Guard",
@@ -48,7 +50,7 @@ export function ShellHeader(props: {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex min-h-[64px] items-center justify-between gap-4 py-2">
           <div className="flex min-w-0 items-center gap-4 sm:gap-6">
-            <a href="/" className="flex items-center gap-3 no-underline hover:no-underline">
+            <a href={guardAwareHref("/")} className="flex items-center gap-3 no-underline hover:no-underline">
               <img src="/brand/Logo_Whole.png" alt="HOL" className="h-8 w-auto sm:h-9" />
             </a>
             <nav className="flex items-center gap-1" aria-label="Primary">
@@ -178,11 +180,11 @@ export function ActionButton(props: {
   const className = actionButtonClass(props.variant);
   if (props.href) {
     return (
-      <a
-        href={props.href}
-        target={props.href.startsWith("https://") ? "_blank" : undefined}
-        rel={props.href.startsWith("https://") ? "noreferrer" : undefined}
-        className={className}
+        <a
+          href={guardAwareHref(props.href)}
+          target={props.href.startsWith("https://") ? "_blank" : undefined}
+          rel={props.href.startsWith("https://") ? "noreferrer" : undefined}
+          className={className}
       >
         {props.children}
       </a>
@@ -198,7 +200,7 @@ export function ActionButton(props: {
 function NavPill(props: { href: string; children: ReactNode; active?: boolean; external?: boolean }) {
   return (
     <a
-      href={props.href}
+      href={props.external ? props.href : guardAwareHref(props.href)}
       target={props.external ? "_blank" : undefined}
       rel={props.external ? "noreferrer" : undefined}
       className={`inline-flex min-h-11 items-center rounded-md px-3 py-1.5 font-medium no-underline transition-colors duration-200 ${

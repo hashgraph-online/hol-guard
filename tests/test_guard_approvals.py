@@ -35,6 +35,13 @@ def _write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _guard_json_headers(auth_token: str | None = None) -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    if auth_token is not None:
+        headers["X-Guard-Token"] = auth_token
+    return headers
+
+
 def _build_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:
     _write_text(
         home_dir / ".codex" / "config.toml",
@@ -713,7 +720,7 @@ class TestGuardApprovals:
             request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/approvals/req-456/decision",
                 data=json.dumps({"action": "allow", "scope": "artifact", "reason": "approved"}).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers=_guard_json_headers(daemon._server.auth_token),
                 method="POST",
             )
             with urllib.request.urlopen(request, timeout=5) as response:
@@ -956,7 +963,7 @@ class TestGuardApprovals:
                         "reason": "saved from api",
                     }
                 ).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers=_guard_json_headers(daemon._server.auth_token),
                 method="POST",
             )
             with urllib.request.urlopen(policy_request, timeout=5) as response:
@@ -1016,7 +1023,7 @@ class TestGuardApprovals:
                         "action": "deny",
                     }
                 ).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers=_guard_json_headers(daemon._server.auth_token),
                 method="POST",
             )
             try:
@@ -1047,7 +1054,7 @@ class TestGuardApprovals:
                         "action": "allow",
                     }
                 ).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers=_guard_json_headers(daemon._server.auth_token),
                 method="POST",
             )
             try:
@@ -1062,6 +1069,68 @@ class TestGuardApprovals:
 
         assert status == 400
         assert payload["error"] == "missing_scope_target"
+
+    def test_guard_daemon_policy_upsert_requires_auth_token(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
+                data=json.dumps(
+                    {
+                        "harness": "codex",
+                        "scope": "harness",
+                        "action": "allow",
+                    }
+                ).encode("utf-8"),
+                headers=_guard_json_headers(),
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for missing auth token")
+        finally:
+            daemon.stop()
+
+        assert status == 401
+        assert payload["error"] == "unauthorized"
+
+    def test_guard_daemon_policy_upsert_rejects_non_ascii_auth_token(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/decisions",
+                data=json.dumps(
+                    {
+                        "harness": "codex",
+                        "scope": "harness",
+                        "action": "allow",
+                    }
+                ).encode("utf-8"),
+                headers=_guard_json_headers("ñ"),
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for malformed auth token")
+        finally:
+            daemon.stop()
+
+        assert status == 401
+        assert payload["error"] == "unauthorized"
 
     def test_guard_daemon_rejects_missing_decision_fields(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -1089,7 +1158,7 @@ class TestGuardApprovals:
             request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/approvals/req-400/decision",
                 data=json.dumps({"action": "allow"}).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers=_guard_json_headers(daemon._server.auth_token),
                 method="POST",
             )
             try:
@@ -1131,7 +1200,7 @@ class TestGuardApprovals:
             request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/requests/req-workspace-http/approve",
                 data=json.dumps({"scope": "workspace"}).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers=_guard_json_headers(daemon._server.auth_token),
                 method="POST",
             )
             try:
@@ -1146,6 +1215,71 @@ class TestGuardApprovals:
 
         assert status == 400
         assert "requires --workspace" in payload["error"]
+
+    def test_guard_daemon_approve_route_requires_auth_token(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-auth-http",
+                harness="codex",
+                artifact_id="codex:project:workspace_skill",
+                artifact_name="workspace_skill",
+                artifact_hash="hash-auth",
+                policy_action="require-reapproval",
+                recommended_scope="artifact",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                review_command="hol-guard approvals approve req-auth-http",
+                approval_url="http://127.0.0.1/pending",
+            ),
+            "2026-04-11T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests/req-auth-http/approve",
+                data=json.dumps({"scope": "artifact"}).encode("utf-8"),
+                headers=_guard_json_headers(),
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for missing auth token")
+        finally:
+            daemon.stop()
+
+        assert status == 401
+        assert payload["error"] == "unauthorized"
+
+    def test_guard_daemon_event_stream_rejects_non_ascii_query_token(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/events/stream?token={urllib.parse.quote('ñ')}",
+                method="GET",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                payload = json.loads(error.read().decode("utf-8"))
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for malformed query token")
+        finally:
+            daemon.stop()
+
+        assert status == 401
+        assert payload["error"] == "unauthorized"
 
     def test_guard_daemon_ignores_invalid_json_body(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -1222,7 +1356,7 @@ class TestGuardApprovals:
                     }
                 ).encode("utf-8"),
                 headers={
-                    "Content-Type": "application/json",
+                    **_guard_json_headers(daemon._server.auth_token),
                     "Origin": "https://evil.example",
                 },
                 method="POST",
@@ -1256,7 +1390,7 @@ class TestGuardApprovals:
                     }
                 ).encode("utf-8"),
                 headers={
-                    "Content-Type": "application/json",
+                    **_guard_json_headers(daemon._server.auth_token),
                     "Origin": "http://127.0.0.1.evil.example",
                 },
                 method="POST",
@@ -1290,7 +1424,7 @@ class TestGuardApprovals:
                     }
                 ).encode("utf-8"),
                 headers={
-                    "Content-Type": "application/json",
+                    **_guard_json_headers(daemon._server.auth_token),
                     "Origin": "http://localhost:abc",
                 },
                 method="POST",
@@ -1470,10 +1604,13 @@ class TestGuardApprovals:
             config=BridgeConfig(guard_url="http://127.0.0.1:4455", dry_run=False),
             store=store,
         )
-        post_calls: list[tuple[str, dict[str, object]]] = []
+        token_path = store.guard_home / "daemon-auth-token"
+        token_path.parent.mkdir(parents=True, exist_ok=True)
+        token_path.write_text("bridge-token", encoding="utf-8")
+        post_calls: list[tuple[str, dict[str, object], dict[str, str] | None]] = []
 
-        def fake_post(url: str, json: dict[str, object], timeout: int):
-            post_calls.append((url, json))
+        def fake_post(url: str, json: dict[str, object], timeout: int, headers: dict[str, str] | None = None):
+            post_calls.append((url, json, headers))
             assert timeout == 30
             return SimpleNamespace(status_code=200, json=lambda: {"resolved": True})
 
@@ -1489,6 +1626,7 @@ class TestGuardApprovals:
                     "scope": "artifact",
                     "reason": "resolved from Guard Bridge",
                 },
+                {"X-Guard-Token": "bridge-token"},
             )
         ]
 
