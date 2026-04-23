@@ -669,11 +669,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _token_is_valid(self, query: str) -> bool:
         params = parse_qs(query)
         token = params.get("token", [None])[-1]
-        return isinstance(token, str) and secrets.compare_digest(token, self.server.auth_token)  # type: ignore[attr-defined]
+        return self._tokens_match(token)
 
     def _header_token_is_valid(self) -> bool:
         token = self.headers.get("X-Guard-Token")
-        return isinstance(token, str) and secrets.compare_digest(token, self.server.auth_token)  # type: ignore[attr-defined]
+        return self._tokens_match(token)
+
+    def _tokens_match(self, token: object) -> bool:
+        if not isinstance(token, str):
+            return False
+        try:
+            provided = token.encode("ascii")
+            expected = self.server.auth_token.encode("ascii")  # type: ignore[attr-defined]
+        except UnicodeEncodeError:
+            return False
+        return secrets.compare_digest(provided, expected)
 
     def _touch_runtime_heartbeat(self, path: str) -> None:
         if path != "/healthz" and not path.startswith("/v1/"):
