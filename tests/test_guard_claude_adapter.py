@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
-from urllib.parse import quote
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters import claude_code, get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_TOOL_MATCHER, ClaudeCodeHarnessAdapter
+from codex_plugin_scanner.guard.adapters.claude_code import (
+    CLAUDE_GUARD_DAEMON_HOOK_MARKER,
+    CLAUDE_GUARD_TOOL_MATCHER,
+    ClaudeCodeHarnessAdapter,
+    _shell_command,
+)
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -36,6 +41,23 @@ def _build_context(tmp_path: Path) -> HarnessContext:
         workspace_dir=workspace_dir,
         guard_home=guard_home,
     )
+
+
+def _runtime_hook_handlers(payload: dict[str, object]) -> list[dict[str, object]]:
+    hooks = payload["hooks"]
+    assert isinstance(hooks, dict)
+    handlers: list[dict[str, object]] = []
+    for key in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Notification"):
+        entries = hooks[key]
+        assert isinstance(entries, list)
+        for entry in entries:
+            assert isinstance(entry, dict)
+            entry_hooks = entry["hooks"]
+            assert isinstance(entry_hooks, list)
+            for hook in entry_hooks:
+                assert isinstance(hook, dict)
+                handlers.append(hook)
+    return handlers
 
 
 def test_claude_detect_marks_local_cli_install_as_available_when_not_on_path(monkeypatch, tmp_path):
@@ -114,7 +136,6 @@ def test_claude_install_bakes_current_source_root_into_session_start_command(tmp
 def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idempotent(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
-    expected_hook_url = adapter._hook_http_url(context)
 
     adapter.install(context)
     adapter.install(context)
@@ -131,18 +152,20 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert all(entry["hooks"][0]["type"] == "command" for entry in session_start)
     assert len(pre_tool_use) == 1
     assert pre_tool_use[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
-    assert pre_tool_use[0]["hooks"][0]["type"] == "http"
-    assert pre_tool_use[0]["hooks"][0]["url"] == expected_hook_url
+    assert pre_tool_use[0]["hooks"][0]["type"] == "command"
+    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in pre_tool_use[0]["hooks"][0]["command"]
+    assert "url" not in pre_tool_use[0]["hooks"][0]
     assert pre_tool_use[0]["hooks"][0]["timeout"] == 30
     assert len(post_tool_use) == 1
-    assert post_tool_use[0]["hooks"][0]["type"] == "http"
+    assert post_tool_use[0]["hooks"][0]["type"] == "command"
     assert len(prompt_submit) == 1
     assert "matcher" not in prompt_submit[0]
-    assert prompt_submit[0]["hooks"][0]["type"] == "http"
+    assert prompt_submit[0]["hooks"][0]["type"] == "command"
     assert len(notification) == 1
     assert notification[0]["matcher"] == "permission_prompt"
-    assert notification[0]["hooks"][0]["type"] == "http"
+    assert notification[0]["hooks"][0]["type"] == "command"
     assert notification[0]["hooks"][0]["timeout"] == 10
+    assert all("url" not in handler for handler in _runtime_hook_handlers(payload))
 
 
 def test_get_adapter_accepts_claude_alias():
@@ -213,19 +236,11 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
     adapter.install(context)
 
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
-    installed_hook_types = [
-        hook["type"]
-        for group in (
-            payload["hooks"]["PreToolUse"]
-            + payload["hooks"]["PostToolUse"]
-            + payload["hooks"]["UserPromptSubmit"]
-            + payload["hooks"]["Notification"]
-        )
-        for hook in group["hooks"]
-        if isinstance(hook, dict)
-    ]
+    installed_handlers = _runtime_hook_handlers(payload)
 
-    assert installed_hook_types == ["http", "http", "http", "http"]
+    assert [handler["type"] for handler in installed_handlers] == ["command", "command", "command", "command"]
+    assert all(CLAUDE_GUARD_DAEMON_HOOK_MARKER in str(handler.get("command", "")) for handler in installed_handlers)
+    assert all("url" not in handler for handler in installed_handlers)
 
 
 def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
@@ -266,17 +281,12 @@ def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
         claude_code.load_guard_daemon_url = original_load_guard_daemon_url
 
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
-    expected_hook_url = (
-        "http://127.0.0.1:5999/v1/hooks/claude-code?"
-        f"guard-home={quote(str(context.guard_home), safe='')}"
-        f"&home={quote(str(context.home_dir), safe='')}"
-        f"&workspace={quote(str(context.workspace_dir), safe='')}"
-    )
+    installed_handlers = _runtime_hook_handlers(payload)
 
-    assert payload["hooks"]["PreToolUse"][0]["hooks"][0]["url"] == expected_hook_url
-    assert payload["hooks"]["PostToolUse"][0]["hooks"][0]["url"] == expected_hook_url
-    assert payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["url"] == expected_hook_url
-    assert payload["hooks"]["Notification"][0]["hooks"][0]["url"] == expected_hook_url
+    assert all(handler["type"] == "command" for handler in installed_handlers)
+    assert all("url" not in handler for handler in installed_handlers)
+    assert all("http://127.0.0.1:5999" in str(handler["command"]) for handler in installed_handlers)
+    assert all(CLAUDE_GUARD_DAEMON_HOOK_MARKER in str(handler["command"]) for handler in installed_handlers)
 
 
 def test_claude_install_rejects_symlinked_settings_file(tmp_path):
@@ -315,6 +325,43 @@ def test_claude_handler_identity_uses_http_url_for_http_hooks():
     )
 
 
+def test_claude_daemon_hook_command_is_identified_as_guard_hook(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    command = adapter._daemon_hook_command(context)
+
+    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in command
+    assert claude_code._is_guard_hook_command(command) is True
+
+
+def test_claude_shell_command_uses_list2cmdline_on_windows():
+    command = ("node", "-e", "console.log('hello')")
+
+    assert _shell_command(command, windows=True) == subprocess.list2cmdline(list(command))
+
+
+def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    command = adapter._daemon_hook_command(context)
+
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        input=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "hello"}),
+        text=True,
+        capture_output=True,
+        timeout=5,
+        check=False,
+    )
+
+    payload = json.loads(result.stdout)
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert payload["decision"] == "block"
+    assert "HOL Guard could not evaluate this action" in payload["reason"]
+
+
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):
     initial_context = _build_context(tmp_path)
     changed_context = HarnessContext(
@@ -323,7 +370,6 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
         guard_home=tmp_path / "different-guard-home",
     )
     adapter = ClaudeCodeHarnessAdapter()
-    expected_hook_url = adapter._hook_http_url(changed_context)
 
     adapter.install(initial_context)
     adapter.install(changed_context)
@@ -332,23 +378,17 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     session_start = payload["hooks"]["SessionStart"]
     hook_commands = [entry["hooks"][0]["command"] for entry in session_start]
-    operational_urls = [
-        group["hooks"][0]["url"]
-        for group in (
-            payload["hooks"]["PreToolUse"]
-            + payload["hooks"]["PostToolUse"]
-            + payload["hooks"]["UserPromptSubmit"]
-            + payload["hooks"]["Notification"]
-        )
-    ]
+    operational_handlers = _runtime_hook_handlers(payload)
+    operational_commands = [str(handler["command"]) for handler in operational_handlers]
 
     assert len(session_start) == 4
     assert all(len(entry["hooks"]) == 1 for entry in session_start)
     assert all(str(changed_context.guard_home) in command for command in hook_commands)
     assert all(str(initial_context.guard_home) not in command for command in hook_commands)
-    assert all(url == expected_hook_url for url in operational_urls)
-    assert all(quote(str(changed_context.guard_home), safe="") in url for url in operational_urls)
-    assert all(quote(str(initial_context.guard_home), safe="") not in url for url in operational_urls)
+    assert all(handler["type"] == "command" for handler in operational_handlers)
+    assert all(CLAUDE_GUARD_DAEMON_HOOK_MARKER in command for command in operational_commands)
+    assert all(str(changed_context.guard_home) in command for command in operational_commands)
+    assert all(str(initial_context.guard_home) not in command for command in operational_commands)
 
 
 def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
@@ -410,9 +450,11 @@ def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
     post_tool_use = payload["hooks"]["PostToolUse"]
 
     assert len(pre_tool_use) == 1
-    assert pre_tool_use[0]["hooks"][0]["type"] == "http"
+    assert pre_tool_use[0]["hooks"][0]["type"] == "command"
+    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in pre_tool_use[0]["hooks"][0]["command"]
     assert len(post_tool_use) == 1
-    assert post_tool_use[0]["hooks"][0]["type"] == "http"
+    assert post_tool_use[0]["hooks"][0]["type"] == "command"
+    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in post_tool_use[0]["hooks"][0]["command"]
 
 
 def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path):
