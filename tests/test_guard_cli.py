@@ -2034,7 +2034,7 @@ args = ["workspace-skill.js", "--changed"]
             [
                 "guard",
                 "install",
-                "claude-code",
+                "claude",
                 "--home",
                 str(home_dir),
                 "--workspace",
@@ -2063,6 +2063,7 @@ args = ["workspace-skill.js", "--changed"]
 
         assert install_rc == 0
         assert install_output["managed_install"]["active"] is True
+        assert install_output["managed_install"]["manifest"]["shim_command"] == "guard-claude"
         assert settings_local.exists()
         assert len(install_settings_payload["hooks"]["SessionStart"]) == 4
         assert len(install_settings_payload["hooks"]["PreToolUse"]) == 1
@@ -2082,11 +2083,19 @@ args = ["workspace-skill.js", "--changed"]
             install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0]["command"]
             == expected_session_start_command
         )
-        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["type"] == "http"
-        assert "/v1/hooks/claude-code?" in install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["url"]
-        assert install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["type"] == "http"
+        expected_hook_command = ClaudeCodeHarnessAdapter._hook_command(
+            HarnessContext(
+                home_dir=home_dir,
+                workspace_dir=workspace_dir,
+                guard_home=home_dir,
+            )
+        )
+        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["type"] == "command"
+        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == expected_hook_command
+        assert install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["type"] == "command"
         assert install_settings_payload["hooks"]["Notification"][0]["matcher"] == "permission_prompt"
-        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["type"] == "http"
+        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["type"] == "command"
+        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["command"] == expected_hook_command
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
         assert settings_payload["hooks"]["SessionStart"] == []
@@ -2205,20 +2214,20 @@ args = ["workspace-skill.js", "--changed"]
         assert len(payload["hooks"]["PostToolUse"]) == 1
         assert len(payload["hooks"]["UserPromptSubmit"]) == 1
         assert len(payload["hooks"]["Notification"]) == 1
-        pretool_hook_urls = [
-            hook["url"]
+        pretool_hook_commands = [
+            hook["command"]
             for hook in payload["hooks"]["PreToolUse"][0]["hooks"]
-            if isinstance(hook, dict) and isinstance(hook.get("url"), str)
+            if isinstance(hook, dict) and isinstance(hook.get("command"), str)
         ]
-        assert len(pretool_hook_urls) == 1
-        assert "/v1/hooks/claude-code?" in pretool_hook_urls[0]
-        notification_hook_urls = [
-            hook["url"]
+        assert len(pretool_hook_commands) == 1
+        assert pretool_hook_commands[0] != legacy_command
+        notification_hook_commands = [
+            hook["command"]
             for hook in payload["hooks"]["Notification"][0]["hooks"]
-            if isinstance(hook, dict) and isinstance(hook.get("url"), str)
+            if isinstance(hook, dict) and isinstance(hook.get("command"), str)
         ]
-        assert len(notification_hook_urls) == 1
-        assert "/v1/hooks/claude-code?" in notification_hook_urls[0]
+        assert len(notification_hook_commands) == 1
+        assert notification_hook_commands[0] != legacy_command
 
     def test_guard_install_auto_detects_configured_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -3699,9 +3708,7 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert "Approve it in HOL Guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"]
 
-    def test_guard_codex_hook_exits_with_block_status_in_actual_codex_runtime(
-        self, tmp_path, monkeypatch, capsys
-    ):
+    def test_guard_codex_hook_exits_with_block_status_in_actual_codex_runtime(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         payload_path = workspace_dir / "hook-event.json"

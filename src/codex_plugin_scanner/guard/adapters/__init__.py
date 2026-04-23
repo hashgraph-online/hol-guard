@@ -30,6 +30,8 @@ def get_adapter(harness: str) -> HarnessAdapter:
     for adapter in ADAPTERS:
         if adapter.harness == harness:
             return adapter
+        if harness in getattr(adapter, "aliases", ()):
+            return adapter
     raise ValueError(f"Unsupported harness: {harness}")
 
 
