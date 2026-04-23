@@ -246,15 +246,18 @@ def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
     )
 
     original_guard_daemon_url_for_home = claude_code.guard_daemon_url_for_home
+    original_load_guard_daemon_url = claude_code.load_guard_daemon_url
     claude_code.guard_daemon_url_for_home = lambda _guard_home: "http://127.0.0.1:5888"
+    claude_code.load_guard_daemon_url = lambda _guard_home: "http://127.0.0.1:5999"
     try:
         adapter.refresh_runtime_hook_urls(context)
     finally:
         claude_code.guard_daemon_url_for_home = original_guard_daemon_url_for_home
+        claude_code.load_guard_daemon_url = original_load_guard_daemon_url
 
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     expected_hook_url = (
-        "http://127.0.0.1:5888/v1/hooks/claude-code?"
+        "http://127.0.0.1:5999/v1/hooks/claude-code?"
         f"guard-home={quote(str(context.guard_home), safe='')}"
         f"&home={quote(str(context.home_dir), safe='')}"
         f"&workspace={quote(str(context.workspace_dir), safe='')}"

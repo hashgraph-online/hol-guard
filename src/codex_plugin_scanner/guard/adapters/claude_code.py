@@ -10,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlencode
 
-from ..daemon import guard_daemon_url_for_home
+from ..daemon import guard_daemon_url_for_home, load_guard_daemon_url
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _json_payload, _run_command_probe
@@ -437,7 +437,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
 
     @staticmethod
     def _hook_http_url(context: HarnessContext) -> str:
-        daemon_url = guard_daemon_url_for_home(context.guard_home)
+        daemon_url = load_guard_daemon_url(context.guard_home) or guard_daemon_url_for_home(context.guard_home)
         query: dict[str, str] = {"guard-home": str(context.guard_home)}
         if context.home_dir.resolve() != Path.home().resolve():
             query["home"] = str(context.home_dir)
