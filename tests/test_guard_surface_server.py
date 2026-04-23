@@ -77,6 +77,7 @@ class TestGuardSurfaceServer:
             in json.dumps(hook_payload)
         )
         assert "protect your local secrets" in hook_payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
+        assert store.list_guard_sessions() == []
 
     def test_guard_daemon_claude_hook_endpoint_returns_notification_context_without_auth(self, tmp_path) -> None:
         home_dir = tmp_path / "home"

@@ -1320,7 +1320,7 @@ def run_guard_command(
                         output_stream=output_stream,
                     )
                     return 0
-                if _should_emit_prequeue_native_hook_response(args):
+                if _should_emit_prequeue_native_hook_response(args, output_stream=output_stream):
                     if _should_emit_claude_native_pretooluse_notice(
                         args,
                         event_name=event_name,
@@ -1650,8 +1650,16 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
     )
 
 
-def _should_emit_prequeue_native_hook_response(args: argparse.Namespace) -> bool:
-    return _canonical_harness_name(args.harness) == "claude-code" and not getattr(args, "json", False)
+def _should_emit_prequeue_native_hook_response(
+    args: argparse.Namespace,
+    *,
+    output_stream: TextIO | None,
+) -> bool:
+    if _canonical_harness_name(args.harness) != "claude-code":
+        return False
+    if not getattr(args, "json", False):
+        return True
+    return output_stream is not None
 
 
 def _claude_permission_notice_state_key(session_id: str, tool_name: str | None = None) -> str:
