@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters import claude_code, get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
@@ -13,6 +15,14 @@ from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAda
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _symlink_or_skip(link_path: Path, target: Path) -> None:
+    try:
+        link_path.parent.mkdir(parents=True, exist_ok=True)
+        link_path.symlink_to(target)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlinks are not supported in this environment")
 
 
 def _build_context(tmp_path: Path) -> HarnessContext:
@@ -211,6 +221,20 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
     ]
 
     assert installed_hook_types == ["command", "command", "command", "command"]
+
+
+def test_claude_install_rejects_symlinked_settings_file(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    outside_settings = tmp_path / "outside-settings.json"
+    outside_settings.write_text("{}", encoding="utf-8")
+    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    _symlink_or_skip(settings_path, outside_settings)
+
+    with pytest.raises(ValueError, match="settings path"):
+        adapter.install(context)
+
+    assert outside_settings.read_text(encoding="utf-8") == "{}"
 
 
 def test_claude_legacy_guard_url_detection_only_matches_local_guard_urls():

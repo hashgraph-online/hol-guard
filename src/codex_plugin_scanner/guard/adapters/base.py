@@ -9,6 +9,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from ...path_support import resolves_within_root
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 
@@ -77,6 +78,11 @@ def _run_command_probe(command: list[str], timeout_seconds: int = 5) -> dict[str
         "stdout": result.stdout.strip(),
         "stderr": result.stderr.strip(),
     }
+
+
+def _ensure_path_within_root(root: Path, path: Path, *, label: str) -> None:
+    if not resolves_within_root(root, path):
+        raise ValueError(f"{label} settings path escapes the managed root")
 
 
 class HarnessAdapter:
@@ -234,6 +240,7 @@ __all__ = [
     "HarnessAdapter",
     "HarnessContext",
     "_command_available",
+    "_ensure_path_within_root",
     "_json_payload",
     "_resolve_command",
     "_run_command_probe",

@@ -13,6 +13,7 @@ from ..integrations.cisco_skill_scanner import (
     run_cisco_skill_scan,
 )
 from ..models import SEVERITY_ORDER, CheckResult, Finding, ScanOptions, Severity, max_severity
+from ..path_support import is_safe_relative_path, iter_safe_matching_files, resolves_within_root
 from .manifest import load_manifest
 
 
@@ -208,7 +209,7 @@ def _relative_skill_path(plugin_dir: Path, skill_path: Path) -> str:
 
 def _local_skill_instruction_findings(plugin_dir: Path, skills_dir: Path) -> tuple[Finding, ...]:
     findings: list[Finding] = []
-    for skill_path in sorted(skills_dir.rglob("SKILL.md")):
+    for skill_path in iter_safe_matching_files(plugin_dir, skills_dir, "SKILL.md"):
         try:
             content = skill_path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
@@ -266,6 +267,14 @@ def _local_skill_instruction_check(plugin_dir: Path, skills_dir: Path | None) ->
     )
 
 
+def _resolved_skill_files(plugin_dir: Path, skills_dir: Path) -> tuple[tuple[Path, ...], bool]:
+    if not resolves_within_root(plugin_dir, skills_dir, require_exists=True):
+        return (), True
+    safe_files = iter_safe_matching_files(plugin_dir, skills_dir, "SKILL.md")
+    total_files = tuple(sorted(path for path in skills_dir.rglob("SKILL.md") if path.is_file()))
+    return safe_files, len(safe_files) != len(total_files)
+
+
 def resolve_skill_security_context(plugin_dir: Path, options: ScanOptions | None = None) -> SkillSecurityContext:
     """Resolve Cisco skill scanning context for a plugin directory."""
 
@@ -282,12 +291,32 @@ def resolve_skill_security_context(plugin_dir: Path, options: ScanOptions | None
     if not isinstance(skills_path_value, str) or not skills_path_value.strip():
         return SkillSecurityContext(summary=None, skills_dir=None, skip_message="No skills declared in plugin.json.")
 
+    if not is_safe_relative_path(plugin_dir, skills_path_value):
+        return SkillSecurityContext(
+            summary=None,
+            skills_dir=None,
+            skip_message=f'Skills directory "{skills_path_value}" is unsafe; skill security checks skipped.',
+        )
+
     skills_dir = (plugin_dir / skills_path_value).resolve()
     if not skills_dir.is_dir():
         return SkillSecurityContext(
             summary=None,
             skills_dir=skills_dir,
             skip_message=f'Skills directory "{skills_path_value}" is missing; see best-practice checks.',
+        )
+    safe_skill_files, unsafe_entries_detected = _resolved_skill_files(plugin_dir, skills_dir)
+    if unsafe_entries_detected:
+        return SkillSecurityContext(
+            summary=None,
+            skills_dir=None,
+            skip_message=f'Skills directory "{skills_path_value}" contains paths outside the plugin root.',
+        )
+    if not safe_skill_files:
+        return SkillSecurityContext(
+            summary=None,
+            skills_dir=skills_dir,
+            skip_message=f'No safe SKILL.md files were found in "{skills_path_value}".',
         )
 
     return SkillSecurityContext(

@@ -75,6 +75,17 @@ class TestCheckMarketplaceJson:
             r = check_marketplace_json(Path(tmpdir))
             assert not r.passed and r.points == 0
 
+    def test_passes_for_preferred_marketplace_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp = Path(tmpdir) / ".agents" / "plugins" / "marketplace.json"
+            mp.parent.mkdir(parents=True)
+            mp.write_text(
+                '{"name": "test", "plugins": [{"source": {"source": "local", "path": "./plugins/example"}, '
+                '"policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, "category": "Productivity"}]}'
+            )
+            r = check_marketplace_json(Path(tmpdir))
+            assert r.passed and r.points == 5
+
 
 class TestCheckPolicyFields:
     def test_passes_when_no_file(self):
@@ -182,3 +193,16 @@ class TestRunMarketplaceChecks:
             source_check = next(check for check in results if check.name == "Marketplace sources are safe")
             assert source_check.passed is False
             assert source_check.message == "Unsafe marketplace sources detected: plugin[0]=invalid-entry"
+
+    def test_run_marketplace_checks_uses_preferred_manifest_location(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mp = Path(tmpdir) / ".agents" / "plugins" / "marketplace.json"
+            mp.parent.mkdir(parents=True)
+            mp.write_text(
+                '{"name": "test", "plugins": [{"source": {"source": "local", "path": "../outside"}, '
+                '"policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, "category": "Productivity"}]}'
+            )
+            results = run_marketplace_checks(Path(tmpdir))
+            source_check = next(check for check in results if check.name == "Marketplace sources are safe")
+            assert source_check.passed is False
+            assert "../outside" in source_check.message

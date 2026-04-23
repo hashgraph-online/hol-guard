@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..models import CheckResult, Finding, Severity
+from ..path_support import resolves_within_root
 
 # Patterns for hardcoded secrets
 SECRET_PATTERNS: list[re.Pattern[str]] = [
@@ -88,6 +89,8 @@ def _scan_all_files(plugin_dir: Path) -> list[Path]:
         if any(part in EXCLUDED_DIRS for part in p.parts):
             continue
         if p.suffix.lower() in BINARY_EXTS:
+            continue
+        if not resolves_within_root(plugin_dir, p, require_exists=True):
             continue
         files.append(p)
     return files

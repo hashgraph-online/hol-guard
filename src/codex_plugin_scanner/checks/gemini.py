@@ -11,6 +11,8 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib
 
+from ..path_support import is_safe_relative_path
+
 
 def _finding(
     rule_id: str,
@@ -132,17 +134,28 @@ def check_context_and_mcp(package: NormalizedPackage) -> CheckResult:
     root = package.root_path
     findings: list[Finding] = []
     context_file = manifest.get("contextFileName")
-    if isinstance(context_file, str) and context_file.strip() and not (root / context_file).exists():
-        findings.append(
-            _finding(
-                "GEMINI_CONTEXT_FILE_MISSING",
-                "Gemini context file is missing",
-                f'contextFileName points to "{context_file}", but that file is missing.',
-                "Add the context file or remove contextFileName.",
-                file_path="gemini-extension.json",
-                severity=Severity.LOW,
+    if isinstance(context_file, str) and context_file.strip():
+        if not is_safe_relative_path(root, context_file):
+            findings.append(
+                _finding(
+                    "GEMINI_CONTEXT_FILE_UNSAFE",
+                    "Gemini context file path is unsafe",
+                    f'contextFileName must stay within the repository root; received "{context_file}".',
+                    "Use a relative in-repository path for contextFileName.",
+                    file_path="gemini-extension.json",
+                )
             )
-        )
+        elif not (root / context_file).exists():
+            findings.append(
+                _finding(
+                    "GEMINI_CONTEXT_FILE_MISSING",
+                    "Gemini context file is missing",
+                    f'contextFileName points to "{context_file}", but that file is missing.',
+                    "Add the context file or remove contextFileName.",
+                    file_path="gemini-extension.json",
+                    severity=Severity.LOW,
+                )
+            )
     mcp_servers = manifest.get("mcpServers")
     if mcp_servers is not None and not isinstance(mcp_servers, dict):
         findings.append(

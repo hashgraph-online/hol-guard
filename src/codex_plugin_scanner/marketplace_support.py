@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .path_support import is_dot_relative_path, is_remote_reference, is_safe_relative_path
+from .path_support import is_dot_relative_path, is_remote_reference, is_safe_relative_path, resolves_within_root
 
 PREFERRED_MARKETPLACE_PATH = Path(".agents/plugins/marketplace.json")
 LEGACY_MARKETPLACE_PATH = Path("marketplace.json")
@@ -37,6 +37,8 @@ def load_marketplace_context(repo_root: Path) -> MarketplaceContext | None:
     if marketplace_file is None:
         return None
     file_path, legacy = marketplace_file
+    if not resolves_within_root(repo_root, file_path, require_exists=True):
+        raise ValueError("marketplace file escapes repository root")
     resolved_repo_root = repo_root.resolve()
     resolved_file_path = file_path.resolve()
     payload = json.loads(file_path.read_text(encoding="utf-8"))

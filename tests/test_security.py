@@ -3,6 +3,8 @@
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.checks.security import (
     _scan_all_files,
     check_license,
@@ -14,6 +16,13 @@ from codex_plugin_scanner.checks.security import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _symlink_or_skip(link_path: Path, target: Path) -> None:
+    try:
+        link_path.symlink_to(target)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlinks are not supported in this environment")
 
 
 class TestSecurityMd:
@@ -168,6 +177,24 @@ class TestScanAllFiles:
             files = _scan_all_files(Path(tmpdir))
             assert len(files) == 1
             assert files[0].name == "test.txt"
+
+    def test_skips_symlinked_files_outside_root(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            outside = root.parent / "outside-secret.txt"
+            outside.write_text('token = "super-secret-token"', encoding="utf-8")
+            _symlink_or_skip(root / "linked-secret.txt", outside)
+            files = _scan_all_files(root)
+            assert files == []
+
+    def test_hardcoded_secret_check_ignores_symlinked_files_outside_root(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            outside = root.parent / "outside-secret.js"
+            outside.write_text('const token = "super-secret-token";', encoding="utf-8")
+            _symlink_or_skip(root / "linked-secret.js", outside)
+            result = check_no_hardcoded_secrets(root)
+            assert result.passed is True
 
 
 class TestRunSecurityChecks:
