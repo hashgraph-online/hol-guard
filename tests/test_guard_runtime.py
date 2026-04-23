@@ -4784,7 +4784,7 @@ def test_guard_run_prompt_allow_once_launches_and_records_override(tmp_path, cap
     monkeypatch.setattr(
         guard_runner_module.subprocess,
         "run",
-        lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+        lambda *args, **kwargs: subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
     )
 
     rc = main(
@@ -4816,7 +4816,7 @@ def test_guard_run_prompt_allow_artifact_persists_for_next_run(tmp_path, capsys,
     monkeypatch.setattr(
         guard_runner_module.subprocess,
         "run",
-        lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+        lambda *args, **kwargs: subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
     )
 
     first_rc = main(
@@ -5850,7 +5850,7 @@ def test_guard_run_headless_allow_persists_state_when_approval_center_is_availab
     monkeypatch.setattr(
         guard_runner_module.subprocess,
         "run",
-        lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+        lambda *args, **kwargs: subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
     )
 
     rc = main(
@@ -5891,7 +5891,7 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     monkeypatch.setattr(
         guard_runner_module.subprocess,
         "run",
-        lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+        lambda *args, **kwargs: subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
     )
 
     stop_resolver = threading.Event()
@@ -6006,7 +6006,7 @@ def test_guard_run_headless_redetects_before_persisted_resume(tmp_path, monkeypa
     monkeypatch.setattr(
         guard_runner_module.subprocess,
         "run",
-        lambda *args, **kwargs: type("CompletedProcess", (), {"returncode": 0})(),
+        lambda *args, **kwargs: subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
     )
 
     def fake_detect(harness: str, context):

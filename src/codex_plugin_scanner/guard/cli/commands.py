@@ -1978,6 +1978,7 @@ def _headless_approval_resolver(
                 resolved_items = [item for item in wait_result.get("items", []) if isinstance(item, dict)]
                 payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)
                 if not payload["blocked"]:
+                    payload["blocked"] = False
                     payload["review_hint"] = "Approval received. Guard is resuming the harness launch."
             else:
                 payload["review_hint"] = (
@@ -2043,6 +2044,7 @@ def _headless_approval_resolver(
             resolved_items = [item for item in wait_result.get("items", []) if isinstance(item, dict)]
             payload["blocked"] = any(str(item.get("resolution_action")) == "block" for item in resolved_items)
             if not payload["blocked"]:
+                payload["blocked"] = False
                 daemon_client.update_operation_status(
                     operation_id=str(operation["operation_id"]),
                     status="completed",
