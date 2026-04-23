@@ -1729,11 +1729,17 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
     path_class = artifact.metadata.get("path_class")
     tool_name = artifact.metadata.get("tool_name")
     if isinstance(path_class, str) and isinstance(tool_name, str):
+        policy_action = response_payload.get("policy_action")
+        if policy_action == "require-reapproval":
+            return (
+                f"HOL Guard intercepted Claude's attempt to use {tool_name} for {path_class} to protect your local "
+                "secrets. "
+                "Choose Yes to allow it once, Yes during this session to trust the same action for the rest of this "
+                "session, or No to keep the secret private."
+            )
         return (
-            f"HOL Guard intercepted Claude's attempt to use {tool_name} for {path_class} to protect your local "
-            "secrets. "
-            "Choose Yes to allow it once, Yes during this session to trust the same action for the rest of this "
-            "session, or No to keep the secret private."
+            f"HOL Guard blocked Claude's attempt to use {tool_name} for {path_class} to protect your local secrets. "
+            "This request cannot continue in the current approval flow."
         )
     risk_summary = response_payload.get("risk_summary")
     if isinstance(risk_summary, str) and risk_summary.strip():

@@ -4122,6 +4122,46 @@ def test_guard_hook_emits_claude_native_deny_response_for_sandbox_required_reque
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_guard_hook_uses_deny_specific_copy_for_blocked_claude_secret_reads(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+            "--policy-action",
+            "sandbox-required",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    reason = output["hookSpecificOutput"]["permissionDecisionReason"].lower()
+
+    assert rc == 0
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "hol guard blocked claude's attempt to use read" in reason
+    assert "choose yes" not in reason
+    assert "yes during this session" not in reason
+
+
 def test_guard_hook_emits_codex_runtime_denial_with_guard_remediation(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
