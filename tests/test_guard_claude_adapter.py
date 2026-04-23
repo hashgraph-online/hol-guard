@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters import claude_code, get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_TOOL_MATCHER, ClaudeCodeHarnessAdapter
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -102,6 +103,7 @@ def test_claude_install_bakes_current_source_root_into_session_start_command(tmp
 
     assert install_output["active"] is True
     assert "ensure_guard_daemon" in hook_command
+    assert "refresh_installed_hook_urls" in hook_command
     assert "hookEventName" in hook_command
     assert "SessionStart" in hook_command
     assert "HOL Guard protection is active for this workspace." in hook_command
@@ -112,6 +114,7 @@ def test_claude_install_bakes_current_source_root_into_session_start_command(tmp
 def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idempotent(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
+    expected_hook_url = adapter._hook_http_url(context)
 
     adapter.install(context)
     adapter.install(context)
@@ -123,20 +126,22 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     post_tool_use = payload["hooks"]["PostToolUse"]
     prompt_submit = payload["hooks"]["UserPromptSubmit"]
     notification = payload["hooks"]["Notification"]
-
     assert len(session_start) == 4
     assert {entry["matcher"] for entry in session_start} == {"startup", "resume", "clear", "compact"}
     assert all(entry["hooks"][0]["type"] == "command" for entry in session_start)
     assert len(pre_tool_use) == 1
     assert pre_tool_use[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
-    assert pre_tool_use[0]["hooks"][0]["type"] == "command"
+    assert pre_tool_use[0]["hooks"][0]["type"] == "http"
+    assert pre_tool_use[0]["hooks"][0]["url"] == expected_hook_url
     assert pre_tool_use[0]["hooks"][0]["timeout"] == 30
     assert len(post_tool_use) == 1
+    assert post_tool_use[0]["hooks"][0]["type"] == "http"
     assert len(prompt_submit) == 1
     assert "matcher" not in prompt_submit[0]
+    assert prompt_submit[0]["hooks"][0]["type"] == "http"
     assert len(notification) == 1
     assert notification[0]["matcher"] == "permission_prompt"
-    assert notification[0]["hooks"][0]["type"] == "command"
+    assert notification[0]["hooks"][0]["type"] == "http"
     assert notification[0]["hooks"][0]["timeout"] == 10
 
 
@@ -220,7 +225,58 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
         if isinstance(hook, dict)
     ]
 
-    assert installed_hook_types == ["command", "command", "command", "command"]
+    assert installed_hook_types == ["http", "http", "http", "http"]
+
+
+def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    _write_json(
+        settings_path,
+        {
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": CLAUDE_GUARD_TOOL_MATCHER,
+                        "hooks": [
+                            {
+                                "type": "http",
+                                "url": "http://127.0.0.1:5371/v1/hooks/claude-code?guard-home=%2Fold",
+                                "timeout": 30,
+                            }
+                        ],
+                    }
+                ],
+                "PostToolUse": [],
+                "UserPromptSubmit": [],
+                "Notification": [],
+            }
+        },
+    )
+
+    original_guard_daemon_url_for_home = claude_code.guard_daemon_url_for_home
+    original_load_guard_daemon_url = claude_code.load_guard_daemon_url
+    claude_code.guard_daemon_url_for_home = lambda _guard_home: "http://127.0.0.1:5888"
+    claude_code.load_guard_daemon_url = lambda _guard_home: "http://127.0.0.1:5999"
+    try:
+        adapter.refresh_runtime_hook_urls(context)
+    finally:
+        claude_code.guard_daemon_url_for_home = original_guard_daemon_url_for_home
+        claude_code.load_guard_daemon_url = original_load_guard_daemon_url
+
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    expected_hook_url = (
+        "http://127.0.0.1:5999/v1/hooks/claude-code?"
+        f"guard-home={quote(str(context.guard_home), safe='')}"
+        f"&home={quote(str(context.home_dir), safe='')}"
+        f"&workspace={quote(str(context.workspace_dir), safe='')}"
+    )
+
+    assert payload["hooks"]["PreToolUse"][0]["hooks"][0]["url"] == expected_hook_url
+    assert payload["hooks"]["PostToolUse"][0]["hooks"][0]["url"] == expected_hook_url
+    assert payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["url"] == expected_hook_url
+    assert payload["hooks"]["Notification"][0]["hooks"][0]["url"] == expected_hook_url
 
 
 def test_claude_install_rejects_symlinked_settings_file(tmp_path):
@@ -257,6 +313,8 @@ def test_claude_handler_identity_uses_http_url_for_http_hooks():
         "http",
         "http://127.0.0.1:5371/two",
     )
+
+
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):
     initial_context = _build_context(tmp_path)
     changed_context = HarnessContext(
@@ -265,6 +323,7 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
         guard_home=tmp_path / "different-guard-home",
     )
     adapter = ClaudeCodeHarnessAdapter()
+    expected_hook_url = adapter._hook_http_url(changed_context)
 
     adapter.install(initial_context)
     adapter.install(changed_context)
@@ -273,11 +332,23 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     session_start = payload["hooks"]["SessionStart"]
     hook_commands = [entry["hooks"][0]["command"] for entry in session_start]
+    operational_urls = [
+        group["hooks"][0]["url"]
+        for group in (
+            payload["hooks"]["PreToolUse"]
+            + payload["hooks"]["PostToolUse"]
+            + payload["hooks"]["UserPromptSubmit"]
+            + payload["hooks"]["Notification"]
+        )
+    ]
 
     assert len(session_start) == 4
     assert all(len(entry["hooks"]) == 1 for entry in session_start)
     assert all(str(changed_context.guard_home) in command for command in hook_commands)
     assert all(str(initial_context.guard_home) not in command for command in hook_commands)
+    assert all(url == expected_hook_url for url in operational_urls)
+    assert all(quote(str(changed_context.guard_home), safe="") in url for url in operational_urls)
+    assert all(quote(str(initial_context.guard_home), safe="") not in url for url in operational_urls)
 
 
 def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
@@ -295,6 +366,9 @@ def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
                     }
                 ]
             },
+            "permissions": {
+                "ask": ["Read(./notes.txt)"],
+            },
             "theme": "dark",
         },
     )
@@ -311,6 +385,7 @@ def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
             "hooks": [{"type": "command", "command": "python3 custom-pre.py", "timeout": 5}],
         }
     ]
+    assert payload["permissions"]["ask"] == ["Read(./notes.txt)"]
 
 
 def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
@@ -335,9 +410,9 @@ def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
     post_tool_use = payload["hooks"]["PostToolUse"]
 
     assert len(pre_tool_use) == 1
-    assert pre_tool_use[0]["hooks"][0]["type"] == "command"
+    assert pre_tool_use[0]["hooks"][0]["type"] == "http"
     assert len(post_tool_use) == 1
-    assert post_tool_use[0]["hooks"][0]["type"] == "command"
+    assert post_tool_use[0]["hooks"][0]["type"] == "http"
 
 
 def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path):

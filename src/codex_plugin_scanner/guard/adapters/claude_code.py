@@ -8,8 +8,10 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from urllib.parse import urlencode
 
 from ...path_support import iter_safe_matching_files, resolves_within_root
+from ..daemon import guard_daemon_url_for_home, load_guard_daemon_url
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _ensure_path_within_root, _json_payload, _run_command_probe
@@ -26,6 +28,25 @@ CLAUDE_SETTINGS_FILES = ("settings.json", "settings.local.json")
 
 def _guard_command_handler(command: str, *, timeout: int) -> dict[str, object]:
     return {"type": "command", "command": command, "timeout": timeout}
+
+
+def _guard_http_handler(url: str, *, timeout: int) -> dict[str, object]:
+    return {"type": "http", "url": url, "timeout": timeout}
+
+
+def _sync_runtime_hook_groups(hooks: dict[str, object], hook_url: str) -> None:
+    for key, matcher, timeout in (
+        ("PreToolUse", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
+        ("PostToolUse", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
+        ("UserPromptSubmit", None, CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS),
+        ("Notification", CLAUDE_GUARD_NOTIFICATION_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
+    ):
+        existing_entries = hooks.get(key)
+        hooks[key] = _merge_hook_group(
+            _prune_guard_hook_entries(existing_entries if isinstance(existing_entries, list) else []),
+            matcher,
+            _guard_http_handler(hook_url, timeout=timeout),
+        )
 
 
 def _guard_hook_group(matcher: str | None, handler: dict[str, object]) -> dict[str, object]:
@@ -425,6 +446,16 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         return subprocess.list2cmdline(list(command))
 
     @staticmethod
+    def _hook_http_url(context: HarnessContext) -> str:
+        daemon_url = load_guard_daemon_url(context.guard_home) or guard_daemon_url_for_home(context.guard_home)
+        query: dict[str, str] = {"guard-home": str(context.guard_home)}
+        if context.home_dir.resolve() != Path.home().resolve():
+            query["home"] = str(context.home_dir)
+        if context.workspace_dir is not None:
+            query["workspace"] = str(context.workspace_dir)
+        return f"{daemon_url}/v1/hooks/claude-code?{urlencode(query)}"
+
+    @staticmethod
     def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
         guard_args = [
             "guard",
@@ -454,12 +485,33 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "import json;"
             "from pathlib import Path;"
             "from codex_plugin_scanner.guard.daemon import ensure_guard_daemon;"
+            "from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter;"
             f"ensure_guard_daemon(Path({str(context.guard_home)!r}));"
+            f"ClaudeCodeHarnessAdapter.refresh_installed_hook_urls(home_dir=Path({str(context.home_dir)!r}), "
+            f"workspace_dir=Path({str(context.workspace_dir)!r}), guard_home=Path({str(context.guard_home)!r}));"
             "print(json.dumps({'hookSpecificOutput': {'hookEventName': 'SessionStart', "
             "'additionalContext': 'HOL Guard protection is active for this workspace.'}}, "
             "separators=(',', ':')))"
         )
         return (sys.executable, "-c", code)
+
+    @classmethod
+    def refresh_installed_hook_urls(cls, *, home_dir: Path, workspace_dir: Path, guard_home: Path) -> None:
+        cls().refresh_runtime_hook_urls(
+            HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
+        )
+
+    def refresh_runtime_hook_urls(self, context: HarnessContext) -> None:
+        if context.workspace_dir is None:
+            return
+        settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+        payload = _json_payload(settings_path)
+        hooks = payload.get("hooks")
+        if not isinstance(hooks, dict):
+            return
+        _sync_runtime_hook_groups(hooks, self._hook_http_url(context))
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         resolved_executable = self.resolved_executable(context)
@@ -485,7 +537,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         _ensure_path_within_root(context.workspace_dir, settings_path, label="Claude Code")
         payload = _json_payload(settings_path)
         session_start_command = self._session_start_command(context)
-        hook_command = self._hook_command(context)
+        hook_url = self._hook_http_url(context)
         hooks = payload.setdefault("hooks", {})
         if not isinstance(hooks, dict):
             hooks = {}
@@ -500,30 +552,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         for matcher in CLAUDE_GUARD_SESSION_START_MATCHERS:
             session_start_entries = _merge_hook_group(session_start_entries, matcher, session_start_handler)
         hooks["SessionStart"] = session_start_entries
-        for key in ("PreToolUse", "PostToolUse"):
-            existing_entries = hooks.get(key)
-            entries = _prune_guard_hook_entries(existing_entries if isinstance(existing_entries, list) else [])
-            hooks[key] = _merge_hook_group(
-                entries,
-                CLAUDE_GUARD_TOOL_MATCHER,
-                _guard_command_handler(hook_command, timeout=CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
-            )
-        prompt_entries = _prune_guard_hook_entries(
-            hooks.get("UserPromptSubmit") if isinstance(hooks.get("UserPromptSubmit"), list) else []
-        )
-        hooks["UserPromptSubmit"] = _merge_hook_group(
-            prompt_entries,
-            None,
-            _guard_command_handler(hook_command, timeout=CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS),
-        )
-        notification_entries = _prune_guard_hook_entries(
-            hooks.get("Notification") if isinstance(hooks.get("Notification"), list) else []
-        )
-        hooks["Notification"] = _merge_hook_group(
-            notification_entries,
-            CLAUDE_GUARD_NOTIFICATION_MATCHER,
-            _guard_command_handler(hook_command, timeout=CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
-        )
+        _sync_runtime_hook_groups(hooks, hook_url)
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return {
@@ -555,31 +584,11 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         settings_path = context.workspace_dir / ".claude" / "settings.local.json"
         _ensure_path_within_root(context.workspace_dir, settings_path, label="Claude Code")
         payload = _json_payload(settings_path)
-        session_start_command = self._session_start_command(context)
-        hook_command = self._hook_command(context)
         hooks = payload.get("hooks")
         if isinstance(hooks, dict):
-            for key, handler in (
-                (
-                    "SessionStart",
-                    _guard_command_handler(
-                        session_start_command,
-                        timeout=CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS,
-                    ),
-                ),
-                ("PreToolUse", _guard_command_handler(hook_command, timeout=CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS)),
-                ("PostToolUse", _guard_command_handler(hook_command, timeout=CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS)),
-                ("UserPromptSubmit", _guard_command_handler(hook_command, timeout=CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS)),
-                (
-                    "Notification",
-                    _guard_command_handler(hook_command, timeout=CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
-                ),
-            ):
+            for key in ("SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit", "Notification"):
                 entries = hooks.get(key)
-                hooks[key] = _remove_hook_entry(
-                    _prune_guard_hook_entries(entries if isinstance(entries, list) else []),
-                    handler,
-                )
+                hooks[key] = _prune_guard_hook_entries(entries if isinstance(entries, list) else [])
             settings_path.parent.mkdir(parents=True, exist_ok=True)
             settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return {
