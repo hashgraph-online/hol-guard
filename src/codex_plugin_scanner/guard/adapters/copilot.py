@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import ast
+import importlib.util
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -33,19 +36,17 @@ _DETECTABLE_HOOK_EVENTS = (
     "errorOccurred",
 )
 _MANAGED_HOOK_FILENAME = "hol-guard-copilot.json"
-_MANAGED_HOOK_COMMAND_PATTERNS = (
+_LEGACY_MANAGED_HOOK_PATTERNS = (
     re.compile(r'(^|["\s])-m["\s]+codex_plugin_scanner\.cli(["\s]|$)'),
     re.compile(r'(^|["\s])guard(["\s]|$)'),
     re.compile(r'(^|["\s])hook(["\s]|$)'),
     re.compile(r'--harness(?:["\s=]+)copilot(["\s]|$)'),
 )
+_INLINE_GUARD_ARGS_PATTERN = re.compile(r"json\.loads\((?P<payload>'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")\)")
 
 
 def _hook_command_parts(context: HarnessContext, *, include_workspace: bool) -> tuple[str, ...]:
-    command = [
-        sys.executable,
-        "-m",
-        "codex_plugin_scanner.cli",
+    guard_args = [
         "guard",
         "hook",
         "--guard-home",
@@ -54,10 +55,18 @@ def _hook_command_parts(context: HarnessContext, *, include_workspace: bool) -> 
         "copilot",
     ]
     if context.home_dir.resolve() != Path.home().resolve():
-        command.extend(["--home", str(context.home_dir)])
+        guard_args.extend(["--home", str(context.home_dir)])
     if include_workspace and context.workspace_dir is not None:
-        command.extend(["--workspace", str(context.workspace_dir)])
-    return tuple(command)
+        guard_args.extend(["--workspace", str(context.workspace_dir)])
+    trusted_path_entries = _trusted_pythonpath_entries()
+    guard_args_json = json.dumps(guard_args)
+    code = (
+        "import json,sys;"
+        f"sys.path[:0]={trusted_path_entries!r};"
+        "from codex_plugin_scanner.cli import main;"
+        f"raise SystemExit(main(json.loads({guard_args_json!r})))"
+    )
+    return (sys.executable, "-c", code)
 
 
 def _hook_shell_commands(context: HarnessContext, *, include_workspace: bool) -> tuple[str, str]:
@@ -71,7 +80,7 @@ def _hook_entry(context: HarnessContext, *, include_workspace: bool) -> dict[str
         "type": "command",
         "bash": bash_command,
         "powershell": powershell_command,
-        "cwd": ".",
+        "cwd": str(context.guard_home),
         "timeoutSec": 30,
     }
     env = merge_guard_launcher_env()
@@ -82,7 +91,72 @@ def _hook_entry(context: HarnessContext, *, include_workspace: bool) -> dict[str
 
 def _is_managed_hook_command(command: str) -> bool:
     normalized_command = command.lower()
-    return all(pattern.search(normalized_command) is not None for pattern in _MANAGED_HOOK_COMMAND_PATTERNS)
+    if all(pattern.search(normalized_command) is not None for pattern in _LEGACY_MANAGED_HOOK_PATTERNS):
+        return True
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    if len(tokens) < 3:
+        return False
+    executable = Path(tokens[0]).name.lower()
+    if not executable.startswith("python") or tokens[1] != "-c":
+        return False
+    inline_code = tokens[2]
+    inline_args = _inline_guard_args(inline_code)
+    return "codex_plugin_scanner.cli" in inline_code and _argv_targets_copilot(inline_args)
+
+
+def _trusted_pythonpath_entries() -> list[str]:
+    launcher_env = merge_guard_launcher_env()
+    path_entries = [entry for entry in launcher_env.get("PYTHONPATH", "").split(os.pathsep) if entry.strip()]
+    package_root = _trusted_package_root()
+    cli_entrypoint = package_root / "codex_plugin_scanner" / "cli.py"
+    if not cli_entrypoint.is_file():
+        raise RuntimeError(f"Guard could not locate the trusted CLI entrypoint at {cli_entrypoint}")
+    package_root_str = str(package_root)
+    if package_root_str not in path_entries:
+        path_entries.insert(0, package_root_str)
+    return path_entries
+
+
+def _trusted_package_root() -> Path:
+    spec = importlib.util.find_spec("codex_plugin_scanner")
+    if spec is None:
+        raise RuntimeError("Guard could not locate the codex_plugin_scanner package")
+    if spec.submodule_search_locations:
+        return Path(next(iter(spec.submodule_search_locations))).resolve().parent
+    if spec.origin is None:
+        raise RuntimeError("Guard could not determine the codex_plugin_scanner package root")
+    return Path(spec.origin).resolve().parent.parent
+
+
+def _inline_guard_args(inline_code: str) -> tuple[str, ...]:
+    match = _INLINE_GUARD_ARGS_PATTERN.search(inline_code)
+    if match is None:
+        return ()
+    try:
+        payload = ast.literal_eval(match.group("payload"))
+    except (SyntaxError, ValueError):
+        return ()
+    if not isinstance(payload, str):
+        return ()
+    try:
+        guard_args = json.loads(payload)
+    except json.JSONDecodeError:
+        return ()
+    if not isinstance(guard_args, list) or any(not isinstance(item, str) for item in guard_args):
+        return ()
+    return tuple(item.lower() for item in guard_args)
+
+
+def _argv_targets_copilot(argv: tuple[str, ...]) -> bool:
+    for index, token in enumerate(argv):
+        if token == "--harness" and index + 1 < len(argv) and argv[index + 1] == "copilot":
+            return "guard" in argv and "hook" in argv
+        if token.startswith("--harness=") and token.split("=", 1)[1] == "copilot":
+            return "guard" in argv and "hook" in argv
+    return False
 
 
 def _is_managed_hook_entry(entry: object, bash_command: str, powershell_command: str) -> bool:

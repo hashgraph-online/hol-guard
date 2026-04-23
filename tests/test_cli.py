@@ -437,11 +437,13 @@ baseline_file = "baseline.txt"
 
         assert rc == 0
         with zipfile.ZipFile(bundle) as archive:
+            report = json.loads(archive.read("doctor-report.json").decode("utf-8"))
             stderr_log = archive.read("stderr.log").decode("utf-8")
             stdout_log = archive.read("stdout.log").decode("utf-8")
             timeout_markers = archive.read("timeout-markers.txt").decode("utf-8")
-        assert "doctor-err" in stderr_log
-        assert "doctor-out" in stdout_log
+        assert any(case["classification"] == "safety-skip" for case in report["cases"])
+        assert stderr_log == ""
+        assert stdout_log == ""
         assert "none" in timeout_markers
 
     def test_submit_writes_artifact(self, tmp_path):
