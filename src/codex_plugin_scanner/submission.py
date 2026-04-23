@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from .checks.manifest import load_manifest
@@ -21,6 +21,33 @@ SUBMISSION_URL_MARKER_SUFFIX = " -->"
 def _repo_api_path(repo: str) -> str:
     owner, name = repo.split("/", 1)
     return f"{quote(owner, safe='')}/{quote(name, safe='')}"
+
+
+def expected_github_api_base_url(github_server_url: str = "https://github.com") -> str:
+    parsed = urlparse(github_server_url.strip() or "https://github.com")
+    if parsed.scheme != "https" or not parsed.netloc:
+        return "https://api.github.com"
+    if parsed.netloc == "github.com":
+        return "https://api.github.com"
+    if parsed.netloc.endswith(".ghe.com"):
+        return f"https://api.{parsed.netloc}"
+    return f"https://{parsed.netloc}/api/v3"
+
+
+def normalize_github_api_base_url(
+    api_base_url: str,
+    *,
+    github_server_url: str = "https://github.com",
+) -> str:
+    expected = expected_github_api_base_url(github_server_url)
+    candidate = api_base_url.strip() or expected
+    parsed = urlparse(candidate)
+    expected_parsed = urlparse(expected)
+    if parsed.scheme != "https" or not parsed.netloc or parsed.params or parsed.query or parsed.fragment:
+        raise ValueError("GITHUB_API_URL must be an HTTPS GitHub API URL.")
+    if parsed.netloc != expected_parsed.netloc or parsed.path.rstrip("/") != expected_parsed.path.rstrip("/"):
+        raise ValueError(f'GITHUB_API_URL must match "{expected}"')
+    return expected
 
 
 @dataclass(frozen=True, slots=True)
