@@ -200,6 +200,7 @@ def test_mcp_security_loads_mcpscanner_from_installed_distribution(monkeypatch, 
         "distribution",
         lambda name: _FakeDistribution(trusted_root),
     )
+    monkeypatch.syspath_prepend(str(plugin_dir))
 
     components = cisco_mcp_module._load_mcp_scanner_components()
 
