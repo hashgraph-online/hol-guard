@@ -31,21 +31,21 @@ def check_marketplace_json(plugin_dir: Path) -> CheckResult:
                 ),
             ),
         )
-    except ValueError:
+    except ValueError as exc:
         return CheckResult(
             name="marketplace.json valid",
             passed=False,
             points=0,
             max_points=5,
-            message="marketplace.json must contain a JSON object",
+            message=str(exc),
             findings=(
                 Finding(
                     rule_id="MARKETPLACE_JSON_INVALID",
                     severity=Severity.MEDIUM,
                     category="marketplace",
-                    title="marketplace.json is invalid JSON",
-                    description="The marketplace manifest must contain a top-level object.",
-                    remediation="Fix marketplace.json so it contains a JSON object.",
+                    title="Marketplace manifest is invalid",
+                    description=str(exc),
+                    remediation="Ensure marketplace.json is a valid JSON object within the repository root.",
                     file_path="marketplace.json",
                 ),
             ),

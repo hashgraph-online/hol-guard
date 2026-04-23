@@ -32,7 +32,7 @@ def _skill_files(plugin_dir: Path, manifest: dict[str, object] | None) -> tuple[
     skills_dir = plugin_dir / skills_root
     if not skills_dir.is_dir():
         return ()
-    return iter_safe_matching_files(plugin_dir, skills_dir, "SKILL.md")
+    return iter_safe_matching_files(plugin_dir, skills_dir, "**/SKILL.md")
 
 
 def _normalized_skill_metadata(

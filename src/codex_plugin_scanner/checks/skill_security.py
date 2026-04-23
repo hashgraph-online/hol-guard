@@ -209,7 +209,7 @@ def _relative_skill_path(plugin_dir: Path, skill_path: Path) -> str:
 
 def _local_skill_instruction_findings(plugin_dir: Path, skills_dir: Path) -> tuple[Finding, ...]:
     findings: list[Finding] = []
-    for skill_path in iter_safe_matching_files(plugin_dir, skills_dir, "SKILL.md"):
+    for skill_path in iter_safe_matching_files(plugin_dir, skills_dir, "**/SKILL.md"):
         try:
             content = skill_path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
@@ -268,11 +268,22 @@ def _local_skill_instruction_check(plugin_dir: Path, skills_dir: Path | None) ->
 
 
 def _resolved_skill_files(plugin_dir: Path, skills_dir: Path) -> tuple[tuple[Path, ...], bool]:
-    if not resolves_within_root(plugin_dir, skills_dir, require_exists=True):
+    try:
+        resolved_root = plugin_dir.resolve()
+    except OSError:
         return (), True
-    safe_files = iter_safe_matching_files(plugin_dir, skills_dir, "SKILL.md")
-    total_files = tuple(sorted(path for path in skills_dir.rglob("SKILL.md") if path.is_file()))
-    return safe_files, len(safe_files) != len(total_files)
+    if not resolves_within_root(resolved_root, skills_dir, require_exists=True):
+        return (), True
+    safe_files: list[Path] = []
+    unsafe_entries_detected = False
+    for skill_path in sorted(skills_dir.glob("**/SKILL.md")):
+        if not skill_path.is_file():
+            continue
+        if not resolves_within_root(resolved_root, skill_path, require_exists=True):
+            unsafe_entries_detected = True
+            continue
+        safe_files.append(skill_path)
+    return tuple(safe_files), unsafe_entries_detected
 
 
 def resolve_skill_security_context(plugin_dir: Path, options: ScanOptions | None = None) -> SkillSecurityContext:

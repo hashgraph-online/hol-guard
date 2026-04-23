@@ -352,7 +352,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
                     _discover_project_markdown_artifacts(
                         root_dir=context.workspace_dir,
                         base_dir=skills_dir,
-                        pattern="SKILL.md",
+                        pattern="**/SKILL.md",
                         harness=self.harness,
                         artifact_type="skill",
                         artifact_id_prefix="skill",

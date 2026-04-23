@@ -45,12 +45,16 @@ def is_safe_relative_path(
 
 
 def iter_safe_matching_files(root: Path, base_dir: Path, pattern: str) -> tuple[Path, ...]:
-    if not base_dir.is_dir() or not resolves_within_root(root, base_dir, require_exists=True):
+    try:
+        resolved_root = root.resolve()
+    except OSError:
+        return ()
+    if not base_dir.is_dir() or not resolves_within_root(resolved_root, base_dir, require_exists=True):
         return ()
     return tuple(
         candidate
-        for candidate in sorted(base_dir.rglob(pattern))
-        if candidate.is_file() and resolves_within_root(root, candidate, require_exists=True)
+        for candidate in sorted(base_dir.glob(pattern))
+        if candidate.is_file() and resolves_within_root(resolved_root, candidate, require_exists=True)
     )
 
 
