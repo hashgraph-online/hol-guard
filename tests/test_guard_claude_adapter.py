@@ -47,7 +47,7 @@ def _runtime_hook_handlers(payload: dict[str, object]) -> list[dict[str, object]
     hooks = payload["hooks"]
     assert isinstance(hooks, dict)
     handlers: list[dict[str, object]] = []
-    for key in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Notification"):
+    for key in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Notification", "Stop"):
         entries = hooks[key]
         assert isinstance(entries, list)
         for entry in entries:
@@ -147,6 +147,7 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     post_tool_use = payload["hooks"]["PostToolUse"]
     prompt_submit = payload["hooks"]["UserPromptSubmit"]
     notification = payload["hooks"]["Notification"]
+    stop = payload["hooks"]["Stop"]
     assert len(session_start) == 4
     assert {entry["matcher"] for entry in session_start} == {"startup", "resume", "clear", "compact"}
     assert all(entry["hooks"][0]["type"] == "command" for entry in session_start)
@@ -165,6 +166,10 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert notification[0]["matcher"] == "permission_prompt"
     assert notification[0]["hooks"][0]["type"] == "command"
     assert notification[0]["hooks"][0]["timeout"] == 10
+    assert len(stop) == 1
+    assert "matcher" not in stop[0]
+    assert stop[0]["hooks"][0]["type"] == "command"
+    assert stop[0]["hooks"][0]["timeout"] == 10
     assert all("url" not in handler for handler in _runtime_hook_handlers(payload))
 
 
@@ -238,7 +243,13 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     installed_handlers = _runtime_hook_handlers(payload)
 
-    assert [handler["type"] for handler in installed_handlers] == ["command", "command", "command", "command"]
+    assert [handler["type"] for handler in installed_handlers] == [
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+    ]
     assert all(CLAUDE_GUARD_DAEMON_HOOK_MARKER in str(handler.get("command", "")) for handler in installed_handlers)
     assert all("url" not in handler for handler in installed_handlers)
 

@@ -25,7 +25,7 @@ from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection, PolicyDecision
 from codex_plugin_scanner.guard.policy import decide_action
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
@@ -4133,6 +4133,218 @@ def test_guard_hook_emits_claude_native_pretooluse_notice_on_stderr(tmp_path, ca
     assert "Yes during this session" in captured_notice[0]
 
 
+def test_guard_hook_claude_posttooluse_persists_native_approval(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    first_event = {
+        "session_id": "session-claude-approval",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=first_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    post_event = {
+        **first_event,
+        "hook_event_name": "PostToolUse",
+        "tool_response": {"filePath": str(workspace_dir / ".env"), "success": True},
+    }
+    post_rc, post_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=post_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "session_id": "session-claude-next"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    first_payload = json.loads(first_output)
+    second_payload = json.loads(second_output)
+    receipts = GuardStore(home_dir).list_receipts(limit=20)
+
+    assert first_rc == 0
+    assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert post_rc == 0
+    assert post_output == ""
+    assert second_rc == 0
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert any(receipt["user_override"] == "claude-native-approve" for receipt in receipts)
+
+
+def test_guard_hook_claude_alias_reuses_native_approval_policy_with_canonical_harness(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    first_event = {
+        "session_id": "session-claude-alias-approval",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude",
+        event=first_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    post_rc, post_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude",
+        event={
+            **first_event,
+            "hook_event_name": "PostToolUse",
+            "tool_response": {"filePath": str(workspace_dir / ".env"), "success": True},
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "session_id": "session-claude-alias-next"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    first_payload = json.loads(first_output)
+    second_payload = json.loads(second_output)
+    receipts = GuardStore(home_dir).list_receipts(limit=20)
+
+    assert first_rc == 0
+    assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert post_rc == 0
+    assert post_output == ""
+    assert second_rc == 0
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert any(receipt["harness"] == "claude-code" for receipt in receipts)
+
+
+def test_guard_hook_claude_alias_reuses_legacy_alias_policy_keys(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "session_id": "session-claude-legacy-alias",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    canonical_artifact = guard_commands_module._hook_runtime_artifact(
+        harness="claude",
+        payload=event,
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+    )
+    assert canonical_artifact is not None
+    legacy_artifact = guard_commands_module._legacy_claude_alias_runtime_artifact(
+        artifact=canonical_artifact,
+        requested_harness="claude",
+        home_dir=home_dir,
+        workspace=workspace_dir,
+    )
+    assert legacy_artifact is not None
+    GuardStore(home_dir).upsert_policy(
+        PolicyDecision(
+            harness="claude",
+            scope="artifact",
+            action="block",
+            artifact_id=legacy_artifact.artifact_id,
+            artifact_hash=artifact_hash(legacy_artifact),
+            reason="Legacy alias block",
+            source="claude-native-approval",
+        ),
+        "2026-04-23T00:00:00+00:00",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    payload = json.loads(output)
+
+    assert rc == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_guard_hook_claude_stop_persists_unapproved_native_prompt_as_denied(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    first_event = {
+        "session_id": "session-claude-deny",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=first_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    stop_rc, stop_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={"session_id": "session-claude-deny", "hook_event_name": "Stop", "stop_hook_active": False},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "session_id": "session-claude-deny-next"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    first_payload = json.loads(first_output)
+    second_payload = json.loads(second_output)
+
+    assert first_rc == 0
+    assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert stop_rc == 0
+    assert stop_output == ""
+    assert second_rc == 0
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "HOL Guard blocked Claude's attempt to use Read" in second_payload["systemMessage"]
+
+
 def test_guard_hook_emits_claude_native_ask_response_for_claude_alias(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -4287,7 +4499,7 @@ def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
     assert reason.endswith("...")
 
 
-def test_guard_hook_allows_claude_user_prompt_submit_for_overridable_prompts_without_output(
+def test_guard_hook_brands_claude_user_prompt_submit_before_native_approval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -4309,13 +4521,19 @@ def test_guard_hook_allows_claude_user_prompt_submit_for_overridable_prompts_wit
         monkeypatch=monkeypatch,
     )
     receipts = GuardStore(home_dir).list_receipts()
+    payload = json.loads(output)
+    hook_output = payload["hookSpecificOutput"]
 
     assert rc == 0
-    assert output == ""
+    assert "decision" not in payload
+    assert "HOL Guard intercepted this prompt" in payload["systemMessage"]
+    assert hook_output["hookEventName"] == "UserPromptSubmit"
+    assert "HOL Guard intercepted Claude's next attempt to access local secrets" in hook_output["additionalContext"]
+    assert "approval dialog" in hook_output["additionalContext"]
     assert any(receipt["artifact_id"].startswith("claude-code:session:prompt") for receipt in receipts)
 
 
-def test_guard_hook_allows_generic_claude_user_prompt_submit_for_overridable_prompts_without_output(
+def test_guard_hook_brands_generic_claude_user_prompt_submit_before_native_approval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -4336,9 +4554,15 @@ def test_guard_hook_allows_generic_claude_user_prompt_submit_for_overridable_pro
         capsys=capsys,
         monkeypatch=monkeypatch,
     )
+    payload = json.loads(output)
+    hook_output = payload["hookSpecificOutput"]
 
     assert rc == 0
-    assert output == ""
+    assert "decision" not in payload
+    assert "HOL Guard intercepted this prompt" in payload["systemMessage"]
+    assert hook_output["hookEventName"] == "UserPromptSubmit"
+    assert "HOL Guard intercepted Claude's next sensitive action" in hook_output["additionalContext"]
+    assert "approval dialog" in hook_output["additionalContext"]
 
 
 def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts(
@@ -4663,9 +4887,10 @@ def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reas
         "HOL Guard intercepted the sensitive request and opened the Claude approval dialog"
         in (output["hookSpecificOutput"]["additionalContext"])
     )
-    assert "the user can choose yes, yes during this session, or no" in (
-        output["hookSpecificOutput"]["additionalContext"]
-    ).lower()
+    assert (
+        "the user can choose yes, yes during this session, or no"
+        in (output["hookSpecificOutput"]["additionalContext"]).lower()
+    )
 
 
 def test_guard_hook_claude_notification_notice_is_tool_scoped_and_consumed(tmp_path, capsys, monkeypatch):
