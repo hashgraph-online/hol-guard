@@ -149,7 +149,7 @@ def add_guard_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
             f"  {program_name} guard detect\n"
             f"  {program_name} guard doctor cursor\n"
             f"  {program_name} guard run codex --dry-run\n"
-            f"  {program_name} guard install claude-code --workspace .\n\n"
+            f"  {program_name} guard install claude --workspace .\n\n"
             f"{_GUARD_HELP_GROUPS}"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,

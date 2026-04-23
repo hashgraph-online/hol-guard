@@ -83,6 +83,7 @@ class HarnessAdapter:
     """Common interface shared by harness adapters."""
 
     harness = ""
+    aliases: tuple[str, ...] = ()
     executable = ""
     approval_tier = "approval-center"
     approval_summary = "Guard pauses the launch and routes approval through the local approval center."
