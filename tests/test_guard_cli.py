@@ -20,7 +20,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters import claude_code as claude_adapter_module
 from codex_plugin_scanner.guard.adapters import cursor as cursor_adapter_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+from codex_plugin_scanner.guard.adapters.claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER, ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import connect_flow as guard_connect_flow_module
@@ -2114,19 +2114,21 @@ args = ["workspace-skill.js", "--changed"]
             install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0]["command"]
             == expected_session_start_command
         )
-        expected_hook_url = ClaudeCodeHarnessAdapter._hook_http_url(
+        expected_hook_command = ClaudeCodeHarnessAdapter._daemon_hook_command(
             HarnessContext(
                 home_dir=home_dir,
                 workspace_dir=workspace_dir,
                 guard_home=home_dir,
             )
         )
-        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["type"] == "http"
-        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["url"] == expected_hook_url
-        assert install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["type"] == "http"
+        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["type"] == "command"
+        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == expected_hook_command
+        assert "url" not in install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]
+        assert install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["type"] == "command"
         assert install_settings_payload["hooks"]["Notification"][0]["matcher"] == "permission_prompt"
-        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["type"] == "http"
-        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["url"] == expected_hook_url
+        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["type"] == "command"
+        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["command"] == expected_hook_command
+        assert "url" not in install_settings_payload["hooks"]["Notification"][0]["hooks"][0]
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
         assert settings_payload["hooks"]["SessionStart"] == []
@@ -2350,20 +2352,22 @@ args = ["workspace-skill.js", "--changed"]
         assert len(payload["hooks"]["PostToolUse"]) == 1
         assert len(payload["hooks"]["UserPromptSubmit"]) == 1
         assert len(payload["hooks"]["Notification"]) == 1
-        pretool_hook_urls = [
-            hook["url"]
+        pretool_hook_commands = [
+            hook["command"]
             for hook in payload["hooks"]["PreToolUse"][0]["hooks"]
-            if isinstance(hook, dict) and isinstance(hook.get("url"), str)
+            if isinstance(hook, dict) and isinstance(hook.get("command"), str)
         ]
-        assert len(pretool_hook_urls) == 1
-        assert "legacy-guard-home" not in pretool_hook_urls[0]
-        notification_hook_urls = [
-            hook["url"]
+        assert len(pretool_hook_commands) == 1
+        assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in pretool_hook_commands[0]
+        assert "legacy-guard-home" not in pretool_hook_commands[0]
+        notification_hook_commands = [
+            hook["command"]
             for hook in payload["hooks"]["Notification"][0]["hooks"]
-            if isinstance(hook, dict) and isinstance(hook.get("url"), str)
+            if isinstance(hook, dict) and isinstance(hook.get("command"), str)
         ]
-        assert len(notification_hook_urls) == 1
-        assert "legacy-guard-home" not in notification_hook_urls[0]
+        assert len(notification_hook_commands) == 1
+        assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in notification_hook_commands[0]
+        assert "legacy-guard-home" not in notification_hook_commands[0]
 
     def test_guard_install_auto_detects_configured_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

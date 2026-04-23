@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shlex
 import subprocess
 import sys
 from collections.abc import Callable
@@ -24,17 +26,21 @@ CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS = 20
 CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS = 10
 CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS = 10
 CLAUDE_SETTINGS_FILES = ("settings.json", "settings.local.json")
+CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 
 
 def _guard_command_handler(command: str, *, timeout: int) -> dict[str, object]:
     return {"type": "command", "command": command, "timeout": timeout}
 
 
-def _guard_http_handler(url: str, *, timeout: int) -> dict[str, object]:
-    return {"type": "http", "url": url, "timeout": timeout}
+def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:
+    is_windows = os.name == "nt" if windows is None else windows
+    if is_windows:
+        return subprocess.list2cmdline(list(command))
+    return shlex.join(command)
 
 
-def _sync_runtime_hook_groups(hooks: dict[str, object], hook_url: str) -> None:
+def _sync_runtime_hook_groups(hooks: dict[str, object], hook_command: str) -> None:
     for key, matcher, timeout in (
         ("PreToolUse", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
         ("PostToolUse", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
@@ -45,7 +51,7 @@ def _sync_runtime_hook_groups(hooks: dict[str, object], hook_url: str) -> None:
         hooks[key] = _merge_hook_group(
             _prune_guard_hook_entries(existing_entries if isinstance(existing_entries, list) else []),
             matcher,
-            _guard_http_handler(hook_url, timeout=timeout),
+            _guard_command_handler(hook_command, timeout=timeout),
         )
 
 
@@ -59,6 +65,8 @@ def _guard_hook_group(matcher: str | None, handler: dict[str, object]) -> dict[s
 def _is_guard_hook_command(command: object) -> bool:
     if not isinstance(command, str):
         return False
+    if CLAUDE_GUARD_DAEMON_HOOK_MARKER in command:
+        return True
     if "codex_plugin_scanner.cli" in command:
         return "guard hook" in command or "'guard', 'hook'" in command or '"guard", "hook"' in command
     return "ensure_guard_daemon(" in command and "HOL Guard protection is active for this workspace." in command
@@ -441,6 +449,11 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         return subprocess.list2cmdline(list(command))
 
     @staticmethod
+    def _daemon_hook_command(context: HarnessContext) -> str:
+        command = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)
+        return _shell_command(command)
+
+    @staticmethod
     def _session_start_command(context: HarnessContext) -> str:
         command = ClaudeCodeHarnessAdapter._session_start_command_parts(context)
         return subprocess.list2cmdline(list(command))
@@ -454,6 +467,60 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         if context.workspace_dir is not None:
             query["workspace"] = str(context.workspace_dir)
         return f"{daemon_url}/v1/hooks/claude-code?{urlencode(query)}"
+
+    @staticmethod
+    def _daemon_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
+        fallback_daemon_url = load_guard_daemon_url(context.guard_home) or guard_daemon_url_for_home(context.guard_home)
+        state_path = context.guard_home / "daemon-state.json"
+        query: dict[str, str] = {"guard-home": str(context.guard_home)}
+        if context.home_dir.resolve() != Path.home().resolve():
+            query["home"] = str(context.home_dir)
+        if context.workspace_dir is not None:
+            query["workspace"] = str(context.workspace_dir)
+        js = (
+            f"const MARKER={CLAUDE_GUARD_DAEMON_HOOK_MARKER!r};"
+            "void MARKER;"
+            "const fs=require('fs');"
+            "const http=require('http');"
+            "const {URL}=require('url');"
+            f"const statePath={str(state_path)!r};"
+            f"const fallbackUrl={fallback_daemon_url!r};"
+            f"const query={urlencode(query)!r};"
+            "function daemonUrl(){"
+            "try{"
+            "const payload=JSON.parse(fs.readFileSync(statePath,'utf8'));"
+            "if(Number.isInteger(payload.port))return `http://127.0.0.1:${payload.port}`;"
+            "}catch(_error){}"
+            "return fallbackUrl;"
+            "}"
+            "function fail(reason){"
+            "const message=`HOL Guard could not evaluate this action: ${reason}`;"
+            "process.stdout.write(JSON.stringify({decision:'block',reason:message}));"
+            "process.exit(0);"
+            "}"
+            "let body='';"
+            "process.stdin.setEncoding('utf8');"
+            "process.stdin.on('data',chunk=>{body+=chunk;});"
+            "process.stdin.on('end',()=>{"
+            "let endpoint;"
+            "try{endpoint=new URL('/v1/hooks/claude-code?'+query,daemonUrl());}"
+            "catch(error){fail(error.message);return;}"
+            "const data=body.trim()?body:'{}';"
+            "const headers={'content-type':'application/json','content-length':Buffer.byteLength(data)};"
+            "const request=http.request(endpoint,{method:'POST',headers},response=>{"
+            "let responseBody='';"
+            "response.setEncoding('utf8');"
+            "response.on('data',chunk=>{responseBody+=chunk;});"
+            "response.on('end',()=>{"
+            "if(response.statusCode>=200&&response.statusCode<300){process.stdout.write(responseBody);process.exit(0);}"
+            "fail(`daemon returned HTTP ${response.statusCode||0}`);"
+            "});"
+            "});"
+            "request.on('error',error=>{fail(error.message);});"
+            "request.end(data);"
+            "});"
+        )
+        return ("node", "-e", js)
 
     @staticmethod
     def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
@@ -509,7 +576,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         hooks = payload.get("hooks")
         if not isinstance(hooks, dict):
             return
-        _sync_runtime_hook_groups(hooks, self._hook_http_url(context))
+        _sync_runtime_hook_groups(hooks, self._daemon_hook_command(context))
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -537,7 +604,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         _ensure_path_within_root(context.workspace_dir, settings_path, label="Claude Code")
         payload = _json_payload(settings_path)
         session_start_command = self._session_start_command(context)
-        hook_url = self._hook_http_url(context)
+        hook_command = self._daemon_hook_command(context)
         hooks = payload.setdefault("hooks", {})
         if not isinstance(hooks, dict):
             hooks = {}
@@ -552,7 +619,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         for matcher in CLAUDE_GUARD_SESSION_START_MATCHERS:
             session_start_entries = _merge_hook_group(session_start_entries, matcher, session_start_handler)
         hooks["SessionStart"] = session_start_entries
-        _sync_runtime_hook_groups(hooks, hook_url)
+        _sync_runtime_hook_groups(hooks, hook_command)
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return {
