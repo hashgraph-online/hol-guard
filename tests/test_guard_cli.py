@@ -2065,9 +2065,10 @@ args = ["workspace-skill.js", "--changed"]
         assert install_output["managed_install"]["active"] is True
         assert install_output["managed_install"]["manifest"]["shim_command"] == "guard-claude"
         assert settings_local.exists()
+        assert len(install_settings_payload["hooks"]["SessionStart"]) == 4
         assert len(install_settings_payload["hooks"]["PreToolUse"]) == 1
         assert install_output["managed_install"]["manifest"]["notes"][0]
-        expected_hook_command = ClaudeCodeHarnessAdapter._hook_command(
+        expected_session_start_command = ClaudeCodeHarnessAdapter._session_start_command(
             HarnessContext(
                 home_dir=home_dir,
                 workspace_dir=workspace_dir,
@@ -2078,12 +2079,26 @@ args = ["workspace-skill.js", "--changed"]
             install_settings_payload["hooks"]["PreToolUse"][0]["matcher"]
             == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
         )
+        assert (
+            install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+            == expected_session_start_command
+        )
+        expected_hook_command = ClaudeCodeHarnessAdapter._hook_command(
+            HarnessContext(
+                home_dir=home_dir,
+                workspace_dir=workspace_dir,
+                guard_home=home_dir,
+            )
+        )
+        assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["type"] == "command"
         assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == expected_hook_command
-        assert install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"] == expected_hook_command
+        assert install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["type"] == "command"
         assert install_settings_payload["hooks"]["Notification"][0]["matcher"] == "permission_prompt"
+        assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["type"] == "command"
         assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["command"] == expected_hook_command
         assert uninstall_rc == 0
         assert uninstall_output["managed_install"]["active"] is False
+        assert settings_payload["hooks"]["SessionStart"] == []
         assert settings_payload["hooks"]["PreToolUse"] == []
         assert settings_payload["hooks"]["Notification"] == []
 
@@ -2144,6 +2159,12 @@ args = ["workspace-skill.js", "--changed"]
             settings_local,
             {
                 "hooks": {
+                    "SessionStart": [
+                        {
+                            "matcher": "startup",
+                            "hooks": [{"type": "command", "command": legacy_command, "timeout": 5}],
+                        }
+                    ],
                     "PreToolUse": [
                         {
                             "matcher": "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
@@ -2188,24 +2209,25 @@ args = ["workspace-skill.js", "--changed"]
 
         assert rc == 0
         assert output["managed_install"]["active"] is True
+        assert len(payload["hooks"]["SessionStart"]) == 4
         assert len(payload["hooks"]["PreToolUse"]) == 1
         assert len(payload["hooks"]["PostToolUse"]) == 1
         assert len(payload["hooks"]["UserPromptSubmit"]) == 1
         assert len(payload["hooks"]["Notification"]) == 1
-        pretool_commands = [
+        pretool_hook_commands = [
             hook["command"]
             for hook in payload["hooks"]["PreToolUse"][0]["hooks"]
             if isinstance(hook, dict) and isinstance(hook.get("command"), str)
         ]
-        assert len(pretool_commands) == 1
-        assert legacy_command not in pretool_commands
-        notification_commands = [
+        assert len(pretool_hook_commands) == 1
+        assert pretool_hook_commands[0] != legacy_command
+        notification_hook_commands = [
             hook["command"]
             for hook in payload["hooks"]["Notification"][0]["hooks"]
             if isinstance(hook, dict) and isinstance(hook.get("command"), str)
         ]
-        assert len(notification_commands) == 1
-        assert legacy_command not in notification_commands
+        assert len(notification_hook_commands) == 1
+        assert notification_hook_commands[0] != legacy_command
 
     def test_guard_install_auto_detects_configured_harnesses(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

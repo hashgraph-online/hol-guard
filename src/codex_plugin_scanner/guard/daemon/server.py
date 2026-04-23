@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
+import io
 import json
 import mimetypes
+import os
 import threading
 import time
 import uuid
@@ -29,6 +32,10 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     store: GuardStore
     runtime: GuardSurfaceRuntime
     auth_token: str
+    idle_timeout_seconds: float | None
+    last_activity_monotonic: float
+    active_stream_clients: int
+    active_stream_clients_lock: threading.Lock
 
 
 _STATIC_DIR = Path(__file__).with_name("static")
@@ -39,6 +46,10 @@ _ROOT_STATIC_FILES = {
     "/favicon-16x16.png",
     "/favicon-32x32.png",
 }
+_CLAUDE_HOOK_EXECUTION_LOCK = threading.Lock()
+_DEFAULT_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 30 * 60
+_EPHEMERAL_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 5
+_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS = 0.5
 
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
@@ -185,6 +196,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         path_parts = [part for part in parsed.path.split("/") if part]
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
+            return
+        if parsed.path == "/v1/hooks/claude-code":
+            self._handle_claude_hook(payload, parsed.query)
             return
         if parsed.path == "/v1/clients/attach":
             if not self._header_token_is_valid():
@@ -605,6 +619,45 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self._write_json({"state": state})
 
+    def _handle_claude_hook(self, payload: dict[str, object], query: str) -> None:
+        params = parse_qs(query)
+        home_dir = self._optional_string(params.get("home", [None])[-1])
+        guard_home = self._optional_string(params.get("guard-home", [None])[-1])
+        workspace = self._optional_string(params.get("workspace", [None])[-1])
+        args = argparse.Namespace(
+            guard_command="hook",
+            home=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+            harness="claude-code",
+            artifact_id=None,
+            artifact_name=None,
+            policy_action=None,
+            event_file=None,
+            json=False,
+        )
+        buffer = io.StringIO()
+        with _CLAUDE_HOOK_EXECUTION_LOCK:
+            from ..cli.commands import run_guard_command
+
+            exit_code = run_guard_command(args, input_text=json.dumps(payload), output_stream=buffer)
+        raw_response = buffer.getvalue().strip()
+        if not raw_response:
+            if exit_code == 0:
+                self._write_json({})
+                return
+            self._write_json({"error": "empty_hook_response", "exit_code": exit_code}, status=502)
+            return
+        try:
+            hook_payload = json.loads(raw_response)
+        except json.JSONDecodeError:
+            self._write_json(
+                {"error": "invalid_hook_response", "raw": raw_response, "exit_code": exit_code},
+                status=502,
+            )
+            return
+        self._write_json(hook_payload)
+
     def _token_is_valid(self, query: str) -> bool:
         params = parse_qs(query)
         token = params.get("token", [None])[-1]
@@ -616,10 +669,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _touch_runtime_heartbeat(self, path: str) -> None:
         if path != "/healthz" and not path.startswith("/v1/"):
             return
+        self.server.last_activity_monotonic = time.monotonic()  # type: ignore[attr-defined]
         self.server.store.touch_runtime_state(  # type: ignore[attr-defined]
             session_id=self.server.runtime_session_id,  # type: ignore[attr-defined]
             last_heartbeat_at=_now(),
         )
+
+    def _increment_active_stream_clients(self) -> None:
+        with self.server.active_stream_clients_lock:  # type: ignore[attr-defined]
+            self.server.active_stream_clients += 1  # type: ignore[attr-defined]
+
+    def _decrement_active_stream_clients(self) -> None:
+        with self.server.active_stream_clients_lock:  # type: ignore[attr-defined]
+            self.server.active_stream_clients = max(0, self.server.active_stream_clients - 1)  # type: ignore[attr-defined]
 
     @staticmethod
     def _optional_int(value: object) -> int | None:
@@ -639,17 +701,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.send_header("Connection", "keep-alive")
         self.end_headers()
         next_cursor = cursor
-        while True:
-            items = self.server.store.list_events_after(next_cursor, limit=100)  # type: ignore[attr-defined]
-            for item in items:
-                next_cursor = int(item["event_id"])
-                body = json.dumps(item)
-                try:
-                    self.wfile.write(f"data: {body}\n\n".encode())
-                    self.wfile.flush()
-                except BrokenPipeError:
-                    return
-            time.sleep(0.5)
+        self._increment_active_stream_clients()
+        try:
+            while True:
+                self._touch_runtime_heartbeat("/v1/events/stream")
+                items = self.server.store.list_events_after(next_cursor, limit=100)  # type: ignore[attr-defined]
+                for item in items:
+                    next_cursor = int(item["event_id"])
+                    body = json.dumps(item)
+                    try:
+                        self.wfile.write(f"data: {body}\n\n".encode())
+                        self.wfile.flush()
+                    except BrokenPipeError:
+                        return
+                time.sleep(0.5)
+        finally:
+            self._decrement_active_stream_clients()
 
     def _origin_is_allowed(self) -> bool:
         origin = self.headers.get("Origin")
@@ -865,7 +932,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 class GuardDaemonServer:
     """Small local daemon for health, receipts, and approval-center introspection."""
 
-    def __init__(self, store: GuardStore, host: str = "127.0.0.1", port: int = 0) -> None:
+    def __init__(
+        self,
+        store: GuardStore,
+        host: str = "127.0.0.1",
+        port: int = 0,
+        *,
+        idle_timeout_seconds: float | None = None,
+    ) -> None:
         _validate_dashboard_bundle()
         self._server = _GuardDaemonHttpServer((host, port), _GuardDaemonHandler)
         self._server.store = store
@@ -874,24 +948,44 @@ class GuardDaemonServer:
         self._server.runtime_host = host
         self._server.runtime_session_id = uuid.uuid4().hex
         self._server.runtime_started_at = _now()
+        self._server.idle_timeout_seconds = _guard_daemon_idle_timeout_seconds(
+            store.guard_home,
+            idle_timeout_seconds=idle_timeout_seconds,
+        )
+        self._server.last_activity_monotonic = time.monotonic()
+        self._server.active_stream_clients = 0
+        self._server.active_stream_clients_lock = threading.Lock()
         self.port = int(self._server.server_address[1])
         self._thread: threading.Thread | None = None
+        self._watchdog_thread: threading.Thread | None = None
+        self._shutdown_started = threading.Event()
 
     def start(self) -> None:
         if self._thread is not None:
             return
-        write_guard_daemon_state(self._server.store.guard_home, self.port, self._server.auth_token)
-        self._server.store.upsert_runtime_state(
-            session_id=self._server.runtime_session_id,
-            daemon_host=self._server.runtime_host,
-            daemon_port=self.port,
-            started_at=self._server.runtime_started_at,
-            last_heartbeat_at=_now(),
-        )
-        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._begin_service()
+        self._thread = threading.Thread(target=self._serve_forever, daemon=True)
         self._thread.start()
 
     def serve(self) -> None:
+        self._begin_service()
+        self._serve_forever()
+
+    def stop(self) -> None:
+        self._shutdown_started.set()
+        self._server.shutdown()
+        self._server.server_close()
+        self._finish_service()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+            self._thread = None
+        if self._watchdog_thread is not None:
+            self._watchdog_thread.join(timeout=5)
+            self._watchdog_thread = None
+
+    def _begin_service(self) -> None:
+        self._shutdown_started.clear()
+        self._server.last_activity_monotonic = time.monotonic()
         write_guard_daemon_state(self._server.store.guard_home, self.port, self._server.auth_token)
         self._server.store.upsert_runtime_state(
             session_id=self._server.runtime_session_id,
@@ -900,20 +994,48 @@ class GuardDaemonServer:
             started_at=self._server.runtime_started_at,
             last_heartbeat_at=_now(),
         )
+        self._start_watchdog()
+
+    def _serve_forever(self) -> None:
         try:
             self._server.serve_forever()
         finally:
+            self._server.server_close()
+            self._finish_service()
+
+    def _finish_service(self) -> None:
+        if self._shutdown_started.is_set():
             clear_guard_daemon_state(self._server.store.guard_home)
             self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
-
-    def stop(self) -> None:
-        self._server.shutdown()
-        self._server.server_close()
+            return
+        self._shutdown_started.set()
         clear_guard_daemon_state(self._server.store.guard_home)
         self._server.store.clear_runtime_state(session_id=self._server.runtime_session_id)
-        if self._thread is not None:
-            self._thread.join(timeout=5)
-            self._thread = None
+
+    def _start_watchdog(self) -> None:
+        if self._watchdog_thread is not None and self._watchdog_thread.is_alive():
+            return
+        idle_timeout_seconds = self._server.idle_timeout_seconds
+        if idle_timeout_seconds is None or idle_timeout_seconds <= 0:
+            return
+        self._watchdog_thread = threading.Thread(target=self._watch_for_idle_shutdown, daemon=True)
+        self._watchdog_thread.start()
+
+    def _watch_for_idle_shutdown(self) -> None:
+        idle_timeout_seconds = self._server.idle_timeout_seconds
+        if idle_timeout_seconds is None or idle_timeout_seconds <= 0:
+            return
+        while not self._shutdown_started.is_set():
+            with self._server.active_stream_clients_lock:
+                active_stream_clients = self._server.active_stream_clients
+            if active_stream_clients > 0:
+                time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
+                continue
+            if time.monotonic() - self._server.last_activity_monotonic >= idle_timeout_seconds:
+                self._shutdown_started.set()
+                self._server.shutdown()
+                return
+            time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
 
 
 def _now() -> str:
@@ -927,6 +1049,33 @@ def _validate_dashboard_bundle() -> None:
         raise RuntimeError(
             "Guard dashboard bundle is missing. Run `pnpm install && pnpm run build` in the dashboard directory."
         )
+
+
+def _guard_daemon_idle_timeout_seconds(
+    guard_home: Path,
+    *,
+    idle_timeout_seconds: float | None = None,
+) -> float | None:
+    if idle_timeout_seconds is not None:
+        return idle_timeout_seconds if idle_timeout_seconds > 0 else None
+    configured_timeout = os.environ.get("GUARD_DAEMON_IDLE_TIMEOUT_SECONDS")
+    if isinstance(configured_timeout, str) and configured_timeout.strip():
+        try:
+            parsed_timeout = float(configured_timeout.strip())
+        except ValueError:
+            parsed_timeout = None
+        if isinstance(parsed_timeout, float) and parsed_timeout > 0:
+            return parsed_timeout
+        if parsed_timeout == 0:
+            return None
+    if _guard_home_is_ephemeral(guard_home):
+        return _EPHEMERAL_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS
+    return _DEFAULT_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS
+
+
+def _guard_home_is_ephemeral(guard_home: Path) -> bool:
+    resolved_parts = guard_home.resolve().parts
+    return any(part.startswith("pytest-") or "pytest-of-" in part for part in resolved_parts)
 
 
 def _int_query_value(query: str, key: str) -> int:

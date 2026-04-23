@@ -5,13 +5,18 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import shlex
+import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
 
@@ -23,15 +28,20 @@ REQUIRED_DAEMON_TABLES = frozenset({"guard_connect_states"})
 GUARD_DAEMON_COMPATIBILITY_VERSION = 2
 GUARD_DAEMON_START_TIMEOUT_SECONDS = 5.0
 GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
+_EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS = 30.0
+_EPHEMERAL_GUARD_DAEMON_STALE_SECONDS = 30.0
+_EPHEMERAL_GUARD_DAEMON_MAX_STATES = 512
 
 _START_LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS_GUARD = threading.Lock()
+_LAST_EPHEMERAL_REAP_AT = 0.0
+_RUNTIME_FINGERPRINT_CACHE: str | None = None
 
 
 def _daemon_launcher_env() -> dict[str, str]:
     env = dict(os.environ)
     pythonpath_entries: list[str] = []
-    for raw_value in (env.get("PYTHONPATH", ""), str(Path(__file__).resolve().parents[3])):
+    for raw_value in (str(Path(__file__).resolve().parents[3]), env.get("PYTHONPATH", "")):
         for entry in raw_value.split(os.pathsep):
             normalized = entry.strip()
             if normalized and normalized not in pythonpath_entries:
@@ -42,6 +52,7 @@ def _daemon_launcher_env() -> dict[str, str]:
 
 
 def ensure_guard_daemon(guard_home: Path) -> str:
+    _reap_stale_ephemeral_guard_daemons(exclude_guard_home=guard_home)
     state_path = _state_path(guard_home)
     existing_url = load_guard_daemon_url(guard_home)
     if existing_url is not None:
@@ -50,6 +61,9 @@ def ensure_guard_daemon(guard_home: Path) -> str:
         existing_url = load_guard_daemon_url(guard_home)
         if existing_url is not None:
             return existing_url
+        stale_state = _load_state(guard_home)
+        if isinstance(stale_state, dict) and not _guard_daemon_state_matches_current_runtime(stale_state):
+            _retire_guard_daemon_process({**stale_state, "guard_home": str(guard_home)})
         if _guard_daemon_start_in_progress(guard_home):
             inflight_url = _wait_for_guard_daemon_url(guard_home, timeout=GUARD_DAEMON_START_TIMEOUT_SECONDS)
             if inflight_url is not None:
@@ -89,9 +103,15 @@ def ensure_guard_daemon(guard_home: Path) -> str:
     raise RuntimeError(f"Guard approval center did not start. Expected state file at {state_path}.")
 
 
+def guard_daemon_url_for_home(guard_home: Path) -> str:
+    return f"http://127.0.0.1:{_configured_port(guard_home)}"
+
+
 def load_guard_daemon_url(guard_home: Path) -> str | None:
     payload = _load_state(guard_home)
     if payload is None:
+        return None
+    if not _guard_daemon_state_matches_current_runtime(payload):
         return None
     port = payload.get("port")
     if not isinstance(port, int):
@@ -123,10 +143,13 @@ def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str) -> No
     state_path.write_text(
         json.dumps(
             {
+                "guard_home": str(guard_home),
                 "port": port,
                 "auth_token": auth_token,
                 "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
                 "package_version": __version__,
+                "source_root": _current_guard_daemon_source_root(),
+                "runtime_fingerprint": _current_guard_daemon_runtime_fingerprint(),
                 "pid": os.getpid(),
             },
             indent=2,
@@ -152,8 +175,259 @@ def _load_state(guard_home: Path) -> dict[str, object] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _looks_like_guard_daemon_state(payload: dict[str, object], *, guard_home: Path) -> bool:
+    compatibility_version = payload.get("compatibility_version")
+    source_root = payload.get("source_root")
+    runtime_fingerprint = payload.get("runtime_fingerprint")
+    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
+        return False
+    if not isinstance(source_root, str) or not source_root.strip():
+        return False
+    if not isinstance(runtime_fingerprint, str) or not runtime_fingerprint.strip():
+        return False
+    payload_guard_home = payload.get("guard_home")
+    if isinstance(payload_guard_home, str) and payload_guard_home.strip():
+        try:
+            return Path(payload_guard_home).resolve() == guard_home.resolve()
+        except OSError:
+            return Path(payload_guard_home) == guard_home
+    return True
+
+
 def _state_path(guard_home: Path) -> Path:
     return guard_home / "daemon-state.json"
+
+
+def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = None) -> None:
+    global _LAST_EPHEMERAL_REAP_AT
+    now = time.monotonic()
+    if now - _LAST_EPHEMERAL_REAP_AT < _EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS:
+        return
+    _LAST_EPHEMERAL_REAP_AT = now
+    temp_root = Path(tempfile.gettempdir())
+    candidate_paths = list(_ephemeral_guard_daemon_state_paths(temp_root))
+    exclude_resolved = exclude_guard_home.resolve() if exclude_guard_home is not None else None
+    for state_path in candidate_paths[:_EPHEMERAL_GUARD_DAEMON_MAX_STATES]:
+        guard_home = state_path.parent
+        try:
+            resolved_guard_home = guard_home.resolve()
+        except OSError:
+            continue
+        if exclude_resolved is not None and resolved_guard_home == exclude_resolved:
+            continue
+        if not _guard_home_is_ephemeral(resolved_guard_home):
+            continue
+        if _state_path_age_seconds(state_path) < _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS:
+            continue
+        if not _ephemeral_guard_home_is_inactive(guard_home, fallback_age_seconds=_state_path_age_seconds(state_path)):
+            continue
+        payload = _load_state(guard_home)
+        if not isinstance(payload, dict) or not _looks_like_guard_daemon_state(payload, guard_home=guard_home):
+            continue
+        payload = {**payload, "guard_home": str(guard_home)}
+        if _retire_guard_daemon_process(payload):
+            clear_guard_daemon_state(guard_home)
+    for pid, guard_home, elapsed_seconds in _running_ephemeral_guard_daemon_processes():
+        if elapsed_seconds < _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS:
+            continue
+        try:
+            resolved_guard_home = guard_home.resolve()
+        except OSError:
+            continue
+        if exclude_resolved is not None and resolved_guard_home == exclude_resolved:
+            continue
+        if not _ephemeral_guard_home_is_inactive(guard_home, fallback_age_seconds=elapsed_seconds):
+            continue
+        if _retire_guard_daemon_pid(pid, expected_guard_home=guard_home):
+            clear_guard_daemon_state(guard_home)
+
+
+def _ephemeral_guard_daemon_state_paths(temp_root: Path) -> list[Path]:
+    results: list[Path] = []
+    for root in _pytest_temp_roots(temp_root):
+        _collect_daemon_state_paths(root, results, limit=_EPHEMERAL_GUARD_DAEMON_MAX_STATES)
+        if len(results) >= _EPHEMERAL_GUARD_DAEMON_MAX_STATES:
+            break
+    return sorted(results)
+
+
+def _pytest_temp_roots(temp_root: Path) -> list[Path]:
+    roots: list[Path] = []
+    try:
+        if _path_name_looks_like_pytest_temp_root(temp_root.name):
+            roots.append(temp_root)
+        with os.scandir(temp_root) as entries:
+            for entry in entries:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                if _path_name_looks_like_pytest_temp_root(entry.name):
+                    roots.append(Path(entry.path))
+    except OSError:
+        return []
+    return sorted(roots)
+
+
+def _path_name_looks_like_pytest_temp_root(name: str) -> bool:
+    return name.startswith("pytest-") or "pytest-of-" in name
+
+
+def _collect_daemon_state_paths(root: Path, results: list[Path], *, limit: int) -> None:
+    pending: list[Path] = [root]
+    while pending and len(results) < limit:
+        current = pending.pop()
+        try:
+            with os.scandir(current) as entries:
+                directories: list[Path] = []
+                files: list[Path] = []
+                for entry in entries:
+                    if entry.is_dir(follow_symlinks=False):
+                        directories.append(Path(entry.path))
+                    elif entry.is_file(follow_symlinks=False) and entry.name == "daemon-state.json":
+                        files.append(Path(entry.path))
+        except OSError:
+            continue
+        for path in sorted(files):
+            results.append(path)
+            if len(results) >= limit:
+                return
+        pending.extend(reversed(sorted(directories)))
+
+
+def _state_path_age_seconds(state_path: Path) -> float:
+    try:
+        return max(0.0, time.time() - state_path.stat().st_mtime)
+    except OSError:
+        return 0.0
+
+
+def _guard_home_is_ephemeral(guard_home: Path) -> bool:
+    return any(part.startswith("pytest-") or "pytest-of-" in part for part in guard_home.parts)
+
+
+def _ephemeral_guard_home_is_inactive(guard_home: Path, *, fallback_age_seconds: float) -> bool:
+    heartbeat_age_seconds = _runtime_state_age_seconds(guard_home)
+    if heartbeat_age_seconds is None:
+        return fallback_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
+    return heartbeat_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
+
+
+def _runtime_state_age_seconds(guard_home: Path) -> float | None:
+    try:
+        from ..store import GuardStore
+
+        runtime_state = GuardStore(guard_home).get_runtime_state()
+    except Exception:
+        return None
+    if not isinstance(runtime_state, dict):
+        return None
+    last_heartbeat_at = runtime_state.get("last_heartbeat_at")
+    if not isinstance(last_heartbeat_at, str) or not last_heartbeat_at.strip():
+        return None
+    try:
+        heartbeat = datetime.fromisoformat(last_heartbeat_at)
+    except ValueError:
+        return None
+    if heartbeat.tzinfo is None:
+        heartbeat = heartbeat.replace(tzinfo=timezone.utc)
+    return max(0.0, (datetime.now(timezone.utc) - heartbeat).total_seconds())
+
+
+def _running_ephemeral_guard_daemon_processes() -> list[tuple[int, Path, float]]:
+    if os.name == "nt":
+        return []
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid=,etime=,command="],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return []
+    processes: list[tuple[int, Path, float]] = []
+    for line in result.stdout.splitlines():
+        match = re.match(r"^\s*(\d+)\s+(\S+)\s+(.*)$", line)
+        if match is None:
+            continue
+        pid = int(match.group(1))
+        elapsed_seconds = _elapsed_seconds_from_ps(match.group(2))
+        command = match.group(3).strip()
+        if "codex_plugin_scanner.cli guard daemon --serve" not in command:
+            continue
+        guard_home = _guard_home_from_command(command)
+        if guard_home is None or not _guard_home_is_ephemeral(guard_home):
+            continue
+        processes.append((pid, guard_home, elapsed_seconds))
+    return processes
+
+
+def _elapsed_seconds_from_ps(value: str) -> float:
+    trimmed = value.strip()
+    if not trimmed:
+        return 0.0
+    day_split = trimmed.split("-", 1)
+    days = 0
+    time_part = trimmed
+    if len(day_split) == 2:
+        days = int(day_split[0])
+        time_part = day_split[1]
+    fields = [int(field) for field in time_part.split(":")]
+    if len(fields) == 3:
+        hours, minutes, seconds = fields
+    elif len(fields) == 2:
+        hours = 0
+        minutes, seconds = fields
+    else:
+        hours = 0
+        minutes = 0
+        seconds = fields[0]
+    return float((((days * 24) + hours) * 60 + minutes) * 60 + seconds)
+
+
+def _guard_home_from_command(command: str) -> Path | None:
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return None
+    for index, part in enumerate(parts):
+        if part == "--guard-home" and index + 1 < len(parts):
+            return Path(parts[index + 1])
+    return None
+
+
+def _guard_daemon_state_matches_current_runtime(payload: dict[str, object]) -> bool:
+    compatibility_version = payload.get("compatibility_version")
+    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
+        return False
+    source_root = payload.get("source_root")
+    if not isinstance(source_root, str) or source_root != _current_guard_daemon_source_root():
+        return False
+    runtime_fingerprint = payload.get("runtime_fingerprint")
+    return isinstance(runtime_fingerprint, str) and runtime_fingerprint == _current_guard_daemon_runtime_fingerprint()
+
+
+def _current_guard_daemon_source_root() -> str:
+    return str(Path(__file__).resolve().parents[3])
+
+
+def _current_guard_daemon_runtime_fingerprint() -> str:
+    global _RUNTIME_FINGERPRINT_CACHE
+    if _RUNTIME_FINGERPRINT_CACHE is not None:
+        return _RUNTIME_FINGERPRINT_CACHE
+    source_root = Path(_current_guard_daemon_source_root())
+    package_root = source_root / "codex_plugin_scanner"
+    digest = hashlib.sha256()
+    digest.update(__version__.encode("utf-8"))
+    for path in sorted(package_root.rglob("*.py")):
+        try:
+            stat_result = path.stat()
+        except OSError:
+            continue
+        digest.update(str(path.relative_to(source_root)).encode("utf-8"))
+        digest.update(str(stat_result.st_mtime_ns).encode("utf-8"))
+        digest.update(str(stat_result.st_size).encode("utf-8"))
+    _RUNTIME_FINGERPRINT_CACHE = digest.hexdigest()
+    return _RUNTIME_FINGERPRINT_CACHE
 
 
 def _guard_daemon_start_in_progress(guard_home: Path) -> bool:
@@ -177,6 +451,79 @@ def _guard_daemon_pid_is_running(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def _guard_daemon_pid_matches_command(pid: int, expected_guard_home: Path | None = None) -> bool:
+    command = _guard_daemon_command_for_pid(pid)
+    if command is None:
+        return False
+    if "codex_plugin_scanner.cli" not in command or "guard daemon --serve" not in command:
+        return False
+    if expected_guard_home is None:
+        return True
+    command_guard_home = _guard_home_from_command(command)
+    if command_guard_home is None:
+        return False
+    try:
+        return command_guard_home.resolve() == expected_guard_home.resolve()
+    except OSError:
+        return command_guard_home == expected_guard_home
+
+
+def _guard_daemon_command_for_pid(pid: int) -> str | None:
+    if os.name == "nt":
+        command = [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            f'(Get-CimInstance Win32_Process -Filter "ProcessId = {pid}").CommandLine',
+        ]
+    else:
+        command = ["ps", "-p", str(pid), "-o", "command="]
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    stdout = result.stdout.strip()
+    return stdout or None
+
+
+def _retire_guard_daemon_process(payload: dict[str, object]) -> bool:
+    pid = payload.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    guard_home = payload.get("guard_home")
+    expected_guard_home = Path(guard_home) if isinstance(guard_home, str) and guard_home.strip() else None
+    return _retire_guard_daemon_pid(pid, expected_guard_home=expected_guard_home)
+
+
+def _retire_guard_daemon_pid(pid: int, *, expected_guard_home: Path | None = None) -> bool:
+    if not _guard_daemon_pid_is_running(pid):
+        return True
+    if not _guard_daemon_pid_matches_command(pid, expected_guard_home):
+        return False
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        return True
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        if not _guard_daemon_pid_is_running(pid):
+            return True
+        time.sleep(GUARD_DAEMON_POLL_INTERVAL_SECONDS)
+    sigkill = getattr(signal, "SIGKILL", None)
+    if sigkill is None:
+        return False
+    try:
+        os.kill(pid, sigkill)
+    except OSError:
+        return True
+    return not _guard_daemon_pid_is_running(pid)
 
 
 def _wait_for_guard_daemon_url(

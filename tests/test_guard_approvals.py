@@ -532,6 +532,7 @@ class TestGuardApprovals:
             "load_guard_daemon_url",
             lambda _guard_home: next(responses),
         )
+        monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
         monkeypatch.setattr(
             daemon_manager_module.subprocess,
             "Popen",
@@ -571,7 +572,13 @@ class TestGuardApprovals:
         monkeypatch.setattr(
             daemon_manager_module,
             "_load_state",
-            lambda _guard_home: {"port": 5530, "auth_token": "token-123"},
+            lambda _guard_home: {
+                "port": 5530,
+                "auth_token": "token-123",
+                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+                "source_root": daemon_manager_module._current_guard_daemon_source_root(),
+                "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
+            },
         )
         monkeypatch.setattr(
             daemon_manager_module.urllib.request,
@@ -581,7 +588,7 @@ class TestGuardApprovals:
 
         assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
 
-    def test_load_guard_daemon_url_accepts_healthy_daemon_for_legacy_state_file(self, tmp_path, monkeypatch):
+    def test_load_guard_daemon_url_accepts_healthy_daemon_for_matching_source_root(self, tmp_path, monkeypatch):
         guard_home = tmp_path / "guard-home"
 
         class FakeResponse:
@@ -605,7 +612,13 @@ class TestGuardApprovals:
         monkeypatch.setattr(
             daemon_manager_module,
             "_load_state",
-            lambda _guard_home: {"port": 5530, "auth_token": "token-123"},
+            lambda _guard_home: {
+                "port": 5530,
+                "auth_token": "token-123",
+                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+                "source_root": daemon_manager_module._current_guard_daemon_source_root(),
+                "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
+            },
         )
         monkeypatch.setattr(
             daemon_manager_module.urllib.request,
@@ -643,12 +656,31 @@ class TestGuardApprovals:
                 "port": 5530,
                 "auth_token": "token-123",
                 "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION - 1,
+                "source_root": daemon_manager_module._current_guard_daemon_source_root(),
+                "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
             },
         )
         monkeypatch.setattr(
             daemon_manager_module.urllib.request,
             "urlopen",
             lambda request, timeout=1: FakeResponse(),
+        )
+
+        assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
+
+    def test_load_guard_daemon_url_rejects_daemon_from_different_source_root(self, tmp_path, monkeypatch):
+        guard_home = tmp_path / "guard-home"
+
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_load_state",
+            lambda _guard_home: {
+                "port": 5530,
+                "auth_token": "token-123",
+                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+                "source_root": "/tmp/older-source-root",
+                "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
+            },
         )
 
         assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
