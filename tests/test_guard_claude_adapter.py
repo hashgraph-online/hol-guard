@@ -233,8 +233,6 @@ def test_claude_handler_identity_uses_http_url_for_http_hooks():
         "http",
         "http://127.0.0.1:5371/two",
     )
-
-
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):
     initial_context = _build_context(tmp_path)
     changed_context = HarnessContext(
