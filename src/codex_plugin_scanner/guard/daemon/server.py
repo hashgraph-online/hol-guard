@@ -634,7 +634,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             artifact_name=None,
             policy_action=None,
             event_file=None,
-            json=False,
+            json=True,
         )
         buffer = io.StringIO()
         with _CLAUDE_HOOK_EXECUTION_LOCK:

@@ -1197,13 +1197,20 @@ def run_guard_command(
                 },
                 _now(),
             )
+            system_message = _claude_permission_prompt_system_message(payload=payload, notice=notice)
+            additional_context = _claude_permission_prompt_additional_context(notice)
+            if not getattr(args, "json", False):
+                _emit_native_hook_notification_stderr(
+                    _claude_permission_prompt_terminal_notice(payload=payload, notice=notice)
+                )
+                return 2
             _emit_native_hook_response(
                 harness=args.harness,
                 policy_action="allow",
                 event_name="Notification",
                 reason="HOL Guard intercepted the tool request and opened this Claude approval prompt.",
-                system_message=_claude_permission_prompt_system_message(payload=payload, notice=notice),
-                additional_context=_claude_permission_prompt_additional_context(notice),
+                system_message=system_message,
+                additional_context=additional_context,
                 output_stream=output_stream,
             )
             return 0
@@ -1311,6 +1318,14 @@ def run_guard_command(
                     )
                     return 0
                 if _should_emit_prequeue_native_hook_response(args):
+                    if _should_emit_claude_native_pretooluse_notice(
+                        args,
+                        event_name=event_name,
+                        policy_action=policy_action,
+                    ):
+                        _emit_native_hook_notification_stderr(
+                            _claude_native_pretooluse_terminal_notice(payload=payload, reason=native_reason)
+                        )
                     system_message = None
                     if _canonical_harness_name(args.harness) == "claude-code":
                         system_message = _claude_prompt_system_message(
@@ -1426,26 +1441,36 @@ def run_guard_command(
                     )
                 )
                 return 2
-            if _should_emit_native_hook_response(args):
+            runtime_reason = _native_hook_reason_for_harness(
+                args.harness,
+                _runtime_artifact_native_reason(runtime_artifact, response_payload),
+            )
+            if _should_emit_claude_native_pretooluse_notice(
+                args,
+                event_name=event_name,
+                policy_action=policy_action,
+            ):
+                _emit_native_hook_notification_stderr(
+                    _claude_native_pretooluse_terminal_notice(payload=payload, reason=runtime_reason)
+                )
+            if _should_emit_native_hook_response(args) or _should_emit_native_hook_json_response(
+                args,
+                event_name=event_name,
+                output_stream=output_stream,
+            ):
                 system_message = None
                 if _canonical_harness_name(args.harness) == "claude-code":
                     system_message = _claude_prompt_system_message(
                         event_name=event_name,
                         policy_action=policy_action,
                         artifact=runtime_artifact,
-                        native_reason=_native_hook_reason_for_harness(
-                            args.harness,
-                            _runtime_artifact_native_reason(runtime_artifact, response_payload),
-                        ),
+                        native_reason=runtime_reason,
                     )
                 _emit_native_hook_response(
                     harness=args.harness,
                     policy_action=policy_action,
                     event_name=event_name,
-                    reason=_native_hook_reason_for_harness(
-                        args.harness,
-                        _runtime_artifact_native_reason(runtime_artifact, response_payload),
-                    ),
+                    reason=runtime_reason,
                     system_message=system_message,
                     output_stream=output_stream,
                 )
@@ -1518,9 +1543,21 @@ def run_guard_command(
                 _native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason"))
             )
             return 2
-        if _should_emit_native_hook_response(args):
+        reason = _native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason"))
+        if _should_emit_claude_native_pretooluse_notice(
+            args,
+            event_name=hook_event_name,
+            policy_action=policy_action,
+        ):
+            _emit_native_hook_notification_stderr(
+                _claude_native_pretooluse_terminal_notice(payload=payload, reason=reason)
+            )
+        if _should_emit_native_hook_response(args) or _should_emit_native_hook_json_response(
+            args,
+            event_name=hook_event_name,
+            output_stream=output_stream,
+        ):
             system_message = None
-            reason = _native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason"))
             if (
                 _canonical_harness_name(args.harness) == "claude-code"
                 and hook_event_name in {"UserPromptSubmit", "PreToolUse"}
@@ -1563,6 +1600,34 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
     return _canonical_harness_name(args.harness) in {"claude-code", "codex"} and not getattr(args, "json", False)
+
+
+def _should_emit_claude_native_pretooluse_notice(
+    args: argparse.Namespace,
+    *,
+    event_name: str,
+    policy_action: str,
+) -> bool:
+    return (
+        _canonical_harness_name(args.harness) == "claude-code"
+        and not getattr(args, "json", False)
+        and event_name == "PreToolUse"
+        and policy_action == "require-reapproval"
+    )
+
+
+def _should_emit_native_hook_json_response(
+    args: argparse.Namespace,
+    *,
+    event_name: str,
+    output_stream: TextIO | None,
+) -> bool:
+    return (
+        _canonical_harness_name(args.harness) in {"claude-code", "codex"}
+        and getattr(args, "json", False)
+        and output_stream is not None
+        and event_name in {"PreToolUse", "Notification"}
+    )
 
 
 def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
@@ -1656,11 +1721,14 @@ def _claude_permission_prompt_system_message(
     if reason is not None:
         return (
             f"{intro} This approval dialog came from HOL Guard, not from Claude alone. "
-            f"{_ensure_terminal_punctuation(reason)}"
+            f"{_ensure_terminal_punctuation(reason)} "
+            "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action "
+            "for the rest of this session, or No to keep the sensitive action blocked."
         )
     return (
         f"{intro} This approval dialog came from HOL Guard, not from Claude alone. "
-        "Review the action details below before allowing it."
+        "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action for "
+        "the rest of this session, or No to keep the sensitive action blocked."
     )
 
 
@@ -1671,12 +1739,51 @@ def _claude_permission_prompt_additional_context(notice: dict[str, object] | Non
             "HOL Guard intercepted the sensitive request and opened the Claude approval dialog that is currently "
             "open. "
             "This approval dialog came from HOL Guard, not from Claude alone. "
-            f"{_ensure_terminal_punctuation(reason)} If the user denies it, do not retry the same sensitive access."
+            f"{_ensure_terminal_punctuation(reason)} The user can choose Yes, Yes during this session, or No in the "
+            "prompt that is already visible. If the user denies it, do not retry the same sensitive access."
         )
     return (
         "HOL Guard intercepted the sensitive request and opened the Claude approval dialog that is currently open. "
         "This approval dialog came from HOL Guard, not from Claude alone. "
+        "The user can choose Yes, Yes during this session, or No in the prompt that is already visible. "
         "If the user denies it, do not retry the same action."
+    )
+
+
+def _claude_permission_prompt_terminal_notice(
+    *,
+    payload: dict[str, object],
+    notice: dict[str, object] | None,
+) -> str:
+    tool_name = _claude_notification_tool_name(payload)
+    reason = _optional_string(notice.get("reason")) if notice is not None else None
+    if tool_name is not None and reason is not None:
+        return (
+            f"HOL Guard opened this Claude approval prompt for {tool_name}. "
+            f"{_ensure_terminal_punctuation(reason)} "
+            "Review the request below, then choose Yes, Yes during this session, or No."
+        )
+    if tool_name is not None:
+        return (
+            f"HOL Guard opened this Claude approval prompt for {tool_name}. "
+            "Review the request below, then choose Yes, Yes during this session, or No."
+        )
+    return (
+        "HOL Guard opened this Claude approval prompt to protect a sensitive action. "
+        "Review the request below, then choose Yes, Yes during this session, or No."
+    )
+
+
+def _claude_native_pretooluse_terminal_notice(*, payload: dict[str, object], reason: str) -> str:
+    tool_name = _claude_notification_tool_name(payload)
+    if tool_name is not None:
+        return (
+            f"HOL Guard opened this Claude approval prompt for {tool_name}. "
+            f"{_ensure_terminal_punctuation(reason)}"
+        )
+    return (
+        "HOL Guard opened this Claude approval prompt to protect a sensitive action. "
+        f"{_ensure_terminal_punctuation(reason)}"
     )
 
 
@@ -1982,6 +2089,10 @@ def _emit_native_hook_response(
 
 
 def _emit_native_hook_block_stderr(reason: str) -> None:
+    print(reason, file=sys.stderr)
+
+
+def _emit_native_hook_notification_stderr(reason: str) -> None:
     print(reason, file=sys.stderr)
 
 
