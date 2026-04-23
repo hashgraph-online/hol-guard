@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -206,6 +207,50 @@ def test_mcp_security_loads_mcpscanner_from_installed_distribution(monkeypatch, 
 
     assert components["YaraAnalyzer"].__module__ == "mcpscanner"
     assert Path(sys.modules["mcpscanner"].__file__).resolve() == (trusted_package / "__init__.py").resolve()
+
+
+def test_mcp_security_supports_editable_distribution_outside_plugin_root(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+    trusted_root = tmp_path / "editable-src"
+    trusted_package = trusted_root / "mcpscanner"
+    trusted_package.mkdir(parents=True)
+    trusted_init = trusted_package / "__init__.py"
+    trusted_init.write_text("class YaraAnalyzer:\n    pass\n", encoding="utf-8")
+    (plugin_dir / "mcpscanner.py").write_text(
+        "raise RuntimeError('workspace import hijack executed')\n",
+        encoding="utf-8",
+    )
+
+    class _EditableDistribution:
+        files: tuple[()] = ()
+
+    editable_spec = importlib.util.spec_from_file_location(
+        "mcpscanner",
+        trusted_init,
+        submodule_search_locations=[str(trusted_package)],
+    )
+
+    monkeypatch.setattr(
+        cisco_mcp_module.importlib_metadata,
+        "distribution",
+        lambda name: _EditableDistribution(),
+    )
+    monkeypatch.setattr(
+        cisco_mcp_module.importlib.util,
+        "find_spec",
+        lambda name: editable_spec if name == "mcpscanner" else None,
+    )
+    monkeypatch.syspath_prepend(str(plugin_dir))
+
+    module = cisco_mcp_module._load_distribution_module(
+        "cisco-ai-mcp-scanner",
+        "mcpscanner",
+        blocked_root=plugin_dir,
+    )
+
+    assert module.__file__ == str(trusted_init)
+    assert Path(sys.modules["mcpscanner"].__file__).resolve() == trusted_init.resolve()
 
 
 def test_scan_plugin_includes_cisco_mcp_findings(monkeypatch, tmp_path: Path) -> None:

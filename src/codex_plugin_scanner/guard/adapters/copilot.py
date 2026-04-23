@@ -109,11 +109,7 @@ def _is_managed_hook_command(command: str) -> bool:
 
 def _trusted_pythonpath_entries() -> list[str]:
     launcher_env = merge_guard_launcher_env()
-    path_entries = [
-        entry
-        for entry in launcher_env.get("PYTHONPATH", "").split(os.pathsep)
-        if entry.strip()
-    ]
+    path_entries = [entry for entry in launcher_env.get("PYTHONPATH", "").split(os.pathsep) if entry.strip()]
     package_root = _trusted_package_root()
     cli_entrypoint = package_root / "codex_plugin_scanner" / "cli.py"
     if not cli_entrypoint.is_file():
