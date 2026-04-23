@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import os
+import sys
 from collections.abc import Awaitable
 from dataclasses import dataclass
+from importlib import metadata as importlib_metadata
+from importlib.metadata import Distribution
 from pathlib import Path
 from threading import Thread
 from typing import TypeVar
@@ -69,10 +73,110 @@ def _build_summary(
     )
 
 
-def _load_mcp_scanner_components() -> dict[str, object]:
-    from mcpscanner import YaraAnalyzer
+def _load_mcp_scanner_components(*, blocked_root: Path | None = None) -> dict[str, object]:
+    module = _load_distribution_module("cisco-ai-mcp-scanner", "mcpscanner", blocked_root=blocked_root)
+    analyzer = getattr(module, "YaraAnalyzer", None)
+    if analyzer is None:
+        raise ImportError("cisco-ai-mcp-scanner does not expose mcpscanner.YaraAnalyzer")
+    return {"YaraAnalyzer": analyzer}
 
-    return {"YaraAnalyzer": YaraAnalyzer}
+
+def _load_distribution_module(
+    distribution_name: str,
+    module_name: str,
+    *,
+    blocked_root: Path | None = None,
+) -> object:
+    try:
+        distribution = importlib_metadata.distribution(distribution_name)
+    except importlib_metadata.PackageNotFoundError as exc:
+        raise ImportError(f"{distribution_name} is not installed") from exc
+    spec = _distribution_module_spec(distribution, module_name)
+    if spec is not None and blocked_root is not None and not _spec_outside_blocked_root(spec, blocked_root):
+        spec = None
+    if spec is None:
+        spec = _editable_distribution_spec(module_name, blocked_root=blocked_root)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to resolve {module_name} from {distribution_name}")
+    module = importlib.util.module_from_spec(spec)
+    previous_module = sys.modules.get(module_name)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        if previous_module is None:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = previous_module
+        raise
+    return module
+
+
+def _distribution_module_spec(distribution: Distribution, module_name: str):
+    files = distribution.files or ()
+    package_init_relative = f"{module_name}/__init__.py"
+    module_relative = f"{module_name}.py"
+    for package_file in files:
+        if str(package_file).replace("\\", "/") != package_init_relative:
+            continue
+        package_init = Path(package_file.locate())
+        if package_init.is_file():
+            return importlib.util.spec_from_file_location(
+                module_name,
+                package_init,
+                submodule_search_locations=[str(package_init.parent)],
+            )
+    for package_file in files:
+        if str(package_file).replace("\\", "/") != module_relative:
+            continue
+        module_file = Path(package_file.locate())
+        if module_file.is_file():
+            return importlib.util.spec_from_file_location(module_name, module_file)
+    locate_file = getattr(distribution, "locate_file", None)
+    if not callable(locate_file):
+        return None
+    package_dir = Path(locate_file(module_name))
+    if package_dir.is_dir():
+        package_init = package_dir / "__init__.py"
+        if package_init.is_file():
+            return importlib.util.spec_from_file_location(
+                module_name,
+                package_init,
+                submodule_search_locations=[str(package_dir)],
+            )
+    module_file = Path(locate_file(module_relative))
+    if module_file.is_file():
+        return importlib.util.spec_from_file_location(module_name, module_file)
+    return None
+
+
+def _editable_distribution_spec(module_name: str, *, blocked_root: Path | None) -> object | None:
+    spec = importlib.util.find_spec(module_name)
+    if spec is None or spec.loader is None:
+        return None
+    if blocked_root is not None and not _spec_outside_blocked_root(spec, blocked_root):
+        return None
+    return spec
+
+
+def _spec_outside_blocked_root(spec: object, blocked_root: Path) -> bool:
+    blocked_root_resolved = blocked_root.resolve()
+    candidate_paths: list[Path] = []
+    spec_origin = getattr(spec, "origin", None)
+    if isinstance(spec_origin, str) and spec_origin not in {"built-in", "frozen"}:
+        candidate_paths.append(Path(spec_origin).resolve())
+    search_locations = getattr(spec, "submodule_search_locations", None)
+    if search_locations is not None:
+        candidate_paths.extend(Path(location).resolve() for location in search_locations)
+    return all(not _path_within_root(candidate_path, blocked_root_resolved) for candidate_path in candidate_paths)
+
+
+def _path_within_root(candidate_path: Path, root: Path) -> bool:
+    try:
+        candidate_path.relative_to(root)
+    except ValueError:
+        return False
+    return True
 
 
 def _relative_path(plugin_dir: Path, file_path: Path) -> str:
@@ -224,7 +328,12 @@ def run_cisco_mcp_scan(plugin_dir: Path, mode: str = "auto") -> CiscoMcpScanSumm
         )
 
     try:
-        components = _load_mcp_scanner_components()
+        try:
+            components = _load_mcp_scanner_components(blocked_root=plugin_dir)
+        except TypeError as exc:
+            if "blocked_root" not in str(exc):
+                raise
+            components = _load_mcp_scanner_components()
     except ImportError:
         if mode == "on":
             return _build_summary(
