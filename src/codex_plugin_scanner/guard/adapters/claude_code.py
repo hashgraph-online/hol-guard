@@ -559,31 +559,11 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             }
         settings_path = context.workspace_dir / ".claude" / "settings.local.json"
         payload = _json_payload(settings_path)
-        session_start_command = self._session_start_command(context)
-        hook_url = self._hook_http_url(context)
         hooks = payload.get("hooks")
         if isinstance(hooks, dict):
-            for key, handler in (
-                (
-                    "SessionStart",
-                    _guard_command_handler(
-                        session_start_command,
-                        timeout=CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS,
-                    ),
-                ),
-                ("PreToolUse", _guard_http_handler(hook_url, timeout=CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS)),
-                ("PostToolUse", _guard_http_handler(hook_url, timeout=CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS)),
-                ("UserPromptSubmit", _guard_http_handler(hook_url, timeout=CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS)),
-                (
-                    "Notification",
-                    _guard_http_handler(hook_url, timeout=CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
-                ),
-            ):
+            for key in ("SessionStart", "PreToolUse", "PostToolUse", "UserPromptSubmit", "Notification"):
                 entries = hooks.get(key)
-                hooks[key] = _remove_hook_entry(
-                    _prune_guard_hook_entries(entries if isinstance(entries, list) else []),
-                    handler,
-                )
+                hooks[key] = _prune_guard_hook_entries(entries if isinstance(entries, list) else [])
             settings_path.parent.mkdir(parents=True, exist_ok=True)
             settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return {

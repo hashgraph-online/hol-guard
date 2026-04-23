@@ -2143,6 +2143,53 @@ args = ["workspace-skill.js", "--changed"]
         assert output["managed_install"]["active"] is False
         assert payload["hooks"]["PreToolUse"] == ["unexpected-entry"]
 
+    def test_guard_uninstall_claude_does_not_boot_daemon_to_remove_hooks(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        settings_local = workspace_dir / ".claude" / "settings.local.json"
+
+        install_rc = main(
+            [
+                "guard",
+                "install",
+                "claude-code",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        capsys.readouterr()
+
+        def _fail_if_called(*args, **kwargs):
+            raise AssertionError("ensure_guard_daemon should not be called during claude uninstall")
+
+        monkeypatch.setattr(claude_adapter_module, "ensure_guard_daemon", _fail_if_called)
+
+        uninstall_rc = main(
+            [
+                "guard",
+                "uninstall",
+                "claude",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        payload = json.loads(settings_local.read_text(encoding="utf-8"))
+
+        assert install_rc == 0
+        assert uninstall_rc == 0
+        assert output["managed_install"]["active"] is False
+        assert payload["hooks"]["PreToolUse"] == []
+        assert payload["hooks"]["UserPromptSubmit"] == []
+        assert payload["hooks"]["Notification"] == []
+
     def test_guard_install_claude_alias_persists_canonical_managed_install(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
