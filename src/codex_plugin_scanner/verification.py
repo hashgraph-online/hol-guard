@@ -3,19 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
-import queue
 import re
-import subprocess
-import threading
 import urllib.error
 import urllib.parse
 import urllib.request
-from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from . import __version__
 from .checks.manifest import load_manifest
 from .checks.manifest_support import safe_manifest_path
 from .marketplace_support import (
@@ -119,26 +113,6 @@ def _read_json(path: Path) -> dict | list | None:
 
 def _is_safe_relative_asset(plugin_dir: Path, value: str) -> bool:
     return is_safe_relative_path(plugin_dir, value, require_prefix=True, require_exists=True)
-
-
-def _readline_with_timeout(stream, *, timeout: float, command: list[str], transcript: list[str]) -> str:
-    result_queue: queue.Queue[str | BaseException] = queue.Queue(maxsize=1)
-
-    def _reader() -> None:
-        try:
-            result_queue.put(stream.readline())
-        except BaseException as exc:  # pragma: no cover - defensive worker handoff
-            result_queue.put(exc)
-
-    thread = threading.Thread(target=_reader, daemon=True)
-    thread.start()
-    try:
-        result = result_queue.get(timeout=timeout)
-    except queue.Empty as exc:
-        raise subprocess.TimeoutExpired(command, timeout, output="\n".join(transcript)) from exc
-    if isinstance(result, BaseException):
-        raise result
-    return result
 
 
 def _check_manifest(plugin_dir: Path) -> list[VerificationCase]:
@@ -478,178 +452,22 @@ def _check_mcp_http(remotes: list[dict], *, online: bool) -> list[VerificationCa
     return cases
 
 
-def _check_mcp_stdio(servers: dict) -> tuple[list[VerificationCase], list[RuntimeTrace]]:
+def _check_mcp_stdio(servers: dict) -> list[VerificationCase]:
     cases: list[VerificationCase] = []
-    traces: list[RuntimeTrace] = []
     for name, server in servers.items():
         cmd = server.get("command") if isinstance(server, dict) else None
-        args = server.get("args", []) if isinstance(server, dict) and isinstance(server.get("args", []), list) else []
         if not cmd:
             continue
-        command = [str(cmd), *[str(arg) for arg in args]]
-        try:
-            proc = subprocess.Popen(
-                command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=os.environ.copy(),
+        cases.append(
+            VerificationCase(
+                "mcp",
+                f"stdio execution:{name}",
+                False,
+                "Skipped stdio command execution for safety; manual review is required before trusting it.",
+                "safety-skip",
             )
-        except Exception as exc:
-            cases.append(VerificationCase("mcp", f"stdio spawn:{name}", False, str(exc), "spawn-failure"))
-            traces.append(
-                RuntimeTrace(
-                    component="mcp",
-                    name=f"stdio spawn:{name}",
-                    command=tuple(command),
-                    returncode=None,
-                    stdout="",
-                    stderr=str(exc),
-                )
-            )
-            continue
-        transcript: list[str] = []
-        try:
-            if proc.stdin is None or proc.stdout is None or proc.stderr is None:
-                raise RuntimeError("stdio server did not expose all pipes")
-            initialize_request = {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
-                    "clientInfo": {"name": "plugin-scanner", "version": __version__},
-                },
-            }
-            proc.stdin.write(json.dumps(initialize_request) + "\n")
-            proc.stdin.flush()
-            transcript.append("> " + json.dumps(initialize_request))
-
-            initialize_response_line = _readline_with_timeout(
-                proc.stdout,
-                timeout=2,
-                command=command,
-                transcript=transcript,
-            )
-            if not initialize_response_line:
-                raise RuntimeError("server did not respond to initialize")
-            transcript.append("< " + initialize_response_line.strip())
-            initialize_response = json.loads(initialize_response_line)
-            result_payload = initialize_response.get("result")
-            if not isinstance(result_payload, dict):
-                raise RuntimeError("server returned an invalid initialize result")
-
-            initialized_notification = {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
-            proc.stdin.write(json.dumps(initialized_notification) + "\n")
-            proc.stdin.flush()
-            transcript.append("> " + json.dumps(initialized_notification))
-
-            capabilities = result_payload.get("capabilities")
-            probe_methods = (
-                ("tools/list", "tools"),
-                ("resources/list", "resources"),
-                ("prompts/list", "prompts"),
-            )
-            request_id = 2
-            if isinstance(capabilities, dict):
-                for method, key in probe_methods:
-                    if key not in capabilities:
-                        continue
-                    request = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": {}}
-                    request_id += 1
-                    proc.stdin.write(json.dumps(request) + "\n")
-                    proc.stdin.flush()
-                    transcript.append("> " + json.dumps(request))
-                    response_line = _readline_with_timeout(
-                        proc.stdout,
-                        timeout=2,
-                        command=command,
-                        transcript=transcript,
-                    )
-                    if not response_line:
-                        raise RuntimeError(f"server did not respond to {method}")
-                    transcript.append("< " + response_line.strip())
-                    json.loads(response_line)
-
-            proc.stdin.close()
-            proc.wait(timeout=2)
-            stdout = proc.stdout.read()
-            stderr = proc.stderr.read()
-            transcript_output = "\n".join(transcript)
-            if stdout:
-                transcript_output = f"{transcript_output}\n{stdout}".strip()
-            traces.append(
-                RuntimeTrace(
-                    component="mcp",
-                    name=f"stdio lifecycle:{name}",
-                    command=tuple(command),
-                    returncode=proc.returncode,
-                    stdout=transcript_output,
-                    stderr=stderr,
-                )
-            )
-            if proc.returncode not in (0, None):
-                cases.append(
-                    VerificationCase(
-                        "mcp",
-                        f"stdio initialize:{name}",
-                        False,
-                        stderr or "non-zero exit",
-                        "spawn-failure",
-                    )
-                )
-            elif "error" in transcript_output.lower():
-                cases.append(
-                    VerificationCase(
-                        "mcp",
-                        f"stdio initialize:{name}",
-                        False,
-                        transcript_output.strip(),
-                        "protocol-failure",
-                    )
-                )
-            else:
-                cases.append(VerificationCase("mcp", f"stdio initialize:{name}", True, "initialize completed"))
-        except subprocess.TimeoutExpired as exc:
-            proc.kill()
-            stdout = exc.stdout if isinstance(exc.stdout, str) else ""
-            stderr = exc.stderr if isinstance(exc.stderr, str) else ""
-            traces.append(
-                RuntimeTrace(
-                    component="mcp",
-                    name=f"stdio timeout:{name}",
-                    command=tuple(command),
-                    returncode=None,
-                    stdout=stdout,
-                    stderr=stderr,
-                    timed_out=True,
-                )
-            )
-            cases.append(VerificationCase("mcp", f"stdio timeout:{name}", False, "process timed out", "timeout"))
-        except Exception as exc:
-            if proc.poll() is None:
-                proc.kill()
-                with suppress(Exception):
-                    proc.wait(timeout=1)
-            stdout = proc.stdout.read() if proc.stdout is not None else ""
-            stderr = proc.stderr.read() if proc.stderr is not None else ""
-            transcript_output = "\n".join(transcript)
-            if stdout:
-                transcript_output = f"{transcript_output}\n{stdout}".strip()
-            traces.append(
-                RuntimeTrace(
-                    component="mcp",
-                    name=f"stdio lifecycle:{name}",
-                    command=tuple(command),
-                    returncode=proc.returncode,
-                    stdout=transcript_output,
-                    stderr=stderr or str(exc),
-                )
-            )
-            cases.append(VerificationCase("mcp", f"stdio run:{name}", False, str(exc), "spawn-failure"))
-    return cases, traces
+        )
+    return cases
 
 
 def _check_mcp(plugin_dir: Path, *, online: bool) -> tuple[list[VerificationCase], list[RuntimeTrace]]:
@@ -673,7 +491,8 @@ def _check_mcp(plugin_dir: Path, *, online: bool) -> tuple[list[VerificationCase
         cases.append(VerificationCase("mcp", "server registry", False, "mcpServers must be an object", "schema"))
         servers = {}
     cases.extend(_check_mcp_http(remotes, online=online))
-    stdio_cases, traces = _check_mcp_stdio(servers)
+    stdio_cases = _check_mcp_stdio(servers)
+    traces: list[RuntimeTrace] = []
     cases.extend(stdio_cases)
     if len(cases) == 1:
         cases.append(VerificationCase("mcp", "mcp config", True, "No remote or stdio MCP surfaces declared"))
