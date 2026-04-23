@@ -2692,6 +2692,7 @@ def _hook_runtime_artifact(
     guard_home: Path,
     workspace: Path | None,
 ) -> GuardArtifact | None:
+    harness = _canonical_harness_name(harness)
     event_name = _hook_event_name(payload)
     if event_name == "UserPromptSubmit":
         prompt_text = payload.get("prompt")
