@@ -1228,8 +1228,9 @@ def run_guard_command(
             runtime_artifact_hash = artifact_hash(runtime_artifact)
             artifact_id = runtime_artifact.artifact_id
             artifact_name = runtime_artifact.name
+            policy_harness = _canonical_harness_name(args.harness)
             stored_policy_action = store.resolve_policy(
-                args.harness,
+                policy_harness,
                 artifact_id,
                 runtime_artifact_hash,
                 str(runtime_workspace) if runtime_workspace else None,
@@ -1265,30 +1266,6 @@ def run_guard_command(
                         artifact_name=artifact_name,
                         source_scope=runtime_artifact.source_scope,
                         user_override="claude-native-approve",
-                    )
-                    store.add_receipt(receipt)
-                return 0
-            if _canonical_harness_name(args.harness) == "claude-code" and event_name == "PermissionDenied":
-                saved = _persist_claude_native_permission_for_runtime_artifact(
-                    store=store,
-                    payload=payload,
-                    artifact=runtime_artifact,
-                    artifact_hash=runtime_artifact_hash,
-                    action="block",
-                    reason=_coalesce_string(payload.get("reason"), "Denied by Claude permission classifier."),
-                )
-                if saved:
-                    receipt = build_receipt(
-                        harness=args.harness,
-                        artifact_id=artifact_id,
-                        artifact_hash=runtime_artifact_hash,
-                        policy_decision="block",
-                        capabilities_summary=_runtime_capabilities_summary(runtime_artifact),
-                        changed_capabilities=[runtime_artifact.artifact_type, "claude-native-denied"],
-                        provenance_summary=f"runtime tool request denied from {runtime_artifact.config_path}",
-                        artifact_name=artifact_name,
-                        source_scope=runtime_artifact.source_scope,
-                        user_override="claude-native-deny",
                     )
                     store.add_receipt(receipt)
                 return 0
@@ -1904,8 +1881,10 @@ def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[
         return 0
     if not isinstance(index_payload, list):
         return 0
+    pending_keys = [str(item) for item in index_payload]
+    processed_keys: list[str] = []
     denied = 0
-    for pending_key in [str(item) for item in index_payload]:
+    for pending_key in pending_keys:
         try:
             pending = store.get_sync_payload(pending_key)
         except (OSError, sqlite3.Error):
@@ -1925,8 +1904,20 @@ def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[
             reason=f"Denied in Claude native approval prompt. {reason}",
             now=_now(),
         )
-        _remove_claude_pending_permission(store, session_id=session_id, pending_key=pending_key)
+        processed_keys.append(pending_key)
         denied += 1
+    if processed_keys:
+        processed_set = set(processed_keys)
+        try:
+            for pending_key in processed_keys:
+                store.delete_sync_payload(pending_key)
+            remaining_keys = [pending_key for pending_key in pending_keys if pending_key not in processed_set]
+            if remaining_keys:
+                store.set_sync_payload(index_key, remaining_keys, _now())
+            else:
+                store.delete_sync_payload(index_key)
+        except (OSError, sqlite3.Error):
+            return denied
     return denied
 
 

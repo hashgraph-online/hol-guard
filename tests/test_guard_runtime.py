@@ -4188,6 +4188,58 @@ def test_guard_hook_claude_posttooluse_persists_native_approval(tmp_path, capsys
     assert any(receipt["user_override"] == "claude-native-approve" for receipt in receipts)
 
 
+def test_guard_hook_claude_alias_reuses_native_approval_policy(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    first_event = {
+        "session_id": "session-claude-alias-approval",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude",
+        event=first_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    post_rc, post_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude",
+        event={
+            **first_event,
+            "hook_event_name": "PostToolUse",
+            "tool_response": {"filePath": str(workspace_dir / ".env"), "success": True},
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude",
+        event={**first_event, "session_id": "session-claude-alias-next"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    first_payload = json.loads(first_output)
+    second_payload = json.loads(second_output)
+
+    assert first_rc == 0
+    assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert post_rc == 0
+    assert post_output == ""
+    assert second_rc == 0
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+
 def test_guard_hook_claude_stop_persists_unapproved_native_prompt_as_denied(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
