@@ -1279,7 +1279,7 @@ def run_guard_command(
                     native_reason=native_reason,
                 )
                 if (
-                    args.harness == "claude-code"
+                    _canonical_harness_name(args.harness) == "claude-code"
                     and event_name == "PreToolUse"
                     and policy_action == "require-reapproval"
                 ):
@@ -1301,11 +1301,20 @@ def run_guard_command(
                     )
                     return 0
                 if _should_emit_prequeue_native_hook_response(args):
+                    system_message = None
+                    if _canonical_harness_name(args.harness) == "claude-code":
+                        system_message = _claude_prompt_system_message(
+                            event_name=event_name,
+                            policy_action=policy_action,
+                            artifact=runtime_artifact,
+                            native_reason=native_reason,
+                        )
                     _emit_native_hook_response(
                         harness=args.harness,
                         policy_action=policy_action,
                         event_name=event_name,
                         reason=native_reason,
+                        system_message=system_message,
                         additional_context=additional_context,
                         output_stream=output_stream,
                     )
@@ -1408,6 +1417,17 @@ def run_guard_command(
                 )
                 return 2
             if _should_emit_native_hook_response(args):
+                system_message = None
+                if _canonical_harness_name(args.harness) == "claude-code":
+                    system_message = _claude_prompt_system_message(
+                        event_name=event_name,
+                        policy_action=policy_action,
+                        artifact=runtime_artifact,
+                        native_reason=_native_hook_reason_for_harness(
+                            args.harness,
+                            _runtime_artifact_native_reason(runtime_artifact, response_payload),
+                        ),
+                    )
                 _emit_native_hook_response(
                     harness=args.harness,
                     policy_action=policy_action,
@@ -1416,6 +1436,7 @@ def run_guard_command(
                         args.harness,
                         _runtime_artifact_native_reason(runtime_artifact, response_payload),
                     ),
+                    system_message=system_message,
                     output_stream=output_stream,
                 )
                 return 0
@@ -1488,11 +1509,20 @@ def run_guard_command(
             )
             return 2
         if _should_emit_native_hook_response(args):
+            system_message = None
+            reason = _native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason"))
+            if (
+                _canonical_harness_name(args.harness) == "claude-code"
+                and hook_event_name in {"UserPromptSubmit", "PreToolUse"}
+                and policy_action in {"block", "sandbox-required", "require-reapproval"}
+            ):
+                system_message = _ensure_terminal_punctuation(reason)
             _emit_native_hook_response(
                 harness=args.harness,
                 policy_action=policy_action,
                 event_name=hook_event_name,
-                reason=_native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason")),
+                reason=reason,
+                system_message=system_message,
                 output_stream=output_stream,
             )
             return 0
@@ -1522,7 +1552,7 @@ def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
 
 
 def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
-    return args.harness in {"claude-code", "codex"} and not getattr(args, "json", False)
+    return _canonical_harness_name(args.harness) in {"claude-code", "codex"} and not getattr(args, "json", False)
 
 
 def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
@@ -1539,7 +1569,7 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
 
 
 def _should_emit_prequeue_native_hook_response(args: argparse.Namespace) -> bool:
-    return args.harness == "claude-code" and not getattr(args, "json", False)
+    return _canonical_harness_name(args.harness) == "claude-code" and not getattr(args, "json", False)
 
 
 def _claude_permission_notice_state_key(session_id: str, tool_name: str | None = None) -> str:
@@ -1595,7 +1625,7 @@ def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]
 
 def _is_claude_permission_prompt_notification(args: argparse.Namespace, payload: dict[str, object]) -> bool:
     return (
-        args.harness == "claude-code"
+        _canonical_harness_name(args.harness) == "claude-code"
         and _hook_event_name(payload) == "Notification"
         and _optional_string(payload.get("notification_type")) == "permission_prompt"
     )
@@ -1751,7 +1781,7 @@ def _claude_prompt_additional_context(
     artifact: GuardArtifact,
     native_reason: str,
 ) -> str | None:
-    if harness != "claude-code":
+    if _canonical_harness_name(harness) != "claude-code":
         return None
     if event_name != "UserPromptSubmit":
         return None
@@ -1776,6 +1806,33 @@ def _claude_prompt_additional_context(
         "Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive "
         "action automatically. Instead, tell the user approval is required in Claude to continue."
     )
+
+
+def _claude_prompt_system_message(
+    *,
+    event_name: str,
+    policy_action: str,
+    artifact: GuardArtifact,
+    native_reason: str,
+) -> str | None:
+    if event_name == "UserPromptSubmit":
+        if policy_action == "require-reapproval" and not _prompt_requires_hard_block(artifact):
+            if "secret_read" in _prompt_request_classes(artifact):
+                return (
+                    "HOL Guard intercepted this prompt because it asks Claude to access local secrets. "
+                    "If Claude opens a permission dialog on the next tool call, that approval prompt came from HOL "
+                    "Guard."
+                )
+            return (
+                "HOL Guard intercepted this prompt because it leads to a sensitive action. "
+                "If Claude opens a permission dialog on the next tool call, that approval prompt came from HOL Guard."
+            )
+        if policy_action in {"block", "sandbox-required"}:
+            return _ensure_terminal_punctuation(native_reason)
+        return None
+    if event_name == "PreToolUse" and policy_action in {"require-reapproval", "block", "sandbox-required"}:
+        return _ensure_terminal_punctuation(native_reason)
+    return None
 
 
 def _copilot_hook_reason(*values: object | None) -> str:
@@ -1870,8 +1927,10 @@ def _emit_native_hook_response(
     system_message: str | None = None,
     output_stream: TextIO | None = None,
 ) -> None:
+    payload: dict[str, object] = {}
+    if isinstance(system_message, str) and system_message.strip():
+        payload["systemMessage"] = system_message.strip()
     if event_name == "UserPromptSubmit":
-        payload: dict[str, object] = {}
         if policy_action in {"block", "sandbox-required", "require-reapproval"} and not additional_context:
             payload["decision"] = "block"
             payload["reason"] = reason
@@ -1884,9 +1943,6 @@ def _emit_native_hook_response(
             _write_json_line(payload, output_stream=output_stream)
         return
     if event_name == "Notification":
-        payload = {}
-        if isinstance(system_message, str) and system_message.strip():
-            payload["systemMessage"] = system_message.strip()
         if additional_context:
             payload["hookSpecificOutput"] = {
                 "hookEventName": event_name,
@@ -1903,7 +1959,7 @@ def _emit_native_hook_response(
         hook_specific_output["permissionDecision"] = permission_decision
         if permission_decision != "allow":
             hook_specific_output["permissionDecisionReason"] = reason
-    payload = {"hookSpecificOutput": hook_specific_output}
+    payload["hookSpecificOutput"] = hook_specific_output
     _write_json_line(payload, output_stream=output_stream)
 
 
@@ -2556,8 +2612,15 @@ def _runtime_requested_path(artifact: GuardArtifact) -> str | None:
     return None
 
 
+def _canonical_harness_name(harness: str) -> str:
+    try:
+        return get_adapter(harness).harness
+    except ValueError:
+        return harness
+
+
 def _managed_install_for(store: GuardStore, harness: str) -> dict[str, object] | None:
-    managed_install = store.get_managed_install(harness)
+    managed_install = store.get_managed_install(_canonical_harness_name(harness))
     if managed_install is None or not bool(managed_install.get("active")):
         return None
     return managed_install
