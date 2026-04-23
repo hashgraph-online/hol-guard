@@ -1292,8 +1292,10 @@ def run_guard_command(
                     and event_name == "UserPromptSubmit"
                     and policy_action == "require-reapproval"
                     and not _prompt_requires_hard_block(runtime_artifact)
-                    and not getattr(args, "json", False)
+                    and (output_stream is not None or not getattr(args, "json", False))
                 ):
+                    if getattr(args, "json", False) and output_stream is not None:
+                        _write_json_line({}, output_stream=output_stream)
                     return 0
                 if (
                     _canonical_harness_name(args.harness) == "claude-code"
@@ -1777,10 +1779,7 @@ def _claude_permission_prompt_terminal_notice(
 def _claude_native_pretooluse_terminal_notice(*, payload: dict[str, object], reason: str) -> str:
     tool_name = _claude_notification_tool_name(payload)
     if tool_name is not None:
-        return (
-            f"HOL Guard opened this Claude approval prompt for {tool_name}. "
-            f"{_ensure_terminal_punctuation(reason)}"
-        )
+        return f"HOL Guard opened this Claude approval prompt for {tool_name}. {_ensure_terminal_punctuation(reason)}"
     return (
         "HOL Guard opened this Claude approval prompt to protect a sensitive action. "
         f"{_ensure_terminal_punctuation(reason)}"

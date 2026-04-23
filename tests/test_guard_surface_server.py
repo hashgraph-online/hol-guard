@@ -73,7 +73,7 @@ class TestGuardSurfaceServer:
         assert hook_payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
         assert hook_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
         assert (
-            "HOL Guard intercepted Claude's attempt to use Read for local .env file and opened this approval prompt"
+            "HOL Guard intercepted Claude's attempt to use Read for local .env file to protect your local secrets."
             in json.dumps(hook_payload)
         )
         assert "protect your local secrets" in hook_payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
@@ -208,6 +208,38 @@ class TestGuardSurfaceServer:
                     {
                         "hook_event_name": "UserPromptSubmit",
                         "prompt": "hi",
+                    }
+                ).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(hook_request, timeout=5) as response:
+                hook_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert hook_payload == {}
+
+    def test_guard_daemon_claude_hook_endpoint_allows_overridable_user_prompt_submit_without_error(
+        self, tmp_path
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        store = GuardStore(home_dir)
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            hook_request = urllib.request.Request(
+                (
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
+                    f"home={urllib.parse.quote(str(home_dir))}&workspace={urllib.parse.quote(str(workspace_dir))}"
+                ),
+                data=json.dumps(
+                    {
+                        "hook_event_name": "UserPromptSubmit",
+                        "prompt": "Use the Read tool to open ./.env and print the full file contents exactly.",
                     }
                 ).encode("utf-8"),
                 headers={"Content-Type": "application/json"},

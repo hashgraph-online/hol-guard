@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import quote
 
 from codex_plugin_scanner.guard.adapters import claude_code, get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -102,9 +103,20 @@ def test_claude_install_bakes_current_source_root_into_session_start_command(tmp
 def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idempotent(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
+    expected_hook_url = (
+        "http://127.0.0.1:5371/v1/hooks/claude-code?"
+        f"guard-home={quote(str(context.guard_home), safe='')}"
+        f"&home={quote(str(context.home_dir), safe='')}"
+        f"&workspace={quote(str(context.workspace_dir), safe='')}"
+    )
 
-    adapter.install(context)
-    adapter.install(context)
+    original_ensure_guard_daemon = claude_code.ensure_guard_daemon
+    claude_code.ensure_guard_daemon = lambda _guard_home: "http://127.0.0.1:5371"
+    try:
+        adapter.install(context)
+        adapter.install(context)
+    finally:
+        claude_code.ensure_guard_daemon = original_ensure_guard_daemon
 
     settings_path = context.workspace_dir / ".claude" / "settings.local.json"
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -118,14 +130,17 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert all(entry["hooks"][0]["type"] == "command" for entry in session_start)
     assert len(pre_tool_use) == 1
     assert pre_tool_use[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
-    assert pre_tool_use[0]["hooks"][0]["type"] == "command"
+    assert pre_tool_use[0]["hooks"][0]["type"] == "http"
+    assert pre_tool_use[0]["hooks"][0]["url"] == expected_hook_url
     assert pre_tool_use[0]["hooks"][0]["timeout"] == 30
     assert len(post_tool_use) == 1
+    assert post_tool_use[0]["hooks"][0]["type"] == "http"
     assert len(prompt_submit) == 1
     assert "matcher" not in prompt_submit[0]
+    assert prompt_submit[0]["hooks"][0]["type"] == "http"
     assert len(notification) == 1
     assert notification[0]["matcher"] == "permission_prompt"
-    assert notification[0]["hooks"][0]["type"] == "command"
+    assert notification[0]["hooks"][0]["type"] == "http"
     assert notification[0]["hooks"][0]["timeout"] == 10
 
 
@@ -194,7 +209,12 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
         },
     )
 
-    adapter.install(context)
+    original_ensure_guard_daemon = claude_code.ensure_guard_daemon
+    claude_code.ensure_guard_daemon = lambda _guard_home: "http://127.0.0.1:5371"
+    try:
+        adapter.install(context)
+    finally:
+        claude_code.ensure_guard_daemon = original_ensure_guard_daemon
 
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     installed_hook_types = [
@@ -209,7 +229,7 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
         if isinstance(hook, dict)
     ]
 
-    assert installed_hook_types == ["command", "command", "command", "command"]
+    assert installed_hook_types == ["http", "http", "http", "http"]
 
 
 def test_claude_legacy_guard_url_detection_only_matches_local_guard_urls():
@@ -243,18 +263,36 @@ def test_claude_install_replaces_prior_session_start_guard_handlers_when_context
     )
     adapter = ClaudeCodeHarnessAdapter()
 
-    adapter.install(initial_context)
-    adapter.install(changed_context)
+    original_ensure_guard_daemon = claude_code.ensure_guard_daemon
+    urls = iter(("http://127.0.0.1:5371", "http://127.0.0.1:5372"))
+    claude_code.ensure_guard_daemon = lambda _guard_home: next(urls)
+    try:
+        adapter.install(initial_context)
+        adapter.install(changed_context)
+    finally:
+        claude_code.ensure_guard_daemon = original_ensure_guard_daemon
 
     settings_path = initial_context.workspace_dir / ".claude" / "settings.local.json"
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     session_start = payload["hooks"]["SessionStart"]
     hook_commands = [entry["hooks"][0]["command"] for entry in session_start]
+    operational_urls = [
+        group["hooks"][0]["url"]
+        for group in (
+            payload["hooks"]["PreToolUse"]
+            + payload["hooks"]["PostToolUse"]
+            + payload["hooks"]["UserPromptSubmit"]
+            + payload["hooks"]["Notification"]
+        )
+    ]
 
     assert len(session_start) == 4
     assert all(len(entry["hooks"]) == 1 for entry in session_start)
     assert all(str(changed_context.guard_home) in command for command in hook_commands)
     assert all(str(initial_context.guard_home) not in command for command in hook_commands)
+    assert all("127.0.0.1:5372" in url for url in operational_urls)
+    assert all(quote(str(changed_context.guard_home), safe="") in url for url in operational_urls)
+    assert all(quote(str(initial_context.guard_home), safe="") not in url for url in operational_urls)
 
 
 def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
@@ -309,16 +347,21 @@ def test_claude_install_migrates_legacy_flat_guard_hook_entries(tmp_path):
         },
     )
 
-    adapter.install(context)
+    original_ensure_guard_daemon = claude_code.ensure_guard_daemon
+    claude_code.ensure_guard_daemon = lambda _guard_home: "http://127.0.0.1:5371"
+    try:
+        adapter.install(context)
+    finally:
+        claude_code.ensure_guard_daemon = original_ensure_guard_daemon
 
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     pre_tool_use = payload["hooks"]["PreToolUse"]
     post_tool_use = payload["hooks"]["PostToolUse"]
 
     assert len(pre_tool_use) == 1
-    assert pre_tool_use[0]["hooks"][0]["type"] == "command"
+    assert pre_tool_use[0]["hooks"][0]["type"] == "http"
     assert len(post_tool_use) == 1
-    assert post_tool_use[0]["hooks"][0]["type"] == "command"
+    assert post_tool_use[0]["hooks"][0]["type"] == "http"
 
 
 def test_claude_detect_discovers_nested_hooks_skills_commands_and_rules(tmp_path):
