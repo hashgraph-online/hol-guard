@@ -496,3 +496,21 @@ def test_retire_guard_daemon_process_skips_recycled_pid_for_different_guard_home
 
     assert retired is False
     assert killed == []
+
+
+def test_ephemeral_guard_daemon_state_paths_only_scan_pytest_roots_and_honor_limit(tmp_path, monkeypatch):
+    pytest_root = tmp_path / "pytest-of-user"
+    first_state = pytest_root / "pytest-1" / "case-a" / "home" / "daemon-state.json"
+    second_state = pytest_root / "pytest-2" / "case-b" / "home" / "daemon-state.json"
+    third_state = pytest_root / "pytest-3" / "case-c" / "home" / "daemon-state.json"
+    ignored_state = tmp_path / "unrelated-tool" / "daemon-state.json"
+    for path in (first_state, second_state, third_state, ignored_state):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(daemon_manager_module, "_EPHEMERAL_GUARD_DAEMON_MAX_STATES", 2)
+
+    results = daemon_manager_module._ephemeral_guard_daemon_state_paths(tmp_path)
+
+    assert results == [first_state, second_state]
+    assert ignored_state not in results

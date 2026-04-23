@@ -243,10 +243,54 @@ def _reap_stale_ephemeral_guard_daemons(*, exclude_guard_home: Path | None = Non
 
 
 def _ephemeral_guard_daemon_state_paths(temp_root: Path) -> list[Path]:
+    results: list[Path] = []
+    for root in _pytest_temp_roots(temp_root):
+        _collect_daemon_state_paths(root, results, limit=_EPHEMERAL_GUARD_DAEMON_MAX_STATES)
+        if len(results) >= _EPHEMERAL_GUARD_DAEMON_MAX_STATES:
+            break
+    return sorted(results)
+
+
+def _pytest_temp_roots(temp_root: Path) -> list[Path]:
+    roots: list[Path] = []
     try:
-        return sorted(temp_root.rglob("daemon-state.json"))
+        if _path_name_looks_like_pytest_temp_root(temp_root.name):
+            roots.append(temp_root)
+        with os.scandir(temp_root) as entries:
+            for entry in entries:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                if _path_name_looks_like_pytest_temp_root(entry.name):
+                    roots.append(Path(entry.path))
     except OSError:
         return []
+    return sorted(roots)
+
+
+def _path_name_looks_like_pytest_temp_root(name: str) -> bool:
+    return name.startswith("pytest-") or "pytest-of-" in name
+
+
+def _collect_daemon_state_paths(root: Path, results: list[Path], *, limit: int) -> None:
+    pending: list[Path] = [root]
+    while pending and len(results) < limit:
+        current = pending.pop()
+        try:
+            with os.scandir(current) as entries:
+                directories: list[Path] = []
+                files: list[Path] = []
+                for entry in entries:
+                    if entry.is_dir(follow_symlinks=False):
+                        directories.append(Path(entry.path))
+                    elif entry.is_file(follow_symlinks=False) and entry.name == "daemon-state.json":
+                        files.append(Path(entry.path))
+        except OSError:
+            continue
+        for path in sorted(files):
+            results.append(path)
+            if len(results) >= limit:
+                return
+        pending.extend(reversed(sorted(directories)))
 
 
 def _state_path_age_seconds(state_path: Path) -> float:
