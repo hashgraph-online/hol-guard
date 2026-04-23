@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.adapters.claude_code import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
     CLAUDE_GUARD_TOOL_MATCHER,
     ClaudeCodeHarnessAdapter,
+    _shell_command,
 )
 
 
@@ -331,6 +332,12 @@ def test_claude_daemon_hook_command_is_identified_as_guard_hook(tmp_path):
 
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in command
     assert claude_code._is_guard_hook_command(command) is True
+
+
+def test_claude_shell_command_uses_list2cmdline_on_windows():
+    command = ("node", "-e", "console.log('hello')")
+
+    assert _shell_command(command, windows=True) == subprocess.list2cmdline(list(command))
 
 
 def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):

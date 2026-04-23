@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -30,6 +31,13 @@ CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 
 def _guard_command_handler(command: str, *, timeout: int) -> dict[str, object]:
     return {"type": "command", "command": command, "timeout": timeout}
+
+
+def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:
+    is_windows = os.name == "nt" if windows is None else windows
+    if is_windows:
+        return subprocess.list2cmdline(list(command))
+    return shlex.join(command)
 
 
 def _sync_runtime_hook_groups(hooks: dict[str, object], hook_command: str) -> None:
@@ -443,7 +451,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
     @staticmethod
     def _daemon_hook_command(context: HarnessContext) -> str:
         command = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)
-        return shlex.join(command)
+        return _shell_command(command)
 
     @staticmethod
     def _session_start_command(context: HarnessContext) -> str:
