@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import ClassVar
 from urllib.parse import parse_qs, urlsplit
 
+import yaml
+
 from codex_plugin_scanner.action_runner import _build_scan_args, main
 from codex_plugin_scanner.github_reporting import GitHubPrCommentResult, upsert_pr_comment
 
@@ -664,3 +666,38 @@ pr_comment = "off"
     assert exit_code == 0
     output_lines = output_path.read_text(encoding="utf-8").splitlines()
     assert "pr_comment_status=disabled" in output_lines
+
+
+def test_main_rejects_invalid_github_api_url_before_submission(monkeypatch, capsys) -> None:
+    def fail_submission_lookup(*args, **kwargs):
+        raise AssertionError("submission lookup should not run with an invalid GITHUB_API_URL")
+
+    monkeypatch.setattr("codex_plugin_scanner.action_runner.find_existing_submission_issue", fail_submission_lookup)
+    monkeypatch.setenv("MODE", "scan")
+    monkeypatch.setenv("PLUGIN_DIR", str(FIXTURES / "good-plugin"))
+    monkeypatch.setenv("FORMAT", "json")
+    monkeypatch.setenv("WRITE_STEP_SUMMARY", "false")
+    monkeypatch.setenv("SUBMISSION_ENABLED", "true")
+    monkeypatch.setenv("SUBMISSION_SCORE_THRESHOLD", "0")
+    monkeypatch.setenv("SUBMISSION_REPOS", "hashgraph-online/awesome-codex-plugins")
+    monkeypatch.setenv("SUBMISSION_TOKEN", "token-123")
+    monkeypatch.setenv("GITHUB_API_URL", "https://evil.example/api/v3")
+
+    return_code = main()
+
+    captured = capsys.readouterr()
+    assert return_code == 1
+    assert "Invalid GITHUB_API_URL" in captured.err
+
+
+def test_publish_workflow_does_not_inline_version_output_in_shell_scripts() -> None:
+    workflow = yaml.safe_load((Path(__file__).parent.parent / ".github" / "workflows" / "publish.yml").read_text())
+
+    run_blocks = [
+        step["run"]
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if isinstance(step, dict) and isinstance(step.get("run"), str)
+    ]
+
+    assert all("${{ needs.build.outputs.version }}" not in run for run in run_blocks)

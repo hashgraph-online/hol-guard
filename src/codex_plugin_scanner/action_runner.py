@@ -31,6 +31,7 @@ from .submission import (
     build_submission_payload,
     create_submission_issue,
     find_existing_submission_issue,
+    normalize_github_api_base_url,
     resolve_submission_metadata,
 )
 from .verification import build_verification_payload, verify_plugin
@@ -261,6 +262,15 @@ def main() -> int:
     workflow_url = ""
     if github_repository and github_run_id:
         workflow_url = f"{github_server_url.rstrip('/')}/{github_repository}/actions/runs/{github_run_id}"
+    normalized_github_api_url = github_api_url
+    github_api_url_error: ValueError | None = None
+    try:
+        normalized_github_api_url = normalize_github_api_base_url(
+            github_api_url,
+            github_server_url=github_server_url,
+        )
+    except ValueError as error:
+        github_api_url_error = error
 
     report_path_value = ""
     registry_payload_path_value = ""
@@ -501,6 +511,9 @@ def main() -> int:
                 if not submission_token:
                     print("Submission is enabled but no submission token was provided.", file=sys.stderr)
                     return finish(1)
+                if github_api_url_error is not None:
+                    print(f"Invalid GITHUB_API_URL: {github_api_url_error}", file=sys.stderr)
+                    return finish(1)
                 if not metadata.plugin_url:
                     print("Submission metadata is missing a plugin repository URL.", file=sys.stderr)
                     return finish(1)
@@ -516,7 +529,7 @@ def main() -> int:
                         submission_repo,
                         metadata.plugin_url,
                         submission_token,
-                        api_base_url=github_api_url,
+                        api_base_url=normalized_github_api_url,
                     )
                     if existing is not None:
                         submission_issues.append(existing)
@@ -528,7 +541,7 @@ def main() -> int:
                             body,
                             submission_token,
                             labels=submission_labels,
-                            api_base_url=github_api_url,
+                            api_base_url=normalized_github_api_url,
                         )
                     )
 
