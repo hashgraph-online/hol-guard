@@ -2034,7 +2034,7 @@ args = ["workspace-skill.js", "--changed"]
             [
                 "guard",
                 "install",
-                "claude-code",
+                "claude",
                 "--home",
                 str(home_dir),
                 "--workspace",
@@ -2063,6 +2063,7 @@ args = ["workspace-skill.js", "--changed"]
 
         assert install_rc == 0
         assert install_output["managed_install"]["active"] is True
+        assert install_output["managed_install"]["manifest"]["shim_command"] == "guard-claude"
         assert settings_local.exists()
         assert len(install_settings_payload["hooks"]["PreToolUse"]) == 1
         assert install_output["managed_install"]["manifest"]["notes"][0]
@@ -3685,9 +3686,7 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert "Approve it in HOL Guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"]
 
-    def test_guard_codex_hook_exits_with_block_status_in_actual_codex_runtime(
-        self, tmp_path, monkeypatch, capsys
-    ):
+    def test_guard_codex_hook_exits_with_block_status_in_actual_codex_runtime(self, tmp_path, monkeypatch, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         payload_path = workspace_dir / "hook-event.json"

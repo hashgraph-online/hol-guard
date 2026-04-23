@@ -12,13 +12,21 @@ if TYPE_CHECKING:
     from .adapters.base import HarnessContext
 
 
-def install_guard_shim(harness: str, context: HarnessContext) -> dict[str, object]:
+def install_guard_shim(
+    harness: str,
+    context: HarnessContext,
+    *,
+    launcher_name: str | None = None,
+    display_name: str | None = None,
+) -> dict[str, object]:
     """Create a local launcher shim that routes harness launches through Guard."""
 
     shim_dir = context.guard_home / "bin"
     shim_dir.mkdir(parents=True, exist_ok=True)
-    posix_path = shim_dir / f"guard-{harness}"
-    windows_path = shim_dir / f"guard-{harness}.cmd"
+    shim_name = launcher_name or harness
+    harness_label = display_name or harness
+    posix_path = shim_dir / f"guard-{shim_name}"
+    windows_path = shim_dir / f"guard-{shim_name}.cmd"
     workspace_args = []
     if context.workspace_dir is not None:
         workspace_args = ["--workspace", str(context.workspace_dir)]
@@ -31,18 +39,26 @@ def install_guard_shim(harness: str, context: HarnessContext) -> dict[str, objec
         "shim_command": posix_path.name,
         "windows_shim_path": str(windows_path),
         "notes": [
-            f"Launch {harness} through {posix_path.name} so Guard checks changes before the harness starts.",
+            f"Launch {harness_label} through {posix_path.name} so Guard checks changes before the harness starts.",
             f"Add {shim_dir} to PATH to use the wrapper command from any shell.",
         ],
     }
 
 
-def remove_guard_shim(harness: str, context: HarnessContext) -> dict[str, object]:
+def remove_guard_shim(
+    harness: str,
+    context: HarnessContext,
+    *,
+    launcher_name: str | None = None,
+    display_name: str | None = None,
+) -> dict[str, object]:
     """Remove a previously installed Guard launcher shim."""
 
     shim_dir = context.guard_home / "bin"
-    posix_path = shim_dir / f"guard-{harness}"
-    windows_path = shim_dir / f"guard-{harness}.cmd"
+    shim_name = launcher_name or harness
+    harness_label = display_name or harness
+    posix_path = shim_dir / f"guard-{shim_name}"
+    windows_path = shim_dir / f"guard-{shim_name}.cmd"
     removed_paths: list[str] = []
     for path in (posix_path, windows_path):
         if path.exists():
@@ -53,7 +69,7 @@ def remove_guard_shim(harness: str, context: HarnessContext) -> dict[str, object
         "shim_dir": str(shim_dir),
         "removed_paths": removed_paths,
         "shim_command": posix_path.name,
-        "notes": [f"Removed the Guard launcher shim for {harness}."],
+        "notes": [f"Removed the Guard launcher shim for {harness_label}."],
     }
 
 

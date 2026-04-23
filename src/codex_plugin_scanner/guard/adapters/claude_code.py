@@ -40,6 +40,21 @@ def _is_guard_hook_command(command: object) -> bool:
     return "guard hook" in command or "'guard', 'hook'" in command or '"guard", "hook"' in command
 
 
+def _is_guard_hook_url(url: object) -> bool:
+    return isinstance(url, str) and "/v1/hooks/claude-code" in url
+
+
+def _is_guard_hook_handler(handler: object) -> bool:
+    if not isinstance(handler, dict):
+        return False
+    handler_type = handler.get("type")
+    if handler_type == "command":
+        return _is_guard_hook_command(handler.get("command"))
+    if handler_type == "http":
+        return _is_guard_hook_url(handler.get("url"))
+    return False
+
+
 def _merge_hook_group(
     entries: list[object],
     matcher: str | None,
@@ -96,9 +111,7 @@ def _prune_guard_hook_entries(entries: list[object]) -> list[object]:
         if not isinstance(hooks, list):
             remaining.append(entry)
             continue
-        filtered_hooks = [
-            item for item in hooks if not (isinstance(item, dict) and _is_guard_hook_command(item.get("command")))
-        ]
+        filtered_hooks = [item for item in hooks if not _is_guard_hook_handler(item)]
         if filtered_hooks:
             updated_entry = dict(entry)
             updated_entry["hooks"] = filtered_hooks
@@ -176,6 +189,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
 
     harness = "claude-code"
     executable = "claude"
+    aliases = ("claude",)
     approval_tier = "native-or-center"
     approval_summary = (
         "Guard uses Claude hooks first and falls back to the local approval center when the shell cannot prompt."
@@ -408,7 +422,12 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         return _run_command_probe([resolved_executable, "--help"], timeout_seconds=5)
 
     def install(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = install_guard_shim(self.harness, context)
+        shim_manifest = install_guard_shim(
+            self.harness,
+            context,
+            launcher_name="claude",
+            display_name="claude",
+        )
         if context.workspace_dir is None:
             return {
                 "harness": self.harness,
@@ -464,7 +483,12 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         }
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = remove_guard_shim(self.harness, context)
+        shim_manifest = remove_guard_shim(
+            self.harness,
+            context,
+            launcher_name="claude",
+            display_name="claude",
+        )
         if context.workspace_dir is None:
             return {
                 "harness": self.harness,

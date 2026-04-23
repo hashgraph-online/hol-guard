@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 
@@ -119,6 +120,89 @@ def test_claude_install_writes_nested_hook_schema_and_is_idempotent(tmp_path):
     assert len(notification) == 1
     assert notification[0]["matcher"] == "permission_prompt"
     assert notification[0]["hooks"][0]["timeout"] == 10
+
+
+def test_get_adapter_accepts_claude_alias():
+    adapter = get_adapter("claude")
+
+    assert isinstance(adapter, ClaudeCodeHarnessAdapter)
+
+
+def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    settings_path = context.workspace_dir / ".claude" / "settings.local.json"
+    _write_json(
+        settings_path,
+        {
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+                        "hooks": [
+                            {
+                                "type": "http",
+                                "url": "http://127.0.0.1:5371/v1/hooks/claude-code?guard-home=%2Fold",
+                                "timeout": 30,
+                            }
+                        ],
+                    }
+                ],
+                "PostToolUse": [
+                    {
+                        "matcher": "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+                        "hooks": [
+                            {
+                                "type": "http",
+                                "url": "http://127.0.0.1:5371/v1/hooks/claude-code?guard-home=%2Fold",
+                                "timeout": 30,
+                            }
+                        ],
+                    }
+                ],
+                "UserPromptSubmit": [
+                    {
+                        "hooks": [
+                            {
+                                "type": "http",
+                                "url": "http://127.0.0.1:5371/v1/hooks/claude-code?guard-home=%2Fold",
+                                "timeout": 20,
+                            }
+                        ],
+                    }
+                ],
+                "Notification": [
+                    {
+                        "matcher": "permission_prompt",
+                        "hooks": [
+                            {
+                                "type": "http",
+                                "url": "http://127.0.0.1:5371/v1/hooks/claude-code?guard-home=%2Fold",
+                                "timeout": 10,
+                            }
+                        ],
+                    }
+                ],
+            }
+        },
+    )
+
+    adapter.install(context)
+
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    installed_hook_types = [
+        hook["type"]
+        for group in (
+            payload["hooks"]["PreToolUse"]
+            + payload["hooks"]["PostToolUse"]
+            + payload["hooks"]["UserPromptSubmit"]
+            + payload["hooks"]["Notification"]
+        )
+        for hook in group["hooks"]
+        if isinstance(hook, dict)
+    ]
+
+    assert installed_hook_types == ["command", "command", "command", "command"]
 
 
 def test_claude_install_and_uninstall_preserve_unrelated_nested_hooks(tmp_path):
