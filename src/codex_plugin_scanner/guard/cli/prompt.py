@@ -174,50 +174,60 @@ def _prompt_for_artifact(
 
 def _build_prompt_panel(artifact: PromptArtifact) -> Panel:
     table = Table.grid(padding=(0, 1))
-    table.add_row("Artifact", f"[bold]{artifact.artifact_name}[/bold] ({artifact.artifact_id})")
-    table.add_row("Harness", artifact.harness)
-    table.add_row("Changed", ", ".join(artifact.changed_fields) or "none")
-    table.add_row("Recommendation", artifact.recommendation)
-    table.add_row("Provenance", artifact.provenance_summary)
+    table.add_row(
+        "Artifact",
+        Text.assemble(
+            (_safe_prompt_value(artifact.artifact_name), "bold"),
+            f" ({_safe_prompt_value(artifact.artifact_id)})",
+        ),
+    )
+    table.add_row("Harness", _safe_prompt_value(artifact.harness))
+    table.add_row("Changed", ", ".join(_safe_prompt_value(field) for field in artifact.changed_fields) or "none")
+    table.add_row("Recommendation", _safe_prompt_value(artifact.recommendation))
+    table.add_row("Provenance", _safe_prompt_value(artifact.provenance_summary))
     capabilities = _capabilities_summary(artifact)
     table.add_row("Capabilities", capabilities)
-    publisher_label = artifact.publisher or artifact.harness
+    publisher_label = _safe_prompt_value(artifact.publisher or artifact.harness)
     menu = [
-        "[green]1[/green] allow once",
-        "[green]2[/green] always allow this artifact",
-        f"[green]3[/green] always allow {publisher_label}",
-        "[red]4[/red] block",
-        "[yellow]5[/yellow] show details",
+        Text.assemble(("1", "green"), " allow once"),
+        Text.assemble(("2", "green"), " always allow this artifact"),
+        Text.assemble(("3", "green"), f" always allow {publisher_label}"),
+        Text.assemble(("4", "red"), " block"),
+        Text.assemble(("5", "yellow"), " show details"),
     ]
-    content = Group(table, Text(""), *[Text.from_markup(item) for item in menu])
+    content = Group(table, Text(""), *menu)
     return Panel(content, title="Guard review", border_style="yellow")
 
 
 def _build_detail_panel(artifact: PromptArtifact) -> Panel:
     table = Table.grid(padding=(0, 1))
-    table.add_row("Artifact type", artifact.artifact_type or "unknown")
-    table.add_row("Source", artifact.source_scope or "unknown")
-    table.add_row("Config", artifact.config_path or "unknown")
-    table.add_row("Transport", artifact.transport or "unknown")
-    table.add_row("Command", artifact.command or "n/a")
-    table.add_row("Hash", artifact.artifact_hash)
+    table.add_row("Artifact type", _safe_prompt_value(artifact.artifact_type or "unknown"))
+    table.add_row("Source", _safe_prompt_value(artifact.source_scope or "unknown"))
+    table.add_row("Config", _safe_prompt_value(artifact.config_path or "unknown"))
+    table.add_row("Transport", _safe_prompt_value(artifact.transport or "unknown"))
+    table.add_row("Command", _safe_prompt_value(artifact.command or "n/a"))
+    table.add_row("Hash", _safe_prompt_value(artifact.artifact_hash))
     if artifact.publisher is not None:
-        table.add_row("Publisher", artifact.publisher)
+        table.add_row("Publisher", _safe_prompt_value(artifact.publisher))
     env_keys = artifact.metadata.get("env_keys")
     if isinstance(env_keys, list) and env_keys:
-        table.add_row("Env keys", ", ".join(str(item) for item in env_keys))
+        table.add_row("Env keys", ", ".join(_safe_prompt_value(str(item)) for item in env_keys))
     return Panel(table, title="Guard details", border_style="blue")
 
 
 def _capabilities_summary(artifact: PromptArtifact) -> str:
     parts = []
     if artifact.artifact_type is not None:
-        parts.append(artifact.artifact_type.replace("_", " "))
+        parts.append(_safe_prompt_value(artifact.artifact_type.replace("_", " ")))
     if artifact.transport is not None:
-        parts.append(artifact.transport)
+        parts.append(_safe_prompt_value(artifact.transport))
     if artifact.command is not None:
-        parts.append(artifact.command)
+        parts.append(_safe_prompt_value(artifact.command))
     return " • ".join(parts) if parts else "local harness artifact"
+
+
+def _safe_prompt_value(value: str) -> str:
+    return "".join(character if character.isprintable() else "?" for character in value)
 
 
 def _persist_allowed_artifact(store: GuardStore, artifact: PromptArtifact, now: str) -> None:

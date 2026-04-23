@@ -14,12 +14,53 @@ import {
   isGuardDemoMode
 } from "./guard-demo";
 
+const GUARD_TOKEN_PARAM = "guard-token";
+
 async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetch(input, init);
   if (!response.ok) {
     throw new Error(`Request failed with ${response.status}`);
   }
   return (await response.json()) as T;
+}
+
+function guardTokenFromHash(): string | null {
+  const fragment = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  return new URLSearchParams(fragment).get(GUARD_TOKEN_PARAM);
+}
+
+function readGuardToken(): string | null {
+  const guardToken = guardTokenFromHash();
+  if (guardToken) {
+    window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+    return guardToken;
+  }
+  return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
+}
+
+function guardAuthHeaders(): HeadersInit {
+  const guardToken = readGuardToken();
+  return guardToken ? { "X-Guard-Token": guardToken } : {};
+}
+
+export function guardAwareHref(href: string): string {
+  const guardToken = readGuardToken();
+  if (!guardToken) {
+    return href;
+  }
+
+  const url = new URL(href, window.location.origin);
+  if (url.origin !== window.location.origin) {
+    return href;
+  }
+
+  url.hash = new URLSearchParams([[GUARD_TOKEN_PARAM, guardToken]]).toString();
+  if (href.startsWith("http://") || href.startsWith("https://")) {
+    return url.toString();
+  }
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 export async function fetchRequests(): Promise<GuardApprovalRequest[]> {
@@ -146,7 +187,8 @@ export async function resolveRequest(input: {
   await readJson(`/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
     },
     body: JSON.stringify({
       action: input.action,
