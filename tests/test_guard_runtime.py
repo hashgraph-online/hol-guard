@@ -91,6 +91,7 @@ def _run_guard_hook(
     capsys,
     monkeypatch,
     as_json: bool = False,
+    policy_action: str | None = None,
 ) -> tuple[int, object]:
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
     command = [
@@ -109,6 +110,8 @@ def _run_guard_hook(
             harness,
         ]
     )
+    if isinstance(policy_action, str) and policy_action:
+        command.extend(["--policy-action", policy_action])
     rc = main(command)
     output = capsys.readouterr().out
     if as_json:
@@ -4099,24 +4102,17 @@ def test_guard_hook_emits_claude_native_deny_response_for_sandbox_required_reque
         "tool_input": {"command": "docker run --rm alpine sh"},
         "source_scope": "project",
     }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--harness",
-            "claude-code",
-            "--policy-action",
-            "sandbox-required",
-        ]
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        policy_action="sandbox-required",
     )
-    output = json.loads(capsys.readouterr().out)
+    output = json.loads(output)
 
     assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"

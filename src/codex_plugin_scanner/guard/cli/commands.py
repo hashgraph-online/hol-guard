@@ -1078,6 +1078,7 @@ def run_guard_command(
             now = _now()
             response_payload = {
                 "recorded": True,
+                "harness": args.harness,
                 "artifact_id": artifact_id,
                 "artifact_name": artifact_name,
                 "artifact_type": runtime_artifact.artifact_type,
@@ -1255,6 +1256,7 @@ def run_guard_command(
             store.add_receipt(receipt)
             response_payload = {
                 "recorded": True,
+                "harness": args.harness,
                 "artifact_id": artifact_id,
                 "artifact_name": artifact_name,
                 "artifact_type": runtime_artifact.artifact_type,
@@ -1729,8 +1731,9 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
     path_class = artifact.metadata.get("path_class")
     tool_name = artifact.metadata.get("tool_name")
     if isinstance(path_class, str) and isinstance(tool_name, str):
+        harness = response_payload.get("harness")
         policy_action = response_payload.get("policy_action")
-        if policy_action == "require-reapproval":
+        if harness == "claude-code" and policy_action == "require-reapproval":
             return (
                 f"HOL Guard intercepted Claude's attempt to use {tool_name} for {path_class} to protect your local "
                 "secrets. "
