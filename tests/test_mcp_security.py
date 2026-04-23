@@ -253,6 +253,45 @@ def test_mcp_security_supports_editable_distribution_outside_plugin_root(monkeyp
     assert Path(sys.modules["mcpscanner"].__file__).resolve() == trusted_init.resolve()
 
 
+def test_mcp_security_rejects_distribution_spec_inside_plugin_root(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+    plugin_package = plugin_dir / "mcpscanner"
+    plugin_package.mkdir()
+    plugin_init = plugin_package / "__init__.py"
+    plugin_init.write_text("class YaraAnalyzer:\n    pass\n", encoding="utf-8")
+
+    class _PluginDistributionFile:
+        def __str__(self) -> str:
+            return "mcpscanner/__init__.py"
+
+        def locate(self) -> Path:
+            return plugin_init
+
+    class _PluginDistribution:
+        files = (_PluginDistributionFile(),)
+
+    monkeypatch.setattr(
+        cisco_mcp_module.importlib_metadata,
+        "distribution",
+        lambda name: _PluginDistribution(),
+    )
+    monkeypatch.setattr(cisco_mcp_module.importlib.util, "find_spec", lambda name: None)
+
+    try:
+        cisco_mcp_module._load_distribution_module(
+            "cisco-ai-mcp-scanner",
+            "mcpscanner",
+            blocked_root=plugin_dir,
+        )
+    except ImportError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected plugin-root distribution spec to be rejected")
+
+    assert "Unable to resolve mcpscanner" in message
+
+
 def test_scan_plugin_includes_cisco_mcp_findings(monkeypatch, tmp_path: Path) -> None:
     plugin_dir = tmp_path / "plugin"
     _write_plugin(plugin_dir)

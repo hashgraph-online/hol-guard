@@ -92,6 +92,8 @@ def _load_distribution_module(
     except importlib_metadata.PackageNotFoundError as exc:
         raise ImportError(f"{distribution_name} is not installed") from exc
     spec = _distribution_module_spec(distribution, module_name)
+    if spec is not None and blocked_root is not None and not _spec_outside_blocked_root(spec, blocked_root):
+        spec = None
     if spec is None:
         spec = _editable_distribution_spec(module_name, blocked_root=blocked_root)
     if spec is None or spec.loader is None:
