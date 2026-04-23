@@ -44,6 +44,8 @@ def _is_guard_hook_command(command: object) -> bool:
 
 def _handler_identity(handler: dict[str, object]) -> tuple[str, str]:
     handler_type = str(handler.get("type", ""))
+    if handler_type == "http":
+        return (handler_type, str(handler.get("url", "")))
     return (handler_type, str(handler.get("command", "")))
 
 
@@ -530,6 +532,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             context,
             launcher_name="claude",
             display_name="claude",
+            legacy_launcher_names=("claude-code",),
         )
         if context.workspace_dir is None:
             return {

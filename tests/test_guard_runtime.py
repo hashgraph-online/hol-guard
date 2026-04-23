@@ -4051,10 +4051,45 @@ def test_guard_hook_emits_claude_native_ask_response(tmp_path, capsys, monkeypat
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
+    assert "systemMessage" in output
+    assert "HOL Guard intercepted Claude's attempt to use Read" in output["systemMessage"]
     assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert "approve" in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
     assert str(workspace_dir) not in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_guard_hook_emits_claude_native_ask_response_for_claude_alias(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert "systemMessage" in output
+    assert "HOL Guard intercepted Claude's attempt to use Read" in output["systemMessage"]
+    assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
 def test_guard_hook_emits_claude_native_deny_response_for_sandbox_required_requests(
@@ -4176,6 +4211,10 @@ def test_guard_hook_emits_claude_user_prompt_submit_context_for_overridable_prom
     receipts = GuardStore(home_dir).list_receipts()
 
     assert rc == 0
+    assert "systemMessage" in output
+    assert (
+        "HOL Guard intercepted this prompt because it asks Claude to access local secrets." in output["systemMessage"]
+    )
     assert output["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     assert "additionalContext" in output["hookSpecificOutput"]
     assert "direct local secret access" in output["hookSpecificOutput"]["additionalContext"]
@@ -4260,6 +4299,7 @@ def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continu
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
+    assert output["systemMessage"] == "HOL Guard blocked this prompt because it requests guarded local secret access."
     assert output["decision"] == "block"
     assert "continue" not in output["reason"].lower()
     assert "blocked this prompt" in output["reason"].lower()
@@ -4415,18 +4455,20 @@ def test_guard_hook_emits_claude_notification_notice_for_permission_prompt(tmp_p
     assert pre_tool_rc == 0
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert notification_rc == 0
-    assert "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt." in (
-        notification_output["systemMessage"]
+    assert (
+        "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt."
+        in (notification_output["systemMessage"])
     )
     assert "came from HOL Guard, not from Claude alone" in notification_output["systemMessage"]
     assert "protect your local secrets" in notification_output["systemMessage"].lower()
     assert "opened this approval prompt" in notification_output["systemMessage"]
     assert notification_output["hookSpecificOutput"]["hookEventName"] == "Notification"
-    assert "HOL Guard intercepted the sensitive request and opened the Claude approval dialog" in (
-        notification_output["hookSpecificOutput"]["additionalContext"]
+    assert (
+        "HOL Guard intercepted the sensitive request and opened the Claude approval dialog"
+        in (notification_output["hookSpecificOutput"]["additionalContext"])
     )
-    assert "came from HOL Guard, not from Claude alone" in (
-        notification_output["hookSpecificOutput"]["additionalContext"]
+    assert (
+        "came from HOL Guard, not from Claude alone" in (notification_output["hookSpecificOutput"]["additionalContext"])
     )
 
 
@@ -4464,8 +4506,9 @@ def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reas
         "This approval dialog came from HOL Guard, not from Claude alone. "
         "Review the action details below before allowing it."
     )
-    assert "HOL Guard intercepted the sensitive request and opened the Claude approval dialog" in (
-        output["hookSpecificOutput"]["additionalContext"]
+    assert (
+        "HOL Guard intercepted the sensitive request and opened the Claude approval dialog"
+        in (output["hookSpecificOutput"]["additionalContext"])
     )
 
 

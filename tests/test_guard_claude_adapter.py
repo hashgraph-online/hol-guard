@@ -224,6 +224,15 @@ def test_claude_legacy_guard_url_detection_only_matches_local_guard_urls():
     assert claude_code._is_guard_hook_url("http://localhost:5371/v1/hooks/claude-code") is False
 
 
+def test_claude_handler_identity_uses_http_url_for_http_hooks():
+    assert claude_code._handler_identity({"type": "http", "url": "http://127.0.0.1:5371/one"}) == (
+        "http",
+        "http://127.0.0.1:5371/one",
+    )
+    assert claude_code._handler_identity({"type": "http", "url": "http://127.0.0.1:5371/two"}) == (
+        "http",
+        "http://127.0.0.1:5371/two",
+    )
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):
     initial_context = _build_context(tmp_path)
     changed_context = HarnessContext(

@@ -22,9 +22,10 @@ def apply_managed_install(
     managed_installs: list[dict[str, object]] = []
     for harness in targets:
         adapter = get_adapter(harness)
+        canonical_harness = adapter.harness
         manifest = adapter.install(context) if active else adapter.uninstall(context)
-        store.set_managed_install(harness, active, workspace, manifest, now)
-        managed_install = store.get_managed_install(harness)
+        store.set_managed_install(canonical_harness, active, workspace, manifest, now)
+        managed_install = store.get_managed_install(canonical_harness)
         if managed_install is not None:
             managed_installs.append(managed_install)
     payload: dict[str, object] = {
@@ -46,7 +47,7 @@ def _resolve_targets(
     if requested_harness is not None and install_all:
         raise ValueError("Pass either a harness or --all, not both.")
     if requested_harness is not None and not install_all:
-        return [requested_harness]
+        return [get_adapter(requested_harness).harness]
     if not install_all:
         action = "install" if command == "install" else "uninstall"
         raise ValueError(f"Guard {action} requires a harness or --all.")
