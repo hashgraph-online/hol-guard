@@ -2128,7 +2128,7 @@ args = ["workspace-skill.js", "--changed"]
         assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["type"] == "command"
         assert install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == expected_hook_command
         assert "url" not in install_settings_payload["hooks"]["PreToolUse"][0]["hooks"][0]
-        assert install_settings_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]["type"] == "command"
+        assert install_settings_payload["hooks"].get("UserPromptSubmit", []) == []
         assert install_settings_payload["hooks"]["Notification"][0]["matcher"] == "permission_prompt"
         assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["type"] == "command"
         assert install_settings_payload["hooks"]["Notification"][0]["hooks"][0]["command"] == expected_hook_command
@@ -2226,7 +2226,7 @@ args = ["workspace-skill.js", "--changed"]
         assert uninstall_rc == 0
         assert output["managed_install"]["active"] is False
         assert payload["hooks"]["PreToolUse"] == []
-        assert payload["hooks"]["UserPromptSubmit"] == []
+        assert payload["hooks"].get("UserPromptSubmit", []) == []
         assert payload["hooks"]["Notification"] == []
         assert payload["hooks"]["Stop"] == []
 
@@ -2357,7 +2357,7 @@ args = ["workspace-skill.js", "--changed"]
         assert len(payload["hooks"]["SessionStart"]) == 4
         assert len(payload["hooks"]["PreToolUse"]) == 1
         assert len(payload["hooks"]["PostToolUse"]) == 1
-        assert len(payload["hooks"]["UserPromptSubmit"]) == 1
+        assert payload["hooks"].get("UserPromptSubmit", []) == []
         assert len(payload["hooks"]["Notification"]) == 1
         assert len(payload["hooks"]["Stop"]) == 1
         pretool_hook_commands = [

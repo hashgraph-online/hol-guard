@@ -4492,6 +4492,71 @@ def test_guard_hook_claude_ask_user_question_empty_answers_uses_explicit_fallbac
     assert guard_commands_module._claude_guard_approval_answer(payload) == "allow"
 
 
+def test_guard_hook_claude_native_cancel_does_not_persist_flat_block(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    first_event = {
+        "session_id": "session-claude-native-cancel",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".npmrc")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=first_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    notification_rc, notification_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={
+            **first_event,
+            "hook_event_name": "Notification",
+            "notification_type": "permission_prompt",
+            "message": "Claude needs your permission to use Read",
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    stop_rc, stop_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={"session_id": "session-claude-native-cancel", "hook_event_name": "Stop"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "session_id": "session-claude-native-cancel-retry"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    first_payload = json.loads(first_output)
+    notification_payload = json.loads(notification_output)
+    second_payload = json.loads(second_output)
+
+    assert first_rc == 0
+    assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert notification_rc == 0
+    assert "HOL Guard approval question" in notification_payload["systemMessage"]
+    assert stop_rc == 0
+    assert stop_output == ""
+    assert GuardStore(home_dir).list_policy_decisions("claude-code") == []
+    assert second_rc == 0
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
 def test_guard_hook_claude_alias_reuses_native_approval_policy_with_canonical_harness(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -4600,7 +4665,7 @@ def test_guard_hook_claude_alias_reuses_legacy_alias_policy_keys(tmp_path, capsy
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_guard_hook_claude_stop_persists_unapproved_native_prompt_as_denied(tmp_path, capsys, monkeypatch):
+def test_guard_hook_claude_stop_keeps_native_cancel_transient(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
@@ -4662,8 +4727,8 @@ def test_guard_hook_claude_stop_persists_unapproved_native_prompt_as_denied(tmp_
     assert stop_rc == 0
     assert stop_output == ""
     assert second_rc == 0
-    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "HOL Guard blocked Claude's attempt to use Read" in second_payload["systemMessage"]
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "HOL Guard intercepted Claude's attempt to use Read" in second_payload["systemMessage"]
 
 
 def test_guard_hook_claude_stop_does_not_persist_denial_without_visible_prompt(
@@ -4873,7 +4938,7 @@ def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
     assert reason.endswith("...")
 
 
-def test_guard_hook_brands_claude_user_prompt_submit_before_native_approval(
+def test_guard_hook_allows_claude_user_prompt_submit_before_tool_approval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -4895,20 +4960,13 @@ def test_guard_hook_brands_claude_user_prompt_submit_before_native_approval(
         monkeypatch=monkeypatch,
     )
     receipts = GuardStore(home_dir).list_receipts()
-    payload = json.loads(output)
 
     assert rc == 0
-    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert "Do not ask for approval at the prompt stage" in payload["hookSpecificOutput"]["additionalContext"]
-    assert (
-        "route that concrete action into a HOL Guard approval question"
-        in payload["hookSpecificOutput"]["additionalContext"]
-    )
-    assert "Keep blocked" in payload["hookSpecificOutput"]["additionalContext"]
+    assert output == ""
     assert any(receipt["artifact_id"].startswith("claude-code:session:prompt") for receipt in receipts)
 
 
-def test_guard_hook_brands_generic_claude_user_prompt_submit_before_native_approval(
+def test_guard_hook_allows_generic_claude_user_prompt_submit_before_tool_approval(
     tmp_path,
     capsys,
     monkeypatch,
@@ -4929,16 +4987,9 @@ def test_guard_hook_brands_generic_claude_user_prompt_submit_before_native_appro
         capsys=capsys,
         monkeypatch=monkeypatch,
     )
-    payload = json.loads(output)
 
     assert rc == 0
-    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert "Do not ask for approval at the prompt stage" in payload["hookSpecificOutput"]["additionalContext"]
-    assert (
-        "route that concrete action into a HOL Guard approval question"
-        in payload["hookSpecificOutput"]["additionalContext"]
-    )
-    assert "Keep blocked" in payload["hookSpecificOutput"]["additionalContext"]
+    assert output == ""
 
 
 def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts(

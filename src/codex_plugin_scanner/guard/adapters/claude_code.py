@@ -23,7 +23,6 @@ CLAUDE_GUARD_POST_TOOL_MATCHER = f"{CLAUDE_GUARD_TOOL_MATCHER}|AskUserQuestion"
 CLAUDE_GUARD_NOTIFICATION_MATCHER = "permission_prompt"
 CLAUDE_GUARD_SESSION_START_MATCHERS = ("startup", "resume", "clear", "compact")
 CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS = 30
-CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS = 20
 CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS = 10
 CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS = 10
 CLAUDE_GUARD_STOP_TIMEOUT_SECONDS = 10
@@ -47,7 +46,6 @@ def _sync_runtime_hook_groups(hooks: dict[str, object], hook_command: str) -> No
         ("PreToolUse", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
         ("PermissionRequest", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
         ("PostToolUse", CLAUDE_GUARD_POST_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
-        ("UserPromptSubmit", None, CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS),
         ("Notification", CLAUDE_GUARD_NOTIFICATION_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
         ("Stop", None, CLAUDE_GUARD_STOP_TIMEOUT_SECONDS),
     ):
@@ -60,7 +58,7 @@ def _sync_runtime_hook_groups(hooks: dict[str, object], hook_command: str) -> No
 
 
 def _remove_unsupported_guard_hook_groups(hooks: dict[str, object]) -> None:
-    for key in ("PermissionDenied",):
+    for key in ("PermissionDenied", "UserPromptSubmit"):
         entries = hooks.get(key)
         if not isinstance(entries, list):
             continue
