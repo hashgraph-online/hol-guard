@@ -1195,11 +1195,11 @@ def run_guard_command(
             _mark_claude_pending_permission_prompt_seen(store=store, payload=payload, notice=notice)
             _emit_native_hook_response(
                 harness=args.harness,
-                policy_action="require-reapproval",
+                policy_action="block",
                 event_name="PermissionRequest",
-                reason="HOL Guard is keeping Claude's native permission prompt open for user review.",
+                reason="HOL Guard is routing this approval through AskUserQuestion.",
                 system_message=_claude_permission_prompt_system_message(payload=payload, notice=notice),
-                additional_context=_claude_permission_prompt_additional_context(notice),
+                additional_context=_claude_guard_approval_question_message(notice),
                 output_stream=output_stream,
             )
             return 0
@@ -1226,7 +1226,7 @@ def run_guard_command(
                 harness=args.harness,
                 policy_action="allow",
                 event_name="Notification",
-                reason="HOL Guard intercepted the tool request and opened this Claude approval prompt.",
+                reason="HOL Guard intercepted the tool request and is routing it through a HOL Guard approval prompt.",
                 system_message=system_message,
                 additional_context=additional_context,
                 output_stream=output_stream,
@@ -1239,6 +1239,10 @@ def run_guard_command(
                 {"session_id": payload.get("session_id"), "saved_denials": denied},
                 _now(),
             )
+            return 0
+        if _canonical_harness_name(args.harness) == "claude-code" and _persist_claude_guard_question_decision(
+            store, payload
+        ):
             return 0
         if runtime_artifact is not None:
             event_name = _hook_event_name(payload) or "PreToolUse"
@@ -1346,14 +1350,6 @@ def run_guard_command(
                 "risk_headline": incident["risk_headline"],
                 "path_summary": _runtime_requested_path(runtime_artifact),
             }
-            if (
-                _canonical_harness_name(args.harness) == "claude-code"
-                and event_name == "UserPromptSubmit"
-                and policy_action == "require-reapproval"
-                and not _prompt_requires_hard_block(runtime_artifact)
-                and (not getattr(args, "json", False) or output_stream is not None)
-            ):
-                return 0
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
                 native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
                 additional_context = _claude_prompt_additional_context(
@@ -1881,6 +1877,42 @@ def _mark_claude_pending_permission_prompt_seen(
         return
 
 
+def _load_single_claude_pending_permission(
+    store: GuardStore,
+    payload: dict[str, object],
+) -> tuple[str, dict[str, object]] | None:
+    session_id = _optional_string(payload.get("session_id"))
+    if session_id is None:
+        return None
+    try:
+        index_payload = store.get_sync_payload(_claude_pending_permission_index_key(session_id))
+    except (OSError, sqlite3.Error):
+        return None
+    if not isinstance(index_payload, list):
+        return None
+    pending_keys = [str(item) for item in index_payload]
+    pending_items: list[tuple[str, dict[str, object]]] = []
+    for pending_key in pending_keys:
+        try:
+            pending = store.get_sync_payload(pending_key)
+        except (OSError, sqlite3.Error):
+            continue
+        if isinstance(pending, dict):
+            pending_items.append((pending_key, pending))
+    prompt_seen_items = [item for item in pending_items if item[1].get("permission_prompt_seen") is True]
+    if len(prompt_seen_items) == 1:
+        return prompt_seen_items[0]
+    if len(pending_items) != 1:
+        return None
+    try:
+        pending = store.get_sync_payload(pending_items[0][0])
+    except (OSError, sqlite3.Error):
+        return None
+    if not isinstance(pending, dict):
+        return None
+    return pending_items[0][0], pending
+
+
 def _load_claude_pending_permission(
     store: GuardStore,
     payload: dict[str, object],
@@ -1938,6 +1970,7 @@ def _persist_claude_native_permission_policy(
     action: str,
     reason: str,
     now: str,
+    source: str = "claude-native-approval",
 ) -> bool:
     try:
         store.upsert_policy(
@@ -1948,7 +1981,7 @@ def _persist_claude_native_permission_policy(
                 artifact_id=artifact_id,
                 artifact_hash=artifact_hash,
                 reason=reason,
-                source="claude-native-approval",
+                source=source,
             ),
             now,
         )
@@ -2082,6 +2115,103 @@ def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[
     return denied
 
 
+def _claude_guard_approval_question_message(notice: dict[str, object] | None) -> str:
+    tool_name = _optional_string((notice or {}).get("tool_name")) or "this tool"
+    reason = _optional_string((notice or {}).get("reason"))
+    reason_text = f" HOL Guard reason: {_ensure_terminal_punctuation(reason)}" if reason is not None else ""
+    return (
+        f"HOL Guard needs the user's explicit decision before {tool_name} can run.{reason_text} "
+        "The native Claude permission prompt is not the final decision surface for this request. Call "
+        "AskUserQuestion now with one HOL Guard approval question before retrying the tool. Use header "
+        "'HOL Guard', question 'HOL Guard intercepted this sensitive action. What should Claude do?', and exactly "
+        "these options: 'Allow once', 'Allow during this session', and 'Keep blocked'. If the user chooses an "
+        "allow option, retry the same tool once. If the user chooses Keep blocked, do not retry the sensitive "
+        "action."
+    )
+
+
+def _is_claude_guard_approval_question(payload: dict[str, object]) -> bool:
+    if _hook_event_name(payload) != "PostToolUse":
+        return False
+    tool_name = _optional_string(payload.get("tool_name"))
+    if tool_name is None or tool_name.lower() != "askuserquestion":
+        return False
+    combined = json.dumps(
+        {
+            "tool_input": payload.get("tool_input"),
+            "tool_response": payload.get("tool_response"),
+        },
+        sort_keys=True,
+        default=str,
+    ).lower()
+    return "hol guard" in combined and (
+        "allow once" in combined or "allow during this session" in combined or "keep blocked" in combined
+    )
+
+
+def _claude_guard_approval_answer(payload: dict[str, object]) -> str | None:
+    response = payload.get("tool_response")
+    if isinstance(response, dict):
+        answers = response.get("answers")
+        if isinstance(answers, dict):
+            answer_text = " ".join(str(answer).lower() for answer in answers.values())
+            if "keep blocked" in answer_text:
+                return "block"
+            if "allow during this session" in answer_text or "allow once" in answer_text:
+                return "allow"
+            return None
+        content = response.get("content")
+        if isinstance(content, str):
+            content_text = content.lower()
+            if "keep blocked" in content_text:
+                return "block"
+            if "allow during this session" in content_text or "allow once" in content_text:
+                return "allow"
+    response_text = json.dumps(response, sort_keys=True, default=str).lower()
+    if "answers" in response_text:
+        return None
+    if "keep blocked" in response_text:
+        return "block"
+    if "allow during this session" in response_text or "allow once" in response_text:
+        return "allow"
+    return None
+
+
+def _persist_claude_guard_question_decision(store: GuardStore, payload: dict[str, object]) -> bool:
+    if not _is_claude_guard_approval_question(payload):
+        return False
+    action = _claude_guard_approval_answer(payload)
+    if action is None:
+        return False
+    pending_pair = _load_single_claude_pending_permission(store, payload)
+    if pending_pair is None:
+        return False
+    pending_key, pending = pending_pair
+    artifact_id = _optional_string(pending.get("artifact_id"))
+    artifact_hash_value = _optional_string(pending.get("artifact_hash"))
+    if artifact_id is None or artifact_hash_value is None:
+        return False
+    saved = _persist_claude_native_permission_policy(
+        store=store,
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash_value,
+        action=action,
+        reason=(
+            "Allowed through HOL Guard AskUserQuestion approval."
+            if action == "allow"
+            else "Blocked through HOL Guard AskUserQuestion approval."
+        ),
+        now=_now(),
+        source="claude-ask-user-question",
+    )
+    if not saved:
+        return False
+    session_id = _optional_string(payload.get("session_id"))
+    if session_id is not None:
+        _remove_claude_pending_permission(store, session_id=session_id, pending_key=pending_key)
+    return True
+
+
 def _is_claude_permission_prompt_notification(args: argparse.Namespace, payload: dict[str, object]) -> bool:
     return (
         _canonical_harness_name(args.harness) == "claude-code"
@@ -2103,22 +2233,23 @@ def _claude_permission_prompt_system_message(
     if tool_name is None and notice is not None:
         tool_name = _optional_string(notice.get("tool_name"))
     reason = _optional_string(notice.get("reason")) if notice is not None else None
-    intro = "HOL Guard intercepted a sensitive request and opened this Claude approval prompt."
+    intro = "HOL Guard intercepted a sensitive request and is routing it to a HOL Guard approval question."
     if tool_name is not None:
-        intro = f"HOL Guard intercepted Claude's attempt to use {tool_name} and opened this approval prompt."
+        intro = (
+            f"HOL Guard intercepted Claude's attempt to use {tool_name} and is routing it to a HOL Guard approval "
+            "question."
+        )
     if reason is not None:
         return (
-            f"{intro} This approval dialog came from HOL Guard, not from Claude alone. "
+            f"{intro} This approval flow came from HOL Guard, not from Claude alone. "
             f"{_ensure_terminal_punctuation(reason)} "
-            "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action "
-            "for the rest of this session, or deny it by choosing No if shown. If Claude only shows Type here, "
-            "select it and enter No, or press Esc to cancel."
+            "HOL Guard will ask the user to choose Allow once, Allow during this session, or Keep blocked before "
+            "Claude retries the action."
         )
     return (
-        f"{intro} This approval dialog came from HOL Guard, not from Claude alone. "
-        "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action for "
-        "the rest of this session, or deny it by choosing No if shown. If Claude only shows Type here, select it "
-        "and enter No, or press Esc to cancel."
+        f"{intro} This approval flow came from HOL Guard, not from Claude alone. "
+        "HOL Guard will ask the user to choose Allow once, Allow during this session, or Keep blocked before Claude "
+        "retries the action."
     )
 
 
@@ -2126,21 +2257,17 @@ def _claude_permission_prompt_additional_context(notice: dict[str, object] | Non
     reason = _optional_string(notice.get("reason")) if notice is not None else None
     if reason is not None:
         return (
-            "HOL Guard intercepted the sensitive request and opened the Claude approval dialog that is currently "
-            "open. "
-            "This approval dialog came from HOL Guard, not from Claude alone. "
-            f"{_ensure_terminal_punctuation(reason)} The user can choose Yes or Yes during this session in the "
-            "prompt that is already visible. To deny, the user should choose No if Claude shows it; if Claude only "
-            "shows Type here, the user should enter No there or press Esc. If the user denies it, do not retry the "
-            "same sensitive access."
+            "HOL Guard intercepted the sensitive request and is routing it into a HOL Guard approval question. "
+            "This approval flow came from HOL Guard, not from Claude alone. "
+            f"{_ensure_terminal_punctuation(reason)} Ask the user with AskUserQuestion and the options Allow once, "
+            "Allow during this session, and Keep blocked. If the user chooses Keep blocked, do not retry the same "
+            "sensitive access."
         )
     return (
-        "HOL Guard intercepted the sensitive request and opened the Claude approval dialog that is currently open. "
-        "This approval dialog came from HOL Guard, not from Claude alone. "
-        "The user can choose Yes or Yes during this session in the prompt that is already visible. To deny, the "
-        "user should choose No if Claude shows it; if Claude only shows Type here, the user should enter No there "
-        "or press Esc. "
-        "If the user denies it, do not retry the same action."
+        "HOL Guard intercepted the sensitive request and is routing it into a HOL Guard approval question. "
+        "This approval flow came from HOL Guard, not from Claude alone. Ask the user with AskUserQuestion and the "
+        "options Allow once, Allow during this session, and Keep blocked. If the user chooses Keep blocked, do not "
+        "retry the same action."
     )
 
 
@@ -2153,31 +2280,32 @@ def _claude_permission_prompt_terminal_notice(
     reason = _optional_string(notice.get("reason")) if notice is not None else None
     if tool_name is not None and reason is not None:
         return (
-            f"HOL Guard opened this Claude approval prompt for {tool_name}. "
+            f"HOL Guard is routing this Claude approval request for {tool_name} into a HOL Guard decision prompt. "
             f"{_ensure_terminal_punctuation(reason)} "
-            "Review the request below. Choose Yes to allow, Yes during this session to trust it temporarily, or "
-            "deny by choosing No if shown; if Claude only shows Type here, enter No there or press Esc."
+            "Choose Allow once, Allow during this session, or Keep blocked in the HOL Guard prompt."
         )
     if tool_name is not None:
         return (
-            f"HOL Guard opened this Claude approval prompt for {tool_name}. "
-            "Review the request below. Choose Yes to allow, Yes during this session to trust it temporarily, or "
-            "deny by choosing No if shown; if Claude only shows Type here, enter No there or press Esc."
+            f"HOL Guard is routing this Claude approval request for {tool_name} into a HOL Guard decision prompt. "
+            "Choose Allow once, Allow during this session, or Keep blocked in the HOL Guard prompt."
         )
     return (
-        "HOL Guard opened this Claude approval prompt to protect a sensitive action. "
-        "Review the request below. Choose Yes to allow, Yes during this session to trust it temporarily, or deny "
-        "by choosing No if shown; if Claude only shows Type here, enter No there or press Esc."
+        "HOL Guard is routing this Claude approval request into a HOL Guard decision prompt to protect a sensitive "
+        "action. Choose Allow once, Allow during this session, or Keep blocked in the HOL Guard prompt."
     )
 
 
 def _claude_native_pretooluse_terminal_notice(*, payload: dict[str, object], reason: str) -> str:
     tool_name = _claude_notification_tool_name(payload)
     if tool_name is not None:
-        return f"HOL Guard opened this Claude approval prompt for {tool_name}. {_ensure_terminal_punctuation(reason)}"
+        return (
+            f"HOL Guard intercepted Claude's attempt to use {tool_name}. {_ensure_terminal_punctuation(reason)} "
+            "Guard will route the next approval through a HOL Guard prompt if Claude asks to continue."
+        )
     return (
-        "HOL Guard opened this Claude approval prompt to protect a sensitive action. "
-        f"{_ensure_terminal_punctuation(reason)}"
+        "HOL Guard intercepted a sensitive Claude action. "
+        f"{_ensure_terminal_punctuation(reason)} Guard will route the next approval through a HOL Guard prompt if "
+        "Claude asks to continue."
     )
 
 
@@ -2275,10 +2403,8 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
         if harness == "claude-code" and policy_action == "require-reapproval":
             return (
                 f"HOL Guard intercepted Claude's attempt to use {tool_name} for {path_class} to protect your local "
-                "secrets. This approval prompt came from HOL Guard, not from Claude alone. "
-                "Choose Yes to allow it once, Yes during this session to trust the same action for the rest of this "
-                "session, or deny by choosing No if Claude shows it. If Claude only shows Type here, enter No there "
-                "or press Esc to keep the secret private."
+                "secrets. The approval flow came from HOL Guard, not from Claude alone. HOL Guard will ask you to "
+                "choose Allow once, Allow during this session, or Keep blocked before Claude retries this action."
             )
         return (
             f"HOL Guard blocked Claude's attempt to use {tool_name} for {path_class} to protect your local secrets. "
@@ -2321,7 +2447,10 @@ def _claude_prompt_additional_context(
         )
     return (
         f"{_ensure_terminal_punctuation(native_reason)} "
-        "Before you use the first sensitive tool for this request, tell the user exactly: "
+        "Before you use the first sensitive tool for this request, call AskUserQuestion with header 'HOL Guard', "
+        "question 'HOL Guard intercepted this sensitive action. What should Claude do?', and exactly these options: "
+        "'Allow once', 'Allow during this session', and 'Keep blocked'. If the user chooses Keep blocked, do not "
+        "retry the sensitive action. Then tell the user exactly: "
         f"'{briefing_sentence}' "
         "Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive "
         "action automatically. Instead, tell the user approval is required in Claude to continue."
@@ -2340,12 +2469,11 @@ def _claude_prompt_system_message(
             if "secret_read" in _prompt_request_classes(artifact):
                 return (
                     "HOL Guard intercepted this prompt because it asks Claude to access local secrets. "
-                    "If Claude opens a permission dialog on the next tool call, that approval prompt came from HOL "
-                    "Guard."
+                    "If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
                 )
             return (
                 "HOL Guard intercepted this prompt because it leads to a sensitive action. "
-                "If Claude opens a permission dialog on the next tool call, that approval prompt came from HOL Guard."
+                "If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
             )
         if policy_action in {"block", "sandbox-required"}:
             return _ensure_terminal_punctuation(native_reason)
@@ -2463,6 +2591,17 @@ def _emit_native_hook_response(
             _write_json_line(payload, output_stream=output_stream)
         return
     if event_name in {"Notification", "PermissionRequest"}:
+        if event_name == "PermissionRequest" and policy_action in {"block", "sandbox-required"}:
+            payload["hookSpecificOutput"] = {
+                "hookEventName": event_name,
+                "decision": {
+                    "behavior": "deny",
+                    "message": additional_context or reason,
+                    "interrupt": False,
+                },
+            }
+            _write_json_line(payload, output_stream=output_stream)
+            return
         if additional_context:
             payload["hookSpecificOutput"] = {
                 "hookEventName": event_name,
