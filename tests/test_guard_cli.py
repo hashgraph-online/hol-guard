@@ -5805,10 +5805,10 @@ url = http://127.0.0.1:8787/guard-canary
         finally:
             daemon.stop()
 
-        assert connect_rc == 0
-        assert connect_output["connected"] is True
-        assert connect_output["status"] == "connected"
-        assert connect_output["milestone"] == "first_sync_pending"
+        assert connect_rc == 1
+        assert connect_output["connected"] is False
+        assert connect_output["status"] == "retry_required"
+        assert connect_output["milestone"] == "first_sync_failed"
         assert connect_output["reason"] == "sync_unreachable"
         assert connect_output["sync_message"] == "sync_unreachable"
 
@@ -5898,10 +5898,10 @@ url = http://127.0.0.1:8787/guard-canary
                 "receiptsStored": 1,
             }
 
-        assert connect_rc == 0
-        assert connect_output["connected"] is True
-        assert connect_output["status"] == "connected"
-        assert connect_output["milestone"] == "sync_not_available"
+        assert connect_rc == 1
+        assert connect_output["connected"] is False
+        assert connect_output["status"] == "retry_required"
+        assert connect_output["milestone"] == "first_sync_failed"
         assert connect_output["reason"] == "Guard sync requires a Pro or Team plan."
         assert connect_output["sync_message"] == "Guard sync requires a Pro or Team plan."
 
@@ -6239,9 +6239,9 @@ url = http://127.0.0.1:8787/guard-canary
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is True
-        assert payload["status"] == "connected"
-        assert payload["milestone"] == "first_sync_pending"
+        assert payload["connected"] is False
+        assert payload["status"] == "retry_required"
+        assert payload["milestone"] == "first_sync_failed"
         assert payload["sync_message"] == "<urlopen error offline>"
 
     def test_guard_connect_persists_success_when_daemon_result_write_fails(self, tmp_path, monkeypatch):
@@ -6413,9 +6413,9 @@ url = http://127.0.0.1:8787/guard-canary
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is True
-        assert payload["status"] == "connected"
-        assert payload["milestone"] == "first_sync_pending"
+        assert payload["connected"] is False
+        assert payload["status"] == "retry_required"
+        assert payload["milestone"] == "first_sync_failed"
         assert payload["sync_message"] == "Guard Cloud sync requires a paid Guard plan"
 
     def test_guard_connect_reports_guard_plan_required_without_failing_pairing(self, tmp_path, monkeypatch):
@@ -6496,9 +6496,9 @@ url = http://127.0.0.1:8787/guard-canary
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is True
-        assert payload["status"] == "connected"
-        assert payload["milestone"] == "first_sync_pending"
+        assert payload["connected"] is False
+        assert payload["status"] == "retry_required"
+        assert payload["milestone"] == "first_sync_failed"
         assert payload["sync_message"] == "Guard plan required"
 
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
