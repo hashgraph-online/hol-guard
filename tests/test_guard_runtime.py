@@ -4380,6 +4380,94 @@ def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_pat
     assert policies[0]["source"] == "claude-ask-user-question"
 
 
+def test_guard_hook_claude_ask_user_question_without_answer_does_not_persist_block(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    first_event = {
+        "session_id": "session-claude-guard-question-no-answer",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    question_options = [
+        {"label": "Allow once", "description": "Allow this single Read operation"},
+        {"label": "Allow during this session", "description": "Allow Read for the rest of this session"},
+        {"label": "Keep blocked", "description": "Keep this Read blocked"},
+    ]
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=first_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    permission_rc, permission_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "hook_event_name": "PermissionRequest"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    question_rc, question_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={
+            "session_id": "session-claude-guard-question-no-answer",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
+                        "options": question_options,
+                    }
+                ]
+            },
+            "tool_response": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
+                        "options": question_options,
+                    }
+                ],
+            },
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "session_id": "session-claude-guard-question-no-answer-retry"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    first_payload = json.loads(first_output)
+    permission_payload = json.loads(permission_output)
+    second_payload = json.loads(second_output)
+    policies = GuardStore(home_dir).list_policy_decisions("claude-code")
+
+    assert first_rc == 0
+    assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert permission_rc == 0
+    assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+    assert question_rc == 0
+    assert json.loads(question_output)["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert second_rc == 0
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert policies == []
+
+
 def test_guard_hook_claude_alias_reuses_native_approval_policy_with_canonical_harness(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
