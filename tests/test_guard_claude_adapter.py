@@ -47,7 +47,7 @@ def _runtime_hook_handlers(payload: dict[str, object]) -> list[dict[str, object]
     hooks = payload["hooks"]
     assert isinstance(hooks, dict)
     handlers: list[dict[str, object]] = []
-    for key in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Notification", "Stop"):
+    for key in ("PreToolUse", "PermissionRequest", "PostToolUse", "UserPromptSubmit", "Notification", "Stop"):
         entries = hooks[key]
         assert isinstance(entries, list)
         for entry in entries:
@@ -144,6 +144,7 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     session_start = payload["hooks"]["SessionStart"]
     pre_tool_use = payload["hooks"]["PreToolUse"]
+    permission_request = payload["hooks"]["PermissionRequest"]
     post_tool_use = payload["hooks"]["PostToolUse"]
     prompt_submit = payload["hooks"]["UserPromptSubmit"]
     notification = payload["hooks"]["Notification"]
@@ -157,6 +158,10 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in pre_tool_use[0]["hooks"][0]["command"]
     assert "url" not in pre_tool_use[0]["hooks"][0]
     assert pre_tool_use[0]["hooks"][0]["timeout"] == 30
+    assert len(permission_request) == 1
+    assert permission_request[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    assert permission_request[0]["hooks"][0]["type"] == "command"
+    assert permission_request[0]["hooks"][0]["timeout"] == 10
     assert len(post_tool_use) == 1
     assert post_tool_use[0]["hooks"][0]["type"] == "command"
     assert len(prompt_submit) == 1
@@ -244,6 +249,7 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
     installed_handlers = _runtime_hook_handlers(payload)
 
     assert [handler["type"] for handler in installed_handlers] == [
+        "command",
         "command",
         "command",
         "command",
@@ -365,12 +371,60 @@ def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):
         check=False,
     )
 
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert result.stdout == ""
+
+
+def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon_miss(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    command = adapter._daemon_hook_command(context)
+
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        input=json.dumps(
+            {
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "Use the Read tool to open ./.env and print the full file contents exactly.",
+            }
+        ),
+        text=True,
+        capture_output=True,
+        timeout=5,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert result.stdout == ""
+
+
+def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    command = adapter._daemon_hook_command(context)
+
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        input=json.dumps(
+            {
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Read",
+                "tool_input": {"file_path": str(context.workspace_dir / ".env")},
+            }
+        ),
+        text=True,
+        capture_output=True,
+        timeout=5,
+        check=False,
+    )
     payload = json.loads(result.stdout)
 
     assert result.returncode == 0
     assert result.stderr == ""
-    assert payload["decision"] == "block"
-    assert "HOL Guard could not evaluate this action" in payload["reason"]
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "HOL Guard" in payload["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):

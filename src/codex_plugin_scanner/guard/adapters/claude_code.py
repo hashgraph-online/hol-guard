@@ -44,6 +44,7 @@ def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> 
 def _sync_runtime_hook_groups(hooks: dict[str, object], hook_command: str) -> None:
     for key, matcher, timeout in (
         ("PreToolUse", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
+        ("PermissionRequest", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
         ("PostToolUse", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
         ("UserPromptSubmit", None, CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS),
         ("Notification", CLAUDE_GUARD_NOTIFICATION_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
@@ -486,6 +487,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
     def _daemon_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
         fallback_daemon_url = load_guard_daemon_url(context.guard_home) or guard_daemon_url_for_home(context.guard_home)
         state_path = context.guard_home / "daemon-state.json"
+        fallback_command = ClaudeCodeHarnessAdapter._hook_command_parts(context)
         query: dict[str, str] = {"guard-home": str(context.guard_home)}
         if context.home_dir.resolve() != Path.home().resolve():
             query["home"] = str(context.home_dir)
@@ -496,9 +498,11 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "void MARKER;"
             "const fs=require('fs');"
             "const http=require('http');"
+            "const cp=require('child_process');"
             "const {URL}=require('url');"
             f"const statePath={str(state_path)!r};"
             f"const fallbackUrl={fallback_daemon_url!r};"
+            f"const fallbackCommand={list(fallback_command)!r};"
             f"const query={urlencode(query)!r};"
             "function daemonUrl(){"
             "try{"
@@ -507,9 +511,42 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "}catch(_error){}"
             "return fallbackUrl;"
             "}"
+            "function eventName(data){"
+            "try{const payload=JSON.parse(data||'{}');"
+            "return String(payload.hook_event_name||payload.event||'PreToolUse');}"
+            "catch(_error){return 'PreToolUse';}"
+            "}"
+            "function degraded(reason,data){"
+            "const event=eventName(data);"
+            "const message=`HOL Guard could not reach the local daemon (${reason}), so it is using Claude's native "
+            "approval prompt as a safety fallback.`;"
+            "if(event==='UserPromptSubmit'){return '';}"
+            "if(event==='PreToolUse'){return JSON.stringify({systemMessage:'HOL Guard opened this Claude approval "
+            "prompt because local daemon evaluation was unavailable.',hookSpecificOutput:{hookEventName:'PreToolUse',"
+            "permissionDecision:'ask',permissionDecisionReason:`${message} Choose Yes to allow it once, Yes during "
+            "this session to trust the same action for this session, or No to keep it blocked.`}});}"
+            "return '{}';"
+            "}"
+            "function shouldSuppressOutput(data,responseBody){"
+            "if(eventName(data)!=='UserPromptSubmit')return false;"
+            "const trimmed=(responseBody||'').trim();"
+            "return trimmed===''||trimmed==='{}';"
+            "}"
+            "function runLocalFallback(reason,data){"
+            "try{"
+            "const result=cp.spawnSync(fallbackCommand[0],fallbackCommand.slice(1),{input:data,encoding:'utf8',"
+            "timeout:30000,env:process.env});"
+            "if(result.error)return degraded(`${reason}; fallback failed: ${result.error.message}`,data);"
+            "if(result.status===0){"
+            "if(shouldSuppressOutput(data,result.stdout)){process.exit(0);}"
+            "process.stdout.write(result.stdout&&result.stdout.trim()?result.stdout:'{}');"
+            "process.exit(0);}"
+            "if(result.stdout&&result.stdout.trim()){process.stdout.write(result.stdout);process.exit(0);}"
+            "return degraded(`${reason}; fallback exited ${result.status}`,data);"
+            "}catch(error){return degraded(`${reason}; fallback crashed: ${error.message}`,data);}"
+            "}"
             "function fail(reason){"
-            "const message=`HOL Guard could not evaluate this action: ${reason}`;"
-            "process.stdout.write(JSON.stringify({decision:'block',reason:message}));"
+            "process.stdout.write(runLocalFallback(reason,body.trim()?body:'{}'));"
             "process.exit(0);"
             "}"
             "let body='';"
@@ -526,7 +563,9 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "response.setEncoding('utf8');"
             "response.on('data',chunk=>{responseBody+=chunk;});"
             "response.on('end',()=>{"
-            "if(response.statusCode>=200&&response.statusCode<300){process.stdout.write(responseBody);process.exit(0);}"
+            "if(response.statusCode>=200&&response.statusCode<300){"
+            "if(shouldSuppressOutput(data,responseBody)){process.exit(0);}"
+            "process.stdout.write(responseBody);process.exit(0);}"
             "fail(`daemon returned HTTP ${response.statusCode||0}`);"
             "});"
             "});"
@@ -672,6 +711,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             for key in (
                 "SessionStart",
                 "PreToolUse",
+                "PermissionRequest",
                 "PostToolUse",
                 "UserPromptSubmit",
                 "Notification",

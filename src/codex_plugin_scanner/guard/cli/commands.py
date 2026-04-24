@@ -1187,8 +1187,24 @@ def run_guard_command(
             guard_home=context.guard_home,
             workspace=runtime_workspace,
         )
+        if _is_claude_permission_request(args, payload):
+            notice = _peek_claude_permission_notice(store, payload)
+            if notice is None:
+                return 0
+            _mark_claude_pending_permission_prompt_seen(store=store, payload=payload, notice=notice)
+            _emit_native_hook_response(
+                harness=args.harness,
+                policy_action="allow",
+                event_name="PermissionRequest",
+                reason="HOL Guard intercepted the tool request and opened this Claude approval prompt.",
+                system_message=_claude_permission_prompt_system_message(payload=payload, notice=notice),
+                additional_context=_claude_permission_prompt_additional_context(notice),
+                output_stream=output_stream,
+            )
+            return 0
         if _is_claude_permission_prompt_notification(args, payload):
             notice = _load_claude_permission_notice(store, payload)
+            _mark_claude_pending_permission_prompt_seen(store=store, payload=payload, notice=notice)
             store.add_event(
                 "claude/permission_prompt",
                 {
@@ -1205,7 +1221,6 @@ def run_guard_command(
                 _emit_native_hook_notification_stderr(
                     _claude_permission_prompt_terminal_notice(payload=payload, notice=notice)
                 )
-                return 2
             _emit_native_hook_response(
                 harness=args.harness,
                 policy_action="allow",
@@ -1330,6 +1345,13 @@ def run_guard_command(
                 "risk_headline": incident["risk_headline"],
                 "path_summary": _runtime_requested_path(runtime_artifact),
             }
+            if (
+                _canonical_harness_name(args.harness) == "claude-code"
+                and event_name == "UserPromptSubmit"
+                and policy_action == "require-reapproval"
+                and (not getattr(args, "json", False) or output_stream is not None)
+            ):
+                return 0
             if policy_action in {"block", "sandbox-required", "require-reapproval"}:
                 native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
                 additional_context = _claude_prompt_additional_context(
@@ -1812,6 +1834,46 @@ def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]
     return None
 
 
+def _peek_claude_permission_notice(store: GuardStore, payload: dict[str, object]) -> dict[str, object] | None:
+    session_id = _optional_string(payload.get("session_id"))
+    if session_id is None:
+        return None
+    tool_name = _claude_notification_tool_name(payload)
+    try:
+        persisted = store.get_sync_payload(_claude_permission_notice_state_key(session_id, tool_name))
+        if persisted is None and tool_name is not None:
+            persisted = store.get_sync_payload(_claude_permission_notice_state_key(session_id))
+    except (OSError, sqlite3.Error):
+        return None
+    return persisted if isinstance(persisted, dict) else None
+
+
+def _mark_claude_pending_permission_prompt_seen(
+    *,
+    store: GuardStore,
+    payload: dict[str, object],
+    notice: dict[str, object] | None,
+) -> None:
+    session_id = _optional_string(payload.get("session_id"))
+    artifact_id = _optional_string((notice or {}).get("artifact_id"))
+    if session_id is None or artifact_id is None:
+        return
+    pending_key = _claude_pending_permission_state_key(session_id, artifact_id)
+    try:
+        pending = store.get_sync_payload(pending_key)
+    except (OSError, sqlite3.Error):
+        return
+    if not isinstance(pending, dict):
+        return
+    updated = dict(pending)
+    updated["permission_prompt_seen"] = True
+    updated["permission_prompt_seen_at"] = _now()
+    try:
+        store.set_sync_payload(pending_key, updated, _now())
+    except (OSError, sqlite3.Error):
+        return
+
+
 def _load_claude_pending_permission(
     store: GuardStore,
     payload: dict[str, object],
@@ -1963,6 +2025,8 @@ def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[
             continue
         if not isinstance(pending, dict):
             continue
+        if pending.get("permission_prompt_seen") is not True:
+            continue
         artifact_id = _optional_string(pending.get("artifact_id"))
         artifact_hash_value = _optional_string(pending.get("artifact_hash"))
         if artifact_id is None or artifact_hash_value is None:
@@ -2017,6 +2081,10 @@ def _is_claude_permission_prompt_notification(args: argparse.Namespace, payload:
         and _hook_event_name(payload) == "Notification"
         and _optional_string(payload.get("notification_type")) == "permission_prompt"
     )
+
+
+def _is_claude_permission_request(args: argparse.Namespace, payload: dict[str, object]) -> bool:
+    return _canonical_harness_name(args.harness) == "claude-code" and _hook_event_name(payload) == "PermissionRequest"
 
 
 def _claude_permission_prompt_system_message(
@@ -2377,7 +2445,7 @@ def _emit_native_hook_response(
         if payload:
             _write_json_line(payload, output_stream=output_stream)
         return
-    if event_name == "Notification":
+    if event_name in {"Notification", "PermissionRequest"}:
         if additional_context:
             payload["hookSpecificOutput"] = {
                 "hookEventName": event_name,
