@@ -255,7 +255,11 @@ class TestGuardSurfaceServer:
 
         assert "HOL Guard intercepted this prompt" in hook_payload["systemMessage"]
         assert hook_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-        assert "AskUserQuestion" in hook_payload["hookSpecificOutput"]["additionalContext"]
+        assert "Do not ask for approval at the prompt stage" in hook_payload["hookSpecificOutput"]["additionalContext"]
+        assert (
+            "route that concrete action into a HOL Guard approval question"
+            in hook_payload["hookSpecificOutput"]["additionalContext"]
+        )
         assert "Allow once" in hook_payload["hookSpecificOutput"]["additionalContext"]
         assert "Keep blocked" in hook_payload["hookSpecificOutput"]["additionalContext"]
 

@@ -4899,7 +4899,11 @@ def test_guard_hook_brands_claude_user_prompt_submit_before_native_approval(
 
     assert rc == 0
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert "AskUserQuestion" in payload["hookSpecificOutput"]["additionalContext"]
+    assert "Do not ask for approval at the prompt stage" in payload["hookSpecificOutput"]["additionalContext"]
+    assert (
+        "route that concrete action into a HOL Guard approval question"
+        in payload["hookSpecificOutput"]["additionalContext"]
+    )
     assert "Keep blocked" in payload["hookSpecificOutput"]["additionalContext"]
     assert any(receipt["artifact_id"].startswith("claude-code:session:prompt") for receipt in receipts)
 
@@ -4929,7 +4933,11 @@ def test_guard_hook_brands_generic_claude_user_prompt_submit_before_native_appro
 
     assert rc == 0
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert "AskUserQuestion" in payload["hookSpecificOutput"]["additionalContext"]
+    assert "Do not ask for approval at the prompt stage" in payload["hookSpecificOutput"]["additionalContext"]
+    assert (
+        "route that concrete action into a HOL Guard approval question"
+        in payload["hookSpecificOutput"]["additionalContext"]
+    )
     assert "Keep blocked" in payload["hookSpecificOutput"]["additionalContext"]
 
 
