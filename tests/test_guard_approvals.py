@@ -1598,6 +1598,40 @@ class TestGuardApprovals:
         assert approve_output["resolved"] is True
         assert store.resolve_policy("codex", "codex:project:workspace_skill", "hash-789") == "allow"
 
+    def test_guard_policies_cli_clears_local_decisions_for_harness(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        store.upsert_policy(
+            PolicyDecision(
+                harness="claude-code",
+                scope="artifact",
+                action="block",
+                artifact_id="claude-code:runtime:file-read:.npmrc",
+                artifact_hash="hash-npmrc",
+                reason="blocked during local test",
+                source="claude-ask-user-question",
+            ),
+            "2026-04-23T00:00:00+00:00",
+        )
+        store.upsert_policy(
+            PolicyDecision(
+                harness="codex",
+                scope="harness",
+                action="allow",
+                reason="keep codex decisions",
+                source="manual",
+            ),
+            "2026-04-23T00:00:00+00:00",
+        )
+
+        rc = main(["guard", "policies", "clear", "--home", str(home_dir), "--harness", "claude-code", "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["cleared"] == 1
+        assert store.list_policy_decisions("claude-code") == []
+        assert len(store.list_policy_decisions("codex")) == 1
+
     def test_guard_bridge_resolves_requests_against_guard_daemon_api(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
         bridge = GuardBridge(

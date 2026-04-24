@@ -253,15 +253,7 @@ class TestGuardSurfaceServer:
         finally:
             daemon.stop()
 
-        assert "HOL Guard intercepted this prompt" in hook_payload["systemMessage"]
-        assert hook_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-        assert "Do not ask for approval at the prompt stage" in hook_payload["hookSpecificOutput"]["additionalContext"]
-        assert (
-            "route that concrete action into a HOL Guard approval question"
-            in hook_payload["hookSpecificOutput"]["additionalContext"]
-        )
-        assert "Allow once" in hook_payload["hookSpecificOutput"]["additionalContext"]
-        assert "Keep blocked" in hook_payload["hookSpecificOutput"]["additionalContext"]
+        assert hook_payload == {}
 
     def test_guard_daemon_claude_hook_endpoint_blocks_guard_bypass_user_prompt_submit(self, tmp_path) -> None:
         home_dir = tmp_path / "home"

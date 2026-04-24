@@ -1528,6 +1528,22 @@ class GuardStore:
             for row in rows
         ]
 
+    def clear_policy_decisions(self, harness: str | None = None, source: str | None = None) -> int:
+        conditions: list[str] = []
+        params: list[object] = []
+        if harness is not None:
+            conditions.append("harness = ?")
+            params.append(harness)
+        if source is not None:
+            conditions.append("source = ?")
+            params.append(source)
+        query = "delete from policy_decisions"
+        if conditions:
+            query += " where " + " and ".join(conditions)
+        with self._connect() as connection:
+            cursor = connection.execute(query, tuple(params))
+            return int(cursor.rowcount if cursor.rowcount is not None else 0)
+
     def get_latest_diff(self, harness: str, artifact_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
             row = connection.execute(
