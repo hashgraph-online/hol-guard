@@ -4692,7 +4692,7 @@ def test_guard_hook_emits_claude_user_prompt_submit_block_reason_without_continu
     assert "blocked this prompt" in output["reason"].lower()
 
 
-def test_guard_hook_defers_claude_user_prompt_submit_bypass_to_tool_approval(
+def test_guard_hook_hard_blocks_claude_user_prompt_submit_bypass(
     tmp_path,
     capsys,
     monkeypatch,
@@ -4719,11 +4719,12 @@ def test_guard_hook_defers_claude_user_prompt_submit_bypass_to_tool_approval(
             "claude-code",
         ]
     )
-    output = capsys.readouterr().out
+    output = json.loads(capsys.readouterr().out)
     receipts = GuardStore(home_dir).list_receipts()
 
     assert rc == 0
-    assert output == ""
+    assert output["decision"] == "block"
+    assert "bypass" in output["reason"].lower() or "disable" in output["reason"].lower()
     assert any(receipt["artifact_id"].startswith("claude-code:session:prompt") for receipt in receipts)
 
 

@@ -1350,6 +1350,7 @@ def run_guard_command(
                 _canonical_harness_name(args.harness) == "claude-code"
                 and event_name == "UserPromptSubmit"
                 and policy_action == "require-reapproval"
+                and not _prompt_requires_hard_block(runtime_artifact)
                 and (not getattr(args, "json", False) or output_stream is not None)
             ):
                 return 0
