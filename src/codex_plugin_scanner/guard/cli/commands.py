@@ -2151,28 +2151,29 @@ def _is_claude_guard_approval_question(payload: dict[str, object]) -> bool:
 
 def _claude_guard_approval_answer(payload: dict[str, object]) -> str | None:
     response = payload.get("tool_response")
+    answer_text: str | None = None
     if isinstance(response, dict):
         answers = response.get("answers")
         if isinstance(answers, dict):
-            answer_text = " ".join(str(answer).lower() for answer in answers.values())
-            if "keep blocked" in answer_text:
-                return "block"
-            if "allow during this session" in answer_text or "allow once" in answer_text:
-                return "allow"
-            return None
-        content = response.get("content")
-        if isinstance(content, str):
-            content_text = content.lower()
-            if "keep blocked" in content_text:
-                return "block"
-            if "allow during this session" in content_text or "allow once" in content_text:
-                return "allow"
-    response_text = json.dumps(response, sort_keys=True, default=str).lower()
-    if "answers" in response_text:
+            answer_text = " ".join(str(answer) for answer in answers.values() if str(answer).strip())
+        if answer_text is None:
+            for key in ("answer", "selected_answer", "selected", "choice", "value", "label"):
+                value = response.get(key)
+                if isinstance(value, str) and value.strip():
+                    answer_text = value
+                    break
+        if answer_text is None and "questions" not in response and "options" not in response:
+            content = response.get("content")
+            if isinstance(content, str) and content.strip():
+                answer_text = content
+    elif isinstance(response, str) and response.strip():
+        answer_text = response
+    if answer_text is None:
         return None
-    if "keep blocked" in response_text:
+    normalized_answer = answer_text.lower()
+    if "keep blocked" in normalized_answer:
         return "block"
-    if "allow during this session" in response_text or "allow once" in response_text:
+    if "allow during this session" in normalized_answer or "allow once" in normalized_answer:
         return "allow"
     return None
 
