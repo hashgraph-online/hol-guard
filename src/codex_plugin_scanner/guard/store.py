@@ -1743,6 +1743,16 @@ class GuardStore:
                 (state_key,),
             )
 
+    def delete_sync_payloads(self, state_keys: list[str]) -> int:
+        if not state_keys:
+            return 0
+        with self._connect() as connection:
+            cursor = connection.executemany(
+                "delete from sync_state where state_key = ?",
+                [(state_key,) for state_key in state_keys],
+            )
+            return int(cursor.rowcount if cursor.rowcount is not None else 0)
+
     def add_guard_event_v1(self, event: GuardEventV1) -> None:
         with self._connect() as connection:
             self._add_guard_event_v1(connection, event)

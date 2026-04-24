@@ -1270,7 +1270,6 @@ def run_guard_command(
                 {
                     "session_id": payload.get("session_id"),
                     "discarded_pending_permissions": discarded,
-                    "saved_denials": 0,
                 },
                 _now(),
             )
@@ -2119,11 +2118,7 @@ def _discard_claude_pending_permissions(store: GuardStore, payload: dict[str, ob
     if not pending_keys:
         return 0
     try:
-        with store._connect() as connection:
-            connection.execute("begin immediate")
-            for pending_key in pending_keys:
-                connection.execute("delete from sync_state where state_key = ?", (pending_key,))
-            connection.execute("delete from sync_state where state_key = ?", (index_key,))
+        store.delete_sync_payloads([*pending_keys, index_key])
     except (OSError, sqlite3.Error):
         return 0
     return len(pending_keys)

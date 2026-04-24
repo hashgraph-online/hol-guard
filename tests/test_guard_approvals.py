@@ -1632,6 +1632,38 @@ class TestGuardApprovals:
         assert store.list_policy_decisions("claude-code") == []
         assert len(store.list_policy_decisions("codex")) == 1
 
+    def test_guard_policies_clear_renders_non_json_result(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        store.upsert_policy(
+            PolicyDecision(
+                harness="claude-code",
+                scope="artifact",
+                action="block",
+                artifact_id="claude-code:runtime:file-read:.npmrc",
+                artifact_hash="hash-npmrc",
+                reason="blocked during local test",
+                source="claude-ask-user-question",
+            ),
+            "2026-04-23T00:00:00+00:00",
+        )
+
+        rc = main(["guard", "policies", "clear", "--home", str(home_dir), "--harness", "claude-code"])
+        output = capsys.readouterr().out
+
+        assert rc == 0
+        assert "Guard policy clear" in output
+        assert "cleared 1 decision" in output
+        assert store.list_policy_decisions("claude-code") == []
+
+    def test_guard_policies_clear_renders_non_json_validation_error(self, tmp_path, capsys):
+        rc = main(["guard", "policies", "clear", "--home", str(tmp_path / "home")])
+        output = capsys.readouterr().out
+
+        assert rc == 2
+        assert "Guard policy clear" in output
+        assert "Choose --harness <name> or --all" in output
+
     def test_guard_bridge_resolves_requests_against_guard_daemon_api(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
         bridge = GuardBridge(
