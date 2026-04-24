@@ -4468,6 +4468,30 @@ def test_guard_hook_claude_ask_user_question_without_answer_does_not_persist_blo
     assert policies == []
 
 
+def test_guard_hook_claude_ask_user_question_empty_answers_uses_explicit_fallback_answer():
+    payload = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "AskUserQuestion",
+        "tool_response": {
+            "questions": [
+                {
+                    "header": "HOL Guard",
+                    "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
+                    "options": [
+                        {"label": "Allow once"},
+                        {"label": "Allow during this session"},
+                        {"label": "Keep blocked"},
+                    ],
+                }
+            ],
+            "answers": {},
+            "selected_answer": "Allow once",
+        },
+    }
+
+    assert guard_commands_module._claude_guard_approval_answer(payload) == "allow"
+
+
 def test_guard_hook_claude_alias_reuses_native_approval_policy_with_canonical_harness(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

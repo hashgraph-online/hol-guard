@@ -2155,7 +2155,9 @@ def _claude_guard_approval_answer(payload: dict[str, object]) -> str | None:
     if isinstance(response, dict):
         answers = response.get("answers")
         if isinstance(answers, dict):
-            answer_text = " ".join(str(answer) for answer in answers.values() if str(answer).strip())
+            joined_answers = " ".join(str(answer) for answer in answers.values() if str(answer).strip())
+            if joined_answers:
+                answer_text = joined_answers
         if answer_text is None:
             for key in ("answer", "selected_answer", "selected", "choice", "value", "label"):
                 value = response.get(key)
