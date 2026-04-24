@@ -224,6 +224,8 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
     response_code = 200
     captured_headers: ClassVar[dict[str, str]] = {}
     captured_body: ClassVar[dict[str, object] | None] = None
+    captured_bodies: ClassVar[list[dict[str, object]]] = []
+    captured_paths: ClassVar[list[str]] = []
     raw_response_body: ClassVar[str | None] = None
     response_payload: ClassVar[dict[str, object]] = {
         "syncedAt": "2026-04-09T00:00:00Z",
@@ -235,6 +237,8 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(length).decode("utf-8") if length else "{}"
         _SyncRequestHandler.captured_headers = {key.lower(): value for key, value in self.headers.items()}
         _SyncRequestHandler.captured_body = json.loads(body)
+        _SyncRequestHandler.captured_bodies.append(_SyncRequestHandler.captured_body)
+        _SyncRequestHandler.captured_paths.append(self.path)
         self.send_response(self.response_code)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
@@ -5401,6 +5405,8 @@ url = http://127.0.0.1:8787/guard-canary
             "syncedAt": "2026-04-09T00:00:00Z",
             "receiptsStored": 1,
         }
+        _SyncRequestHandler.captured_bodies = []
+        _SyncRequestHandler.captured_paths = []
 
         server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -5464,10 +5470,16 @@ url = http://127.0.0.1:8787/guard-canary
         assert status_output["cloud_state"] == "paired_active"
         assert status_output["last_sync_at"] == "2026-04-09T00:00:00Z"
         assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer demo-token"
-        assert _SyncRequestHandler.captured_body is not None
-        assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
-        assert "inventory" not in _SyncRequestHandler.captured_body
-        first_receipt = _SyncRequestHandler.captured_body["receipts"][0]
+        receipt_body = next(
+            body
+            for body in _SyncRequestHandler.captured_bodies
+            if isinstance(body.get("receipts"), list) and len(body["receipts"]) >= 1
+        )
+        event_body = next(body for body in _SyncRequestHandler.captured_bodies if "events" in body)
+        assert len(receipt_body["receipts"]) >= 1
+        assert "inventory" not in receipt_body
+        assert len(event_body["events"]) >= 1
+        first_receipt = receipt_body["receipts"][0]
         assert "artifactId" in first_receipt
         assert "artifact_id" not in first_receipt
         assert "receiptId" in first_receipt
@@ -5805,10 +5817,10 @@ url = http://127.0.0.1:8787/guard-canary
         finally:
             daemon.stop()
 
-        assert connect_rc == 0
-        assert connect_output["connected"] is True
-        assert connect_output["status"] == "connected"
-        assert connect_output["milestone"] == "first_sync_pending"
+        assert connect_rc == 1
+        assert connect_output["connected"] is False
+        assert connect_output["status"] == "retry_required"
+        assert connect_output["milestone"] == "first_sync_failed"
         assert connect_output["reason"] == "sync_unreachable"
         assert connect_output["sync_message"] == "sync_unreachable"
 
@@ -5898,10 +5910,10 @@ url = http://127.0.0.1:8787/guard-canary
                 "receiptsStored": 1,
             }
 
-        assert connect_rc == 0
-        assert connect_output["connected"] is True
-        assert connect_output["status"] == "connected"
-        assert connect_output["milestone"] == "sync_not_available"
+        assert connect_rc == 1
+        assert connect_output["connected"] is False
+        assert connect_output["status"] == "retry_required"
+        assert connect_output["milestone"] == "first_sync_failed"
         assert connect_output["reason"] == "Guard sync requires a Pro or Team plan."
         assert connect_output["sync_message"] == "Guard sync requires a Pro or Team plan."
 
@@ -6239,9 +6251,9 @@ url = http://127.0.0.1:8787/guard-canary
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is True
-        assert payload["status"] == "connected"
-        assert payload["milestone"] == "first_sync_pending"
+        assert payload["connected"] is False
+        assert payload["status"] == "retry_required"
+        assert payload["milestone"] == "first_sync_failed"
         assert payload["sync_message"] == "<urlopen error offline>"
 
     def test_guard_connect_persists_success_when_daemon_result_write_fails(self, tmp_path, monkeypatch):
@@ -6413,9 +6425,9 @@ url = http://127.0.0.1:8787/guard-canary
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is True
-        assert payload["status"] == "connected"
-        assert payload["milestone"] == "first_sync_pending"
+        assert payload["connected"] is False
+        assert payload["status"] == "retry_required"
+        assert payload["milestone"] == "first_sync_failed"
         assert payload["sync_message"] == "Guard Cloud sync requires a paid Guard plan"
 
     def test_guard_connect_reports_guard_plan_required_without_failing_pairing(self, tmp_path, monkeypatch):
@@ -6496,9 +6508,9 @@ url = http://127.0.0.1:8787/guard-canary
             wait_timeout_seconds=1,
         )
 
-        assert payload["connected"] is True
-        assert payload["status"] == "connected"
-        assert payload["milestone"] == "first_sync_pending"
+        assert payload["connected"] is False
+        assert payload["status"] == "retry_required"
+        assert payload["milestone"] == "first_sync_failed"
         assert payload["sync_message"] == "Guard plan required"
 
     def test_guard_sync_persists_advisories_from_endpoint(self, tmp_path, capsys):
