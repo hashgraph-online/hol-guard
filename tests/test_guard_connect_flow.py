@@ -156,9 +156,9 @@ def test_guard_connect_preserves_pairing_when_first_sync_fails(
     finally:
         daemon.stop()
 
-    assert payload["connected"] is True
-    assert payload["status"] == "connected"
-    assert payload["milestone"] == "first_sync_pending"
+    assert payload["connected"] is False
+    assert payload["status"] == "retry_required"
+    assert payload["milestone"] == "first_sync_failed"
     assert payload["reason"] == "sync_unreachable"
     assert payload["sync_message"] == "sync_unreachable"
     assert payload["request_id"].startswith("connect-")
@@ -235,9 +235,9 @@ def test_guard_connect_prefers_paid_plan_sync_note_over_runtime_sync_timeout(
     finally:
         daemon.stop()
 
-    assert payload["connected"] is True
-    assert payload["status"] == "connected"
-    assert payload["milestone"] == "first_sync_pending"
+    assert payload["connected"] is False
+    assert payload["status"] == "retry_required"
+    assert payload["milestone"] == "first_sync_failed"
     assert payload["reason"] == "Guard Cloud sync requires a paid Guard plan"
     assert payload["sync_message"] == "Guard Cloud sync requires a paid Guard plan"
 
@@ -311,9 +311,9 @@ def test_guard_connect_preserves_http_402_payment_required_sync_note(
     finally:
         daemon.stop()
 
-    assert payload["connected"] is True
-    assert payload["status"] == "connected"
-    assert payload["milestone"] == "first_sync_pending"
+    assert payload["connected"] is False
+    assert payload["status"] == "retry_required"
+    assert payload["milestone"] == "first_sync_failed"
     assert payload["reason"] == "HTTP Error 402: Payment Required"
     assert payload["sync_message"] == "HTTP Error 402: Payment Required"
 
