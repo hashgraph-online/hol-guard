@@ -1526,6 +1526,22 @@ class GuardStore:
         with self._connect() as connection:
             return count_pending_approval_requests(connection, status=status)
 
+    def clear_approval_requests(self, *, harness: str | None = None, status: str | None = None) -> int:
+        conditions: list[str] = []
+        params: list[object] = []
+        if harness is not None:
+            conditions.append("harness = ?")
+            params.append(harness)
+        if status is not None:
+            conditions.append("status = ?")
+            params.append(status)
+        query = "delete from approval_requests"
+        if conditions:
+            query += " where " + " and ".join(conditions)
+        with self._connect() as connection:
+            cursor = connection.execute(query, tuple(params))
+            return int(cursor.rowcount if cursor.rowcount is not None else 0)
+
     def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
         query = """
             select harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason, owner, source,

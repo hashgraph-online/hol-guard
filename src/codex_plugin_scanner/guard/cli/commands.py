@@ -855,7 +855,7 @@ def run_guard_command(
     if args.guard_command == "approvals":
         payload = run_approval_command(args, store=store, workspace=workspace)
         _emit("approvals", payload, getattr(args, "json", False))
-        return 0
+        return int(payload.get("exit_code", 0))
 
     if args.guard_command == "explain":
         payload = _build_explain_payload_with_mode(store, args.target, cisco_mode=args.cisco_mode)
