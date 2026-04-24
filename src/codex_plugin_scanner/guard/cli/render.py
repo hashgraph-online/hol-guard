@@ -392,6 +392,27 @@ def _render_events(console: Console, payload: dict[str, object]) -> None:
 
 
 def _render_approvals(console: Console, payload: dict[str, object]) -> None:
+    if "history_cleared" in payload or "cleared_policies" in payload:
+        error = payload.get("error")
+        body = Table.grid(padding=(0, 1))
+        body.add_row(
+            "Outcome",
+            str(error) if error else "approval history reset",
+        )
+        body.add_row("Harness", str(payload.get("harness") or "all harnesses"))
+        source = payload.get("source")
+        if source:
+            body.add_row("Source", str(source))
+        body.add_row("Policy decisions", str(int(payload.get("cleared_policies", 0) or 0)))
+        body.add_row("Resolved requests", str(int(payload.get("cleared_resolved_requests", 0) or 0)))
+        console.print(
+            Panel(
+                body,
+                title="Approval history",
+                border_style="red" if error else "green",
+            )
+        )
+        return
     if payload.get("resolved"):
         item = payload.get("item")
         if isinstance(item, dict):
