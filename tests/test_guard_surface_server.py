@@ -131,13 +131,15 @@ class TestGuardSurfaceServer:
 
         assert notification_payload["hookSpecificOutput"]["hookEventName"] == "Notification"
         assert (
-            "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt."
+            "HOL Guard intercepted Claude's attempt to use Read and is routing it to a HOL Guard approval question."
             in (notification_payload["systemMessage"])
         )
         assert (
-            "HOL Guard intercepted the sensitive request and opened the Claude approval dialog"
+            "HOL Guard intercepted the sensitive request and is routing it into a HOL Guard approval question"
             in (notification_payload["hookSpecificOutput"]["additionalContext"])
         )
+        assert "AskUserQuestion" in notification_payload["hookSpecificOutput"]["additionalContext"]
+        assert "Keep blocked" in notification_payload["hookSpecificOutput"]["additionalContext"]
 
     def test_guard_daemon_runtime_snapshot_exposes_cloud_handoff_state(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
@@ -251,7 +253,11 @@ class TestGuardSurfaceServer:
         finally:
             daemon.stop()
 
-        assert hook_payload == {}
+        assert "HOL Guard intercepted this prompt" in hook_payload["systemMessage"]
+        assert hook_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+        assert "AskUserQuestion" in hook_payload["hookSpecificOutput"]["additionalContext"]
+        assert "Allow once" in hook_payload["hookSpecificOutput"]["additionalContext"]
+        assert "Keep blocked" in hook_payload["hookSpecificOutput"]["additionalContext"]
 
     def test_guard_daemon_claude_hook_endpoint_blocks_guard_bypass_user_prompt_submit(self, tmp_path) -> None:
         home_dir = tmp_path / "home"
