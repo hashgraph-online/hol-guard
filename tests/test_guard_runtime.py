@@ -4291,6 +4291,101 @@ def test_guard_hook_claude_ask_user_question_allow_persists_approval(tmp_path, c
     assert policies[0]["source"] == "claude-ask-user-question"
 
 
+def test_guard_hook_claude_notification_only_ask_user_question_persists_approval(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    first_event = {
+        "session_id": "session-claude-guard-question-notification-only",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=first_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    notification_rc, notification_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={
+            "session_id": "session-claude-guard-question-notification-only",
+            "hook_event_name": "Notification",
+            "notification_type": "permission_prompt",
+            "title": "Permission needed",
+            "message": "Claude needs your permission to use Read",
+            "tool_name": "Read",
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    approval_question, question_options = _load_claude_pending_question_contract(
+        home_dir,
+        "session-claude-guard-question-notification-only",
+    )
+    question_rc, question_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={
+            "session_id": "session-claude-guard-question-notification-only",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": approval_question,
+                        "options": question_options,
+                    }
+                ]
+            },
+            "tool_response": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": approval_question,
+                        "options": question_options,
+                    }
+                ],
+                "answers": {approval_question: "Allow once"},
+            },
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "session_id": "session-claude-guard-question-notification-only-retry"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    first_payload = json.loads(first_output)
+    notification_payload = json.loads(notification_output)
+    second_payload = json.loads(second_output)
+    policies = GuardStore(home_dir).list_policy_decisions("claude-code")
+
+    assert first_rc == 0
+    assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert notification_rc == 0
+    assert "AskUserQuestion" in notification_payload["hookSpecificOutput"]["additionalContext"]
+    assert question_rc == 0
+    assert question_output == ""
+    assert second_rc == 0
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert policies[0]["source"] == "claude-ask-user-question"
+
+
 def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

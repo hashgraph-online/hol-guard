@@ -2495,6 +2495,8 @@ def _claude_permission_prompt_system_message(
 
 
 def _claude_permission_prompt_additional_context(notice: dict[str, object] | None) -> str:
+    if notice is not None:
+        return _claude_guard_approval_question_message(notice)
     reason = _optional_string(notice.get("reason")) if notice is not None else None
     if reason is not None:
         return (
