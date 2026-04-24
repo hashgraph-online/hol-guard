@@ -163,6 +163,7 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert permission_request[0]["hooks"][0]["type"] == "command"
     assert permission_request[0]["hooks"][0]["timeout"] == 10
     assert len(post_tool_use) == 1
+    assert post_tool_use[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
     assert post_tool_use[0]["hooks"][0]["type"] == "command"
     assert len(prompt_submit) == 1
     assert "matcher" not in prompt_submit[0]
@@ -396,7 +397,10 @@ def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon
     )
     assert result.returncode == 0
     assert result.stderr == ""
-    assert result.stdout == ""
+    payload = json.loads(result.stdout)
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    assert "AskUserQuestion" in payload["hookSpecificOutput"]["additionalContext"]
+    assert "Keep blocked" in payload["hookSpecificOutput"]["additionalContext"]
 
 
 def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_path):
@@ -426,8 +430,9 @@ def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "HOL Guard" in reason
-    assert "Type here" in reason
-    assert "press Esc" in reason
+    assert "approval flow came from HOL Guard" in reason
+    assert "Allow once" in reason
+    assert "Keep blocked" in reason
 
 
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):

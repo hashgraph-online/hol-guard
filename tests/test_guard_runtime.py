@@ -4087,9 +4087,9 @@ def test_guard_hook_emits_claude_native_ask_response(tmp_path, capsys, monkeypat
     assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
     reason = output["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    assert "this approval prompt came from hol guard" in reason
-    assert "choose yes to allow it once" in reason
-    assert "yes during this session" in reason
+    assert "approval flow came from hol guard" in reason
+    assert "allow once" in reason
+    assert "keep blocked" in reason
     assert str(workspace_dir) not in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
@@ -4128,9 +4128,9 @@ def test_guard_hook_emits_claude_native_pretooluse_notice_on_stderr(tmp_path, ca
     assert rc == 0
     assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert captured_notice
-    assert "HOL Guard opened this Claude approval prompt for Read." in captured_notice[0]
+    assert "HOL Guard intercepted Claude's attempt to use Read." in captured_notice[0]
     assert "protect your local secrets" in captured_notice[0]
-    assert "Yes during this session" in captured_notice[0]
+    assert "HOL Guard prompt" in captured_notice[0]
 
 
 def test_guard_hook_claude_posttooluse_persists_native_approval(tmp_path, capsys, monkeypatch):
@@ -4186,6 +4186,198 @@ def test_guard_hook_claude_posttooluse_persists_native_approval(tmp_path, capsys
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert any(receipt["user_override"] == "claude-native-approve" for receipt in receipts)
+
+
+def test_guard_hook_claude_ask_user_question_allow_persists_approval(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    first_event = {
+        "session_id": "session-claude-guard-question-allow",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=first_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    permission_rc, permission_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "hook_event_name": "PermissionRequest"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    question_rc, question_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={
+            "session_id": "session-claude-guard-question-allow",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
+                        "options": [
+                            {"label": "Allow once"},
+                            {"label": "Allow during this session"},
+                            {"label": "Keep blocked"},
+                        ],
+                    }
+                ]
+            },
+            "tool_response": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
+                        "options": [
+                            {"label": "Allow once", "description": "Allow this single Read operation"},
+                            {
+                                "label": "Allow during this session",
+                                "description": "Allow Read for the rest of this session",
+                            },
+                            {"label": "Keep blocked", "description": "Keep this Read blocked"},
+                        ],
+                    }
+                ],
+                "answers": {"HOL Guard intercepted this sensitive action. What should Claude do?": "Allow once"},
+            },
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "session_id": "session-claude-guard-question-allow-retry"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    first_payload = json.loads(first_output)
+    permission_payload = json.loads(permission_output)
+    second_payload = json.loads(second_output)
+    policies = GuardStore(home_dir).list_policy_decisions("claude-code")
+
+    assert first_rc == 0
+    assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert permission_rc == 0
+    assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+    assert "AskUserQuestion" in permission_payload["hookSpecificOutput"]["decision"]["message"]
+    assert question_rc == 0
+    assert question_output == ""
+    assert second_rc == 0
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert policies[0]["source"] == "claude-ask-user-question"
+
+
+def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    first_event = {
+        "session_id": "session-claude-guard-question-block",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=first_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    permission_rc, permission_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "hook_event_name": "PermissionRequest"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    question_rc, question_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={
+            "session_id": "session-claude-guard-question-block",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
+                        "options": [
+                            {"label": "Allow once"},
+                            {"label": "Allow during this session"},
+                            {"label": "Keep blocked"},
+                        ],
+                    }
+                ]
+            },
+            "tool_response": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
+                        "options": [
+                            {"label": "Allow once", "description": "Allow this single Read operation"},
+                            {
+                                "label": "Allow during this session",
+                                "description": "Allow Read for the rest of this session",
+                            },
+                            {"label": "Keep blocked", "description": "Keep this Read blocked"},
+                        ],
+                    }
+                ],
+                "answers": {"HOL Guard intercepted this sensitive action. What should Claude do?": "Keep blocked"},
+            },
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "session_id": "session-claude-guard-question-block-retry"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    first_payload = json.loads(first_output)
+    permission_payload = json.loads(permission_output)
+    second_payload = json.loads(second_output)
+    policies = GuardStore(home_dir).list_policy_decisions("claude-code")
+
+    assert first_rc == 0
+    assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert permission_rc == 0
+    assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+    assert question_rc == 0
+    assert question_output == ""
+    assert second_rc == 0
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "HOL Guard blocked Claude's attempt to use Read" in second_payload["systemMessage"]
+    assert policies[0]["source"] == "claude-ask-user-question"
 
 
 def test_guard_hook_claude_alias_reuses_native_approval_policy_with_canonical_harness(tmp_path, capsys, monkeypatch):
@@ -4591,9 +4783,12 @@ def test_guard_hook_brands_claude_user_prompt_submit_before_native_approval(
         monkeypatch=monkeypatch,
     )
     receipts = GuardStore(home_dir).list_receipts()
+    payload = json.loads(output)
 
     assert rc == 0
-    assert output == ""
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    assert "AskUserQuestion" in payload["hookSpecificOutput"]["additionalContext"]
+    assert "Keep blocked" in payload["hookSpecificOutput"]["additionalContext"]
     assert any(receipt["artifact_id"].startswith("claude-code:session:prompt") for receipt in receipts)
 
 
@@ -4618,9 +4813,12 @@ def test_guard_hook_brands_generic_claude_user_prompt_submit_before_native_appro
         capsys=capsys,
         monkeypatch=monkeypatch,
     )
+    payload = json.loads(output)
 
     assert rc == 0
-    assert output == ""
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    assert "AskUserQuestion" in payload["hookSpecificOutput"]["additionalContext"]
+    assert "Keep blocked" in payload["hookSpecificOutput"]["additionalContext"]
 
 
 def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts(
@@ -4848,12 +5046,12 @@ def test_guard_hook_emits_claude_notification_notice_for_permission_prompt(tmp_p
     notification_payload = json.loads(notification_capture.out)
 
     assert notification_rc == 0
-    assert "HOL Guard opened this Claude approval prompt for Read." in notification_capture.err
+    assert "HOL Guard is routing this Claude approval request for Read" in notification_capture.err
     assert "protect your local secrets" in notification_capture.err
     assert "HOL Guard intercepted Claude's attempt to use Read" in notification_payload["systemMessage"]
     assert "came from HOL Guard, not from Claude alone" in notification_payload["systemMessage"]
-    assert "Yes during this session" in notification_payload["systemMessage"]
-    assert "enter No, or press Esc to cancel" in notification_payload["systemMessage"]
+    assert "Allow during this session" in notification_payload["systemMessage"]
+    assert "Keep blocked" in notification_payload["systemMessage"]
 
 
 def test_guard_hook_emits_claude_permission_request_attribution_without_decision(
@@ -4897,7 +5095,13 @@ def test_guard_hook_emits_claude_permission_request_attribution_without_decision
     assert "HOL Guard intercepted Claude's attempt to use Read" in permission_payload["systemMessage"]
     assert "came from HOL Guard, not from Claude alone" in permission_payload["systemMessage"]
     assert permission_payload["hookSpecificOutput"]["hookEventName"] == "PermissionRequest"
-    assert "decision" not in permission_payload["hookSpecificOutput"]
+    assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+    assert permission_payload["hookSpecificOutput"]["decision"]["interrupt"] is False
+    message = permission_payload["hookSpecificOutput"]["decision"]["message"]
+    assert "AskUserQuestion" in message
+    assert "Allow once" in message
+    assert "Allow during this session" in message
+    assert "Keep blocked" in message
 
 
 def test_guard_hook_ignores_unattributed_claude_permission_request(
@@ -4988,8 +5192,8 @@ def test_guard_hook_emits_claude_native_ask_for_sensitive_file_reads(
     assert notification_rc == 0
     assert "HOL Guard intercepted Claude's attempt to use Read" in notification_output["systemMessage"]
     assert "came from HOL Guard, not from Claude alone" in notification_output["systemMessage"]
-    assert "yes during this session" in notification_output["systemMessage"].lower()
-    assert "enter no, or press esc to cancel" in notification_output["systemMessage"].lower()
+    assert "allow during this session" in notification_output["systemMessage"].lower()
+    assert "keep blocked" in notification_output["systemMessage"].lower()
 
 
 def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reason(tmp_path, capsys, monkeypatch):
@@ -5016,18 +5220,17 @@ def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reas
 
     assert rc == 0
     assert output["systemMessage"] == (
-        "HOL Guard intercepted Claude's attempt to use Bash and opened this approval prompt. "
-        "This approval dialog came from HOL Guard, not from Claude alone. "
-        "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action "
-        "for the rest of this session, or deny it by choosing No if shown. If Claude only shows Type here, "
-        "select it and enter No, or press Esc to cancel."
+        "HOL Guard intercepted Claude's attempt to use Bash and is routing it to a HOL Guard approval question. "
+        "This approval flow came from HOL Guard, not from Claude alone. "
+        "HOL Guard will ask the user to choose Allow once, Allow during this session, or Keep blocked before Claude "
+        "retries the action."
     )
     assert (
-        "HOL Guard intercepted the sensitive request and opened the Claude approval dialog"
+        "HOL Guard intercepted the sensitive request and is routing it into a HOL Guard approval question"
         in (output["hookSpecificOutput"]["additionalContext"])
     )
     assert (
-        "to deny, the user should choose no if claude shows it"
+        "allow once, allow during this session, and keep blocked"
         in (output["hookSpecificOutput"]["additionalContext"]).lower()
     )
 
@@ -5098,16 +5301,15 @@ def test_guard_hook_claude_notification_notice_is_tool_scoped_and_consumed(tmp_p
     )
 
     assert first_rc == 0
-    assert "choose yes to allow it once" in first_output["systemMessage"].lower()
+    assert "allow once" in first_output["systemMessage"].lower()
     assert "came from HOL Guard, not from Claude alone" in first_output["systemMessage"]
-    assert "enter no, or press esc to cancel" in first_output["systemMessage"].lower()
+    assert "keep blocked" in first_output["systemMessage"].lower()
     assert second_rc == 0
     assert second_output["systemMessage"] == (
-        "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt. "
-        "This approval dialog came from HOL Guard, not from Claude alone. "
-        "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action "
-        "for the rest of this session, or deny it by choosing No if shown. If Claude only shows Type here, "
-        "select it and enter No, or press Esc to cancel."
+        "HOL Guard intercepted Claude's attempt to use Read and is routing it to a HOL Guard approval question. "
+        "This approval flow came from HOL Guard, not from Claude alone. "
+        "HOL Guard will ask the user to choose Allow once, Allow during this session, or Keep blocked before Claude "
+        "retries the action."
     )
 
 
@@ -5161,8 +5363,8 @@ def test_guard_hook_claude_notification_notice_falls_back_when_tool_name_is_miss
 
     assert pre_tool_rc == 0
     assert notification_rc == 0
-    assert "opened this approval prompt" in notification_output["systemMessage"]
-    assert "enter no, or press esc to cancel" in notification_output["systemMessage"].lower()
+    assert "HOL Guard approval question" in notification_output["systemMessage"]
+    assert "keep blocked" in notification_output["systemMessage"].lower()
 
 
 def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(tmp_path, capsys, monkeypatch):
@@ -5219,11 +5421,10 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
     assert pre_tool_output["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert notification_rc == 0
     assert notification_output["systemMessage"] == (
-        "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt. "
-        "This approval dialog came from HOL Guard, not from Claude alone. "
-        "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action "
-        "for the rest of this session, or deny it by choosing No if shown. If Claude only shows Type here, "
-        "select it and enter No, or press Esc to cancel."
+        "HOL Guard intercepted Claude's attempt to use Read and is routing it to a HOL Guard approval question. "
+        "This approval flow came from HOL Guard, not from Claude alone. "
+        "HOL Guard will ask the user to choose Allow once, Allow during this session, or Keep blocked before Claude "
+        "retries the action."
     )
 
 
