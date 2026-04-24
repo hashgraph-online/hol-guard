@@ -17,7 +17,9 @@ from uuid import uuid4
 
 from cryptography.fernet import Fernet, InvalidToken
 
+from .edge_events import build_receipt_event
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
+from .schemas.guard_event_v1 import GuardEventV1
 from .store_approvals import (
     add_approval_request as persist_approval_request,
 )
@@ -546,6 +548,20 @@ class GuardStore:
               payload_json text not null,
               occurred_at text not null
             )
+            """,
+            """
+            create table if not exists guard_cloud_events (
+              event_id text primary key,
+              idempotency_key text not null unique,
+              event_type text not null,
+              payload_json text not null,
+              occurred_at text not null,
+              uploaded_at text
+            )
+            """,
+            """
+            create index if not exists idx_guard_cloud_events_sync
+            on guard_cloud_events (uploaded_at, occurred_at)
             """,
             """
             create table if not exists guard_runtime_state (
@@ -1213,6 +1229,19 @@ class GuardStore:
                     receipt.timestamp,
                 ),
             )
+            self._ensure_local_device(connection)
+            row = connection.execute(
+                "select installation_id from guard_devices where device_key = ?",
+                (_DEVICE_ROW_KEY,),
+            ).fetchone()
+            device_id = str(row["installation_id"]) if row is not None else None
+            self._add_guard_event_v1(
+                connection,
+                build_receipt_event(
+                    receipt,
+                    device_id=device_id,
+                ),
+            )
 
     def list_receipts(self, limit: int = 50) -> list[dict[str, object]]:
         with self._connect() as connection:
@@ -1697,6 +1726,72 @@ class GuardStore:
                 "delete from sync_state where state_key = ?",
                 (state_key,),
             )
+
+    def add_guard_event_v1(self, event: GuardEventV1) -> None:
+        with self._connect() as connection:
+            self._add_guard_event_v1(connection, event)
+
+    @staticmethod
+    def _add_guard_event_v1(connection: sqlite3.Connection, event: GuardEventV1) -> None:
+        payload = event.to_dict()
+        connection.execute(
+            """
+            insert or ignore into guard_cloud_events (
+              event_id, idempotency_key, event_type, payload_json, occurred_at, uploaded_at
+            )
+            values (?, ?, ?, ?, ?, null)
+            """,
+            (
+                event.event_id,
+                event.idempotency_key,
+                event.event_type,
+                json.dumps(payload, sort_keys=True),
+                event.occurred_at,
+            ),
+        )
+
+    def list_guard_events_v1(self, *, uploaded: bool | None = None, limit: int = 200) -> list[dict[str, object]]:
+        query = """
+            select event_id, idempotency_key, event_type, payload_json, occurred_at, uploaded_at
+            from guard_cloud_events
+        """
+        params: list[object] = []
+        if uploaded is True:
+            query += " where uploaded_at is not null"
+        elif uploaded is False:
+            query += " where uploaded_at is null"
+        query += " order by occurred_at asc, event_id asc limit ?"
+        params.append(limit)
+        with self._connect() as connection:
+            rows = connection.execute(query, tuple(params)).fetchall()
+        events: list[dict[str, object]] = []
+        for row in rows:
+            payload = json.loads(str(row["payload_json"]))
+            if not isinstance(payload, dict):
+                payload = {}
+            events.append(
+                {
+                    "event_id": str(row["event_id"]),
+                    "idempotency_key": str(row["idempotency_key"]),
+                    "event_type": str(row["event_type"]),
+                    "occurred_at": str(row["occurred_at"]),
+                    "uploaded_at": row["uploaded_at"],
+                    "payload": payload,
+                }
+            )
+        return events
+
+    def mark_guard_events_v1_uploaded(self, event_ids: list[str], uploaded_at: str) -> int:
+        clean_ids = [event_id for event_id in event_ids if event_id.strip()]
+        if not clean_ids:
+            return 0
+        placeholders = ", ".join("?" for _ in clean_ids)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                f"update guard_cloud_events set uploaded_at = ? where event_id in ({placeholders})",
+                (uploaded_at, *clean_ids),
+            )
+            return int(cursor.rowcount)
 
     def add_event(self, event_name: str, payload: dict[str, object], now: str) -> None:
         with self._connect() as connection:

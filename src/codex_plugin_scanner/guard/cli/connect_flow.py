@@ -107,36 +107,37 @@ def run_guard_connect_command(
         sync_payload = sync_receipts(store)
     except GuardSyncNotAvailableError as plan_error:
         plan_msg = str(plan_error).strip() or "Cloud sync requires a paid Guard plan."
-        pending_state = _record_connect_result(
-            daemon_client=daemon_client,
-            store=store,
-            request_id=str(connect_request["request_id"]),
-            status="connected",
-            milestone="sync_not_available",
-            reason=plan_msg,
-        )
-        return build_connect_payload(
-            state=pending_state,
-            browser_opened=browser_opened,
-            connect_url=browser_url,
-            sync_url=sync_url,
-            connected=True,
-            sync_available=False,
-            sync_message=plan_msg,
-        )
-    except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
-        sync_message = str(error)
-        if runtime_sync_error and not _is_paid_plan_sync_error(sync_message):
-            sync_message = runtime_sync_error
-        sync_is_plan_limited = _is_paid_plan_sync_error(sync_message)
         pending_sync_payload = dict(runtime_sync_summary)
         pending_sync_payload["synced_at"] = None
         pending_state = _record_connect_result(
             daemon_client=daemon_client,
             store=store,
             request_id=str(connect_request["request_id"]),
-            status="connected",
-            milestone="first_sync_pending",
+            status="retry_required",
+            milestone="first_sync_failed",
+            reason=plan_msg,
+            sync=pending_sync_payload,
+        )
+        return build_connect_payload(
+            state=pending_state,
+            browser_opened=browser_opened,
+            connect_url=browser_url,
+            sync_url=sync_url,
+            connected=False,
+            sync=pending_sync_payload,
+            sync_available=False,
+            sync_message=plan_msg,
+        )
+    except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
+        sync_message = str(error)
+        pending_sync_payload = dict(runtime_sync_summary)
+        pending_sync_payload["synced_at"] = None
+        pending_state = _record_connect_result(
+            daemon_client=daemon_client,
+            store=store,
+            request_id=str(connect_request["request_id"]),
+            status="retry_required",
+            milestone="first_sync_failed",
             reason=sync_message,
             sync=pending_sync_payload,
         )
@@ -145,10 +146,9 @@ def run_guard_connect_command(
             browser_opened=browser_opened,
             connect_url=browser_url,
             sync_url=sync_url,
-            connected=True,
+            connected=False,
             sync=pending_sync_payload,
             sync_message=sync_message,
-            sync_available=False if sync_is_plan_limited else None,
         )
     sync_payload["runtime_session_synced_at"] = runtime_sync_summary["runtime_session_synced_at"]
     sync_payload["runtime_session_id"] = runtime_sync_summary["runtime_session_id"]
