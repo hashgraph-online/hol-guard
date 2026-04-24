@@ -4853,7 +4853,7 @@ def test_guard_hook_emits_claude_notification_notice_for_permission_prompt(tmp_p
     assert "HOL Guard intercepted Claude's attempt to use Read" in notification_payload["systemMessage"]
     assert "came from HOL Guard, not from Claude alone" in notification_payload["systemMessage"]
     assert "Yes during this session" in notification_payload["systemMessage"]
-    assert "No to keep the sensitive action blocked" in notification_payload["systemMessage"]
+    assert "enter No, or press Esc to cancel" in notification_payload["systemMessage"]
 
 
 def test_guard_hook_emits_claude_permission_request_attribution_without_decision(
@@ -4989,7 +4989,7 @@ def test_guard_hook_emits_claude_native_ask_for_sensitive_file_reads(
     assert "HOL Guard intercepted Claude's attempt to use Read" in notification_output["systemMessage"]
     assert "came from HOL Guard, not from Claude alone" in notification_output["systemMessage"]
     assert "yes during this session" in notification_output["systemMessage"].lower()
-    assert "or no to keep the sensitive action blocked" in notification_output["systemMessage"].lower()
+    assert "enter no, or press esc to cancel" in notification_output["systemMessage"].lower()
 
 
 def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reason(tmp_path, capsys, monkeypatch):
@@ -5019,14 +5019,15 @@ def test_guard_hook_emits_generic_claude_notification_notice_without_cached_reas
         "HOL Guard intercepted Claude's attempt to use Bash and opened this approval prompt. "
         "This approval dialog came from HOL Guard, not from Claude alone. "
         "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action "
-        "for the rest of this session, or No to keep the sensitive action blocked."
+        "for the rest of this session, or deny it by choosing No if shown. If Claude only shows Type here, "
+        "select it and enter No, or press Esc to cancel."
     )
     assert (
         "HOL Guard intercepted the sensitive request and opened the Claude approval dialog"
         in (output["hookSpecificOutput"]["additionalContext"])
     )
     assert (
-        "the user can choose yes, yes during this session, or no"
+        "to deny, the user should choose no if claude shows it"
         in (output["hookSpecificOutput"]["additionalContext"]).lower()
     )
 
@@ -5099,13 +5100,14 @@ def test_guard_hook_claude_notification_notice_is_tool_scoped_and_consumed(tmp_p
     assert first_rc == 0
     assert "choose yes to allow it once" in first_output["systemMessage"].lower()
     assert "came from HOL Guard, not from Claude alone" in first_output["systemMessage"]
-    assert "or no to keep the sensitive action blocked" in first_output["systemMessage"].lower()
+    assert "enter no, or press esc to cancel" in first_output["systemMessage"].lower()
     assert second_rc == 0
     assert second_output["systemMessage"] == (
         "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt. "
         "This approval dialog came from HOL Guard, not from Claude alone. "
         "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action "
-        "for the rest of this session, or No to keep the sensitive action blocked."
+        "for the rest of this session, or deny it by choosing No if shown. If Claude only shows Type here, "
+        "select it and enter No, or press Esc to cancel."
     )
 
 
@@ -5160,7 +5162,7 @@ def test_guard_hook_claude_notification_notice_falls_back_when_tool_name_is_miss
     assert pre_tool_rc == 0
     assert notification_rc == 0
     assert "opened this approval prompt" in notification_output["systemMessage"]
-    assert "or no to keep the sensitive action blocked" in notification_output["systemMessage"].lower()
+    assert "enter no, or press esc to cancel" in notification_output["systemMessage"].lower()
 
 
 def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(tmp_path, capsys, monkeypatch):
@@ -5220,7 +5222,8 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
         "HOL Guard intercepted Claude's attempt to use Read and opened this approval prompt. "
         "This approval dialog came from HOL Guard, not from Claude alone. "
         "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action "
-        "for the rest of this session, or No to keep the sensitive action blocked."
+        "for the rest of this session, or deny it by choosing No if shown. If Claude only shows Type here, "
+        "select it and enter No, or press Esc to cancel."
     )
 
 

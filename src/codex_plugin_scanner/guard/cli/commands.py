@@ -2111,12 +2111,14 @@ def _claude_permission_prompt_system_message(
             f"{intro} This approval dialog came from HOL Guard, not from Claude alone. "
             f"{_ensure_terminal_punctuation(reason)} "
             "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action "
-            "for the rest of this session, or No to keep the sensitive action blocked."
+            "for the rest of this session, or deny it by choosing No if shown. If Claude only shows Type here, "
+            "select it and enter No, or press Esc to cancel."
         )
     return (
         f"{intro} This approval dialog came from HOL Guard, not from Claude alone. "
         "Use the Claude choices below: Yes to allow it once, Yes during this session to trust the same action for "
-        "the rest of this session, or No to keep the sensitive action blocked."
+        "the rest of this session, or deny it by choosing No if shown. If Claude only shows Type here, select it "
+        "and enter No, or press Esc to cancel."
     )
 
 
@@ -2127,13 +2129,17 @@ def _claude_permission_prompt_additional_context(notice: dict[str, object] | Non
             "HOL Guard intercepted the sensitive request and opened the Claude approval dialog that is currently "
             "open. "
             "This approval dialog came from HOL Guard, not from Claude alone. "
-            f"{_ensure_terminal_punctuation(reason)} The user can choose Yes, Yes during this session, or No in the "
-            "prompt that is already visible. If the user denies it, do not retry the same sensitive access."
+            f"{_ensure_terminal_punctuation(reason)} The user can choose Yes or Yes during this session in the "
+            "prompt that is already visible. To deny, the user should choose No if Claude shows it; if Claude only "
+            "shows Type here, the user should enter No there or press Esc. If the user denies it, do not retry the "
+            "same sensitive access."
         )
     return (
         "HOL Guard intercepted the sensitive request and opened the Claude approval dialog that is currently open. "
         "This approval dialog came from HOL Guard, not from Claude alone. "
-        "The user can choose Yes, Yes during this session, or No in the prompt that is already visible. "
+        "The user can choose Yes or Yes during this session in the prompt that is already visible. To deny, the "
+        "user should choose No if Claude shows it; if Claude only shows Type here, the user should enter No there "
+        "or press Esc. "
         "If the user denies it, do not retry the same action."
     )
 
@@ -2149,16 +2155,19 @@ def _claude_permission_prompt_terminal_notice(
         return (
             f"HOL Guard opened this Claude approval prompt for {tool_name}. "
             f"{_ensure_terminal_punctuation(reason)} "
-            "Review the request below, then choose Yes, Yes during this session, or No."
+            "Review the request below. Choose Yes to allow, Yes during this session to trust it temporarily, or "
+            "deny by choosing No if shown; if Claude only shows Type here, enter No there or press Esc."
         )
     if tool_name is not None:
         return (
             f"HOL Guard opened this Claude approval prompt for {tool_name}. "
-            "Review the request below, then choose Yes, Yes during this session, or No."
+            "Review the request below. Choose Yes to allow, Yes during this session to trust it temporarily, or "
+            "deny by choosing No if shown; if Claude only shows Type here, enter No there or press Esc."
         )
     return (
         "HOL Guard opened this Claude approval prompt to protect a sensitive action. "
-        "Review the request below, then choose Yes, Yes during this session, or No."
+        "Review the request below. Choose Yes to allow, Yes during this session to trust it temporarily, or deny "
+        "by choosing No if shown; if Claude only shows Type here, enter No there or press Esc."
     )
 
 
@@ -2268,7 +2277,8 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
                 f"HOL Guard intercepted Claude's attempt to use {tool_name} for {path_class} to protect your local "
                 "secrets. This approval prompt came from HOL Guard, not from Claude alone. "
                 "Choose Yes to allow it once, Yes during this session to trust the same action for the rest of this "
-                "session, or No to keep the secret private."
+                "session, or deny by choosing No if Claude shows it. If Claude only shows Type here, enter No there "
+                "or press Esc to keep the secret private."
             )
         return (
             f"HOL Guard blocked Claude's attempt to use {tool_name} for {path_class} to protect your local secrets. "
