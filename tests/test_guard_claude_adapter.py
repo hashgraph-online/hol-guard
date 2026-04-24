@@ -424,7 +424,10 @@ def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_
     assert result.stderr == ""
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
-    assert "HOL Guard" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "HOL Guard" in reason
+    assert "Type here" in reason
+    assert "press Esc" in reason
 
 
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):
