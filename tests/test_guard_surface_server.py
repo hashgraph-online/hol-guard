@@ -251,18 +251,9 @@ class TestGuardSurfaceServer:
         finally:
             daemon.stop()
 
-        assert "decision" not in hook_payload
-        assert "HOL Guard intercepted this prompt" in hook_payload["systemMessage"]
-        assert hook_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-        assert (
-            "HOL Guard intercepted Claude's next attempt to access local secrets"
-            in hook_payload["hookSpecificOutput"]["additionalContext"]
-        )
-        assert "approval dialog" in hook_payload["hookSpecificOutput"]["additionalContext"]
+        assert hook_payload == {}
 
-    def test_guard_daemon_claude_hook_endpoint_returns_native_user_prompt_submit_block(
-        self, tmp_path
-    ) -> None:
+    def test_guard_daemon_claude_hook_endpoint_defers_user_prompt_submit_to_tool_approval(self, tmp_path) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -290,11 +281,7 @@ class TestGuardSurfaceServer:
         finally:
             daemon.stop()
 
-        assert hook_payload["decision"] == "block"
-        assert (
-            hook_payload["reason"]
-            == "HOL Guard blocked this prompt because it asks to bypass or disable Guard."
-        )
+        assert hook_payload == {}
 
     def test_guard_daemon_background_start_auto_stops_after_idle_timeout(self, tmp_path) -> None:
         guard_home = tmp_path / "pytest-of-user" / "guard-home"
