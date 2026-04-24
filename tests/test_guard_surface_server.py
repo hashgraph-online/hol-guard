@@ -135,7 +135,7 @@ class TestGuardSurfaceServer:
             in (notification_payload["systemMessage"])
         )
         assert (
-            "HOL Guard intercepted the sensitive request and is routing it into a HOL Guard approval question"
+            "HOL Guard needs the user's explicit decision before Read can run"
             in (notification_payload["hookSpecificOutput"]["additionalContext"])
         )
         assert "AskUserQuestion" in notification_payload["hookSpecificOutput"]["additionalContext"]
