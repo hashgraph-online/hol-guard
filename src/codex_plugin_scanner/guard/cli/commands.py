@@ -1922,8 +1922,15 @@ def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]
         if persisted is None and tool_name is not None:
             selected_key = _claude_permission_notice_state_key(session_id)
             persisted = store.get_sync_payload(selected_key)
-        if persisted is not None:
-            store.delete_sync_payload(selected_key)
+        if isinstance(persisted, dict):
+            artifact_id = _optional_string(persisted.get("artifact_id"))
+            if artifact_id is not None:
+                pending_key = _claude_pending_permission_state_key(session_id, artifact_id)
+                pending = store.get_sync_payload(pending_key)
+                if not isinstance(pending, dict):
+                    store.delete_sync_payload(selected_key)
+            else:
+                store.delete_sync_payload(selected_key)
     except (OSError, sqlite3.Error):
         return None
     if isinstance(persisted, dict):
