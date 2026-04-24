@@ -1664,6 +1664,26 @@ class TestGuardApprovals:
         assert "Guard policy clear" in output
         assert "Choose --harness <name> or --all" in output
 
+    def test_guard_policies_clear_rejects_all_with_harness(self, tmp_path, capsys):
+        rc = main(
+            [
+                "guard",
+                "policies",
+                "clear",
+                "--home",
+                str(tmp_path / "home"),
+                "--all",
+                "--harness",
+                "claude-code",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 2
+        assert output["cleared"] == 0
+        assert "Choose either --all or --harness <name>" in output["error"]
+
     def test_guard_bridge_resolves_requests_against_guard_daemon_api(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
         bridge = GuardBridge(

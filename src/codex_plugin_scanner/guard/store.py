@@ -1746,10 +1746,11 @@ class GuardStore:
     def delete_sync_payloads(self, state_keys: list[str]) -> int:
         if not state_keys:
             return 0
+        placeholders = ",".join("?" for _ in state_keys)
         with self._connect() as connection:
-            cursor = connection.executemany(
-                "delete from sync_state where state_key = ?",
-                [(state_key,) for state_key in state_keys],
+            cursor = connection.execute(
+                f"delete from sync_state where state_key in ({placeholders})",
+                tuple(state_keys),
             )
             return int(cursor.rowcount if cursor.rowcount is not None else 0)
 

@@ -315,7 +315,11 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     policies_parser.add_argument("policies_command", nargs="?", choices=("clear",))
     policies_parser.add_argument("--harness")
     policies_parser.add_argument("--source")
-    policies_parser.add_argument("--all", action="store_true", help="Clear decisions across every harness")
+    policies_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Clear decisions across every harness; cannot be combined with --harness",
+    )
     _add_guard_common_args(policies_parser)
     policies_parser.add_argument("--json", action="store_true")
 
@@ -781,6 +785,18 @@ def run_guard_command(
         if getattr(args, "policies_command", None) == "clear":
             harness = getattr(args, "harness", None)
             clear_all = bool(getattr(args, "all", False))
+            if clear_all and harness is not None:
+                _emit(
+                    "policies",
+                    {
+                        "error": "Choose either --all or --harness <name> when clearing Guard policy decisions.",
+                        "cleared": 0,
+                        "harness": harness,
+                        "source": getattr(args, "source", None),
+                    },
+                    getattr(args, "json", False),
+                )
+                return 2
             if not clear_all and harness is None:
                 _emit(
                     "policies",
