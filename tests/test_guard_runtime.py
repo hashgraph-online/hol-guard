@@ -4188,6 +4188,20 @@ def test_guard_hook_claude_posttooluse_persists_native_approval(tmp_path, capsys
     assert any(receipt["user_override"] == "claude-native-approve" for receipt in receipts)
 
 
+def _load_claude_pending_question_contract(home_dir: Path, session_id: str) -> tuple[str, list[dict[str, str]]]:
+    store = GuardStore(home_dir)
+    index_payload = store.get_sync_payload(f"claude_pending_permissions:{session_id}")
+    assert isinstance(index_payload, list)
+    assert index_payload
+    pending_payload = store.get_sync_payload(str(index_payload[0]))
+    assert isinstance(pending_payload, dict)
+    question = str(pending_payload["approval_question"])
+    options = pending_payload.get("approval_options")
+    assert isinstance(options, list)
+    assert options
+    return question, [{"label": str(option)} for option in options]
+
+
 def test_guard_hook_claude_ask_user_question_allow_persists_approval(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -4217,6 +4231,10 @@ def test_guard_hook_claude_ask_user_question_allow_persists_approval(tmp_path, c
         capsys=capsys,
         monkeypatch=monkeypatch,
     )
+    approval_question, question_options = _load_claude_pending_question_contract(
+        home_dir,
+        "session-claude-guard-question-allow",
+    )
     question_rc, question_output = _run_guard_hook(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
@@ -4229,12 +4247,8 @@ def test_guard_hook_claude_ask_user_question_allow_persists_approval(tmp_path, c
                 "questions": [
                     {
                         "header": "HOL Guard",
-                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
-                        "options": [
-                            {"label": "Allow once"},
-                            {"label": "Allow during this session"},
-                            {"label": "Keep blocked"},
-                        ],
+                        "question": approval_question,
+                        "options": question_options,
                     }
                 ]
             },
@@ -4242,18 +4256,11 @@ def test_guard_hook_claude_ask_user_question_allow_persists_approval(tmp_path, c
                 "questions": [
                     {
                         "header": "HOL Guard",
-                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
-                        "options": [
-                            {"label": "Allow once", "description": "Allow this single Read operation"},
-                            {
-                                "label": "Allow during this session",
-                                "description": "Allow Read for the rest of this session",
-                            },
-                            {"label": "Keep blocked", "description": "Keep this Read blocked"},
-                        ],
+                        "question": approval_question,
+                        "options": question_options,
                     }
                 ],
-                "answers": {"HOL Guard intercepted this sensitive action. What should Claude do?": "Allow once"},
+                "answers": {approval_question: "Allow once"},
             },
         },
         capsys=capsys,
@@ -4313,6 +4320,10 @@ def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_pat
         capsys=capsys,
         monkeypatch=monkeypatch,
     )
+    approval_question, question_options = _load_claude_pending_question_contract(
+        home_dir,
+        "session-claude-guard-question-block",
+    )
     question_rc, question_output = _run_guard_hook(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
@@ -4325,12 +4336,8 @@ def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_pat
                 "questions": [
                     {
                         "header": "HOL Guard",
-                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
-                        "options": [
-                            {"label": "Allow once"},
-                            {"label": "Allow during this session"},
-                            {"label": "Keep blocked"},
-                        ],
+                        "question": approval_question,
+                        "options": question_options,
                     }
                 ]
             },
@@ -4338,18 +4345,11 @@ def test_guard_hook_claude_ask_user_question_keep_blocked_persists_block(tmp_pat
                 "questions": [
                     {
                         "header": "HOL Guard",
-                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
-                        "options": [
-                            {"label": "Allow once", "description": "Allow this single Read operation"},
-                            {
-                                "label": "Allow during this session",
-                                "description": "Allow Read for the rest of this session",
-                            },
-                            {"label": "Keep blocked", "description": "Keep this Read blocked"},
-                        ],
+                        "question": approval_question,
+                        "options": question_options,
                     }
                 ],
-                "answers": {"HOL Guard intercepted this sensitive action. What should Claude do?": "Keep blocked"},
+                "answers": {approval_question: "Keep blocked"},
             },
         },
         capsys=capsys,
@@ -4391,11 +4391,6 @@ def test_guard_hook_claude_ask_user_question_without_answer_does_not_persist_blo
         "tool_input": {"file_path": str(workspace_dir / ".env")},
         "source_scope": "project",
     }
-    question_options = [
-        {"label": "Allow once", "description": "Allow this single Read operation"},
-        {"label": "Allow during this session", "description": "Allow Read for the rest of this session"},
-        {"label": "Keep blocked", "description": "Keep this Read blocked"},
-    ]
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
 
     first_rc, first_output = _run_guard_hook(
@@ -4414,6 +4409,10 @@ def test_guard_hook_claude_ask_user_question_without_answer_does_not_persist_blo
         capsys=capsys,
         monkeypatch=monkeypatch,
     )
+    approval_question, question_options = _load_claude_pending_question_contract(
+        home_dir,
+        "session-claude-guard-question-no-answer",
+    )
     question_rc, question_output = _run_guard_hook(
         home_dir=home_dir,
         workspace_dir=workspace_dir,
@@ -4426,7 +4425,7 @@ def test_guard_hook_claude_ask_user_question_without_answer_does_not_persist_blo
                 "questions": [
                     {
                         "header": "HOL Guard",
-                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
+                        "question": approval_question,
                         "options": question_options,
                     }
                 ]
@@ -4435,7 +4434,7 @@ def test_guard_hook_claude_ask_user_question_without_answer_does_not_persist_blo
                 "questions": [
                     {
                         "header": "HOL Guard",
-                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
+                        "question": approval_question,
                         "options": question_options,
                     }
                 ],
@@ -4463,6 +4462,92 @@ def test_guard_hook_claude_ask_user_question_without_answer_does_not_persist_blo
     assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     assert question_rc == 0
     assert json.loads(question_output)["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert second_rc == 0
+    assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert policies == []
+
+
+def test_guard_hook_claude_ask_user_question_spoofed_prompt_does_not_persist_approval(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    first_event = {
+        "session_id": "session-claude-guard-question-spoof",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    first_rc, first_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=first_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    permission_rc, permission_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "hook_event_name": "PermissionRequest"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    _, expected_options = _load_claude_pending_question_contract(home_dir, "session-claude-guard-question-spoof")
+    question_rc, question_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={
+            "session_id": "session-claude-guard-question-spoof",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
+                        "options": expected_options,
+                    }
+                ]
+            },
+            "tool_response": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": "HOL Guard intercepted this sensitive action. What should Claude do?",
+                        "options": expected_options,
+                    }
+                ],
+                "answers": {"HOL Guard intercepted this sensitive action. What should Claude do?": "Allow once"},
+            },
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    second_rc, second_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={**first_event, "session_id": "session-claude-guard-question-spoof-retry"},
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    first_payload = json.loads(first_output)
+    permission_payload = json.loads(permission_output)
+    question_payload = json.loads(question_output)
+    second_payload = json.loads(second_output)
+    policies = GuardStore(home_dir).list_policy_decisions("claude-code")
+
+    assert first_rc == 0
+    assert first_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert permission_rc == 0
+    assert permission_payload["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+    assert question_rc == 0
+    assert question_payload["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert second_rc == 0
     assert second_payload["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert policies == []
