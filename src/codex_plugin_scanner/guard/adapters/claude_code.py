@@ -19,6 +19,7 @@ from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _ensure_path_within_root, _json_payload, _run_command_probe
 
 CLAUDE_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+CLAUDE_GUARD_POST_TOOL_MATCHER = f"{CLAUDE_GUARD_TOOL_MATCHER}|AskUserQuestion"
 CLAUDE_GUARD_NOTIFICATION_MATCHER = "permission_prompt"
 CLAUDE_GUARD_SESSION_START_MATCHERS = ("startup", "resume", "clear", "compact")
 CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS = 30
@@ -45,7 +46,7 @@ def _sync_runtime_hook_groups(hooks: dict[str, object], hook_command: str) -> No
     for key, matcher, timeout in (
         ("PreToolUse", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
         ("PermissionRequest", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
-        ("PostToolUse", CLAUDE_GUARD_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
+        ("PostToolUse", CLAUDE_GUARD_POST_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS),
         ("UserPromptSubmit", None, CLAUDE_GUARD_PROMPT_TIMEOUT_SECONDS),
         ("Notification", CLAUDE_GUARD_NOTIFICATION_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS),
         ("Stop", None, CLAUDE_GUARD_STOP_TIMEOUT_SECONDS),
@@ -519,13 +520,13 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "function degraded(reason,data){"
             "const event=eventName(data);"
             "const message=`HOL Guard could not reach the local daemon (${reason}), so it is using Claude's native "
-            "approval prompt as a safety fallback.`;"
+            "approval prompt as a temporary safety fallback.`;"
             "if(event==='UserPromptSubmit'){return '';}"
-            "if(event==='PreToolUse'){return JSON.stringify({systemMessage:'HOL Guard opened this Claude approval "
-            "prompt because local daemon evaluation was unavailable.',hookSpecificOutput:{hookEventName:'PreToolUse',"
-            "permissionDecision:'ask',permissionDecisionReason:`${message} Choose Yes to allow it once, Yes during "
-            "this session to trust the same action for this session, or deny by choosing No if shown. If Claude only "
-            "shows Type here, enter No there or press Esc.`}});}"
+            "if(event==='PreToolUse'){return JSON.stringify({systemMessage:'HOL Guard could not reach the local "
+            "daemon, so it cannot render the full HOL Guard approval flow.',hookSpecificOutput:{"
+            "hookEventName:'PreToolUse',permissionDecision:'ask',permissionDecisionReason:`${message} Keep this "
+            "action blocked unless you intentionally trust it. Restart Guard to restore the branded Allow once / "
+            "Allow during this session / Keep blocked flow.`}});}"
             "return '{}';"
             "}"
             "function shouldSuppressOutput(data,responseBody){"
