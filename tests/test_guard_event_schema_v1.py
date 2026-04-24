@@ -69,6 +69,33 @@ class _EventIngestHandler(BaseHTTPRequestHandler):
         return
 
 
+class _RejectedEventHandler(BaseHTTPRequestHandler):
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length) if length else b"{}"
+        payload = json.loads(body.decode())
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(
+            json.dumps(
+                {
+                    "accepted": 0,
+                    "rejected": 1,
+                    "statuses": [
+                        {
+                            "eventId": payload["events"][0]["eventId"],
+                            "status": "rejected",
+                        }
+                    ],
+                }
+            ).encode()
+        )
+
+    def log_message(self, fmt: str, *args) -> None:
+        return
+
+
 def test_receipt_event_uses_white_rabbit_contract() -> None:
     event = build_receipt_event(_receipt(), workspace_id="workspace-1", device_id="device-1")
     payload = event.to_dict()
@@ -209,3 +236,25 @@ def test_sync_receipts_keeps_receipt_success_when_v1_events_endpoint_is_missing(
     assert result["receipts"] == 1
     assert result["guard_events_v1"]["sync_skipped"] is True
     assert store.list_guard_events_v1(uploaded=False, limit=10)
+
+
+def test_sync_guard_events_marks_rejected_events_processed(tmp_path) -> None:
+    store = GuardStore(tmp_path)
+    store.add_receipt(_receipt())
+    server = HTTPServer(("127.0.0.1", 0), _RejectedEventHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        store.set_sync_credentials(
+            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            "token-1",
+            "2026-04-24T00:00:00+00:00",
+        )
+
+        result = sync_guard_events(store)
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert result["accepted"] == 1
+    assert store.list_guard_events_v1(uploaded=False, limit=10) == []

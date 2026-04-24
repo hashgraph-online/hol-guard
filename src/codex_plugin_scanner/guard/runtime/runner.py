@@ -531,9 +531,9 @@ def sync_guard_events(store: GuardStore) -> dict[str, object]:
             raise RuntimeError(_sync_http_error_message(error)) from error
         except OSError as error:
             raise RuntimeError(_sync_url_error_message(error)) from error
-        accepted_ids = _accepted_guard_event_ids(payload)
+        completed_ids = _completed_guard_event_ids(payload)
         synced_at = _sync_timestamp(payload)
-        uploaded = store.mark_guard_events_v1_uploaded(accepted_ids, synced_at)
+        uploaded = store.mark_guard_events_v1_uploaded(completed_ids, synced_at)
         total_events += len(pending_events)
         total_accepted += uploaded
         if uploaded == 0 or len(pending_events) < 200:
@@ -1034,19 +1034,19 @@ def _guard_events_sync_url(sync_url: str) -> str:
     )
 
 
-def _accepted_guard_event_ids(payload: dict[str, object]) -> list[str]:
+def _completed_guard_event_ids(payload: dict[str, object]) -> list[str]:
     statuses = payload.get("statuses")
     if not isinstance(statuses, list):
         return []
-    accepted: list[str] = []
+    completed: list[str] = []
     for item in statuses:
         if not isinstance(item, dict):
             continue
         status = str(item.get("status") or "")
         event_id = item.get("eventId")
-        if status in {"accepted", "duplicate"} and isinstance(event_id, str):
-            accepted.append(event_id)
-    return accepted
+        if status in {"accepted", "duplicate", "rejected"} and isinstance(event_id, str):
+            completed.append(event_id)
+    return completed
 
 
 def _cloud_sync_receipts_payload(store: GuardStore, receipts: list[dict[str, object]]) -> list[dict[str, object]]:
