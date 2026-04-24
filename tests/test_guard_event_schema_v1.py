@@ -30,6 +30,7 @@ def _receipt() -> GuardReceipt:
 
 class _EventIngestHandler(BaseHTTPRequestHandler):
     requests: ClassVar[list[dict[str, object]]] = []
+    event_status: ClassVar[int] = 200
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", "0"))
@@ -42,9 +43,13 @@ class _EventIngestHandler(BaseHTTPRequestHandler):
                 "authorization": self.headers.get("Authorization"),
             }
         )
-        self.send_response(200)
+        status_code = type(self).event_status if self.path.endswith("/api/v1/guard/events") else 200
+        self.send_response(status_code)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
+        if status_code == 404:
+            self.wfile.write(json.dumps({"error": "not found"}).encode())
+            return
         if self.path.endswith("/receipts/sync"):
             response = {"syncedAt": "2026-04-24T00:00:00+00:00", "receiptsStored": len(payload.get("receipts", []))}
         else:
@@ -178,3 +183,29 @@ def test_sync_receipts_uploads_pending_guard_events(tmp_path) -> None:
         "/api/v1/guard/events",
     ]
     assert store.list_guard_events_v1(uploaded=False, limit=10) == []
+
+
+def test_sync_receipts_keeps_receipt_success_when_v1_events_endpoint_is_missing(tmp_path) -> None:
+    store = GuardStore(tmp_path)
+    store.add_receipt(_receipt())
+    _EventIngestHandler.requests = []
+    _EventIngestHandler.event_status = 404
+    server = HTTPServer(("127.0.0.1", 0), _EventIngestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        store.set_sync_credentials(
+            f"http://127.0.0.1:{server.server_port}/api/guard/receipts/sync",
+            "token-1",
+            "2026-04-24T00:00:00+00:00",
+        )
+
+        result = sync_receipts(store)
+    finally:
+        _EventIngestHandler.event_status = 200
+        server.shutdown()
+        thread.join(timeout=5)
+
+    assert result["receipts"] == 1
+    assert result["guard_events_v1"]["sync_skipped"] is True
+    assert store.list_guard_events_v1(uploaded=False, limit=10)

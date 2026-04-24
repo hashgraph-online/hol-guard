@@ -513,6 +513,16 @@ def sync_guard_events(store: GuardStore) -> dict[str, object]:
                 retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
             )
         except urllib.error.HTTPError as error:
+            if error.code == 404:
+                summary = {
+                    "synced_at": synced_at,
+                    "events": total_events,
+                    "accepted": total_accepted,
+                    "sync_skipped": True,
+                    "sync_reason": "guard_events_endpoint_unavailable",
+                }
+                store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
+                return summary
             if error.code == 403:
                 is_plan, message = _check_plan_restriction_403(error)
                 if is_plan:
