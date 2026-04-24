@@ -1190,13 +1190,14 @@ def run_guard_command(
         if _is_claude_permission_request(args, payload):
             notice = _peek_claude_permission_notice(store, payload)
             if notice is None:
+                _emit_claude_permission_request_passthrough(output_stream=output_stream)
                 return 0
             _mark_claude_pending_permission_prompt_seen(store=store, payload=payload, notice=notice)
             _emit_native_hook_response(
                 harness=args.harness,
-                policy_action="allow",
+                policy_action="require-reapproval",
                 event_name="PermissionRequest",
-                reason="HOL Guard intercepted the tool request and opened this Claude approval prompt.",
+                reason="HOL Guard is keeping Claude's native permission prompt open for user review.",
                 system_message=_claude_permission_prompt_system_message(payload=payload, notice=notice),
                 additional_context=_claude_permission_prompt_additional_context(notice),
                 output_stream=output_stream,
@@ -1724,6 +1725,11 @@ def _should_emit_prequeue_native_hook_response(
     if not getattr(args, "json", False):
         return True
     return output_stream is not None
+
+
+def _emit_claude_permission_request_passthrough(*, output_stream: TextIO | None = None) -> None:
+    if output_stream is not None:
+        output_stream.write("")
 
 
 def _claude_permission_notice_state_key(session_id: str, tool_name: str | None = None) -> str:

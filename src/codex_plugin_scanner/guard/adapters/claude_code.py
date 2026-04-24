@@ -541,7 +541,6 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             "if(shouldSuppressOutput(data,result.stdout)){process.exit(0);}"
             "process.stdout.write(result.stdout&&result.stdout.trim()?result.stdout:'{}');"
             "process.exit(0);}"
-            "if(result.stdout&&result.stdout.trim()){process.stdout.write(result.stdout);process.exit(0);}"
             "return degraded(`${reason}; fallback exited ${result.status}`,data);"
             "}catch(error){return degraded(`${reason}; fallback crashed: ${error.message}`,data);}"
             "}"
