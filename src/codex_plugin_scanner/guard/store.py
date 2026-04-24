@@ -1557,6 +1557,22 @@ class GuardStore:
             for row in rows
         ]
 
+    def clear_policy_decisions(self, harness: str | None = None, source: str | None = None) -> int:
+        conditions: list[str] = []
+        params: list[object] = []
+        if harness is not None:
+            conditions.append("harness = ?")
+            params.append(harness)
+        if source is not None:
+            conditions.append("source = ?")
+            params.append(source)
+        query = "delete from policy_decisions"
+        if conditions:
+            query += " where " + " and ".join(conditions)
+        with self._connect() as connection:
+            cursor = connection.execute(query, tuple(params))
+            return int(cursor.rowcount if cursor.rowcount is not None else 0)
+
     def get_latest_diff(self, harness: str, artifact_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -1726,6 +1742,17 @@ class GuardStore:
                 "delete from sync_state where state_key = ?",
                 (state_key,),
             )
+
+    def delete_sync_payloads(self, state_keys: list[str]) -> int:
+        if not state_keys:
+            return 0
+        placeholders = ",".join("?" for _ in state_keys)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                f"delete from sync_state where state_key in ({placeholders})",
+                tuple(state_keys),
+            )
+            return int(cursor.rowcount if cursor.rowcount is not None else 0)
 
     def add_guard_event_v1(self, event: GuardEventV1) -> None:
         with self._connect() as connection:

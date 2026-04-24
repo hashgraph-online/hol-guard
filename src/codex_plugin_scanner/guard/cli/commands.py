@@ -311,8 +311,15 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         policy_parser.add_argument("--json", action="store_true")
         policy_parser.set_defaults(policy_action=action)
 
-    policies_parser = guard_subparsers.add_parser("policies", help="List stored Guard policy decisions")
+    policies_parser = guard_subparsers.add_parser("policies", help="List or clear stored Guard policy decisions")
+    policies_parser.add_argument("policies_command", nargs="?", choices=("clear",))
     policies_parser.add_argument("--harness")
+    policies_parser.add_argument("--source")
+    policies_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Clear decisions across every harness; cannot be combined with --harness",
+    )
     _add_guard_common_args(policies_parser)
     policies_parser.add_argument("--json", action="store_true")
 
@@ -775,6 +782,46 @@ def run_guard_command(
         return 0
 
     if args.guard_command == "policies":
+        if getattr(args, "policies_command", None) == "clear":
+            harness = getattr(args, "harness", None)
+            clear_all = bool(getattr(args, "all", False))
+            if clear_all and harness is not None:
+                _emit(
+                    "policies",
+                    {
+                        "error": "Choose either --all or --harness <name> when clearing Guard policy decisions.",
+                        "cleared": 0,
+                        "harness": harness,
+                        "source": getattr(args, "source", None),
+                    },
+                    getattr(args, "json", False),
+                )
+                return 2
+            if not clear_all and harness is None:
+                _emit(
+                    "policies",
+                    {
+                        "error": "Choose --harness <name> or --all when clearing Guard policy decisions.",
+                        "cleared": 0,
+                    },
+                    getattr(args, "json", False),
+                )
+                return 2
+            cleared = store.clear_policy_decisions(
+                None if clear_all else harness,
+                getattr(args, "source", None),
+            )
+            _emit(
+                "policies",
+                {
+                    "generated_at": _now(),
+                    "cleared": cleared,
+                    "harness": None if clear_all else harness,
+                    "source": getattr(args, "source", None),
+                },
+                getattr(args, "json", False),
+            )
+            return 0
         policy_items = store.list_policy_decisions(getattr(args, "harness", None))
         items = _filter_policy_items(policy_items, active_only=True)
         _emit("policies", {"generated_at": _now(), "items": items}, getattr(args, "json", False))
@@ -1233,10 +1280,13 @@ def run_guard_command(
             )
             return 0
         if _canonical_harness_name(args.harness) == "claude-code" and _hook_event_name(payload) == "Stop":
-            denied = _persist_claude_pending_permission_denials(store, payload)
+            discarded = _discard_claude_pending_permissions(store, payload)
             store.add_event(
                 "claude/turn_stop",
-                {"session_id": payload.get("session_id"), "saved_denials": denied},
+                {
+                    "session_id": payload.get("session_id"),
+                    "discarded_pending_permissions": discarded,
+                },
                 _now(),
             )
             return 0
@@ -1371,6 +1421,14 @@ def run_guard_command(
                         artifact=runtime_artifact,
                         artifact_hash=runtime_artifact_hash,
                     )
+                if _should_allow_claude_user_prompt_submit_without_output(
+                    args,
+                    event_name=event_name,
+                    policy_action=policy_action,
+                    artifact=runtime_artifact,
+                    output_stream=output_stream,
+                ):
+                    return 0
                 if _should_emit_copilot_hook_response(args):
                     _emit_copilot_hook_response(
                         policy_action=policy_action,
@@ -1724,6 +1782,23 @@ def _should_emit_prequeue_native_hook_response(
     return output_stream is not None
 
 
+def _should_allow_claude_user_prompt_submit_without_output(
+    args: argparse.Namespace,
+    *,
+    event_name: str,
+    policy_action: str,
+    artifact: GuardArtifact,
+    output_stream: TextIO | None,
+) -> bool:
+    return (
+        _canonical_harness_name(args.harness) == "claude-code"
+        and event_name == "UserPromptSubmit"
+        and policy_action == "require-reapproval"
+        and not _prompt_requires_hard_block(artifact)
+        and (not getattr(args, "json", False) or output_stream is not None)
+    )
+
+
 def _emit_claude_permission_request_passthrough(*, output_stream: TextIO | None = None) -> None:
     if output_stream is not None:
         output_stream.write("")
@@ -2042,6 +2117,27 @@ def _persist_claude_native_permission_for_runtime_artifact(
             pending_key=_claude_pending_permission_state_key(session_id, artifact.artifact_id),
         )
     return True
+
+
+def _discard_claude_pending_permissions(store: GuardStore, payload: dict[str, object]) -> int:
+    session_id = _optional_string(payload.get("session_id"))
+    if session_id is None:
+        return 0
+    index_key = _claude_pending_permission_index_key(session_id)
+    try:
+        index_payload = store.get_sync_payload(index_key)
+    except (OSError, sqlite3.Error):
+        return 0
+    if not isinstance(index_payload, list):
+        return 0
+    pending_keys = [str(item) for item in index_payload]
+    if not pending_keys:
+        return 0
+    try:
+        store.delete_sync_payloads([*pending_keys, index_key])
+    except (OSError, sqlite3.Error):
+        return 0
+    return len(pending_keys)
 
 
 def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[str, object]) -> int:

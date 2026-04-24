@@ -295,6 +295,24 @@ def _render_inventory(console: Console, payload: dict[str, object]) -> None:
 
 
 def _render_policies(console: Console, payload: dict[str, object]) -> None:
+    if "cleared" in payload or "error" in payload:
+        error = payload.get("error")
+        cleared = int(payload.get("cleared", 0) or 0)
+        scope = str(payload.get("harness") or "all harnesses")
+        source = payload.get("source")
+        body = Table.grid(padding=(0, 1))
+        body.add_row("Outcome", str(error) if error else f"cleared {cleared} decision{'s' if cleared != 1 else ''}")
+        body.add_row("Harness", scope)
+        if source:
+            body.add_row("Source", str(source))
+        console.print(
+            Panel(
+                body,
+                title="Guard policy clear",
+                border_style="red" if error else "green",
+            )
+        )
+        return
     items = _coerce_dict_list(payload.get("items"))
     console.print(
         Panel.fit(

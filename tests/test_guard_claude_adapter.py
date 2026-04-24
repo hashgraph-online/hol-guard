@@ -47,8 +47,8 @@ def _runtime_hook_handlers(payload: dict[str, object]) -> list[dict[str, object]
     hooks = payload["hooks"]
     assert isinstance(hooks, dict)
     handlers: list[dict[str, object]] = []
-    for key in ("PreToolUse", "PermissionRequest", "PostToolUse", "UserPromptSubmit", "Notification", "Stop"):
-        entries = hooks[key]
+    for key in ("PreToolUse", "PermissionRequest", "PostToolUse", "Notification", "Stop"):
+        entries = hooks.get(key, [])
         assert isinstance(entries, list)
         for entry in entries:
             assert isinstance(entry, dict)
@@ -146,7 +146,6 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     pre_tool_use = payload["hooks"]["PreToolUse"]
     permission_request = payload["hooks"]["PermissionRequest"]
     post_tool_use = payload["hooks"]["PostToolUse"]
-    prompt_submit = payload["hooks"]["UserPromptSubmit"]
     notification = payload["hooks"]["Notification"]
     stop = payload["hooks"]["Stop"]
     assert len(session_start) == 4
@@ -165,9 +164,7 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert len(post_tool_use) == 1
     assert post_tool_use[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
     assert post_tool_use[0]["hooks"][0]["type"] == "command"
-    assert len(prompt_submit) == 1
-    assert "matcher" not in prompt_submit[0]
-    assert prompt_submit[0]["hooks"][0]["type"] == "command"
+    assert payload["hooks"].get("UserPromptSubmit", []) == []
     assert len(notification) == 1
     assert notification[0]["matcher"] == "permission_prompt"
     assert notification[0]["hooks"][0]["type"] == "command"
@@ -255,8 +252,8 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
         "command",
         "command",
         "command",
-        "command",
     ]
+    assert payload["hooks"].get("UserPromptSubmit", []) == []
     assert all(CLAUDE_GUARD_DAEMON_HOOK_MARKER in str(handler.get("command", "")) for handler in installed_handlers)
     assert all("url" not in handler for handler in installed_handlers)
 
@@ -397,14 +394,7 @@ def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon
     )
     assert result.returncode == 0
     assert result.stderr == ""
-    payload = json.loads(result.stdout)
-    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert "Do not ask for approval at the prompt stage" in payload["hookSpecificOutput"]["additionalContext"]
-    assert (
-        "route that concrete action into a HOL Guard approval question"
-        in payload["hookSpecificOutput"]["additionalContext"]
-    )
-    assert "Keep blocked" in payload["hookSpecificOutput"]["additionalContext"]
+    assert result.stdout == ""
 
 
 def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_path):
