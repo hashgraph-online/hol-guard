@@ -490,31 +490,44 @@ def sync_guard_events(store: GuardStore) -> dict[str, object]:
     credentials = store.get_sync_credentials()
     if credentials is None:
         raise GuardSyncNotConfiguredError("Guard is not logged in.")
-    pending_events = store.list_guard_events_v1(uploaded=False, limit=200)
-    if not pending_events:
-        return {"synced_at": _now(), "events": 0, "accepted": 0}
     sync_url = _guard_events_sync_url(str(credentials["sync_url"]))
-    body = json.dumps({"events": [event["payload"] for event in pending_events]}).encode("utf-8")
-    request = urllib.request.Request(
-        sync_url,
-        data=body,
-        method="POST",
-        headers=_guard_sync_headers(str(credentials["token"])),
-    )
-    try:
-        payload = _urlopen_json_with_timeout_retry(
-            request=request,
-            timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
-            retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
+    total_events = 0
+    total_accepted = 0
+    synced_at = _now()
+    while True:
+        pending_events = store.list_guard_events_v1(uploaded=False, limit=200)
+        if not pending_events:
+            break
+        body = json.dumps({"events": [event["payload"] for event in pending_events]}).encode("utf-8")
+        request = urllib.request.Request(
+            sync_url,
+            data=body,
+            method="POST",
+            headers=_guard_sync_headers(str(credentials["token"])),
         )
-    except urllib.error.HTTPError as error:
-        raise RuntimeError(_sync_http_error_message(error)) from error
-    except OSError as error:
-        raise RuntimeError(_sync_url_error_message(error)) from error
-    accepted_ids = _accepted_guard_event_ids(payload)
-    synced_at = _sync_timestamp(payload)
-    uploaded = store.mark_guard_events_v1_uploaded(accepted_ids, synced_at)
-    summary = {"synced_at": synced_at, "events": len(pending_events), "accepted": uploaded}
+        try:
+            payload = _urlopen_json_with_timeout_retry(
+                request=request,
+                timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
+                retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
+            )
+        except urllib.error.HTTPError as error:
+            if error.code == 403:
+                is_plan, message = _check_plan_restriction_403(error)
+                if is_plan:
+                    raise GuardSyncNotAvailableError(message) from error
+                raise RuntimeError(message) from error
+            raise RuntimeError(_sync_http_error_message(error)) from error
+        except OSError as error:
+            raise RuntimeError(_sync_url_error_message(error)) from error
+        accepted_ids = _accepted_guard_event_ids(payload)
+        synced_at = _sync_timestamp(payload)
+        uploaded = store.mark_guard_events_v1_uploaded(accepted_ids, synced_at)
+        total_events += len(pending_events)
+        total_accepted += uploaded
+        if uploaded == 0 or len(pending_events) < 200:
+            break
+    summary = {"synced_at": synced_at, "events": total_events, "accepted": total_accepted}
     store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
     return summary
 

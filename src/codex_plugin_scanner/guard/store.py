@@ -560,6 +560,10 @@ class GuardStore:
             )
             """,
             """
+            create index if not exists idx_guard_cloud_events_sync
+            on guard_cloud_events (uploaded_at, occurred_at)
+            """,
+            """
             create table if not exists guard_runtime_state (
               state_key text primary key,
               session_id text not null,
@@ -1225,13 +1229,19 @@ class GuardStore:
                     receipt.timestamp,
                 ),
             )
-        device = self.get_device_metadata()
-        self.add_guard_event_v1(
-            build_receipt_event(
-                receipt,
-                device_id=str(device["installation_id"]),
+            self._ensure_local_device(connection)
+            row = connection.execute(
+                "select installation_id from guard_devices where device_key = ?",
+                (_DEVICE_ROW_KEY,),
+            ).fetchone()
+            device_id = str(row["installation_id"]) if row is not None else None
+            self._add_guard_event_v1(
+                connection,
+                build_receipt_event(
+                    receipt,
+                    device_id=device_id,
+                ),
             )
-        )
 
     def list_receipts(self, limit: int = 50) -> list[dict[str, object]]:
         with self._connect() as connection:
@@ -1718,23 +1728,27 @@ class GuardStore:
             )
 
     def add_guard_event_v1(self, event: GuardEventV1) -> None:
-        payload = event.to_dict()
         with self._connect() as connection:
-            connection.execute(
-                """
-                insert or ignore into guard_cloud_events (
-                  event_id, idempotency_key, event_type, payload_json, occurred_at, uploaded_at
-                )
-                values (?, ?, ?, ?, ?, null)
-                """,
-                (
-                    event.event_id,
-                    event.idempotency_key,
-                    event.event_type,
-                    json.dumps(payload, sort_keys=True),
-                    event.occurred_at,
-                ),
+            self._add_guard_event_v1(connection, event)
+
+    @staticmethod
+    def _add_guard_event_v1(connection: sqlite3.Connection, event: GuardEventV1) -> None:
+        payload = event.to_dict()
+        connection.execute(
+            """
+            insert or ignore into guard_cloud_events (
+              event_id, idempotency_key, event_type, payload_json, occurred_at, uploaded_at
             )
+            values (?, ?, ?, ?, ?, null)
+            """,
+            (
+                event.event_id,
+                event.idempotency_key,
+                event.event_type,
+                json.dumps(payload, sort_keys=True),
+                event.occurred_at,
+            ),
+        )
 
     def list_guard_events_v1(self, *, uploaded: bool | None = None, limit: int = 200) -> list[dict[str, object]]:
         query = """

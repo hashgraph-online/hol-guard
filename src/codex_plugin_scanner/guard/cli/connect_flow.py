@@ -149,7 +149,6 @@ def run_guard_connect_command(
             connected=False,
             sync=pending_sync_payload,
             sync_message=sync_message,
-            sync_available=False,
         )
     sync_payload["runtime_session_synced_at"] = runtime_sync_summary["runtime_session_synced_at"]
     sync_payload["runtime_session_id"] = runtime_sync_summary["runtime_session_id"]
