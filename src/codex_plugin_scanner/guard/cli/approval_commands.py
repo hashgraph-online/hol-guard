@@ -41,13 +41,19 @@ def add_approval_parser(
         "clear-history",
         help="Clear saved allow/deny history so flows can be re-tested",
     )
-    clear_history_parser.add_argument("--harness")
+    clear_history_parser.add_argument(
+        "--harness",
+        help="The harness to clear history for (for example: codex, claude-code, opencode, copilot)",
+    )
     clear_history_parser.add_argument(
         "--all",
         action="store_true",
         help="Clear approval history across every harness; cannot be combined with --harness",
     )
-    clear_history_parser.add_argument("--source")
+    clear_history_parser.add_argument(
+        "--source",
+        help="Optional source filter for policy decisions (for example: manual, claude-ask-user-question)",
+    )
     add_common_args(clear_history_parser)
     clear_history_parser.add_argument("--json", action="store_true")
 
@@ -86,12 +92,15 @@ def run_approval_command(
             }
         target_harness = None if clear_all else harness
         source = getattr(args, "source", None)
+        cleared_resolved_requests = 0
+        if source is None:
+            cleared_resolved_requests = store.clear_approval_requests(harness=target_harness, status="resolved")
         return {
             "history_cleared": True,
             "harness": target_harness,
             "source": source,
             "cleared_policies": store.clear_policy_decisions(target_harness, source),
-            "cleared_resolved_requests": store.clear_approval_requests(harness=target_harness, status="resolved"),
+            "cleared_resolved_requests": cleared_resolved_requests,
             "exit_code": 0,
         }
     item = apply_approval_resolution(

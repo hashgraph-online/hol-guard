@@ -1786,6 +1786,84 @@ class TestGuardApprovals:
         assert output["cleared_resolved_requests"] == 0
         assert "Choose --harness <name> or --all" in output["error"]
 
+    def test_guard_approvals_clear_history_with_source_only_clears_matching_policies(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        store.upsert_policy(
+            PolicyDecision(
+                harness="claude-code",
+                scope="artifact",
+                action="block",
+                artifact_id="claude-code:runtime:file-read:.env",
+                artifact_hash="hash-env",
+                reason="blocked during local test",
+                source="claude-ask-user-question",
+            ),
+            "2026-04-23T00:00:00+00:00",
+        )
+        store.upsert_policy(
+            PolicyDecision(
+                harness="claude-code",
+                scope="artifact",
+                action="allow",
+                artifact_id="claude-code:runtime:file-read:.npmrc",
+                artifact_hash="hash-npmrc",
+                reason="keep manual allow",
+                source="manual",
+            ),
+            "2026-04-23T00:00:00+00:00",
+        )
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-claude-resolved-source",
+                harness="claude-code",
+                artifact_id="claude-code:runtime:file-read:.env",
+                artifact_name=".env",
+                artifact_hash="hash-env",
+                policy_action="require-reapproval",
+                recommended_scope="artifact",
+                changed_fields=("first_seen",),
+                source_scope="project",
+                config_path=str(tmp_path / "workspace" / ".claude" / "settings.local.json"),
+                review_command="hol-guard approvals approve req-claude-resolved-source",
+                approval_url="http://127.0.0.1/pending/req-claude-resolved-source",
+            ),
+            "2026-04-23T00:00:00+00:00",
+        )
+        store.resolve_approval_request(
+            "req-claude-resolved-source",
+            resolution_action="block",
+            resolution_scope="artifact",
+            reason="intentional block",
+            resolved_at="2026-04-23T00:01:00+00:00",
+        )
+
+        rc = main(
+            [
+                "guard",
+                "approvals",
+                "clear-history",
+                "--home",
+                str(home_dir),
+                "--harness",
+                "claude-code",
+                "--source",
+                "claude-ask-user-question",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["history_cleared"] is True
+        assert output["source"] == "claude-ask-user-question"
+        assert output["cleared_policies"] == 1
+        assert output["cleared_resolved_requests"] == 0
+        remaining = store.list_policy_decisions("claude-code")
+        assert len(remaining) == 1
+        assert remaining[0]["source"] == "manual"
+        assert len(store.list_approval_requests(status="resolved", harness="claude-code", limit=None)) == 1
+
     def test_guard_bridge_resolves_requests_against_guard_daemon_api(self, tmp_path, monkeypatch):
         store = GuardStore(tmp_path / "guard-home")
         bridge = GuardBridge(
