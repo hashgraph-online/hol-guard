@@ -399,7 +399,11 @@ def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon
     assert result.stderr == ""
     payload = json.loads(result.stdout)
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert "AskUserQuestion" in payload["hookSpecificOutput"]["additionalContext"]
+    assert "Do not ask for approval at the prompt stage" in payload["hookSpecificOutput"]["additionalContext"]
+    assert (
+        "route that concrete action into a HOL Guard approval question"
+        in payload["hookSpecificOutput"]["additionalContext"]
+    )
     assert "Keep blocked" in payload["hookSpecificOutput"]["additionalContext"]
 
 

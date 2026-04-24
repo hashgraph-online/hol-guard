@@ -2438,22 +2438,17 @@ def _claude_prompt_additional_context(
         return None
     if _prompt_requires_hard_block(artifact):
         return None
-    briefing_sentence = "HOL Guard intercepted the next sensitive action and opened the approval dialog below."
+    briefing_sentence = "HOL Guard will intercept Claude's next sensitive action and open a branded approval question."
     if "secret_read" in _prompt_request_classes(artifact):
         briefing_sentence = (
-            "HOL Guard intercepted Claude's next attempt to access local secrets and opened the approval dialog "
-            "shown below to protect you."
-        )
-    else:
-        briefing_sentence = (
-            "HOL Guard intercepted Claude's next sensitive action and opened the approval dialog shown below."
+            "HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval "
+            "question to protect you."
         )
     return (
         f"{_ensure_terminal_punctuation(native_reason)} "
-        "Before you use the first sensitive tool for this request, call AskUserQuestion with header 'HOL Guard', "
-        "question 'HOL Guard intercepted this sensitive action. What should Claude do?', and exactly these options: "
-        "'Allow once', 'Allow during this session', and 'Keep blocked'. If the user chooses Keep blocked, do not "
-        "retry the sensitive action. Then tell the user exactly: "
+        "Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can "
+        "evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval "
+        "question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: "
         f"'{briefing_sentence}' "
         "Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive "
         "action automatically. Instead, tell the user approval is required in Claude to continue."
