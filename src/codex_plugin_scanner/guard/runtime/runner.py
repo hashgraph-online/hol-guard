@@ -480,6 +480,7 @@ def sync_receipts(store: GuardStore) -> dict[str, object]:
         "inventory": 0,
         "inventory_tracked": len(inventory),
     }
+    summary["guard_events_v1"] = sync_guard_events(store)
     store.set_sync_payload("sync_summary", summary, now)
     return summary
 
@@ -1000,11 +1001,15 @@ def _normalized_runtime_sessions_sync_url(sync_url: str) -> str:
 
 
 def _guard_events_sync_url(sync_url: str) -> str:
-    parsed = urllib.parse.urlsplit(sync_url)
+    parsed = urllib.parse.urlsplit(_normalized_receipts_sync_url(sync_url))
     if parsed.path.rstrip("/").endswith("/api/v1/guard/events"):
-        return sync_url
+        return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), parsed.query, ""))
     path = parsed.path.rstrip("/")
-    for suffix in ("/api/guard/receipts/sync", "/registry/api/v1/guard/receipts/sync"):
+    for suffix in (
+        "/api/guard/receipts/sync",
+        "/guard/receipts/sync",
+        "/registry/api/v1/guard/receipts/sync",
+    ):
         if path.endswith(suffix):
             path = path[: -len(suffix)]
             break

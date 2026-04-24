@@ -224,6 +224,8 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
     response_code = 200
     captured_headers: ClassVar[dict[str, str]] = {}
     captured_body: ClassVar[dict[str, object] | None] = None
+    captured_bodies: ClassVar[list[dict[str, object]]] = []
+    captured_paths: ClassVar[list[str]] = []
     raw_response_body: ClassVar[str | None] = None
     response_payload: ClassVar[dict[str, object]] = {
         "syncedAt": "2026-04-09T00:00:00Z",
@@ -235,6 +237,8 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(length).decode("utf-8") if length else "{}"
         _SyncRequestHandler.captured_headers = {key.lower(): value for key, value in self.headers.items()}
         _SyncRequestHandler.captured_body = json.loads(body)
+        _SyncRequestHandler.captured_bodies.append(_SyncRequestHandler.captured_body)
+        _SyncRequestHandler.captured_paths.append(self.path)
         self.send_response(self.response_code)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
@@ -5401,6 +5405,8 @@ url = http://127.0.0.1:8787/guard-canary
             "syncedAt": "2026-04-09T00:00:00Z",
             "receiptsStored": 1,
         }
+        _SyncRequestHandler.captured_bodies = []
+        _SyncRequestHandler.captured_paths = []
 
         server = HTTPServer(("127.0.0.1", 0), _SyncRequestHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -5464,10 +5470,16 @@ url = http://127.0.0.1:8787/guard-canary
         assert status_output["cloud_state"] == "paired_active"
         assert status_output["last_sync_at"] == "2026-04-09T00:00:00Z"
         assert _SyncRequestHandler.captured_headers["authorization"] == "Bearer demo-token"
-        assert _SyncRequestHandler.captured_body is not None
-        assert len(_SyncRequestHandler.captured_body["receipts"]) >= 1
-        assert "inventory" not in _SyncRequestHandler.captured_body
-        first_receipt = _SyncRequestHandler.captured_body["receipts"][0]
+        receipt_body = next(
+            body
+            for body in _SyncRequestHandler.captured_bodies
+            if isinstance(body.get("receipts"), list) and len(body["receipts"]) >= 1
+        )
+        event_body = next(body for body in _SyncRequestHandler.captured_bodies if "events" in body)
+        assert len(receipt_body["receipts"]) >= 1
+        assert "inventory" not in receipt_body
+        assert len(event_body["events"]) >= 1
+        first_receipt = receipt_body["receipts"][0]
         assert "artifactId" in first_receipt
         assert "artifact_id" not in first_receipt
         assert "receiptId" in first_receipt
