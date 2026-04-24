@@ -2300,7 +2300,7 @@ def _claude_guard_prompt_contract_from_question_list(
     if not isinstance(payload_section, dict):
         return None
     questions = payload_section.get("questions")
-    if not isinstance(questions, list) or not questions:
+    if not isinstance(questions, list) or len(questions) != 1:
         return None
     first_question = questions[0]
     if not isinstance(first_question, dict):
@@ -2363,6 +2363,16 @@ def _claude_guard_approval_action_for_answer(answer_text: str) -> str | None:
     return None
 
 
+def _claude_guard_answer_text_from_value(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value
+    if isinstance(value, dict):
+        label = _optional_string(value.get("label"))
+        if label is not None:
+            return label
+    return None
+
+
 def _claude_guard_approval_answer(payload: dict[str, object], *, expected_question: str | None = None) -> str | None:
     response = payload.get("tool_response")
     answer_text: str | None = None
@@ -2378,18 +2388,19 @@ def _claude_guard_approval_answer(payload: dict[str, object], *, expected_questi
                         continue
                     if _normalize_claude_guard_approval_text(question) != normalized_expected_question:
                         continue
-                    if isinstance(answer, str) and answer.strip():
-                        answer_text = answer
+                    parsed_answer_text = _claude_guard_answer_text_from_value(answer)
+                    if parsed_answer_text is not None:
+                        answer_text = parsed_answer_text
                         break
             if answer_text is None and len(answers) == 1:
                 only_answer = next(iter(answers.values()))
-                if isinstance(only_answer, str) and only_answer.strip():
-                    answer_text = only_answer
+                answer_text = _claude_guard_answer_text_from_value(only_answer)
         if answer_text is None:
             for key in ("answer", "selected_answer", "selected", "choice", "value", "label"):
                 value = response.get(key)
-                if isinstance(value, str) and value.strip():
-                    answer_text = value
+                parsed_answer_text = _claude_guard_answer_text_from_value(value)
+                if parsed_answer_text is not None:
+                    answer_text = parsed_answer_text
                     break
         if answer_text is None and "questions" not in response and "options" not in response:
             content = response.get("content")
