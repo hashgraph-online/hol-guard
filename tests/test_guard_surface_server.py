@@ -152,6 +152,55 @@ class TestGuardSurfaceServer:
         assert len(remaining) == 1
         assert remaining[0]["harness"] == "claude-code"
 
+    def test_guard_daemon_policy_clear_parses_form_all_strictly(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        store.upsert_policy(
+            PolicyDecision(harness="codex", scope="harness", action="allow", reason="test"),
+            "2026-04-25T00:00:00+00:00",
+        )
+        store.upsert_policy(
+            PolicyDecision(harness="claude-code", scope="harness", action="deny", reason="test"),
+            "2026-04-25T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            false_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/clear",
+                data=urllib.parse.urlencode({"all": "false"}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(false_request, timeout=5)
+            false_payload = json.loads(error.value.read().decode("utf-8"))
+            remaining_after_false = store.list_policy_decisions()
+            true_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/clear",
+                data=urllib.parse.urlencode({"all": "true"}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(true_request, timeout=5) as true_response:
+                true_payload = json.loads(true_response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert error.value.code == 400
+        assert false_payload == {"error": "missing_harness_or_all", "cleared": 0}
+        assert len(remaining_after_false) == 2
+        assert true_response.status == 200
+        assert true_payload["cleared"] == 2
+        assert true_payload["harness"] is None
+        assert len(store.list_policy_decisions()) == 0
+
     def test_guard_daemon_settings_can_read_and_update_cli_config(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

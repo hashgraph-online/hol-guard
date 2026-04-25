@@ -341,7 +341,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_policy_clear(self, payload: dict[str, object]) -> None:
         harness = self._optional_string(payload.get("harness"))
         source = self._optional_string(payload.get("source"))
-        clear_all = bool(payload.get("all"))
+        try:
+            clear_all = self._optional_bool(payload.get("all"), default=False)
+        except ValueError:
+            self._write_json({"error": "invalid_all", "cleared": 0}, status=400)
+            return
         if clear_all and harness is not None:
             self._write_json(
                 {
@@ -367,6 +371,20 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "source": source,
             }
         )
+
+    @staticmethod
+    def _optional_bool(value: object, *, default: bool) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "on"}:
+                return True
+            if normalized in {"false", "0", "no", "off", ""}:
+                return False
+        raise ValueError("invalid boolean value")
 
     def _handle_settings_update(self, payload: dict[str, object]) -> None:
         settings = payload.get("settings")
