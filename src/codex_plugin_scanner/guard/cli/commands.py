@@ -2771,13 +2771,14 @@ def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
     if not isinstance(action_class, str):
         return []
     action_risk_classes = {
-        "credential exfiltration shell command": "credential_exfiltration",
-        "encoded or encrypted shell command": "encoded_execution",
-        "shell file upload command": "credential_exfiltration",
-        "destructive shell command": "destructive_shell",
+        "credential exfiltration shell command": ["credential_exfiltration", "network_egress"],
+        "docker-sensitive command": ["network_egress", "destructive_shell"],
+        "docker client config access": ["local_secret_read"],
+        "encoded or encrypted shell command": ["encoded_execution"],
+        "shell file upload command": ["credential_exfiltration", "network_egress"],
+        "destructive shell command": ["destructive_shell"],
     }
-    risk_class = action_risk_classes.get(action_class.strip().lower())
-    return [risk_class] if risk_class is not None else []
+    return action_risk_classes.get(action_class.strip().lower(), [])
 
 
 def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:

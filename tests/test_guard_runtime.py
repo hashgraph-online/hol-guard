@@ -8482,6 +8482,69 @@ def test_guard_runtime_tool_action_classification_uses_exact_action_classes():
     assert guard_commands_module._runtime_artifact_risk_classes(artifact) == []
 
 
+def test_guard_runtime_tool_action_classification_emits_network_and_docker_risks():
+    upload_artifact = GuardArtifact(
+        artifact_id="codex:test:tool-action:upload",
+        name="Bash shell file upload command",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/dev/null",
+        metadata={"action_class": "shell file upload command"},
+    )
+    docker_artifact = GuardArtifact(
+        artifact_id="codex:test:tool-action:docker",
+        name="Bash docker-sensitive command",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/dev/null",
+        metadata={"action_class": "docker-sensitive command"},
+    )
+    docker_config_artifact = GuardArtifact(
+        artifact_id="codex:test:tool-action:docker-config",
+        name="Bash Docker client config access",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/dev/null",
+        metadata={"action_class": "Docker client config access"},
+    )
+
+    assert guard_commands_module._runtime_artifact_risk_classes(upload_artifact) == [
+        "credential_exfiltration",
+        "network_egress",
+    ]
+    assert guard_commands_module._runtime_artifact_risk_classes(docker_artifact) == [
+        "network_egress",
+        "destructive_shell",
+    ]
+    assert guard_commands_module._runtime_artifact_risk_classes(docker_config_artifact) == ["local_secret_read"]
+
+
+def test_guard_runtime_tool_action_policy_uses_network_egress_when_stricter(tmp_path):
+    artifact = GuardArtifact(
+        artifact_id="codex:test:tool-action:upload",
+        name="Bash shell file upload command",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/dev/null",
+        metadata={"action_class": "shell file upload command"},
+    )
+    config = GuardConfig(
+        guard_home=tmp_path,
+        workspace=None,
+        security_level="custom",
+        risk_actions={
+            "credential_exfiltration": "allow",
+            "network_egress": "block",
+        },
+    )
+
+    assert guard_commands_module._runtime_artifact_policy_action(config, artifact, "codex") == "block"
+
+
 def test_guard_hook_codex_user_prompt_submit_guard_bypass_hard_blocks_without_approval_url(
     tmp_path,
     capsys,
