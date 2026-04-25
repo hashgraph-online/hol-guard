@@ -1842,7 +1842,9 @@ def _should_emit_native_hook_json_response(
 
 
 def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
-    codex_runtime_marker = os.environ.get("CODEX_MANAGED_BY_BUN", "").strip()
+    codex_runtime_marker = (
+        os.environ.get("CODEX_HOME", "").strip() or os.environ.get("CODEX_MANAGED_BY_BUN", "").strip()
+    )
     return (
         args.harness == "codex"
         and event_name == "PreToolUse"
@@ -2727,41 +2729,53 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
 def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> str:
     if _prompt_requires_hard_block(artifact):
         return "block"
-    risk_action = resolve_risk_action(
-        config, _runtime_artifact_risk_class(artifact), harness=_canonical_harness_name(harness)
-    )
-    if risk_action in VALID_GUARD_ACTIONS:
-        return risk_action
+    risk_actions = [
+        resolve_risk_action(config, risk_class, harness=_canonical_harness_name(harness))
+        for risk_class in _runtime_artifact_risk_classes(artifact)
+    ]
+    resolved_actions = [action for action in risk_actions if action in VALID_GUARD_ACTIONS]
+    if resolved_actions:
+        return max(resolved_actions, key=_guard_action_severity)
     return SAFE_CHANGED_HASH_ACTION
 
 
-def _runtime_artifact_risk_class(artifact: GuardArtifact) -> str | None:
+def _guard_action_severity(action: str) -> int:
+    return {
+        "allow": 0,
+        "warn": 1,
+        "review": 2,
+        "require-reapproval": 3,
+        "sandbox-required": 4,
+        "block": 5,
+    }.get(action, -1)
+
+
+def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
     if artifact.artifact_type == "file_read_request":
-        return "local_secret_read"
+        return ["local_secret_read"]
     if artifact.artifact_type == "prompt_request":
         prompt_classes = _prompt_request_classes(artifact)
+        risk_classes: list[str] = []
         if "secret_read" in prompt_classes:
-            return "local_secret_read"
+            risk_classes.append("local_secret_read")
         if "exfil_intent" in prompt_classes:
-            return "credential_exfiltration"
+            risk_classes.append("credential_exfiltration")
         if "subprocess_intent" in prompt_classes:
-            return "destructive_shell"
-        return None
+            risk_classes.append("destructive_shell")
+        return risk_classes
     if artifact.artifact_type != "tool_action_request":
-        return None
+        return []
     action_class = artifact.metadata.get("action_class")
     if not isinstance(action_class, str):
-        return None
-    normalized_action = action_class.lower()
-    if "credential exfiltration" in normalized_action:
-        return "credential_exfiltration"
-    if "encoded or encrypted" in normalized_action:
-        return "encoded_execution"
-    if "file upload" in normalized_action:
-        return "credential_exfiltration"
-    if "destructive" in normalized_action:
-        return "destructive_shell"
-    return None
+        return []
+    action_risk_classes = {
+        "credential exfiltration shell command": "credential_exfiltration",
+        "encoded or encrypted shell command": "encoded_execution",
+        "shell file upload command": "credential_exfiltration",
+        "destructive shell command": "destructive_shell",
+    }
+    risk_class = action_risk_classes.get(action_class.strip().lower())
+    return [risk_class] if risk_class is not None else []
 
 
 def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
@@ -2779,26 +2793,27 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
         payload: dict[str, object] = {"security_level": args.security_level}
         if args.security_level in {"balanced", "strict"}:
             payload["risk_actions"] = {}
+            payload["harness_risk_actions"] = {}
         return update_guard_settings(guard_home, payload)
     if settings_command == "risk":
         risk_class = _guard_risk_action_key(str(args.risk_class))
         action = str(args.action)
         harness = getattr(args, "harness", None)
         if isinstance(harness, str) and harness.strip():
+            harness_key = _canonical_harness_name(harness.strip().lower())
             harness_actions = {
                 name: dict(values)
                 for name, values in (config.harness_risk_actions or {}).items()
                 if isinstance(values, dict)
             }
-            harness_actions.setdefault(harness.strip(), {})[risk_class] = action
+            harness_actions.setdefault(harness_key, {})[risk_class] = action
             return update_guard_settings(
                 guard_home,
                 {
-                    "security_level": "custom",
                     "harness_risk_actions": harness_actions,
                 },
             )
-        risk_actions = dict(config.risk_actions or {})
+        risk_actions = _current_effective_risk_actions(config)
         risk_actions[risk_class] = action
         return update_guard_settings(
             guard_home,
@@ -2808,6 +2823,17 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
             },
         )
     raise ValueError("Unsupported Guard settings command.")
+
+
+def _current_effective_risk_actions(config: GuardConfig) -> dict[str, str]:
+    risk_actions = editable_guard_settings(config).get("risk_actions")
+    if isinstance(risk_actions, dict):
+        return {
+            key: value
+            for key, value in risk_actions.items()
+            if isinstance(key, str) and isinstance(value, str) and value in VALID_GUARD_ACTIONS
+        }
+    return {}
 
 
 def _prompt_requires_hard_block(artifact: GuardArtifact) -> bool:
