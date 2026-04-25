@@ -230,7 +230,7 @@ def _coerce_editable_setting(key: str, value: object) -> object:
             return value
         raise ValueError("Invalid approval surface policy.")
     if key == "approval_wait_timeout_seconds":
-        if isinstance(value, int) and 0 <= value <= 600:
+        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 600:
             return value
         raise ValueError("Approval wait timeout must be between 0 and 600 seconds.")
     if key in {"telemetry", "sync", "billing"}:
@@ -280,6 +280,8 @@ def _toml_literal(value: object) -> str:
         return "true" if value else "false"
     if isinstance(value, int):
         return str(value)
+    if isinstance(value, float):
+        return repr(value)
     if isinstance(value, str):
         return json.dumps(value)
     return json.dumps(str(value))
