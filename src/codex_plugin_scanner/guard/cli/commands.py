@@ -2646,8 +2646,7 @@ def _native_approval_center_context(response_payload: dict[str, object]) -> str 
                 break
     review_url = first_approval_url or approval_center_url.strip()
     return (
-        "Open HOL Guard to approve or keep this blocked: "
-        f"{review_url}. After you choose, retry the same Codex command."
+        f"Open HOL Guard to approve or keep this blocked: {review_url}. After you choose, retry the same Codex command."
     )
 
 

@@ -41,11 +41,7 @@ def test_dashboard_settings_update_persists_to_cli_config_loader(tmp_path):
     guard_home = tmp_path / ".hol-guard"
     _write_text(
         guard_home / "config.toml",
-        'mode = "prompt"\n'
-        'default_action = "warn"\n'
-        "\n"
-        "[harnesses]\n"
-        'codex = "review"\n',
+        'mode = "prompt"\ndefault_action = "warn"\n\n[harnesses]\ncodex = "review"\n',
     )
 
     updated = update_guard_settings(
