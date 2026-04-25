@@ -604,6 +604,8 @@ def _contains_shell_credential_exfiltration(
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
+    if _text_contains_credential_exfiltration(normalized):
+        return True
     if _shell_segments_contain_credential_exfiltration(parts):
         return True
     for env_split_string in _env_split_string_payloads(parts):
