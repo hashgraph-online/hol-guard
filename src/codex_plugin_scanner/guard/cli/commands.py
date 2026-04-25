@@ -1638,6 +1638,14 @@ def run_guard_command(
             payload.get("policy_action"),
             config.default_action,
         )
+        if (
+            stored_policy_action is None
+            and not isinstance(getattr(args, "policy_action", None), str)
+            and not isinstance(payload.get("policy_action"), str)
+            and runtime_artifact is not None
+            and runtime_artifact.artifact_type == "tool_action_request"
+        ):
+            policy_action = SAFE_CHANGED_HASH_ACTION
         if policy_action not in VALID_GUARD_ACTIONS:
             policy_action = SAFE_CHANGED_HASH_ACTION
         hook_event_name = _hook_event_name(payload) or "PreToolUse"
