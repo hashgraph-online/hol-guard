@@ -12,8 +12,6 @@
   --brand-green-text: #0d7a3a;
   --brand-green-bg: #dcfce7;
   --brand-purple: #b56cff;
-  --brand-red: #dc2626;
-  --brand-amber: #d97706;
   --border: 230 20% 91%;
   --input: 230 20% 91%;
   --ring: 263 85% 64%;
@@ -38,8 +36,6 @@
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
 }
 
 @theme inline {
@@ -52,8 +48,6 @@
   --color-brand-green-text: var(--brand-green-text);
   --color-brand-green-bg: var(--brand-green-bg);
   --color-brand-purple: var(--brand-purple);
-  --color-brand-red: var(--brand-red);
-  --color-brand-amber: var(--brand-amber);
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -70,8 +64,6 @@
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
   --color-ring-offset-background: hsl(var(--background-hsl));
   --font-sans: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -80,7 +72,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: linear-gradient(180deg, #f8fbff 0%, #f5f7fc 100%);
+  background: #ffffff;
   color: hsl(var(--foreground-hsl));
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;

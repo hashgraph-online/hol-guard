@@ -3,7 +3,9 @@ import type {
   GuardArtifactDiff,
   GuardPolicyDecision,
   GuardReceipt,
-  GuardRuntimeSnapshot
+  GuardRuntimeSnapshot,
+  GuardSettingsPayload,
+  GuardSettings
 } from "./guard-types";
 import {
   getDemoDiff,
@@ -92,13 +94,13 @@ export async function fetchRuntimeSnapshot(): Promise<GuardRuntimeSnapshot> {
       headline_label: demoRequests.length > 0 ? "Blocked" : "Connected",
       headline_detail:
         demoRequests.length > 0
-          ? "A blocked launch is waiting for review in the current request queue."
+          ? "A blocked action is waiting for review."
           : "This machine is connected to Guard Cloud and waiting for the first shared proof to appear.",
       sync_configured: true,
       cloud_state: "paired_waiting",
       cloud_state_label: "Connected",
       cloud_state_detail:
-        "This machine is connected to Guard Cloud, but the first shared proof has not landed yet. Open Fleet while the first sync settles.",
+        "This machine is connected to Guard Cloud, but the first shared proof has not landed yet. Open Watched Apps while the first sync settles.",
       dashboard_url: "https://hol.org/guard",
       inbox_url: "https://hol.org/guard/inbox",
       fleet_url: "https://hol.org/guard/fleet",
@@ -108,6 +110,44 @@ export async function fetchRuntimeSnapshot(): Promise<GuardRuntimeSnapshot> {
     };
   }
   return readJson<GuardRuntimeSnapshot>("/v1/runtime");
+}
+
+export async function fetchSettings(): Promise<GuardSettingsPayload> {
+  if (isGuardDemoMode()) {
+    return {
+      guard_home: "~/.hol-guard",
+      config_path: "~/.hol-guard/config.toml",
+      settings: {
+        mode: "prompt",
+        default_action: "warn",
+        unknown_publisher_action: "review",
+        changed_hash_action: "require-reapproval",
+        new_network_domain_action: "warn",
+        subprocess_action: "warn",
+        approval_wait_timeout_seconds: 120,
+        approval_surface_policy: "auto-open-once",
+        telemetry: false,
+        sync: true,
+        billing: false
+      }
+    };
+  }
+  return readJson<GuardSettingsPayload>("/v1/settings");
+}
+
+export async function updateSettings(settings: Partial<GuardSettings>): Promise<GuardSettingsPayload> {
+  if (isGuardDemoMode()) {
+    const current = await fetchSettings();
+    return { ...current, settings: { ...current.settings, ...settings } };
+  }
+  return readJson<GuardSettingsPayload>("/v1/settings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({ settings })
+  });
 }
 
 export async function fetchRequest(requestId: string): Promise<GuardApprovalRequest> {
@@ -152,6 +192,36 @@ export async function fetchPolicy(harness: string): Promise<GuardPolicyDecision[
     `/v1/policy?harness=${encodeURIComponent(harness)}`
   );
   return payload.items;
+}
+
+export async function fetchPolicies(): Promise<GuardPolicyDecision[]> {
+  if (isGuardDemoMode()) {
+    return getDemoPolicy("codex");
+  }
+  const payload = await readJson<{ items: GuardPolicyDecision[] }>("/v1/policy");
+  return payload.items;
+}
+
+export async function clearPolicy(input: {
+  harness?: string;
+  all?: boolean;
+  source?: string;
+}): Promise<{ cleared: number; harness: string | null; source: string | null }> {
+  if (isGuardDemoMode()) {
+    return { cleared: 0, harness: input.harness ?? null, source: input.source ?? null };
+  }
+  return readJson<{ cleared: number; harness: string | null; source: string | null }>("/v1/policy/clear", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...guardAuthHeaders()
+    },
+    body: JSON.stringify({
+      harness: input.harness,
+      all: input.all ?? false,
+      source: input.source
+    })
+  });
 }
 
 export async function fetchDiff(

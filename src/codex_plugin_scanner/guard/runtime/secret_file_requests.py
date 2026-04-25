@@ -262,6 +262,18 @@ _SENSITIVE_DECODED_PAYLOAD_TOKENS = (
     ".codex/config.toml",
     "scp ",
 )
+_SECRET_EXFILTRATION_SECRET_PATTERN = re.compile(
+    r"\b(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token)\b",
+    re.IGNORECASE,
+)
+_SECRET_EXFILTRATION_NETWORK_PATTERN = re.compile(
+    r"\b(?:axios\.post|fetch\s*\(|http\.client|requests\.post|urllib\.request|urlopen\s*\()|https?://",
+    re.IGNORECASE,
+)
+_SECRET_EXFILTRATION_DESTINATION_PATTERN = re.compile(
+    r"\b(?:collect|exfil|evil|leak|post|upload|webhook)\b",
+    re.IGNORECASE,
+)
 _SENSITIVE_BASENAME_LABELS = {
     ".npmrc": "npm registry credentials",
     ".pypirc": "Python package credentials",
@@ -539,6 +551,17 @@ def _destructive_shell_tool_action_request(
                 "payloads in-process without executing them during evaluation."
             ),
         )
+    if _contains_shell_credential_exfiltration(command_text, cwd=cwd, home_dir=home_dir):
+        return ToolActionRequestMatch(
+            tool_name=tool_name,
+            normalized_tool_name=normalized_tool_name,
+            command_text=command_text,
+            action_class="credential exfiltration shell command",
+            reason=(
+                "Guard treats shell scripts that combine credential-looking material with outbound HTTP posting as "
+                "sensitive because they can exfiltrate local secrets before the user confirms the action."
+            ),
+        )
     if _contains_shell_network_file_upload(command_text, cwd=cwd, home_dir=home_dir):
         return ToolActionRequestMatch(
             tool_name=tool_name,
@@ -562,6 +585,76 @@ def _destructive_shell_tool_action_request(
             "local machine before the user confirms the action."
         ),
     )
+
+
+def _contains_shell_credential_exfiltration(
+    command_text: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    depth: int = 0,
+    visited_script_paths: frozenset[str] = frozenset(),
+) -> bool:
+    if depth > 4:
+        return False
+    normalized = command_text.strip()
+    if not normalized:
+        return False
+    if _text_contains_credential_exfiltration(normalized):
+        return True
+    parts = _split_shell_parts(normalized)
+    if not parts:
+        return False
+    for env_split_string in _env_split_string_payloads(parts):
+        if _contains_shell_credential_exfiltration(
+            env_split_string,
+            cwd=cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+            visited_script_paths=visited_script_paths,
+        ):
+            return True
+    for substitution_payload in _shell_command_substitution_payloads(normalized):
+        if _contains_shell_credential_exfiltration(
+            substitution_payload,
+            cwd=cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+            visited_script_paths=visited_script_paths,
+        ):
+            return True
+    for shell_script in _shell_command_scripts(parts):
+        if _contains_shell_credential_exfiltration(
+            shell_script,
+            cwd=cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+            visited_script_paths=visited_script_paths,
+        ):
+            return True
+    for script_text, script_cwd, script_path in _local_shell_script_payloads(
+        parts,
+        cwd=cwd,
+        home_dir=home_dir,
+        visited_script_paths=visited_script_paths,
+    ):
+        if _contains_shell_credential_exfiltration(
+            script_text,
+            cwd=script_cwd,
+            home_dir=home_dir,
+            depth=depth + 1,
+            visited_script_paths=visited_script_paths | frozenset({script_path}),
+        ):
+            return True
+    return False
+
+
+def _text_contains_credential_exfiltration(text: str) -> bool:
+    if not _SECRET_EXFILTRATION_SECRET_PATTERN.search(text):
+        return False
+    if not _SECRET_EXFILTRATION_NETWORK_PATTERN.search(text):
+        return False
+    return _SECRET_EXFILTRATION_DESTINATION_PATTERN.search(text) is not None
 
 
 def _contains_encoded_or_encrypted_shell_command(
