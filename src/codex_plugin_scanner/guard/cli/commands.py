@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shlex
 import sqlite3
 import subprocess
@@ -128,6 +129,13 @@ _GUARD_HELP_GROUPS = (
     "  install      Enable Guard management for a harness\n"
     "  uninstall    Disable Guard management for a harness\n"
     "  update       Update hol-guard in the current environment"
+)
+
+_CLAUDE_GUARD_APPROVAL_HEADER = "HOL Guard"
+_CLAUDE_GUARD_APPROVAL_OPTIONS = (
+    "Allow once",
+    "Allow during this session",
+    "Keep blocked",
 )
 
 
@@ -1859,6 +1867,10 @@ def _append_claude_pending_permission_key(
         )
 
 
+def _claude_guard_approval_question_text(approval_code: str) -> str:
+    return f"HOL Guard intercepted this sensitive action (approval code: {approval_code}). What should Claude do?"
+
+
 def _record_claude_permission_notice(
     *,
     store: GuardStore,
@@ -1870,9 +1882,12 @@ def _record_claude_permission_notice(
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
         return
+    saved_at = _now()
     tool_name = _optional_string(payload.get("tool_name"))
+    approval_code = secrets.token_hex(6)
+    approval_question = _claude_guard_approval_question_text(approval_code)
     notice_payload: dict[str, object] = {
-        "saved_at": _now(),
+        "saved_at": saved_at,
         "reason": reason,
         "artifact_id": artifact.artifact_id,
         "artifact_hash": artifact_hash,
@@ -1880,14 +1895,18 @@ def _record_claude_permission_notice(
         "artifact_type": artifact.artifact_type,
         "config_path": artifact.config_path,
         "source_scope": artifact.source_scope,
+        "approval_header": _CLAUDE_GUARD_APPROVAL_HEADER,
+        "approval_question": approval_question,
+        "approval_options": list(_CLAUDE_GUARD_APPROVAL_OPTIONS),
+        "approval_code": approval_code,
     }
     if tool_name is not None:
         notice_payload["tool_name"] = tool_name
     try:
-        store.set_sync_payload(_claude_permission_notice_state_key(session_id, tool_name), notice_payload, _now())
+        store.set_sync_payload(_claude_permission_notice_state_key(session_id, tool_name), notice_payload, saved_at)
         pending_key = _claude_pending_permission_state_key(session_id, artifact.artifact_id)
-        store.set_sync_payload(pending_key, notice_payload, _now())
-        _append_claude_pending_permission_key(store, session_id=session_id, pending_key=pending_key, now=_now())
+        store.set_sync_payload(pending_key, notice_payload, saved_at)
+        _append_claude_pending_permission_key(store, session_id=session_id, pending_key=pending_key, now=saved_at)
     except (OSError, sqlite3.Error):
         return
 
@@ -1903,8 +1922,17 @@ def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]
         if persisted is None and tool_name is not None:
             selected_key = _claude_permission_notice_state_key(session_id)
             persisted = store.get_sync_payload(selected_key)
-        if persisted is not None:
-            store.delete_sync_payload(selected_key)
+        if isinstance(persisted, dict):
+            artifact_id = _optional_string(persisted.get("artifact_id"))
+            if artifact_id is not None:
+                pending_key = _claude_pending_permission_state_key(session_id, artifact_id)
+                pending = store.get_sync_payload(pending_key)
+                if not isinstance(pending, dict):
+                    store.delete_sync_payload(selected_key)
+                    persisted = None
+            else:
+                store.delete_sync_payload(selected_key)
+                persisted = None
     except (OSError, sqlite3.Error):
         return None
     if isinstance(persisted, dict):
@@ -2214,51 +2242,185 @@ def _persist_claude_pending_permission_denials(store: GuardStore, payload: dict[
 def _claude_guard_approval_question_message(notice: dict[str, object] | None) -> str:
     tool_name = _optional_string((notice or {}).get("tool_name")) or "this tool"
     reason = _optional_string((notice or {}).get("reason"))
+    header = _optional_string((notice or {}).get("approval_header")) or _CLAUDE_GUARD_APPROVAL_HEADER
+    question = _optional_string((notice or {}).get("approval_question")) or (
+        "HOL Guard intercepted this sensitive action. What should Claude do?"
+    )
+    options = _claude_guard_approval_options_from_value((notice or {}).get("approval_options"))
+    if not options:
+        options = _CLAUDE_GUARD_APPROVAL_OPTIONS
+    options_text = "', '".join(options)
     reason_text = f" HOL Guard reason: {_ensure_terminal_punctuation(reason)}" if reason is not None else ""
     return (
         f"HOL Guard needs the user's explicit decision before {tool_name} can run.{reason_text} "
         "The native Claude permission prompt is not the final decision surface for this request. Call "
         "AskUserQuestion now with one HOL Guard approval question before retrying the tool. Use header "
-        "'HOL Guard', question 'HOL Guard intercepted this sensitive action. What should Claude do?', and exactly "
-        "these options: 'Allow once', 'Allow during this session', and 'Keep blocked'. If the user chooses an "
-        "allow option, retry the same tool once. If the user chooses Keep blocked, do not retry the sensitive "
-        "action."
+        f"'{header}', question '{question}', and exactly these options: '{options_text}'. If the user chooses an "
+        "allow option, retry the same tool once. If the user chooses Keep blocked, do not retry the sensitive action."
     )
 
 
-def _is_claude_guard_approval_question(payload: dict[str, object]) -> bool:
+def _normalize_claude_guard_approval_text(value: str) -> str:
+    return " ".join(value.strip().lower().split())
+
+
+def _claude_guard_approval_options_from_value(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    labels: list[str] = []
+    for item in value:
+        label: str | None
+        if isinstance(item, dict):
+            label = _optional_string(item.get("label"))
+        elif isinstance(item, str):
+            label = item.strip()
+        else:
+            label = None
+        if label is None:
+            return ()
+        labels.append(label)
+    return tuple(labels)
+
+
+def _claude_guard_prompt_contract_from_pending(
+    pending: dict[str, object],
+) -> tuple[str, str, tuple[str, ...]] | None:
+    header = _optional_string(pending.get("approval_header"))
+    question = _optional_string(pending.get("approval_question"))
+    approval_code = _optional_string(pending.get("approval_code"))
+    options = _claude_guard_approval_options_from_value(pending.get("approval_options"))
+    if approval_code is None:
+        if header is None and question is None and not options:
+            return (
+                _CLAUDE_GUARD_APPROVAL_HEADER,
+                "HOL Guard intercepted this sensitive action. What should Claude do?",
+                _CLAUDE_GUARD_APPROVAL_OPTIONS,
+            )
+        if header is None or question is None or not options:
+            return None
+        expected_question = "HOL Guard intercepted this sensitive action. What should Claude do?"
+    else:
+        if header is None or question is None or not options:
+            return None
+        expected_question = _claude_guard_approval_question_text(approval_code)
+    normalized_expected_options = tuple(
+        _normalize_claude_guard_approval_text(option) for option in _CLAUDE_GUARD_APPROVAL_OPTIONS
+    )
+    normalized_pending_options = tuple(_normalize_claude_guard_approval_text(option) for option in options)
+    if _normalize_claude_guard_approval_text(question) != _normalize_claude_guard_approval_text(expected_question):
+        return None
+    if normalized_pending_options != normalized_expected_options:
+        return None
+    return header, question, options
+
+
+def _claude_guard_prompt_contract_from_question_list(
+    payload_section: object,
+) -> tuple[str, str, tuple[str, ...]] | None:
+    if not isinstance(payload_section, dict):
+        return None
+    questions = payload_section.get("questions")
+    if not isinstance(questions, list) or len(questions) != 1:
+        return None
+    first_question = questions[0]
+    if not isinstance(first_question, dict):
+        return None
+    header = _optional_string(first_question.get("header"))
+    question = _optional_string(first_question.get("question"))
+    options = _claude_guard_approval_options_from_value(first_question.get("options"))
+    if header is None or question is None or not options:
+        return None
+    return header, question, options
+
+
+def _claude_guard_prompt_contract_matches(
+    expected_contract: tuple[str, str, tuple[str, ...]],
+    actual_contract: tuple[str, str, tuple[str, ...]],
+) -> bool:
+    expected_header, expected_question, expected_options = expected_contract
+    actual_header, actual_question, actual_options = actual_contract
+    if _normalize_claude_guard_approval_text(actual_header) != _normalize_claude_guard_approval_text(expected_header):
+        return False
+    if _normalize_claude_guard_approval_text(actual_question) != _normalize_claude_guard_approval_text(
+        expected_question
+    ):
+        return False
+    expected_labels = tuple(_normalize_claude_guard_approval_text(option) for option in expected_options)
+    actual_labels = tuple(_normalize_claude_guard_approval_text(option) for option in actual_options)
+    return actual_labels == expected_labels
+
+
+def _is_claude_guard_approval_question(
+    payload: dict[str, object],
+    pending: dict[str, object],
+) -> bool:
     if _hook_event_name(payload) != "PostToolUse":
         return False
     tool_name = _optional_string(payload.get("tool_name"))
     if tool_name is None or tool_name.lower() != "askuserquestion":
         return False
-    combined = json.dumps(
-        {
-            "tool_input": payload.get("tool_input"),
-            "tool_response": payload.get("tool_response"),
-        },
-        sort_keys=True,
-        default=str,
-    ).lower()
-    return "hol guard" in combined and (
-        "allow once" in combined or "allow during this session" in combined or "keep blocked" in combined
-    )
+    expected_contract = _claude_guard_prompt_contract_from_pending(pending)
+    if expected_contract is None:
+        return False
+    tool_input_contract = _claude_guard_prompt_contract_from_question_list(payload.get("tool_input"))
+    if tool_input_contract is None:
+        return False
+    if not _claude_guard_prompt_contract_matches(expected_contract, tool_input_contract):
+        return False
+    response_contract = _claude_guard_prompt_contract_from_question_list(payload.get("tool_response"))
+    return response_contract is None or _claude_guard_prompt_contract_matches(expected_contract, response_contract)
 
 
-def _claude_guard_approval_answer(payload: dict[str, object]) -> str | None:
+def _claude_guard_approval_action_for_answer(answer_text: str) -> str | None:
+    normalized_answer = _normalize_claude_guard_approval_text(answer_text)
+    if normalized_answer == _normalize_claude_guard_approval_text("Keep blocked"):
+        return "block"
+    if normalized_answer in {
+        _normalize_claude_guard_approval_text("Allow once"),
+        _normalize_claude_guard_approval_text("Allow during this session"),
+    }:
+        return "allow"
+    return None
+
+
+def _claude_guard_answer_text_from_value(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value
+    if isinstance(value, dict):
+        label = _optional_string(value.get("label"))
+        if label is not None:
+            return label
+    return None
+
+
+def _claude_guard_approval_answer(payload: dict[str, object], *, expected_question: str | None = None) -> str | None:
     response = payload.get("tool_response")
     answer_text: str | None = None
     if isinstance(response, dict):
         answers = response.get("answers")
         if isinstance(answers, dict):
-            joined_answers = " ".join(str(answer) for answer in answers.values() if str(answer).strip())
-            if joined_answers:
-                answer_text = joined_answers
+            normalized_expected_question = (
+                _normalize_claude_guard_approval_text(expected_question) if isinstance(expected_question, str) else None
+            )
+            if normalized_expected_question is not None:
+                for question, answer in answers.items():
+                    if not isinstance(question, str):
+                        continue
+                    if _normalize_claude_guard_approval_text(question) != normalized_expected_question:
+                        continue
+                    parsed_answer_text = _claude_guard_answer_text_from_value(answer)
+                    if parsed_answer_text is not None:
+                        answer_text = parsed_answer_text
+                        break
+            if answer_text is None and len(answers) == 1:
+                only_answer = next(iter(answers.values()))
+                answer_text = _claude_guard_answer_text_from_value(only_answer)
         if answer_text is None:
             for key in ("answer", "selected_answer", "selected", "choice", "value", "label"):
                 value = response.get(key)
-                if isinstance(value, str) and value.strip():
-                    answer_text = value
+                parsed_answer_text = _claude_guard_answer_text_from_value(value)
+                if parsed_answer_text is not None:
+                    answer_text = parsed_answer_text
                     break
         if answer_text is None and "questions" not in response and "options" not in response:
             content = response.get("content")
@@ -2268,24 +2430,25 @@ def _claude_guard_approval_answer(payload: dict[str, object]) -> str | None:
         answer_text = response
     if answer_text is None:
         return None
-    normalized_answer = answer_text.lower()
-    if "keep blocked" in normalized_answer:
-        return "block"
-    if "allow during this session" in normalized_answer or "allow once" in normalized_answer:
-        return "allow"
-    return None
+    return _claude_guard_approval_action_for_answer(answer_text)
 
 
 def _persist_claude_guard_question_decision(store: GuardStore, payload: dict[str, object]) -> bool:
-    if not _is_claude_guard_approval_question(payload):
-        return False
-    action = _claude_guard_approval_answer(payload)
-    if action is None:
-        return False
     pending_pair = _load_single_claude_pending_permission(store, payload)
     if pending_pair is None:
         return False
     pending_key, pending = pending_pair
+    approval_code = _optional_string(pending.get("approval_code"))
+    if approval_code is None and pending.get("permission_prompt_seen") is not True:
+        return False
+    if not _is_claude_guard_approval_question(payload, pending):
+        return False
+    action = _claude_guard_approval_answer(
+        payload,
+        expected_question=_optional_string(pending.get("approval_question")),
+    )
+    if action is None:
+        return False
     artifact_id = _optional_string(pending.get("artifact_id"))
     artifact_hash_value = _optional_string(pending.get("artifact_hash"))
     if artifact_id is None or artifact_hash_value is None:
@@ -2353,6 +2516,8 @@ def _claude_permission_prompt_system_message(
 
 
 def _claude_permission_prompt_additional_context(notice: dict[str, object] | None) -> str:
+    if notice is not None:
+        return _claude_guard_approval_question_message(notice)
     reason = _optional_string(notice.get("reason")) if notice is not None else None
     if reason is not None:
         return (
