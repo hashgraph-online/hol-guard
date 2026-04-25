@@ -52,9 +52,10 @@ export function ShellHeader(props: {
   queuedCount: number;
   activeHarness: string | null;
   view: "home" | "inbox" | "fleet" | "evidence" | "settings";
+  onNavigate: (pathname: string) => void;
 }) {
   function handleMobileNavigationChange(event: ChangeEvent<HTMLSelectElement>) {
-    window.location.href = guardAwareHref(event.target.value);
+    props.onNavigate(event.target.value);
   }
 
   return (

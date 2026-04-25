@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useState, useEffect, useCallback, type ChangeEvent } from "react";
+import { useState, useEffect, useCallback, useMemo, type ChangeEvent } from "react";
 import {
   ShellHeader,
   ShellSidebar,
@@ -74,6 +74,7 @@ type LayoutProps = {
   fleetContent: ReactNode;
   settingsContent: ReactNode;
   onGoHome: () => void;
+  onNavigate: (pathname: string) => void;
   onOpenRequest: (requestId: string) => void;
   onResolve: (payload: {
     requestId: string;
@@ -100,7 +101,12 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     props.detail.kind === "ready" ? props.detail.item.harness : queuedItems[0]?.harness ?? null;
   return (
     <div className="min-h-screen bg-white text-brand-dark">
-      <ShellHeader queuedCount={queuedItems.length} activeHarness={activeHarness} view={props.view} />
+      <ShellHeader
+        queuedCount={queuedItems.length}
+        activeHarness={activeHarness}
+        view={props.view}
+        onNavigate={props.onNavigate}
+      />
       <ShellSidebar queuedCount={queuedItems.length} activeHarness={activeHarness} view={props.view} />
       <div className="flex flex-col lg:pl-64">
         <main className="flex-1 p-6 lg:p-10">
@@ -250,13 +256,21 @@ function QueueBrowser(props: {
   const [page, setPage] = useState(1);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness))).sort();
   const actions = Array.from(new Set(props.items.map((item) => item.policy_action))).sort();
-  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
-  const filteredItems = props.items.filter((item) => {
-    const matchesHarness = harnessFilter === "all" || item.harness === harnessFilter;
-    const matchesAction = actionFilter === "all" || item.policy_action === actionFilter;
-    const searchable = `${item.artifact_name} ${item.artifact_type} ${item.harness} ${item.policy_action} ${buildQueueSummary(item)}`.toLowerCase();
-    return matchesHarness && matchesAction && (normalizedSearchTerm.length === 0 || searchable.includes(normalizedSearchTerm));
-  });
+  const filteredItems = useMemo(() => {
+    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+    return props.items.filter((item) => {
+      const matchesHarness = harnessFilter === "all" || item.harness === harnessFilter;
+      const matchesAction = actionFilter === "all" || item.policy_action === actionFilter;
+      if (!matchesHarness || !matchesAction) {
+        return false;
+      }
+      if (normalizedSearchTerm.length === 0) {
+        return true;
+      }
+      const searchable = `${item.artifact_name} ${item.artifact_type} ${item.harness} ${item.policy_action} ${buildQueueSummary(item)}`.toLowerCase();
+      return searchable.includes(normalizedSearchTerm);
+    });
+  }, [actionFilter, harnessFilter, props.items, searchTerm]);
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / queuePageSize));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * queuePageSize;
