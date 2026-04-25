@@ -74,6 +74,48 @@ def test_dashboard_settings_update_persists_to_cli_config_loader(tmp_path):
     assert "ignored_key" not in config_text
 
 
+def test_dashboard_settings_update_preserves_nested_cli_policy_tables(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(
+        guard_home / "config.toml",
+        "\n".join(
+            [
+                'mode = "prompt"',
+                "",
+                "[harnesses.codex]",
+                'default_action = "review"',
+                "",
+                '[publishers."@scope/pkg"]',
+                'action = "block"',
+                "",
+                '[artifacts."codex:project:workspace-tools"]',
+                'action = "allow"',
+            ]
+        )
+        + "\n",
+    )
+
+    updated = update_guard_settings(
+        guard_home,
+        {
+            "mode": "enforce",
+            "approval_wait_timeout_seconds": 30,
+        },
+    )
+    loaded = load_guard_config(guard_home)
+    config_text = (guard_home / "config.toml").read_text(encoding="utf-8")
+
+    assert updated.mode == "enforce"
+    assert loaded.mode == "enforce"
+    assert loaded.approval_wait_timeout_seconds == 30
+    assert loaded.harness_actions == {"codex": "review"}
+    assert loaded.publisher_actions == {"@scope/pkg": "block"}
+    assert loaded.artifact_actions == {"codex:project:workspace-tools": "allow"}
+    assert "[harnesses.codex]" in config_text
+    assert '[publishers."@scope/pkg"]' in config_text
+    assert '[artifacts."codex:project:workspace-tools"]' in config_text
+
+
 def test_resolve_guard_home_migrates_legacy_directory_into_canonical_home(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     legacy_home = home_dir / ".config" / ".ai-plugin-scanner-guard"

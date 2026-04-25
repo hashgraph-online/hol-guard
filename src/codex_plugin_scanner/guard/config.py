@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sqlite3
 import tempfile
@@ -48,6 +49,7 @@ EDITABLE_GUARD_SETTING_KEYS = frozenset(
     }
 )
 VALID_APPROVAL_SURFACE_POLICIES = {"auto-open-once", "native-only", "approval-center"}
+BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 WORKSPACE_BLOCKED_POLICY_KEYS = frozenset(
     {
         "mode",
@@ -240,20 +242,37 @@ def _coerce_editable_setting(key: str, value: object) -> object:
 
 def _write_guard_config(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    lines = _toml_lines_for_table(payload, ())
+    path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+
+
+def _toml_lines_for_table(payload: dict[object, object], path: tuple[str, ...]) -> list[str]:
     lines: list[str] = []
+    scalar_items: list[tuple[str, object]] = []
     table_items: list[tuple[str, dict[object, object]]] = []
-    for key in sorted(payload):
-        value = payload[key]
+    for key, value in sorted(payload.items(), key=lambda item: str(item[0])):
+        if not isinstance(key, str):
+            continue
         if isinstance(value, dict):
             table_items.append((key, value))
             continue
-        lines.append(f"{key} = {_toml_literal(value)}")
+        scalar_items.append((key, value))
+    if path:
+        lines.append(f"[{'.'.join(_toml_key(item) for item in path)}]")
+    for key, value in scalar_items:
+        lines.append(f"{_toml_key(key)} = {_toml_literal(value)}")
     for key, value in table_items:
-        lines.append("")
-        lines.append(f"[{key}]")
-        for nested_key in sorted(value):
-            lines.append(f"{nested_key} = {_toml_literal(value[nested_key])}")
-    path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+        nested_lines = _toml_lines_for_table(value, (*path, key))
+        if lines and nested_lines:
+            lines.append("")
+        lines.extend(nested_lines)
+    return lines
+
+
+def _toml_key(value: str) -> str:
+    if BARE_TOML_KEY.match(value):
+        return value
+    return json.dumps(value)
 
 
 def _toml_literal(value: object) -> str:
