@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.config import (
     _migrate_guard_home_state,
     load_guard_config,
     resolve_guard_home,
+    update_guard_settings,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -34,6 +35,43 @@ def test_resolve_guard_home_defaults_to_hol_guard_directory(tmp_path, monkeypatc
     monkeypatch.setattr(Path, "home", lambda: home_dir)
 
     assert resolve_guard_home() == home_dir / ".hol-guard"
+
+
+def test_dashboard_settings_update_persists_to_cli_config_loader(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(
+        guard_home / "config.toml",
+        'mode = "prompt"\n'
+        'default_action = "warn"\n'
+        "\n"
+        "[harnesses]\n"
+        'codex = "review"\n',
+    )
+
+    updated = update_guard_settings(
+        guard_home,
+        {
+            "mode": "enforce",
+            "default_action": "review",
+            "changed_hash_action": "block",
+            "approval_wait_timeout_seconds": 45,
+            "approval_surface_policy": "approval-center",
+            "telemetry": True,
+            "ignored_key": "ignored",
+        },
+    )
+    loaded = load_guard_config(guard_home)
+    config_text = (guard_home / "config.toml").read_text(encoding="utf-8")
+
+    assert updated.mode == "enforce"
+    assert loaded.mode == "enforce"
+    assert loaded.default_action == "review"
+    assert loaded.changed_hash_action == "block"
+    assert loaded.approval_wait_timeout_seconds == 45
+    assert loaded.approval_surface_policy == "approval-center"
+    assert loaded.telemetry is True
+    assert loaded.harness_actions == {"codex": "review"}
+    assert "ignored_key" not in config_text
 
 
 def test_resolve_guard_home_migrates_legacy_directory_into_canonical_home(tmp_path, monkeypatch):
