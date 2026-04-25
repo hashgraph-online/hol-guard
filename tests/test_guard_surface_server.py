@@ -192,7 +192,11 @@ class TestGuardSurfaceServer:
         assert update_payload["settings"]["changed_hash_action"] == "review"
         assert update_payload["settings"]["approval_wait_timeout_seconds"] == 45
         assert update_payload["settings"]["telemetry"] is True
-        assert (store.guard_home / "config.toml").read_text(encoding="utf-8")
+        config_text = (store.guard_home / "config.toml").read_text(encoding="utf-8")
+        assert 'mode = "enforce"' in config_text
+        assert 'changed_hash_action = "review"' in config_text
+        assert "approval_wait_timeout_seconds = 45" in config_text
+        assert "telemetry = true" in config_text
 
     def test_guard_daemon_claude_hook_endpoint_returns_native_pretooluse_response(self, tmp_path) -> None:
         home_dir = tmp_path / "home"
