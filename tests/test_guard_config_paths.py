@@ -5,6 +5,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard import bridge as bridge_module
 from codex_plugin_scanner.guard import config as guard_config_module
 from codex_plugin_scanner.guard.config import (
@@ -110,6 +112,45 @@ def test_dashboard_settings_update_preserves_nested_cli_policy_tables(tmp_path):
     assert "[harnesses.codex]" in config_text
     assert '[publishers."@scope/pkg"]' in config_text
     assert '[artifacts."codex:project:workspace-tools"]' in config_text
+
+
+def test_dashboard_settings_update_rejects_boolean_approval_timeout(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(
+        guard_home / "config.toml",
+        'mode = "prompt"\napproval_wait_timeout_seconds = 45\n',
+    )
+
+    with pytest.raises(ValueError, match="Approval wait timeout"):
+        update_guard_settings(
+            guard_home,
+            {
+                "approval_wait_timeout_seconds": True,
+            },
+        )
+
+    loaded = load_guard_config(guard_home)
+    assert loaded.approval_wait_timeout_seconds == 45
+
+
+def test_dashboard_settings_update_preserves_existing_float_config_values(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(
+        guard_home / "config.toml",
+        'mode = "prompt"\nscore_threshold = 0.75\n',
+    )
+
+    updated = update_guard_settings(
+        guard_home,
+        {
+            "mode": "enforce",
+        },
+    )
+    config_payload = guard_config_module._read_toml(guard_home / "config.toml")
+
+    assert updated.mode == "enforce"
+    assert config_payload["score_threshold"] == 0.75
+    assert isinstance(config_payload["score_threshold"], float)
 
 
 def test_resolve_guard_home_migrates_legacy_directory_into_canonical_home(tmp_path, monkeypatch):
