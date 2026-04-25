@@ -102,6 +102,28 @@ const riskProfileActions: Record<"balanced" | "strict" | "custom", Record<RiskKe
   }
 };
 
+function normalizeSettingsPayload(payload: GuardSettingsPayload): GuardSettingsPayload {
+  return {
+    ...payload,
+    settings: normalizeGuardSettings(payload.settings)
+  };
+}
+
+function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
+  const defaults = riskProfileActions[settings.security_level];
+  const explicitOverrides = settings.risk_action_overrides ?? {};
+  const effectiveRiskActions = riskControls.reduce<Record<RiskKey, string>>((actions, risk) => {
+    actions[risk.key] = settings.risk_actions?.[risk.key] ?? explicitOverrides[risk.key] ?? defaults[risk.key];
+    return actions;
+  }, {} as Record<RiskKey, string>);
+  return {
+    ...settings,
+    risk_actions: effectiveRiskActions,
+    risk_action_overrides: explicitOverrides,
+    harness_risk_actions: settings.harness_risk_actions ?? {}
+  };
+}
+
 export function SettingsWorkspace() {
   const [state, setState] = useState<SettingsState>({ kind: "loading" });
   const [draft, setDraft] = useState<GuardSettings | null>(null);
@@ -113,8 +135,9 @@ export function SettingsWorkspace() {
     fetchSettings()
       .then((payload) => {
         if (!cancelled) {
-          setState({ kind: "ready", payload });
-          setDraft(payload.settings);
+          const normalizedPayload = normalizeSettingsPayload(payload);
+          setState({ kind: "ready", payload: normalizedPayload });
+          setDraft(normalizedPayload.settings);
         }
       })
       .catch((error: unknown) => {
@@ -223,8 +246,9 @@ export function SettingsWorkspace() {
         ...draft,
         risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides
       });
-      setState({ kind: "ready", payload });
-      setDraft(payload.settings);
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
       setSavedMessage("Settings saved. New Guard checks use these values immediately.");
     } catch (error) {
       setSavedMessage(error instanceof Error ? error.message : "Unable to save settings.");
