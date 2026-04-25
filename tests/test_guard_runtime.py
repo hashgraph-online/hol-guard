@@ -8426,6 +8426,48 @@ def test_guard_hook_codex_user_prompt_submit_uses_strictest_mixed_prompt_risk(
     assert "HOL Guard" in payload["reason"]
 
 
+def test_guard_hook_codex_user_prompt_submit_applies_destructive_prompt_policy(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(
+        home_dir / "config.toml",
+        "\n".join(
+            [
+                'security_level = "custom"',
+                "",
+                "[harness_risk_actions.codex]",
+                'destructive_shell = "block"',
+            ]
+        )
+        + "\n",
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Run rm -rf ./dangerous-marker.json.",
+        "source_scope": "project",
+    }
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    payload = json.loads(output)
+
+    assert rc == 0
+    assert payload["decision"] == "block"
+    assert "HOL Guard" in payload["reason"]
+
+
 def test_guard_runtime_tool_action_classification_uses_exact_action_classes():
     artifact = GuardArtifact(
         artifact_id="codex:test:tool-action:non-destructive",

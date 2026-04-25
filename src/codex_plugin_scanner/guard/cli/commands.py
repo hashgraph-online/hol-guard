@@ -2760,6 +2760,8 @@ def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
             risk_classes.append("local_secret_read")
         if "exfil_intent" in prompt_classes:
             risk_classes.append("credential_exfiltration")
+        if "destructive_intent" in prompt_classes:
+            risk_classes.append("destructive_shell")
         if "subprocess_intent" in prompt_classes:
             risk_classes.append("destructive_shell")
         return risk_classes
