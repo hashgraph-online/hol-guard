@@ -135,6 +135,49 @@ def test_guard_settings_set_risk_action_for_harness(tmp_path, capsys):
     assert resolve_risk_action(loaded, "network_egress", harness="codex") == "require-reapproval"
 
 
+def test_guard_settings_set_global_risk_action_preserves_preset_defaults(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    _write_text(
+        home_dir / "config.toml",
+        "\n".join(
+            [
+                'security_level = "strict"',
+                "",
+                "[risk_actions]",
+                'encoded_execution = "block"',
+            ]
+        )
+        + "\n",
+    )
+
+    rc = main(
+        [
+            "guard",
+            "settings",
+            "set",
+            "risk",
+            "local-secret-read",
+            "allow",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    loaded = load_guard_config(home_dir)
+
+    assert rc == 0
+    assert payload["settings"]["security_level"] == "strict"
+    assert loaded.security_level == "strict"
+    assert loaded.risk_actions == {
+        "encoded_execution": "block",
+        "local_secret_read": "allow",
+    }
+    assert resolve_risk_action(loaded, "local_secret_read", harness="codex") == "allow"
+    assert resolve_risk_action(loaded, "encoded_execution", harness="codex") == "block"
+    assert resolve_risk_action(loaded, "network_egress", harness="codex") == "require-reapproval"
+
+
 def _build_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:
     _write_text(
         home_dir / ".codex" / "config.toml",

@@ -2815,12 +2815,11 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
                     "harness_risk_actions": harness_actions,
                 },
             )
-        risk_actions = _current_effective_risk_actions(config)
+        risk_actions = dict(config.risk_actions or {})
         risk_actions[risk_class] = action
         return update_guard_settings(
             guard_home,
             {
-                "security_level": "custom",
                 "risk_actions": risk_actions,
             },
         )
