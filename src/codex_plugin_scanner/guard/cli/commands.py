@@ -2438,7 +2438,8 @@ def _persist_claude_guard_question_decision(store: GuardStore, payload: dict[str
     if pending_pair is None:
         return False
     pending_key, pending = pending_pair
-    if pending.get("permission_prompt_seen") is not True:
+    approval_code = _optional_string(pending.get("approval_code"))
+    if approval_code is None and pending.get("permission_prompt_seen") is not True:
         return False
     if not _is_claude_guard_approval_question(payload, pending):
         return False

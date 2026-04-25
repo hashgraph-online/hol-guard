@@ -4974,6 +4974,81 @@ def test_guard_hook_claude_ask_user_question_legacy_pending_state_still_persists
     assert policies[0]["source"] == "claude-ask-user-question"
 
 
+def test_guard_hook_claude_ask_user_question_bound_pending_without_prompt_seen_still_persists_decision(tmp_path):
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    session_id = "session-claude-bound-no-seen"
+    artifact_id = "claude-code:runtime:file-read:.env"
+    now = "2026-04-24T00:00:00+00:00"
+    approval_code = "abc123abc123"
+    approval_question = guard_commands_module._claude_guard_approval_question_text(approval_code)
+    pending_key = guard_commands_module._claude_pending_permission_state_key(session_id, artifact_id)
+    store.set_sync_payload(
+        pending_key,
+        {
+            "saved_at": now,
+            "reason": "HOL Guard intercepted Claude's attempt to use Read for local .env file.",
+            "artifact_id": artifact_id,
+            "artifact_hash": "hash-bound",
+            "artifact_name": "Read",
+            "tool_name": "Read",
+            "approval_header": "HOL Guard",
+            "approval_question": approval_question,
+            "approval_options": ["Allow once", "Allow during this session", "Keep blocked"],
+            "approval_code": approval_code,
+        },
+        now,
+    )
+    store.set_sync_payload(
+        guard_commands_module._claude_pending_permission_index_key(session_id),
+        [pending_key],
+        now,
+    )
+
+    persisted = guard_commands_module._persist_claude_guard_question_decision(
+        store,
+        {
+            "session_id": session_id,
+            "hook_event_name": "PostToolUse",
+            "tool_name": "AskUserQuestion",
+            "tool_input": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": approval_question,
+                        "options": [
+                            {"label": "Allow once"},
+                            {"label": "Allow during this session"},
+                            {"label": "Keep blocked"},
+                        ],
+                    }
+                ]
+            },
+            "tool_response": {
+                "questions": [
+                    {
+                        "header": "HOL Guard",
+                        "question": approval_question,
+                        "options": [
+                            {"label": "Allow once"},
+                            {"label": "Allow during this session"},
+                            {"label": "Keep blocked"},
+                        ],
+                    }
+                ],
+                "answers": {approval_question: "Allow once"},
+            },
+        },
+    )
+    policies = store.list_policy_decisions("claude-code")
+
+    assert persisted is True
+    assert len(policies) == 1
+    assert policies[0]["artifact_id"] == artifact_id
+    assert policies[0]["action"] == "allow"
+    assert policies[0]["source"] == "claude-ask-user-question"
+
+
 def test_guard_hook_claude_native_cancel_does_not_persist_flat_block(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
