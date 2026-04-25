@@ -11,6 +11,7 @@ import {
 import {
   clearPolicy,
   fetchDiff,
+  fetchInventory,
   fetchLatestReceipt,
   fetchPolicies,
   fetchPolicy,
@@ -28,7 +29,8 @@ import type {
   GuardArtifactDiff,
   GuardPolicyDecision,
   GuardReceipt,
-  GuardRuntimeSnapshot
+  GuardRuntimeSnapshot,
+  GuardInventoryItem
 } from "./guard-types";
 
 type RequestState =
@@ -62,6 +64,11 @@ type PolicyState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardPolicyDecision[] };
+type InventoryState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; items: GuardInventoryItem[] };
 
 function usePathname(): string {
   const [pathname, setPathname] = useState(window.location.pathname);
@@ -138,6 +145,7 @@ export function App() {
   const [receipts, setReceipts] = useState<ReceiptsState>({ kind: "loading" });
   const [runtime, setRuntime] = useState<RuntimeState>({ kind: "loading" });
   const [policies, setPolicies] = useState<PolicyState>({ kind: "loading" });
+  const [inventory, setInventory] = useState<InventoryState>({ kind: "idle" });
   const [resolutionMessage, setResolutionMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -198,6 +206,31 @@ export function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (view !== "fleet") {
+      return;
+    }
+    let cancelled = false;
+    setInventory({ kind: "loading" });
+    fetchInventory()
+      .then((items) => {
+        if (!cancelled) {
+          setInventory({ kind: "ready", items });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setInventory({
+            kind: "error",
+            message: error instanceof Error ? error.message : "Unable to load watched app inventory."
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view]);
 
   const queuedItems = requests.kind === "ready" ? requests.items : [];
   const activeRequestId = requestId ?? queuedItems[0]?.request_id ?? null;
@@ -290,7 +323,11 @@ export function App() {
       }}
       fleetContent={
         runtime.kind === "ready" ? (
-          <FleetWorkspace runtime={runtime.snapshot} policies={policies.kind === "ready" ? policies.items : []} />
+          <FleetWorkspace
+            runtime={runtime.snapshot}
+            policies={policies.kind === "ready" ? policies.items : []}
+            inventory={inventory}
+          />
         ) : null
       }
       settingsContent={<SettingsWorkspace />}

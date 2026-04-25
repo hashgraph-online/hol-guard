@@ -7,11 +7,16 @@ import {
   Tag
 } from "./approval-center-primitives";
 import { harnessDisplayName } from "./approval-center-utils";
-import type { GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import type { GuardInventoryItem, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
 type FleetWorkspaceProps = {
   runtime: GuardRuntimeSnapshot;
   policies: GuardPolicyDecision[];
+  inventory:
+    | { kind: "idle" }
+    | { kind: "loading" }
+    | { kind: "error"; message: string }
+    | { kind: "ready"; items: GuardInventoryItem[] };
 };
 
 function collectHarnesses(snapshot: GuardRuntimeSnapshot): string[] {
@@ -35,7 +40,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
   const managedInstalls = props.runtime.managed_installs ?? [];
   const activeInstalls = managedInstalls.filter((install) => install.active);
   const visibleHarnesses = managedInstalls.length > 0 ? managedInstalls.map((install) => install.harness) : harnesses;
-  const inventory = props.runtime.inventory ?? [];
+  const inventory = props.inventory.kind === "ready" ? props.inventory.items : [];
   const runtimeState = props.runtime.runtime_state;
 
   return (
@@ -114,9 +119,12 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
                 ["Started", runtimeState?.started_at ?? "offline"],
                 ["Heartbeat", runtimeState?.last_heartbeat_at ?? "offline"],
                 ["Detected", `${harnesses.length} apps`],
-                ["Actions seen", `${inventory.length}`]
+                ["Actions seen", props.inventory.kind === "loading" ? "loading" : `${inventory.length}`]
               ]}
             />
+            {props.inventory.kind === "error" ? (
+              <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{props.inventory.message}</p>
+            ) : null}
           </div>
         </section>
 

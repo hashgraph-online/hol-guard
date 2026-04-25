@@ -206,7 +206,6 @@ def build_runtime_snapshot(
         "items": pending_requests,
         "latest_receipts": latest_receipts,
         "managed_installs": store.list_managed_installs(),
-        "inventory": store.list_inventory(),
         **cloud_context,
     }
 
