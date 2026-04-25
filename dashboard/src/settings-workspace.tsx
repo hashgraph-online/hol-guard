@@ -76,6 +76,32 @@ const riskControls = [
   }
 ] as const;
 
+type RiskKey = (typeof riskControls)[number]["key"];
+
+const riskProfileActions: Record<"balanced" | "strict" | "custom", Record<RiskKey, string>> = {
+  balanced: {
+    local_secret_read: "require-reapproval",
+    credential_exfiltration: "require-reapproval",
+    destructive_shell: "require-reapproval",
+    encoded_execution: "require-reapproval",
+    network_egress: "warn"
+  },
+  strict: {
+    local_secret_read: "require-reapproval",
+    credential_exfiltration: "require-reapproval",
+    destructive_shell: "require-reapproval",
+    encoded_execution: "require-reapproval",
+    network_egress: "require-reapproval"
+  },
+  custom: {
+    local_secret_read: "require-reapproval",
+    credential_exfiltration: "require-reapproval",
+    destructive_shell: "require-reapproval",
+    encoded_execution: "require-reapproval",
+    network_egress: "warn"
+  }
+};
+
 export function SettingsWorkspace() {
   const [state, setState] = useState<SettingsState>({ kind: "loading" });
   const [draft, setDraft] = useState<GuardSettings | null>(null);
@@ -113,7 +139,19 @@ export function SettingsWorkspace() {
   );
 
   const handleSecurityLevelChange = useCallback((securityLevel: GuardSettings["security_level"]) => {
-    setDraft((value) => value === null ? value : { ...value, security_level: securityLevel });
+    setDraft((value) => {
+      if (value === null) return value;
+      if (securityLevel === "custom") {
+        return { ...value, security_level: securityLevel };
+      }
+      return {
+        ...value,
+        security_level: securityLevel,
+        risk_actions: riskProfileActions[securityLevel],
+        risk_action_overrides: {},
+        harness_risk_actions: {}
+      };
+    });
     setSavedMessage(null);
   }, []);
 
@@ -183,7 +221,7 @@ export function SettingsWorkspace() {
     try {
       const payload = await updateSettings({
         ...draft,
-        risk_actions: draft.risk_action_overrides
+        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides
       });
       setState({ kind: "ready", payload });
       setDraft(payload.settings);
