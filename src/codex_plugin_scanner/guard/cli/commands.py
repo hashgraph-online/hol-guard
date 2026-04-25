@@ -1569,7 +1569,7 @@ def run_guard_command(
                     _native_hook_reason_for_harness(
                         args.harness,
                         _runtime_artifact_native_reason(runtime_artifact, response_payload),
-                        _native_approval_center_context(response_payload),
+                        _native_approval_center_context(response_payload, harness=args.harness),
                     )
                 )
                 return 2
@@ -1580,7 +1580,7 @@ def run_guard_command(
                 runtime_reason = _native_hook_reason_for_harness(
                     args.harness,
                     raw_runtime_reason,
-                    _native_approval_center_context(response_payload),
+                    _native_approval_center_context(response_payload, harness=args.harness),
                 )
             if _should_emit_claude_native_pretooluse_notice(
                 args,
@@ -2638,7 +2638,7 @@ def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str
     return f"{reason} Approve it in HOL Guard, then retry."
 
 
-def _native_approval_center_context(response_payload: dict[str, object]) -> str | None:
+def _native_approval_center_context(response_payload: dict[str, object], *, harness: str) -> str | None:
     approval_center_url = response_payload.get("approval_center_url")
     if not isinstance(approval_center_url, str) or not approval_center_url.strip():
         return None
@@ -2653,8 +2653,15 @@ def _native_approval_center_context(response_payload: dict[str, object]) -> str 
                 first_approval_url = approval_url.strip()
                 break
     review_url = first_approval_url or approval_center_url.strip()
+    harness_label = {
+        "claude-code": "Claude Code",
+        "codex": "Codex",
+        "copilot": "Copilot",
+        "opencode": "OpenCode",
+    }.get(_canonical_harness_name(harness), "the harness")
     return (
-        f"Open HOL Guard to approve or keep this blocked: {review_url}. After you choose, retry the same Codex command."
+        f"Open HOL Guard to approve or keep this blocked: {review_url}. "
+        f"After you choose, retry the same {harness_label} action."
     )
 
 
