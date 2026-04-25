@@ -255,7 +255,7 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         harness_actions=_coerce_action_map(merged.get("harnesses")),
         publisher_actions=_coerce_action_map(merged.get("publishers")),
         artifact_actions=_coerce_action_map(merged.get("artifacts")),
-        security_level=_coerce_security_level(merged.get("security_level", DEFAULT_SECURITY_LEVEL)),
+        security_level=_coerce_loaded_security_level(merged.get("security_level", DEFAULT_SECURITY_LEVEL)),
         risk_actions=_coerce_risk_action_map(merged.get("risk_actions")),
         harness_risk_actions=_coerce_harness_risk_action_map(merged.get("harness_risk_actions")),
     )
@@ -330,6 +330,12 @@ def _coerce_security_level(value: object) -> str:
     if isinstance(value, str) and value in VALID_SECURITY_LEVELS:
         return value
     raise ValueError("Invalid Guard security level.")
+
+
+def _coerce_loaded_security_level(value: object) -> str:
+    if isinstance(value, str) and value in VALID_SECURITY_LEVELS:
+        return value
+    return DEFAULT_SECURITY_LEVEL
 
 
 def _coerce_risk_action_payload(value: object) -> dict[str, GuardAction]:
