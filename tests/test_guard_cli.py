@@ -3818,8 +3818,8 @@ args = ["-lc", "echo hi"]
 
         assert rc == 0
         assert output["native_hook_state"]["protection_active"] is False
-        assert any("native Bash hooks are disabled" in warning for warning in output["warnings"])
-        assert any("managed PreToolUse Bash hook is missing" in warning for warning in output["warnings"])
+        assert any("native hooks are disabled" in warning for warning in output["warnings"])
+        assert any("managed Codex hooks are missing" in warning for warning in output["warnings"])
 
     def test_guard_codex_hook_blocks_shell_file_upload_script(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
