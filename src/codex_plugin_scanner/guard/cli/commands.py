@@ -2287,9 +2287,20 @@ def _claude_guard_prompt_contract_from_pending(
     question = _optional_string(pending.get("approval_question"))
     approval_code = _optional_string(pending.get("approval_code"))
     options = _claude_guard_approval_options_from_value(pending.get("approval_options"))
-    if header is None or question is None or approval_code is None or not options:
-        return None
-    expected_question = _claude_guard_approval_question_text(approval_code)
+    if approval_code is None:
+        if header is None and question is None and not options:
+            return (
+                _CLAUDE_GUARD_APPROVAL_HEADER,
+                "HOL Guard intercepted this sensitive action. What should Claude do?",
+                _CLAUDE_GUARD_APPROVAL_OPTIONS,
+            )
+        if header is None or question is None or not options:
+            return None
+        expected_question = "HOL Guard intercepted this sensitive action. What should Claude do?"
+    else:
+        if header is None or question is None or not options:
+            return None
+        expected_question = _claude_guard_approval_question_text(approval_code)
     normalized_expected_options = tuple(
         _normalize_claude_guard_approval_text(option) for option in _CLAUDE_GUARD_APPROVAL_OPTIONS
     )
