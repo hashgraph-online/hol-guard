@@ -5452,6 +5452,7 @@ def test_guard_hook_emits_codex_runtime_denial_with_guard_remediation(tmp_path, 
         "tool_input": {"file_path": str(workspace_dir / ".env")},
         "source_scope": "project",
     }
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
 
     rc = main(
@@ -5466,11 +5467,11 @@ def test_guard_hook_emits_codex_runtime_denial_with_guard_remediation(tmp_path, 
             "codex",
         ]
     )
-    output = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
 
-    assert rc == 0
-    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "approve it in hol guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"].lower()
+    assert rc == 2
+    assert captured.out == ""
+    assert "approve it in hol guard, then retry." in captured.err.lower()
 
 
 def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
@@ -7961,6 +7962,7 @@ def test_guard_hook_codex_emits_native_deny_for_sensitive_bash_command(tmp_path,
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     event_path = tmp_path / "codex-hook.json"
     _write_json(
@@ -7988,12 +7990,12 @@ def test_guard_hook_codex_emits_native_deny_for_sensitive_bash_command(tmp_path,
             str(event_path),
         ]
     )
-    output = capsys.readouterr().out.strip()
+    captured = capsys.readouterr()
 
-    assert rc == 0
-    assert '"hookEventName":"PreToolUse"' in output
-    assert '"permissionDecision":"deny"' in output
-    assert "Approve it in HOL Guard, then retry." in output
+    assert rc == 2
+    assert captured.out == ""
+    assert "HOL Guard" in captured.err
+    assert "Approve it in HOL Guard, then retry." in captured.err
 
 
 def test_guard_hook_codex_emits_no_native_output_for_safe_requests(tmp_path, capsys, monkeypatch):
@@ -8080,6 +8082,7 @@ def test_guard_hook_codex_queues_approval_before_native_deny_output(tmp_path, ca
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     blocked_event = {
         "hook_event_name": "PreToolUse",
@@ -8103,13 +8106,12 @@ def test_guard_hook_codex_queues_approval_before_native_deny_output(tmp_path, ca
             "codex",
         ]
     )
-    output = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
     pending = GuardStore(home_dir).list_approval_requests(limit=10)
 
-    assert rc == 0
-    assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "Approve it in HOL Guard, then retry." in output["hookSpecificOutput"]["permissionDecisionReason"]
+    assert rc == 2
+    assert captured.out == ""
+    assert "Approve it in HOL Guard, then retry." in captured.err
     assert len(pending) == 1
     assert pending[0]["artifact_type"] == "tool_action_request"
 
@@ -8428,25 +8430,30 @@ PY
         "tool_input": {"command": "bash ./guard-evil-canary.sh"},
         "source_scope": "project",
     }
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
 
-    rc, output = _run_guard_hook(
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-        harness="codex",
-        event=event,
-        capsys=capsys,
-        monkeypatch=monkeypatch,
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
     )
-    payload = json.loads(output)
+    captured = capsys.readouterr()
 
-    assert rc == 0
-    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "HOL Guard" in payload["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "credential exfiltration" in payload["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "Open HOL Guard to approve or keep this blocked" in payload["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "http://127.0.0.1:4455/approvals/" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert rc == 2
+    assert captured.out == ""
+    assert "HOL Guard" in captured.err
+    assert "credential exfiltration" in captured.err
+    assert "Open HOL Guard to approve or keep this blocked" in captured.err
+    assert "http://127.0.0.1:4455/approvals/" in captured.err
 
 
 def test_guard_hook_allows_codex_safe_user_prompt_submit_without_output(
