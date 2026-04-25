@@ -10,7 +10,7 @@ import {
   Surface,
   Tag
 } from "./approval-center-primitives";
-import { harnessDisplayName } from "./approval-center-utils";
+import { harnessDisplayName, policyActionLabel } from "./approval-center-utils";
 import type { GuardReceipt } from "./guard-types";
 
 type ReceiptsState =
@@ -188,14 +188,13 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
 function HistoryRow(props: { receipt: GuardReceipt }) {
   const { receipt } = props;
   const changed = receipt.changed_capabilities.join(", ") || "Nothing recorded";
+  const decisionTone = receipt.policy_decision === "allow" ? "green" : receipt.policy_decision === "block" ? "purple" : "blue";
   return (
     <article className="px-4 py-4 transition-colors duration-150 hover:bg-surface-1/70 sm:px-5">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_150px_120px] lg:items-start">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Tag tone={receipt.policy_decision === "allow" ? "green" : "purple"}>
-              {receipt.policy_decision === "allow" ? "Approved" : "Blocked"}
-            </Tag>
+            <Tag tone={decisionTone}>{policyActionLabel(receipt.policy_decision)}</Tag>
             <span className="text-xs font-medium text-muted-foreground">{harnessDisplayName(receipt.harness)}</span>
           </div>
           <h2 className="mt-2 truncate text-sm font-semibold text-brand-dark">

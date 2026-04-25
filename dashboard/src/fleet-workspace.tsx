@@ -39,7 +39,9 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
   const harnesses = collectHarnesses(props.runtime);
   const managedInstalls = props.runtime.managed_installs ?? [];
   const activeInstalls = managedInstalls.filter((install) => install.active);
-  const visibleHarnesses = managedInstalls.length > 0 ? managedInstalls.map((install) => install.harness) : harnesses;
+  const visibleHarnesses = Array.from(
+    new Set([...managedInstalls.map((install) => install.harness), ...harnesses])
+  ).sort((left, right) => left.localeCompare(right));
   const inventory = props.inventory.kind === "ready" ? props.inventory.items : [];
   const runtimeState = props.runtime.runtime_state;
 
