@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.models import GuardApprovalRequest, PolicyDecision
 from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore
@@ -28,7 +29,7 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
-            for route in ("/", "/home", "/inbox", "/fleet", "/evidence"):
+            for route in ("/", "/home", "/inbox", "/fleet", "/evidence", "/settings"):
                 with urllib.request.urlopen(
                     f"http://127.0.0.1:{daemon.port}{route}",
                     timeout=5,
@@ -40,6 +41,158 @@ class TestGuardSurfaceServer:
                 assert "Loading Local approval center" in body
         finally:
             daemon.stop()
+
+    def test_guard_daemon_static_dashboard_assets_disable_browser_cache(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/assets/guard-dashboard.js",
+                timeout=5,
+            ) as response:
+                response.read()
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/brand/favicon.svg",
+                timeout=5,
+            ) as favicon_response:
+                favicon_response.read()
+        finally:
+            daemon.stop()
+
+        assert response.status == 200
+        assert response.headers.get("Cache-Control") == "no-store, max-age=0"
+        assert response.headers.get("Pragma") == "no-cache"
+        assert response.headers.get("Expires") == "0"
+        assert favicon_response.status == 200
+        assert favicon_response.headers.get("Cache-Control") == "no-store, max-age=0"
+
+    def test_guard_daemon_dashboard_shell_seeds_local_auth_token(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="example-request",
+                harness="codex",
+                artifact_id="codex:project:dangerous-shell",
+                artifact_name="Bash destructive shell command",
+                artifact_hash="hash-123",
+                policy_action="require-reapproval",
+                recommended_scope="artifact",
+                changed_fields=("tool_action_request",),
+                source_scope="project",
+                config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                workspace=str(tmp_path / "workspace"),
+                review_command="hol-guard approvals approve example-request",
+                approval_url="http://127.0.0.1:4455/approvals/example-request",
+            ),
+            "2026-04-25T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/approvals/example-request",
+                timeout=5,
+            ) as response:
+                body = response.read().decode("utf-8")
+            approval_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests/example-request/approve",
+                data=json.dumps({"scope": "artifact", "reason": "approved in test"}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(approval_request, timeout=5) as approval_response:
+                approval_payload = json.loads(approval_response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert response.status == 200
+        assert "sessionStorage.setItem" in body
+        assert "guard-token" in body
+        assert daemon._server.auth_token in body
+        assert approval_response.status == 200
+        assert approval_payload["resolved"] is True
+
+    def test_guard_daemon_policy_clear_matches_cli_clear_semantics(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        store.upsert_policy(
+            PolicyDecision(harness="codex", scope="harness", action="allow", reason="test"),
+            "2026-04-25T00:00:00+00:00",
+        )
+        store.upsert_policy(
+            PolicyDecision(harness="claude-code", scope="harness", action="allow", reason="test"),
+            "2026-04-25T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            clear_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/policy/clear",
+                data=json.dumps({"harness": "codex"}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(clear_request, timeout=5) as response:
+                clear_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert clear_payload["cleared"] == 1
+        assert clear_payload["harness"] == "codex"
+        remaining = store.list_policy_decisions()
+        assert len(remaining) == 1
+        assert remaining[0]["harness"] == "claude-code"
+
+    def test_guard_daemon_settings_can_read_and_update_cli_config(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{daemon.port}/v1/settings",
+                timeout=5,
+            ) as read_response:
+                read_payload = json.loads(read_response.read().decode("utf-8"))
+            update_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/settings",
+                data=json.dumps(
+                    {
+                        "settings": {
+                            "mode": "enforce",
+                            "changed_hash_action": "review",
+                            "approval_wait_timeout_seconds": 45,
+                            "telemetry": True,
+                        }
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(update_request, timeout=5) as update_response:
+                update_payload = json.loads(update_response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert read_payload["settings"]["mode"] == "prompt"
+        assert update_response.status == 200
+        assert update_payload["settings"]["mode"] == "enforce"
+        assert update_payload["settings"]["changed_hash_action"] == "review"
+        assert update_payload["settings"]["approval_wait_timeout_seconds"] == 45
+        assert update_payload["settings"]["telemetry"] is True
+        assert (store.guard_home / "config.toml").read_text(encoding="utf-8")
 
     def test_guard_daemon_claude_hook_endpoint_returns_native_pretooluse_response(self, tmp_path) -> None:
         home_dir = tmp_path / "home"

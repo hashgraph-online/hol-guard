@@ -9,8 +9,10 @@ import {
   Tag
 } from "./approval-center-primitives";
 import {
+  clearPolicy,
   fetchDiff,
   fetchLatestReceipt,
+  fetchPolicies,
   fetchPolicy,
   fetchReceipts,
   fetchRequest,
@@ -20,6 +22,7 @@ import {
 } from "./guard-api";
 import { ApprovalCenterLayout } from "./approval-center-layout";
 import { FleetWorkspace } from "./fleet-workspace";
+import { SettingsWorkspace } from "./settings-workspace";
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
@@ -55,6 +58,11 @@ type RuntimeState =
   | { kind: "error"; message: string }
   | { kind: "ready"; snapshot: GuardRuntimeSnapshot };
 
+type PolicyState =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; items: GuardPolicyDecision[] };
+
 function usePathname(): string {
   const [pathname, setPathname] = useState(window.location.pathname);
 
@@ -82,7 +90,10 @@ function parseRequestId(pathname: string): string | null {
   return null;
 }
 
-function resolveView(pathname: string): "home" | "inbox" | "fleet" | "evidence" {
+function resolveView(pathname: string): "home" | "inbox" | "fleet" | "evidence" | "settings" {
+  if (pathname === "/settings") {
+    return "settings";
+  }
   if (pathname === "/fleet") {
     return "fleet";
   }
@@ -126,6 +137,7 @@ export function App() {
   const [detail, setDetail] = useState<DetailState>({ kind: "idle" });
   const [receipts, setReceipts] = useState<ReceiptsState>({ kind: "loading" });
   const [runtime, setRuntime] = useState<RuntimeState>({ kind: "loading" });
+  const [policies, setPolicies] = useState<PolicyState>({ kind: "loading" });
   const [resolutionMessage, setResolutionMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -160,18 +172,21 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchReceipts()
-      .then((items) => {
+    Promise.all([fetchReceipts(), fetchPolicies()])
+      .then(([items, policyItems]) => {
         if (!cancelled) {
           setReceipts({ kind: "ready", items });
+          setPolicies({ kind: "ready", items: policyItems });
         }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
+          const message = error instanceof Error ? error.message : "Unable to load local approval history.";
           setReceipts({
             kind: "error",
-            message: error instanceof Error ? error.message : "Unable to load local receipt history."
+            message
           });
+          setPolicies({ kind: "error", message });
         }
       });
     return () => {
@@ -212,27 +227,42 @@ export function App() {
         <HomeWorkspace
           requests={requests}
           runtime={runtime}
+          policies={policies}
           onOpenInbox={() => navigate("/inbox")}
           onOpenFleet={() => navigate("/fleet")}
           onOpenEvidence={() => navigate("/evidence")}
+          onOpenSettings={() => navigate("/settings")}
+          onClearPolicies={async (scope) => {
+            const target = scope.all ? "all saved approvals" : `${scope.harness ?? "this app"} approvals`;
+            if (!window.confirm(`Clear ${target}? Guard will ask again next time matching actions run.`)) {
+              return;
+            }
+            await clearPolicy(scope);
+            const [nextSnapshot, nextPolicies] = await Promise.all([fetchRuntimeSnapshot(), fetchPolicies()]);
+            setRuntime({ kind: "ready", snapshot: nextSnapshot });
+            setRequests({ kind: "ready", items: nextSnapshot.items });
+            setPolicies({ kind: "ready", items: nextPolicies });
+          }}
         />
       }
       onGoHome={() => navigate("/")}
       onOpenRequest={(nextRequestId) => navigate(`/requests/${nextRequestId}`)}
       onResolve={async (payload) => {
         await resolveRequest(payload);
-        setResolutionMessage("Decision saved. Return to the harness and rerun the same command.");
+        setResolutionMessage("Decision saved. Return to the same chat and retry the command.");
         navigate("/");
-        const [nextSnapshot, nextReceipts] = await Promise.all([fetchRuntimeSnapshot(), fetchReceipts()]);
+        const [nextSnapshot, nextReceipts, nextPolicies] = await Promise.all([fetchRuntimeSnapshot(), fetchReceipts(), fetchPolicies()]);
         setRuntime({ kind: "ready", snapshot: nextSnapshot });
         setRequests({ kind: "ready", items: nextSnapshot.items });
         setReceipts({ kind: "ready", items: nextReceipts });
+        setPolicies({ kind: "ready", items: nextPolicies });
       }}
       fleetContent={
         runtime.kind === "ready" ? (
-          <FleetWorkspace runtime={runtime.snapshot} />
+          <FleetWorkspace runtime={runtime.snapshot} policies={policies.kind === "ready" ? policies.items : []} />
         ) : null
       }
+      settingsContent={<SettingsWorkspace />}
     />
   );
 }
@@ -240,9 +270,12 @@ export function App() {
 function HomeWorkspace(props: {
   requests: RequestState;
   runtime: RuntimeState;
+  policies: PolicyState;
   onOpenInbox: () => void;
   onOpenFleet: () => void;
   onOpenEvidence: () => void;
+  onOpenSettings: () => void;
+  onClearPolicies: (scope: { harness?: string; all?: boolean }) => Promise<void>;
 }) {
   if (props.runtime.kind === "loading" || props.requests.kind === "loading") {
     return (
@@ -266,20 +299,34 @@ function HomeWorkspace(props: {
 
   const snapshot = props.runtime.snapshot;
   const queuedCount = props.requests.kind === "ready" ? props.requests.items.length : 0;
+  const policyItems = props.policies.kind === "ready" ? props.policies.items : [];
+  const managedInstalls = snapshot.managed_installs ?? [];
+  const activeInstalls = managedInstalls.filter((item) => item.active);
+  const observedHarnesses = Array.from(
+    new Set([
+      ...snapshot.items.map((item) => item.harness),
+      ...snapshot.latest_receipts.map((receipt) => receipt.harness),
+      ...policyItems.map((policy) => policy.harness)
+    ])
+  ).sort();
+  const clearHarnesses = activeInstalls.length > 0 ? activeInstalls.map((install) => install.harness) : observedHarnesses;
   const latestReceipts = snapshot.latest_receipts
     .slice(0, 3)
     .map((receipt) => receipt.artifact_name ?? receipt.artifact_id)
     .filter((receiptName) => receiptName.length > 0);
+  const watchedAppsCount = activeInstalls.length > 0 ? activeInstalls.length : observedHarnesses.length;
+  const primaryActionLabel = queuedCount > 0 ? "Review blocked action" : "Open review queue";
 
   return (
     <div className="space-y-6">
-      <Surface tone="accent">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
+      <section className="guard-surface-in relative overflow-hidden rounded-[2rem] border border-brand-blue/15 bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)] p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7">
+        <div className="pointer-events-none absolute right-10 top-8 h-24 w-24 rounded-full bg-brand-blue/20 blur-3xl" />
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+          <div className="space-y-5">
             <div className="flex flex-wrap items-center gap-2">
-              <SectionLabel>Local Home</SectionLabel>
+              <SectionLabel>Home</SectionLabel>
               <Badge tone={queuedCount > 0 ? "warning" : "success"}>
-                {queuedCount > 0 ? `${queuedCount} queued` : "Queue clear"}
+                {queuedCount > 0 ? `${queuedCount} waiting` : "Nothing waiting"}
               </Badge>
               <Tag tone={snapshot.cloud_state === "local_only" ? "slate" : "blue"}>
                 {snapshot.cloud_state_label}
@@ -287,20 +334,28 @@ function HomeWorkspace(props: {
             </div>
             <div className="space-y-2">
               <h2 className="text-xl font-semibold tracking-tight text-brand-dark">
-                See the local queue, machine coverage, and cloud handoff from one place
+                HOL Guard is watching this machine.
               </h2>
               <p className="max-w-3xl text-sm leading-relaxed text-brand-dark/80">
-                Home keeps the current queue, the protected machine, and the next cloud step visible without dropping you straight into a decision lane.
+                If Codex, Claude Code, Copilot, or another connected app tries something risky, Guard pauses it here before it runs.
               </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <HomeStat label="Needs your choice" value={queuedCount.toString()} />
+              <HomeStat label="Apps watched" value={watchedAppsCount.toString()} />
+              <HomeStat label="Saved choices" value={policyItems.length.toString()} />
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <ActionButton onClick={props.onOpenInbox}>Open Inbox</ActionButton>
+            <ActionButton onClick={props.onOpenInbox}>{primaryActionLabel}</ActionButton>
             <ActionButton variant="outline" onClick={props.onOpenFleet}>
-              Open Fleet
+              Watched apps
             </ActionButton>
             <ActionButton variant="outline" onClick={props.onOpenEvidence}>
-              Open Evidence
+              History
+            </ActionButton>
+            <ActionButton variant="outline" onClick={props.onOpenSettings}>
+              Settings
             </ActionButton>
             {snapshot.cloud_state === "local_only" ? (
               <ActionButton href={snapshot.connect_url} variant="secondary">
@@ -309,60 +364,62 @@ function HomeWorkspace(props: {
             ) : null}
           </div>
         </div>
-      </Surface>
+      </section>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Surface>
-          <SectionLabel>Inbox</SectionLabel>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+          <SectionLabel>Today</SectionLabel>
           <h3 className="mt-2 text-lg font-semibold tracking-tight text-brand-dark">
-            {queuedCount > 0 ? "Work is waiting" : "Nothing needs review"}
+            {queuedCount > 0 ? "A blocked action needs your choice." : "No blocked actions right now."}
           </h3>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             {queuedCount > 0
-              ? "Open Inbox to review the current blocked launch and keep the same harness flow moving."
-              : "Inbox stays quiet until a changed tool or blocked launch needs a real decision."}
+              ? "Open the review queue to see exactly what app and command were paused."
+              : latestReceipts.length > 0
+                ? `Recent choices: ${latestReceipts.join(", ")}.`
+                : "Guard will show the next risky action here before it runs."}
           </p>
-          <div className="mt-4">
-            <ActionButton onClick={props.onOpenInbox}>
-              {queuedCount > 0 ? "Review current queue" : "Open Inbox"}
-            </ActionButton>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <ActionButton onClick={props.onOpenInbox}>{primaryActionLabel}</ActionButton>
+            <ActionButton variant="outline" onClick={props.onOpenEvidence}>View history</ActionButton>
           </div>
-        </Surface>
+        </section>
 
-        <Surface>
-          <SectionLabel>Fleet</SectionLabel>
-          <h3 className="mt-2 text-lg font-semibold tracking-tight text-brand-dark">
-            {snapshot.runtime_state ? "This machine is connected" : "Runtime offline"}
-          </h3>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            {snapshot.runtime_state
-              ? "Fleet shows the active machine, the current session, and whether the cloud handoff has started."
-              : "Guard is not publishing runtime state right now. Restart the local daemon before expecting fresh machine coverage."}
-          </p>
-          <div className="mt-4">
-            <ActionButton variant="outline" onClick={props.onOpenFleet}>
-              Open Fleet
-            </ActionButton>
-          </div>
-        </Surface>
-
-        <Surface>
-          <SectionLabel>Evidence</SectionLabel>
-          <h3 className="mt-2 text-lg font-semibold tracking-tight text-brand-dark">
-            {snapshot.receipt_count > 0 ? `${snapshot.receipt_count} stored decisions` : "No local evidence yet"}
-          </h3>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            {latestReceipts.length > 0
-              ? `Recent memory: ${latestReceipts.join(", ")}.`
-              : "The first local proof appears here after Guard evaluates or approves a tool on this machine."}
-          </p>
-          <div className="mt-4">
-            <ActionButton variant="outline" onClick={props.onOpenEvidence}>
-              Open Evidence
-            </ActionButton>
-          </div>
-        </Surface>
+        <section className="rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 sm:p-6">
+          <details className="group">
+            <summary className="flex cursor-pointer select-none items-center justify-between gap-3 text-sm font-semibold text-brand-dark [&::-webkit-details-marker]:hidden">
+              <span>Reset saved approvals</span>
+              <span className="text-brand-blue transition-transform group-open:rotate-90">›</span>
+            </summary>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              Clear saved choices when you want Guard to ask again. This does not remove your review history.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <ActionButton variant="outline" onClick={() => props.onClearPolicies({ all: true })}>
+                Clear all approvals
+              </ActionButton>
+              {clearHarnesses.slice(0, 3).map((harness) => (
+                <ActionButton
+                  key={harness}
+                  variant="ghost"
+                  onClick={() => props.onClearPolicies({ harness })}
+                >
+                  Clear {harness}
+                </ActionButton>
+              ))}
+            </div>
+          </details>
+        </section>
       </div>
+    </div>
+  );
+}
+
+function HomeStat(props: { label: string; value: string }) {
+  return (
+    <div className="rounded-[1.25rem] border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
+      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.label}</p>
+      <p className="mt-1 text-2xl font-semibold tracking-tight text-brand-dark">{props.value}</p>
     </div>
   );
 }

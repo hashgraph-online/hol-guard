@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlu
 
 from ...version import __version__
 from ..approvals import apply_approval_resolution, build_runtime_snapshot
+from ..config import editable_guard_settings, load_guard_config, update_guard_settings
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
@@ -43,6 +44,7 @@ _STATIC_DIR = Path(__file__).with_name("static")
 _INDEX_PATH = _STATIC_DIR / "index.html"
 _ENTRY_PATH = _STATIC_DIR / "assets" / "guard-dashboard.js"
 _ROOT_STATIC_FILES = {
+    "/favicon.svg",
     "/favicon.ico",
     "/favicon-16x16.png",
     "/favicon-32x32.png",
@@ -96,6 +98,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     store=store,
                     approval_center_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
                 )
+            )
+            return
+        if parsed.path == "/v1/settings":
+            config = load_guard_config(store.guard_home)
+            self._write_json(
+                {
+                    "guard_home": str(store.guard_home),
+                    "config_path": str(store.guard_home / "config.toml"),
+                    "settings": editable_guard_settings(config),
+                }
             )
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
@@ -264,6 +276,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return
             self._handle_policy_upsert(payload)
             return
+        if parsed.path == "/v1/policy/clear":
+            if not self._header_token_is_valid():
+                self._write_json({"error": "unauthorized"}, status=401)
+                return
+            self._handle_policy_clear(payload)
+            return
+        if parsed.path == "/v1/settings":
+            if not self._header_token_is_valid():
+                self._write_json({"error": "unauthorized"}, status=401)
+                return
+            self._handle_settings_update(payload)
+            return
         request_id, action, matched = self._resolve_request_action(path_parts, payload)
         if not matched:
             self.send_response(404)
@@ -313,6 +337,54 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return (payload if isinstance(payload, dict) else {}), None
         form_payload = parse_qs(raw_body)
         return {key: values[-1] for key, values in form_payload.items() if values}, None
+
+    def _handle_policy_clear(self, payload: dict[str, object]) -> None:
+        harness = self._optional_string(payload.get("harness"))
+        source = self._optional_string(payload.get("source"))
+        clear_all = bool(payload.get("all"))
+        if clear_all and harness is not None:
+            self._write_json(
+                {
+                    "error": "choose_all_or_harness",
+                    "cleared": 0,
+                    "harness": harness,
+                    "source": source,
+                },
+                status=400,
+            )
+            return
+        if not clear_all and harness is None:
+            self._write_json({"error": "missing_harness_or_all", "cleared": 0}, status=400)
+            return
+        cleared = self.server.store.clear_policy_decisions(  # type: ignore[attr-defined]
+            None if clear_all else harness,
+            source,
+        )
+        self._write_json(
+            {
+                "cleared": cleared,
+                "harness": None if clear_all else harness,
+                "source": source,
+            }
+        )
+
+    def _handle_settings_update(self, payload: dict[str, object]) -> None:
+        settings = payload.get("settings")
+        if not isinstance(settings, dict):
+            self._write_json({"error": "invalid_settings"}, status=400)
+            return
+        try:
+            config = update_guard_settings(self.server.store.guard_home, settings)  # type: ignore[attr-defined]
+        except ValueError as error:
+            self._write_json({"error": "invalid_settings", "message": str(error)}, status=400)
+            return
+        self._write_json(
+            {
+                "guard_home": str(self.server.store.guard_home),  # type: ignore[attr-defined]
+                "config_path": str(self.server.store.guard_home / "config.toml"),  # type: ignore[attr-defined]
+                "settings": editable_guard_settings(config),
+            }
+        )
 
     def _handle_initialize(self, payload: dict[str, object]) -> None:
         client_name = self._optional_string(payload.get("client_name")) or "guard-client"
@@ -921,12 +993,35 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type or "application/octet-stream")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.end_headers()
         self.wfile.write(body)
 
     def _write_dashboard_shell(self) -> None:
         if _INDEX_PATH.is_file() and _ENTRY_PATH.is_file():
-            self._write_static_asset("index.html")
+            body = _INDEX_PATH.read_text(encoding="utf-8")
+            token_script = (
+                "<script>"
+                "try{window.sessionStorage.setItem("
+                f"{json.dumps('guard-token')},{json.dumps(self.server.auth_token)}"  # type: ignore[attr-defined]
+                ");}catch(_error){}"
+                "</script>"
+            )
+            if "</head>" in body:
+                body = body.replace("</head>", f"{token_script}</head>", 1)
+            else:
+                body = f"{token_script}{body}"
+            encoded = body.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.send_header("Cache-Control", "no-store, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+            self.end_headers()
+            self.wfile.write(encoded)
             return
         self._write_json({"error": "dashboard_bundle_missing"}, status=503)
 
@@ -939,6 +1034,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/inbox",
             "/fleet",
             "/evidence",
+            "/settings",
             "/requests",
             "/approvals",
         }:

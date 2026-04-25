@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import sqlite3
 import tempfile
@@ -31,6 +32,22 @@ GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
+EDITABLE_GUARD_SETTING_KEYS = frozenset(
+    {
+        "mode",
+        "default_action",
+        "unknown_publisher_action",
+        "changed_hash_action",
+        "new_network_domain_action",
+        "subprocess_action",
+        "approval_wait_timeout_seconds",
+        "approval_surface_policy",
+        "telemetry",
+        "sync",
+        "billing",
+    }
+)
+VALID_APPROVAL_SURFACE_POLICIES = {"auto-open-once", "native-only", "approval-center"}
 WORKSPACE_BLOCKED_POLICY_KEYS = frozenset(
     {
         "mode",
@@ -164,6 +181,86 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         publisher_actions=_coerce_action_map(merged.get("publishers")),
         artifact_actions=_coerce_action_map(merged.get("artifacts")),
     )
+
+
+def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
+    """Return Guard config values that are safe to edit from the local dashboard."""
+
+    return {
+        "mode": config.mode,
+        "default_action": config.default_action,
+        "unknown_publisher_action": config.unknown_publisher_action,
+        "changed_hash_action": config.changed_hash_action,
+        "new_network_domain_action": config.new_network_domain_action,
+        "subprocess_action": config.subprocess_action,
+        "approval_wait_timeout_seconds": config.approval_wait_timeout_seconds,
+        "approval_surface_policy": config.approval_surface_policy,
+        "telemetry": config.telemetry,
+        "sync": config.sync,
+        "billing": config.billing,
+    }
+
+
+def update_guard_settings(guard_home: Path, payload: dict[str, object]) -> GuardConfig:
+    """Persist safe local Guard settings to config.toml and return the updated config."""
+
+    current = _read_toml(guard_home / "config.toml")
+    next_payload = dict(current)
+    for key, value in payload.items():
+        if key not in EDITABLE_GUARD_SETTING_KEYS:
+            continue
+        next_payload[key] = _coerce_editable_setting(key, value)
+    _write_guard_config(guard_home / "config.toml", next_payload)
+    return load_guard_config(guard_home)
+
+
+def _coerce_editable_setting(key: str, value: object) -> object:
+    if key == "mode":
+        if isinstance(value, str) and value in VALID_GUARD_MODES:
+            return value
+        raise ValueError("Invalid Guard mode.")
+    if key.endswith("_action"):
+        if isinstance(value, str) and value in VALID_GUARD_ACTIONS:
+            return value
+        raise ValueError("Invalid Guard action.")
+    if key == "approval_surface_policy":
+        if isinstance(value, str) and value in VALID_APPROVAL_SURFACE_POLICIES:
+            return value
+        raise ValueError("Invalid approval surface policy.")
+    if key == "approval_wait_timeout_seconds":
+        if isinstance(value, int) and 0 <= value <= 600:
+            return value
+        raise ValueError("Approval wait timeout must be between 0 and 600 seconds.")
+    if key in {"telemetry", "sync", "billing"}:
+        if isinstance(value, bool):
+            return value
+        raise ValueError(f"{key} must be true or false.")
+    raise ValueError(f"Unsupported Guard setting: {key}")
+
+
+def _write_guard_config(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    for key in sorted(payload):
+        value = payload[key]
+        if isinstance(value, dict):
+            lines.append("")
+            lines.append(f"[{key}]")
+            for nested_key in sorted(value):
+                lines.append(f"{nested_key} = {_toml_literal(value[nested_key])}")
+            continue
+        lines.append(f"{key} = {_toml_literal(value)}")
+    path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+
+
+def _toml_literal(value: object) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return json.dumps(value)
+    return json.dumps(str(value))
 
 
 def overlay_synced_guard_policy(

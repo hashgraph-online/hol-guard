@@ -21,6 +21,7 @@ export type GuardApprovalRequest = {
   risk_signals?: string[];
   why_now?: string;
   trigger_summary?: string;
+  launch_summary?: string;
   changed_fields: string[];
   source_scope: string;
   config_path: string;
@@ -65,6 +66,8 @@ export type GuardRuntimeSnapshot = {
   connect_url: string;
   items: GuardApprovalRequest[];
   latest_receipts: GuardReceipt[];
+  managed_installs?: GuardManagedInstall[];
+  inventory?: GuardInventoryItem[];
 };
 
 export type GuardReceipt = {
@@ -100,4 +103,53 @@ export type GuardPolicyDecision = {
   action: string;
   reason: string | null;
   updated_at: string;
+};
+
+export type GuardManagedInstall = {
+  harness: string;
+  active: boolean;
+  workspace: string | null;
+  manifest: Record<string, unknown>;
+  updated_at: string;
+};
+
+export type GuardInventoryItem = {
+  artifact_id: string;
+  harness: string;
+  artifact_name: string;
+  artifact_type: string;
+  source_scope: string;
+  config_path: string;
+  publisher: string | null;
+  origin_url: string | null;
+  launch_command: string | null;
+  transport: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  last_changed_at: string | null;
+  last_approved_at: string | null;
+  removed_at: string | null;
+  present: boolean;
+  last_policy_action: string;
+  artifact_hash: string;
+};
+
+export type GuardSettings = {
+  mode: "observe" | "prompt" | "enforce";
+  default_action: string;
+  unknown_publisher_action: string;
+  changed_hash_action: string;
+  new_network_domain_action: string;
+  subprocess_action: string;
+  approval_wait_timeout_seconds: number;
+  approval_surface_policy: string;
+  telemetry: boolean;
+  sync: boolean;
+  billing: boolean;
+};
+
+export type GuardSettingsPayload = {
+  guard_home: string;
+  config_path: string;
+  settings: GuardSettings;
 };
