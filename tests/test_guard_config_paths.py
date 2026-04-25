@@ -153,6 +153,25 @@ def test_dashboard_settings_update_preserves_existing_float_config_values(tmp_pa
     assert isinstance(config_payload["score_threshold"], float)
 
 
+def test_dashboard_settings_update_preserves_existing_array_config_values(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(
+        guard_home / "config.toml",
+        'mode = "prompt"\ntrusted_harnesses = ["codex", "claude-code"]\n',
+    )
+
+    updated = update_guard_settings(
+        guard_home,
+        {
+            "mode": "enforce",
+        },
+    )
+    config_payload = guard_config_module._read_toml(guard_home / "config.toml")
+
+    assert updated.mode == "enforce"
+    assert config_payload["trusted_harnesses"] == ["codex", "claude-code"]
+
+
 def test_resolve_guard_home_migrates_legacy_directory_into_canonical_home(tmp_path, monkeypatch):
     home_dir = tmp_path / "home"
     legacy_home = home_dir / ".config" / ".ai-plugin-scanner-guard"

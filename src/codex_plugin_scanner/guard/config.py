@@ -284,6 +284,8 @@ def _toml_literal(value: object) -> str:
         return repr(value)
     if isinstance(value, str):
         return json.dumps(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_literal(item) for item in value) + "]"
     return json.dumps(str(value))
 
 
