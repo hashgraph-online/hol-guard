@@ -459,9 +459,13 @@ def _current_guard_daemon_runtime_fingerprint() -> str:
         return _RUNTIME_FINGERPRINT_CACHE
     source_root = Path(_current_guard_daemon_source_root())
     package_root = source_root / "codex_plugin_scanner"
+    static_root = package_root / "guard" / "daemon" / "static"
     digest = hashlib.sha256()
     digest.update(__version__.encode("utf-8"))
-    for path in sorted(package_root.rglob("*.py")):
+    paths = [*package_root.rglob("*.py")]
+    if static_root.is_dir():
+        paths.extend(path for path in static_root.rglob("*") if path.is_file())
+    for path in sorted(paths):
         try:
             stat_result = path.stat()
         except OSError:
