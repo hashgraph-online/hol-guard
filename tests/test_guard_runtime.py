@@ -5967,6 +5967,66 @@ def test_guard_hook_claude_notification_notice_is_tool_scoped_and_retained_while
     )
 
 
+def test_guard_hook_claude_notification_stale_notice_falls_back_to_generic_context(tmp_path, capsys, monkeypatch):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    session_id = "session-claude-stale-notice"
+    pre_tool_event = {
+        "session_id": session_id,
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(workspace_dir / ".env")},
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(pre_tool_event)))
+    pre_tool_rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+        ]
+    )
+    capsys.readouterr()
+
+    store = GuardStore(home_dir)
+    pending_index_key = guard_commands_module._claude_pending_permission_index_key(session_id)
+    pending_index = store.get_sync_payload(pending_index_key)
+    assert isinstance(pending_index, list)
+    assert pending_index
+    store.delete_sync_payloads([str(pending_index[0]), pending_index_key])
+
+    notification_rc, notification_output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event={
+            "session_id": session_id,
+            "hook_event_name": "Notification",
+            "notification_type": "permission_prompt",
+            "title": "Permission needed",
+            "message": "Claude needs your permission to use Read",
+            "tool_name": "Read",
+        },
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    assert pre_tool_rc == 0
+    assert notification_rc == 0
+    assert "approval code:" not in notification_output["hookSpecificOutput"]["additionalContext"].lower()
+    assert (
+        "HOL Guard intercepted the sensitive request and is routing it into a HOL Guard approval question"
+        in notification_output["hookSpecificOutput"]["additionalContext"]
+    )
+
+
 def test_guard_hook_claude_notification_notice_falls_back_when_tool_name_is_missing(
     tmp_path,
     capsys,

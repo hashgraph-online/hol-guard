@@ -1929,8 +1929,10 @@ def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]
                 pending = store.get_sync_payload(pending_key)
                 if not isinstance(pending, dict):
                     store.delete_sync_payload(selected_key)
+                    persisted = None
             else:
                 store.delete_sync_payload(selected_key)
+                persisted = None
     except (OSError, sqlite3.Error):
         return None
     if isinstance(persisted, dict):
