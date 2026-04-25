@@ -241,15 +241,18 @@ def _coerce_editable_setting(key: str, value: object) -> object:
 def _write_guard_config(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
+    table_items: list[tuple[str, dict[object, object]]] = []
     for key in sorted(payload):
         value = payload[key]
         if isinstance(value, dict):
-            lines.append("")
-            lines.append(f"[{key}]")
-            for nested_key in sorted(value):
-                lines.append(f"{nested_key} = {_toml_literal(value[nested_key])}")
+            table_items.append((key, value))
             continue
         lines.append(f"{key} = {_toml_literal(value)}")
+    for key, value in table_items:
+        lines.append("")
+        lines.append(f"[{key}]")
+        for nested_key in sorted(value):
+            lines.append(f"{nested_key} = {_toml_literal(value[nested_key])}")
     path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
 
 
