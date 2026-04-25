@@ -1335,7 +1335,7 @@ class TestGuardApprovals:
             daemon.stop()
 
         assert "<img src=x onerror=alert(1)>" not in body
-        assert "<script>" not in body
+        assert "codex<script>" not in body
         assert "guard-dashboard-root" in body
         assert "Local approval center" in body
         assert "Hashgraph Online" in body

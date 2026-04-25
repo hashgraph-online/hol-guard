@@ -145,6 +145,7 @@ _CURL_SHORT_FLAGS_WITH_VALUES = frozenset(
 _WGET_UPLOAD_FLAGS_WITH_VALUE = frozenset({"--body-file", "--post-file"})
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
 _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
+_BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS = frozenset({"cat", "curl", "echo", "printf", "sed", "tr", "wget"})
 _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
@@ -600,11 +601,11 @@ def _contains_shell_credential_exfiltration(
     normalized = command_text.strip()
     if not normalized:
         return False
-    if _text_contains_credential_exfiltration(normalized):
-        return True
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
+    if _shell_segments_contain_credential_exfiltration(parts):
+        return True
     for env_split_string in _env_split_string_payloads(parts):
         if _contains_shell_credential_exfiltration(
             env_split_string,
@@ -645,6 +646,18 @@ def _contains_shell_credential_exfiltration(
             depth=depth + 1,
             visited_script_paths=visited_script_paths | frozenset({script_path}),
         ):
+            return True
+    return False
+
+
+def _shell_segments_contain_credential_exfiltration(parts: list[str]) -> bool:
+    for segment in _iter_shell_command_segments(parts):
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name is None or command_index is None:
+            continue
+        if command_name in _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS:
+            continue
+        if _text_contains_credential_exfiltration(" ".join(segment[command_index:])):
             return True
     return False
 
