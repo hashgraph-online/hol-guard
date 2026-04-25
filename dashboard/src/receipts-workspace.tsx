@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 
 import {
   Badge,
@@ -70,24 +70,33 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
       />
     );
   }
-  const harnesses = Array.from(new Set(props.receipts.items.map((receipt) => receipt.harness))).sort();
-  const decisions = Array.from(new Set(props.receipts.items.map((receipt) => receipt.policy_decision))).sort();
-  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
-  const filteredReceipts = props.receipts.items.filter((receipt) => {
-    const matchesHarness = harnessFilter === "all" || receipt.harness === harnessFilter;
-    const matchesDecision = decisionFilter === "all" || receipt.policy_decision === decisionFilter;
-    const searchable = [
-      receipt.artifact_name ?? "",
-      receipt.artifact_id,
-      receipt.artifact_hash,
-      receipt.harness,
-      receipt.policy_decision,
-      receipt.capabilities_summary,
-      sanitizeReceiptValue(receipt.provenance_summary),
-      receipt.changed_capabilities.join(" ")
-    ].join(" ").toLowerCase();
-    return matchesHarness && matchesDecision && (normalizedSearchTerm.length === 0 || searchable.includes(normalizedSearchTerm));
-  });
+  const receiptItems = props.receipts.items;
+  const harnesses = Array.from(new Set(receiptItems.map((receipt) => receipt.harness))).sort();
+  const decisions = Array.from(new Set(receiptItems.map((receipt) => receipt.policy_decision))).sort();
+  const filteredReceipts = useMemo(() => {
+    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+    return receiptItems.filter((receipt) => {
+      const matchesHarness = harnessFilter === "all" || receipt.harness === harnessFilter;
+      const matchesDecision = decisionFilter === "all" || receipt.policy_decision === decisionFilter;
+      if (!matchesHarness || !matchesDecision) {
+        return false;
+      }
+      if (normalizedSearchTerm.length === 0) {
+        return true;
+      }
+      const searchable = [
+        receipt.artifact_name ?? "",
+        receipt.artifact_id,
+        receipt.artifact_hash,
+        receipt.harness,
+        receipt.policy_decision,
+        receipt.capabilities_summary,
+        sanitizeReceiptValue(receipt.provenance_summary),
+        receipt.changed_capabilities.join(" ")
+      ].join(" ").toLowerCase();
+      return searchable.includes(normalizedSearchTerm);
+    });
+  }, [decisionFilter, harnessFilter, receiptItems, searchTerm]);
   const totalPages = Math.max(1, Math.ceil(filteredReceipts.length / receiptPageSize));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * receiptPageSize;

@@ -172,21 +172,26 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchReceipts(), fetchPolicies()])
-      .then(([items, policyItems]) => {
-        if (!cancelled) {
-          setReceipts({ kind: "ready", items });
-          setPolicies({ kind: "ready", items: policyItems });
+    Promise.allSettled([fetchReceipts(), fetchPolicies()])
+      .then(([receiptsResult, policiesResult]) => {
+        if (cancelled) {
+          return;
         }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          const message = error instanceof Error ? error.message : "Unable to load local approval history.";
+        if (receiptsResult.status === "fulfilled") {
+          setReceipts({ kind: "ready", items: receiptsResult.value });
+        } else {
           setReceipts({
             kind: "error",
-            message
+            message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history."
           });
-          setPolicies({ kind: "error", message });
+        }
+        if (policiesResult.status === "fulfilled") {
+          setPolicies({ kind: "ready", items: policiesResult.value });
+        } else {
+          setPolicies({
+            kind: "error",
+            message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load saved approvals."
+          });
         }
       });
     return () => {
@@ -238,24 +243,50 @@ export function App() {
               return;
             }
             await clearPolicy(scope);
-            const [nextSnapshot, nextPolicies] = await Promise.all([fetchRuntimeSnapshot(), fetchPolicies()]);
-            setRuntime({ kind: "ready", snapshot: nextSnapshot });
-            setRequests({ kind: "ready", items: nextSnapshot.items });
-            setPolicies({ kind: "ready", items: nextPolicies });
+            const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
+            if (snapshotResult.status === "fulfilled") {
+              setRuntime({ kind: "ready", snapshot: snapshotResult.value });
+              setRequests({ kind: "ready", items: snapshotResult.value.items });
+            }
+            if (policiesResult.status === "fulfilled") {
+              setPolicies({ kind: "ready", items: policiesResult.value });
+            } else {
+              setPolicies({
+                kind: "error",
+                message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load saved approvals."
+              });
+            }
           }}
         />
       }
       onGoHome={() => navigate("/")}
+      onNavigate={navigate}
       onOpenRequest={(nextRequestId) => navigate(`/requests/${nextRequestId}`)}
       onResolve={async (payload) => {
         await resolveRequest(payload);
         setResolutionMessage("Decision saved. Return to the same chat and retry the command.");
         navigate("/");
-        const [nextSnapshot, nextReceipts, nextPolicies] = await Promise.all([fetchRuntimeSnapshot(), fetchReceipts(), fetchPolicies()]);
-        setRuntime({ kind: "ready", snapshot: nextSnapshot });
-        setRequests({ kind: "ready", items: nextSnapshot.items });
-        setReceipts({ kind: "ready", items: nextReceipts });
-        setPolicies({ kind: "ready", items: nextPolicies });
+        const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchReceipts(), fetchPolicies()]);
+        if (snapshotResult.status === "fulfilled") {
+          setRuntime({ kind: "ready", snapshot: snapshotResult.value });
+          setRequests({ kind: "ready", items: snapshotResult.value.items });
+        }
+        if (receiptsResult.status === "fulfilled") {
+          setReceipts({ kind: "ready", items: receiptsResult.value });
+        } else {
+          setReceipts({
+            kind: "error",
+            message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history."
+          });
+        }
+        if (policiesResult.status === "fulfilled") {
+          setPolicies({ kind: "ready", items: policiesResult.value });
+        } else {
+          setPolicies({
+            kind: "error",
+            message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load saved approvals."
+          });
+        }
       }}
       fleetContent={
         runtime.kind === "ready" ? (
