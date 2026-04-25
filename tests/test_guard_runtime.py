@@ -5496,6 +5496,23 @@ def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
     assert reason.endswith("...")
 
 
+def test_native_approval_center_context_uses_harness_specific_retry_copy() -> None:
+    payload = {
+        "approval_center_url": "http://127.0.0.1:4455",
+        "approval_requests": [{"approval_url": "http://127.0.0.1:4455/approvals/request-1"}],
+    }
+
+    codex_context = guard_commands_module._native_approval_center_context(payload, harness="codex")
+    claude_context = guard_commands_module._native_approval_center_context(payload, harness="claude-code")
+
+    assert codex_context is not None
+    assert "retry the same Codex action" in codex_context
+    assert "request-1" in codex_context
+    assert claude_context is not None
+    assert "retry the same Claude Code action" in claude_context
+    assert "Codex command" not in claude_context
+
+
 def test_guard_hook_allows_claude_user_prompt_submit_before_tool_approval(
     tmp_path,
     capsys,
