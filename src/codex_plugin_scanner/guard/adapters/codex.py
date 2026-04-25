@@ -212,11 +212,7 @@ def _is_managed_hook_entry(entry: object) -> bool:
         return False
     status_message = entry.get("statusMessage")
     has_managed_status = isinstance(status_message, str) and status_message in _LEGACY_MANAGED_HOOK_STATUS_MESSAGES
-    return (
-        entry.get("type") == "command"
-        and has_managed_status
-        and _is_managed_hook_command(entry.get("command"))
-    )
+    return entry.get("type") == "command" and has_managed_status and _is_managed_hook_command(entry.get("command"))
 
 
 def _remove_managed_hook_entries(group: object) -> object | None:
