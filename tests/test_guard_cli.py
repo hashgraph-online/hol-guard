@@ -27,10 +27,16 @@ from codex_plugin_scanner.guard.cli import connect_flow as guard_connect_flow_mo
 from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli import update_commands as guard_update_commands_module
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
+from codex_plugin_scanner.guard.config import load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_codex_runtime_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CODEX_MANAGED_BY_BUN", raising=False)
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -60,6 +66,51 @@ def _write_codex_pre_tool_payload(path: Path, workspace_dir: Path, command: str)
             }
         ),
     )
+
+
+def test_guard_settings_show_and_update_security_level(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+
+    show_rc = main(["guard", "settings", "--home", str(home_dir), "--json"])
+    show_payload = json.loads(capsys.readouterr().out)
+
+    assert show_rc == 0
+    assert show_payload["settings"]["security_level"] == "balanced"
+
+    set_rc = main(["guard", "settings", "set", "security-level", "strict", "--home", str(home_dir), "--json"])
+    set_payload = json.loads(capsys.readouterr().out)
+    loaded = load_guard_config(home_dir)
+
+    assert set_rc == 0
+    assert set_payload["settings"]["security_level"] == "strict"
+    assert loaded.security_level == "strict"
+    assert resolve_risk_action(loaded, "network_egress", harness="codex") == "require-reapproval"
+
+
+def test_guard_settings_set_risk_action_for_harness(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+
+    rc = main(
+        [
+            "guard",
+            "settings",
+            "set",
+            "risk",
+            "local-secret-read",
+            "allow",
+            "--harness",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    loaded = load_guard_config(home_dir)
+
+    assert rc == 0
+    assert payload["settings"]["harness_risk_actions"]["codex"]["local_secret_read"] == "allow"
+    assert resolve_risk_action(loaded, "local_secret_read", harness="codex") == "allow"
 
 
 def _build_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:

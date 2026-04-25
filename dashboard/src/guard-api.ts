@@ -128,11 +128,23 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
       config_path: "~/.hol-guard/config.toml",
       settings: {
         mode: "prompt",
+        security_level: "balanced",
         default_action: "warn",
         unknown_publisher_action: "review",
         changed_hash_action: "require-reapproval",
         new_network_domain_action: "warn",
         subprocess_action: "warn",
+        risk_actions: {
+          local_secret_read: "require-reapproval",
+          credential_exfiltration: "require-reapproval",
+          destructive_shell: "require-reapproval",
+          encoded_execution: "require-reapproval",
+          network_egress: "warn"
+        },
+        risk_action_overrides: {},
+        harness_risk_actions: {
+          codex: {}
+        },
         approval_wait_timeout_seconds: 120,
         approval_surface_policy: "auto-open-once",
         telemetry: false,
