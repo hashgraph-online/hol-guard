@@ -286,7 +286,17 @@ def _toml_literal(value: object) -> str:
         return json.dumps(value)
     if isinstance(value, list):
         return "[" + ", ".join(_toml_literal(item) for item in value) + "]"
+    if isinstance(value, dict):
+        return _toml_inline_table(value)
     return json.dumps(str(value))
+
+
+def _toml_inline_table(value: dict[object, object]) -> str:
+    items: list[str] = []
+    for key, item in sorted(value.items(), key=lambda entry: str(entry[0])):
+        if isinstance(key, str):
+            items.append(f"{_toml_key(key)} = {_toml_literal(item)}")
+    return "{ " + ", ".join(items) + " }"
 
 
 def overlay_synced_guard_policy(
