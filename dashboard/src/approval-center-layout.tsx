@@ -267,7 +267,7 @@ function QueueBrowser(props: {
       if (normalizedSearchTerm.length === 0) {
         return true;
       }
-      const searchable = `${item.artifact_name} ${item.artifact_type} ${item.harness} ${item.policy_action} ${buildQueueSummary(item)}`.toLowerCase();
+      const searchable = `${displayArtifactName(item)} ${item.artifact_type} ${item.harness} ${item.policy_action} ${buildQueueSummary(item)}`.toLowerCase();
       return searchable.includes(normalizedSearchTerm);
     });
   }, [actionFilter, harnessFilter, props.items, searchTerm]);
@@ -392,7 +392,7 @@ function QueueCard(props: { item: GuardApprovalRequest; active: boolean; onClick
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-brand-dark">{actionDisplayTitle(props.item)}</p>
             <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
-              {props.item.artifact_name}
+              {displayArtifactName(props.item)}
             </p>
           </div>
         </div>
@@ -766,6 +766,7 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
 }
 
 function actionDisplayTitle(item: GuardApprovalRequest): string {
+  const artifactName = displayArtifactName(item);
   if (item.artifact_type === "tool_action_request") {
     return `${harnessDisplayName(item.harness)} wants to run a tool`;
   }
@@ -775,10 +776,10 @@ function actionDisplayTitle(item: GuardApprovalRequest): string {
   if (item.artifact_type === "prompt_request") {
     return `${harnessDisplayName(item.harness)} received a sensitive prompt`;
   }
-  if (item.artifact_name.toLowerCase().includes("bash")) {
+  if (artifactName.toLowerCase().includes("bash")) {
     return `${harnessDisplayName(item.harness)} wants to run a shell command`;
   }
-  return item.artifact_name;
+  return artifactName;
 }
 
 function actionLaunchText(item: GuardApprovalRequest): string {
@@ -792,7 +793,7 @@ function actionLaunchText(item: GuardApprovalRequest): string {
     }
     return item.launch_summary;
   }
-  return item.artifact_name;
+  return displayArtifactName(item);
 }
 
 function getRulePreviewText(
@@ -803,7 +804,7 @@ function getRulePreviewText(
     return `Allow only this exact action. HOL Guard will ask again if it changes.`;
   }
   if (scope === "workspace") {
-    return `Remember this choice for ${item.artifact_name} in this project folder.`;
+    return `Remember this choice for ${displayArtifactName(item)} in this project folder.`;
   }
   return "Remember this choice more broadly on this machine.";
 }
@@ -847,6 +848,10 @@ function PolicyBadge(props: { action: string }) {
     props.action === "allow" ? "success" as const :
     "warning" as const;
   return <Badge tone={tone}>{policyActionLabel(props.action)}</Badge>;
+}
+
+function displayArtifactName(item: GuardApprovalRequest): string {
+  return item.artifact_name || item.artifact_id || "this action";
 }
 
 function simplifyRiskHeadline(headline: string, harness: string): string {

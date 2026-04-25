@@ -16,7 +16,7 @@ from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
-from codex_plugin_scanner.guard.models import GuardApprovalRequest, PolicyDecision
+from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntime
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore
@@ -54,7 +54,7 @@ class TestGuardSurfaceServer:
             ) as response:
                 response.read()
             with urllib.request.urlopen(
-                f"http://127.0.0.1:{daemon.port}/brand/favicon.svg",
+                f"http://127.0.0.1:{daemon.port}/favicon.ico",
                 timeout=5,
             ) as favicon_response:
                 favicon_response.read()
@@ -376,6 +376,38 @@ class TestGuardSurfaceServer:
         assert payload["inbox_url"] == "https://hol.org/guard/inbox"
         assert payload["fleet_url"] == "https://hol.org/guard/fleet"
         assert payload["connect_url"] == "https://hol.org/guard/connect"
+        assert "inventory" not in payload
+
+    def test_guard_daemon_inventory_endpoint_exposes_watched_artifacts(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        store.record_inventory_artifact(
+            artifact=GuardArtifact(
+                artifact_id="codex:project:workspace-tool",
+                name="workspace-tool",
+                harness="codex",
+                artifact_type="tool",
+                source_scope="project",
+                config_path=str(tmp_path / "workspace" / "codex.json"),
+                command="python",
+                args=("-m", "workspace_tool"),
+            ),
+            artifact_hash="hash-workspace-tool",
+            policy_action="allow",
+            changed=False,
+            now="2026-04-23T00:00:00+00:00",
+            approved=True,
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/v1/inventory", timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert payload["items"][0]["artifact_id"] == "codex:project:workspace-tool"
+        assert payload["items"][0]["launch_command"] == "python -m workspace_tool"
 
     def test_guard_daemon_runtime_snapshot_derives_cloud_urls_from_sync_origin(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

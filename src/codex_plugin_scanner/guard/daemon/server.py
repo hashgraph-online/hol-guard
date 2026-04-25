@@ -100,6 +100,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 )
             )
             return
+        if parsed.path == "/v1/inventory":
+            self._write_json({"items": store.list_inventory()})
+            return
         if parsed.path == "/v1/settings":
             config = load_guard_config(store.guard_home)
             self._write_json(

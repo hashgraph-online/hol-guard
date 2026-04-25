@@ -1,6 +1,7 @@
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
+  GuardInventoryItem,
   GuardPolicyDecision,
   GuardReceipt,
   GuardRuntimeSnapshot,
@@ -110,6 +111,14 @@ export async function fetchRuntimeSnapshot(): Promise<GuardRuntimeSnapshot> {
     };
   }
   return readJson<GuardRuntimeSnapshot>("/v1/runtime");
+}
+
+export async function fetchInventory(): Promise<GuardInventoryItem[]> {
+  if (isGuardDemoMode()) {
+    return [];
+  }
+  const payload = await readJson<{ items: GuardInventoryItem[] }>("/v1/inventory");
+  return payload.items;
 }
 
 export async function fetchSettings(): Promise<GuardSettingsPayload> {
