@@ -82,11 +82,24 @@ def test_guard_install_codex_rewrites_workspace_config_with_proxy_entries(tmp_pa
     assert 'API_BASE = "https://hol.org"' in config_text
     assert 'FEATURE_FLAG = "1"' in config_text
     assert hooks_payload["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
+    assert hooks_payload["hooks"]["PermissionRequest"][0]["matcher"] == "Bash|^apply_patch$|Edit|Write|mcp__.*"
+    assert "UserPromptSubmit" in hooks_payload["hooks"]
+    assert "matcher" not in hooks_payload["hooks"]["UserPromptSubmit"][0]
+    prompt_handler = hooks_payload["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+    assert prompt_handler["type"] == "command"
+    assert "codex_plugin_scanner.cli" in prompt_handler["command"]
+    assert "hook" in prompt_handler["command"]
+    assert "codex" in prompt_handler["command"]
     handler = hooks_payload["hooks"]["PreToolUse"][0]["hooks"][0]
     assert handler["type"] == "command"
     assert "codex_plugin_scanner.cli" in handler["command"]
     assert "hook" in handler["command"]
     assert "codex" in handler["command"]
+    permission_handler = hooks_payload["hooks"]["PermissionRequest"][0]["hooks"][0]
+    assert permission_handler["type"] == "command"
+    assert "codex_plugin_scanner.cli" in permission_handler["command"]
+    assert "hook" in permission_handler["command"]
+    assert "codex" in permission_handler["command"]
 
 
 def test_guard_uninstall_codex_restores_original_workspace_config(tmp_path, capsys):
@@ -208,6 +221,54 @@ def test_guard_install_codex_merges_managed_hooks_without_removing_existing_entr
             "hooks": [{"type": "command", "command": "python3 custom-start.py"}],
         }
     ]
+
+
+def test_guard_install_codex_migrates_legacy_bash_only_managed_hook(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _write_text(workspace_dir / ".codex" / "config.toml", 'approval_policy = "never"\n')
+    context = HarnessContext(home_dir=home_dir, guard_home=home_dir / ".hol-guard", workspace_dir=workspace_dir)
+    legacy_group = {
+        "matcher": "Bash",
+        "hooks": [
+            {
+                "type": "command",
+                "command": (
+                    "python -m codex_plugin_scanner.cli guard hook "
+                    f"--guard-home {context.guard_home} --harness codex"
+                ),
+                "timeoutSec": 30,
+                "statusMessage": "HOL Guard checking Bash command",
+            }
+        ],
+    }
+    _write_text(
+        workspace_dir / ".codex" / "hooks.json",
+        json.dumps({"hooks": {"PreToolUse": [legacy_group]}}, indent=2) + "\n",
+    )
+
+    install_rc = main(
+        [
+            "guard",
+            "install",
+            "codex",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    json.loads(capsys.readouterr().out)
+    hooks_payload = json.loads((workspace_dir / ".codex" / "hooks.json").read_text(encoding="utf-8"))
+
+    assert install_rc == 0
+    assert len(hooks_payload["hooks"]["PreToolUse"]) == 1
+    assert len(hooks_payload["hooks"]["PermissionRequest"]) == 1
+    assert len(hooks_payload["hooks"]["UserPromptSubmit"]) == 1
+    assert hooks_payload["hooks"]["PreToolUse"][0]["matcher"] == "Bash"
+    assert hooks_payload["hooks"]["PreToolUse"][0]["hooks"][0]["statusMessage"] == "HOL Guard checking tool action"
+    assert len(hooks_payload["hooks"]["UserPromptSubmit"]) == 1
 
 
 def test_guard_install_codex_workspace_cleans_stale_global_managed_hook(tmp_path, capsys):

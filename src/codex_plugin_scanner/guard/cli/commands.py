@@ -1569,13 +1569,19 @@ def run_guard_command(
                     _native_hook_reason_for_harness(
                         args.harness,
                         _runtime_artifact_native_reason(runtime_artifact, response_payload),
+                        _native_approval_center_context(response_payload),
                     )
                 )
                 return 2
-            runtime_reason = _native_hook_reason_for_harness(
-                args.harness,
-                _runtime_artifact_native_reason(runtime_artifact, response_payload),
-            )
+            raw_runtime_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
+            if _canonical_harness_name(args.harness) == "codex" and event_name == "UserPromptSubmit":
+                runtime_reason = raw_runtime_reason
+            else:
+                runtime_reason = _native_hook_reason_for_harness(
+                    args.harness,
+                    raw_runtime_reason,
+                    _native_approval_center_context(response_payload),
+                )
             if _should_emit_claude_native_pretooluse_notice(
                 args,
                 event_name=event_name,
@@ -1590,7 +1596,8 @@ def run_guard_command(
                 output_stream=output_stream,
             ):
                 system_message = None
-                if _canonical_harness_name(args.harness) == "claude-code":
+                canonical_harness = _canonical_harness_name(args.harness)
+                if canonical_harness == "claude-code":
                     system_message = _claude_prompt_system_message(
                         event_name=event_name,
                         policy_action=policy_action,
@@ -2623,6 +2630,27 @@ def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str
     return f"{reason} Approve it in HOL Guard, then retry."
 
 
+def _native_approval_center_context(response_payload: dict[str, object]) -> str | None:
+    approval_center_url = response_payload.get("approval_center_url")
+    if not isinstance(approval_center_url, str) or not approval_center_url.strip():
+        return None
+    queued = response_payload.get("approval_requests")
+    first_approval_url: str | None = None
+    if isinstance(queued, list):
+        for item in queued:
+            if not isinstance(item, dict):
+                continue
+            approval_url = item.get("approval_url")
+            if isinstance(approval_url, str) and approval_url.strip():
+                first_approval_url = approval_url.strip()
+                break
+    review_url = first_approval_url or approval_center_url.strip()
+    return (
+        "Open HOL Guard to approve or keep this blocked: "
+        f"{review_url}. After you choose, retry the same Codex command."
+    )
+
+
 def _prompt_requires_hard_block(artifact: GuardArtifact) -> bool:
     prompt_classes = artifact.metadata.get("prompt_request_classes")
     if isinstance(prompt_classes, list):
@@ -2655,6 +2683,13 @@ def _native_prompt_context(artifact: GuardArtifact) -> str:
 
 def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: dict[str, object]) -> str:
     if artifact.artifact_type == "prompt_request":
+        harness = response_payload.get("harness")
+        prompt_classes = _prompt_request_classes(artifact)
+        if harness == "codex" and "secret_read" in prompt_classes:
+            return (
+                "HOL Guard stopped this Codex prompt before Codex could open a sensitive local file. Codex does not "
+                "expose native approval prompts for Read-tool file reads, so Guard blocks this request at prompt time."
+            )
         policy_action = response_payload.get("policy_action")
         if policy_action in {"block", "sandbox-required"} and not _prompt_requires_hard_block(artifact):
             return "HOL Guard blocked this prompt because it requests guarded local secret access."
@@ -2851,15 +2886,26 @@ def _emit_native_hook_response(
         return
     if event_name in {"Notification", "PermissionRequest"}:
         if event_name == "PermissionRequest" and policy_action in {"block", "sandbox-required"}:
+            decision: dict[str, object] = {
+                "behavior": "deny",
+                "message": additional_context or reason,
+            }
+            if _canonical_harness_name(harness) != "codex":
+                decision["interrupt"] = False
             payload["hookSpecificOutput"] = {
                 "hookEventName": event_name,
-                "decision": {
-                    "behavior": "deny",
-                    "message": additional_context or reason,
-                    "interrupt": False,
-                },
+                "decision": decision,
             }
             _write_json_line(payload, output_stream=output_stream)
+            return
+        if event_name == "PermissionRequest" and _canonical_harness_name(harness) == "codex":
+            if policy_action == "require-reapproval":
+                payload["systemMessage"] = (
+                    "HOL Guard is reviewing this Codex approval request. Codex will show its normal approval prompt; "
+                    "choose allow only if you trust the exact tool action."
+                )
+            if payload:
+                _write_json_line(payload, output_stream=output_stream)
             return
         if additional_context:
             payload["hookSpecificOutput"] = {

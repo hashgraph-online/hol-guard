@@ -40,7 +40,15 @@ def _read_toml(path: Path) -> dict[str, object]:
         return {}
 
 
-_MANAGED_HOOK_STATUS_MESSAGE = "HOL Guard checking Bash command"
+_MANAGED_HOOK_STATUS_MESSAGE = "HOL Guard checking tool action"
+_MANAGED_PROMPT_HOOK_STATUS_MESSAGE = "HOL Guard checking prompt"
+_MANAGED_PERMISSION_HOOK_STATUS_MESSAGE = "HOL Guard checking Codex approval request"
+_LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
+    "HOL Guard checking Bash command",
+    _MANAGED_HOOK_STATUS_MESSAGE,
+    _MANAGED_PROMPT_HOOK_STATUS_MESSAGE,
+    _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE,
+}
 
 
 def _json_object(path: Path) -> dict[str, object]:
@@ -98,7 +106,7 @@ def _hook_command(context: HarnessContext) -> str:
     return shlex.join(_hook_command_parts(context))
 
 
-def _hook_group(context: HarnessContext) -> dict[str, object]:
+def _pre_tool_hook_group(context: HarnessContext) -> dict[str, object]:
     return {
         "matcher": "Bash",
         "hooks": [
@@ -109,6 +117,41 @@ def _hook_group(context: HarnessContext) -> dict[str, object]:
                 "statusMessage": _MANAGED_HOOK_STATUS_MESSAGE,
             }
         ],
+    }
+
+
+def _prompt_hook_group(context: HarnessContext) -> dict[str, object]:
+    return {
+        "hooks": [
+            {
+                "type": "command",
+                "command": _hook_command(context),
+                "timeoutSec": 30,
+                "statusMessage": _MANAGED_PROMPT_HOOK_STATUS_MESSAGE,
+            }
+        ],
+    }
+
+
+def _permission_request_hook_group(context: HarnessContext) -> dict[str, object]:
+    return {
+        "matcher": "Bash|^apply_patch$|Edit|Write|mcp__.*",
+        "hooks": [
+            {
+                "type": "command",
+                "command": _hook_command(context),
+                "timeoutSec": 30,
+                "statusMessage": _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE,
+            }
+        ],
+    }
+
+
+def _managed_hook_groups(context: HarnessContext) -> dict[str, dict[str, object]]:
+    return {
+        "PreToolUse": _pre_tool_hook_group(context),
+        "PermissionRequest": _permission_request_hook_group(context),
+        "UserPromptSubmit": _prompt_hook_group(context),
     }
 
 
@@ -158,9 +201,6 @@ def _argv_targets_codex(argv: list[str]) -> bool:
 def _is_managed_hook_group(group: object) -> bool:
     if not isinstance(group, dict):
         return False
-    matcher = group.get("matcher")
-    if not isinstance(matcher, str) or matcher != "Bash":
-        return False
     hooks = group.get("hooks")
     if not isinstance(hooks, list):
         return False
@@ -168,10 +208,13 @@ def _is_managed_hook_group(group: object) -> bool:
 
 
 def _is_managed_hook_entry(entry: object) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    status_message = entry.get("statusMessage")
+    has_managed_status = isinstance(status_message, str) and status_message in _LEGACY_MANAGED_HOOK_STATUS_MESSAGES
     return (
-        isinstance(entry, dict)
-        and entry.get("type") == "command"
-        and entry.get("statusMessage") == _MANAGED_HOOK_STATUS_MESSAGE
+        entry.get("type") == "command"
+        and has_managed_status
         and _is_managed_hook_command(entry.get("command"))
     )
 
@@ -179,9 +222,8 @@ def _is_managed_hook_entry(entry: object) -> bool:
 def _remove_managed_hook_entries(group: object) -> object | None:
     if not isinstance(group, dict):
         return group
-    matcher = group.get("matcher")
     hooks = group.get("hooks")
-    if not isinstance(matcher, str) or matcher != "Bash" or not isinstance(hooks, list):
+    if not isinstance(hooks, list):
         return group
     remaining_hooks = [entry for entry in hooks if not _is_managed_hook_entry(entry)]
     if len(remaining_hooks) == len(hooks):
@@ -208,6 +250,23 @@ def _remove_hook_groups(groups: object) -> list[object]:
     return remaining
 
 
+def _remove_managed_hook_events(hooks: dict[str, object]) -> tuple[dict[str, object], bool]:
+    updated_hooks = dict(hooks)
+    changed = False
+    for event_name in ("PreToolUse", "PermissionRequest", "UserPromptSubmit"):
+        original_groups = deepcopy(updated_hooks.get(event_name))
+        remaining = _remove_hook_groups(original_groups)
+        managed_removed = isinstance(original_groups, list) and remaining != original_groups
+        if not managed_removed:
+            continue
+        changed = True
+        if remaining:
+            updated_hooks[event_name] = remaining
+        else:
+            updated_hooks.pop(event_name, None)
+    return updated_hooks, changed
+
+
 def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     config_path = CodexHarnessAdapter._target_config_path(context)
     hooks_path = CodexHarnessAdapter._hooks_path(context)
@@ -215,16 +274,28 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     features = config_payload.get("features") if isinstance(config_payload, dict) else None
     hooks_payload = _json_object(hooks_path)
     hooks = hooks_payload.get("hooks") if isinstance(hooks_payload, dict) else None
-    hook_groups = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
-    managed_hook_installed = isinstance(hook_groups, list) and any(
-        _is_managed_hook_group(group) for group in hook_groups
+    pre_tool_groups = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
+    permission_groups = hooks.get("PermissionRequest") if isinstance(hooks, dict) else None
+    prompt_groups = hooks.get("UserPromptSubmit") if isinstance(hooks, dict) else None
+    pre_tool_hook_installed = isinstance(pre_tool_groups, list) and any(
+        _is_managed_hook_group(group) for group in pre_tool_groups
     )
+    permission_hook_installed = isinstance(permission_groups, list) and any(
+        _is_managed_hook_group(group) for group in permission_groups
+    )
+    prompt_hook_installed = isinstance(prompt_groups, list) and any(
+        _is_managed_hook_group(group) for group in prompt_groups
+    )
+    managed_hook_installed = pre_tool_hook_installed and permission_hook_installed and prompt_hook_installed
     return {
         "config_path": str(config_path),
         "config_present": config_path.is_file(),
         "hooks_path": str(hooks_path),
         "hooks_present": hooks_path.is_file(),
         "codex_hooks_enabled": isinstance(features, dict) and features.get("codex_hooks") is True,
+        "managed_pre_tool_hook_installed": pre_tool_hook_installed,
+        "managed_permission_request_hook_installed": permission_hook_installed,
+        "managed_prompt_hook_installed": prompt_hook_installed,
         "managed_hook_installed": managed_hook_installed,
         "protection_active": isinstance(features, dict)
         and features.get("codex_hooks") is True
@@ -239,8 +310,9 @@ class CodexHarnessAdapter(HarnessAdapter):
     executable = "codex"
     approval_tier = "native-or-center"
     approval_summary = (
-        "Guard installs native Codex Bash hooks for shell interception, keeps same-chat approvals for "
-        "managed MCP tool calls, and falls back to the local approval center when Codex cannot answer."
+        "Guard installs native Codex Bash hooks for shell interception, PermissionRequest hooks for Codex approval "
+        "prompts, prompt hooks for sensitive file-read requests, keeps same-chat approvals for managed MCP tool "
+        "calls, and falls back to the local approval center when Codex cannot answer."
     )
     fallback_hint = (
         "If Codex cannot render or return the inline approval request, or a native Bash hook blocks a "
@@ -442,12 +514,12 @@ class CodexHarnessAdapter(HarnessAdapter):
         warnings = [str(item) for item in payload.get("warnings", []) if isinstance(item, str)]
         if bool(hook_state["config_present"]) and not bool(hook_state["codex_hooks_enabled"]):
             warnings.append(
-                "Codex config was found, but native Bash hooks are disabled. Run `hol-guard install codex` or "
+                "Codex config was found, but native hooks are disabled. Run `hol-guard install codex` or "
                 "`hol-guard update` to repair protection."
             )
         if bool(hook_state["config_present"]) and not bool(hook_state["managed_hook_installed"]):
             warnings.append(
-                "Codex config was found, but Guard's managed PreToolUse Bash hook is missing. Run "
+                "Codex config was found, but Guard's managed Codex hooks are missing. Run "
                 "`hol-guard install codex` or `hol-guard update` to repair protection."
             )
         payload["warnings"] = warnings
@@ -504,7 +576,7 @@ class CodexHarnessAdapter(HarnessAdapter):
 
     def _install_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
         target_hooks_path = self._hooks_path(context)
-        managed_group = _hook_group(context)
+        managed_groups = _managed_hook_groups(context)
         hook_payloads = payloads or self._load_hook_payloads(context)
         for hooks_path in self._all_hook_paths(context):
             original_payload = deepcopy(hook_payloads.get(hooks_path, {}))
@@ -512,24 +584,18 @@ class CodexHarnessAdapter(HarnessAdapter):
             hooks = payload.get("hooks")
             if not isinstance(hooks, dict):
                 hooks = {}
-            original_groups = deepcopy(hooks.get("PreToolUse"))
-            remaining = _remove_hook_groups(original_groups)
-            managed_removed = isinstance(original_groups, list) and remaining != original_groups
+            cleaned_hooks, managed_removed = _remove_managed_hook_events(hooks)
             if hooks_path == target_hooks_path:
-                hooks["PreToolUse"] = _merge_hook_groups(remaining, managed_group)
-                payload["hooks"] = hooks
+                for event_name, managed_group in managed_groups.items():
+                    cleaned_hooks[event_name] = _merge_hook_groups(cleaned_hooks.get(event_name), managed_group)
+                payload["hooks"] = cleaned_hooks
             elif not managed_removed:
                 payload = deepcopy(original_payload)
             else:
-                if remaining:
-                    hooks["PreToolUse"] = remaining
-                    payload["hooks"] = hooks
+                if cleaned_hooks:
+                    payload["hooks"] = cleaned_hooks
                 else:
-                    hooks.pop("PreToolUse", None)
-                    if hooks:
-                        payload["hooks"] = hooks
-                    else:
-                        payload.pop("hooks", None)
+                    payload.pop("hooks", None)
             self._write_hooks_payload(hooks_path, payload, original_payload=original_payload)
         return target_hooks_path
 
@@ -543,20 +609,13 @@ class CodexHarnessAdapter(HarnessAdapter):
                 continue
             hooks = payload.get("hooks")
             if isinstance(hooks, dict):
-                original_groups = deepcopy(hooks.get("PreToolUse"))
-                remaining = _remove_hook_groups(original_groups)
-                managed_removed = isinstance(original_groups, list) and remaining != original_groups
+                cleaned_hooks, managed_removed = _remove_managed_hook_events(hooks)
                 if not managed_removed:
                     payload = deepcopy(original_payload)
-                elif remaining:
-                    hooks["PreToolUse"] = remaining
-                    payload["hooks"] = hooks
+                elif cleaned_hooks:
+                    payload["hooks"] = cleaned_hooks
                 else:
-                    hooks.pop("PreToolUse", None)
-                    if hooks:
-                        payload["hooks"] = hooks
-                    else:
-                        payload.pop("hooks", None)
+                    payload.pop("hooks", None)
             self._write_hooks_payload(hooks_path, payload, original_payload=original_payload)
         return target_hooks_path
 

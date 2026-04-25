@@ -1,4 +1,15 @@
-import type { ReactNode } from "react";
+import type { ChangeEvent, ReactNode } from "react";
+import {
+  HiMiniArrowTopRightOnSquare,
+  HiMiniCloud,
+  HiMiniCommandLine,
+  HiMiniDocumentText,
+  HiMiniHome,
+  HiMiniInbox,
+  HiMiniServerStack,
+  HiMiniAdjustmentsHorizontal,
+  HiMiniShieldCheck,
+} from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
 
@@ -40,38 +51,134 @@ const footerSections = [
 export function ShellHeader(props: {
   queuedCount: number;
   activeHarness: string | null;
-  view: "home" | "inbox" | "fleet" | "evidence";
+  view: "home" | "inbox" | "fleet" | "evidence" | "settings";
 }) {
+  function handleMobileNavigationChange(event: ChangeEvent<HTMLSelectElement>) {
+    window.location.href = guardAwareHref(event.target.value);
+  }
+
   return (
     <header
-      className="sticky top-0 z-50 border-b border-white/10 bg-gradient-to-r from-[#3f4174] to-brand-blue text-white shadow-[0_10px_30px_-20px_rgba(37,42,89,0.8)]"
+      className="sticky top-0 z-30 flex min-h-16 items-center border-b border-brand-blue/20 bg-gradient-to-r from-brand-blue to-brand-dark px-4 text-white shadow-sm lg:hidden"
       style={{ contain: "layout style paint" }}
     >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex min-h-[64px] items-center justify-between gap-4 py-2">
-          <div className="flex min-w-0 items-center gap-4 sm:gap-6">
-            <a href={guardAwareHref("/")} className="flex items-center gap-3 no-underline hover:no-underline">
-              <img src="/brand/Logo_Whole.png" alt="HOL" className="h-8 w-auto sm:h-9" />
-            </a>
-            <nav className="flex items-center gap-1" aria-label="Primary">
-              <NavPill href="/" active={props.view === "home"}>Home</NavPill>
-              <NavPill href="/inbox" active={props.view === "inbox"}>Inbox</NavPill>
-              <NavPill href="/fleet" active={props.view === "fleet"}>Fleet</NavPill>
-              <NavPill href="/evidence" active={props.view === "evidence"}>Evidence</NavPill>
-              <NavPill href="https://hol.org/guard" external>hol.org</NavPill>
-            </nav>
-          </div>
-          <div className="ml-auto flex items-center gap-2 sm:gap-3">
-            {props.queuedCount > 0 ? (
-              <NavBadge tone="warning">{props.queuedCount} blocked</NavBadge>
-            ) : (
-              <NavBadge tone="success">All clear</NavBadge>
-            )}
-            {props.activeHarness ? <NavBadge tone="default">{props.activeHarness}</NavBadge> : null}
+      <div className="flex w-full items-center gap-3">
+        <a
+          href={guardAwareHref("/")}
+          className="flex min-h-11 min-w-0 items-center gap-2.5 text-white no-underline transition-opacity duration-150 hover:opacity-85"
+        >
+          <img src="/brand/Logo_Icon_Dark.png" alt="HOL" className="h-9 w-9 shrink-0 rounded-none bg-transparent object-contain" />
+          <span className="font-mono text-base font-semibold tracking-tight text-white">HOL Guard</span>
+        </a>
+        <div className="min-w-0 flex-1">
+          <select
+            aria-label="Navigate Guard sections"
+            className="h-11 w-full rounded-full border border-white/25 bg-white/95 px-4 text-sm font-medium text-brand-dark shadow-none transition-colors duration-150 focus:border-white focus:outline-none focus:ring-2 focus:ring-white/40"
+            onChange={handleMobileNavigationChange}
+            value={sidebarLinks.find((item) => item.view === props.view)?.href ?? "/"}
+          >
+            {sidebarLinks.map((item) => (
+              <option key={item.href} value={item.href}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <a
+          href={guardAwareHref("/inbox")}
+          className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15"
+          aria-label={`${props.queuedCount} Guard actions queued`}
+        >
+          {props.queuedCount > 99 ? "99+" : props.queuedCount}
+        </a>
+      </div>
+    </header>
+  );
+}
+
+const sidebarLinks = [
+  { href: "/", label: "Home", view: "home", icon: HiMiniHome },
+  { href: "/inbox", label: "Review Queue", view: "inbox", icon: HiMiniInbox },
+  { href: "/fleet", label: "Watched Apps", view: "fleet", icon: HiMiniServerStack },
+  { href: "/evidence", label: "History", view: "evidence", icon: HiMiniDocumentText },
+  { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal }
+] as const;
+
+export function ShellSidebar(props: {
+  queuedCount: number;
+  activeHarness: string | null;
+  view: "home" | "inbox" | "fleet" | "evidence" | "settings";
+}) {
+  return (
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-slate-200 bg-[#f8fafc] lg:flex">
+      <div className="flex min-h-[72px] shrink-0 items-center border-b border-brand-blue/20 bg-gradient-to-r from-brand-blue to-brand-dark px-6">
+        <a href={guardAwareHref("/")} className="flex items-center gap-2.5 text-white no-underline transition-opacity hover:opacity-85">
+          <img src="/brand/Logo_Icon_Dark.png" alt="HOL" className="h-10 w-10 shrink-0 rounded-none bg-transparent object-contain" />
+          <span className="font-mono text-base font-semibold tracking-tight text-white">HOL Guard</span>
+        </a>
+      </div>
+      <div className="flex flex-1 flex-col overflow-y-auto px-3 py-5">
+        <p className="mb-2 px-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+          Dashboard
+        </p>
+        <nav className="flex flex-col gap-0.5" aria-label="Guard dashboard">
+          {sidebarLinks.map((item) => {
+            const Icon = item.icon;
+            return (
+              <SidebarLink
+                key={item.href}
+                href={item.href}
+                active={props.view === item.view}
+                icon={<Icon className="h-4 w-4" />}
+                badgeCount={item.view === "inbox" ? props.queuedCount : 0}
+              >
+                {item.label}
+              </SidebarLink>
+            );
+          })}
+        </nav>
+
+        <div className="mt-6 space-y-2">
+          <p className="px-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+            Quick Actions
+          </p>
+          <SidebarAction href="/" icon={<HiMiniCommandLine className="h-4 w-4" />}>
+            Local dashboard
+          </SidebarAction>
+          <SidebarAction href="https://hol.org/guard" external icon={<HiMiniCloud className="h-4 w-4" />}>
+            Open Guard Cloud
+          </SidebarAction>
+        </div>
+
+        <div className="mt-auto pt-6">
+          <div className="mx-2 overflow-hidden rounded-xl border border-brand-blue/25 bg-gradient-to-br from-brand-blue/[0.05] to-brand-dark/[0.03]">
+            <div className="space-y-2 px-3 pb-2.5 pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <HiMiniShieldCheck className="h-3.5 w-3.5 text-brand-blue" />
+                  <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-brand-blue">
+                    Local Guard
+                  </p>
+                </div>
+                <span className="rounded-full bg-brand-blue/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-blue">
+                  {props.queuedCount > 0 ? "Review" : "Clear"}
+                </span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-brand-dark/70">
+                {props.queuedCount > 0
+                  ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.`
+                  : "No local approvals are waiting."}
+              </p>
+              {props.activeHarness ? (
+                <span className="inline-flex rounded-full bg-white/70 px-2 py-1 font-mono text-[10px] font-semibold text-slate-500">
+                  {props.activeHarness}
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
-    </header>
+    </aside>
   );
 }
 
@@ -105,7 +212,7 @@ export function Surface(props: {
   const toneClass = surfaceToneClass(props.tone);
   return (
     <section
-      className={`guard-surface-in rounded-xl border shadow-sm p-5 sm:p-6 ${toneClass}${props.className ? ` ${props.className}` : ""}`}
+      className={`guard-surface-in rounded-[1.35rem] border shadow-sm p-5 sm:p-6 ${toneClass}${props.className ? ` ${props.className}` : ""}`}
     >
       {props.children}
     </section>
@@ -113,7 +220,7 @@ export function Surface(props: {
 }
 
 export function SectionLabel(props: { children: ReactNode }) {
-  return <p className="text-xs font-medium text-gray-500">{props.children}</p>;
+  return <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-blue">{props.children}</p>;
 }
 
 export function Badge(props: {
@@ -180,11 +287,11 @@ export function ActionButton(props: {
   const className = actionButtonClass(props.variant);
   if (props.href) {
     return (
-        <a
-          href={guardAwareHref(props.href)}
-          target={props.href.startsWith("https://") ? "_blank" : undefined}
-          rel={props.href.startsWith("https://") ? "noreferrer" : undefined}
-          className={className}
+      <a
+        href={guardAwareHref(props.href)}
+        target={props.href.startsWith("https://") ? "_blank" : undefined}
+        rel={props.href.startsWith("https://") ? "noreferrer" : undefined}
+        className={className}
       >
         {props.children}
       </a>
@@ -197,69 +304,168 @@ export function ActionButton(props: {
   );
 }
 
-function NavPill(props: { href: string; children: ReactNode; active?: boolean; external?: boolean }) {
+export function ListControls(props: {
+  searchLabel: string;
+  searchValue: string;
+  searchPlaceholder: string;
+  filterLabel: string;
+  filterValue: string;
+  filterOptions: string[];
+  allLabel: string;
+  onSearchChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onFilterChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  className?: string;
+}) {
+  return (
+    <div className={`grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]${props.className ? ` ${props.className}` : ""}`}>
+      <label className="block">
+        <span className="sr-only">{props.searchLabel}</span>
+        <input
+          type="search"
+          value={props.searchValue}
+          onChange={props.onSearchChange}
+          placeholder={props.searchPlaceholder}
+          className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        />
+      </label>
+      <label className="block">
+        <span className="sr-only">{props.filterLabel}</span>
+        <select
+          value={props.filterValue}
+          onChange={props.onFilterChange}
+          className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        >
+          <option value="all">{props.allLabel}</option>
+          {props.filterOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+export function PaginationControls(props: {
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  pageSize: number;
+  onPrevious: () => void;
+  onNext: () => void;
+  className?: string;
+}) {
+  const firstItem = props.totalItems === 0 ? 0 : (props.page - 1) * props.pageSize + 1;
+  const lastItem = Math.min(props.totalItems, props.page * props.pageSize);
+  return (
+    <div className={`flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between${props.className ? ` ${props.className}` : ""}`}>
+      <span>
+        {firstItem}-{lastItem} of {props.totalItems}
+      </span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={props.onPrevious}
+          disabled={props.page <= 1}
+          className="min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40"
+        >
+          Previous
+        </button>
+        <span className="font-mono text-[11px] text-slate-400">
+          {props.page}/{props.totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={props.onNext}
+          disabled={props.page >= props.totalPages}
+          className="min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SidebarLink(props: {
+  href: string;
+  children: ReactNode;
+  active?: boolean;
+  icon?: ReactNode;
+  badgeCount?: number;
+}) {
+  return (
+    <a
+      href={guardAwareHref(props.href)}
+      aria-current={props.active ? "page" : undefined}
+      className={`flex min-h-10 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors duration-150 ${
+        props.active
+          ? "bg-brand-blue/10 font-semibold text-brand-dark"
+          : "text-slate-600 hover:bg-slate-200/50 hover:text-slate-900"
+      }`}
+    >
+      {props.icon ? (
+        <span className={`shrink-0 ${props.active ? "text-brand-blue" : "text-slate-400"}`}>
+          {props.icon}
+        </span>
+      ) : null}
+      <span className="flex-1 truncate">{props.children}</span>
+      {props.badgeCount && props.badgeCount > 0 ? (
+        <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-blue/15 px-1.5 text-[10px] font-bold text-brand-blue">
+          {props.badgeCount > 99 ? "99+" : props.badgeCount}
+        </span>
+      ) : null}
+    </a>
+  );
+}
+
+function SidebarAction(props: { href: string; children: ReactNode; icon: ReactNode; external?: boolean }) {
   return (
     <a
       href={props.external ? props.href : guardAwareHref(props.href)}
       target={props.external ? "_blank" : undefined}
       rel={props.external ? "noreferrer" : undefined}
-      className={`inline-flex min-h-11 items-center rounded-md px-3 py-1.5 font-medium no-underline transition-colors duration-200 ${
-        props.active
-          ? "bg-white/15 text-white"
-          : "text-white/80 hover:bg-white/10 hover:text-white"
-      }`}
+      className="flex min-h-10 items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 no-underline transition-colors duration-150 hover:border-brand-blue/30 hover:text-brand-dark"
     >
-      {props.children}
+      <span className="shrink-0 text-slate-400">{props.icon}</span>
+      <span className="flex-1 truncate">{props.children}</span>
+      {props.external ? <HiMiniArrowTopRightOnSquare className="h-3.5 w-3.5 shrink-0 text-slate-300" /> : null}
     </a>
-  );
-}
-
-function NavBadge(props: { children: ReactNode; tone?: "default" | "success" | "warning" }) {
-  const toneClass = navBadgeToneClass(props.tone);
-  return (
-    <span className={`inline-flex items-center rounded-md px-3 py-1 font-mono text-[13px] border ${toneClass}`}>
-      {props.children}
-    </span>
   );
 }
 
 function surfaceToneClass(tone: "default" | "accent" | "success" | "warning" | "danger" | undefined): string {
   if (tone === "accent") return "border-brand-blue/20 bg-gradient-to-b from-white to-blue-50/40";
   if (tone === "success") return "border-brand-green/20 bg-brand-green-bg/30";
-  if (tone === "warning") return "border-orange-300/30 bg-orange-50/40";
-  if (tone === "danger") return "border-red-200/50 bg-red-50/40";
+  if (tone === "warning") return "border-brand-blue/25 bg-brand-blue/[0.04]";
+  if (tone === "danger") return "border-brand-purple/25 bg-brand-purple/[0.05]";
   return "border-gray-200/50 bg-white/80";
 }
 
 function badgeToneClass(tone: "default" | "success" | "warning" | "info" | "destructive" | undefined): string {
   if (tone === "success") return "border-transparent bg-accent/10 text-accent border-accent/20";
-  if (tone === "warning") return "border-transparent bg-orange-500/10 text-orange-700 border-orange-500/20";
+  if (tone === "warning") return "border-transparent bg-brand-blue/10 text-brand-blue border-brand-blue/20";
   if (tone === "info") return "border-transparent bg-blue-500/10 text-blue-700 border-blue-500/20";
-  if (tone === "destructive") return "border-transparent bg-destructive/10 text-destructive border-destructive/20";
+  if (tone === "destructive") return "border-transparent bg-brand-purple/10 text-brand-purple border-brand-purple/20";
   return "border-transparent bg-gray-100 text-gray-600 border-gray-200";
 }
 
 function tagToneClass(tone: "blue" | "green" | "purple" | "slate" | "red" | undefined): string {
   if (tone === "green") return "border-transparent bg-brand-green-bg/60 text-brand-green-text";
   if (tone === "purple") return "border-transparent bg-brand-purple/10 text-brand-purple";
-  if (tone === "red") return "border-transparent bg-red-100/80 text-red-700";
+  if (tone === "red") return "border-transparent bg-brand-purple/10 text-brand-purple";
   if (tone === "slate") return "border-gray-200 bg-gray-100 text-gray-500";
   return "border-transparent bg-blue-500/10 text-blue-700";
 }
 
-function navBadgeToneClass(tone: "default" | "success" | "warning" | undefined): string {
-  if (tone === "success") return "bg-white/10 text-green-200 border-white/10";
-  if (tone === "warning") return "bg-white/10 text-amber-200 border-white/10";
-  return "bg-white/10 text-white/80 border-white/10";
-}
-
 function actionButtonClass(variant: "primary" | "secondary" | "danger" | "outline" | "ghost" | undefined): string {
-  const base = "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-[color,background-color,border-color,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-w-0";
+  const base = "inline-flex items-center justify-center rounded-lg text-sm font-semibold ring-offset-background transition-[color,background-color,border-color,opacity,transform,box-shadow] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-w-0";
   const sizeDefault = "min-h-11 h-auto px-4 py-2";
   if (variant === "outline") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
   if (variant === "secondary") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
   if (variant === "ghost") return `${base} ${sizeDefault} hover:bg-slate-100 hover:text-slate-900`;
-  if (variant === "danger") return `${base} ${sizeDefault} bg-red-600 text-white shadow-lg shadow-red-600/20 hover:bg-red-700 hover:shadow-red-600/30`;
+  if (variant === "danger") return `${base} ${sizeDefault} bg-brand-purple text-white shadow-lg shadow-brand-blue/10 hover:bg-brand-purple/90 hover:shadow-brand-blue/20`;
   return `${base} ${sizeDefault} bg-brand-blue text-white shadow-lg shadow-brand-blue/20 hover:bg-brand-blue/90 hover:shadow-brand-blue/30`;
 }
 
@@ -313,16 +519,16 @@ export function WelcomeState(props: {
       )}
       
       <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-brand-green-bg/50 ring-1 ring-brand-green/20">
-        <svg className="h-10 w-10 text-brand-green" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+        <HiMiniShieldCheck className="h-10 w-10 text-brand-green" aria-hidden="true" />
       </div>
       <h2 className="text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl">Your environment is secure</h2>
       <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground">
-        Guard is actively watching your harness configs. When your queue is clear, connect to Guard Cloud for team-wide protection.
+        HOL Guard is watching connected apps on this machine. Connect Cloud when you want shared decisions across the team.
       </p>
       
       <div className="mt-12 text-left w-full max-w-3xl">
         <div className="rounded-xl border border-border bg-card p-6 shadow-[0_4px_20px_rgba(85,153,254,0.04)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue mb-4">Sync your decisions</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue mb-4">Sync decisions</p>
           {props.connectUrl ? (
             <div className="flex flex-wrap gap-3">
               <ActionButton href={props.connectUrl}>Open pairing flow</ActionButton>
@@ -333,12 +539,12 @@ export function WelcomeState(props: {
               ) : null}
               {props.inboxUrl ? (
                 <ActionButton href={props.inboxUrl} variant="outline">
-                  Open Inbox
+                  Review Queue
                 </ActionButton>
               ) : null}
               {props.fleetUrl ? (
                 <ActionButton href={props.fleetUrl} variant="outline">
-                  Open Fleet
+                  Watched Apps
                 </ActionButton>
               ) : null}
             </div>
@@ -349,25 +555,25 @@ export function WelcomeState(props: {
             </div>
           )}
           <p className="mt-3 text-xs text-muted-foreground">
-            Open the browser pairing flow, sign in once, and let Guard finish the first sync automatically.
+            Sign in once. Guard handles the first sync automatically.
           </p>
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-3">
-          <div className="space-y-1.5 rounded-xl border border-border bg-card p-5">
-            <p className="text-sm font-semibold text-brand-dark">Team Policy Sync</p>
-            <p className="text-xs leading-relaxed text-muted-foreground">Share approval decisions and blocklists across your engineering team.</p>
-          </div>
-          <div className="space-y-1.5 rounded-xl border border-border bg-card p-5">
-            <p className="text-sm font-semibold text-brand-dark">Global Trust Feeds</p>
-            <p className="text-xs leading-relaxed text-muted-foreground">Enrich local approvals with verified publisher identity and trust data.</p>
-          </div>
-          <div className="space-y-1.5 rounded-xl border border-border bg-card p-5">
-            <p className="text-sm font-semibold text-brand-dark">0-Day Revocation</p>
-            <p className="text-xs leading-relaxed text-muted-foreground">When a tool is flagged malicious, Guard Cloud overrides local trust automatically.</p>
-          </div>
+          <TrustCard title="Team Policy Sync" body="Share approval decisions and blocklists." />
+          <TrustCard title="Global Trust Feeds" body="Check publisher identity and trust data." />
+          <TrustCard title="0-Day Revocation" body="Override local trust when a tool is flagged." />
         </div>
       </div>
+    </div>
+  );
+}
+
+function TrustCard(props: { title: string; body: string }) {
+  return (
+    <div className="space-y-1.5 rounded-xl border border-border bg-card p-5">
+      <p className="text-sm font-semibold text-brand-dark">{props.title}</p>
+      <p className="text-xs leading-relaxed text-muted-foreground">{props.body}</p>
     </div>
   );
 }
