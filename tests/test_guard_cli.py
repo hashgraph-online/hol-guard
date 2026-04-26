@@ -6048,6 +6048,100 @@ url = http://127.0.0.1:8787/guard-canary
         assert connect_output["reason"] == "Guard sync requires a Pro or Team plan."
         assert connect_output["sync_message"] == "Guard sync requires a Pro or Team plan."
 
+    def test_guard_dashboard_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        opened_urls: list[str] = []
+        open_keys: list[str | None] = []
+        force_open_flags: list[bool] = []
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_open_approval_center",
+            lambda approval_center_url, *, store, config, open_key=None, force_open=False: (
+                opened_urls.append(approval_center_url),
+                open_keys.append(open_key),
+                force_open_flags.append(force_open),
+                {"opened": True, "reason": "opened", "browser_url": approval_center_url},
+            )[-1],
+        )
+
+        rc = main(["guard", "dashboard", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert opened_urls == ["http://127.0.0.1:5474"]
+        assert open_keys == ["dashboard"]
+        assert force_open_flags == [True]
+        assert output["approval_center_url"] == "http://127.0.0.1:5474"
+        assert output["browser_url"] == "http://127.0.0.1:5474"
+        assert output["opened"] is True
+        assert output["reason"] == "opened"
+
+    def test_guard_admin_alias_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        opened_urls: list[str] = []
+        open_keys: list[str | None] = []
+        force_open_flags: list[bool] = []
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_open_approval_center",
+            lambda approval_center_url, *, store, config, open_key=None, force_open=False: (
+                opened_urls.append(approval_center_url),
+                open_keys.append(open_key),
+                force_open_flags.append(force_open),
+                {"opened": False, "reason": "policy-disabled", "browser_url": approval_center_url},
+            )[-1],
+        )
+
+        rc = main(["guard", "admin", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert opened_urls == ["http://127.0.0.1:5474"]
+        assert open_keys == ["dashboard"]
+        assert force_open_flags == [True]
+        assert output["approval_center_url"] == "http://127.0.0.1:5474"
+        assert output["browser_url"] == "http://127.0.0.1:5474"
+        assert output["opened"] is False
+        assert output["reason"] == "policy-disabled"
+
+    def test_guard_dashboard_returns_error_when_daemon_start_fails(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda guard_home: (_ for _ in ()).throw(RuntimeError("dashboard_unavailable")),
+        )
+
+        rc = main(["guard", "dashboard", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["opened"] is False
+        assert output["error"] == "dashboard_unavailable"
+
+    def test_public_approval_center_url_strips_guard_token(self):
+        browser_url = guard_commands_module._approval_center_browser_url(
+            "http://127.0.0.1:5474#section=inbox",
+            "secret-token",
+        )
+
+        assert browser_url is not None
+        assert "guard-token=secret-token" in browser_url
+        assert "guard-token=" not in guard_commands_module._public_approval_center_url(browser_url)
+
     def test_guard_connect_pending_output_uses_product_copy_for_sign_in_gap(self, capsys):
         emit_guard_payload(
             "connect",
