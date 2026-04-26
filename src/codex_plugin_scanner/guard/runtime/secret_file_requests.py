@@ -921,6 +921,7 @@ def _curl_segment_uses_file_upload(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     visited_config_paths: frozenset[str] = frozenset(),
     stdin_config_payloads: tuple[tuple[str, Path | None], ...] = (),
     stdin_uses_local_file: bool = False,
@@ -938,6 +939,7 @@ def _curl_segment_uses_file_upload(
                 value,
                 cwd=cwd,
                 home_dir=home_dir,
+                allowed_roots=allowed_roots,
                 visited_config_paths=visited_config_paths,
                 stdin_config_payloads=stdin_config_payloads,
             ):
@@ -968,6 +970,7 @@ def _curl_segment_uses_file_upload(
             token.split("=", 1)[1],
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             visited_config_paths=visited_config_paths,
             stdin_config_payloads=stdin_config_payloads,
         ):
@@ -1550,6 +1553,7 @@ def _curl_config_uses_file_upload(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     visited_config_paths: frozenset[str],
     stdin_config_payloads: tuple[tuple[str, Path | None], ...] = (),
 ) -> bool:
@@ -1559,7 +1563,8 @@ def _curl_config_uses_file_upload(
             _curl_inline_config_text_uses_file_upload(payload_text, cwd=payload_cwd, home_dir=home_dir)
             for payload_text, payload_cwd in stdin_config_payloads
         )
-    config_file = _resolved_runtime_path(value, cwd=cwd, home_dir=home_dir)
+    read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
+    config_file = _resolved_runtime_path(value, cwd=cwd, home_dir=home_dir, allowed_roots=read_roots)
     if config_file is None:
         return False
     normalized_config_path = str(config_file)
@@ -1567,7 +1572,7 @@ def _curl_config_uses_file_upload(
         return False
     config_text = _read_small_runtime_text_file(
         config_file,
-        allowed_roots=_runtime_read_roots(cwd, home_dir),
+        allowed_roots=read_roots,
     )
     if config_text is None:
         return False
@@ -1578,6 +1583,7 @@ def _curl_config_uses_file_upload(
         config_args,
         cwd=config_file.parent,
         home_dir=home_dir,
+        allowed_roots=read_roots,
         visited_config_paths=visited_config_paths | frozenset({normalized_config_path}),
         stdin_config_payloads=stdin_config_payloads,
     )
@@ -2236,13 +2242,19 @@ def _path_is_within_roots(path: Path, roots: tuple[Path, ...]) -> bool:
     return any(path.is_relative_to(root) for root in roots)
 
 
-def _resolved_runtime_path(value: str, *, cwd: Path | None, home_dir: Path | None) -> Path | None:
+def _resolved_runtime_path(
+    value: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
+) -> Path | None:
     stripped_value = _strip_cli_value(value)
     if not stripped_value:
         return None
     expanded_value = _expand_home(stripped_value, home_dir)
     normalized_path = Path(_normalize_path(expanded_value, cwd))
-    read_roots = _runtime_read_roots(cwd, home_dir)
+    read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
     if not read_roots:
         return None
     return normalized_path if _path_is_within_roots(normalized_path, read_roots) else None
@@ -3192,25 +3204,28 @@ def _script_is_benign_wait(script_text: str) -> bool:
 def _script_has_aliased_risky_import(script_text: str) -> bool:
     risky_roots = {"os", "pathlib", "shutil", "subprocess"}
     for raw_line in script_text.splitlines():
-        statement = raw_line.split("#", 1)[0].split(";", 1)[0].strip()
-        if statement.startswith("import "):
-            for part in statement[7:].split(","):
-                clause_tokens = part.strip().split()
-                if len(clause_tokens) < 3 or clause_tokens[-2] != "as":
-                    continue
-                module_name = clause_tokens[0].split(".", 1)[0]
-                if module_name in risky_roots:
-                    return True
-            continue
-        clause_tokens = statement.split()
-        if len(clause_tokens) < 6 or clause_tokens[0] != "from" or "import" not in clause_tokens:
-            continue
-        import_index = clause_tokens.index("import")
-        if import_index < 2 or clause_tokens[1].split(".", 1)[0] not in risky_roots:
-            continue
-        import_clauses = " ".join(clause_tokens[import_index + 1 :]).split(",")
-        if any(len(clause.strip().split()) >= 3 and clause.strip().split()[-2] == "as" for clause in import_clauses):
-            return True
+        for raw_statement in raw_line.split("#", 1)[0].split(";"):
+            statement = raw_statement.strip()
+            if statement.startswith("import "):
+                for part in statement[7:].split(","):
+                    clause_tokens = part.strip().split()
+                    if len(clause_tokens) < 3 or clause_tokens[-2] != "as":
+                        continue
+                    module_name = clause_tokens[0].split(".", 1)[0]
+                    if module_name in risky_roots:
+                        return True
+                continue
+            clause_tokens = statement.split()
+            if len(clause_tokens) < 6 or clause_tokens[0] != "from" or "import" not in clause_tokens:
+                continue
+            import_index = clause_tokens.index("import")
+            if import_index < 2 or clause_tokens[1].split(".", 1)[0] not in risky_roots:
+                continue
+            import_clauses = " ".join(clause_tokens[import_index + 1 :]).split(",")
+            if any(
+                len(clause.strip().split()) >= 3 and clause.strip().split()[-2] == "as" for clause in import_clauses
+            ):
+                return True
     return False
 
 

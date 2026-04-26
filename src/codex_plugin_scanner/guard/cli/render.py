@@ -7,6 +7,7 @@ import math
 import re
 import sys
 import textwrap
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -55,7 +56,7 @@ def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) 
 
     redacted_payload = _redact_payload(payload)
     if as_json or not _RICH_AVAILABLE:
-        sys.stdout.write(_render_redacted_json_payload(redacted_payload))
+        sys.stdout.write(_render_redacted_json_payload(_json_payload_for_command(command, redacted_payload)))
         sys.stdout.write("\n")
         return
 
@@ -87,6 +88,40 @@ def _render_redacted_json_payload(redacted_payload: object) -> str:
     return _serialize_redacted_json(redacted_payload, indent=0)
 
 
+def _json_payload_for_command(command: str, redacted_payload: dict[str, object]) -> dict[str, object]:
+    json_renderer = _JSON_RENDERERS.get(command)
+    if json_renderer is None:
+        return redacted_payload
+    return json_renderer(redacted_payload)
+
+
+def _render_settings_json_payload(redacted_payload: dict[str, object]) -> dict[str, object]:
+    settings = redacted_payload.get("settings")
+    safe_keys = (
+        "mode",
+        "security_level",
+        "default_action",
+        "unknown_publisher_action",
+        "changed_hash_action",
+        "new_network_domain_action",
+        "subprocess_action",
+        "risk_actions",
+        "risk_action_overrides",
+        "harness_risk_actions",
+        "approval_wait_timeout_seconds",
+        "approval_surface_policy",
+        "telemetry",
+        "sync",
+    )
+    safe_settings = {key: settings[key] for key in safe_keys if isinstance(settings, dict) and key in settings}
+    return {
+        "generated_at": redacted_payload.get("generated_at"),
+        "guard_home": redacted_payload.get("guard_home"),
+        "config_path": redacted_payload.get("config_path"),
+        "settings": safe_settings,
+    }
+
+
 def _serialize_redacted_json(value: object, *, indent: int) -> str:
     if isinstance(value, dict):
         if not value:
@@ -110,6 +145,11 @@ def _serialize_redacted_json(value: object, *, indent: int) -> str:
         return json.dumps(value)
     except TypeError:
         return json.dumps(str(value))
+
+
+_JSON_RENDERERS: dict[str, Callable[[dict[str, object]], dict[str, object]]] = {
+    "settings": _render_settings_json_payload,
+}
 
 
 def _render_detect(console: Console, payload: dict[str, object]) -> None:
