@@ -60,7 +60,7 @@ _SECRET_ABSOLUTE_HINTS: tuple[tuple[str, str], ...] = (
 )
 _SECRET_READ_INTENT_PATTERN = re.compile(
     r"\b("
-    r"read|open|print|show|dump|cat|copy|cp|scp|reveal|display|summari[sz]e|inspect|extract|"
+    r"read|open|print|show|dump|cat|head|tail|less|copy|cp|scp|reveal|display|summari[sz]e|inspect|extract|"
     r"contain(?:s)?|contents?\s+of|what(?:'s| is)\s+in"
     r")\b",
     re.IGNORECASE,
@@ -101,7 +101,7 @@ _EXFIL_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"/.docker/config\.json"
         r")"
         r".{0,80}\b(?:to|into|onto|via|through)\b.{0,80}"
-        r"(?:https?://|webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)\b",
+        r"(?:[a-z][a-z0-9+.-]*://|webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)\b",
         re.IGNORECASE,
     ),
 )
