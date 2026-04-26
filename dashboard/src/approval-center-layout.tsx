@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 import { useState, useEffect, useCallback, useMemo, type ChangeEvent } from "react";
 import {
+  HiMiniClipboard,
+  HiMiniClipboardDocumentCheck,
+  HiMiniExclamationTriangle,
+  HiMiniNoSymbol,
+  HiMiniArrowTopRightOnSquare,
+} from "react-icons/hi2";
+import {
   ShellHeader,
   ShellSidebar,
   Surface,
@@ -603,6 +610,7 @@ function RuleBuilder(props: {
           allowLabel={allowLabel}
           previewText={previewText}
           submitting={props.submitting}
+          isBlocked={props.item.policy_action === "block"}
           onAllow={() => props.onResolve("allow")}
           onBlock={() => props.onResolve("block")}
         />
@@ -614,9 +622,12 @@ function RuleBuilder(props: {
         <BlockedActionCard item={props.item} />
         <div className="space-y-4">
           <div>
-            <SectionLabel>Trust level</SectionLabel>
+            <SectionLabel>Approval scope</SectionLabel>
             <p className="mt-2 text-sm leading-6 text-brand-dark/75">
               {buildRecommendation(props.item)}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Start with the narrowest scope. Broader trust is harder to undo.
             </p>
           </div>
           <fieldset className="space-y-3">
@@ -635,19 +646,24 @@ function RuleBuilder(props: {
             </div>
             <details>
               <summary className="cursor-pointer select-none py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-brand-dark/70 [&::-webkit-details-marker]:hidden">
-                › Advanced trust levels
+                › Broader approval scopes
               </summary>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
-                {props.broadScopeOptions.map((option) => (
-                  <ScopeOption
-                    key={option.value}
-                    value={option.value}
-                    label={option.label}
-                    description={option.description}
-                    checked={props.scope === option.value}
-                    onChange={() => props.onScopeChange(option.value)}
-                  />
-                ))}
+              <div className="mt-2 rounded-[1rem] border border-amber-200/60 bg-amber-50/50 p-2 dark:border-amber-500/20 dark:bg-amber-900/10">
+                <p className="mb-2 px-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                  Broader scopes apply across more sessions. Use only when the narrower options are not enough.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
+                  {props.broadScopeOptions.map((option) => (
+                    <ScopeOption
+                      key={option.value}
+                      value={option.value}
+                      label={option.label}
+                      description={option.description}
+                      checked={props.scope === option.value}
+                      onChange={() => props.onScopeChange(option.value)}
+                    />
+                  ))}
+                </div>
               </div>
             </details>
           </fieldset>
@@ -677,6 +693,7 @@ function DecisionActionPanel(props: {
   allowLabel: string;
   previewText: string;
   submitting: "allow" | "block" | null;
+  isBlocked: boolean;
   onAllow: () => void;
   onBlock: () => void;
 }) {
@@ -687,11 +704,11 @@ function DecisionActionPanel(props: {
         {props.previewText}
       </p>
       <div className="mt-4 grid gap-2">
-        <ActionButton onClick={props.onAllow} disabled={props.submitting !== null}>
-          {props.submitting === "allow" ? "Saving…" : props.allowLabel}
+        <ActionButton variant="success" onClick={props.onAllow} disabled={props.submitting !== null}>
+          {props.submitting === "allow" ? "Saving…" : (props.isBlocked ? "Allow — override block" : props.allowLabel)}
         </ActionButton>
         <ActionButton variant="danger" onClick={props.onBlock} disabled={props.submitting !== null}>
-          {props.submitting === "block" ? "Saving…" : "Keep blocked"}
+          {props.submitting === "block" ? "Saving…" : (props.isBlocked ? "Keep blocked" : "Block this action")}
         </ActionButton>
       </div>
       <p className="mt-3 text-xs leading-5 text-muted-foreground">
@@ -734,32 +751,97 @@ function DecisionSteps(props: { activeStep: number }) {
   );
 }
 
+function CopyCommandButton(props: { command: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    void navigator.clipboard.writeText(props.command).then(() => {
+      setCopied(true);
+      const timer = setTimeout(() => setCopied(false), 2000);
+      return timer;
+    });
+  }, [props.command]);
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      aria-label="Copy command to clipboard"
+      className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+    >
+      {copied ? (
+        <HiMiniClipboardDocumentCheck className="h-3.5 w-3.5" aria-hidden="true" />
+      ) : (
+        <HiMiniClipboard className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
 function BlockedActionCard(props: { item: GuardApprovalRequest }) {
   const launchText = actionLaunchText(props.item);
+  const isBlocked = props.item.policy_action === "block";
+  const bannerBg = isBlocked
+    ? "bg-gradient-to-r from-brand-purple/90 to-brand-purple/75"
+    : "bg-gradient-to-r from-brand-blue/85 to-brand-dark/80";
+  const bannerLabel = isBlocked ? "Blocked" : "Paused for review";
+  const bannerIcon = isBlocked ? HiMiniNoSymbol : HiMiniExclamationTriangle;
+  const BannerIcon = bannerIcon;
+
   return (
-    <div className="rounded-[1.65rem] border border-brand-blue/15 bg-white/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <SectionLabel>What was stopped</SectionLabel>
-        <Badge tone="warning">{artifactTypeLabel(props.item.artifact_type)}</Badge>
+    <div className="overflow-hidden rounded-[1.65rem] border border-brand-blue/15 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
+      <div className={`flex items-center gap-2 px-4 py-2.5 ${bannerBg}`}>
+        <BannerIcon className="h-3.5 w-3.5 shrink-0 text-white" aria-hidden="true" />
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-white">
+          {bannerLabel}
+        </span>
+        {props.item.approval_url ? (
+          <a
+            href={props.item.approval_url}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-auto inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80 transition-colors hover:text-white"
+          >
+            Approval link
+            <HiMiniArrowTopRightOnSquare className="h-3 w-3" aria-hidden="true" />
+          </a>
+        ) : null}
       </div>
-      <h4 className="mt-2 text-xl font-semibold tracking-tight text-brand-dark">
-        {actionDisplayTitle(props.item)}
-      </h4>
-      <p className="mt-2 text-sm leading-6 text-brand-dark/70">
-        {harnessDisplayName(props.item.harness)} paused this because {buildQueueSummary(props.item).toLowerCase()}.
-      </p>
-      <div className="mt-4 rounded-[1.25rem] bg-[#090d1a] p-1 shadow-[0_14px_35px_rgba(9,13,26,0.18)]">
-        <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-brand-purple" />
-          <span className="h-2.5 w-2.5 rounded-full bg-brand-blue" />
-          <span className="h-2.5 w-2.5 rounded-full bg-brand-green" />
-          <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45">
-            Command or tool details
-          </span>
+      <div className="p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <SectionLabel>What was stopped</SectionLabel>
+          <Badge tone="warning">{artifactTypeLabel(props.item.artifact_type)}</Badge>
         </div>
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white">
-          {launchText}
-        </pre>
+        <h4 className="mt-2 text-xl font-semibold tracking-tight text-brand-dark">
+          {actionDisplayTitle(props.item)}
+        </h4>
+        <p className="mt-2 text-sm leading-6 text-brand-dark/70">
+          {harnessDisplayName(props.item.harness)} paused this because {buildQueueSummary(props.item).toLowerCase()}.
+        </p>
+        <div className="mt-4 rounded-[1.25rem] bg-[#090d1a] p-1 shadow-[0_14px_35px_rgba(9,13,26,0.18)]">
+          <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-brand-purple" />
+            <span className="h-2.5 w-2.5 rounded-full bg-brand-blue" />
+            <span className="h-2.5 w-2.5 rounded-full bg-brand-green" />
+            <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45">
+              Stopped command
+            </span>
+            <span className="ml-auto">
+              <CopyCommandButton command={launchText} />
+            </span>
+          </div>
+          <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white">
+            {launchText}
+          </pre>
+        </div>
+        {isBlocked && (
+          <div className="mt-3 rounded-[1rem] border border-brand-purple/20 bg-brand-purple/[0.05] px-3 py-2.5">
+            <p className="text-sm leading-6 text-brand-purple">
+              HOL Guard blocked this based on a saved decision. If this is a false positive, choose <span className="font-semibold">Allow</span> below and pick how broadly to remember the override.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

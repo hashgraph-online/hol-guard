@@ -1078,7 +1078,7 @@ def run_guard_command(
         workspace_was_explicit = workspace is not None
         runtime_workspace = workspace
         if runtime_workspace is None and isinstance(payload_cwd, str) and payload_cwd.strip():
-            runtime_workspace = Path(payload_cwd).expanduser().resolve()
+            runtime_workspace = _resolve_runtime_workspace(payload_cwd)
         if args.harness == "copilot":
             runtime_workspace = _resolve_copilot_workspace_root(runtime_workspace)
         copilot_hook_stage = _copilot_hook_stage(payload) if args.harness == "copilot" else None
@@ -1685,12 +1685,22 @@ def run_guard_command(
             str(payload.get("artifact_hash")) if isinstance(payload.get("artifact_hash"), str) else None,
             str(runtime_workspace) if runtime_workspace else None,
         )
+        incoming_policy_action = _optional_string(payload.get("policy_action"))
         policy_action = _coalesce_string(
             getattr(args, "policy_action", None),
             stored_policy_action,
-            payload.get("policy_action"),
+            incoming_policy_action,
             config.default_action,
         )
+        if (
+            _canonical_harness_name(args.harness) == "copilot"
+            and _copilot_hook_stage(payload) == "pretooluse"
+            and runtime_artifact is None
+            and stored_policy_action is None
+            and not isinstance(getattr(args, "policy_action", None), str)
+            and incoming_policy_action in VALID_GUARD_ACTIONS
+        ):
+            policy_action = "allow"
         if (
             stored_policy_action is None
             and not isinstance(getattr(args, "policy_action", None), str)
@@ -3704,6 +3714,17 @@ def _resolve_copilot_workspace_root(workspace: Path | None) -> Path | None:
         if (candidate / ".mcp.json").is_file() or (candidate / ".vscode" / "mcp.json").is_file():
             return candidate
     return workspace
+
+
+def _resolve_runtime_workspace(value: str) -> Path | None:
+    candidate = value.strip()
+    if not candidate:
+        return None
+    try:
+        resolved = Path(candidate).expanduser().resolve()
+    except OSError:
+        return None
+    return resolved if resolved.is_dir() else None
 
 
 def _mcp_server_entries_from_path(path: Path, *, source_scope: str) -> list[tuple[str, str, str]]:

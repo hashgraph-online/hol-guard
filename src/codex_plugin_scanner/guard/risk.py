@@ -281,8 +281,11 @@ def extract_network_hosts(text: str) -> set[str]:
         parsed = urlsplit(value)
         if parsed.hostname:
             hosts.add(parsed.hostname.lower())
-    for value in _HOST_PATTERN.findall(text):
+    for match in _HOST_PATTERN.finditer(text):
+        value = match.group(0)
         if value.count(".") < 1:
+            continue
+        if text[match.end() : match.end() + 1] == "(":
             continue
         lowered = value.lower()
         suffix = lowered.rsplit(".", 1)[-1]

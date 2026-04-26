@@ -456,3 +456,25 @@ def test_emit_guard_payload_uses_adaptive_console_width(monkeypatch) -> None:
     assert captured_kwargs["file"] is not None
     assert captured_kwargs["soft_wrap"] is True
     assert "width" not in captured_kwargs
+
+
+def test_emit_guard_payload_redacts_sensitive_json_fields(capsys) -> None:
+    emit_guard_payload(
+        "status",
+        {
+            "token": "secret-token",
+            "authorization": "Bearer super-secret",
+            "nested": {
+                "api_key": "abc123",
+                "message": "Authorization: Bearer top-secret",
+            },
+        },
+        True,
+    )
+
+    output = capsys.readouterr().out
+    assert "secret-token" not in output
+    assert "super-secret" not in output
+    assert "top-secret" not in output
+    assert '"token": "*****"' in output
+    assert '"api_key": "*****"' in output

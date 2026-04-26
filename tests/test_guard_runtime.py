@@ -2945,6 +2945,51 @@ def test_guard_hook_emits_copilot_native_allow_response_for_node_string_literal_
     assert output == {"permissionDecision": "allow"}
 
 
+def test_guard_hook_emits_copilot_native_allow_response_for_benign_python_heredoc_after_cd(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hookName": "preToolUse",
+        "toolName": "bash",
+        "toolArgs": {
+            "command": (
+                "cd /tmp/hol-guard-fixtures/hashgraph-online && python - <<'PY'\n"
+                "from pathlib import Path\n"
+                "text = Path('bounty_submissions.txt').read_text()\n"
+                "print('bytes', len(text))\n"
+                "print('rows', text.count('data-testid=\"portal-grid-row\"'))\n"
+                "PY"
+            )
+        },
+        "policyAction": "block",
+        "sourceScope": "project",
+        "cwd": str(workspace_dir),
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "copilot",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output == {"permissionDecision": "allow"}
+
+
 def test_guard_hook_emits_copilot_native_allow_response_for_find_name_delete_literal(
     tmp_path,
     capsys,
