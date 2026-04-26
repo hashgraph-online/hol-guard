@@ -83,6 +83,27 @@ _EXFIL_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"(?:webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)\b",
         re.IGNORECASE,
     ),
+    re.compile(
+        r"\b(?:send|post|upload|transfer|paste|sync)\b.{0,120}"
+        r"(?:"
+        r"(?<![\w-])\.env(?:\.[\w.-]+)?\b|"
+        r"(?:^|[\s'\"`])~?/.ssh(?:/|\b)|"
+        r"(?:^|[\s'\"`])~?/.aws/(?:credentials|config)\b|"
+        r"(?:^|[\s'\"`])~?/.kube/config\b|"
+        r"(?:^|[\s'\"`])~?/.docker/config\.json\b|"
+        r"(?<![\w-])\.npmrc\b|"
+        r"(?<![\w-])\.pypirc\b|"
+        r"(?<![\w-])\.git-credentials\b|"
+        r"/.ssh/|"
+        r"/.aws/credentials|"
+        r"/.aws/config|"
+        r"/.kube/config|"
+        r"/.docker/config\.json"
+        r")"
+        r".{0,80}\b(?:to|into|onto|via|through)\b.{0,80}"
+        r"(?:https?://|webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)\b",
+        re.IGNORECASE,
+    ),
 )
 _DESTRUCTIVE_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
@@ -105,7 +126,7 @@ _SUBPROCESS_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.IGNORECASE,
     ),
     re.compile(
-        r"(?:^|[\s'\"`])(?:bash\s+-c\b|sh\s+-c\b|zsh\s+-c\b|powershell(?:\s|$)|cmd\s+/c(?:\s|$)|subprocess\.(?:run|Popen|call|check_call|check_output)\b|exec\(|spawn\()",
+        r"(?:^|[\s'\"`])(?:bash\s+-c\b|sh\s+-c\b|zsh\s+-c\b|powershell(?:\.exe)?(?:\s|$)|cmd\s+/c(?:\s|$)|subprocess\.(?:run|Popen|call|check_call|check_output)\b|exec\(|spawn\()",
         re.IGNORECASE,
     ),
     re.compile(
