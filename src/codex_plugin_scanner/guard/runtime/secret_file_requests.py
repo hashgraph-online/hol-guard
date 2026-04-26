@@ -1158,14 +1158,18 @@ def _curl_segment_reads_config_from_stdin(segment_args: list[str]) -> bool:
             return False
         if token in _CURL_CONFIG_FLAGS_WITH_VALUE:
             value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
-            if _strip_cli_value(value) == "-":
+            if _strip_cli_value(_shell_command_token_without_attached_redirection(value)) == "-":
                 return True
             index += 2
             continue
-        if token.startswith("--config=") and _strip_cli_value(token.split("=", 1)[1]) == "-":
+        if token.startswith("--config=") and _strip_cli_value(
+            _shell_command_token_without_attached_redirection(token.split("=", 1)[1])
+        ) == "-":
             return True
         clustered_config_value = _curl_clustered_short_flag_value(segment_args, index, "K")
-        if clustered_config_value is not None and _strip_cli_value(clustered_config_value) == "-":
+        if clustered_config_value is not None and _strip_cli_value(
+            _shell_command_token_without_attached_redirection(clustered_config_value)
+        ) == "-":
             return True
         index += 1
     return False
@@ -1517,10 +1521,7 @@ def _stdin_redirect_target_from_token(token: str, *, next_token: str | None) -> 
 
 
 def _token_is_heredoc_operator(token: str) -> bool:
-    if token.startswith("<<"):
-        return True
-    heredoc_index = token.find("<<")
-    return heredoc_index > 0 and token[:heredoc_index].isdigit()
+    return "<<" in token
 
 
 def _decode_shell_text_literal(value: str) -> str | None:
@@ -1614,14 +1615,15 @@ def _curl_config_uses_file_upload(
     visited_config_paths: frozenset[str],
     stdin_config_payloads: tuple[tuple[str, Path | None], ...] = (),
 ) -> bool:
-    stripped_value = _strip_cli_value(value)
+    normalized_value = _shell_command_token_without_attached_redirection(value)
+    stripped_value = _strip_cli_value(normalized_value)
     if stripped_value == "-":
         return any(
             _curl_inline_config_text_uses_file_upload(payload_text, cwd=payload_cwd, home_dir=home_dir)
             for payload_text, payload_cwd in stdin_config_payloads
         )
     read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
-    config_file = _resolved_runtime_path(value, cwd=cwd, home_dir=home_dir, allowed_roots=read_roots)
+    config_file = _resolved_runtime_path(normalized_value, cwd=cwd, home_dir=home_dir, allowed_roots=read_roots)
     if config_file is None:
         return False
     normalized_config_path = str(config_file)
@@ -3277,7 +3279,7 @@ def _script_has_aliased_risky_import(script_text: str) -> bool:
     risky_roots = {"os", "pathlib", "shutil", "subprocess"}
     try:
         parsed_script = ast.parse(script_text)
-    except SyntaxError:
+    except (SyntaxError, ValueError):
         return False
     for node in ast.walk(parsed_script):
         if isinstance(node, ast.Import):
