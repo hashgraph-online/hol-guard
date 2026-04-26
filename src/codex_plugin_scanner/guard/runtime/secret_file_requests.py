@@ -532,19 +532,23 @@ def is_explicitly_benign_tool_action_request(tool_name: object, arguments: objec
     normalized_tool_name = _normalize_tool_name(tool_name)
     if normalized_tool_name not in _SHELL_TOOL_NAMES:
         return False
+    found_benign_candidate = False
     for command_text in _candidate_command_texts(arguments):
         stripped_command = command_text.strip()
         if not stripped_command:
             continue
         parts = _split_shell_parts(stripped_command)
         if not parts:
-            continue
+            return False
         parsed_command_names = list(_shell_command_names_from_parts(parts))
         if _looks_like_benign_interpreter_wait(stripped_command, parts, parsed_command_names):
-            return True
+            found_benign_candidate = True
+            continue
         if _looks_like_read_only_interpreter_command(stripped_command, parts, parsed_command_names):
-            return True
-    return False
+            found_benign_candidate = True
+            continue
+        return False
+    return found_benign_candidate
 
 
 def _docker_sensitive_tool_action_request(
