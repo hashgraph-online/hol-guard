@@ -149,17 +149,18 @@ def _prompt_secret_intent_region(text: str, *, start: int, end: int) -> str:
     region_start = _prompt_sentence_start(text, start)
     first_sentence_end = _prompt_sentence_end(text, end)
     second_sentence_end = (
-        _prompt_sentence_end(text, first_sentence_end)
-        if first_sentence_end < len(text)
-        else first_sentence_end
+        _prompt_sentence_end(text, first_sentence_end) if first_sentence_end < len(text) else first_sentence_end
     )
     return text[region_start:second_sentence_end]
 
 
 def _prompt_has_secret_read_intent(prompt_text: str, *, start: int, end: int) -> bool:
-    return _SECRET_READ_INTENT_PATTERN.search(
-        _prompt_secret_intent_region(prompt_text, start=start, end=end),
-    ) is not None
+    return (
+        _SECRET_READ_INTENT_PATTERN.search(
+            _prompt_secret_intent_region(prompt_text, start=start, end=end),
+        )
+        is not None
+    )
 
 
 def _match_text(pattern: re.Pattern[str], text: str) -> str:
