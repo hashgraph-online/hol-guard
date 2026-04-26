@@ -91,6 +91,7 @@ from ..runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_file_read_request,
     extract_sensitive_tool_action_request,
+    is_explicitly_benign_tool_action_request,
 )
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
@@ -1699,6 +1700,10 @@ def run_guard_command(
             and stored_policy_action is None
             and not isinstance(getattr(args, "policy_action", None), str)
             and incoming_policy_action in VALID_GUARD_ACTIONS
+            and is_explicitly_benign_tool_action_request(
+                payload.get("tool_name"),
+                payload.get("tool_input", payload.get("arguments")),
+            )
         ):
             policy_action = "allow"
         if (

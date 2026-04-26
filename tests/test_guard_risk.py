@@ -1173,6 +1173,16 @@ def test_tool_action_request_classifier_detects_ruby_file_write():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_alias_imported_os_remove():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": ("python3 -c \"from os import remove as rm; rm('dangerous-marker.json')\"")},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_does_not_promote_echoed_interpreter_text():
     request = extract_sensitive_tool_action_request(
         "bash",

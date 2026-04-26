@@ -525,6 +525,25 @@ def extract_sensitive_tool_action_request(
     return None
 
 
+def is_explicitly_benign_tool_action_request(tool_name: object, arguments: object) -> bool:
+    normalized_tool_name = _normalize_tool_name(tool_name)
+    if normalized_tool_name not in _SHELL_TOOL_NAMES:
+        return False
+    for command_text in _candidate_command_texts(arguments):
+        stripped_command = command_text.strip()
+        if not stripped_command:
+            continue
+        parts = _split_shell_parts(stripped_command)
+        if not parts:
+            continue
+        parsed_command_names = list(_shell_command_names_from_parts(parts))
+        if _looks_like_benign_interpreter_wait(stripped_command, parts, parsed_command_names):
+            return True
+        if _looks_like_read_only_interpreter_command(stripped_command, parts, parsed_command_names):
+            return True
+    return False
+
+
 def _docker_sensitive_tool_action_request(
     *,
     tool_name: str,
@@ -3091,6 +3110,8 @@ def _script_is_read_only_observer(script_text: str) -> bool:
         return False
     if _script_is_benign_wait(normalized_script):
         return True
+    if re.search(r"\bfrom\s+(?:os|pathlib|shutil|subprocess)\s+import\s+[^#\n]*\bas\b", normalized_script):
+        return False
     return not any(pattern.search(normalized_script) for pattern in _READ_ONLY_INTERPRETER_MUTATION_PATTERNS)
 
 
