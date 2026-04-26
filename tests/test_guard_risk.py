@@ -1139,6 +1139,20 @@ def test_tool_action_request_classifier_detects_path_open_positional_write_mode(
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_imported_subprocess_run():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "python3 -c \"from subprocess import run; run('echo owned > dangerous-marker.json', shell=True)\""
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_does_not_promote_echoed_interpreter_text():
     request = extract_sensitive_tool_action_request(
         "bash",
