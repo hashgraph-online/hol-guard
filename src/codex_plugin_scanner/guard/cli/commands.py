@@ -1484,14 +1484,6 @@ def run_guard_command(
                         artifact=runtime_artifact,
                         artifact_hash=runtime_artifact_hash,
                     )
-                if _should_allow_claude_user_prompt_submit_without_output(
-                    args,
-                    event_name=event_name,
-                    policy_action=policy_action,
-                    artifact=runtime_artifact,
-                    output_stream=output_stream,
-                ):
-                    return 0
                 if _should_emit_copilot_hook_response(args):
                     _emit_copilot_hook_response(
                         policy_action=policy_action,
@@ -1864,23 +1856,6 @@ def _should_emit_prequeue_native_hook_response(
     if not getattr(args, "json", False):
         return True
     return output_stream is not None
-
-
-def _should_allow_claude_user_prompt_submit_without_output(
-    args: argparse.Namespace,
-    *,
-    event_name: str,
-    policy_action: str,
-    artifact: GuardArtifact,
-    output_stream: TextIO | None,
-) -> bool:
-    return (
-        _canonical_harness_name(args.harness) == "claude-code"
-        and event_name == "UserPromptSubmit"
-        and policy_action == "require-reapproval"
-        and not _prompt_requires_hard_block(artifact)
-        and (not getattr(args, "json", False) or output_stream is not None)
-    )
 
 
 def _emit_claude_permission_request_passthrough(*, output_stream: TextIO | None = None) -> None:
@@ -3070,6 +3045,8 @@ def _emit_native_hook_response(
                 "hookEventName": event_name,
                 "additionalContext": additional_context,
             }
+        elif _canonical_harness_name(harness) in {"claude-code", "codex"}:
+            payload["hookSpecificOutput"] = {"hookEventName": event_name}
         if payload:
             _write_json_line(payload, output_stream=output_stream)
         return
@@ -3432,11 +3409,20 @@ def _optional_string(value: object | None) -> str | None:
     return None
 
 
+_HOOK_EVENT_NAME_MAP = {
+    "userpromptsubmitted": "UserPromptSubmit",
+    "pretooluse": "PreToolUse",
+    "posttooluse": "PostToolUse",
+    "permissionrequest": "PermissionRequest",
+}
+
+
 def _hook_event_name(payload: dict[str, object]) -> str | None:
     for key in ("event", "hook_event_name", "hookEventName", "hook_name"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            normalized = value.strip()
+            return _HOOK_EVENT_NAME_MAP.get(normalized.lower(), normalized)
     return None
 
 

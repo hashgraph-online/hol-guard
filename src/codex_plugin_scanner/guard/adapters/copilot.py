@@ -25,7 +25,7 @@ from .mcp_servers import (
     skipped_stdio_server_names,
 )
 
-_MANAGED_HOOK_EVENTS = ("preToolUse", "postToolUse", "permissionRequest")
+_MANAGED_HOOK_EVENTS = ("userPromptSubmitted", "preToolUse", "postToolUse", "permissionRequest")
 _DETECTABLE_HOOK_EVENTS = (
     "sessionStart",
     "sessionEnd",

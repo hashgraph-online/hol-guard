@@ -8,11 +8,13 @@ Current Guard support in this repo:
   - parses configured MCP servers
   - installs Guard-owned Codex `PreToolUse` Bash hooks so native shell commands can be denied before execution even when Codex itself is running in YOLO mode
   - supports wrapper-mode `guard run codex`
+  - wrapper prompt screening now suppresses copied debug and incident context while still escalating risky prompt intent
   - uses same-chat MCP elicitation for live managed MCP tool approvals in the interactive CLI and Codex App
   - falls back to the local approval center only for nonresponsive or headless Codex sessions such as `codex exec`
 - `claude-code`
   - detects global and project settings, hooks, `.mcp.json`, and workspace agents
   - supports local hook install and uninstall in `.claude/settings.local.json`
+  - has native `UserPromptSubmit` and `PreToolUse` Guard hook coverage
   - is the best current harness for graceful approval deferral
 - `copilot`
   - detects read-only user config in `~/.copilot/config.json` and `~/.copilot/mcp-config.json`
@@ -20,9 +22,11 @@ Current Guard support in this repo:
   - detects repo-local Copilot CLI hooks from `.github/hooks/*.json`
   - installs and removes Guard-owned repo hooks in `.github/hooks/hol-guard-copilot.json`
   - supports wrapper-mode `guard run copilot`
+  - has native `userPromptSubmitted`, `preToolUse`, and `postToolUse` hook coverage normalized onto the shared Guard runtime
 - `cursor`
   - detects global and project `mcp.json`
   - supports wrapper-mode management state
+  - wrapper prompt screening is covered for benign debug prompts and risky secret-read prompts
   - leaves native Cursor tool approval in place and focuses Guard on artifact trust
 - `antigravity`
   - detects Antigravity user settings, installed extension profiles, and Antigravity-owned MCP and skill roots
@@ -31,6 +35,7 @@ Current Guard support in this repo:
 - `gemini`
   - detects `.gemini/settings.json`, local extension manifests, embedded MCP declarations, hooks, and Gemini skill directories
   - supports wrapper-mode management state
+  - wrapper prompt screening is covered for benign debug prompts and risky secret-read prompts
   - falls back to the local approval center when Guard blocks a launch
 - `hermes`
   - detects Hermes skills plus MCP servers from `~/.hermes/config.yaml` and `~/.hermes/mcp_servers.json`
@@ -42,6 +47,7 @@ Current Guard support in this repo:
     plugin files, and OpenCode-compatible skill directories
   - supports wrapper-mode management state plus a Guard-owned runtime overlay for native skill approval prompts
   - supports wrapper-mode `guard run opencode`
+  - wrapper prompt screening is covered for benign debug prompts and risky secret-read prompts
   - keeps managed MCP tools on OpenCode native ask so the user can allow once, allow for the session, or reject inline
   - blocks newly introduced OpenCode MCP, plugin, and skill artifacts before launch when local Guard policy requires
     approval
@@ -53,6 +59,14 @@ Approval tiers:
 3. terminal approval resolution through `hol-guard approvals`
 
 The harness adapters are designed to prefer discovery and reversible overlay behavior over invasive config mutation.
+
+The Guard Surface Server now provides one shared runtime shape across harnesses:
+
+- session attach
+- operation start and status updates
+- approval request items
+- approval-center lease and heartbeat tracking
+- resume or completion after approval
 
 Runtime intent protections:
 

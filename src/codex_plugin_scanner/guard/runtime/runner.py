@@ -58,22 +58,87 @@ _SECRET_ABSOLUTE_HINTS: tuple[tuple[str, str], ...] = (
     ("/.kube/config", "kubeconfig"),
     ("/.docker/config.json", "Docker credentials"),
 )
-_EXFIL_PROMPT_PATTERN = re.compile(
-    r"\b(upload|exfiltrate|send|post|sync|webhook|paste|gist|transfer)\b",
+_SECRET_READ_INTENT_PATTERN = re.compile(
+    r"\b("
+    r"read|open|print|show|dump|cat|head|tail|less|copy|cp|scp|reveal|display|summari[sz]e|inspect|extract|"
+    r"contain(?:s)?|contents?\s+of|what(?:'s| is)\s+in"
+    r")\b",
     re.IGNORECASE,
 )
-_DESTRUCTIVE_PROMPT_PATTERN = re.compile(
-    r"\b(rm\s+-rf|rm\s+|del\s+|truncate\s+|chmod\s+|chown\s+|mv\s+|overwrite)\b",
-    re.IGNORECASE,
+_EXFIL_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:upload|exfiltrate|transfer|paste|gist|webhook)\b.{0,80}\b"
+        r"(?:file|contents?|data|payload|secret|token|key|credential|credentials|config|output)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:send|post|upload|transfer|paste|sync)\b.{0,80}\b"
+        r"(?:contents?|data|payload|file|secret|token|key|credential|credentials|config|output)\b"
+        r"(?:.{0,40}\b(?:to|into|onto|via|through)\b)?",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:send|post|upload|transfer|paste|sync)\b.{0,80}\b"
+        r"(?:to|into|onto|via|through)\b.{0,40}\b"
+        r"(?:webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:send|post|upload|transfer|paste|sync)\b.{0,120}"
+        r"(?:"
+        r"(?<![\w-])\.env(?:\.[\w.-]+)?\b|"
+        r"(?:^|[\s'\"`])~?/.ssh(?:/|\b)|"
+        r"(?:^|[\s'\"`])~?/.aws/(?:credentials|config)\b|"
+        r"(?:^|[\s'\"`])~?/.kube/config\b|"
+        r"(?:^|[\s'\"`])~?/.docker/config\.json\b|"
+        r"(?<![\w-])\.npmrc\b|"
+        r"(?<![\w-])\.pypirc\b|"
+        r"(?<![\w-])\.git-credentials\b|"
+        r"/.ssh/|"
+        r"/.aws/credentials|"
+        r"/.aws/config|"
+        r"/.kube/config|"
+        r"/.docker/config\.json"
+        r")"
+        r".{0,80}\b(?:to|into|onto|via|through)\b.{0,80}"
+        r"(?:[a-z][a-z0-9+.-]*://|webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)\b",
+        re.IGNORECASE,
+    ),
 )
-_SUBPROCESS_PROMPT_PATTERN = re.compile(
-    r"\b(?:bash\s+-c|sh\s+-c|zsh\s+-c|powershell|cmd\s+/c|subprocess)\b|(?:exec|spawn)\s*\(",
-    re.IGNORECASE,
+_DESTRUCTIVE_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:run|execute|use|call|invoke)\b.{0,40}\b(?:rm\s+-rf|rm\s+|del\s+|truncate\s+|chmod\s+|chown\s+|mv\s+)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:^|[\s'\"`(])(?:rm\s+-rf|rm\s+\S|del\s+\S|truncate\s+\S|chmod\s+\S|chown\s+\S|mv\s+\S)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:delete|remove|overwrite|truncate)\b.{0,60}\b(?:file|directory|repo|workspace|contents?)\b",
+        re.IGNORECASE,
+    ),
+)
+_SUBPROCESS_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:run|execute|use|call|invoke|launch|spawn)\b.{0,60}\b"
+        r"(?:bash\s+-c|sh\s+-c|zsh\s+-c|powershell|cmd\s+/c|subprocess|exec\(|spawn\()",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:^|[\s'\"`(])(?:bash\s+-c\b|sh\s+-c\b|zsh\s+-c\b|powershell(?:\.exe)?(?:\s|$)|cmd\s+/c(?:\s|$)|subprocess\.(?:run|Popen|call|check_call|check_output)\b|exec\(|spawn\()",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:use|call|invoke)\b.{0,40}\bsubprocess\b",
+        re.IGNORECASE,
+    ),
 )
 _GUARD_BYPASS_PROMPT_PATTERN = re.compile(
     r"\b(hol-guard\s+(?:disable|off|uninstall)|disable\s+hol-guard|approval_policy\s*=\s*\"never\"|guard[_-]?bypass)\b",
     re.IGNORECASE,
 )
+_PROMPT_SENTENCE_BOUNDARY_PATTERN = re.compile(r"[!?;]|[.](?=\s|$)")
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 _SYNC_HTTP_TIMEOUT_SECONDS = 20
 _SYNC_HTTP_RETRY_TIMEOUT_SECONDS = 120
@@ -89,6 +154,55 @@ class GuardSyncNotConfiguredError(RuntimeError):
 
 class GuardSyncNotAvailableError(RuntimeError):
     """Raised when the sync endpoint returns 403 (free-plan restriction)."""
+
+
+def _prompt_sentence_start(text: str, index: int) -> int:
+    matches = list(_PROMPT_SENTENCE_BOUNDARY_PATTERN.finditer(text, 0, index))
+    return matches[-1].end() if matches else 0
+
+
+def _prompt_sentence_end(text: str, index: int) -> int:
+    match = _PROMPT_SENTENCE_BOUNDARY_PATTERN.search(text, index)
+    return match.end() if match is not None else len(text)
+
+
+def _prompt_secret_intent_region(text: str, *, start: int, end: int) -> str:
+    current_sentence_start = _prompt_sentence_start(text, start)
+    region_start = _prompt_sentence_start(text, max(0, current_sentence_start - 1))
+    first_sentence_end = _prompt_sentence_end(text, end)
+    second_sentence_end = (
+        _prompt_sentence_end(text, first_sentence_end) if first_sentence_end < len(text) else first_sentence_end
+    )
+    return text[region_start:second_sentence_end]
+
+
+def _prompt_has_secret_read_intent(prompt_text: str, *, start: int, end: int) -> bool:
+    return (
+        _SECRET_READ_INTENT_PATTERN.search(
+            _prompt_secret_intent_region(prompt_text, start=start, end=end),
+        )
+        is not None
+    )
+
+
+def _first_match(patterns: tuple[re.Pattern[str], ...], text: str) -> re.Match[str] | None:
+    for pattern in patterns:
+        match = pattern.search(text)
+        if match is not None:
+            return match
+    return None
+
+
+def _iter_hint_occurrences(text: str, hint: str) -> list[tuple[int, int]]:
+    occurrences: list[tuple[int, int]] = []
+    current_pos = 0
+    while True:
+        start = text.find(hint, current_pos)
+        if start == -1:
+            return occurrences
+        end = start + len(hint)
+        occurrences.append((start, end))
+        current_pos = start + 1
 
 
 def guard_run(
@@ -122,6 +236,12 @@ def guard_run(
             if key in pending_evaluation:
                 reevaluated[key] = pending_evaluation[key]
         evaluation = reevaluated
+    if "config_paths" not in evaluation:
+        evaluation["config_paths"] = list(detection.config_paths) or _guard_run_config_paths(
+            detection=detection,
+            context=context,
+            passthrough_args=passthrough_args,
+        )
     if evaluation["blocked"] or dry_run:
         evaluation["launched"] = False
         evaluation["launch_command"] = []
@@ -145,6 +265,20 @@ def guard_run(
     evaluation["launched"] = True
     evaluation["return_code"] = result.returncode
     return evaluation
+
+
+def _guard_run_config_paths(
+    *,
+    detection: HarnessDetection,
+    context: HarnessContext,
+    passthrough_args: list[str],
+) -> list[str]:
+    if detection.config_paths:
+        return list(detection.config_paths)
+    prompt_text = " ".join(value.strip() for value in passthrough_args if value.strip())
+    if prompt_text:
+        return [str(_prompt_policy_path(detection, context))]
+    return []
 
 
 def _detection_with_prompt_artifacts(
@@ -210,20 +344,25 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
         )
 
     for pattern, label in _SECRET_REQUEST_PATTERNS:
-        match = pattern.search(normalized_prompt)
-        if match is None:
-            continue
-        add_secret_request(label=label, matched=match.group(0).strip())
+        for match in pattern.finditer(normalized_prompt):
+            if not _prompt_has_secret_read_intent(normalized_prompt, start=match.start(), end=match.end()):
+                continue
+            add_secret_request(label=label, matched=match.group(0).strip())
+            break
     for hint, label in _SECRET_ABSOLUTE_HINTS:
-        if hint in lowered:
-            add_secret_request(label=label, matched=hint)
-    if _EXFIL_PROMPT_PATTERN.search(normalized_prompt):
+        for start, end in _iter_hint_occurrences(lowered, hint):
+            if _prompt_has_secret_read_intent(normalized_prompt, start=start, end=end):
+                add_secret_request(label=label, matched=hint)
+                break
+    exfil_match = _first_match(_EXFIL_PROMPT_PATTERNS, normalized_prompt)
+    if exfil_match is not None:
+        matched_text = exfil_match.group(0).strip()
         requests.append(
             PromptRequest(
-                request_id=_prompt_request_id("exfil_intent", "exfil", lowered),
+                request_id=_prompt_request_id("exfil_intent", matched_text, lowered),
                 request_class="exfil_intent",
                 summary="Prompt includes exfiltration-oriented transfer intent.",
-                matched_text="exfil-transfer",
+                matched_text=matched_text,
                 severity=8,
                 confidence=0.84,
                 remediation=(
@@ -236,13 +375,19 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
                 ),
             )
         )
-    if _DESTRUCTIVE_PROMPT_PATTERN.search(normalized_prompt):
+    destructive_match = _first_match(_DESTRUCTIVE_PROMPT_PATTERNS, normalized_prompt)
+    if destructive_match is not None:
+        matched_text = destructive_match.group(0).strip()
         requests.append(
             PromptRequest(
-                request_id=_prompt_request_id("destructive_intent", "destructive", lowered),
+                request_id=_prompt_request_id(
+                    "destructive_intent",
+                    matched_text,
+                    lowered,
+                ),
                 request_class="destructive_intent",
                 summary="Prompt includes destructive filesystem mutation intent.",
-                matched_text="destructive-operation",
+                matched_text=matched_text,
                 severity=8,
                 confidence=0.87,
                 remediation=(
@@ -259,13 +404,19 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
                 ),
             )
         )
-    if _SUBPROCESS_PROMPT_PATTERN.search(normalized_prompt):
+    subprocess_match = _first_match(_SUBPROCESS_PROMPT_PATTERNS, normalized_prompt)
+    if subprocess_match is not None:
+        matched_text = subprocess_match.group(0).strip()
         requests.append(
             PromptRequest(
-                request_id=_prompt_request_id("subprocess_intent", "subprocess", lowered),
+                request_id=_prompt_request_id(
+                    "subprocess_intent",
+                    matched_text,
+                    lowered,
+                ),
                 request_class="subprocess_intent",
                 summary="Prompt asks for subprocess or shell-wrapper execution.",
-                matched_text="subprocess-shell",
+                matched_text=matched_text,
                 severity=7,
                 confidence=0.8,
                 remediation=(
@@ -377,13 +528,7 @@ def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) ->
                 return candidate
     if config_candidates:
         return Path(config_candidates[0])
-    if detection.harness == "opencode":
-        if context.workspace_dir is not None:
-            return context.workspace_dir / "opencode.json"
-        return context.home_dir / ".config" / "opencode" / "opencode.json"
-    if context.workspace_dir is not None:
-        return context.workspace_dir / ".codex" / "config.toml"
-    return context.home_dir / ".codex" / "config.toml"
+    return get_adapter(detection.harness).policy_path(context)
 
 
 def _prompt_config_candidates(detection: HarnessDetection, context: HarnessContext) -> tuple[str, ...]:
