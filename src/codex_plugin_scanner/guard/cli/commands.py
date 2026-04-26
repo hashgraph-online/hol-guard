@@ -23,7 +23,6 @@ from typing import TextIO
 
 from ...argparse_utils import FriendlyArgumentParser
 from ...models import ScanOptions
-from ...path_support import resolves_within_root
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approvals import (
@@ -3727,22 +3726,21 @@ def _resolve_runtime_workspace(value: str, *, home_dir: Path) -> Path | None:
     candidate = value.strip()
     if not candidate:
         return None
-    expanded = Path(candidate).expanduser()
-    if not expanded.is_absolute():
+    normalized_path = os.path.realpath(os.path.expanduser(candidate))
+    if not os.path.isabs(normalized_path):
         return None
+    allowed_roots: list[str] = []
+    with suppress(OSError):
+        allowed_roots.append(os.path.realpath(os.fspath(home_dir.expanduser().resolve().parent)))
+    with suppress(OSError):
+        allowed_roots.append(os.path.realpath(os.fspath(Path.cwd().resolve())))
+    if allowed_roots and not any(os.path.commonpath((root, normalized_path)) == root for root in allowed_roots):
+        return None
+    path = Path(normalized_path)
     try:
-        if not expanded.is_dir():
-            return None
+        return path if path.is_dir() else None
     except OSError:
         return None
-    allowed_roots: list[Path] = []
-    with suppress(OSError):
-        allowed_roots.append(home_dir.expanduser().resolve().parent)
-    with suppress(OSError):
-        allowed_roots.append(Path.cwd().resolve())
-    if allowed_roots and not any(resolves_within_root(root, expanded, require_exists=True) for root in allowed_roots):
-        return None
-    return expanded
 
 
 def _mcp_server_entries_from_path(path: Path, *, source_scope: str) -> list[tuple[str, str, str]]:
