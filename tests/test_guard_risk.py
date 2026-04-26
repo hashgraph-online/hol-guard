@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     classify_sensitive_path,
     extract_sensitive_file_read_request,
     extract_sensitive_tool_action_request,
+    is_explicitly_benign_tool_action_request,
     is_file_read_tool_name,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -1215,6 +1216,16 @@ def test_tool_action_request_classifier_does_not_promote_echoed_interpreter_text
     )
 
     assert request is None
+
+
+def test_explicitly_benign_tool_action_request_requires_all_command_variants_to_be_benign():
+    assert not is_explicitly_benign_tool_action_request(
+        "bash",
+        {
+            "command": "python3 - <<'PY'\nprint('rows')\nPY",
+            "argv": ["rm", "-rf", "dangerous-marker.json"],
+        },
+    )
 
 
 def test_tool_action_request_classifier_does_not_let_benign_wait_mask_following_rm():

@@ -4170,9 +4170,9 @@ def test_guard_hook_resolves_copilot_nested_cwd_back_to_workspace_root(
             }
         },
     )
+    monkeypatch.chdir(nested_dir)
     event = {
         "hook_event_name": "PreToolUse",
-        "cwd": str(nested_dir),
         "toolName": "mcp_danger_lab_safe_echo",
         "toolArgs": json.dumps({"text": "ok"}),
         "sourceScope": "project",
