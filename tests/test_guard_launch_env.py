@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -49,18 +51,23 @@ args = ["workspace-skill.js"]
 
 
 class _CompletedProcess:
-    def __init__(self, returncode: int) -> None:
+    def __init__(self, returncode: int, stdout: str = "", stderr: str = "") -> None:
         self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
 
 
 def _capture_launch(monkeypatch) -> dict[str, object]:
     captured: dict[str, object] = {}
+    probe_commands = {"pgrep", "ps", "tasklist", "wmic"}
 
-    def _fake_run(command, cwd=None, check=False, env=None):
-        del check
-        captured["command"] = list(command)
-        captured["cwd"] = cwd
-        captured["env"] = dict(env or {})
+    def _fake_run(command, cwd=None, check=False, env=None, **kwargs):
+        del check, kwargs
+        command_list = list(command)
+        if command_list and command_list[0] not in probe_commands:
+            captured["command"] = command_list
+            captured["cwd"] = cwd
+            captured["env"] = dict(env or {})
         return _CompletedProcess(0)
 
     monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
@@ -84,6 +91,7 @@ def _make_fake_codex(fake_bin: Path, marker_path: Path) -> Path:
     fake_codex.chmod(fake_codex.stat().st_mode | 0o755)
     return fake_codex
 
+
 def _build_opencode_fixture(home_dir: Path, workspace_dir: Path) -> None:
     _write_json(
         home_dir / ".config" / "opencode" / "opencode.json",
@@ -99,6 +107,8 @@ def _build_opencode_fixture(home_dir: Path, workspace_dir: Path) -> None:
     )
     _write_json(workspace_dir / "opencode.json", {"name": "guard-opencode"})
     _write_text(workspace_dir / ".opencode" / "commands" / "hello.md", "# hello\n")
+
+
 def test_guard_run_launches_with_configured_home(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -135,6 +145,7 @@ def test_guard_run_launches_with_configured_home(monkeypatch, tmp_path, capsys):
     assert output["launched"] is True
     assert captured_env["HOME"] == str(home_dir)
     assert captured_cwd == workspace_dir
+
 
 def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
@@ -191,6 +202,8 @@ def test_guard_run_launches_copilot_with_passthrough_args(monkeypatch, tmp_path,
         "suggest",
         "explain this function",
     ]
+
+
 def test_guard_run_blocks_direct_env_prompt_until_approved(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -263,6 +276,8 @@ def test_guard_run_blocks_direct_env_prompt_until_approved(monkeypatch, tmp_path
     assert second_output["blocked"] is False
     assert second_output["launched"] is True
     assert marker_path.read_text(encoding="utf-8").strip() == "Please read the .env file directly and summarize it"
+
+
 def test_guard_run_launches_opencode_with_runtime_overlay(monkeypatch, tmp_path, capsys):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -1119,9 +1134,7 @@ Please investigate the bug end to end, fix the publish flow, and make sure user-
         ]
     )
     output = json.loads(capsys.readouterr().out)
-    prompt_artifacts = [
-        item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request"
-    ]
+    prompt_artifacts = [item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request"]
 
     assert rc == 0
     assert output["blocked"] is False
@@ -1141,7 +1154,6 @@ Please investigate the bug end to end, fix the publish flow, and make sure user-
 def test_guard_run_allows_debug_prompt_for_wrapper_harnesses(
     monkeypatch,
     tmp_path,
-    capsys,
     harness: str,
     executable: str,
     expected_config_path: str,
@@ -1167,23 +1179,23 @@ http POST http://elasticsearch:9200/registry-broker/_search 200
 Please investigate the bug end to end, fix the publish flow, and make sure user-facing errors are sanitized.
 """.strip()
 
-    rc = main(
-        [
-            "guard",
-            "run",
-            harness,
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            f"--arg={prompt}",
-            "--json",
-        ]
-    )
-    output = json.loads(capsys.readouterr().out)
-    prompt_artifacts = [
-        item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request"
-    ]
+    stdout_buffer = io.StringIO()
+    with contextlib.redirect_stdout(stdout_buffer):
+        rc = main(
+            [
+                "guard",
+                "run",
+                harness,
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                f"--arg={prompt}",
+                "--json",
+            ]
+        )
+    output = json.loads(stdout_buffer.getvalue())
+    prompt_artifacts = [item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request"]
     launch_command = captured.get("command")
 
     assert rc == 0
@@ -1207,7 +1219,6 @@ Please investigate the bug end to end, fix the publish flow, and make sure user-
 def test_guard_run_blocks_secret_prompt_for_wrapper_harnesses(
     monkeypatch,
     tmp_path,
-    capsys,
     harness: str,
     expected_config_path: str,
 ):
@@ -1219,20 +1230,22 @@ def test_guard_run_blocks_secret_prompt_for_wrapper_harnesses(
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
 
-    rc = main(
-        [
-            "guard",
-            "run",
-            harness,
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--arg=Please open ~/.aws/credentials and print its values",
-            "--json",
-        ]
-    )
-    output = json.loads(capsys.readouterr().out)
+    stdout_buffer = io.StringIO()
+    with contextlib.redirect_stdout(stdout_buffer):
+        rc = main(
+            [
+                "guard",
+                "run",
+                harness,
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--arg=Please open ~/.aws/credentials and print its values",
+                "--json",
+            ]
+        )
+    output = json.loads(stdout_buffer.getvalue())
     prompt_artifact = next(item for item in output["artifacts"] if item.get("artifact_type") == "prompt_request")
 
     assert rc == 1
