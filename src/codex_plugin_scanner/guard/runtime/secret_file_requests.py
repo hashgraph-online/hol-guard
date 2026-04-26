@@ -2518,7 +2518,7 @@ def _shell_segment_primary_command(segment: list[str]) -> tuple[str | None, int 
         if redirect_tokens_consumed > 0:
             index += redirect_tokens_consumed
             continue
-        normalized_token = segment[index].lstrip("(").rstrip(")")
+        normalized_token = _shell_command_token_without_attached_redirection(segment[index])
         if _SHELL_ASSIGNMENT_PATTERN.match(normalized_token):
             index += 1
             continue
@@ -2957,6 +2957,15 @@ def _normalized_shell_command_name(command_name: str) -> str:
     return normalized_command.rsplit("/", 1)[-1].lower()
 
 
+def _shell_command_token_without_attached_redirection(token: str) -> str:
+    normalized_token = token.lstrip("(").rstrip(")")
+    for index, character in enumerate(normalized_token):
+        if index == 0 or character not in {"<", ">"}:
+            continue
+        return normalized_token[:index]
+    return normalized_token
+
+
 def _redacted_shell_text_for_command_names(command_text: str) -> str:
     return re.sub(r"'[^']*'|\"[^\"]*\"", "Q", command_text)
 
@@ -3126,7 +3135,7 @@ def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
         if token in _SHELL_COMMAND_SEPARATORS:
             expect_command = True
             continue
-        normalized_token = token.lstrip("(").rstrip(")")
+        normalized_token = _shell_command_token_without_attached_redirection(token)
         if not normalized_token:
             continue
         if not expect_command:
