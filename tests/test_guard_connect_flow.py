@@ -162,6 +162,8 @@ def test_guard_connect_preserves_pairing_when_first_sync_fails(
     assert payload["reason"] == "sync_unreachable"
     assert payload["sync_message"] == "sync_unreachable"
     assert payload["request_id"].startswith("connect-")
+    assert "guardPairRequest=" in str(payload["connect_url"])
+    assert "guardPairSecret=" in str(payload["connect_url"])
     assert payload["sync"]["synced_at"] is None
     assert payload["proof"]["first_synced_at"] is None
 

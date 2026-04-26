@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import base64
 import binascii
 import hashlib
@@ -660,6 +661,7 @@ def _contains_shell_credential_exfiltration(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     depth: int = 0,
     visited_script_paths: frozenset[str] = frozenset(),
 ) -> bool:
@@ -681,6 +683,7 @@ def _contains_shell_credential_exfiltration(
             env_split_string,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -690,6 +693,7 @@ def _contains_shell_credential_exfiltration(
             substitution_payload,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -699,6 +703,7 @@ def _contains_shell_credential_exfiltration(
             shell_script,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -707,12 +712,14 @@ def _contains_shell_credential_exfiltration(
         parts,
         cwd=cwd,
         home_dir=home_dir,
+        allowed_roots=allowed_roots,
         visited_script_paths=visited_script_paths,
     ):
         if _contains_shell_credential_exfiltration(
             script_text,
             cwd=script_cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths | frozenset({script_path}),
         ):
@@ -745,6 +752,7 @@ def _contains_encoded_or_encrypted_shell_command(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     depth: int = 0,
     visited_script_paths: frozenset[str] = frozenset(),
 ) -> bool:
@@ -775,6 +783,7 @@ def _contains_encoded_or_encrypted_shell_command(
             env_split_string,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -784,6 +793,7 @@ def _contains_encoded_or_encrypted_shell_command(
             shell_script,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -792,12 +802,14 @@ def _contains_encoded_or_encrypted_shell_command(
         parts,
         cwd=cwd,
         home_dir=home_dir,
+        allowed_roots=allowed_roots,
         visited_script_paths=visited_script_paths,
     ):
         if _contains_encoded_or_encrypted_shell_command(
             script_text,
             cwd=script_cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths | frozenset({script_path}),
         ):
@@ -822,6 +834,7 @@ def _contains_shell_network_file_upload(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     depth: int = 0,
     visited_script_paths: frozenset[str] = frozenset(),
 ) -> bool:
@@ -833,7 +846,13 @@ def _contains_shell_network_file_upload(
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
-    if _curl_stdin_config_uses_file_upload(normalized, parts, cwd=cwd, home_dir=home_dir):
+    if _curl_stdin_config_uses_file_upload(
+        normalized,
+        parts,
+        cwd=cwd,
+        home_dir=home_dir,
+        allowed_roots=allowed_roots,
+    ):
         return True
     for pipeline in _iter_shell_pipelines(parts):
         for index, segment in enumerate(pipeline):
@@ -841,6 +860,7 @@ def _contains_shell_network_file_upload(
                 segment,
                 cwd=cwd,
                 home_dir=home_dir,
+                allowed_roots=allowed_roots,
                 stdin_uses_local_file=_shell_pipeline_stdin_uses_local_file(
                     pipeline,
                     index,
@@ -854,6 +874,7 @@ def _contains_shell_network_file_upload(
             env_split_string,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -863,6 +884,7 @@ def _contains_shell_network_file_upload(
             substitution_payload,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -872,6 +894,7 @@ def _contains_shell_network_file_upload(
             shell_script,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -880,12 +903,14 @@ def _contains_shell_network_file_upload(
         parts,
         cwd=cwd,
         home_dir=home_dir,
+        allowed_roots=allowed_roots,
         visited_script_paths=visited_script_paths,
     ):
         if _contains_shell_network_file_upload(
             script_text,
             cwd=script_cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths | frozenset({script_path}),
         ):
@@ -898,6 +923,7 @@ def _segment_uses_network_file_upload(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     stdin_uses_local_file: bool = False,
 ) -> bool:
     command_name, command_index = _shell_segment_primary_command(segment)
@@ -909,6 +935,7 @@ def _segment_uses_network_file_upload(
             segment_args,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             stdin_uses_local_file=stdin_uses_local_file,
         )
     if command_name == "wget":
@@ -921,6 +948,7 @@ def _curl_segment_uses_file_upload(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     visited_config_paths: frozenset[str] = frozenset(),
     stdin_config_payloads: tuple[tuple[str, Path | None], ...] = (),
     stdin_uses_local_file: bool = False,
@@ -938,6 +966,7 @@ def _curl_segment_uses_file_upload(
                 value,
                 cwd=cwd,
                 home_dir=home_dir,
+                allowed_roots=allowed_roots,
                 visited_config_paths=visited_config_paths,
                 stdin_config_payloads=stdin_config_payloads,
             ):
@@ -968,6 +997,7 @@ def _curl_segment_uses_file_upload(
             token.split("=", 1)[1],
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             visited_config_paths=visited_config_paths,
             stdin_config_payloads=stdin_config_payloads,
         ):
@@ -1073,6 +1103,7 @@ def _curl_stdin_config_uses_file_upload(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> bool:
     heredoc_payloads = _shell_heredoc_payloads(command_text)
     for pipeline in _iter_shell_pipelines(parts):
@@ -1086,6 +1117,7 @@ def _curl_stdin_config_uses_file_upload(
                 index,
                 cwd=cwd,
                 home_dir=home_dir,
+                allowed_roots=allowed_roots,
             )
             pipeline_stdin_uses_local_file = _shell_pipeline_stdin_uses_local_file(
                 pipeline,
@@ -1097,6 +1129,7 @@ def _curl_stdin_config_uses_file_upload(
                 segment_args,
                 cwd=cwd,
                 home_dir=home_dir,
+                allowed_roots=allowed_roots,
                 stdin_config_payloads=pipeline_stdin_payloads,
                 stdin_uses_local_file=pipeline_stdin_uses_local_file,
             ):
@@ -1125,14 +1158,20 @@ def _curl_segment_reads_config_from_stdin(segment_args: list[str]) -> bool:
             return False
         if token in _CURL_CONFIG_FLAGS_WITH_VALUE:
             value = segment_args[index + 1] if index + 1 < len(segment_args) else ""
-            if _strip_cli_value(value) == "-":
+            if _strip_cli_value(_shell_command_token_without_attached_redirection(value)) == "-":
                 return True
             index += 2
             continue
-        if token.startswith("--config=") and _strip_cli_value(token.split("=", 1)[1]) == "-":
+        if (
+            token.startswith("--config=")
+            and _strip_cli_value(_shell_command_token_without_attached_redirection(token.split("=", 1)[1])) == "-"
+        ):
             return True
         clustered_config_value = _curl_clustered_short_flag_value(segment_args, index, "K")
-        if clustered_config_value is not None and _strip_cli_value(clustered_config_value) == "-":
+        if (
+            clustered_config_value is not None
+            and _strip_cli_value(_shell_command_token_without_attached_redirection(clustered_config_value)) == "-"
+        ):
             return True
         index += 1
     return False
@@ -1175,6 +1214,7 @@ def _shell_pipeline_stdin_payloads(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> tuple[tuple[str, Path | None], ...]:
     payloads: tuple[tuple[str, Path | None], ...] = ()
     for upstream_segment in pipeline[:index]:
@@ -1183,8 +1223,14 @@ def _shell_pipeline_stdin_payloads(
             stdin_payloads=payloads,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
         )
-    current_redirect_payloads = _shell_stdin_redirect_payloads(pipeline[index], cwd=cwd, home_dir=home_dir)
+    current_redirect_payloads = _shell_stdin_redirect_payloads(
+        pipeline[index],
+        cwd=cwd,
+        home_dir=home_dir,
+        allowed_roots=allowed_roots,
+    )
     return current_redirect_payloads or payloads
 
 
@@ -1193,6 +1239,7 @@ def _shell_stdout_payloads(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> tuple[tuple[str, Path | None], ...]:
     command_name, command_index = _shell_segment_primary_command(segment)
     if command_name is None or command_index is None:
@@ -1205,7 +1252,7 @@ def _shell_stdout_payloads(
         payload = _echo_stdout_payload(segment_args)
         return ((payload, cwd),) if payload else ()
     if command_name == "cat":
-        return _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir)
+        return _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir, allowed_roots=allowed_roots)
     return ()
 
 
@@ -1215,12 +1262,18 @@ def _shell_segment_stdout_payloads(
     stdin_payloads: tuple[tuple[str, Path | None], ...],
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> tuple[tuple[str, Path | None], ...]:
     command_name, command_index = _shell_segment_primary_command(segment)
     if command_name is None or command_index is None:
         return stdin_payloads
     segment_args = segment[command_index + 1 :]
-    redirected_input_payloads = _shell_stdin_redirect_payloads(segment, cwd=cwd, home_dir=home_dir)
+    redirected_input_payloads = _shell_stdin_redirect_payloads(
+        segment,
+        cwd=cwd,
+        home_dir=home_dir,
+        allowed_roots=allowed_roots,
+    )
     effective_input_payloads = redirected_input_payloads or stdin_payloads
     if command_name == "printf":
         payloads = _printf_stdout_payloads(segment_args)
@@ -1229,7 +1282,10 @@ def _shell_segment_stdout_payloads(
         payload = _echo_stdout_payload(segment_args)
         return ((payload, cwd),) if payload else ()
     if command_name == "cat":
-        return _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir) or effective_input_payloads
+        return (
+            _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir, allowed_roots=allowed_roots)
+            or effective_input_payloads
+        )
     if command_name in {"sed", "tr"}:
         return effective_input_payloads
     return ()
@@ -1296,9 +1352,11 @@ def _cat_stdout_payloads(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> tuple[tuple[str, Path | None], ...]:
     payloads: list[tuple[str, Path | None]] = []
     consume_all = False
+    read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
     for token in segment_args:
         if token == "--":
             consume_all = True
@@ -1307,8 +1365,13 @@ def _cat_stdout_payloads(
             continue
         if token == "-":
             continue
-        config_path = _resolved_runtime_path(token, cwd=cwd, home_dir=home_dir)
-        payload_text = _read_small_runtime_text_file(config_path)
+        config_path = _resolved_runtime_path(token, cwd=cwd, home_dir=home_dir, allowed_roots=read_roots)
+        if config_path is None:
+            continue
+        payload_text = _read_small_runtime_text_file(
+            config_path,
+            allowed_roots=read_roots,
+        )
         if payload_text is None:
             continue
         payloads.append((payload_text, config_path.parent))
@@ -1340,6 +1403,7 @@ def _shell_stdin_redirect_payloads(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> tuple[tuple[str, Path | None], ...]:
     payloads: list[tuple[str, Path | None]] = []
     index = 0
@@ -1362,7 +1426,12 @@ def _shell_stdin_redirect_payloads(
             next_token=segment[index + 1] if index + 1 < len(segment) else None,
         )
         if redirect_target is not None:
-            redirect_payload = _stdin_redirect_payload(redirect_target, cwd=cwd, home_dir=home_dir)
+            redirect_payload = _stdin_redirect_payload(
+                redirect_target,
+                cwd=cwd,
+                home_dir=home_dir,
+                allowed_roots=allowed_roots,
+            )
             if redirect_payload is not None:
                 payloads.append(redirect_payload)
             index += tokens_consumed
@@ -1404,9 +1473,16 @@ def _stdin_redirect_payload(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> tuple[str, Path | None] | None:
-    config_path = _resolved_runtime_path(target, cwd=cwd, home_dir=home_dir)
-    payload_text = _read_small_runtime_text_file(config_path)
+    read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
+    config_path = _resolved_runtime_path(target, cwd=cwd, home_dir=home_dir, allowed_roots=read_roots)
+    if config_path is None:
+        return None
+    payload_text = _read_small_runtime_text_file(
+        config_path,
+        allowed_roots=read_roots,
+    )
     if payload_text is None:
         return None
     return payload_text, config_path.parent
@@ -1432,16 +1508,22 @@ def _looks_like_local_stdin_source(value: str) -> bool:
 
 
 def _stdin_redirect_target_from_token(token: str, *, next_token: str | None) -> tuple[str | None, int]:
-    if token.startswith("<<"):
+    if _token_is_heredoc_operator(token):
         return None, 1
     if token in {"<", "0<"}:
         if next_token is None:
             return None, 1
         return next_token, 2
-    match = re.fullmatch(r"(?P<fd>\d*)<(?P<target>.+)", token)
-    if match is None or match.group("fd") not in {"", "0"}:
+    if token.count("<") != 1:
         return None, 1
-    return match.group("target"), 1
+    fd, target = token.split("<", 1)
+    if fd not in {"", "0"} or not target:
+        return None, 1
+    return target, 1
+
+
+def _token_is_heredoc_operator(token: str) -> bool:
+    return "<<" in token
 
 
 def _decode_shell_text_literal(value: str) -> str | None:
@@ -1531,20 +1613,28 @@ def _curl_config_uses_file_upload(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     visited_config_paths: frozenset[str],
     stdin_config_payloads: tuple[tuple[str, Path | None], ...] = (),
 ) -> bool:
-    stripped_value = _strip_cli_value(value)
+    normalized_value = _shell_command_token_without_attached_redirection(value)
+    stripped_value = _strip_cli_value(normalized_value)
     if stripped_value == "-":
         return any(
             _curl_inline_config_text_uses_file_upload(payload_text, cwd=payload_cwd, home_dir=home_dir)
             for payload_text, payload_cwd in stdin_config_payloads
         )
-    config_file = _resolved_runtime_path(value, cwd=cwd, home_dir=home_dir)
+    read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
+    config_file = _resolved_runtime_path(normalized_value, cwd=cwd, home_dir=home_dir, allowed_roots=read_roots)
+    if config_file is None:
+        return False
     normalized_config_path = str(config_file)
     if normalized_config_path in visited_config_paths:
         return False
-    config_text = _read_small_runtime_text_file(config_file)
+    config_text = _read_small_runtime_text_file(
+        config_file,
+        allowed_roots=read_roots,
+    )
     if config_text is None:
         return False
     config_args = _curl_config_arguments(config_text)
@@ -1554,6 +1644,7 @@ def _curl_config_uses_file_upload(
         config_args,
         cwd=config_file.parent,
         home_dir=home_dir,
+        allowed_roots=read_roots,
         visited_config_paths=visited_config_paths | frozenset({normalized_config_path}),
         stdin_config_payloads=stdin_config_payloads,
     )
@@ -1588,12 +1679,16 @@ def _curl_config_arguments(config_text: str) -> list[str]:
 
 
 def _command_uses_curl_stdin_heredoc(command_text: str) -> bool:
-    return bool(
-        re.search(
-            r"\bcurl\b[^\n;|&]*(?:--config(?:=|\s+)-|-K(?:\s+-|-?[^\s;|&]*))[^\n;|&]*<<",
-            command_text,
-        )
-    )
+    parts = _split_shell_parts(command_text)
+    for segment in _iter_shell_command_segments(parts):
+        if not any(_token_is_heredoc_operator(token) for token in segment):
+            continue
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name != "curl" or command_index is None:
+            continue
+        if _curl_segment_reads_config_from_stdin(segment[command_index + 1 :]):
+            return True
+    return False
 
 
 def _shell_heredoc_payloads(command_text: str) -> tuple[str, ...]:
@@ -1972,9 +2067,11 @@ def _local_shell_script_payloads(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     visited_script_paths: frozenset[str],
 ) -> tuple[tuple[str, Path | None, str], ...]:
     payloads: list[tuple[str, Path | None, str]] = []
+    read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
     for segment in _iter_shell_command_segments(parts):
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_index is None:
@@ -1982,11 +2079,16 @@ def _local_shell_script_payloads(
         script_path = _shell_script_path_for_segment(segment, command_name=command_name, command_index=command_index)
         if script_path is None:
             continue
-        normalized_script_path = _normalize_path(_expand_home(script_path, home_dir), cwd)
+        script_file = _resolved_runtime_path(script_path, cwd=cwd, home_dir=home_dir, allowed_roots=read_roots)
+        if script_file is None:
+            continue
+        normalized_script_path = str(script_file)
         if normalized_script_path in visited_script_paths:
             continue
-        script_file = Path(normalized_script_path)
-        script_text = _read_small_runtime_text_file(script_file)
+        script_text = _read_small_runtime_text_file(
+            script_file,
+            allowed_roots=read_roots,
+        )
         if script_text is None:
             continue
         payloads.append((script_text, script_file.parent, normalized_script_path))
@@ -2185,16 +2287,52 @@ def _normalize_path(value: str, cwd: Path | None) -> str:
     return os.path.normpath(value)
 
 
-def _resolved_runtime_path(value: str, *, cwd: Path | None, home_dir: Path | None) -> Path:
+def _runtime_read_roots(cwd: Path | None, home_dir: Path | None) -> tuple[Path, ...]:
+    roots: list[Path] = []
+    for candidate in (cwd, home_dir or Path.home()):
+        if candidate is None:
+            continue
+        try:
+            resolved_candidate = candidate.resolve(strict=False)
+        except OSError:
+            continue
+        if resolved_candidate not in roots:
+            roots.append(resolved_candidate)
+    return tuple(roots)
+
+
+def _path_is_within_roots(path: Path, roots: tuple[Path, ...]) -> bool:
+    return any(path.is_relative_to(root) for root in roots)
+
+
+def _resolved_runtime_path(
+    value: str,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
+) -> Path | None:
     stripped_value = _strip_cli_value(value)
+    if not stripped_value:
+        return None
     expanded_value = _expand_home(stripped_value, home_dir)
-    return Path(_normalize_path(expanded_value, cwd))
+    normalized_path = Path(_normalize_path(expanded_value, cwd))
+    read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
+    if not read_roots:
+        return None
+    try:
+        resolved_path = normalized_path.resolve(strict=False)
+    except OSError:
+        return None
+    return resolved_path if _path_is_within_roots(resolved_path, read_roots) else None
 
 
-def _read_small_runtime_text_file(path: Path) -> str | None:
+def _read_small_runtime_text_file(path: Path, *, allowed_roots: tuple[Path, ...]) -> str | None:
     try:
         resolved_path = path.resolve(strict=True)
     except OSError:
+        return None
+    if not _path_is_within_roots(resolved_path, allowed_roots):
         return None
     try:
         stat_result = resolved_path.stat()
@@ -2384,7 +2522,7 @@ def _shell_segment_primary_command(segment: list[str]) -> tuple[str | None, int 
         if redirect_tokens_consumed > 0:
             index += redirect_tokens_consumed
             continue
-        normalized_token = segment[index].lstrip("(").rstrip(")")
+        normalized_token = _shell_command_token_without_attached_redirection(segment[index])
         if _SHELL_ASSIGNMENT_PATTERN.match(normalized_token):
             index += 1
             continue
@@ -2813,8 +2951,7 @@ def _js_slash_starts_regex(result: list[str]) -> bool:
 
 
 def _shell_command_names(command_text: str) -> tuple[str, ...]:
-    pattern = re.compile(r"(?:^|&&|\|\||[;&|\n])\s*(?:[a-z_][a-z0-9_]*=\S+\s+)*(?P<command>[a-z0-9_./\\\\-]+)")
-    return tuple(_normalized_shell_command_name(match.group("command")) for match in pattern.finditer(command_text))
+    return _shell_command_names_from_parts(_split_shell_parts(command_text))
 
 
 def _normalized_shell_command_name(command_name: str) -> str:
@@ -2822,6 +2959,15 @@ def _normalized_shell_command_name(command_name: str) -> str:
     if "/" not in normalized_command:
         return normalized_command.lower()
     return normalized_command.rsplit("/", 1)[-1].lower()
+
+
+def _shell_command_token_without_attached_redirection(token: str) -> str:
+    normalized_token = token.lstrip("(").rstrip(")")
+    for index, character in enumerate(normalized_token):
+        if index == 0 or character not in {"<", ">"}:
+            continue
+        return normalized_token[:index]
+    return normalized_token
 
 
 def _redacted_shell_text_for_command_names(command_text: str) -> str:
@@ -2974,6 +3120,15 @@ def _sudo_short_option_has_attached_value(token: str) -> bool:
     return False
 
 
+def _is_shell_env_assignment_token(token: str) -> bool:
+    name, separator, _ = token.partition("=")
+    if separator != "=" or not name:
+        return False
+    if not (name[0].isalpha() or name[0] == "_"):
+        return False
+    return all(character.isalnum() or character == "_" for character in name[1:])
+
+
 def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
     command_names: list[str] = []
     expect_command = True
@@ -2984,12 +3139,12 @@ def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
         if token in _SHELL_COMMAND_SEPARATORS:
             expect_command = True
             continue
-        normalized_token = token.lstrip("(").rstrip(")")
+        normalized_token = _shell_command_token_without_attached_redirection(token)
         if not normalized_token:
             continue
         if not expect_command:
             continue
-        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", normalized_token):
+        if _is_shell_env_assignment_token(normalized_token):
             continue
         normalized_command = _normalized_shell_command_name(normalized_token)
         if normalized_command in {"env", "command", "builtin", "nohup", "nice", "sudo", "time", "stdbuf"}:
@@ -3037,7 +3192,7 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
             index += 1
             continue
         if expect_command:
-            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", normalized_token):
+            if _is_shell_env_assignment_token(normalized_token):
                 index += 1
                 continue
             normalized_command = _normalized_shell_command_name(normalized_token)
@@ -3122,13 +3277,38 @@ def _script_is_benign_wait(script_text: str) -> bool:
     )
 
 
+def _script_has_aliased_risky_import(script_text: str) -> bool:
+    risky_roots = {"os", "pathlib", "shutil", "subprocess"}
+    try:
+        parsed_script = ast.parse(script_text)
+    except (SyntaxError, ValueError):
+        return False
+    for node in ast.walk(parsed_script):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname is None:
+                    continue
+                module_name = alias.name.split(".", 1)[0]
+                if module_name in risky_roots:
+                    return True
+            continue
+        if not isinstance(node, ast.ImportFrom) or node.module is None:
+            continue
+        module_name = node.module.split(".", 1)[0]
+        if module_name not in risky_roots:
+            continue
+        if any(alias.asname is not None for alias in node.names):
+            return True
+    return False
+
+
 def _script_is_read_only_observer(script_text: str) -> bool:
     normalized_script = script_text.strip()
     if not normalized_script:
         return False
     if _script_is_benign_wait(normalized_script):
         return True
-    if re.search(r"\bfrom\s+(?:os|pathlib|shutil|subprocess)\s+import\s+[^#\n]*\bas\b", normalized_script):
+    if _script_has_aliased_risky_import(normalized_script):
         return False
     return not any(pattern.search(normalized_script) for pattern in _READ_ONLY_INTERPRETER_MUTATION_PATTERNS)
 
