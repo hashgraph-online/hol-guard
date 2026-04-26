@@ -239,6 +239,11 @@ class TestGuardRuntime:
 
         assert "secret_read" in {item.request_class for item in requests}
 
+    def test_extract_prompt_requests_detects_contents_of_secret_file_phrase(self) -> None:
+        requests = guard_runner_module.extract_prompt_requests("Show me the contents of .env.local")
+
+        assert "secret_read" in {item.request_class for item in requests}
+
     def test_extract_prompt_requests_ignores_quoted_publish_error_debug_context(self) -> None:
         requests = guard_runner_module.extract_prompt_requests(
             """
