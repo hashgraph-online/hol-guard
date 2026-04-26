@@ -3032,6 +3032,10 @@ def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str
         return False
     heredoc_script = _single_interpreter_heredoc_script(command_text)
     if heredoc_script is not None:
+        scripts = list(_script_interpreter_texts(parts))
+        if scripts:
+            scripts.append(heredoc_script)
+            return all(_script_is_read_only_observer(script_text) for script_text in scripts)
         return _script_is_read_only_observer(heredoc_script)
     if not command_names or not all(command_name in _SCRIPT_INTERPRETER_COMMANDS for command_name in command_names):
         return False

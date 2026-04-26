@@ -40,7 +40,7 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?i)(bearer\s+)[^\s,;]+"), r"\1*****"),
     (
         re.compile(
-            r"(?i)([a-z0-9_-]*(?:token|secret|api[-_]?key|password|credential)[a-z0-9_-]*=)(?:'[^']*'|\"[^\"]*\"|[^&\\s]+)"
+            r"(?i)([a-z0-9_-]*(?:token|secret|api[-_]?key|password|credential)[a-z0-9_-]*=)(?:'[^']*'|\"[^\"]*\"|[^&\s]+)"
         ),
         r"\1*****",
     ),

@@ -46,7 +46,7 @@ def test_guard_render_redacts_sensitive_values_before_rich_renderer(monkeypatch)
         "status",
         {
             "api_key": "secret value",
-            "launch_summary": 'api_key="secret value" token=abc123',
+            "launch_summary": 'api_key="secret value" token=supersecret',
         },
         False,
     )
