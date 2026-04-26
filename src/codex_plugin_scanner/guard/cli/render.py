@@ -53,13 +53,15 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) -> None:
     """Render Guard payloads as JSON or human-friendly rich output."""
 
+    redacted_payload = _redact_payload(payload)
     if as_json or not _RICH_AVAILABLE:
-        print(json.dumps(_redact_payload(payload), indent=2))
+        sys.stdout.write(json.dumps(redacted_payload, indent=2))
+        sys.stdout.write("\n")
         return
 
     console = Console(file=sys.stdout, soft_wrap=True)
     renderer = _RENDERERS.get(command, _render_fallback)
-    renderer(console, _redact_payload(payload))
+    renderer(console, redacted_payload)
 
 
 def _redact_payload(value: object, *, key: str | None = None) -> object:

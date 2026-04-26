@@ -1308,6 +1308,8 @@ def _cat_stdout_payloads(
         if token == "-":
             continue
         config_path = _resolved_runtime_path(token, cwd=cwd, home_dir=home_dir)
+        if config_path is None:
+            continue
         payload_text = _read_small_runtime_text_file(config_path)
         if payload_text is None:
             continue
@@ -1406,6 +1408,8 @@ def _stdin_redirect_payload(
     home_dir: Path | None,
 ) -> tuple[str, Path | None] | None:
     config_path = _resolved_runtime_path(target, cwd=cwd, home_dir=home_dir)
+    if config_path is None:
+        return None
     payload_text = _read_small_runtime_text_file(config_path)
     if payload_text is None:
         return None
@@ -1438,10 +1442,12 @@ def _stdin_redirect_target_from_token(token: str, *, next_token: str | None) -> 
         if next_token is None:
             return None, 1
         return next_token, 2
-    match = re.fullmatch(r"(?P<fd>\d*)<(?P<target>.+)", token)
-    if match is None or match.group("fd") not in {"", "0"}:
+    if token.count("<") != 1:
         return None, 1
-    return match.group("target"), 1
+    fd, target = token.split("<", 1)
+    if fd not in {"", "0"} or not target:
+        return None, 1
+    return target, 1
 
 
 def _decode_shell_text_literal(value: str) -> str | None:
@@ -1541,6 +1547,8 @@ def _curl_config_uses_file_upload(
             for payload_text, payload_cwd in stdin_config_payloads
         )
     config_file = _resolved_runtime_path(value, cwd=cwd, home_dir=home_dir)
+    if config_file is None:
+        return False
     normalized_config_path = str(config_file)
     if normalized_config_path in visited_config_paths:
         return False
@@ -1588,12 +1596,21 @@ def _curl_config_arguments(config_text: str) -> list[str]:
 
 
 def _command_uses_curl_stdin_heredoc(command_text: str) -> bool:
-    return bool(
-        re.search(
-            r"\bcurl\b[^\n;|&]*(?:--config(?:=|\s+)-|-K(?:\s+-|-?[^\s;|&]*))[^\n;|&]*<<",
-            command_text,
-        )
-    )
+    for line in command_text.splitlines():
+        heredoc_index = line.find("<<")
+        if heredoc_index == -1:
+            continue
+        prefix = line[:heredoc_index].strip()
+        if not prefix:
+            continue
+        parts = _split_shell_parts(prefix)
+        for segment in _iter_shell_command_segments(parts):
+            command_name, command_index = _shell_segment_primary_command(segment)
+            if command_name != "curl" or command_index is None:
+                continue
+            if _curl_segment_reads_config_from_stdin(segment):
+                return True
+    return False
 
 
 def _shell_heredoc_payloads(command_text: str) -> tuple[str, ...]:
@@ -1982,10 +1999,12 @@ def _local_shell_script_payloads(
         script_path = _shell_script_path_for_segment(segment, command_name=command_name, command_index=command_index)
         if script_path is None:
             continue
-        normalized_script_path = _normalize_path(_expand_home(script_path, home_dir), cwd)
+        script_file = _resolved_runtime_path(script_path, cwd=cwd, home_dir=home_dir)
+        if script_file is None:
+            continue
+        normalized_script_path = str(script_file)
         if normalized_script_path in visited_script_paths:
             continue
-        script_file = Path(normalized_script_path)
         script_text = _read_small_runtime_text_file(script_file)
         if script_text is None:
             continue
@@ -2185,10 +2204,40 @@ def _normalize_path(value: str, cwd: Path | None) -> str:
     return os.path.normpath(value)
 
 
-def _resolved_runtime_path(value: str, *, cwd: Path | None, home_dir: Path | None) -> Path:
+def _runtime_read_roots(cwd: Path | None, home_dir: Path | None) -> tuple[Path, ...]:
+    roots: list[Path] = []
+    for candidate in (cwd, home_dir or Path.home()):
+        if candidate is None:
+            continue
+        try:
+            resolved_candidate = candidate.resolve(strict=False)
+        except OSError:
+            continue
+        if resolved_candidate not in roots:
+            roots.append(resolved_candidate)
+    return tuple(roots)
+
+
+def _path_is_within_roots(path: Path, roots: tuple[Path, ...]) -> bool:
+    return any(path.is_relative_to(root) for root in roots)
+
+
+def _resolved_runtime_path(value: str, *, cwd: Path | None, home_dir: Path | None) -> Path | None:
     stripped_value = _strip_cli_value(value)
+    if not stripped_value:
+        return None
     expanded_value = _expand_home(stripped_value, home_dir)
-    return Path(_normalize_path(expanded_value, cwd))
+    normalized_path = Path(_normalize_path(expanded_value, cwd))
+    read_roots = _runtime_read_roots(cwd, home_dir)
+    if not read_roots:
+        return None
+    try:
+        resolved_path = normalized_path.resolve(strict=False)
+    except OSError:
+        return None
+    if not _path_is_within_roots(resolved_path, read_roots):
+        return None
+    return normalized_path
 
 
 def _read_small_runtime_text_file(path: Path) -> str | None:
@@ -2813,8 +2862,7 @@ def _js_slash_starts_regex(result: list[str]) -> bool:
 
 
 def _shell_command_names(command_text: str) -> tuple[str, ...]:
-    pattern = re.compile(r"(?:^|&&|\|\||[;&|\n])\s*(?:[a-z_][a-z0-9_]*=\S+\s+)*(?P<command>[a-z0-9_./\\\\-]+)")
-    return tuple(_normalized_shell_command_name(match.group("command")) for match in pattern.finditer(command_text))
+    return _shell_command_names_from_parts(_split_shell_parts(command_text))
 
 
 def _normalized_shell_command_name(command_name: str) -> str:
@@ -2974,6 +3022,15 @@ def _sudo_short_option_has_attached_value(token: str) -> bool:
     return False
 
 
+def _is_shell_env_assignment_token(token: str) -> bool:
+    name, separator, _ = token.partition("=")
+    if separator != "=" or not name:
+        return False
+    if not (name[0].isalpha() or name[0] == "_"):
+        return False
+    return all(character.isalnum() or character == "_" for character in name[1:])
+
+
 def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
     command_names: list[str] = []
     expect_command = True
@@ -2989,7 +3046,7 @@ def _shell_command_names_from_parts(parts: list[str]) -> tuple[str, ...]:
             continue
         if not expect_command:
             continue
-        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", normalized_token):
+        if _is_shell_env_assignment_token(normalized_token):
             continue
         normalized_command = _normalized_shell_command_name(normalized_token)
         if normalized_command in {"env", "command", "builtin", "nohup", "nice", "sudo", "time", "stdbuf"}:
@@ -3037,7 +3094,7 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
             index += 1
             continue
         if expect_command:
-            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", normalized_token):
+            if _is_shell_env_assignment_token(normalized_token):
                 index += 1
                 continue
             normalized_command = _normalized_shell_command_name(normalized_token)
@@ -3122,13 +3179,27 @@ def _script_is_benign_wait(script_text: str) -> bool:
     )
 
 
+def _script_has_aliased_risky_import(script_text: str) -> bool:
+    risky_roots = {"os", "pathlib", "shutil", "subprocess"}
+    for raw_line in script_text.splitlines():
+        statement = raw_line.split("#", 1)[0].strip()
+        if not statement.startswith("from ") or " import " not in statement or " as " not in statement:
+            continue
+        module_part, import_part = statement[5:].split(" import ", 1)
+        if module_part.strip().split(".", 1)[0] not in risky_roots:
+            continue
+        if any(" as " in clause for clause in import_part.split(",")):
+            return True
+    return False
+
+
 def _script_is_read_only_observer(script_text: str) -> bool:
     normalized_script = script_text.strip()
     if not normalized_script:
         return False
     if _script_is_benign_wait(normalized_script):
         return True
-    if re.search(r"\bfrom\s+(?:os|pathlib|shutil|subprocess)\s+import\s+[^#\n]*\bas\b", normalized_script):
+    if _script_has_aliased_risky_import(normalized_script):
         return False
     return not any(pattern.search(normalized_script) for pattern in _READ_ONLY_INTERPRETER_MUTATION_PATTERNS)
 

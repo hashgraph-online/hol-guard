@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.risk import (
     detect_staged_download,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
+    _resolved_runtime_path,
     build_file_read_request_artifact,
     build_tool_action_request_artifact,
     classify_sensitive_path,
@@ -1136,6 +1137,23 @@ def test_tool_action_request_classifier_does_not_treat_python_c_flag_write_as_re
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_does_not_treat_aliased_path_import_as_read_only():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "python3 - <<'PY'\n"
+                "from pathlib import Path as P\n"
+                "print(P('bounty_submissions.txt').read_text())\n"
+                "PY"
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_path_open_positional_write_mode():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -1803,6 +1821,22 @@ def test_tool_action_request_classifier_detects_symlinked_curl_config_file_uploa
 
     assert request is not None
     assert request.action_class == "shell file upload command"
+
+
+def test_resolved_runtime_path_rejects_paths_outside_workspace_and_home(tmp_path):
+    workspace_dir = tmp_path / "workspace"
+    home_dir = tmp_path / "home"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    home_dir.mkdir(parents=True, exist_ok=True)
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir(parents=True, exist_ok=True)
+    inside_path = workspace_dir / "allowed.cfg"
+    outside_path = outside_dir / "blocked.cfg"
+    inside_path.write_text("ok\n", encoding="utf-8")
+    outside_path.write_text("nope\n", encoding="utf-8")
+
+    assert _resolved_runtime_path("./allowed.cfg", cwd=workspace_dir, home_dir=home_dir) == inside_path
+    assert _resolved_runtime_path("../outside/blocked.cfg", cwd=workspace_dir, home_dir=home_dir) is None
 
 
 def test_tool_action_request_classifier_does_not_match_exfiltration_across_unrelated_segments():
