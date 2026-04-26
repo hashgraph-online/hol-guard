@@ -130,8 +130,9 @@ def apply_approval_resolution(
     )
     store.upsert_policy(decision, now or _now())
     resolved_at = now or _now()
+    resolution_harness = None if scope == "global" else str(request["harness"])
     resolved_ids = store.resolve_matching_approval_requests(
-        harness="*" if scope == "global" else str(request["harness"]),
+        harness=resolution_harness,
         scope=scope,
         artifact_id=str(request["artifact_id"]) if scope == "artifact" else None,
         workspace=workspace if scope == "workspace" else None,

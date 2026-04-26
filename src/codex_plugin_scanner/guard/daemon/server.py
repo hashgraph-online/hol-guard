@@ -209,7 +209,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         path_parts = [part for part in parsed.path.split("/") if part]
         if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid():
-            self._write_json({"error": "unauthorized"}, status=401)
+            origin = self._normalize_origin(self.headers.get("Origin"))
+            self._write_json(
+                {"error": "unauthorized"},
+                status=401,
+                extra_headers=self._cors_headers(origin) if origin is not None else None,
+            )
             return
         payload, body_error = self._load_request_body()
         if body_error is not None:
@@ -222,87 +227,48 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_claude_hook(payload, parsed.query)
             return
         if parsed.path == "/v1/clients/attach":
-            if not self._header_token_is_valid():
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
             self._handle_client_attach(payload)
             return
         if parsed.path == "/v1/clients/heartbeat":
-            if not self._header_token_is_valid():
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
             self._handle_client_heartbeat(payload)
             return
         if parsed.path == "/v1/sessions/start":
-            if not self._header_token_is_valid():
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
             self._handle_session_start(payload)
             return
         if parsed.path == "/v1/operations/start":
-            if not self._header_token_is_valid():
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
             self._handle_operation_start(payload)
             return
         if parsed.path == "/v1/connect/requests":
-            if not self._header_token_is_valid():
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
             self._handle_connect_request_create(payload)
             return
         if parsed.path == "/v1/connect/complete":
             self._handle_connect_complete(payload)
             return
         if parsed.path == "/v1/connect/result":
-            if not self._header_token_is_valid():
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
             self._handle_connect_result_update(payload)
             return
         if parsed.path == "/v1/operations/block":
-            if not self._header_token_is_valid():
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
             self._handle_operation_block(payload)
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] == "items":
-            if not self._header_token_is_valid():
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
             self._handle_operation_item(path_parts[2], payload)
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] == "status":
-            if not self._header_token_is_valid():
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
             self._handle_operation_status(path_parts[2], payload)
             return
         if parsed.path == "/v1/policy/decisions":
-            if not self._header_token_is_valid():
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
             self._handle_policy_upsert(payload)
             return
         if parsed.path == "/v1/policy/clear":
-            if not self._header_token_is_valid():
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
             self._handle_policy_clear(payload)
             return
         if parsed.path == "/v1/settings":
-            if not self._header_token_is_valid():
-                self._write_json({"error": "unauthorized"}, status=401)
-                return
             self._handle_settings_update(payload)
             return
         request_id, action, matched = self._resolve_request_action(path_parts, payload)
         if not matched:
             self.send_response(404)
             self.end_headers()
-            return
-        if not self._header_token_is_valid():
-            self._write_json({"error": "unauthorized"}, status=401)
             return
         if action is None:
             self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
@@ -971,7 +937,20 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _requires_header_token(path: str, path_parts: list[str]) -> bool:
-        if path in {"/v1/policy/decisions", "/v1/policy/clear"}:
+        if path in {
+            "/v1/clients/attach",
+            "/v1/clients/heartbeat",
+            "/v1/sessions/start",
+            "/v1/operations/start",
+            "/v1/connect/requests",
+            "/v1/connect/result",
+            "/v1/operations/block",
+            "/v1/policy/decisions",
+            "/v1/policy/clear",
+            "/v1/settings",
+        }:
+            return True
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] in {"items", "status"}:
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
             return True

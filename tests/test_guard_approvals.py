@@ -418,6 +418,44 @@ class TestGuardApprovals:
         assert resolved["status"] == "resolved"
         assert store.get_approval_request("req-b")["status"] == "resolved"
 
+    def test_guard_global_scope_resolution_clears_pending_requests_across_harnesses(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        for request_id, harness in (("req-codex", "codex"), ("req-copilot", "copilot")):
+            store.add_approval_request(
+                GuardApprovalRequest(
+                    request_id=request_id,
+                    harness=harness,
+                    artifact_id=f"{harness}:project:item",
+                    artifact_name=f"{harness}-item",
+                    artifact_hash=f"hash-{request_id}",
+                    policy_action="require-reapproval",
+                    recommended_scope="global",
+                    changed_fields=("args",),
+                    source_scope="project",
+                    config_path=str(tmp_path / harness / ".config" / "guard.toml"),
+                    review_command=f"hol-guard approvals approve {request_id}",
+                    approval_url=f"http://127.0.0.1:4455/approvals/{request_id}",
+                ),
+                "2026-04-11T00:00:00+00:00",
+            )
+
+        resolved = apply_approval_resolution(
+            store=store,
+            request_id="req-codex",
+            action="allow",
+            scope="global",
+            workspace=None,
+            reason="trusted globally",
+            now="2026-04-11T00:02:00+00:00",
+        )
+
+        pending = store.list_approval_requests(status="pending", limit=None)
+        decisions = store.list_policy_decisions()
+
+        assert resolved["status"] == "resolved"
+        assert pending == []
+        assert decisions[0]["harness"] == "*"
+
     def test_guard_broad_scope_resolution_clears_more_than_default_pending_page(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         for index in range(520):
@@ -1429,6 +1467,36 @@ class TestGuardApprovals:
 
         assert status == 200
         assert allow_headers == "Content-Type, X-Guard-Token"
+
+    def test_guard_daemon_includes_cors_headers_on_unauthorized_local_post(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests/missing/approve",
+                data=json.dumps({"scope": "artifact"}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Origin": f"http://127.0.0.1:{daemon.port}",
+                },
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                status = error.code
+                payload = json.loads(error.read().decode("utf-8"))
+                allow_origin = error.headers.get("Access-Control-Allow-Origin")
+            else:
+                raise AssertionError("expected HTTPError for missing auth token")
+        finally:
+            daemon.stop()
+
+        assert status == 401
+        assert payload["error"] == "unauthorized"
+        assert allow_origin == f"http://127.0.0.1:{daemon.port}"
 
     def test_guard_daemon_rejects_spoofed_localhost_origin_post_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
