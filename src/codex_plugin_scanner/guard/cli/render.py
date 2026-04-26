@@ -55,7 +55,7 @@ def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) 
 
     redacted_payload = _redact_payload(payload)
     if as_json or not _RICH_AVAILABLE:
-        sys.stdout.write(json.dumps(redacted_payload, indent=2))
+        sys.stdout.write(_render_redacted_json_payload(payload))
         sys.stdout.write("\n")
         return
 
@@ -79,6 +79,13 @@ def _redact_payload(value: object, *, key: str | None = None) -> object:
             redacted = pattern.sub(replacement, redacted)
         return redacted
     return value
+
+
+def _render_redacted_json_payload(payload: dict[str, object]) -> str:
+    redacted_payload = _redact_payload(payload)
+    if not isinstance(redacted_payload, dict):
+        return "{}"
+    return json.dumps(redacted_payload, indent=2)
 
 
 def _render_detect(console: Console, payload: dict[str, object]) -> None:

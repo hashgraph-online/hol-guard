@@ -1596,20 +1596,15 @@ def _curl_config_arguments(config_text: str) -> list[str]:
 
 
 def _command_uses_curl_stdin_heredoc(command_text: str) -> bool:
-    for line in command_text.splitlines():
-        heredoc_index = line.find("<<")
-        if heredoc_index == -1:
+    parts = _split_shell_parts(command_text)
+    for segment in _iter_shell_command_segments(parts):
+        if not any(token == "<<" or token.startswith("<<") for token in segment):
             continue
-        prefix = line[:heredoc_index].strip()
-        if not prefix:
+        command_name, command_index = _shell_segment_primary_command(segment)
+        if command_name != "curl" or command_index is None:
             continue
-        parts = _split_shell_parts(prefix)
-        for segment in _iter_shell_command_segments(parts):
-            command_name, command_index = _shell_segment_primary_command(segment)
-            if command_name != "curl" or command_index is None:
-                continue
-            if _curl_segment_reads_config_from_stdin(segment):
-                return True
+        if _curl_segment_reads_config_from_stdin(segment[command_index + 1 :]):
+            return True
     return False
 
 
@@ -2231,13 +2226,18 @@ def _resolved_runtime_path(value: str, *, cwd: Path | None, home_dir: Path | Non
     read_roots = _runtime_read_roots(cwd, home_dir)
     if not read_roots:
         return None
-    try:
-        resolved_path = normalized_path.resolve(strict=False)
-    except OSError:
-        return None
-    if not _path_is_within_roots(resolved_path, read_roots):
-        return None
-    return normalized_path
+    for root in read_roots:
+        try:
+            relative_path = normalized_path.relative_to(root)
+        except ValueError:
+            continue
+        try:
+            resolved_path = (root / relative_path).resolve(strict=False)
+        except OSError:
+            continue
+        if _path_is_within_roots(resolved_path, (root,)):
+            return resolved_path
+    return None
 
 
 def _read_small_runtime_text_file(path: Path) -> str | None:
@@ -3183,6 +3183,15 @@ def _script_has_aliased_risky_import(script_text: str) -> bool:
     risky_roots = {"os", "pathlib", "shutil", "subprocess"}
     for raw_line in script_text.splitlines():
         statement = raw_line.split("#", 1)[0].strip()
+        if statement.startswith("import "):
+            if " as " in statement:
+                for part in statement[7:].split(","):
+                    if " as " not in part:
+                        continue
+                    module_name = part.strip().split(" as ", 1)[0].strip().split(".", 1)[0]
+                    if module_name in risky_roots:
+                        return True
+            continue
         if not statement.startswith("from ") or " import " not in statement or " as " not in statement:
             continue
         module_part, import_part = statement[5:].split(" import ", 1)
