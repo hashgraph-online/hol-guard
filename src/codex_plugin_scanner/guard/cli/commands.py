@@ -38,7 +38,17 @@ from ..bridge import (
     TelegramBackend,
     WebhookBackend,
 )
-from ..config import load_guard_config, overlay_synced_guard_policy, resolve_guard_home
+from ..config import (
+    VALID_RISK_ACTION_KEYS,
+    VALID_SECURITY_LEVELS,
+    GuardConfig,
+    editable_guard_settings,
+    load_guard_config,
+    overlay_synced_guard_policy,
+    resolve_guard_home,
+    resolve_risk_action,
+    update_guard_settings,
+)
 from ..consumer import (
     artifact_hash,
     detect_all,
@@ -121,6 +131,7 @@ _GUARD_HELP_GROUPS = (
     "  abom         Export the local AI-BOM\n"
     "  explain      Show evidence for one artifact\n"
     "  policies     Inspect local Guard policy state\n"
+    "  settings     Show or update local Guard settings\n"
     "  exceptions   Inspect active exception windows\n"
     "  advisories   Inspect cached Guard Cloud advisories\n"
     "  events       Review Guard lifecycle events\n"
@@ -130,6 +141,14 @@ _GUARD_HELP_GROUPS = (
     "  uninstall    Disable Guard management for a harness\n"
     "  update       Update hol-guard in the current environment"
 )
+
+
+def _guard_risk_action_key(value: str) -> str:
+    normalized = value.strip().lower().replace("-", "_")
+    if normalized not in VALID_RISK_ACTION_KEYS:
+        raise argparse.ArgumentTypeError(f"invalid risk class: {value}")
+    return normalized
+
 
 _CLAUDE_GUARD_APPROVAL_HEADER = "HOL Guard"
 _CLAUDE_GUARD_APPROVAL_OPTIONS = (
@@ -330,6 +349,32 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     )
     _add_guard_common_args(policies_parser)
     policies_parser.add_argument("--json", action="store_true")
+
+    settings_parser = guard_subparsers.add_parser("settings", help="Show or update local Guard settings")
+    _add_guard_common_args(settings_parser)
+    settings_parser.add_argument("--json", action="store_true")
+    settings_subparsers = settings_parser.add_subparsers(
+        dest="settings_command",
+        parser_class=FriendlyArgumentParser,
+    )
+    settings_set_parser = settings_subparsers.add_parser("set", help="Update local Guard settings")
+    _add_guard_common_args(settings_set_parser)
+    settings_set_parser.add_argument("--json", action="store_true")
+    settings_set_subparsers = settings_set_parser.add_subparsers(
+        dest="settings_set_command",
+        required=True,
+        parser_class=FriendlyArgumentParser,
+    )
+    settings_security_parser = settings_set_subparsers.add_parser("security-level", help="Set Guard security level")
+    settings_security_parser.add_argument("security_level", choices=tuple(sorted(VALID_SECURITY_LEVELS)))
+    _add_guard_common_args(settings_security_parser)
+    settings_security_parser.add_argument("--json", action="store_true")
+    settings_risk_parser = settings_set_subparsers.add_parser("risk", help="Set a granular risk action")
+    settings_risk_parser.add_argument("risk_class", type=_guard_risk_action_key)
+    settings_risk_parser.add_argument("action", choices=tuple(sorted(VALID_GUARD_ACTIONS)))
+    settings_risk_parser.add_argument("--harness")
+    _add_guard_common_args(settings_risk_parser)
+    settings_risk_parser.add_argument("--json", action="store_true")
 
     exceptions_parser = guard_subparsers.add_parser("exceptions", help="List active Guard exceptions with expiry")
     exceptions_parser.add_argument("--harness")
@@ -835,6 +880,16 @@ def run_guard_command(
         _emit("policies", {"generated_at": _now(), "items": items}, getattr(args, "json", False))
         return 0
 
+    if args.guard_command == "settings":
+        if getattr(args, "settings_command", None) == "set":
+            try:
+                config = _update_guard_cli_settings(args=args, config=config, guard_home=guard_home)
+            except ValueError as error:
+                print(str(error), file=sys.stderr)
+                return 2
+        _emit("settings", _guard_settings_payload(config), getattr(args, "json", False))
+        return 0
+
     if args.guard_command == "exceptions":
         policy_items = store.list_policy_decisions(getattr(args, "harness", None))
         active_items = _filter_policy_items(policy_items, active_only=True)
@@ -1334,7 +1389,7 @@ def run_guard_command(
                 payload.get("policy_action"),
             )
             if policy_action not in VALID_GUARD_ACTIONS:
-                policy_action = SAFE_CHANGED_HASH_ACTION
+                policy_action = _runtime_artifact_policy_action(config, runtime_artifact, args.harness)
             if _canonical_harness_name(args.harness) == "claude-code" and event_name in {
                 "PostToolUse",
                 "PostToolUseFailure",
@@ -1475,84 +1530,87 @@ def run_guard_command(
                         output_stream=output_stream,
                     )
                     return 0
-                approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
-                approval_center_url = ensure_guard_daemon(guard_home)
-                runtime_detection = _runtime_detection(args.harness, runtime_artifact)
-                evaluation_payload = {
-                    "artifacts": [
-                        {
-                            "artifact_id": artifact_id,
-                            "artifact_name": artifact_name,
-                            "artifact_hash": runtime_artifact_hash,
-                            "policy_action": policy_action,
-                            "changed_fields": changed_capabilities,
-                            "artifact_type": runtime_artifact.artifact_type,
-                            "source_scope": runtime_artifact.source_scope,
-                            "config_path": runtime_artifact.config_path,
-                            "launch_target": _runtime_request_summary(runtime_artifact),
-                        }
-                    ]
-                }
-                try:
-                    daemon_client = load_guard_surface_daemon_client(guard_home)
-                except RuntimeError:
-                    queued = queue_blocked_approvals(
-                        detection=runtime_detection,
-                        evaluation=evaluation_payload,
-                        store=store,
-                        approval_center_url=approval_center_url,
-                        now=_now(),
-                    )
-                else:
-                    session = daemon_client.start_session(
+                if not _prompt_requires_hard_block(runtime_artifact):
+                    approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
+                    approval_center_url = ensure_guard_daemon(guard_home)
+                    runtime_detection = _runtime_detection(args.harness, runtime_artifact)
+                    evaluation_payload = {
+                        "artifacts": [
+                            {
+                                "artifact_id": artifact_id,
+                                "artifact_name": artifact_name,
+                                "artifact_hash": runtime_artifact_hash,
+                                "policy_action": policy_action,
+                                "changed_fields": changed_capabilities,
+                                "artifact_type": runtime_artifact.artifact_type,
+                                "source_scope": runtime_artifact.source_scope,
+                                "config_path": runtime_artifact.config_path,
+                                "launch_target": _runtime_request_summary(runtime_artifact),
+                            }
+                        ]
+                    }
+                    try:
+                        daemon_client = load_guard_surface_daemon_client(guard_home)
+                    except RuntimeError:
+                        queued = queue_blocked_approvals(
+                            detection=runtime_detection,
+                            evaluation=evaluation_payload,
+                            store=store,
+                            approval_center_url=approval_center_url,
+                            now=_now(),
+                        )
+                    else:
+                        session = daemon_client.start_session(
+                            harness=args.harness,
+                            surface="harness-adapter",
+                            workspace=str(workspace) if workspace else None,
+                            client_name=f"{args.harness}-hook",
+                            client_title=f"{args.harness} hook",
+                            client_version="1.0.0",
+                            capabilities=["approval-resolution", "receipt-view"],
+                        )
+                        response_payload["session_id"] = str(session["session_id"])
+                        blocked_operation = daemon_client.queue_blocked_operation(
+                            session_id=str(session["session_id"]),
+                            operation_type="tool_call",
+                            harness=args.harness,
+                            metadata={
+                                "tool_name": str(payload.get("tool_name", "")),
+                                "event": str(payload.get("event", "")),
+                            },
+                            detection=runtime_detection.to_dict(),
+                            evaluation=evaluation_payload,
+                            approval_center_url=approval_center_url,
+                            approval_surface_policy=_approval_surface_policy_for_flow(
+                                config.approval_surface_policy,
+                                approval_flow,
+                            ),
+                            open_key=artifact_id,
+                        )
+                        operation = (
+                            blocked_operation["operation"]
+                            if isinstance(blocked_operation.get("operation"), dict)
+                            else {}
+                        )
+                        queued = (
+                            blocked_operation["approval_requests"]
+                            if isinstance(blocked_operation.get("approval_requests"), list)
+                            else []
+                        )
+                        response_payload["operation_id"] = str(operation["operation_id"])
+                    response_payload["approval_requests"] = queued
+                    response_payload["approval_center_url"] = approval_center_url
+                    response_payload["review_hint"] = approval_center_hint(
+                        context=context,
                         harness=args.harness,
-                        surface="harness-adapter",
-                        workspace=str(workspace) if workspace else None,
-                        client_name=f"{args.harness}-hook",
-                        client_title=f"{args.harness} hook",
-                        client_version="1.0.0",
-                        capabilities=["approval-resolution", "receipt-view"],
-                    )
-                    response_payload["session_id"] = str(session["session_id"])
-                    blocked_operation = daemon_client.queue_blocked_operation(
-                        session_id=str(session["session_id"]),
-                        operation_type="tool_call",
-                        harness=args.harness,
-                        metadata={
-                            "tool_name": str(payload.get("tool_name", "")),
-                            "event": str(payload.get("event", "")),
-                        },
-                        detection=runtime_detection.to_dict(),
-                        evaluation=evaluation_payload,
                         approval_center_url=approval_center_url,
-                        approval_surface_policy=_approval_surface_policy_for_flow(
-                            config.approval_surface_policy,
-                            approval_flow,
-                        ),
-                        open_key=artifact_id,
+                        queued=queued,
+                        managed_install=managed_install,
                     )
-                    operation = (
-                        blocked_operation["operation"] if isinstance(blocked_operation.get("operation"), dict) else {}
+                    response_payload["approval_delivery"] = _approval_delivery_payload(
+                        args.harness,
+                        managed_install=managed_install,
                     )
-                    queued = (
-                        blocked_operation["approval_requests"]
-                        if isinstance(blocked_operation.get("approval_requests"), list)
-                        else []
-                    )
-                    response_payload["operation_id"] = str(operation["operation_id"])
-                response_payload["approval_requests"] = queued
-                response_payload["approval_center_url"] = approval_center_url
-                response_payload["review_hint"] = approval_center_hint(
-                    context=context,
-                    harness=args.harness,
-                    approval_center_url=approval_center_url,
-                    queued=queued,
-                    managed_install=managed_install,
-                )
-                response_payload["approval_delivery"] = _approval_delivery_payload(
-                    args.harness,
-                    managed_install=managed_install,
-                )
             if _should_emit_copilot_hook_response(args):
                 _emit_copilot_hook_response(
                     policy_action=policy_action,
@@ -1575,7 +1633,10 @@ def run_guard_command(
                 return 2
             raw_runtime_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
             if _canonical_harness_name(args.harness) == "codex" and event_name == "UserPromptSubmit":
-                runtime_reason = raw_runtime_reason
+                runtime_reason = _native_hook_reason(
+                    raw_runtime_reason,
+                    _native_approval_center_context(response_payload, harness=args.harness),
+                )
             else:
                 runtime_reason = _native_hook_reason_for_harness(
                     args.harness,
@@ -2663,6 +2724,120 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
         f"Open HOL Guard to approve or keep this blocked: {review_url}. "
         f"After you choose, retry the same {harness_label} action."
     )
+
+
+def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> str:
+    if _prompt_requires_hard_block(artifact):
+        return "block"
+    risk_actions = [
+        resolve_risk_action(config, risk_class, harness=_canonical_harness_name(harness))
+        for risk_class in _runtime_artifact_risk_classes(artifact)
+    ]
+    resolved_actions = [action for action in risk_actions if action in VALID_GUARD_ACTIONS]
+    if resolved_actions:
+        return max(resolved_actions, key=_guard_action_severity)
+    return SAFE_CHANGED_HASH_ACTION
+
+
+def _guard_action_severity(action: str) -> int:
+    return {
+        "allow": 0,
+        "warn": 1,
+        "review": 2,
+        "require-reapproval": 3,
+        "sandbox-required": 4,
+        "block": 5,
+    }.get(action, -1)
+
+
+def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
+    if artifact.artifact_type == "file_read_request":
+        return ["local_secret_read"]
+    if artifact.artifact_type == "prompt_request":
+        prompt_classes = _prompt_request_classes(artifact)
+        risk_classes: list[str] = []
+        if "secret_read" in prompt_classes:
+            risk_classes.append("local_secret_read")
+        if "exfil_intent" in prompt_classes:
+            risk_classes.append("credential_exfiltration")
+        if "destructive_intent" in prompt_classes:
+            risk_classes.append("destructive_shell")
+        if "subprocess_intent" in prompt_classes:
+            risk_classes.append("destructive_shell")
+        return risk_classes
+    if artifact.artifact_type != "tool_action_request":
+        return []
+    action_class = artifact.metadata.get("action_class")
+    if not isinstance(action_class, str):
+        return []
+    action_risk_classes = {
+        "credential exfiltration shell command": ["credential_exfiltration", "network_egress"],
+        "docker-sensitive command": ["network_egress", "destructive_shell"],
+        "docker client config access": ["local_secret_read"],
+        "encoded or encrypted shell command": ["encoded_execution"],
+        "shell file upload command": ["credential_exfiltration", "network_egress"],
+        "destructive shell command": ["destructive_shell"],
+    }
+    return action_risk_classes.get(action_class.strip().lower(), [])
+
+
+def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
+    return {
+        "generated_at": _now(),
+        "guard_home": str(config.guard_home),
+        "config_path": str(config.guard_home / "config.toml"),
+        "settings": editable_guard_settings(config),
+    }
+
+
+def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig, guard_home: Path) -> GuardConfig:
+    settings_command = getattr(args, "settings_set_command", None)
+    if settings_command == "security-level":
+        payload: dict[str, object] = {"security_level": args.security_level}
+        if args.security_level in {"balanced", "strict"}:
+            payload["risk_actions"] = {}
+            payload["harness_risk_actions"] = {}
+        elif args.security_level == "custom":
+            payload["risk_actions"] = _current_effective_risk_actions(config)
+        return update_guard_settings(guard_home, payload)
+    if settings_command == "risk":
+        risk_class = _guard_risk_action_key(str(args.risk_class))
+        action = str(args.action)
+        harness = getattr(args, "harness", None)
+        if isinstance(harness, str) and harness.strip():
+            harness_key = _canonical_harness_name(harness.strip().lower())
+            harness_actions = {
+                name: dict(values)
+                for name, values in (config.harness_risk_actions or {}).items()
+                if isinstance(values, dict)
+            }
+            harness_actions.setdefault(harness_key, {})[risk_class] = action
+            return update_guard_settings(
+                guard_home,
+                {
+                    "harness_risk_actions": harness_actions,
+                },
+            )
+        risk_actions = dict(config.risk_actions or {})
+        risk_actions[risk_class] = action
+        return update_guard_settings(
+            guard_home,
+            {
+                "risk_actions": risk_actions,
+            },
+        )
+    raise ValueError("Unsupported Guard settings command.")
+
+
+def _current_effective_risk_actions(config: GuardConfig) -> dict[str, str]:
+    risk_actions = editable_guard_settings(config).get("risk_actions")
+    if isinstance(risk_actions, dict):
+        return {
+            key: value
+            for key, value in risk_actions.items()
+            if isinstance(key, str) and isinstance(value, str) and value in VALID_GUARD_ACTIONS
+        }
+    return {}
 
 
 def _prompt_requires_hard_block(artifact: GuardArtifact) -> bool:

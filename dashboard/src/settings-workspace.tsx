@@ -30,6 +30,100 @@ const surfacePolicyOptions = [
   { value: "native-only", label: "Harness prompt only" }
 ];
 
+const securityLevels = [
+  {
+    value: "balanced",
+    label: "Balanced",
+    description: "Ask before secret access, hidden execution, exfiltration, and destructive actions."
+  },
+  {
+    value: "strict",
+    label: "Strict",
+    description: "Ask more often, including new network destinations."
+  },
+  {
+    value: "custom",
+    label: "Custom",
+    description: "Use the exact choices below for this machine and connected apps."
+  }
+] as const;
+
+const riskControls = [
+  {
+    key: "local_secret_read",
+    label: "Local secrets",
+    description: "Files such as .env, .npmrc, .netrc, SSH keys, and cloud credentials."
+  },
+  {
+    key: "credential_exfiltration",
+    label: "Credential sharing",
+    description: "Commands or scripts that appear to send keys, tokens, or credentials away."
+  },
+  {
+    key: "destructive_shell",
+    label: "Destructive commands",
+    description: "Shell actions that delete, overwrite, or rewrite local files."
+  },
+  {
+    key: "encoded_execution",
+    label: "Hidden scripts",
+    description: "Encoded, encrypted, or decoded-and-run command payloads."
+  },
+  {
+    key: "network_egress",
+    label: "New network destinations",
+    description: "Outbound connections Guard has not seen in this context."
+  }
+] as const;
+
+type RiskKey = (typeof riskControls)[number]["key"];
+
+const riskProfileActions: Record<"balanced" | "strict" | "custom", Record<RiskKey, string>> = {
+  balanced: {
+    local_secret_read: "require-reapproval",
+    credential_exfiltration: "require-reapproval",
+    destructive_shell: "require-reapproval",
+    encoded_execution: "require-reapproval",
+    network_egress: "warn"
+  },
+  strict: {
+    local_secret_read: "require-reapproval",
+    credential_exfiltration: "require-reapproval",
+    destructive_shell: "require-reapproval",
+    encoded_execution: "require-reapproval",
+    network_egress: "require-reapproval"
+  },
+  custom: {
+    local_secret_read: "require-reapproval",
+    credential_exfiltration: "require-reapproval",
+    destructive_shell: "require-reapproval",
+    encoded_execution: "require-reapproval",
+    network_egress: "warn"
+  }
+};
+
+function normalizeSettingsPayload(payload: GuardSettingsPayload): GuardSettingsPayload {
+  return {
+    ...payload,
+    settings: normalizeGuardSettings(payload.settings)
+  };
+}
+
+function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
+  const defaults = riskProfileActions[settings.security_level];
+  const explicitOverrides = settings.risk_action_overrides ?? {};
+  const effectiveRiskActions = riskControls.reduce<Record<RiskKey, string>>((actions, risk) => {
+    actions[risk.key] = settings.risk_actions?.[risk.key] ?? explicitOverrides[risk.key] ?? defaults[risk.key];
+    return actions;
+  }, {} as Record<RiskKey, string>);
+  return {
+    ...settings,
+    risk_actions: effectiveRiskActions,
+    risk_action_overrides: explicitOverrides,
+    harness_risk_actions: settings.harness_risk_actions ?? {}
+  };
+}
+
 export function SettingsWorkspace() {
   const [state, setState] = useState<SettingsState>({ kind: "loading" });
   const [draft, setDraft] = useState<GuardSettings | null>(null);
@@ -41,8 +135,9 @@ export function SettingsWorkspace() {
     fetchSettings()
       .then((payload) => {
         if (!cancelled) {
-          setState({ kind: "ready", payload });
-          setDraft(payload.settings);
+          const normalizedPayload = normalizeSettingsPayload(payload);
+          setState({ kind: "ready", payload: normalizedPayload });
+          setDraft(normalizedPayload.settings);
         }
       })
       .catch((error: unknown) => {
@@ -65,6 +160,63 @@ export function SettingsWorkspace() {
     },
     []
   );
+
+  const handleSecurityLevelChange = useCallback((securityLevel: GuardSettings["security_level"]) => {
+    setDraft((value) => {
+      if (value === null) return value;
+      if (securityLevel === "custom") {
+        return { ...value, security_level: securityLevel };
+      }
+      return {
+        ...value,
+        security_level: securityLevel,
+        risk_actions: riskProfileActions[securityLevel],
+        risk_action_overrides: {},
+        harness_risk_actions: {}
+      };
+    });
+    setSavedMessage(null);
+  }, []);
+
+  const handleRiskActionChange = useCallback(
+    (riskKey: string) => (event: ChangeEvent<HTMLSelectElement>) => {
+      setDraft((value) => {
+        if (value === null) return value;
+        return {
+          ...value,
+          security_level: "custom",
+          risk_actions: {
+            ...value.risk_actions,
+            [riskKey]: event.target.value
+          },
+          risk_action_overrides: {
+            ...value.risk_action_overrides,
+            [riskKey]: event.target.value
+          }
+        };
+      });
+      setSavedMessage(null);
+    },
+    []
+  );
+
+  const handleCodexSecretReadChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    setDraft((value) => {
+      if (value === null) return value;
+      return {
+        ...value,
+        security_level: "custom",
+        harness_risk_actions: {
+          ...value.harness_risk_actions,
+          codex: {
+            ...(value.harness_risk_actions.codex ?? {}),
+            local_secret_read: event.target.value
+          }
+        }
+      };
+    });
+    setSavedMessage(null);
+  }, []);
 
   const handleTimeoutChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = Number.parseInt(event.target.value, 10);
@@ -90,9 +242,13 @@ export function SettingsWorkspace() {
     setSaving(true);
     setSavedMessage(null);
     try {
-      const payload = await updateSettings(draft);
-      setState({ kind: "ready", payload });
-      setDraft(payload.settings);
+      const payload = await updateSettings({
+        ...draft,
+        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides
+      });
+      const normalizedPayload = normalizeSettingsPayload(payload);
+      setState({ kind: "ready", payload: normalizedPayload });
+      setDraft(normalizedPayload.settings);
       setSavedMessage("Settings saved. New Guard checks use these values immediately.");
     } catch (error) {
       setSavedMessage(error instanceof Error ? error.message : "Unable to save settings.");
@@ -130,10 +286,10 @@ export function SettingsWorkspace() {
             </div>
             <SectionLabel>Settings</SectionLabel>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-brand-dark">
-              Tune how HOL Guard pauses risky actions.
+              Choose how protective HOL Guard should be.
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/70">
-              These are the same local controls exposed by the CLI config. Use them when you want Guard to ask more often, run quietly, or wait longer for approval decisions.
+              Start with a simple security level, then tune exact risk types when a trusted app needs more room to work.
             </p>
           </div>
           <div className="rounded-[1.65rem] border border-white/80 bg-white/80 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur">
@@ -148,6 +304,27 @@ export function SettingsWorkspace() {
 
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
+          <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
+            <SectionLabel>Security level</SectionLabel>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {securityLevels.map((level) => (
+                <button
+                  key={level.value}
+                  type="button"
+                  onClick={() => handleSecurityLevelChange(level.value)}
+                  className={`min-h-32 rounded-[1.5rem] border p-4 text-left transition-all duration-150 ${
+                    draft.security_level === level.value
+                      ? "border-brand-blue/35 bg-brand-blue/[0.07] shadow-[0_12px_32px_rgba(85,153,254,0.14)]"
+                      : "border-transparent bg-surface-1/80 hover:bg-white"
+                  }`}
+                >
+                  <span className="text-base font-semibold text-brand-dark">{level.label}</span>
+                  <span className="mt-2 block text-sm leading-6 text-muted-foreground">{level.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
             <SectionLabel>Protection mode</SectionLabel>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -174,7 +351,45 @@ export function SettingsWorkspace() {
           </div>
 
           <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
-            <SectionLabel>Default decisions</SectionLabel>
+            <SectionLabel>Risk choices</SectionLabel>
+            <div className="mt-4 divide-y divide-slate-200/70 overflow-hidden rounded-[1.35rem] border border-slate-200/70 bg-white">
+              {riskControls.map((risk) => (
+                <div key={risk.key} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-center">
+                  <div>
+                    <p className="text-sm font-semibold text-brand-dark">{risk.label}</p>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{risk.description}</p>
+                  </div>
+                  <SettingSelect
+                    label="Guard should"
+                    value={draft.risk_actions[risk.key] ?? "require-reapproval"}
+                    options={actionOptions}
+                    onChange={handleRiskActionChange(risk.key)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
+            <SectionLabel>Codex override</SectionLabel>
+            <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_260px] md:items-center">
+              <div>
+                <p className="text-sm font-semibold text-brand-dark">Codex reading local secret files</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Use this only for trusted projects where Codex should be allowed to open files such as .env or .npmrc.
+                </p>
+              </div>
+              <SettingSelect
+                label="Codex should"
+                value={draft.harness_risk_actions.codex?.local_secret_read ?? draft.risk_actions.local_secret_read ?? "require-reapproval"}
+                options={actionOptions}
+                onChange={handleCodexSecretReadChange}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
+            <SectionLabel>Advanced defaults</SectionLabel>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <SettingSelect label="New action" value={draft.default_action} options={actionOptions} onChange={handleStringChange("default_action")} />
               <SettingSelect label="Unknown source" value={draft.unknown_publisher_action} options={actionOptions} onChange={handleStringChange("unknown_publisher_action")} />
