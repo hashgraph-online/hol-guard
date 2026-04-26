@@ -79,6 +79,8 @@ _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
     }
 )
 _SCRIPT_INTERPRETER_COMMANDS = frozenset({"perl", "python", "python3", "ruby"})
+_READ_ONLY_OBSERVER_INTERPRETER_COMMANDS = frozenset({"python", "python3"})
+_UNMODELED_INLINE_INTERPRETER_COMMANDS = frozenset({"perl", "ruby"})
 _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
     {
         "/dev/null",
@@ -2223,6 +2225,8 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return False
     if _looks_like_read_only_interpreter_command(normalized, parts, parsed_command_names):
         return False
+    if _contains_unmodeled_inline_interpreter_eval(normalized, parts, parsed_command_names):
+        return True
     if _contains_destructive_node_inline_eval(parts):
         return True
     if _contains_destructive_git_command(parts):
@@ -3037,18 +3041,38 @@ def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str
         return False
     heredoc_script = _single_interpreter_heredoc_script(command_text)
     if heredoc_script is not None:
+        if not command_names or not all(
+            command_name in _READ_ONLY_OBSERVER_INTERPRETER_COMMANDS for command_name in command_names
+        ):
+            return False
         scripts = list(_script_interpreter_texts(parts))
         if scripts:
             scripts.append(heredoc_script)
             return all(_script_is_read_only_observer(script_text) for script_text in scripts)
         return _script_is_read_only_observer(heredoc_script)
-    if not command_names or not all(command_name in _SCRIPT_INTERPRETER_COMMANDS for command_name in command_names):
+    if not command_names or not all(
+        command_name in _READ_ONLY_OBSERVER_INTERPRETER_COMMANDS for command_name in command_names
+    ):
         return False
     scripts = list(_script_interpreter_texts(parts))
     scripts.extend(_shell_heredoc_payloads(command_text))
     if not scripts or len(scripts) != len(command_names):
         return False
     return all(_script_is_read_only_observer(script_text) for script_text in scripts)
+
+
+def _contains_unmodeled_inline_interpreter_eval(
+    command_text: str,
+    parts: list[str],
+    command_names: list[str],
+) -> bool:
+    if not command_names or not all(command_name in _SCRIPT_INTERPRETER_COMMANDS for command_name in command_names):
+        return False
+    if not any(command_name in _UNMODELED_INLINE_INTERPRETER_COMMANDS for command_name in command_names):
+        return False
+    if _single_interpreter_heredoc_script(command_text) is not None:
+        return True
+    return bool(_script_interpreter_texts(parts) or _shell_heredoc_payloads(command_text))
 
 
 def _script_is_benign_wait(script_text: str) -> bool:
