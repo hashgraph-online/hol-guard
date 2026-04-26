@@ -459,7 +459,7 @@ class TestGuardSurfaceServer:
         finally:
             daemon.stop()
 
-        assert hook_payload == {}
+        assert hook_payload == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
 
     def test_guard_daemon_claude_hook_endpoint_brands_overridable_user_prompt_submit_without_blocking(
         self, tmp_path
@@ -491,7 +491,12 @@ class TestGuardSurfaceServer:
         finally:
             daemon.stop()
 
-        assert hook_payload == {}
+        assert hook_payload["systemMessage"].startswith("HOL Guard intercepted this prompt")
+        assert hook_payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+        assert (
+            "HOL Guard will intercept Claude's next attempt to access local secrets"
+            in (hook_payload["hookSpecificOutput"]["additionalContext"])
+        )
 
     def test_guard_daemon_claude_hook_endpoint_blocks_guard_bypass_user_prompt_submit(self, tmp_path) -> None:
         home_dir = tmp_path / "home"
