@@ -371,7 +371,7 @@ def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):
 
     assert result.returncode == 0
     assert result.stderr == ""
-    assert result.stdout == ""
+    assert json.loads(result.stdout) == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
 
 
 def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon_miss(tmp_path):
@@ -394,7 +394,13 @@ def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon
     )
     assert result.returncode == 0
     assert result.stderr == ""
-    assert result.stdout == ""
+    payload = json.loads(result.stdout)
+    assert payload["systemMessage"].startswith("HOL Guard intercepted this prompt")
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    assert (
+        "HOL Guard will intercept Claude's next attempt to access local secrets"
+        in (payload["hookSpecificOutput"]["additionalContext"])
+    )
 
 
 def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_path):

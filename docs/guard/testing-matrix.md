@@ -4,6 +4,8 @@ Automated coverage in this phase includes:
 
 - Guard CLI behavior tests for detect, scan, run, diff, receipts, install, uninstall, login, and sync
 - Guard product-flow tests for `hol-guard start`, `hol-guard status`, and launcher shim creation
+- prompt-risk regressions for Codex, Cursor, Gemini, and OpenCode wrapper launches
+- native prompt-hook regressions for Claude Code and Copilot hook events
 - SQLite persistence through real command execution in temporary homes and workspaces
 - consumer-mode JSON contract generation against scanner fixtures
 - local HTTP sync against a live in-process server instead of mocked transport
@@ -20,6 +22,8 @@ Manual verification should include:
 - `hol-guard detect opencode --json`
 - `hol-guard install opencode --json`
 - `hol-guard update --dry-run --json`
+- `hol-guard run cursor --dry-run --default-action allow --json`
+- `hol-guard run gemini --dry-run --default-action allow --json`
 - `hol-guard run opencode --dry-run --default-action allow --json`
 - `hol-guard run opencode --default-action require-reapproval --json`
 - `hol-guard approvals --json`

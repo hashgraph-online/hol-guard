@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ..models import GuardArtifact, HarnessDetection
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
 
@@ -24,6 +26,11 @@ class CursorHarnessAdapter(HarnessAdapter):
         if context.workspace_dir is not None and path.is_relative_to(context.workspace_dir):
             return "project"
         return "global"
+
+    def policy_path(self, context: HarnessContext) -> Path:
+        if context.workspace_dir is not None:
+            return context.workspace_dir / ".cursor" / "mcp.json"
+        return context.home_dir / ".cursor" / "mcp.json"
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         config_paths = [context.home_dir / ".cursor" / "mcp.json"]

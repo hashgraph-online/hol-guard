@@ -219,6 +219,7 @@ def test_copilot_install_and_uninstall_manage_inline_config_hooks_idempotently(t
         assert first_install["active"] is True
         assert second_install["active"] is True
         assert first_install["config_path"] == str(config_path)
+        assert len(managed_hooks["userPromptSubmitted"]) == 1
         assert len(managed_hooks["preToolUse"]) == 1
         assert len(managed_hooks["postToolUse"]) == 1
         assert len(managed_hooks["permissionRequest"]) == 1
@@ -230,8 +231,10 @@ def test_copilot_install_and_uninstall_manage_inline_config_hooks_idempotently(t
         assert "copilot" in managed_hooks["preToolUse"][0]["bash"]
         assert "--workspace" not in managed_hooks["preToolUse"][0]["bash"]
         assert "from codex_plugin_scanner.cli import main" in managed_hooks["preToolUse"][0]["powershell"]
+        assert "from codex_plugin_scanner.cli import main" in managed_hooks["userPromptSubmitted"][0]["bash"]
         assert managed_hooks["postToolUse"][0]["type"] == "command"
         assert "from codex_plugin_scanner.cli import main" in managed_hooks["postToolUse"][0]["bash"]
+        assert len(managed_workspace_hooks["userPromptSubmitted"]) == 1
         assert len(managed_workspace_hooks["preToolUse"]) == 1
         assert len(managed_workspace_hooks["postToolUse"]) == 1
         assert len(managed_workspace_hooks["permissionRequest"]) == 1
