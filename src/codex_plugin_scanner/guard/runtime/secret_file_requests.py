@@ -203,6 +203,7 @@ _READ_ONLY_INTERPRETER_MUTATION_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"\bpath\s*\([^)]*\)\s*\.\s*(?:write_text|write_bytes|touch|unlink|rename|replace|chmod|mkdir|rmdir)\s*\(",
         re.IGNORECASE,
     ),
+    re.compile(r"\.\s*(?:write_text|write_bytes|touch|unlink|rename|replace|chmod|mkdir|rmdir)\s*\(", re.IGNORECASE),
 )
 _GIT_GLOBAL_OPTIONS_WITH_VALUE = frozenset(
     {

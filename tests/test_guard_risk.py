@@ -1153,6 +1153,16 @@ def test_tool_action_request_classifier_detects_imported_subprocess_run():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_path_variable_touch():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": ("python3 -c \"from pathlib import Path; p = Path('dangerous-marker.json'); p.touch()\"")},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_does_not_promote_echoed_interpreter_text():
     request = extract_sensitive_tool_action_request(
         "bash",
