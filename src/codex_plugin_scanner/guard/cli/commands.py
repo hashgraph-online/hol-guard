@@ -694,17 +694,15 @@ def run_guard_command(
             approval_center_url,
             store=store,
             config=config,
-            open_key=f"dashboard:{secrets.token_hex(8)}",
+            open_key="dashboard",
+            force_open=True,
         )
         _emit(
             "dashboard",
             {
                 "generated_at": _now(),
                 "approval_center_url": approval_center_url,
-                "browser_url": _approval_center_browser_url(
-                    approval_center_url,
-                    load_guard_daemon_auth_token(store.guard_home),
-                ),
+                "browser_url": open_result.get("browser_url"),
                 "opened": bool(open_result.get("opened")),
                 "reason": str(open_result.get("reason") or "unknown"),
             },
@@ -3334,19 +3332,24 @@ def _open_approval_center(
     approval_center_url: str,
     *,
     store: GuardStore,
-    config,
+    config: GuardConfig,
     open_key: str | None = None,
+    force_open: bool = False,
 ) -> dict[str, object]:
     surface_runtime = GuardSurfaceRuntime(store)
     auth_token = load_guard_daemon_auth_token(store.guard_home)
-    return surface_runtime.ensure_surface(
+    browser_url = _approval_center_browser_url(approval_center_url, auth_token)
+    open_result = surface_runtime.ensure_surface(
         surface="approval-center",
         approval_center_url=approval_center_url,
-        browser_url=_approval_center_browser_url(approval_center_url, auth_token),
+        browser_url=browser_url,
         approval_surface_policy=config.approval_surface_policy,
         open_key=open_key or approval_center_url,
+        force_open=force_open,
         opener=webbrowser.open,
     )
+    open_result["browser_url"] = browser_url
+    return open_result
 
 
 def _approval_center_browser_url(approval_center_url: str, auth_token: str | None) -> str | None:

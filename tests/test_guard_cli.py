@@ -6052,6 +6052,7 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         opened_urls: list[str] = []
         open_keys: list[str | None] = []
+        force_open_flags: list[bool] = []
 
         monkeypatch.setattr(
             guard_commands_module,
@@ -6061,10 +6062,11 @@ url = http://127.0.0.1:8787/guard-canary
         monkeypatch.setattr(
             guard_commands_module,
             "_open_approval_center",
-            lambda approval_center_url, *, store, config, open_key=None: (
+            lambda approval_center_url, *, store, config, open_key=None, force_open=False: (
                 opened_urls.append(approval_center_url),
                 open_keys.append(open_key),
-                {"opened": True, "reason": "opened"},
+                force_open_flags.append(force_open),
+                {"opened": True, "reason": "opened", "browser_url": approval_center_url},
             )[-1],
         )
 
@@ -6073,8 +6075,10 @@ url = http://127.0.0.1:8787/guard-canary
 
         assert rc == 0
         assert opened_urls == ["http://127.0.0.1:5474"]
-        assert open_keys and isinstance(open_keys[0], str) and open_keys[0].startswith("dashboard:")
+        assert open_keys == ["dashboard"]
+        assert force_open_flags == [True]
         assert output["approval_center_url"] == "http://127.0.0.1:5474"
+        assert output["browser_url"] == "http://127.0.0.1:5474"
         assert output["opened"] is True
         assert output["reason"] == "opened"
 
@@ -6082,6 +6086,7 @@ url = http://127.0.0.1:8787/guard-canary
         home_dir = tmp_path / "home"
         opened_urls: list[str] = []
         open_keys: list[str | None] = []
+        force_open_flags: list[bool] = []
 
         monkeypatch.setattr(
             guard_commands_module,
@@ -6091,10 +6096,11 @@ url = http://127.0.0.1:8787/guard-canary
         monkeypatch.setattr(
             guard_commands_module,
             "_open_approval_center",
-            lambda approval_center_url, *, store, config, open_key=None: (
+            lambda approval_center_url, *, store, config, open_key=None, force_open=False: (
                 opened_urls.append(approval_center_url),
                 open_keys.append(open_key),
-                {"opened": False, "reason": "policy-disabled"},
+                force_open_flags.append(force_open),
+                {"opened": False, "reason": "policy-disabled", "browser_url": approval_center_url},
             )[-1],
         )
 
@@ -6103,8 +6109,10 @@ url = http://127.0.0.1:8787/guard-canary
 
         assert rc == 0
         assert opened_urls == ["http://127.0.0.1:5474"]
-        assert open_keys and isinstance(open_keys[0], str) and open_keys[0].startswith("dashboard:")
+        assert open_keys == ["dashboard"]
+        assert force_open_flags == [True]
         assert output["approval_center_url"] == "http://127.0.0.1:5474"
+        assert output["browser_url"] == "http://127.0.0.1:5474"
         assert output["opened"] is False
         assert output["reason"] == "policy-disabled"
 
