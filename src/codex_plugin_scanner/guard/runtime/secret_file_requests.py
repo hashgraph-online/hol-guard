@@ -660,6 +660,7 @@ def _contains_shell_credential_exfiltration(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     depth: int = 0,
     visited_script_paths: frozenset[str] = frozenset(),
 ) -> bool:
@@ -681,6 +682,7 @@ def _contains_shell_credential_exfiltration(
             env_split_string,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -690,6 +692,7 @@ def _contains_shell_credential_exfiltration(
             substitution_payload,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -699,6 +702,7 @@ def _contains_shell_credential_exfiltration(
             shell_script,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -707,12 +711,14 @@ def _contains_shell_credential_exfiltration(
         parts,
         cwd=cwd,
         home_dir=home_dir,
+        allowed_roots=allowed_roots,
         visited_script_paths=visited_script_paths,
     ):
         if _contains_shell_credential_exfiltration(
             script_text,
             cwd=script_cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths | frozenset({script_path}),
         ):
@@ -745,6 +751,7 @@ def _contains_encoded_or_encrypted_shell_command(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     depth: int = 0,
     visited_script_paths: frozenset[str] = frozenset(),
 ) -> bool:
@@ -775,6 +782,7 @@ def _contains_encoded_or_encrypted_shell_command(
             env_split_string,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -784,6 +792,7 @@ def _contains_encoded_or_encrypted_shell_command(
             shell_script,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -792,12 +801,14 @@ def _contains_encoded_or_encrypted_shell_command(
         parts,
         cwd=cwd,
         home_dir=home_dir,
+        allowed_roots=allowed_roots,
         visited_script_paths=visited_script_paths,
     ):
         if _contains_encoded_or_encrypted_shell_command(
             script_text,
             cwd=script_cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths | frozenset({script_path}),
         ):
@@ -822,6 +833,7 @@ def _contains_shell_network_file_upload(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     depth: int = 0,
     visited_script_paths: frozenset[str] = frozenset(),
 ) -> bool:
@@ -833,7 +845,13 @@ def _contains_shell_network_file_upload(
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
-    if _curl_stdin_config_uses_file_upload(normalized, parts, cwd=cwd, home_dir=home_dir):
+    if _curl_stdin_config_uses_file_upload(
+        normalized,
+        parts,
+        cwd=cwd,
+        home_dir=home_dir,
+        allowed_roots=allowed_roots,
+    ):
         return True
     for pipeline in _iter_shell_pipelines(parts):
         for index, segment in enumerate(pipeline):
@@ -841,6 +859,7 @@ def _contains_shell_network_file_upload(
                 segment,
                 cwd=cwd,
                 home_dir=home_dir,
+                allowed_roots=allowed_roots,
                 stdin_uses_local_file=_shell_pipeline_stdin_uses_local_file(
                     pipeline,
                     index,
@@ -854,6 +873,7 @@ def _contains_shell_network_file_upload(
             env_split_string,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -863,6 +883,7 @@ def _contains_shell_network_file_upload(
             substitution_payload,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -872,6 +893,7 @@ def _contains_shell_network_file_upload(
             shell_script,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths,
         ):
@@ -880,12 +902,14 @@ def _contains_shell_network_file_upload(
         parts,
         cwd=cwd,
         home_dir=home_dir,
+        allowed_roots=allowed_roots,
         visited_script_paths=visited_script_paths,
     ):
         if _contains_shell_network_file_upload(
             script_text,
             cwd=script_cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             depth=depth + 1,
             visited_script_paths=visited_script_paths | frozenset({script_path}),
         ):
@@ -898,6 +922,7 @@ def _segment_uses_network_file_upload(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     stdin_uses_local_file: bool = False,
 ) -> bool:
     command_name, command_index = _shell_segment_primary_command(segment)
@@ -909,6 +934,7 @@ def _segment_uses_network_file_upload(
             segment_args,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
             stdin_uses_local_file=stdin_uses_local_file,
         )
     if command_name == "wget":
@@ -1076,6 +1102,7 @@ def _curl_stdin_config_uses_file_upload(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> bool:
     heredoc_payloads = _shell_heredoc_payloads(command_text)
     for pipeline in _iter_shell_pipelines(parts):
@@ -1089,6 +1116,7 @@ def _curl_stdin_config_uses_file_upload(
                 index,
                 cwd=cwd,
                 home_dir=home_dir,
+                allowed_roots=allowed_roots,
             )
             pipeline_stdin_uses_local_file = _shell_pipeline_stdin_uses_local_file(
                 pipeline,
@@ -1100,6 +1128,7 @@ def _curl_stdin_config_uses_file_upload(
                 segment_args,
                 cwd=cwd,
                 home_dir=home_dir,
+                allowed_roots=allowed_roots,
                 stdin_config_payloads=pipeline_stdin_payloads,
                 stdin_uses_local_file=pipeline_stdin_uses_local_file,
             ):
@@ -1178,6 +1207,7 @@ def _shell_pipeline_stdin_payloads(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> tuple[tuple[str, Path | None], ...]:
     payloads: tuple[tuple[str, Path | None], ...] = ()
     for upstream_segment in pipeline[:index]:
@@ -1186,8 +1216,14 @@ def _shell_pipeline_stdin_payloads(
             stdin_payloads=payloads,
             cwd=cwd,
             home_dir=home_dir,
+            allowed_roots=allowed_roots,
         )
-    current_redirect_payloads = _shell_stdin_redirect_payloads(pipeline[index], cwd=cwd, home_dir=home_dir)
+    current_redirect_payloads = _shell_stdin_redirect_payloads(
+        pipeline[index],
+        cwd=cwd,
+        home_dir=home_dir,
+        allowed_roots=allowed_roots,
+    )
     return current_redirect_payloads or payloads
 
 
@@ -1196,6 +1232,7 @@ def _shell_stdout_payloads(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> tuple[tuple[str, Path | None], ...]:
     command_name, command_index = _shell_segment_primary_command(segment)
     if command_name is None or command_index is None:
@@ -1208,7 +1245,7 @@ def _shell_stdout_payloads(
         payload = _echo_stdout_payload(segment_args)
         return ((payload, cwd),) if payload else ()
     if command_name == "cat":
-        return _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir)
+        return _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir, allowed_roots=allowed_roots)
     return ()
 
 
@@ -1218,12 +1255,18 @@ def _shell_segment_stdout_payloads(
     stdin_payloads: tuple[tuple[str, Path | None], ...],
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> tuple[tuple[str, Path | None], ...]:
     command_name, command_index = _shell_segment_primary_command(segment)
     if command_name is None or command_index is None:
         return stdin_payloads
     segment_args = segment[command_index + 1 :]
-    redirected_input_payloads = _shell_stdin_redirect_payloads(segment, cwd=cwd, home_dir=home_dir)
+    redirected_input_payloads = _shell_stdin_redirect_payloads(
+        segment,
+        cwd=cwd,
+        home_dir=home_dir,
+        allowed_roots=allowed_roots,
+    )
     effective_input_payloads = redirected_input_payloads or stdin_payloads
     if command_name == "printf":
         payloads = _printf_stdout_payloads(segment_args)
@@ -1232,7 +1275,10 @@ def _shell_segment_stdout_payloads(
         payload = _echo_stdout_payload(segment_args)
         return ((payload, cwd),) if payload else ()
     if command_name == "cat":
-        return _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir) or effective_input_payloads
+        return (
+            _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir, allowed_roots=allowed_roots)
+            or effective_input_payloads
+        )
     if command_name in {"sed", "tr"}:
         return effective_input_payloads
     return ()
@@ -1299,9 +1345,11 @@ def _cat_stdout_payloads(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> tuple[tuple[str, Path | None], ...]:
     payloads: list[tuple[str, Path | None]] = []
     consume_all = False
+    read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
     for token in segment_args:
         if token == "--":
             consume_all = True
@@ -1310,12 +1358,12 @@ def _cat_stdout_payloads(
             continue
         if token == "-":
             continue
-        config_path = _resolved_runtime_path(token, cwd=cwd, home_dir=home_dir)
+        config_path = _resolved_runtime_path(token, cwd=cwd, home_dir=home_dir, allowed_roots=read_roots)
         if config_path is None:
             continue
         payload_text = _read_small_runtime_text_file(
             config_path,
-            allowed_roots=_runtime_read_roots(cwd, home_dir),
+            allowed_roots=read_roots,
         )
         if payload_text is None:
             continue
@@ -1348,6 +1396,7 @@ def _shell_stdin_redirect_payloads(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> tuple[tuple[str, Path | None], ...]:
     payloads: list[tuple[str, Path | None]] = []
     index = 0
@@ -1370,7 +1419,12 @@ def _shell_stdin_redirect_payloads(
             next_token=segment[index + 1] if index + 1 < len(segment) else None,
         )
         if redirect_target is not None:
-            redirect_payload = _stdin_redirect_payload(redirect_target, cwd=cwd, home_dir=home_dir)
+            redirect_payload = _stdin_redirect_payload(
+                redirect_target,
+                cwd=cwd,
+                home_dir=home_dir,
+                allowed_roots=allowed_roots,
+            )
             if redirect_payload is not None:
                 payloads.append(redirect_payload)
             index += tokens_consumed
@@ -1412,13 +1466,15 @@ def _stdin_redirect_payload(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
 ) -> tuple[str, Path | None] | None:
-    config_path = _resolved_runtime_path(target, cwd=cwd, home_dir=home_dir)
+    read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
+    config_path = _resolved_runtime_path(target, cwd=cwd, home_dir=home_dir, allowed_roots=read_roots)
     if config_path is None:
         return None
     payload_text = _read_small_runtime_text_file(
         config_path,
-        allowed_roots=_runtime_read_roots(cwd, home_dir),
+        allowed_roots=read_roots,
     )
     if payload_text is None:
         return None
@@ -2006,9 +2062,11 @@ def _local_shell_script_payloads(
     *,
     cwd: Path | None,
     home_dir: Path | None,
+    allowed_roots: tuple[Path, ...] | None = None,
     visited_script_paths: frozenset[str],
 ) -> tuple[tuple[str, Path | None, str], ...]:
     payloads: list[tuple[str, Path | None, str]] = []
+    read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
     for segment in _iter_shell_command_segments(parts):
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_index is None:
@@ -2016,7 +2074,7 @@ def _local_shell_script_payloads(
         script_path = _shell_script_path_for_segment(segment, command_name=command_name, command_index=command_index)
         if script_path is None:
             continue
-        script_file = _resolved_runtime_path(script_path, cwd=cwd, home_dir=home_dir)
+        script_file = _resolved_runtime_path(script_path, cwd=cwd, home_dir=home_dir, allowed_roots=read_roots)
         if script_file is None:
             continue
         normalized_script_path = str(script_file)
@@ -2024,7 +2082,7 @@ def _local_shell_script_payloads(
             continue
         script_text = _read_small_runtime_text_file(
             script_file,
-            allowed_roots=_runtime_read_roots(cwd, home_dir),
+            allowed_roots=read_roots,
         )
         if script_text is None:
             continue
