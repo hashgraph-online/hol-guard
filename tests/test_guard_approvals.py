@@ -692,6 +692,20 @@ class TestGuardApprovals:
 
         assert daemon_manager_module.load_guard_daemon_url(guard_home) is None
 
+    def test_guard_daemon_server_reuses_existing_auth_token(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        token_path = store.guard_home / "daemon-auth-token"
+        token_path.parent.mkdir(parents=True, exist_ok=True)
+        token_path.write_text("persisted-token", encoding="utf-8")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+
+        try:
+            daemon.start()
+            assert daemon._server.auth_token == "persisted-token"
+            assert token_path.read_text(encoding="utf-8").strip() == "persisted-token"
+        finally:
+            daemon.stop()
+
     def test_guard_daemon_serves_approval_queue_and_resolves_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         store.add_approval_request(
@@ -1290,7 +1304,7 @@ class TestGuardApprovals:
             request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/approvals/missing/decision",
                 data=b"{not-json",
-                headers={"Content-Type": "application/json"},
+                headers=_guard_json_headers(daemon._server.auth_token),
                 method="POST",
             )
             try:
@@ -1373,6 +1387,48 @@ class TestGuardApprovals:
 
         assert status == 403
         assert payload["error"] == "forbidden_origin"
+
+    def test_guard_daemon_rejects_cross_origin_options_requests(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests/missing/approve",
+                headers={"Origin": "https://evil.example"},
+                method="OPTIONS",
+            )
+            try:
+                urllib.request.urlopen(request, timeout=5)
+            except urllib.error.HTTPError as error:
+                status = error.code
+            else:
+                raise AssertionError("expected HTTPError for disallowed preflight origin")
+        finally:
+            daemon.stop()
+
+        assert status == 403
+
+    def test_guard_daemon_allows_local_options_requests_with_guard_headers(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests/missing/approve",
+                headers={"Origin": f"http://127.0.0.1:{daemon.port}"},
+                method="OPTIONS",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                allow_headers = response.headers.get("Access-Control-Allow-Headers")
+                status = response.status
+        finally:
+            daemon.stop()
+
+        assert status == 200
+        assert allow_headers == "Content-Type, X-Guard-Token"
 
     def test_guard_daemon_rejects_spoofed_localhost_origin_post_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

@@ -26,6 +26,7 @@ from ..store import GuardStore
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     clear_guard_daemon_state,
+    load_guard_daemon_auth_token,
     write_guard_daemon_state,
 )
 
@@ -59,18 +60,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     _MAX_BODY_BYTES = 1_000_000
 
     def do_OPTIONS(self) -> None:
-        parsed = urlparse(self.path)
-        if parsed.path in {"/v1/connect/complete", "/v1/connect/state"}:
-            origin = self._normalize_origin(self.headers.get("Origin"))
-            if origin is None:
-                self._write_empty(status=400)
-                return
-            self._write_empty(
-                status=200,
-                extra_headers=self._cors_headers(origin, allow_methods="GET, POST, OPTIONS"),
-            )
+        origin = self._normalize_origin(self.headers.get("Origin"))
+        if origin is None:
+            self._write_empty(status=400)
             return
-        self._write_empty(status=404)
+        if not self._origin_is_allowed():
+            self._write_empty(status=403)
+            return
+        self._write_empty(
+            status=200,
+            extra_headers=self._cors_headers(
+                origin, allow_methods="GET, POST, OPTIONS", allow_headers="Content-Type, X-Guard-Token"
+            ),
+        )
 
     def do_GET(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
@@ -205,11 +207,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path != "/v1/connect/complete" and not self._origin_is_allowed():
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
+        path_parts = [part for part in parsed.path.split("/") if part]
+        if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid():
+            self._write_json({"error": "unauthorized"}, status=401)
+            return
         payload, body_error = self._load_request_body()
         if body_error is not None:
             self._write_json({"error": body_error}, status=400)
             return
-        path_parts = [part for part in parsed.path.split("/") if part]
         if parsed.path == "/v1/initialize":
             self._handle_initialize(payload)
             return
@@ -868,11 +873,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return f"{parsed.scheme}://{host}{port_suffix}"
 
     @staticmethod
-    def _cors_headers(origin: str, *, allow_methods: str = "POST, OPTIONS") -> dict[str, str]:
+    def _cors_headers(
+        origin: str,
+        *,
+        allow_methods: str = "POST, OPTIONS",
+        allow_headers: str = "Content-Type, X-Guard-Token",
+    ) -> dict[str, str]:
         return {
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Methods": allow_methods,
-            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Allow-Headers": allow_headers,
             "Vary": "Origin",
         }
 
@@ -958,6 +968,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return path_parts[1], None, True
             return path_parts[1], action.strip(), True
         return None, None, False
+
+    @staticmethod
+    def _requires_header_token(path: str, path_parts: list[str]) -> bool:
+        if path in {"/v1/policy/decisions", "/v1/policy/clear"}:
+            return True
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
+            return True
+        return len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision"
 
     def _write_json(
         self,
@@ -1080,7 +1098,7 @@ class GuardDaemonServer:
         self._server = _GuardDaemonHttpServer((host, port), _GuardDaemonHandler)
         self._server.store = store
         self._server.runtime = GuardSurfaceRuntime(store)
-        self._server.auth_token = uuid.uuid4().hex
+        self._server.auth_token = load_guard_daemon_auth_token(store.guard_home) or uuid.uuid4().hex
         self._server.runtime_host = host
         self._server.runtime_session_id = uuid.uuid4().hex
         self._server.runtime_started_at = _now()
