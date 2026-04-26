@@ -1150,6 +1150,35 @@ def test_tool_action_request_classifier_detects_path_open_positional_write_mode(
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_path_write_text_alias():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "python3 -c \"from pathlib import Path; wt = Path('dangerous-marker.json').write_text; wt('owned')\""
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_path_open_alias_write_mode():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                'python3 -c "from pathlib import Path; '
+                "opener = Path('dangerous-marker.json').open; opener('w').write('owned')\""
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_imported_subprocess_run():
     request = extract_sensitive_tool_action_request(
         "bash",
