@@ -6048,6 +6048,52 @@ url = http://127.0.0.1:8787/guard-canary
         assert connect_output["reason"] == "Guard sync requires a Pro or Team plan."
         assert connect_output["sync_message"] == "Guard sync requires a Pro or Team plan."
 
+    def test_guard_dashboard_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        opened_urls: list[str] = []
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_open_approval_center",
+            lambda approval_center_url, *, store, config, open_key=None: opened_urls.append(approval_center_url),
+        )
+
+        rc = main(["guard", "dashboard", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert opened_urls == ["http://127.0.0.1:5474"]
+        assert output["approval_center_url"] == "http://127.0.0.1:5474"
+        assert output["opened"] is True
+
+    def test_guard_admin_alias_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        opened_urls: list[str] = []
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda guard_home: "http://127.0.0.1:5474",
+        )
+        monkeypatch.setattr(
+            guard_commands_module,
+            "_open_approval_center",
+            lambda approval_center_url, *, store, config, open_key=None: opened_urls.append(approval_center_url),
+        )
+
+        rc = main(["guard", "admin", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert opened_urls == ["http://127.0.0.1:5474"]
+        assert output["approval_center_url"] == "http://127.0.0.1:5474"
+        assert output["opened"] is True
+
     def test_guard_connect_pending_output_uses_product_copy_for_sign_in_gap(self, capsys):
         emit_guard_payload(
             "connect",

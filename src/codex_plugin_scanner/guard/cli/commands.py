@@ -112,6 +112,7 @@ _GUARD_HELP_GROUPS = (
     "Everyday protection:\n"
     "  start        First-run setup and the Guard operating loop\n"
     "  status       Current local protection state and next actions\n"
+    "  dashboard    Open the local Guard dashboard in your browser\n"
     "  run          Enforce Guard before a harness launch\n"
     "  approvals    Resolve the current request queue\n"
     "  receipts     Review recent local decisions\n"
@@ -204,7 +205,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         required=True,
         parser_class=FriendlyArgumentParser,
         metavar=(
-            "{start,status,bootstrap,detect,install,update,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
+            "{start,status,dashboard,bootstrap,detect,install,update,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
             "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,login,sync,device,bridge}"
         ),
     )
@@ -216,6 +217,17 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     status_parser = guard_subparsers.add_parser("status", help="Show current Guard protection status")
     _add_guard_common_args(status_parser)
     status_parser.add_argument("--json", action="store_true")
+
+    dashboard_parser = guard_subparsers.add_parser(
+        "dashboard",
+        help="Open the local Guard dashboard in your browser",
+    )
+    _add_guard_common_args(dashboard_parser)
+    dashboard_parser.add_argument("--json", action="store_true")
+
+    admin_parser = guard_subparsers.add_parser("admin", help=argparse.SUPPRESS)
+    _add_guard_common_args(admin_parser)
+    admin_parser.add_argument("--json", action="store_true")
 
     bootstrap_parser = guard_subparsers.add_parser(
         "bootstrap",
@@ -513,6 +525,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     hermes_mcp_proxy_parser.add_argument("--server", required=True)
     hermes_mcp_proxy_parser.add_argument("--stdio", action="store_true")
     hidden_commands = {
+        "admin",
         "hook",
         "daemon",
         "codex-mcp-proxy",
@@ -658,6 +671,24 @@ def run_guard_command(
     if args.guard_command == "status":
         payload = build_guard_status_payload(context, store, config)
         _emit("status", payload, getattr(args, "json", False))
+        return 0
+
+    if args.guard_command in {"dashboard", "admin"}:
+        approval_center_url = ensure_guard_daemon(guard_home)
+        _open_approval_center(approval_center_url, store=store, config=config)
+        _emit(
+            "dashboard",
+            {
+                "generated_at": _now(),
+                "approval_center_url": approval_center_url,
+                "browser_url": _approval_center_browser_url(
+                    approval_center_url,
+                    load_guard_daemon_auth_token(store.guard_home),
+                ),
+                "opened": True,
+            },
+            getattr(args, "json", False),
+        )
         return 0
 
     if args.guard_command == "bootstrap":
