@@ -51,6 +51,7 @@ def run_guard_connect_command(
         request_id=str(connect_request["request_id"]),
         pairing_secret=str(connect_request["pairing_secret"]),
     )
+    public_connect_url = _public_guard_connect_url(browser_url)
     browser_opened = bool(opener(browser_url))
     transition = wait_for_connect_transition(
         daemon_client=daemon_client,
@@ -69,7 +70,7 @@ def run_guard_connect_command(
                 "proof": {},
             },
             browser_opened=browser_opened,
-            connect_url=browser_url,
+            connect_url=public_connect_url,
             sync_url=sync_url,
             connected=False,
         )
@@ -77,7 +78,7 @@ def run_guard_connect_command(
         return build_connect_payload(
             state=transition,
             browser_opened=browser_opened,
-            connect_url=browser_url,
+            connect_url=public_connect_url,
             sync_url=sync_url,
             connected=False,
         )
@@ -86,7 +87,7 @@ def run_guard_connect_command(
         return build_connect_payload(
             state=transition,
             browser_opened=browser_opened,
-            connect_url=browser_url,
+            connect_url=public_connect_url,
             sync_url=sync_url,
             connected=False,
         )
@@ -121,7 +122,7 @@ def run_guard_connect_command(
         return build_connect_payload(
             state=pending_state,
             browser_opened=browser_opened,
-            connect_url=browser_url,
+            connect_url=public_connect_url,
             sync_url=sync_url,
             connected=False,
             sync=pending_sync_payload,
@@ -144,7 +145,7 @@ def run_guard_connect_command(
         return build_connect_payload(
             state=pending_state,
             browser_opened=browser_opened,
-            connect_url=browser_url,
+            connect_url=public_connect_url,
             sync_url=sync_url,
             connected=False,
             sync=pending_sync_payload,
@@ -170,7 +171,7 @@ def run_guard_connect_command(
         return build_connect_payload(
             state=pending_state,
             browser_opened=browser_opened,
-            connect_url=browser_url,
+            connect_url=public_connect_url,
             sync_url=sync_url,
             connected=True,
             sync=pending_sync_payload,
@@ -187,7 +188,7 @@ def run_guard_connect_command(
     return build_connect_payload(
         state=final_state,
         browser_opened=browser_opened,
-        connect_url=browser_url,
+        connect_url=public_connect_url,
         sync_url=sync_url,
         connected=True,
         sync=sync_payload,
@@ -241,6 +242,11 @@ def build_guard_connect_browser_url(
             fragment,
         )
     )
+
+
+def _public_guard_connect_url(connect_url: str) -> str:
+    parsed = urllib.parse.urlparse(connect_url)
+    return urllib.parse.urlunparse(parsed._replace(fragment=""))
 
 
 def wait_for_connect_transition(
