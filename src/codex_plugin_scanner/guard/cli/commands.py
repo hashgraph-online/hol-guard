@@ -15,6 +15,7 @@ import sys
 import urllib.error
 import urllib.parse
 import webbrowser
+from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,6 +23,7 @@ from typing import TextIO
 
 from ...argparse_utils import FriendlyArgumentParser
 from ...models import ScanOptions
+from ...path_support import resolves_within_root
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..approvals import (
@@ -1079,7 +1081,7 @@ def run_guard_command(
         workspace_was_explicit = workspace is not None
         runtime_workspace = workspace
         if runtime_workspace is None and isinstance(payload_cwd, str) and payload_cwd.strip():
-            runtime_workspace = _resolve_runtime_workspace(payload_cwd)
+            runtime_workspace = _resolve_runtime_workspace(payload_cwd, home_dir=context.home_dir)
         if args.harness == "copilot":
             runtime_workspace = _resolve_copilot_workspace_root(runtime_workspace)
         copilot_hook_stage = _copilot_hook_stage(payload) if args.harness == "copilot" else None
@@ -3721,15 +3723,26 @@ def _resolve_copilot_workspace_root(workspace: Path | None) -> Path | None:
     return workspace
 
 
-def _resolve_runtime_workspace(value: str) -> Path | None:
+def _resolve_runtime_workspace(value: str, *, home_dir: Path) -> Path | None:
     candidate = value.strip()
     if not candidate:
         return None
+    expanded = Path(candidate).expanduser()
+    if not expanded.is_absolute():
+        return None
     try:
-        resolved = Path(candidate).expanduser().resolve()
+        if not expanded.is_dir():
+            return None
     except OSError:
         return None
-    return resolved if resolved.is_dir() else None
+    allowed_roots: list[Path] = []
+    with suppress(OSError):
+        allowed_roots.append(home_dir.expanduser().resolve().parent)
+    with suppress(OSError):
+        allowed_roots.append(Path.cwd().resolve())
+    if allowed_roots and not any(resolves_within_root(root, expanded, require_exists=True) for root in allowed_roots):
+        return None
+    return expanded
 
 
 def _mcp_server_entries_from_path(path: Path, *, source_scope: str) -> list[tuple[str, str, str]]:
