@@ -154,7 +154,7 @@ _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
 _SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|]*)"
 _SINGLE_INTERPRETER_HEREDOC_PATTERN = re.compile(
-    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>perl|python|python3|ruby)\b[^\n;&|]*<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
+    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>perl|python|python3|ruby)\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
     re.IGNORECASE | re.DOTALL,
 )
 _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
@@ -3066,6 +3066,9 @@ def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str
         heredoc_interpreter = _single_interpreter_heredoc_interpreter(command_text)
         if heredoc_interpreter not in _READ_ONLY_OBSERVER_INTERPRETER_COMMANDS:
             return False
+        heredoc_args = _single_interpreter_heredoc_args(command_text)
+        if heredoc_args not in {"", "-"}:
+            return False
         scripts = list(_script_interpreter_texts(parts))
         if scripts:
             scripts.append(heredoc_script)
@@ -3132,6 +3135,13 @@ def _single_interpreter_heredoc_interpreter(command_text: str) -> str | None:
         return None
     interpreter = match.group("interpreter").strip().lower()
     return interpreter or None
+
+
+def _single_interpreter_heredoc_args(command_text: str) -> str | None:
+    match = _SINGLE_INTERPRETER_HEREDOC_PATTERN.fullmatch(command_text.strip())
+    if match is None:
+        return None
+    return match.group("args").strip()
 
 
 @dataclass(frozen=True, slots=True)
