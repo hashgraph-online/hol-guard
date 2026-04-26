@@ -33,6 +33,30 @@ def test_guard_connect_render_clarifies_paid_plan_pending_state(capsys) -> None:
     assert "Upgrade to sync this device to Guard Cloud" in output
 
 
+def test_guard_render_redacts_sensitive_values_before_rich_renderer(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_renderer(_console, payload: dict[str, object]) -> None:
+        captured["payload"] = payload
+
+    monkeypatch.setitem(render._RENDERERS, "status", fake_renderer)
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+
+    emit_guard_payload(
+        "status",
+        {
+            "api_key": "secret value",
+            "launch_summary": 'api_key="secret value" token=abc123',
+        },
+        False,
+    )
+
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["api_key"] == "*****"
+    assert payload["launch_summary"] == "api_key=***** token=*****"
+
+
 def test_guard_connect_render_defaults_sync_not_available_to_upgrade_guidance(capsys) -> None:
     emit_guard_payload(
         "connect",

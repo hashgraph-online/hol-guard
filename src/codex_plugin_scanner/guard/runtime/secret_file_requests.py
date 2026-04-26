@@ -186,8 +186,14 @@ _READ_ONLY_INTERPRETER_MUTATION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
         r"\b(?:unlink|rmdir|remove|removedirs|rename|replace|chmod|chown|mkdir|makedirs|truncate)\s*\(", re.IGNORECASE
     ),
-    re.compile(r"\b(?:copy|copy2|copyfile|move|rmtree|symlink|link)\s*\(", re.IGNORECASE),
-    re.compile(r"\bopen\s*\([^)]*,\s*['\"][wax+]", re.IGNORECASE),
+    re.compile(r"\b(?:copy|copy2|copyfile|copyfileobj|copytree|move|rmtree|symlink|link)\s*\(", re.IGNORECASE),
+    re.compile(
+        r"\bopen\s*\([^)]*(?:,\s*['\"][^'\"]*[wax+][^'\"]*['\"]|\bmode\s*=\s*['\"][^'\"]*[wax+][^'\"]*['\"])",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\b(?:fdopen|os\.fdopen)\s*\([^)]*,\s*['\"][^'\"]*[wax+][^'\"]*['\"]", re.IGNORECASE),
+    re.compile(r"\bos\.open\s*\([^)]*\b(?:O_WRONLY|O_RDWR|O_CREAT|O_TRUNC|O_APPEND)\b", re.IGNORECASE),
+    re.compile(r"\bos\.write\s*\(", re.IGNORECASE),
     re.compile(r"\b(?:os\.system|subprocess\.(?:run|popen|call|check_call|check_output)|system)\s*\(", re.IGNORECASE),
     re.compile(
         r"\bpath\s*\([^)]*\)\s*\.\s*(?:write_text|write_bytes|touch|unlink|rename|replace|chmod|mkdir|rmdir)\s*\(",
@@ -2146,13 +2152,17 @@ def _resolved_runtime_path(value: str, *, cwd: Path | None, home_dir: Path | Non
 
 def _read_small_runtime_text_file(path: Path) -> str | None:
     try:
-        stat_result = path.stat(follow_symlinks=False)
+        resolved_path = path.resolve(strict=True)
+    except OSError:
+        return None
+    try:
+        stat_result = resolved_path.stat()
     except OSError:
         return None
     if not stat.S_ISREG(stat_result.st_mode) or stat_result.st_size > _MAX_DECODED_PAYLOAD_BYTES:
         return None
     try:
-        return path.read_text(encoding="utf-8")
+        return resolved_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
 

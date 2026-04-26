@@ -38,7 +38,12 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?i)(authorization:\s*)(bearer\s+)?[^\s,;]+"), r"\1*****"),
     (re.compile(r"(?i)(api[-_ ]?key:\s*)[^\s,;]+"), r"\1*****"),
     (re.compile(r"(?i)(bearer\s+)[^\s,;]+"), r"\1*****"),
-    (re.compile(r"(?i)([a-z0-9_-]*(?:token|secret|api[-_]?key|password|credential)[a-z0-9_-]*=)[^&\\s]+"), r"\1*****"),
+    (
+        re.compile(
+            r"(?i)([a-z0-9_-]*(?:token|secret|api[-_]?key|password|credential)[a-z0-9_-]*=)(?:'[^']*'|\"[^\"]*\"|[^&\\s]+)"
+        ),
+        r"\1*****",
+    ),
 )
 
 
@@ -51,7 +56,7 @@ def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) 
 
     console = Console(file=sys.stdout, soft_wrap=True)
     renderer = _RENDERERS.get(command, _render_fallback)
-    renderer(console, payload)
+    renderer(console, _redact_payload(payload))
 
 
 def _redact_payload(value: object, *, key: str | None = None) -> object:

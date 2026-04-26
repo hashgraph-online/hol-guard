@@ -755,7 +755,7 @@ function CopyCommandButton(props: { command: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
-    void navigator.clipboard.writeText(props.command).then(() => {
+    void navigator.clipboard?.writeText(props.command)?.then(() => {
       setCopied(true);
       const timer = setTimeout(() => setCopied(false), 2000);
       return timer;
