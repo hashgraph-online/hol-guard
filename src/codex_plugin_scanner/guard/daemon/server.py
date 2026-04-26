@@ -49,6 +49,7 @@ _ROOT_STATIC_FILES = {
     "/favicon.ico",
     "/favicon-16x16.png",
     "/favicon-32x32.png",
+    "/apple-touch-icon.png",
 }
 _CLAUDE_HOOK_EXECUTION_LOCK = threading.Lock()
 _DEFAULT_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 30 * 60
