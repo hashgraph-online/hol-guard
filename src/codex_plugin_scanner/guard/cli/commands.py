@@ -2797,6 +2797,8 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
         if args.security_level in {"balanced", "strict"}:
             payload["risk_actions"] = {}
             payload["harness_risk_actions"] = {}
+        elif args.security_level == "custom":
+            payload["risk_actions"] = _current_effective_risk_actions(config)
         return update_guard_settings(guard_home, payload)
     if settings_command == "risk":
         risk_class = _guard_risk_action_key(str(args.risk_class))

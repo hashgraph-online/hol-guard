@@ -106,6 +106,21 @@ def test_guard_settings_show_and_update_security_level(tmp_path, capsys):
     assert resolve_risk_action(loaded, "local_secret_read", harness="codex") == "require-reapproval"
 
 
+def test_guard_settings_set_security_level_custom_preserves_current_effective_risks(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    _write_text(home_dir / "config.toml", 'security_level = "strict"\n')
+
+    rc = main(["guard", "settings", "set", "security-level", "custom", "--home", str(home_dir), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    loaded = load_guard_config(home_dir)
+
+    assert rc == 0
+    assert payload["settings"]["security_level"] == "custom"
+    assert loaded.security_level == "custom"
+    assert loaded.risk_actions["network_egress"] == "require-reapproval"
+    assert resolve_risk_action(loaded, "network_egress", harness="codex") == "require-reapproval"
+
+
 def test_guard_settings_set_risk_action_for_harness(tmp_path, capsys):
     home_dir = tmp_path / "home"
     _write_text(home_dir / "config.toml", 'security_level = "strict"\n')
