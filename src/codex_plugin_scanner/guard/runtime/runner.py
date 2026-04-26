@@ -60,7 +60,7 @@ _SECRET_ABSOLUTE_HINTS: tuple[tuple[str, str], ...] = (
 )
 _SECRET_READ_INTENT_PATTERN = re.compile(
     r"\b("
-    r"read|open|print|show|dump|cat|copy|reveal|display|summari[sz]e|inspect|extract|"
+    r"read|open|print|show|dump|cat|copy|cp|scp|reveal|display|summari[sz]e|inspect|extract|"
     r"contain(?:s)?|what(?:'s| is)\s+in"
     r")\b",
     re.IGNORECASE,

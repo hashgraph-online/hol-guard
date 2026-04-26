@@ -234,6 +234,11 @@ class TestGuardRuntime:
 
         assert "subprocess_intent" in {item.request_class for item in requests}
 
+    def test_extract_prompt_requests_detects_shell_copy_of_secret_file(self) -> None:
+        requests = guard_runner_module.extract_prompt_requests("cp ./.npmrc /tmp/npmrc.backup")
+
+        assert "secret_read" in {item.request_class for item in requests}
+
     def test_extract_prompt_requests_ignores_quoted_publish_error_debug_context(self) -> None:
         requests = guard_runner_module.extract_prompt_requests(
             """
