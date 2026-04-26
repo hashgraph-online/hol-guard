@@ -2315,7 +2315,11 @@ def _resolved_runtime_path(
     read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
     if not read_roots:
         return None
-    return normalized_path if _path_is_within_roots(normalized_path, read_roots) else None
+    try:
+        resolved_path = normalized_path.resolve(strict=False)
+    except OSError:
+        return None
+    return resolved_path if _path_is_within_roots(resolved_path, read_roots) else None
 
 
 def _read_small_runtime_text_file(path: Path, *, allowed_roots: tuple[Path, ...]) -> str | None:
