@@ -195,7 +195,10 @@ _READ_ONLY_INTERPRETER_MUTATION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b(?:fdopen|os\.fdopen)\s*\([^)]*,\s*['\"][^'\"]*[wax+][^'\"]*['\"]", re.IGNORECASE),
     re.compile(r"\bos\.open\s*\([^)]*\b(?:O_WRONLY|O_RDWR|O_CREAT|O_TRUNC|O_APPEND)\b", re.IGNORECASE),
     re.compile(r"\bos\.write\s*\(", re.IGNORECASE),
-    re.compile(r"\b(?:os\.system|subprocess\.(?:run|popen|call|check_call|check_output)|system)\s*\(", re.IGNORECASE),
+    re.compile(
+        r"\b(?:os\.system|subprocess\.(?:run|popen|call|check_call|check_output)|run|popen|call|check_call|check_output|system)\s*\(",
+        re.IGNORECASE,
+    ),
     re.compile(
         r"\bpath\s*\([^)]*\)\s*\.\s*(?:write_text|write_bytes|touch|unlink|rename|replace|chmod|mkdir|rmdir)\s*\(",
         re.IGNORECASE,
