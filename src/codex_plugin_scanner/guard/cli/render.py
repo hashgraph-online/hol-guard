@@ -94,8 +94,8 @@ def _serialize_redacted_json(value: object, *, indent: int) -> str:
         child_indent = indent + 2
         entries = [
             (
-                f'{" " * child_indent}{json.dumps(str(item_key))}: '
-                f'{_serialize_redacted_json(item_value, indent=child_indent)}'
+                f"{' ' * child_indent}{json.dumps(str(item_key))}: "
+                f"{_serialize_redacted_json(item_value, indent=child_indent)}"
             )
             for item_key, item_value in value.items()
         ]
@@ -104,7 +104,7 @@ def _serialize_redacted_json(value: object, *, indent: int) -> str:
         if not value:
             return "[]"
         child_indent = indent + 2
-        items = [f'{" " * child_indent}{_serialize_redacted_json(item, indent=child_indent)}' for item in value]
+        items = [f"{' ' * child_indent}{_serialize_redacted_json(item, indent=child_indent)}" for item in value]
         return "[\n" + ",\n".join(items) + "\n" + (" " * indent) + "]"
     try:
         return json.dumps(value)
