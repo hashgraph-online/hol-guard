@@ -3722,6 +3722,8 @@ def _resolve_copilot_workspace_root(workspace: Path | None) -> Path | None:
         if (candidate / ".mcp.json").is_file() or (candidate / ".vscode" / "mcp.json").is_file():
             return candidate
     return workspace
+
+
 def _mcp_server_entries_from_path(path: Path, *, source_scope: str) -> list[tuple[str, str, str]]:
     if not path.exists():
         return []
