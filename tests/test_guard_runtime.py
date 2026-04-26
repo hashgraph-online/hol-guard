@@ -217,6 +217,13 @@ class TestGuardRuntime:
 
         assert "secret_read" in {item.request_class for item in requests}
 
+    def test_extract_prompt_requests_scans_preceding_sentence_for_secret_read_intent(self) -> None:
+        requests = guard_runner_module.extract_prompt_requests(
+            "Please print the file exactly. The .env file appears in the incident notes.",
+        )
+
+        assert "secret_read" in {item.request_class for item in requests}
+
     def test_extract_prompt_requests_detects_bare_destructive_shell_directive(self) -> None:
         requests = guard_runner_module.extract_prompt_requests("rm -rf ~/workspace")
 

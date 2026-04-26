@@ -105,7 +105,7 @@ _SUBPROCESS_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.IGNORECASE,
     ),
     re.compile(
-        r"(?:^|[\s'\"`])(?:bash\s+-c|sh\s+-c|zsh\s+-c|powershell|cmd\s+/c|subprocess|exec\(|spawn\()",
+        r"(?:^|[\s'\"`])(?:bash\s+-c\b|sh\s+-c\b|zsh\s+-c\b|powershell(?:\s|$)|cmd\s+/c(?:\s|$)|subprocess\.(?:run|Popen|call|check_call|check_output)\b|exec\(|spawn\()",
         re.IGNORECASE,
     ),
     re.compile(
@@ -146,7 +146,8 @@ def _prompt_sentence_end(text: str, index: int) -> int:
 
 
 def _prompt_secret_intent_region(text: str, *, start: int, end: int) -> str:
-    region_start = _prompt_sentence_start(text, start)
+    current_sentence_start = _prompt_sentence_start(text, start)
+    region_start = _prompt_sentence_start(text, max(0, current_sentence_start - 1))
     first_sentence_end = _prompt_sentence_end(text, end)
     second_sentence_end = (
         _prompt_sentence_end(text, first_sentence_end) if first_sentence_end < len(text) else first_sentence_end
