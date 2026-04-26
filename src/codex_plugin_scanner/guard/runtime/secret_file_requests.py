@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import base64
 import binascii
 import hashlib
@@ -3265,29 +3266,26 @@ def _script_is_benign_wait(script_text: str) -> bool:
 
 def _script_has_aliased_risky_import(script_text: str) -> bool:
     risky_roots = {"os", "pathlib", "shutil", "subprocess"}
-    for raw_line in script_text.splitlines():
-        for raw_statement in raw_line.split("#", 1)[0].split(";"):
-            statement = raw_statement.strip()
-            if statement.startswith("import "):
-                for part in statement[7:].split(","):
-                    clause_tokens = part.strip().split()
-                    if len(clause_tokens) < 3 or clause_tokens[-2] != "as":
-                        continue
-                    module_name = clause_tokens[0].split(".", 1)[0]
-                    if module_name in risky_roots:
-                        return True
-                continue
-            clause_tokens = statement.split()
-            if len(clause_tokens) < 6 or clause_tokens[0] != "from" or "import" not in clause_tokens:
-                continue
-            import_index = clause_tokens.index("import")
-            if import_index < 2 or clause_tokens[1].split(".", 1)[0] not in risky_roots:
-                continue
-            import_clauses = " ".join(clause_tokens[import_index + 1 :]).split(",")
-            if any(
-                len(clause.strip().split()) >= 3 and clause.strip().split()[-2] == "as" for clause in import_clauses
-            ):
-                return True
+    try:
+        parsed_script = ast.parse(script_text)
+    except SyntaxError:
+        return False
+    for node in ast.walk(parsed_script):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname is None:
+                    continue
+                module_name = alias.name.split(".", 1)[0]
+                if module_name in risky_roots:
+                    return True
+            continue
+        if not isinstance(node, ast.ImportFrom) or node.module is None:
+            continue
+        module_name = node.module.split(".", 1)[0]
+        if module_name not in risky_roots:
+            continue
+        if any(alias.asname is not None for alias in node.names):
+            return True
     return False
 
 
