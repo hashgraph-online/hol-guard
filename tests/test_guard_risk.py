@@ -1115,6 +1115,16 @@ def test_tool_action_request_classifier_detects_python_heredoc_copytree():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_does_not_treat_python_module_heredoc_as_read_only():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": ("python3 -m pip install demo <<'PY'\nprint('safe')\nPY")},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_does_not_treat_python_c_flag_write_as_read_only():
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -1188,7 +1198,7 @@ def test_tool_action_request_classifier_detects_path_symlink_creation():
         "bash",
         {
             "command": (
-                "python3 -c \"from pathlib import Path; "
+                'python3 -c "from pathlib import Path; '
                 "Path('dangerous-marker.json').symlink_to('target-marker.json')\""
             )
         },
