@@ -1162,14 +1162,16 @@ def _curl_segment_reads_config_from_stdin(segment_args: list[str]) -> bool:
                 return True
             index += 2
             continue
-        if token.startswith("--config=") and _strip_cli_value(
-            _shell_command_token_without_attached_redirection(token.split("=", 1)[1])
-        ) == "-":
+        if (
+            token.startswith("--config=")
+            and _strip_cli_value(_shell_command_token_without_attached_redirection(token.split("=", 1)[1])) == "-"
+        ):
             return True
         clustered_config_value = _curl_clustered_short_flag_value(segment_args, index, "K")
-        if clustered_config_value is not None and _strip_cli_value(
-            _shell_command_token_without_attached_redirection(clustered_config_value)
-        ) == "-":
+        if (
+            clustered_config_value is not None
+            and _strip_cli_value(_shell_command_token_without_attached_redirection(clustered_config_value)) == "-"
+        ):
             return True
         index += 1
     return False
