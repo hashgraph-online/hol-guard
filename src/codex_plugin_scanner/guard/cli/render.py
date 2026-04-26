@@ -7,6 +7,7 @@ import math
 import re
 import sys
 import textwrap
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -53,13 +54,15 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) -> None:
     """Render Guard payloads as JSON or human-friendly rich output."""
 
+    redacted_payload = _redact_payload(payload)
     if as_json or not _RICH_AVAILABLE:
-        print(json.dumps(_redact_payload(payload), indent=2))
+        sys.stdout.write(_render_redacted_json_payload(_json_payload_for_command(command, redacted_payload)))
+        sys.stdout.write("\n")
         return
 
     console = Console(file=sys.stdout, soft_wrap=True)
     renderer = _RENDERERS.get(command, _render_fallback)
-    renderer(console, _redact_payload(payload))
+    renderer(console, redacted_payload)
 
 
 def _redact_payload(value: object, *, key: str | None = None) -> object:
@@ -77,6 +80,76 @@ def _redact_payload(value: object, *, key: str | None = None) -> object:
             redacted = pattern.sub(replacement, redacted)
         return redacted
     return value
+
+
+def _render_redacted_json_payload(redacted_payload: object) -> str:
+    if not isinstance(redacted_payload, dict):
+        return "{}"
+    return _serialize_redacted_json(redacted_payload, indent=0)
+
+
+def _json_payload_for_command(command: str, redacted_payload: dict[str, object]) -> dict[str, object]:
+    json_renderer = _JSON_RENDERERS.get(command)
+    if json_renderer is None:
+        return redacted_payload
+    return json_renderer(redacted_payload)
+
+
+def _render_settings_json_payload(redacted_payload: dict[str, object]) -> dict[str, object]:
+    settings = redacted_payload.get("settings")
+    safe_keys = (
+        "mode",
+        "security_level",
+        "default_action",
+        "unknown_publisher_action",
+        "changed_hash_action",
+        "new_network_domain_action",
+        "subprocess_action",
+        "risk_actions",
+        "risk_action_overrides",
+        "harness_risk_actions",
+        "approval_wait_timeout_seconds",
+        "approval_surface_policy",
+        "telemetry",
+        "sync",
+    )
+    safe_settings = {key: settings[key] for key in safe_keys if isinstance(settings, dict) and key in settings}
+    return {
+        "generated_at": redacted_payload.get("generated_at"),
+        "guard_home": redacted_payload.get("guard_home"),
+        "config_path": redacted_payload.get("config_path"),
+        "settings": safe_settings,
+    }
+
+
+def _serialize_redacted_json(value: object, *, indent: int) -> str:
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        child_indent = indent + 2
+        entries = [
+            (
+                f"{' ' * child_indent}{json.dumps(str(item_key))}: "
+                f"{_serialize_redacted_json(item_value, indent=child_indent)}"
+            )
+            for item_key, item_value in value.items()
+        ]
+        return "{\n" + ",\n".join(entries) + "\n" + (" " * indent) + "}"
+    if isinstance(value, list):
+        if not value:
+            return "[]"
+        child_indent = indent + 2
+        items = [f"{' ' * child_indent}{_serialize_redacted_json(item, indent=child_indent)}" for item in value]
+        return "[\n" + ",\n".join(items) + "\n" + (" " * indent) + "]"
+    try:
+        return json.dumps(value)
+    except TypeError:
+        return json.dumps(str(value))
+
+
+_JSON_RENDERERS: dict[str, Callable[[dict[str, object]], dict[str, object]]] = {
+    "settings": _render_settings_json_payload,
+}
 
 
 def _render_detect(console: Console, payload: dict[str, object]) -> None:
@@ -1040,7 +1113,7 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
 def _render_fallback(console: Console, payload: dict[str, object]) -> None:
     console.print(
         Syntax(
-            json.dumps(payload, indent=2),
+            _render_redacted_json_payload(payload),
             "json",
             theme="ansi_dark",
             word_wrap=True,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from codex_plugin_scanner.guard.cli import render
@@ -55,6 +56,39 @@ def test_guard_render_redacts_sensitive_values_before_rich_renderer(monkeypatch)
     assert isinstance(payload, dict)
     assert payload["api_key"] == "*****"
     assert payload["launch_summary"] == "api_key=***** token=*****"
+
+
+def test_guard_settings_json_omits_billing_flag(capsys) -> None:
+    emit_guard_payload(
+        "settings",
+        {
+            "generated_at": "2026-04-17T00:00:00Z",
+            "guard_home": "/tmp/guard-home",
+            "config_path": "/tmp/guard-home/config.toml",
+            "settings": {
+                "mode": "prompt",
+                "security_level": "balanced",
+                "default_action": "warn",
+                "unknown_publisher_action": "review",
+                "changed_hash_action": "require-reapproval",
+                "new_network_domain_action": "warn",
+                "subprocess_action": "warn",
+                "risk_actions": {"destructive_shell": "require-reapproval"},
+                "risk_action_overrides": {},
+                "harness_risk_actions": {},
+                "approval_wait_timeout_seconds": 120,
+                "approval_surface_policy": "auto-open-once",
+                "telemetry": False,
+                "sync": True,
+                "billing": True,
+            },
+        },
+        True,
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["settings"]["sync"] is True
+    assert "billing" not in output["settings"]
 
 
 def test_guard_connect_render_defaults_sync_not_available_to_upgrade_guidance(capsys) -> None:

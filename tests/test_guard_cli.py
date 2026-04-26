@@ -106,6 +106,16 @@ def test_guard_settings_show_and_update_security_level(tmp_path, capsys):
     assert resolve_risk_action(loaded, "local_secret_read", harness="codex") == "require-reapproval"
 
 
+def test_guard_settings_cli_payload_omits_billing_flag(tmp_path):
+    home_dir = tmp_path / "home"
+    config = load_guard_config(home_dir)
+
+    payload = guard_commands_module._guard_cli_settings_payload(config)
+
+    assert isinstance(payload["settings"], dict)
+    assert "billing" not in payload["settings"]
+
+
 def test_guard_settings_set_security_level_custom_preserves_current_effective_risks(tmp_path, capsys):
     home_dir = tmp_path / "home"
     _write_text(home_dir / "config.toml", 'security_level = "strict"\n')

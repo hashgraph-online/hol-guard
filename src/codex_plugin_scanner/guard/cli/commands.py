@@ -939,7 +939,7 @@ def run_guard_command(
             except ValueError as error:
                 print(str(error), file=sys.stderr)
                 return 2
-        _emit("settings", _guard_settings_payload(config), getattr(args, "json", False))
+        _emit("settings", _guard_cli_settings_payload(config), getattr(args, "json", False))
         return 0
 
     if args.guard_command == "exceptions":
@@ -2830,6 +2830,19 @@ def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
         "guard_home": str(config.guard_home),
         "config_path": str(config.guard_home / "config.toml"),
         "settings": editable_guard_settings(config),
+    }
+
+
+def _guard_cli_settings_payload(config: GuardConfig) -> dict[str, object]:
+    payload = _guard_settings_payload(config)
+    settings = payload.get("settings")
+    if not isinstance(settings, dict):
+        return payload
+    cli_settings = dict(settings)
+    cli_settings.pop("billing", None)
+    return {
+        **payload,
+        "settings": cli_settings,
     }
 
 
