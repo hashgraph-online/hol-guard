@@ -1163,6 +1163,16 @@ def test_tool_action_request_classifier_detects_path_variable_touch():
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_ruby_file_write():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {"command": ("ruby -e \"File.write('dangerous-marker.json', 'owned')\"")},
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_does_not_promote_echoed_interpreter_text():
     request = extract_sensitive_tool_action_request(
         "bash",
