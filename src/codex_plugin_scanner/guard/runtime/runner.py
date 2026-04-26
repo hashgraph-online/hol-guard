@@ -58,17 +58,52 @@ _SECRET_ABSOLUTE_HINTS: tuple[tuple[str, str], ...] = (
     ("/.kube/config", "kubeconfig"),
     ("/.docker/config.json", "Docker credentials"),
 )
-_EXFIL_PROMPT_PATTERN = re.compile(
-    r"\b(upload|exfiltrate|send|post|sync|webhook|paste|gist|transfer)\b",
+_SECRET_READ_INTENT_PATTERN = re.compile(
+    r"\b("
+    r"read|open|print|show|dump|cat|copy|reveal|display|summari[sz]e|inspect|extract|"
+    r"contain(?:s)?|what(?:'s| is)\s+in"
+    r")\b",
     re.IGNORECASE,
 )
-_DESTRUCTIVE_PROMPT_PATTERN = re.compile(
-    r"\b(rm\s+-rf|rm\s+|del\s+|truncate\s+|chmod\s+|chown\s+|mv\s+|overwrite)\b",
-    re.IGNORECASE,
+_EXFIL_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:upload|exfiltrate|transfer|paste|gist|webhook)\b.{0,80}\b"
+        r"(?:file|contents?|data|payload|secret|token|key|credential|credentials|config|output)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:send|post|upload|transfer|paste|sync)\b.{0,80}\b"
+        r"(?:contents?|data|payload|file|secret|token|key|credential|credentials|config|output)\b"
+        r"(?:.{0,40}\b(?:to|into|onto|via|through)\b)?",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:send|post|upload|transfer|paste|sync)\b.{0,80}\b"
+        r"(?:to|into|onto|via|through)\b.{0,40}\b"
+        r"(?:webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)\b",
+        re.IGNORECASE,
+    ),
 )
-_SUBPROCESS_PROMPT_PATTERN = re.compile(
-    r"\b(?:bash\s+-c|sh\s+-c|zsh\s+-c|powershell|cmd\s+/c|subprocess)\b|(?:exec|spawn)\s*\(",
-    re.IGNORECASE,
+_DESTRUCTIVE_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:run|execute|use|call|invoke)\b.{0,40}\b(?:rm\s+-rf|rm\s+|del\s+|truncate\s+|chmod\s+|chown\s+|mv\s+)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:delete|remove|overwrite|truncate)\b.{0,60}\b(?:file|directory|repo|workspace|contents?)\b",
+        re.IGNORECASE,
+    ),
+)
+_SUBPROCESS_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"\b(?:run|execute|use|call|invoke|launch|spawn)\b.{0,60}\b"
+        r"(?:bash\s+-c|sh\s+-c|zsh\s+-c|powershell|cmd\s+/c|subprocess|exec\(|spawn\()",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:use|call|invoke)\b.{0,40}\bsubprocess\b",
+        re.IGNORECASE,
+    ),
 )
 _GUARD_BYPASS_PROMPT_PATTERN = re.compile(
     r"\b(hol-guard\s+(?:disable|off|uninstall)|disable\s+hol-guard|approval_policy\s*=\s*\"never\"|guard[_-]?bypass)\b",
@@ -89,6 +124,19 @@ class GuardSyncNotConfiguredError(RuntimeError):
 
 class GuardSyncNotAvailableError(RuntimeError):
     """Raised when the sync endpoint returns 403 (free-plan restriction)."""
+
+
+def _prompt_window(text: str, start: int, end: int, *, window: int = 96) -> str:
+    return text[max(0, start - window) : min(len(text), end + window)]
+
+
+def _prompt_has_secret_read_intent(prompt_text: str, *, start: int, end: int) -> bool:
+    return _SECRET_READ_INTENT_PATTERN.search(_prompt_window(prompt_text, start, end)) is not None
+
+
+def _match_text(pattern: re.Pattern[str], text: str) -> str:
+    match = pattern.search(text)
+    return match.group(0).strip() if match is not None else ""
 
 
 def guard_run(
@@ -122,6 +170,15 @@ def guard_run(
             if key in pending_evaluation:
                 reevaluated[key] = pending_evaluation[key]
         evaluation = reevaluated
+    evaluation.setdefault(
+        "config_paths",
+        list(detection.config_paths)
+        or _guard_run_config_paths(
+            detection=detection,
+            context=context,
+            passthrough_args=passthrough_args,
+        ),
+    )
     if evaluation["blocked"] or dry_run:
         evaluation["launched"] = False
         evaluation["launch_command"] = []
@@ -145,6 +202,20 @@ def guard_run(
     evaluation["launched"] = True
     evaluation["return_code"] = result.returncode
     return evaluation
+
+
+def _guard_run_config_paths(
+    *,
+    detection: HarnessDetection,
+    context: HarnessContext,
+    passthrough_args: list[str],
+) -> list[str]:
+    if detection.config_paths:
+        return list(detection.config_paths)
+    prompt_text = " ".join(value.strip() for value in passthrough_args if value.strip())
+    if prompt_text:
+        return [str(_prompt_policy_path(detection, context))]
+    return []
 
 
 def _detection_with_prompt_artifacts(
@@ -213,17 +284,26 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
         match = pattern.search(normalized_prompt)
         if match is None:
             continue
+        if not _prompt_has_secret_read_intent(normalized_prompt, start=match.start(), end=match.end()):
+            continue
         add_secret_request(label=label, matched=match.group(0).strip())
     for hint, label in _SECRET_ABSOLUTE_HINTS:
         if hint in lowered:
-            add_secret_request(label=label, matched=hint)
-    if _EXFIL_PROMPT_PATTERN.search(normalized_prompt):
+            start = lowered.index(hint)
+            end = start + len(hint)
+            if _prompt_has_secret_read_intent(normalized_prompt, start=start, end=end):
+                add_secret_request(label=label, matched=hint)
+    exfil_match = next(
+        (pattern for pattern in _EXFIL_PROMPT_PATTERNS if pattern.search(normalized_prompt) is not None),
+        None,
+    )
+    if exfil_match is not None:
         requests.append(
             PromptRequest(
-                request_id=_prompt_request_id("exfil_intent", "exfil", lowered),
+                request_id=_prompt_request_id("exfil_intent", _match_text(exfil_match, normalized_prompt), lowered),
                 request_class="exfil_intent",
                 summary="Prompt includes exfiltration-oriented transfer intent.",
-                matched_text="exfil-transfer",
+                matched_text=_match_text(exfil_match, normalized_prompt),
                 severity=8,
                 confidence=0.84,
                 remediation=(
@@ -236,13 +316,21 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
                 ),
             )
         )
-    if _DESTRUCTIVE_PROMPT_PATTERN.search(normalized_prompt):
+    destructive_match = next(
+        (pattern for pattern in _DESTRUCTIVE_PROMPT_PATTERNS if pattern.search(normalized_prompt) is not None),
+        None,
+    )
+    if destructive_match is not None:
         requests.append(
             PromptRequest(
-                request_id=_prompt_request_id("destructive_intent", "destructive", lowered),
+                request_id=_prompt_request_id(
+                    "destructive_intent",
+                    _match_text(destructive_match, normalized_prompt),
+                    lowered,
+                ),
                 request_class="destructive_intent",
                 summary="Prompt includes destructive filesystem mutation intent.",
-                matched_text="destructive-operation",
+                matched_text=_match_text(destructive_match, normalized_prompt),
                 severity=8,
                 confidence=0.87,
                 remediation=(
@@ -259,13 +347,21 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
                 ),
             )
         )
-    if _SUBPROCESS_PROMPT_PATTERN.search(normalized_prompt):
+    subprocess_match = next(
+        (pattern for pattern in _SUBPROCESS_PROMPT_PATTERNS if pattern.search(normalized_prompt) is not None),
+        None,
+    )
+    if subprocess_match is not None:
         requests.append(
             PromptRequest(
-                request_id=_prompt_request_id("subprocess_intent", "subprocess", lowered),
+                request_id=_prompt_request_id(
+                    "subprocess_intent",
+                    _match_text(subprocess_match, normalized_prompt),
+                    lowered,
+                ),
                 request_class="subprocess_intent",
                 summary="Prompt asks for subprocess or shell-wrapper execution.",
-                matched_text="subprocess-shell",
+                matched_text=_match_text(subprocess_match, normalized_prompt),
                 severity=7,
                 confidence=0.8,
                 remediation=(
@@ -377,13 +473,7 @@ def _prompt_policy_path(detection: HarnessDetection, context: HarnessContext) ->
                 return candidate
     if config_candidates:
         return Path(config_candidates[0])
-    if detection.harness == "opencode":
-        if context.workspace_dir is not None:
-            return context.workspace_dir / "opencode.json"
-        return context.home_dir / ".config" / "opencode" / "opencode.json"
-    if context.workspace_dir is not None:
-        return context.workspace_dir / ".codex" / "config.toml"
-    return context.home_dir / ".codex" / "config.toml"
+    return get_adapter(detection.harness).policy_path(context)
 
 
 def _prompt_config_candidates(detection: HarnessDetection, context: HarnessContext) -> tuple[str, ...]:

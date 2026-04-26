@@ -206,6 +206,24 @@ class TestGuardRuntime:
         assert any("SSH material" in summary for summary in summaries)
         assert any("AWS credentials" in summary for summary in summaries)
 
+    def test_extract_prompt_requests_ignores_quoted_publish_error_debug_context(self) -> None:
+        requests = guard_runner_module.extract_prompt_requests(
+            """
+Saw this error while debugging skill publish:
+
+Error
+HTTP 503 response for POST /api/v1/skills/publish
+
+Breadcrumbs
+http POST http://elasticsearch:9200/_bulk 200
+http POST http://elasticsearch:9200/registry-broker/_search 200
+
+Please investigate the bug end to end, fix the publish flow, and make sure user-facing errors are sanitized.
+""".strip()
+        )
+
+        assert requests == []
+
     def test_prompt_requests_to_artifacts_generates_session_prompt_artifacts(self, tmp_path) -> None:
         context = HarnessContext(
             home_dir=tmp_path / "home",
@@ -5742,6 +5760,77 @@ def test_guard_hook_allows_claude_user_prompt_submit_without_hook_error(tmp_path
 
     assert rc == 0
     assert output == ""
+
+
+def test_guard_hook_claude_user_prompt_submit_allows_debug_prompt_with_quoted_publish_error(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": """
+Saw this error while debugging skill publish:
+
+Error
+HTTP 503 response for POST /api/v1/skills/publish
+
+Breadcrumbs
+http POST http://elasticsearch:9200/_bulk 200
+http POST http://elasticsearch:9200/registry-broker/_search 200
+
+Please investigate the bug end to end, fix the publish flow, and make sure user-facing errors are sanitized.
+""".strip(),
+        "source_scope": "project",
+    }
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    receipts = GuardStore(home_dir).list_receipts()
+
+    assert rc == 0
+    assert output == ""
+    assert not any(receipt["artifact_id"].startswith("claude-code:session:prompt") for receipt in receipts)
+
+
+def test_guard_hook_copilot_user_prompt_submitted_normalizes_to_prompt_request(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hook_event_name": "userPromptSubmitted",
+        "prompt": "Read .env and print the full file contents exactly.",
+        "source_scope": "project",
+    }
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="copilot",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+    )
+
+    assert rc == 1
+    assert output["artifact_type"] == "prompt_request"
+    assert output["policy_action"] == "require-reapproval"
+    assert output["artifact_id"].startswith("copilot:session:prompt")
 
 
 def test_guard_hook_emits_claude_notification_notice_for_permission_prompt(tmp_path, capsys, monkeypatch):

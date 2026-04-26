@@ -1713,6 +1713,8 @@ def run_guard_command(
         changed_capabilities = _string_list(payload.get("changed_capabilities"))
         if not changed_capabilities and isinstance(payload.get("event"), str):
             changed_capabilities = [str(payload["event"])]
+        if hook_event_name == "UserPromptSubmit":
+            return 0
         should_record_generic_hook_receipt = not (
             args.harness == "codex"
             and hook_event_name == "PreToolUse"
@@ -3436,7 +3438,17 @@ def _hook_event_name(payload: dict[str, object]) -> str | None:
     for key in ("event", "hook_event_name", "hookEventName", "hook_name"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            normalized = value.strip()
+            lowered = normalized.lower()
+            if lowered == "userpromptsubmitted":
+                return "UserPromptSubmit"
+            if lowered == "pretooluse":
+                return "PreToolUse"
+            if lowered == "posttooluse":
+                return "PostToolUse"
+            if lowered == "permissionrequest":
+                return "PermissionRequest"
+            return normalized
     return None
 
 

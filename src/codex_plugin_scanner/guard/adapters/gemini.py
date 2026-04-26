@@ -39,6 +39,11 @@ class GeminiHarnessAdapter(HarnessAdapter):
             return ()
         return tuple(str(value) for value in raw_args if isinstance(value, str))
 
+    def policy_path(self, context: HarnessContext) -> Path:
+        if context.workspace_dir is not None:
+            return context.workspace_dir / ".gemini" / "extensions"
+        return context.home_dir / ".gemini" / "extensions"
+
     def detect(self, context: HarnessContext) -> HarnessDetection:
         artifacts: list[GuardArtifact] = []
         found_paths: list[str] = []

@@ -97,6 +97,11 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             return "project"
         return "global"
 
+    def policy_path(self, context: HarnessContext) -> Path:
+        if context.workspace_dir is not None:
+            return context.workspace_dir / "opencode.json"
+        return context.home_dir / ".config" / "opencode" / "opencode.json"
+
     def detect(self, context: HarnessContext) -> HarnessDetection:
         artifacts = []
         found_paths: list[str] = []
