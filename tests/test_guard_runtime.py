@@ -5814,6 +5814,39 @@ def test_guard_hook_allows_claude_user_prompt_submit_without_hook_error(tmp_path
     assert output == ""
 
 
+@pytest.mark.parametrize("policy_action", ["block", "require-reapproval"])
+def test_guard_hook_honors_explicit_policy_for_generic_user_prompt_submit(
+    tmp_path,
+    capsys,
+    monkeypatch,
+    policy_action: str,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Summarize the project architecture.",
+        "source_scope": "project",
+    }
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="claude-code",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+        as_json=True,
+        policy_action=policy_action,
+    )
+    receipts = GuardStore(home_dir).list_receipts()
+
+    assert rc == 1
+    assert output["recorded"] is True
+    assert output["policy_action"] == policy_action
+    assert len(receipts) == 1
+
+
 def test_guard_hook_claude_user_prompt_submit_allows_debug_prompt_with_quoted_publish_error(
     tmp_path,
     capsys,

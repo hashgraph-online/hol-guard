@@ -1713,7 +1713,11 @@ def run_guard_command(
         changed_capabilities = _string_list(payload.get("changed_capabilities"))
         if not changed_capabilities and isinstance(payload.get("event"), str):
             changed_capabilities = [str(payload["event"])]
-        if hook_event_name == "UserPromptSubmit":
+        if hook_event_name == "UserPromptSubmit" and policy_action not in {
+            "block",
+            "sandbox-required",
+            "require-reapproval",
+        }:
             return 0
         should_record_generic_hook_receipt = not (
             args.harness == "codex"
