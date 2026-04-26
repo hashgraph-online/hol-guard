@@ -502,3 +502,22 @@ def test_emit_guard_payload_redacts_sensitive_json_fields(capsys) -> None:
     assert "top-secret" not in output
     assert '"token": "*****"' in output
     assert '"api_key": "*****"' in output
+
+
+def test_emit_guard_payload_preserves_policy_literals_for_risk_action_keys(capsys) -> None:
+    emit_guard_payload(
+        "status",
+        {
+            "settings": {
+                "harness_risk_actions": {
+                    "codex": {
+                        "local_secret_read": "allow",
+                    }
+                }
+            }
+        },
+        True,
+    )
+
+    output = capsys.readouterr().out
+    assert '"local_secret_read": "allow"' in output
