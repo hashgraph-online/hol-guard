@@ -654,6 +654,14 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
     console.print(_build_steps_panel(_coerce_dict_list(payload.get("next_steps"))))
 
 
+def _render_dashboard(console: Console, payload: dict[str, object]) -> None:
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Dashboard", str(payload.get("approval_center_url") or "unknown"))
+    if payload.get("opened") is not None:
+        body.add_row("Browser opened", _bool_label(bool(payload.get("opened"))))
+    console.print(Panel(body, title="HOL Guard dashboard", border_style="cyan"))
+
+
 def _render_sync(console: Console, payload: dict[str, object]) -> None:
     body = Table.grid(padding=(0, 1))
     body.add_row("Synced at", str(payload.get("synced_at") or "unknown"))
@@ -1615,6 +1623,7 @@ _RENDERERS: dict[str, Any] = {
     "approvals": _render_approvals,
     "start": _render_start,
     "status": _render_status,
+    "dashboard": _render_dashboard,
     "connect": _render_connect,
     "bootstrap": _render_bootstrap,
     "detect": _render_detect,

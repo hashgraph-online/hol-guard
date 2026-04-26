@@ -332,10 +332,15 @@ class GuardSurfaceRuntime:
         approval_surface_policy: str,
         open_key: str,
         opener: Callable[[str], object],
+        force_open: bool = False,
     ) -> dict[str, object]:
-        if approval_surface_policy in {"notify-only", "never-auto-open"}:
+        if approval_surface_policy in {"notify-only", "never-auto-open"} and not force_open:
             return {"surface": surface, "opened": False, "reason": "policy-disabled", "open_key": open_key}
-        if approval_surface_policy == "auto-open-once" and self.has_surface_opened(surface, open_key):
+        if (
+            approval_surface_policy == "auto-open-once"
+            and not force_open
+            and self.has_surface_opened(surface, open_key)
+        ):
             return {"surface": surface, "opened": False, "reason": "already-opened", "open_key": open_key}
         if self.has_live_surface(surface):
             return {"surface": surface, "opened": False, "reason": "live-client", "open_key": open_key}
