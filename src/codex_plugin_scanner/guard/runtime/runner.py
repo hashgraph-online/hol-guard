@@ -105,6 +105,10 @@ _SUBPROCESS_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.IGNORECASE,
     ),
     re.compile(
+        r"(?:^|[\s'\"`])(?:bash\s+-c|sh\s+-c|zsh\s+-c|powershell|cmd\s+/c|subprocess|exec\(|spawn\()",
+        re.IGNORECASE,
+    ),
+    re.compile(
         r"\b(?:use|call|invoke)\b.{0,40}\bsubprocess\b",
         re.IGNORECASE,
     ),
@@ -113,6 +117,7 @@ _GUARD_BYPASS_PROMPT_PATTERN = re.compile(
     r"\b(hol-guard\s+(?:disable|off|uninstall)|disable\s+hol-guard|approval_policy\s*=\s*\"never\"|guard[_-]?bypass)\b",
     re.IGNORECASE,
 )
+_PROMPT_SENTENCE_BOUNDARY_PATTERN = re.compile(r"[!?;]|[.](?=\s|$)")
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 _SYNC_HTTP_TIMEOUT_SECONDS = 20
 _SYNC_HTTP_RETRY_TIMEOUT_SECONDS = 120
@@ -130,12 +135,31 @@ class GuardSyncNotAvailableError(RuntimeError):
     """Raised when the sync endpoint returns 403 (free-plan restriction)."""
 
 
-def _prompt_window(text: str, start: int, end: int, *, window: int = 96) -> str:
-    return text[max(0, start - window) : min(len(text), end + window)]
+def _prompt_sentence_start(text: str, index: int) -> int:
+    matches = list(_PROMPT_SENTENCE_BOUNDARY_PATTERN.finditer(text, 0, index))
+    return matches[-1].end() if matches else 0
+
+
+def _prompt_sentence_end(text: str, index: int) -> int:
+    match = _PROMPT_SENTENCE_BOUNDARY_PATTERN.search(text, index)
+    return match.end() if match is not None else len(text)
+
+
+def _prompt_secret_intent_region(text: str, *, start: int, end: int) -> str:
+    region_start = _prompt_sentence_start(text, start)
+    first_sentence_end = _prompt_sentence_end(text, end)
+    second_sentence_end = (
+        _prompt_sentence_end(text, first_sentence_end)
+        if first_sentence_end < len(text)
+        else first_sentence_end
+    )
+    return text[region_start:second_sentence_end]
 
 
 def _prompt_has_secret_read_intent(prompt_text: str, *, start: int, end: int) -> bool:
-    return _SECRET_READ_INTENT_PATTERN.search(_prompt_window(prompt_text, start, end)) is not None
+    return _SECRET_READ_INTENT_PATTERN.search(
+        _prompt_secret_intent_region(prompt_text, start=start, end=end),
+    ) is not None
 
 
 def _match_text(pattern: re.Pattern[str], text: str) -> str:

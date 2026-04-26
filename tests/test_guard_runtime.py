@@ -206,11 +206,11 @@ class TestGuardRuntime:
         assert any("SSH material" in summary for summary in summaries)
         assert any("AWS credentials" in summary for summary in summaries)
 
-    def test_extract_prompt_requests_scans_later_secret_mentions_for_read_intent(self) -> None:
+    def test_extract_prompt_requests_scans_follow_up_sentence_for_secret_read_intent(self) -> None:
         prompt = (
-            "The .env file appears in the incident notes. "
+            "The .env file appears in the incident notes "
             + ("safe filler " * 20)
-            + "Please read the .env file and print the contents."
+            + ". Please print it."
         )
 
         requests = guard_runner_module.extract_prompt_requests(prompt)
@@ -221,6 +221,11 @@ class TestGuardRuntime:
         requests = guard_runner_module.extract_prompt_requests("rm -rf ~/workspace")
 
         assert "destructive_intent" in {item.request_class for item in requests}
+
+    def test_extract_prompt_requests_detects_bare_subprocess_shell_wrapper(self) -> None:
+        requests = guard_runner_module.extract_prompt_requests("bash -c 'cat ~/.ssh/id_rsa'")
+
+        assert "subprocess_intent" in {item.request_class for item in requests}
 
     def test_extract_prompt_requests_ignores_quoted_publish_error_debug_context(self) -> None:
         requests = guard_runner_module.extract_prompt_requests(
