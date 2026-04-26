@@ -19,6 +19,7 @@ type ReceiptsState =
   | { kind: "ready"; items: GuardReceipt[] };
 
 const receiptPageSize = 8;
+const EMPTY_RECEIPTS: GuardReceipt[] = [];
 
 export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -47,32 +48,18 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
     setPage(1);
   }, [decisionFilter, harnessFilter, searchTerm, receiptCount]);
 
-  if (props.receipts.kind === "loading") {
-    return (
-      <div className="space-y-4">
-        <div className="guard-skeleton h-8 w-64" />
-        <div className="guard-skeleton h-32 w-full" />
-      </div>
-    );
-  }
-  if (props.receipts.kind === "error") {
-    return (
-      <Surface tone="danger">
-        <p className="text-sm text-brand-purple">{props.receipts.message}</p>
-      </Surface>
-    );
-  }
-  if (props.receipts.items.length === 0) {
-    return (
-      <EmptyState
-        title="No history yet"
-        body="Saved choices appear here after HOL Guard reviews or blocks an action."
-      />
-    );
-  }
-  const receiptItems = props.receipts.items;
-  const harnesses = Array.from(new Set(receiptItems.map((receipt) => receipt.harness))).sort();
-  const decisions = Array.from(new Set(receiptItems.map((receipt) => receipt.policy_decision))).sort();
+  const receiptItems = props.receipts.kind === "ready" ? props.receipts.items : EMPTY_RECEIPTS;
+
+  const harnesses = useMemo(
+    () => Array.from(new Set(receiptItems.map((receipt) => receipt.harness))).sort(),
+    [receiptItems],
+  );
+
+  const decisions = useMemo(
+    () => Array.from(new Set(receiptItems.map((receipt) => receipt.policy_decision))).sort(),
+    [receiptItems],
+  );
+
   const filteredReceipts = useMemo(() => {
     const normalizedSearchTerm = searchTerm.trim().toLowerCase();
     return receiptItems.filter((receipt) => {
@@ -97,14 +84,39 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
       return searchable.includes(normalizedSearchTerm);
     });
   }, [decisionFilter, harnessFilter, receiptItems, searchTerm]);
+
   const totalPages = Math.max(1, Math.ceil(filteredReceipts.length / receiptPageSize));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * receiptPageSize;
   const visibleReceipts = filteredReceipts.slice(pageStart, pageStart + receiptPageSize);
 
-  const handleNextPage = () => {
+  const handleNextPage = useCallback(() => {
     setPage((value) => Math.min(totalPages, value + 1));
-  };
+  }, [totalPages]);
+
+  if (props.receipts.kind === "loading") {
+    return (
+      <div className="space-y-4">
+        <div className="guard-skeleton h-8 w-64" />
+        <div className="guard-skeleton h-32 w-full" />
+      </div>
+    );
+  }
+  if (props.receipts.kind === "error") {
+    return (
+      <Surface tone="danger">
+        <p className="text-sm text-brand-purple">{props.receipts.message}</p>
+      </Surface>
+    );
+  }
+  if (receiptItems.length === 0) {
+    return (
+      <EmptyState
+        title="No history yet"
+        body="Saved choices appear here after HOL Guard reviews or blocks an action."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
