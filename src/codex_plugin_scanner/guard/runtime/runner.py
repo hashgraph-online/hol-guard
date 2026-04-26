@@ -111,7 +111,7 @@ _DESTRUCTIVE_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.IGNORECASE,
     ),
     re.compile(
-        r"(?:^|[\s'\"`])(?:rm\s+-rf|rm\s+\S|del\s+\S|truncate\s+\S|chmod\s+\S|chown\s+\S|mv\s+\S)",
+        r"(?:^|[\s'\"`(])(?:rm\s+-rf|rm\s+\S|del\s+\S|truncate\s+\S|chmod\s+\S|chown\s+\S|mv\s+\S)",
         re.IGNORECASE,
     ),
     re.compile(
@@ -126,7 +126,7 @@ _SUBPROCESS_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.IGNORECASE,
     ),
     re.compile(
-        r"(?:^|[\s'\"`])(?:bash\s+-c\b|sh\s+-c\b|zsh\s+-c\b|powershell(?:\.exe)?(?:\s|$)|cmd\s+/c(?:\s|$)|subprocess\.(?:run|Popen|call|check_call|check_output)\b|exec\(|spawn\()",
+        r"(?:^|[\s'\"`(])(?:bash\s+-c\b|sh\s+-c\b|zsh\s+-c\b|powershell(?:\.exe)?(?:\s|$)|cmd\s+/c(?:\s|$)|subprocess\.(?:run|Popen|call|check_call|check_output)\b|exec\(|spawn\()",
         re.IGNORECASE,
     ),
     re.compile(

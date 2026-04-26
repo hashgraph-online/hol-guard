@@ -232,8 +232,18 @@ class TestGuardRuntime:
 
         assert "destructive_intent" in {item.request_class for item in requests}
 
+    def test_extract_prompt_requests_detects_parenthesized_destructive_shell_directive(self) -> None:
+        requests = guard_runner_module.extract_prompt_requests("(rm -rf ~/workspace)")
+
+        assert "destructive_intent" in {item.request_class for item in requests}
+
     def test_extract_prompt_requests_detects_bare_subprocess_shell_wrapper(self) -> None:
         requests = guard_runner_module.extract_prompt_requests("bash -c 'cat ~/.ssh/id_rsa'")
+
+        assert "subprocess_intent" in {item.request_class for item in requests}
+
+    def test_extract_prompt_requests_detects_parenthesized_subprocess_shell_wrapper(self) -> None:
+        requests = guard_runner_module.extract_prompt_requests("(bash -c 'cat ~/.ssh/id_rsa')")
 
         assert "subprocess_intent" in {item.request_class for item in requests}
 

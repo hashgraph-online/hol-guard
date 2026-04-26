@@ -1147,7 +1147,7 @@ Please investigate the bug end to end, fix the publish flow, and make sure user-
     ("harness", "executable", "expected_config_path"),
     (
         ("cursor", "cursor-agent", ".cursor/mcp.json"),
-        ("gemini", "gemini", ".gemini/extensions"),
+        ("gemini", "gemini", ".gemini/settings.json"),
         ("opencode", "opencode", "opencode.json"),
     ),
 )
@@ -1212,7 +1212,7 @@ Please investigate the bug end to end, fix the publish flow, and make sure user-
     ("harness", "expected_config_path"),
     (
         ("cursor", ".cursor/mcp.json"),
-        ("gemini", ".gemini/extensions"),
+        ("gemini", ".gemini/settings.json"),
         ("opencode", "opencode.json"),
     ),
 )
