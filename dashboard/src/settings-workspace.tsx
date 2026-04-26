@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from "react";
+import {
+  HiMiniShieldCheck,
+  HiMiniLockClosed,
+  HiMiniCog6Tooth,
+  HiMiniCheckCircle,
+} from "react-icons/hi2";
 
 import {
   ActionButton,
@@ -34,17 +40,26 @@ const securityLevels = [
   {
     value: "balanced",
     label: "Balanced",
-    description: "Ask before secret access, hidden execution, exfiltration, and destructive actions."
+    description: "Ask before secret access, hidden execution, exfiltration, and destructive actions.",
+    icon: HiMiniShieldCheck,
+    protects: ["Secret file access", "Credential sharing", "Destructive shell commands", "Hidden scripts"],
+    tone: "blue" as const,
   },
   {
     value: "strict",
     label: "Strict",
-    description: "Ask more often, including new network destinations."
+    description: "Ask more often, including new network destinations.",
+    icon: HiMiniLockClosed,
+    protects: ["Everything in Balanced", "New network destinations"],
+    tone: "purple" as const,
   },
   {
     value: "custom",
     label: "Custom",
-    description: "Use the exact choices below for this machine and connected apps."
+    description: "Use the exact choices below for this machine and connected apps.",
+    icon: HiMiniCog6Tooth,
+    protects: [],
+    tone: "slate" as const,
   }
 ] as const;
 
@@ -306,22 +321,58 @@ export function SettingsWorkspace() {
         <div className="space-y-6">
           <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
             <SectionLabel>Security level</SectionLabel>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Pick a level to set up all risk choices at once. Switch to Custom only when you need to override individual behaviors.
+            </p>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
-              {securityLevels.map((level) => (
-                <button
-                  key={level.value}
-                  type="button"
-                  onClick={() => handleSecurityLevelChange(level.value)}
-                  className={`min-h-32 rounded-[1.5rem] border p-4 text-left transition-all duration-150 ${
-                    draft.security_level === level.value
-                      ? "border-brand-blue/35 bg-brand-blue/[0.07] shadow-[0_12px_32px_rgba(85,153,254,0.14)]"
-                      : "border-transparent bg-surface-1/80 hover:bg-white"
-                  }`}
-                >
-                  <span className="text-base font-semibold text-brand-dark">{level.label}</span>
-                  <span className="mt-2 block text-sm leading-6 text-muted-foreground">{level.description}</span>
-                </button>
-              ))}
+              {securityLevels.map((level) => {
+                const LevelIcon = level.icon;
+                const isSelected = draft.security_level === level.value;
+                const iconColorClass =
+                  level.tone === "blue" ? "text-brand-blue" :
+                  level.tone === "purple" ? "text-brand-purple" :
+                  "text-slate-500";
+                const iconBgClass =
+                  level.tone === "blue" ? "bg-brand-blue/10" :
+                  level.tone === "purple" ? "bg-brand-purple/10" :
+                  "bg-slate-100";
+                const selectedBorderClass =
+                  level.tone === "blue" ? "border-brand-blue/35 bg-brand-blue/[0.07] shadow-[0_12px_32px_rgba(85,153,254,0.14)]" :
+                  level.tone === "purple" ? "border-brand-purple/35 bg-brand-purple/[0.06] shadow-[0_12px_32px_rgba(181,108,255,0.12)]" :
+                  "border-slate-300 bg-slate-50 shadow-sm";
+                return (
+                  <button
+                    key={level.value}
+                    type="button"
+                    onClick={() => handleSecurityLevelChange(level.value)}
+                    aria-pressed={isSelected}
+                    className={`relative min-h-36 rounded-[1.5rem] border p-4 text-left transition-all duration-150 ${
+                      isSelected ? selectedBorderClass : "border-transparent bg-surface-1/80 hover:bg-white"
+                    }`}
+                  >
+                    {isSelected && (
+                      <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[#059669]">
+                        <HiMiniCheckCircle className="h-4 w-4 text-white" aria-hidden="true" />
+                      </span>
+                    )}
+                    <span className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${iconBgClass}`}>
+                      <LevelIcon className={`h-4 w-4 ${iconColorClass}`} aria-hidden="true" />
+                    </span>
+                    <span className="mt-3 block text-base font-semibold text-brand-dark">{level.label}</span>
+                    <span className="mt-1.5 block text-sm leading-6 text-muted-foreground">{level.description}</span>
+                    {level.protects.length > 0 && (
+                      <ul className="mt-3 space-y-1">
+                        {level.protects.map((item) => (
+                          <li key={item} className="flex items-center gap-1.5 text-[11px] font-medium text-brand-dark/60">
+                            <span className={`h-1 w-1 shrink-0 rounded-full ${iconColorClass}`} />
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -351,8 +402,28 @@ export function SettingsWorkspace() {
           </div>
 
           <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
-            <SectionLabel>Risk choices</SectionLabel>
-            <div className="mt-4 divide-y divide-slate-200/70 overflow-hidden rounded-[1.35rem] border border-slate-200/70 bg-white">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <SectionLabel>Risk choices</SectionLabel>
+              {draft.security_level !== "custom" ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  <HiMiniLockClosed className="h-3 w-3" aria-hidden="true" />
+                  Managed by {draft.security_level === "balanced" ? "Balanced" : "Strict"}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-blue/25 bg-brand-blue/[0.06] px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue">
+                  <HiMiniCog6Tooth className="h-3 w-3" aria-hidden="true" />
+                  Custom overrides active
+                </span>
+              )}
+            </div>
+            {draft.security_level !== "custom" && (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-[1rem] border border-slate-200/60 bg-slate-50/80 px-4 py-3">
+                <p className="text-sm text-brand-dark/65">
+                  All risk behaviors are set by the <span className="font-semibold">{draft.security_level === "balanced" ? "Balanced" : "Strict"}</span> level. Select <span className="font-semibold">Custom</span> above to override individual choices.
+                </p>
+              </div>
+            )}
+            <div className={`mt-4 divide-y divide-slate-200/70 overflow-hidden rounded-[1.35rem] border border-slate-200/70 bg-white ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
               {riskControls.map((risk) => (
                 <div key={risk.key} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-center">
                   <div>
@@ -364,6 +435,7 @@ export function SettingsWorkspace() {
                     value={draft.risk_actions[risk.key] ?? "require-reapproval"}
                     options={actionOptions}
                     onChange={handleRiskActionChange(risk.key)}
+                    disabled={draft.security_level !== "custom"}
                   />
                 </div>
               ))}
@@ -372,7 +444,7 @@ export function SettingsWorkspace() {
 
           <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
             <SectionLabel>Codex override</SectionLabel>
-            <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_260px] md:items-center">
+            <div className={`mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_260px] md:items-center ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
               <div>
                 <p className="text-sm font-semibold text-brand-dark">Codex reading local secret files</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
@@ -384,6 +456,7 @@ export function SettingsWorkspace() {
                 value={draft.harness_risk_actions.codex?.local_secret_read ?? draft.risk_actions.local_secret_read ?? "require-reapproval"}
                 options={actionOptions}
                 onChange={handleCodexSecretReadChange}
+                disabled={draft.security_level !== "custom"}
               />
             </div>
           </div>
@@ -448,6 +521,7 @@ function SettingSelect(props: {
   value: string;
   options: Array<{ value: string; label: string }>;
   onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  disabled?: boolean;
 }) {
   return (
     <label className="block">
@@ -455,7 +529,8 @@ function SettingSelect(props: {
       <select
         value={props.value}
         onChange={props.onChange}
-        className="mt-2 min-h-11 w-full rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        disabled={props.disabled}
+        className="mt-2 min-h-11 w-full rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {props.options.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>

@@ -171,12 +171,6 @@ def clear_guard_daemon_state(guard_home: Path) -> None:
     state_path = _state_path(guard_home)
     _ensure_private_directory(state_path.parent)
     _write_private_text(state_path, "{}")
-    try:
-        _auth_token_path(guard_home).unlink()
-    except FileNotFoundError:
-        return
-    except OSError:
-        return
 
 
 def _load_state(guard_home: Path) -> dict[str, object] | None:

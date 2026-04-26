@@ -287,7 +287,15 @@ def update_guard_settings(guard_home: Path, payload: dict[str, object]) -> Guard
     """Persist safe local Guard settings to config.toml and return the updated config."""
 
     current = _read_toml(guard_home / "config.toml")
+    current_config = load_guard_config(guard_home)
     next_payload = dict(current)
+    switching_to_custom_without_overrides = (
+        payload.get("security_level") == "custom"
+        and "risk_actions" not in payload
+        and "harness_risk_actions" not in payload
+    )
+    if switching_to_custom_without_overrides:
+        next_payload["risk_actions"] = _effective_risk_actions(current_config)
     for key, value in payload.items():
         if key not in EDITABLE_GUARD_SETTING_KEYS:
             continue

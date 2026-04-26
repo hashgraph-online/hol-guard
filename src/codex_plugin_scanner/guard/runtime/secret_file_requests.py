@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shlex
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -149,6 +150,11 @@ _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS = frozenset({"cat", "curl", "echo",
 _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
+_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|]*)"
+_SINGLE_INTERPRETER_HEREDOC_PATTERN = re.compile(
+    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?:perl|python|python3|ruby)\b[^\n;&|]*<<-?\s*(['\"]?)(?P<tag>[^\s'\";|&<>]+)\1\s*\n(?P<body>.*)\n(?P=tag)\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
 _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
     {
         "appendFile",
@@ -174,6 +180,20 @@ _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
     }
 )
 _DESTRUCTIVE_GIT_SUBCOMMANDS = frozenset({"clean", "reset", "restore", "rm"})
+_READ_ONLY_INTERPRETER_MUTATION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bwrite_(?:text|bytes)\s*\(", re.IGNORECASE),
+    re.compile(r"\bunlink\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:unlink|rmdir|remove|removedirs|rename|replace|chmod|chown|mkdir|makedirs|truncate)\s*\(", re.IGNORECASE
+    ),
+    re.compile(r"\b(?:copy|copy2|copyfile|move|rmtree|symlink|link)\s*\(", re.IGNORECASE),
+    re.compile(r"\bopen\s*\([^)]*,\s*['\"][wax+]", re.IGNORECASE),
+    re.compile(r"\b(?:os\.system|subprocess\.(?:run|popen|call|check_call|check_output)|system)\s*\(", re.IGNORECASE),
+    re.compile(
+        r"\bpath\s*\([^)]*\)\s*\.\s*(?:write_text|write_bytes|touch|unlink|rename|replace|chmod|mkdir|rmdir)\s*\(",
+        re.IGNORECASE,
+    ),
+)
 _GIT_GLOBAL_OPTIONS_WITH_VALUE = frozenset(
     {
         "-C",
@@ -1241,11 +1261,8 @@ def _cat_stdout_payloads(
         if token == "-":
             continue
         config_path = _resolved_runtime_path(token, cwd=cwd, home_dir=home_dir)
-        try:
-            if not config_path.is_file() or config_path.stat().st_size > _MAX_DECODED_PAYLOAD_BYTES:
-                continue
-            payload_text = config_path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+        payload_text = _read_small_runtime_text_file(config_path)
+        if payload_text is None:
             continue
         payloads.append((payload_text, config_path.parent))
     return tuple(payloads)
@@ -1342,12 +1359,10 @@ def _stdin_redirect_payload(
     home_dir: Path | None,
 ) -> tuple[str, Path | None] | None:
     config_path = _resolved_runtime_path(target, cwd=cwd, home_dir=home_dir)
-    try:
-        if not config_path.is_file() or config_path.stat().st_size > _MAX_DECODED_PAYLOAD_BYTES:
-            return None
-        return config_path.read_text(encoding="utf-8"), config_path.parent
-    except (OSError, UnicodeDecodeError):
+    payload_text = _read_small_runtime_text_file(config_path)
+    if payload_text is None:
         return None
+    return payload_text, config_path.parent
 
 
 def _stdin_redirect_uses_local_file(
@@ -1480,13 +1495,10 @@ def _curl_config_uses_file_upload(
         )
     config_file = _resolved_runtime_path(value, cwd=cwd, home_dir=home_dir)
     normalized_config_path = str(config_file)
-    if normalized_config_path in visited_config_paths or not config_file.is_file():
+    if normalized_config_path in visited_config_paths:
         return False
-    try:
-        if config_file.stat().st_size > _MAX_DECODED_PAYLOAD_BYTES:
-            return False
-        config_text = config_file.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    config_text = _read_small_runtime_text_file(config_file)
+    if config_text is None:
         return False
     config_args = _curl_config_arguments(config_text)
     if not config_args:
@@ -1927,13 +1939,8 @@ def _local_shell_script_payloads(
         if normalized_script_path in visited_script_paths:
             continue
         script_file = Path(normalized_script_path)
-        if not script_file.is_file():
-            continue
-        try:
-            if script_file.stat().st_size > _MAX_DECODED_PAYLOAD_BYTES:
-                continue
-            script_text = script_file.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
+        script_text = _read_small_runtime_text_file(script_file)
+        if script_text is None:
             continue
         payloads.append((script_text, script_file.parent, normalized_script_path))
     return tuple(payloads)
@@ -2137,6 +2144,19 @@ def _resolved_runtime_path(value: str, *, cwd: Path | None, home_dir: Path | Non
     return Path(_normalize_path(expanded_value, cwd))
 
 
+def _read_small_runtime_text_file(path: Path) -> str | None:
+    try:
+        stat_result = path.stat(follow_symlinks=False)
+    except OSError:
+        return None
+    if not stat.S_ISREG(stat_result.st_mode) or stat_result.st_size > _MAX_DECODED_PAYLOAD_BYTES:
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
 def _normalize_tool_name(tool_name: object) -> str | None:
     if not isinstance(tool_name, str) or not tool_name.strip():
         return None
@@ -2183,7 +2203,10 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     if _contains_mutating_shell_redirection(parts):
         return True
     raw_command_names = list(_shell_command_names(redacted_command_text))
-    if _looks_like_benign_interpreter_wait(normalized, parts, raw_command_names):
+    parsed_command_names = list(_shell_command_names_from_parts(parts))
+    if _looks_like_benign_interpreter_wait(normalized, parts, parsed_command_names):
+        return False
+    if _looks_like_read_only_interpreter_command(normalized, parts, parsed_command_names):
         return False
     if _contains_destructive_node_inline_eval(parts):
         return True
@@ -2994,6 +3017,21 @@ def _looks_like_benign_interpreter_wait(command_text: str, parts: list[str], com
     return all(_script_is_benign_wait(script_text) for script_text in scripts)
 
 
+def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str], command_names: list[str]) -> bool:
+    if "$(" in command_text or "`" in command_text or "<(" in command_text or ">(" in command_text:
+        return False
+    heredoc_script = _single_interpreter_heredoc_script(command_text)
+    if heredoc_script is not None:
+        return _script_is_read_only_observer(heredoc_script)
+    if not command_names or not all(command_name in _SCRIPT_INTERPRETER_COMMANDS for command_name in command_names):
+        return False
+    scripts = list(_script_interpreter_texts(parts))
+    scripts.extend(_shell_heredoc_payloads(command_text))
+    if not scripts or len(scripts) != len(command_names):
+        return False
+    return all(_script_is_read_only_observer(script_text) for script_text in scripts)
+
+
 def _script_is_benign_wait(script_text: str) -> bool:
     normalized_script = script_text.strip()
     if not normalized_script:
@@ -3002,6 +3040,23 @@ def _script_is_benign_wait(script_text: str) -> bool:
         re.fullmatch(r"sleep\s+\d+(?:\.\d+)?", normalized_script)
         or re.fullmatch(r"(?:import\s+time\s*;\s*)?time\.sleep\(\s*\d+(?:\.\d+)?\s*\)", normalized_script)
     )
+
+
+def _script_is_read_only_observer(script_text: str) -> bool:
+    normalized_script = script_text.strip()
+    if not normalized_script:
+        return False
+    if _script_is_benign_wait(normalized_script):
+        return True
+    return not any(pattern.search(normalized_script) for pattern in _READ_ONLY_INTERPRETER_MUTATION_PATTERNS)
+
+
+def _single_interpreter_heredoc_script(command_text: str) -> str | None:
+    match = _SINGLE_INTERPRETER_HEREDOC_PATTERN.fullmatch(command_text.strip())
+    if match is None:
+        return None
+    script_text = match.group("body").strip()
+    return script_text or None
 
 
 @dataclass(frozen=True, slots=True)

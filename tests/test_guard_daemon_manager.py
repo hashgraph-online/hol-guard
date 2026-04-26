@@ -29,14 +29,14 @@ def test_write_guard_daemon_state_keeps_auth_token_out_of_state_file(tmp_path):
     assert stat.S_IMODE(token_path.stat().st_mode) & 0o077 == 0
 
 
-def test_clear_guard_daemon_state_removes_auth_token_file(tmp_path):
+def test_clear_guard_daemon_state_preserves_auth_token_file(tmp_path):
     guard_home = tmp_path / "guard-home"
 
     daemon_manager_module.write_guard_daemon_state(guard_home, 4781, "secret-token")
     daemon_manager_module.clear_guard_daemon_state(guard_home)
 
     assert json.loads(daemon_manager_module._state_path(guard_home).read_text(encoding="utf-8")) == {}
-    assert not daemon_manager_module._auth_token_path(guard_home).exists()
+    assert daemon_manager_module._auth_token_path(guard_home).read_text(encoding="utf-8") == "secret-token"
 
 
 def test_write_guard_daemon_state_hardens_permissions_on_open_descriptor(tmp_path, monkeypatch):

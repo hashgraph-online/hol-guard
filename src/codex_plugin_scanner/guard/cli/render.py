@@ -33,18 +33,40 @@ _MODE_ACRONYMS = frozenset({"mcp", "api", "cli"})
 _KNOWN_MANAGED_INSTALL_MODES = {
     "codex-mcp-proxy": "Codex MCP proxy",
 }
+_SENSITIVE_KEY_TOKENS = ("key", "token", "auth", "secret", "password", "credential")
+_SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"(?i)(authorization:\s*)(bearer\s+)?[^\s,;]+"), r"\1*****"),
+    (re.compile(r"(?i)(api[-_ ]?key:\s*)[^\s,;]+"), r"\1*****"),
+    (re.compile(r"(?i)(bearer\s+)[^\s,;]+"), r"\1*****"),
+    (re.compile(r"(?i)([a-z0-9_-]*(?:token|secret|api[-_]?key|password|credential)[a-z0-9_-]*=)[^&\\s]+"), r"\1*****"),
+)
 
 
 def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) -> None:
     """Render Guard payloads as JSON or human-friendly rich output."""
 
     if as_json or not _RICH_AVAILABLE:
-        print(json.dumps(payload, indent=2))
+        print(json.dumps(_redact_payload(payload), indent=2))
         return
 
     console = Console(file=sys.stdout, soft_wrap=True)
     renderer = _RENDERERS.get(command, _render_fallback)
     renderer(console, payload)
+
+
+def _redact_payload(value: object, *, key: str | None = None) -> object:
+    if key is not None and any(token in key.lower() for token in _SENSITIVE_KEY_TOKENS):
+        return "*****"
+    if isinstance(value, dict):
+        return {item_key: _redact_payload(item_value, key=item_key) for item_key, item_value in value.items()}
+    if isinstance(value, list):
+        return [_redact_payload(item) for item in value]
+    if isinstance(value, str):
+        redacted = value
+        for pattern, replacement in _SENSITIVE_STRING_PATTERNS:
+            redacted = pattern.sub(replacement, redacted)
+        return redacted
+    return value
 
 
 def _render_detect(console: Console, payload: dict[str, object]) -> None:

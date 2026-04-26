@@ -84,6 +84,25 @@ def test_artifact_risk_signals_ignore_common_file_extensions_as_network_hosts():
     assert host_signals == []
 
 
+def test_artifact_risk_signals_ignore_python_method_calls_as_network_hosts():
+    artifact = GuardArtifact(
+        artifact_id="codex:project:python-debugger",
+        name="python-debugger",
+        harness="codex",
+        artifact_type="mcp_server",
+        source_scope="project",
+        config_path="/workspace/.codex/config.toml",
+        command="bash",
+        args=("-lc", "python -c \"print(text.count('data-testid=\\\"portal-grid-row\\\"'))\""),
+        transport="stdio",
+    )
+
+    signals = artifact_risk_signals_typed(artifact)
+    host_signals = [signal for signal in signals if signal.signal_id.startswith("network:host:")]
+
+    assert host_signals == []
+
+
 def test_artifact_risk_signals_detect_direct_env_prompt_requests():
     artifact = GuardArtifact(
         artifact_id="codex:session:prompt-env-read:abc123",
@@ -966,6 +985,42 @@ def test_tool_action_request_classifier_detects_python_heredoc_file_write():
 
     assert request is not None
     assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_allows_read_only_python_heredoc_debugging():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "python3 - <<'PY'\n"
+                "from pathlib import Path\n"
+                "text = Path('bounty_submissions.txt').read_text()\n"
+                "print('bytes', len(text))\n"
+                "print('rows', text.count('data-testid=\"portal-grid-row\"'))\n"
+                "PY"
+            )
+        },
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_allows_read_only_python_heredoc_debugging_after_cd():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "cd /tmp/hol-guard-fixtures/hashgraph-online && python - <<'PY'\n"
+                "from pathlib import Path\n"
+                "text = Path('bounty_submissions.txt').read_text()\n"
+                "print('bytes', len(text))\n"
+                "print('rows', text.count('data-testid=\"portal-grid-row\"'))\n"
+                "PY"
+            )
+        },
+    )
+
+    assert request is None
 
 
 def test_tool_action_request_classifier_detects_semicolon_chained_interpreter_script():

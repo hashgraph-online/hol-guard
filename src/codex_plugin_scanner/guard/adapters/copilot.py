@@ -355,12 +355,18 @@ class CopilotHarnessAdapter(HarnessAdapter):
         return "servers"
 
     @staticmethod
-    def _strict_json_object(path: Path, *, label: str) -> dict[str, object]:
+    def _strict_json_object(path: Path, *, label: str, recover_malformed: bool = False) -> dict[str, object]:
         if not path.is_file():
             return {}
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            raw_text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise RuntimeError(f"Guard refused to overwrite unreadable {label} at {path}") from exc
+        try:
+            payload = json.loads(raw_text)
+        except json.JSONDecodeError as exc:
+            if recover_malformed:
+                return {}
             raise RuntimeError(f"Guard refused to overwrite unreadable {label} at {path}") from exc
         if not isinstance(payload, dict):
             raise RuntimeError(f"Guard refused to overwrite non-object {label} at {path}")
@@ -479,7 +485,7 @@ class CopilotHarnessAdapter(HarnessAdapter):
         primary_backup_path = backup_paths[0]
         primary_state_path = state_paths[0]
         config_path = self._config_path(context)
-        config_payload = self._strict_json_object(config_path, label="Copilot config")
+        config_payload = self._strict_json_object(config_path, label="Copilot config", recover_malformed=True)
         hooks_payload = _inline_hooks_payload(config_payload)
         hook_entry = _hook_entry(context, include_workspace=False)
         for hook_name in _MANAGED_HOOK_EVENTS:

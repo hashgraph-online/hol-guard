@@ -14,13 +14,23 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    dependencies = " ".join(project["dependencies"])
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    project = pyproject["project"]
+    dependency_entries = project["dependencies"]
+    dependencies = " ".join(dependency_entries)
     cisco_extra = " ".join(project["optional-dependencies"]["cisco"])
+    override_entries = pyproject["tool"]["uv"]["override-dependencies"]
 
     assert "cisco-ai-mcp-scanner" not in dependencies
-    assert "cisco-ai-mcp-scanner~=4.5" in cisco_extra
+    assert "cisco-ai-mcp-scanner~=4.6" in cisco_extra
     assert "python_version >= '3.11'" in cisco_extra
+    assert "cisco-ai-skill-scanner~=2.0.9" in dependency_entries
+    assert "click==8.1.8" in override_entries
+    assert "jsonschema==4.23.0" in override_entries
+    assert "litellm>=1.83.7" in override_entries
+    assert "openai==2.30.0" in override_entries
+    assert "python-dotenv>=1.2.2" in override_entries
+    assert "python-multipart>=0.0.26" in override_entries
     assert "cisco-ai-a2a-scanner" not in dependencies
     assert "cisco-ai-a2a-scanner" not in cisco_extra
     assert "cisco-aibom" not in dependencies
@@ -69,6 +79,19 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     source_copy_index = dockerfile.index("COPY src /app/src")
     assert requirements_copy_index < source_copy_index
     assert "cisco-ai-mcp-scanner==" in docker_requirements
+    patched_litellm_versions = (
+        "litellm==1.83.7",
+        "litellm==1.83.8",
+        "litellm==1.83.9",
+        "litellm==1.83.10",
+        "litellm==1.83.11",
+        "litellm==1.83.12",
+        "litellm==1.83.13",
+        "litellm==1.83.14",
+    )
+    assert any(version in docker_requirements for version in patched_litellm_versions)
+    assert "python-dotenv==1.2.2" in docker_requirements
+    assert "python-multipart==0.0.26" in docker_requirements
     assert "--hash=sha256:" in docker_requirements
     assert "uv sync --extra dev --extra cisco" in contributing
 

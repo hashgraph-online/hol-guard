@@ -152,6 +152,30 @@ def test_dashboard_settings_update_persists_security_level_and_risk_actions(tmp_
     assert resolve_risk_action(loaded, "credential_exfiltration", harness="codex") == "require-reapproval"
 
 
+def test_dashboard_settings_switch_to_custom_carries_forward_effective_risk_map(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(guard_home / "config.toml", 'security_level = "strict"\n')
+
+    updated = update_guard_settings(
+        guard_home,
+        {
+            "security_level": "custom",
+        },
+    )
+    loaded = load_guard_config(guard_home)
+
+    assert updated.security_level == "custom"
+    assert loaded.security_level == "custom"
+    assert loaded.risk_actions == {
+        "local_secret_read": "require-reapproval",
+        "credential_exfiltration": "require-reapproval",
+        "destructive_shell": "require-reapproval",
+        "encoded_execution": "require-reapproval",
+        "network_egress": "require-reapproval",
+    }
+    assert resolve_risk_action(loaded, "network_egress", harness="codex") == "require-reapproval"
+
+
 def test_dashboard_settings_update_preserves_nested_cli_policy_tables(tmp_path):
     guard_home = tmp_path / ".hol-guard"
     _write_text(

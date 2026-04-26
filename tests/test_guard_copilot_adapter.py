@@ -124,22 +124,19 @@ def test_copilot_detect_tolerates_malformed_json(tmp_path):
     assert [artifact.artifact_id for artifact in detection.artifacts] == ["copilot:project:workspace-tool"]
 
 
-def test_copilot_install_fails_closed_when_global_config_is_unreadable(tmp_path):
+def test_copilot_install_recovers_malformed_global_config(tmp_path):
     context = _build_context(tmp_path)
     adapter = CopilotHarnessAdapter()
     config_path = context.home_dir / ".copilot" / "config.json"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text("{broken", encoding="utf-8")
 
-    try:
-        adapter.install(context)
-    except RuntimeError as exc:
-        message = str(exc)
-    else:
-        raise AssertionError("expected install to refuse unreadable Copilot config")
+    manifest = adapter.install(context)
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
 
-    assert "unreadable Copilot config" in message
-    assert config_path.read_text(encoding="utf-8") == "{broken"
+    assert manifest["active"] is True
+    assert isinstance(payload.get("hooks"), dict)
+    assert "preToolUse" in payload["hooks"]
 
 
 def test_copilot_detect_ignores_hook_json_without_hook_entries(tmp_path):

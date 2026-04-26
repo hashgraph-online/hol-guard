@@ -282,7 +282,7 @@ export function ActionButton(props: {
   children: ReactNode;
   onClick?: () => void;
   href?: string;
-  variant?: "primary" | "secondary" | "danger" | "outline" | "ghost";
+  variant?: "primary" | "secondary" | "danger" | "outline" | "ghost" | "success";
   disabled?: boolean;
 }) {
   const className = actionButtonClass(props.variant);
@@ -460,13 +460,14 @@ function tagToneClass(tone: "blue" | "green" | "purple" | "slate" | "red" | unde
   return "border-transparent bg-blue-500/10 text-blue-700";
 }
 
-function actionButtonClass(variant: "primary" | "secondary" | "danger" | "outline" | "ghost" | undefined): string {
+function actionButtonClass(variant: "primary" | "secondary" | "danger" | "outline" | "ghost" | "success" | undefined): string {
   const base = "inline-flex items-center justify-center rounded-lg text-sm font-semibold ring-offset-background transition-[color,background-color,border-color,opacity,transform,box-shadow] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-w-0";
   const sizeDefault = "min-h-11 h-auto px-4 py-2";
   if (variant === "outline") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
   if (variant === "secondary") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
   if (variant === "ghost") return `${base} ${sizeDefault} hover:bg-slate-100 hover:text-slate-900`;
   if (variant === "danger") return `${base} ${sizeDefault} bg-brand-purple text-white shadow-lg shadow-brand-blue/10 hover:bg-brand-purple/90 hover:shadow-brand-blue/20`;
+  if (variant === "success") return `${base} ${sizeDefault} bg-[#059669] text-white shadow-lg shadow-emerald-500/15 hover:bg-[#047857] hover:shadow-emerald-500/20`;
   return `${base} ${sizeDefault} bg-brand-blue text-white shadow-lg shadow-brand-blue/20 hover:bg-brand-blue/90 hover:shadow-brand-blue/30`;
 }
 
