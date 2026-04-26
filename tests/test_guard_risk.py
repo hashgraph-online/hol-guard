@@ -1125,6 +1125,20 @@ def test_tool_action_request_classifier_does_not_treat_python_c_flag_write_as_re
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_path_open_positional_write_mode():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "python3 -c \"from pathlib import Path; Path('dangerous-marker.json').open('w').write('owned')\""
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_does_not_promote_echoed_interpreter_text():
     request = extract_sensitive_tool_action_request(
         "bash",
