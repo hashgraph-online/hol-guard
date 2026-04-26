@@ -5623,9 +5623,10 @@ def test_guard_hook_allows_claude_user_prompt_submit_before_tool_approval(
         monkeypatch=monkeypatch,
     )
     receipts = GuardStore(home_dir).list_receipts()
+    payload = json.loads(output)
 
     assert rc == 0
-    assert output == ""
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     assert any(receipt["artifact_id"].startswith("claude-code:session:prompt") for receipt in receipts)
 
 
@@ -5650,9 +5651,10 @@ def test_guard_hook_allows_generic_claude_user_prompt_submit_before_tool_approva
         capsys=capsys,
         monkeypatch=monkeypatch,
     )
+    payload = json.loads(output)
 
     assert rc == 0
-    assert output == ""
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
 
 
 def test_guard_hook_emits_json_for_claude_user_prompt_submit_overridable_prompts(
@@ -5818,10 +5820,10 @@ def test_guard_hook_allows_claude_user_prompt_submit_without_hook_error(tmp_path
             "claude-code",
         ]
     )
-    output = capsys.readouterr().out
+    payload = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output == ""
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
 
 
 @pytest.mark.parametrize("policy_action", ["block", "require-reapproval"])
@@ -5891,9 +5893,10 @@ Please investigate the bug end to end, fix the publish flow, and make sure user-
         monkeypatch=monkeypatch,
     )
     receipts = GuardStore(home_dir).list_receipts()
+    payload = json.loads(output)
 
     assert rc == 0
-    assert output == ""
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     assert not any(receipt["artifact_id"].startswith("claude-code:session:prompt") for receipt in receipts)
 
 
@@ -8787,9 +8790,10 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_can_be_allowed_by_harne
         capsys=capsys,
         monkeypatch=monkeypatch,
     )
+    payload = json.loads(output)
 
     assert rc == 0
-    assert output == ""
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
@@ -8947,9 +8951,10 @@ def test_guard_hook_allows_codex_safe_user_prompt_submit_without_output(
         capsys=capsys,
         monkeypatch=monkeypatch,
     )
+    payload = json.loads(output)
 
     assert rc == 0
-    assert output == ""
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
 
 
 def test_stdio_proxy_blocks_disallowed_tools_and_redacts_headers():

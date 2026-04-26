@@ -185,11 +185,6 @@ def _prompt_has_secret_read_intent(prompt_text: str, *, start: int, end: int) ->
     )
 
 
-def _match_text(pattern: re.Pattern[str], text: str) -> str:
-    match = pattern.search(text)
-    return match.group(0).strip() if match is not None else ""
-
-
 def _first_match(patterns: tuple[re.Pattern[str], ...], text: str) -> re.Match[str] | None:
     for pattern in patterns:
         match = pattern.search(text)
