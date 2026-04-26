@@ -55,7 +55,7 @@ def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) 
 
     redacted_payload = _redact_payload(payload)
     if as_json or not _RICH_AVAILABLE:
-        sys.stdout.write(_render_redacted_json_payload(payload))
+        sys.stdout.write(_render_redacted_json_payload(redacted_payload))
         sys.stdout.write("\n")
         return
 
@@ -81,11 +81,35 @@ def _redact_payload(value: object, *, key: str | None = None) -> object:
     return value
 
 
-def _render_redacted_json_payload(payload: dict[str, object]) -> str:
-    redacted_payload = _redact_payload(payload)
+def _render_redacted_json_payload(redacted_payload: object) -> str:
     if not isinstance(redacted_payload, dict):
         return "{}"
-    return json.dumps(redacted_payload, indent=2)
+    return _serialize_redacted_json(redacted_payload, indent=0)
+
+
+def _serialize_redacted_json(value: object, *, indent: int) -> str:
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        child_indent = indent + 2
+        entries = [
+            (
+                f'{" " * child_indent}{json.dumps(str(item_key))}: '
+                f'{_serialize_redacted_json(item_value, indent=child_indent)}'
+            )
+            for item_key, item_value in value.items()
+        ]
+        return "{\n" + ",\n".join(entries) + "\n" + (" " * indent) + "}"
+    if isinstance(value, list):
+        if not value:
+            return "[]"
+        child_indent = indent + 2
+        items = [f'{" " * child_indent}{_serialize_redacted_json(item, indent=child_indent)}' for item in value]
+        return "[\n" + ",\n".join(items) + "\n" + (" " * indent) + "]"
+    try:
+        return json.dumps(value)
+    except TypeError:
+        return json.dumps(str(value))
 
 
 def _render_detect(console: Console, payload: dict[str, object]) -> None:
@@ -1041,7 +1065,7 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
 def _render_fallback(console: Console, payload: dict[str, object]) -> None:
     console.print(
         Syntax(
-            json.dumps(payload, indent=2),
+            _render_redacted_json_payload(payload),
             "json",
             theme="ansi_dark",
             word_wrap=True,

@@ -1310,7 +1310,10 @@ def _cat_stdout_payloads(
         config_path = _resolved_runtime_path(token, cwd=cwd, home_dir=home_dir)
         if config_path is None:
             continue
-        payload_text = _read_small_runtime_text_file(config_path)
+        payload_text = _read_small_runtime_text_file(
+            config_path,
+            allowed_roots=_runtime_read_roots(cwd, home_dir),
+        )
         if payload_text is None:
             continue
         payloads.append((payload_text, config_path.parent))
@@ -1410,7 +1413,10 @@ def _stdin_redirect_payload(
     config_path = _resolved_runtime_path(target, cwd=cwd, home_dir=home_dir)
     if config_path is None:
         return None
-    payload_text = _read_small_runtime_text_file(config_path)
+    payload_text = _read_small_runtime_text_file(
+        config_path,
+        allowed_roots=_runtime_read_roots(cwd, home_dir),
+    )
     if payload_text is None:
         return None
     return payload_text, config_path.parent
@@ -1436,7 +1442,7 @@ def _looks_like_local_stdin_source(value: str) -> bool:
 
 
 def _stdin_redirect_target_from_token(token: str, *, next_token: str | None) -> tuple[str | None, int]:
-    if token.startswith("<<"):
+    if _token_is_heredoc_operator(token):
         return None, 1
     if token in {"<", "0<"}:
         if next_token is None:
@@ -1448,6 +1454,13 @@ def _stdin_redirect_target_from_token(token: str, *, next_token: str | None) -> 
     if fd not in {"", "0"} or not target:
         return None, 1
     return target, 1
+
+
+def _token_is_heredoc_operator(token: str) -> bool:
+    if token.startswith("<<"):
+        return True
+    heredoc_index = token.find("<<")
+    return heredoc_index > 0 and token[:heredoc_index].isdigit()
 
 
 def _decode_shell_text_literal(value: str) -> str | None:
@@ -1552,7 +1565,10 @@ def _curl_config_uses_file_upload(
     normalized_config_path = str(config_file)
     if normalized_config_path in visited_config_paths:
         return False
-    config_text = _read_small_runtime_text_file(config_file)
+    config_text = _read_small_runtime_text_file(
+        config_file,
+        allowed_roots=_runtime_read_roots(cwd, home_dir),
+    )
     if config_text is None:
         return False
     config_args = _curl_config_arguments(config_text)
@@ -1598,7 +1614,7 @@ def _curl_config_arguments(config_text: str) -> list[str]:
 def _command_uses_curl_stdin_heredoc(command_text: str) -> bool:
     parts = _split_shell_parts(command_text)
     for segment in _iter_shell_command_segments(parts):
-        if not any(token == "<<" or token.startswith("<<") for token in segment):
+        if not any(_token_is_heredoc_operator(token) for token in segment):
             continue
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name != "curl" or command_index is None:
@@ -2000,7 +2016,10 @@ def _local_shell_script_payloads(
         normalized_script_path = str(script_file)
         if normalized_script_path in visited_script_paths:
             continue
-        script_text = _read_small_runtime_text_file(script_file)
+        script_text = _read_small_runtime_text_file(
+            script_file,
+            allowed_roots=_runtime_read_roots(cwd, home_dir),
+        )
         if script_text is None:
             continue
         payloads.append((script_text, script_file.parent, normalized_script_path))
@@ -2226,24 +2245,15 @@ def _resolved_runtime_path(value: str, *, cwd: Path | None, home_dir: Path | Non
     read_roots = _runtime_read_roots(cwd, home_dir)
     if not read_roots:
         return None
-    for root in read_roots:
-        try:
-            relative_path = normalized_path.relative_to(root)
-        except ValueError:
-            continue
-        try:
-            resolved_path = (root / relative_path).resolve(strict=False)
-        except OSError:
-            continue
-        if _path_is_within_roots(resolved_path, (root,)):
-            return resolved_path
-    return None
+    return normalized_path if _path_is_within_roots(normalized_path, read_roots) else None
 
 
-def _read_small_runtime_text_file(path: Path) -> str | None:
+def _read_small_runtime_text_file(path: Path, *, allowed_roots: tuple[Path, ...]) -> str | None:
     try:
         resolved_path = path.resolve(strict=True)
     except OSError:
+        return None
+    if not _path_is_within_roots(resolved_path, allowed_roots):
         return None
     try:
         stat_result = resolved_path.stat()
@@ -3182,22 +3192,24 @@ def _script_is_benign_wait(script_text: str) -> bool:
 def _script_has_aliased_risky_import(script_text: str) -> bool:
     risky_roots = {"os", "pathlib", "shutil", "subprocess"}
     for raw_line in script_text.splitlines():
-        statement = raw_line.split("#", 1)[0].strip()
+        statement = raw_line.split("#", 1)[0].split(";", 1)[0].strip()
         if statement.startswith("import "):
-            if " as " in statement:
-                for part in statement[7:].split(","):
-                    if " as " not in part:
-                        continue
-                    module_name = part.strip().split(" as ", 1)[0].strip().split(".", 1)[0]
-                    if module_name in risky_roots:
-                        return True
+            for part in statement[7:].split(","):
+                clause_tokens = part.strip().split()
+                if len(clause_tokens) < 3 or clause_tokens[-2] != "as":
+                    continue
+                module_name = clause_tokens[0].split(".", 1)[0]
+                if module_name in risky_roots:
+                    return True
             continue
-        if not statement.startswith("from ") or " import " not in statement or " as " not in statement:
+        clause_tokens = statement.split()
+        if len(clause_tokens) < 6 or clause_tokens[0] != "from" or "import" not in clause_tokens:
             continue
-        module_part, import_part = statement[5:].split(" import ", 1)
-        if module_part.strip().split(".", 1)[0] not in risky_roots:
+        import_index = clause_tokens.index("import")
+        if import_index < 2 or clause_tokens[1].split(".", 1)[0] not in risky_roots:
             continue
-        if any(" as " in clause for clause in import_part.split(",")):
+        import_clauses = " ".join(clause_tokens[import_index + 1 :]).split(",")
+        if any(len(clause.strip().split()) >= 3 and clause.strip().split()[-2] == "as" for clause in import_clauses):
             return True
     return False
 
