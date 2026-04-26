@@ -1076,11 +1076,13 @@ def run_guard_command(
     if args.guard_command == "hook":
         payload = _load_hook_payload(getattr(args, "event_file", None), input_text=input_text)
         managed_install = _managed_install_for(store, args.harness)
-        payload_cwd = payload.get("cwd")
         workspace_was_explicit = workspace is not None
         runtime_workspace = workspace
-        if runtime_workspace is None and isinstance(payload_cwd, str) and payload_cwd.strip():
-            runtime_workspace = _resolve_runtime_workspace(payload_cwd, home_dir=context.home_dir)
+        if runtime_workspace is None and args.harness == "copilot":
+            with suppress(OSError):
+                current_workspace = Path.cwd().resolve()
+                if current_workspace.is_dir():
+                    runtime_workspace = current_workspace
         if args.harness == "copilot":
             runtime_workspace = _resolve_copilot_workspace_root(runtime_workspace)
         copilot_hook_stage = _copilot_hook_stage(payload) if args.harness == "copilot" else None
@@ -3720,29 +3722,6 @@ def _resolve_copilot_workspace_root(workspace: Path | None) -> Path | None:
         if (candidate / ".mcp.json").is_file() or (candidate / ".vscode" / "mcp.json").is_file():
             return candidate
     return workspace
-
-
-def _resolve_runtime_workspace(value: str, *, home_dir: Path) -> Path | None:
-    candidate = value.strip()
-    if not candidate:
-        return None
-    normalized_path = os.path.realpath(os.path.expanduser(candidate))
-    if not os.path.isabs(normalized_path):
-        return None
-    allowed_roots: list[str] = []
-    with suppress(OSError):
-        allowed_roots.append(os.path.realpath(os.fspath(home_dir.expanduser().resolve().parent)))
-    with suppress(OSError):
-        allowed_roots.append(os.path.realpath(os.fspath(Path.cwd().resolve())))
-    if allowed_roots and not any(os.path.commonpath((root, normalized_path)) == root for root in allowed_roots):
-        return None
-    path = Path(normalized_path)
-    try:
-        return path if path.is_dir() else None
-    except OSError:
-        return None
-
-
 def _mcp_server_entries_from_path(path: Path, *, source_scope: str) -> list[tuple[str, str, str]]:
     if not path.exists():
         return []

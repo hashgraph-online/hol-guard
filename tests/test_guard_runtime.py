@@ -321,17 +321,17 @@ Please investigate the bug end to end, fix the publish flow, and make sure user-
         assert all(artifact.artifact_type == "prompt_request" for artifact in artifacts)
         assert all("prompt_summary" in artifact.metadata for artifact in artifacts)
 
-    def test_guard_hook_uses_payload_cwd_for_global_copilot_hooks(self, tmp_path, capsys) -> None:
+    def test_guard_hook_uses_process_cwd_for_global_copilot_hooks(self, monkeypatch, tmp_path, capsys) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         marker_path = workspace_dir / "dangerous-marker.json"
         marker_path.parent.mkdir(parents=True, exist_ok=True)
         marker_path.write_text('{"status":"armed"}\n', encoding="utf-8")
+        monkeypatch.chdir(workspace_dir)
         event_path = tmp_path / "copilot-hook.json"
         _write_json(
             event_path,
             {
-                "cwd": str(workspace_dir),
                 "toolName": "bash",
                 "toolInput": {"command": "rm dangerous-marker.json"},
                 "policyAction": "allow",
@@ -357,50 +357,6 @@ Please investigate the bug end to end, fix the publish flow, and make sure user-
         assert output["artifact_type"] == "tool_action_request"
         assert "rm dangerous-marker.json" in output["launch_summary"]
         assert output["trigger_summary"].startswith("HOL Guard paused the native tool action")
-
-    def test_guard_hook_ignores_relative_payload_cwd_for_global_copilot_hooks(self, tmp_path, capsys) -> None:
-        home_dir = tmp_path / "home"
-        event_path = tmp_path / "copilot-hook-relative.json"
-        _write_json(
-            event_path,
-            {
-                "cwd": "workspace",
-                "toolName": "bash",
-                "toolInput": {"command": "rm dangerous-marker.json"},
-                "policyAction": "allow",
-            },
-        )
-
-        rc = main(
-            [
-                "guard",
-                "hook",
-                "--home",
-                str(home_dir),
-                "--harness",
-                "copilot",
-                "--event-file",
-                str(event_path),
-                "--json",
-            ]
-        )
-        output = json.loads(capsys.readouterr().out)
-
-        assert rc == 0
-        assert output["artifact_type"] == "tool_action_request"
-        assert "dangerous-marker.json" in output["launch_summary"]
-
-    def test_resolve_runtime_workspace_ignores_paths_outside_allowed_roots(self, tmp_path) -> None:
-        home_dir = tmp_path / "sandbox" / "home"
-        outside_workspace = tmp_path / "outside-workspace"
-        outside_workspace.mkdir(parents=True, exist_ok=True)
-
-        resolved = guard_commands_module._resolve_runtime_workspace(
-            str(outside_workspace),
-            home_dir=home_dir,
-        )
-
-        assert resolved is None
 
     def test_guard_hook_copilot_path_does_not_require_rich_imports(
         self,
