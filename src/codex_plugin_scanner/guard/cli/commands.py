@@ -674,8 +674,28 @@ def run_guard_command(
         return 0
 
     if args.guard_command in {"dashboard", "admin"}:
-        approval_center_url = ensure_guard_daemon(guard_home)
-        _open_approval_center(approval_center_url, store=store, config=config)
+        try:
+            approval_center_url = ensure_guard_daemon(guard_home)
+        except RuntimeError as error:
+            if getattr(args, "json", False):
+                _emit(
+                    "dashboard",
+                    {
+                        "generated_at": _now(),
+                        "opened": False,
+                        "error": str(error),
+                    },
+                    True,
+                )
+            else:
+                print(str(error), file=sys.stderr)
+            return 1
+        open_result = _open_approval_center(
+            approval_center_url,
+            store=store,
+            config=config,
+            open_key=f"dashboard:{secrets.token_hex(8)}",
+        )
         _emit(
             "dashboard",
             {
@@ -685,7 +705,8 @@ def run_guard_command(
                     approval_center_url,
                     load_guard_daemon_auth_token(store.guard_home),
                 ),
-                "opened": True,
+                "opened": bool(open_result.get("opened")),
+                "reason": str(open_result.get("reason") or "unknown"),
             },
             getattr(args, "json", False),
         )
@@ -3309,10 +3330,16 @@ def _headless_approval_resolver(
     return resolve
 
 
-def _open_approval_center(approval_center_url: str, *, store: GuardStore, config, open_key: str | None = None) -> None:
+def _open_approval_center(
+    approval_center_url: str,
+    *,
+    store: GuardStore,
+    config,
+    open_key: str | None = None,
+) -> dict[str, object]:
     surface_runtime = GuardSurfaceRuntime(store)
     auth_token = load_guard_daemon_auth_token(store.guard_home)
-    surface_runtime.ensure_surface(
+    return surface_runtime.ensure_surface(
         surface="approval-center",
         approval_center_url=approval_center_url,
         browser_url=_approval_center_browser_url(approval_center_url, auth_token),

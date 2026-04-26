@@ -6051,6 +6051,7 @@ url = http://127.0.0.1:8787/guard-canary
     def test_guard_dashboard_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         opened_urls: list[str] = []
+        open_keys: list[str | None] = []
 
         monkeypatch.setattr(
             guard_commands_module,
@@ -6060,7 +6061,11 @@ url = http://127.0.0.1:8787/guard-canary
         monkeypatch.setattr(
             guard_commands_module,
             "_open_approval_center",
-            lambda approval_center_url, *, store, config, open_key=None: opened_urls.append(approval_center_url),
+            lambda approval_center_url, *, store, config, open_key=None: (
+                opened_urls.append(approval_center_url),
+                open_keys.append(open_key),
+                {"opened": True, "reason": "opened"},
+            )[-1],
         )
 
         rc = main(["guard", "dashboard", "--home", str(home_dir), "--json"])
@@ -6068,12 +6073,15 @@ url = http://127.0.0.1:8787/guard-canary
 
         assert rc == 0
         assert opened_urls == ["http://127.0.0.1:5474"]
+        assert open_keys and isinstance(open_keys[0], str) and open_keys[0].startswith("dashboard:")
         assert output["approval_center_url"] == "http://127.0.0.1:5474"
         assert output["opened"] is True
+        assert output["reason"] == "opened"
 
     def test_guard_admin_alias_opens_local_approval_center(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         opened_urls: list[str] = []
+        open_keys: list[str | None] = []
 
         monkeypatch.setattr(
             guard_commands_module,
@@ -6083,7 +6091,11 @@ url = http://127.0.0.1:8787/guard-canary
         monkeypatch.setattr(
             guard_commands_module,
             "_open_approval_center",
-            lambda approval_center_url, *, store, config, open_key=None: opened_urls.append(approval_center_url),
+            lambda approval_center_url, *, store, config, open_key=None: (
+                opened_urls.append(approval_center_url),
+                open_keys.append(open_key),
+                {"opened": False, "reason": "policy-disabled"},
+            )[-1],
         )
 
         rc = main(["guard", "admin", "--home", str(home_dir), "--json"])
@@ -6091,8 +6103,26 @@ url = http://127.0.0.1:8787/guard-canary
 
         assert rc == 0
         assert opened_urls == ["http://127.0.0.1:5474"]
+        assert open_keys and isinstance(open_keys[0], str) and open_keys[0].startswith("dashboard:")
         assert output["approval_center_url"] == "http://127.0.0.1:5474"
-        assert output["opened"] is True
+        assert output["opened"] is False
+        assert output["reason"] == "policy-disabled"
+
+    def test_guard_dashboard_returns_error_when_daemon_start_fails(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+
+        monkeypatch.setattr(
+            guard_commands_module,
+            "ensure_guard_daemon",
+            lambda guard_home: (_ for _ in ()).throw(RuntimeError("dashboard_unavailable")),
+        )
+
+        rc = main(["guard", "dashboard", "--home", str(home_dir), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["opened"] is False
+        assert output["error"] == "dashboard_unavailable"
 
     def test_guard_connect_pending_output_uses_product_copy_for_sign_in_gap(self, capsys):
         emit_guard_payload(
