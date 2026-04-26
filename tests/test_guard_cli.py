@@ -6132,6 +6132,16 @@ url = http://127.0.0.1:8787/guard-canary
         assert output["opened"] is False
         assert output["error"] == "dashboard_unavailable"
 
+    def test_public_approval_center_url_strips_guard_token(self):
+        browser_url = guard_commands_module._approval_center_browser_url(
+            "http://127.0.0.1:5474#section=inbox",
+            "secret-token",
+        )
+
+        assert browser_url is not None
+        assert "guard-token=secret-token" in browser_url
+        assert "guard-token=" not in guard_commands_module._public_approval_center_url(browser_url)
+
     def test_guard_connect_pending_output_uses_product_copy_for_sign_in_gap(self, capsys):
         emit_guard_payload(
             "connect",

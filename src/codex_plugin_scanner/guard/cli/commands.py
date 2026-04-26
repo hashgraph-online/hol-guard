@@ -3348,7 +3348,7 @@ def _open_approval_center(
         force_open=force_open,
         opener=webbrowser.open,
     )
-    open_result["browser_url"] = browser_url
+    open_result["browser_url"] = _public_approval_center_url(browser_url) or approval_center_url
     return open_result
 
 
@@ -3362,6 +3362,18 @@ def _approval_center_browser_url(approval_center_url: str, auth_token: str | Non
         if key != "guard-token"
     ]
     fragment_pairs.append(("guard-token", auth_token))
+    return urllib.parse.urlunparse(parsed._replace(fragment=urllib.parse.urlencode(fragment_pairs)))
+
+
+def _public_approval_center_url(browser_url: str | None) -> str | None:
+    if browser_url is None:
+        return None
+    parsed = urllib.parse.urlparse(browser_url)
+    fragment_pairs = [
+        (key, value)
+        for key, value in urllib.parse.parse_qsl(parsed.fragment, keep_blank_values=True)
+        if key != "guard-token"
+    ]
     return urllib.parse.urlunparse(parsed._replace(fragment=urllib.parse.urlencode(fragment_pairs)))
 
 
