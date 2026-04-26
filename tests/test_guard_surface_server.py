@@ -1620,3 +1620,46 @@ class TestGuardSurfaceServer:
         assert operation["operation_type"] == "run"
         assert approval["request_ids"] == ["req-1", "req-2"]
         assert resumed["status"] == "completed"
+
+    def test_guard_surface_runtime_force_open_bypasses_auto_open_once(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store)
+        opened_urls: list[str] = []
+
+        first_result = runtime.ensure_surface(
+            surface="approval-center",
+            approval_center_url="http://127.0.0.1:5474",
+            approval_surface_policy="auto-open-once",
+            open_key="dashboard",
+            opener=lambda url: opened_urls.append(url) or True,
+        )
+        second_result = runtime.ensure_surface(
+            surface="approval-center",
+            approval_center_url="http://127.0.0.1:5474",
+            approval_surface_policy="auto-open-once",
+            open_key="dashboard",
+            force_open=True,
+            opener=lambda url: opened_urls.append(url) or True,
+        )
+
+        assert first_result["opened"] is True
+        assert second_result["opened"] is True
+        assert opened_urls == ["http://127.0.0.1:5474", "http://127.0.0.1:5474"]
+
+    def test_guard_surface_runtime_force_open_overrides_disabled_policy(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store)
+        opened_urls: list[str] = []
+
+        result = runtime.ensure_surface(
+            surface="approval-center",
+            approval_center_url="http://127.0.0.1:5474",
+            approval_surface_policy="never-auto-open",
+            open_key="dashboard",
+            force_open=True,
+            opener=lambda url: opened_urls.append(url) or True,
+        )
+
+        assert result["opened"] is True
+        assert result["reason"] == "opened"
+        assert opened_urls == ["http://127.0.0.1:5474"]
