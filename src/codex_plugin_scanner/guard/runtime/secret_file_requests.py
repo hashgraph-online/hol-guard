@@ -154,7 +154,7 @@ _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
 _SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|]*)"
 _SINGLE_INTERPRETER_HEREDOC_PATTERN = re.compile(
-    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?:perl|python|python3|ruby)\b[^\n;&|]*<<-?\s*(['\"]?)(?P<tag>[^\s'\";|&<>]+)\1\s*\n(?P<body>.*)\n(?P=tag)\s*$",
+    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>perl|python|python3|ruby)\b[^\n;&|]*<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
     re.IGNORECASE | re.DOTALL,
 )
 _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
@@ -3041,9 +3041,8 @@ def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str
         return False
     heredoc_script = _single_interpreter_heredoc_script(command_text)
     if heredoc_script is not None:
-        if not command_names or not all(
-            command_name in _READ_ONLY_OBSERVER_INTERPRETER_COMMANDS for command_name in command_names
-        ):
+        heredoc_interpreter = _single_interpreter_heredoc_interpreter(command_text)
+        if heredoc_interpreter not in _READ_ONLY_OBSERVER_INTERPRETER_COMMANDS:
             return False
         scripts = list(_script_interpreter_texts(parts))
         if scripts:
@@ -3066,12 +3065,13 @@ def _contains_unmodeled_inline_interpreter_eval(
     parts: list[str],
     command_names: list[str],
 ) -> bool:
+    heredoc_interpreter = _single_interpreter_heredoc_interpreter(command_text)
+    if heredoc_interpreter is not None:
+        return heredoc_interpreter in _UNMODELED_INLINE_INTERPRETER_COMMANDS
     if not command_names or not all(command_name in _SCRIPT_INTERPRETER_COMMANDS for command_name in command_names):
         return False
     if not any(command_name in _UNMODELED_INLINE_INTERPRETER_COMMANDS for command_name in command_names):
         return False
-    if _single_interpreter_heredoc_script(command_text) is not None:
-        return True
     return bool(_script_interpreter_texts(parts) or _shell_heredoc_payloads(command_text))
 
 
@@ -3100,6 +3100,14 @@ def _single_interpreter_heredoc_script(command_text: str) -> str | None:
         return None
     script_text = match.group("body").strip()
     return script_text or None
+
+
+def _single_interpreter_heredoc_interpreter(command_text: str) -> str | None:
+    match = _SINGLE_INTERPRETER_HEREDOC_PATTERN.fullmatch(command_text.strip())
+    if match is None:
+        return None
+    interpreter = match.group("interpreter").strip().lower()
+    return interpreter or None
 
 
 @dataclass(frozen=True, slots=True)
