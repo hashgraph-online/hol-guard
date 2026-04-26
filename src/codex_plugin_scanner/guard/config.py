@@ -33,14 +33,49 @@ GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
+VALID_SECURITY_LEVELS = {"balanced", "strict", "custom"}
+VALID_RISK_ACTION_KEYS = {
+    "local_secret_read",
+    "credential_exfiltration",
+    "destructive_shell",
+    "encoded_execution",
+    "network_egress",
+}
+DEFAULT_SECURITY_LEVEL = "balanced"
+SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
+    "balanced": {
+        "local_secret_read": "require-reapproval",
+        "credential_exfiltration": "require-reapproval",
+        "destructive_shell": "require-reapproval",
+        "encoded_execution": "require-reapproval",
+        "network_egress": "warn",
+    },
+    "strict": {
+        "local_secret_read": "require-reapproval",
+        "credential_exfiltration": "require-reapproval",
+        "destructive_shell": "require-reapproval",
+        "encoded_execution": "require-reapproval",
+        "network_egress": "require-reapproval",
+    },
+    "custom": {
+        "local_secret_read": "require-reapproval",
+        "credential_exfiltration": "require-reapproval",
+        "destructive_shell": "require-reapproval",
+        "encoded_execution": "require-reapproval",
+        "network_egress": "warn",
+    },
+}
 EDITABLE_GUARD_SETTING_KEYS = frozenset(
     {
         "mode",
+        "security_level",
         "default_action",
         "unknown_publisher_action",
         "changed_hash_action",
         "new_network_domain_action",
         "subprocess_action",
+        "risk_actions",
+        "harness_risk_actions",
         "approval_wait_timeout_seconds",
         "approval_surface_policy",
         "telemetry",
@@ -58,6 +93,9 @@ WORKSPACE_BLOCKED_POLICY_KEYS = frozenset(
         "changed_hash_action",
         "new_network_domain_action",
         "subprocess_action",
+        "security_level",
+        "risk_actions",
+        "harness_risk_actions",
         "harnesses",
         "publishers",
         "artifacts",
@@ -88,6 +126,38 @@ def _coerce_action_map(payload: object) -> dict[str, GuardAction]:
     return action_map
 
 
+def _coerce_risk_action_map(payload: object) -> dict[str, GuardAction]:
+    if not isinstance(payload, dict):
+        return {}
+    action_map: dict[str, GuardAction] = {}
+    for key, value in payload.items():
+        if not isinstance(key, str) or key not in VALID_RISK_ACTION_KEYS:
+            continue
+        action = (
+            value
+            if isinstance(value, str)
+            else (value.get("action") or value.get("default_action"))
+            if isinstance(value, dict)
+            else None
+        )
+        if isinstance(action, str) and action in VALID_GUARD_ACTIONS:
+            action_map[key] = action
+    return action_map
+
+
+def _coerce_harness_risk_action_map(payload: object) -> dict[str, dict[str, GuardAction]]:
+    if not isinstance(payload, dict):
+        return {}
+    action_map: dict[str, dict[str, GuardAction]] = {}
+    for harness, value in payload.items():
+        if not isinstance(harness, str) or not harness.strip():
+            continue
+        harness_actions = _coerce_risk_action_map(value)
+        if harness_actions:
+            action_map[harness] = harness_actions
+    return action_map
+
+
 @dataclass(frozen=True, slots=True)
 class GuardConfig:
     """Merged local Guard configuration."""
@@ -95,6 +165,7 @@ class GuardConfig:
     guard_home: Path
     workspace: Path | None
     mode: GuardMode = "prompt"
+    security_level: str = DEFAULT_SECURITY_LEVEL
     default_action: GuardAction = "warn"
     unknown_publisher_action: GuardAction = "review"
     changed_hash_action: GuardAction = "require-reapproval"
@@ -105,6 +176,8 @@ class GuardConfig:
     telemetry: bool = False
     sync: bool = False
     billing: bool = False
+    risk_actions: dict[str, GuardAction] | None = None
+    harness_risk_actions: dict[str, dict[str, GuardAction]] | None = None
     harness_actions: dict[str, GuardAction] | None = None
     publisher_actions: dict[str, GuardAction] | None = None
     artifact_actions: dict[str, GuardAction] | None = None
@@ -182,6 +255,9 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         harness_actions=_coerce_action_map(merged.get("harnesses")),
         publisher_actions=_coerce_action_map(merged.get("publishers")),
         artifact_actions=_coerce_action_map(merged.get("artifacts")),
+        security_level=_coerce_loaded_security_level(merged.get("security_level", DEFAULT_SECURITY_LEVEL)),
+        risk_actions=_coerce_risk_action_map(merged.get("risk_actions")),
+        harness_risk_actions=_coerce_harness_risk_action_map(merged.get("harness_risk_actions")),
     )
 
 
@@ -190,11 +266,15 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
 
     return {
         "mode": config.mode,
+        "security_level": config.security_level,
         "default_action": config.default_action,
         "unknown_publisher_action": config.unknown_publisher_action,
         "changed_hash_action": config.changed_hash_action,
         "new_network_domain_action": config.new_network_domain_action,
         "subprocess_action": config.subprocess_action,
+        "risk_actions": _effective_risk_actions(config),
+        "risk_action_overrides": dict(config.risk_actions or {}),
+        "harness_risk_actions": dict(config.harness_risk_actions or {}),
         "approval_wait_timeout_seconds": config.approval_wait_timeout_seconds,
         "approval_surface_policy": config.approval_surface_policy,
         "telemetry": config.telemetry,
@@ -221,6 +301,12 @@ def _coerce_editable_setting(key: str, value: object) -> object:
         if isinstance(value, str) and value in VALID_GUARD_MODES:
             return value
         raise ValueError("Invalid Guard mode.")
+    if key == "security_level":
+        return _coerce_security_level(value)
+    if key == "risk_actions":
+        return _coerce_risk_action_payload(value)
+    if key == "harness_risk_actions":
+        return _coerce_harness_risk_action_payload(value)
     if key.endswith("_action"):
         if isinstance(value, str) and value in VALID_GUARD_ACTIONS:
             return value
@@ -238,6 +324,66 @@ def _coerce_editable_setting(key: str, value: object) -> object:
             return value
         raise ValueError(f"{key} must be true or false.")
     raise ValueError(f"Unsupported Guard setting: {key}")
+
+
+def _coerce_security_level(value: object) -> str:
+    if isinstance(value, str) and value in VALID_SECURITY_LEVELS:
+        return value
+    raise ValueError("Invalid Guard security level.")
+
+
+def _coerce_loaded_security_level(value: object) -> str:
+    if isinstance(value, str) and value in VALID_SECURITY_LEVELS:
+        return value
+    return DEFAULT_SECURITY_LEVEL
+
+
+def _coerce_risk_action_payload(value: object) -> dict[str, GuardAction]:
+    if not isinstance(value, dict):
+        raise ValueError("Risk actions must be a table.")
+    action_map: dict[str, GuardAction] = {}
+    for key, action in value.items():
+        if not isinstance(key, str) or key not in VALID_RISK_ACTION_KEYS:
+            raise ValueError("Invalid Guard risk action.")
+        if not isinstance(action, str) or action not in VALID_GUARD_ACTIONS:
+            raise ValueError("Invalid Guard risk action.")
+        action_map[key] = action
+    return action_map
+
+
+def _coerce_harness_risk_action_payload(value: object) -> dict[str, dict[str, GuardAction]]:
+    if not isinstance(value, dict):
+        raise ValueError("Harness risk actions must be a table.")
+    harness_actions: dict[str, dict[str, GuardAction]] = {}
+    for harness, risk_payload in value.items():
+        if not isinstance(harness, str) or not harness.strip():
+            raise ValueError("Invalid Guard harness.")
+        harness_actions[harness] = _coerce_risk_action_payload(risk_payload)
+    return harness_actions
+
+
+def _effective_risk_actions(config: GuardConfig) -> dict[str, GuardAction]:
+    defaults = SECURITY_LEVEL_RISK_ACTIONS.get(
+        config.security_level, SECURITY_LEVEL_RISK_ACTIONS[DEFAULT_SECURITY_LEVEL]
+    )
+    return {**defaults, **dict(config.risk_actions or {})}
+
+
+def resolve_risk_action(config: GuardConfig, risk_class: str | None, *, harness: str | None) -> GuardAction | None:
+    """Resolve the configured action for a concrete runtime risk class."""
+
+    if not isinstance(risk_class, str) or risk_class not in VALID_RISK_ACTION_KEYS:
+        return None
+    if isinstance(harness, str) and config.harness_risk_actions is not None:
+        harness_actions = config.harness_risk_actions.get(harness)
+        if harness_actions is not None and risk_class in harness_actions:
+            return harness_actions[risk_class]
+    if config.risk_actions is not None and risk_class in config.risk_actions:
+        return config.risk_actions[risk_class]
+    defaults = SECURITY_LEVEL_RISK_ACTIONS.get(
+        config.security_level, SECURITY_LEVEL_RISK_ACTIONS[DEFAULT_SECURITY_LEVEL]
+    )
+    return defaults.get(risk_class)
 
 
 def _write_guard_config(path: Path, payload: dict[str, object]) -> None:

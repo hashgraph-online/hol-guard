@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.config import (
     _migrate_guard_home_state,
     load_guard_config,
     resolve_guard_home,
+    resolve_risk_action,
     update_guard_settings,
 )
 from codex_plugin_scanner.guard.store import GuardStore
@@ -70,6 +71,85 @@ def test_dashboard_settings_update_persists_to_cli_config_loader(tmp_path):
     assert loaded.telemetry is True
     assert loaded.harness_actions == {"codex": "review"}
     assert "ignored_key" not in config_text
+
+
+def test_guard_config_loads_security_level_and_risk_action_overrides(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(
+        guard_home / "config.toml",
+        "\n".join(
+            [
+                'security_level = "custom"',
+                "",
+                "[risk_actions]",
+                'local_secret_read = "allow"',
+                'credential_exfiltration = "block"',
+                "",
+                "[harness_risk_actions.codex]",
+                'local_secret_read = "allow"',
+                'destructive_shell = "require-reapproval"',
+            ]
+        )
+        + "\n",
+    )
+
+    config = load_guard_config(guard_home)
+
+    assert config.security_level == "custom"
+    assert config.risk_actions == {
+        "local_secret_read": "allow",
+        "credential_exfiltration": "block",
+    }
+    assert config.harness_risk_actions == {
+        "codex": {
+            "local_secret_read": "allow",
+            "destructive_shell": "require-reapproval",
+        }
+    }
+    assert resolve_risk_action(config, "local_secret_read", harness="codex") == "allow"
+    assert resolve_risk_action(config, "credential_exfiltration", harness="codex") == "block"
+
+
+def test_guard_config_strict_profile_defaults_review_sensitive_risks(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(guard_home / "config.toml", 'security_level = "strict"\n')
+
+    config = load_guard_config(guard_home)
+
+    assert config.security_level == "strict"
+    assert resolve_risk_action(config, "local_secret_read", harness="codex") == "require-reapproval"
+    assert resolve_risk_action(config, "encoded_execution", harness="codex") == "require-reapproval"
+    assert resolve_risk_action(config, "network_egress", harness="codex") == "require-reapproval"
+
+
+def test_guard_config_invalid_security_level_falls_back_to_balanced(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(guard_home / "config.toml", 'security_level = "surprise-me"\n')
+
+    config = load_guard_config(guard_home)
+
+    assert config.security_level == "balanced"
+    assert resolve_risk_action(config, "network_egress", harness="codex") == "warn"
+
+
+def test_dashboard_settings_update_persists_security_level_and_risk_actions(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(guard_home / "config.toml", 'mode = "prompt"\n')
+
+    updated = update_guard_settings(
+        guard_home,
+        {
+            "security_level": "custom",
+            "risk_actions": {"local_secret_read": "allow"},
+            "harness_risk_actions": {"codex": {"credential_exfiltration": "require-reapproval"}},
+        },
+    )
+    loaded = load_guard_config(guard_home)
+
+    assert updated.security_level == "custom"
+    assert loaded.security_level == "custom"
+    assert resolve_risk_action(loaded, "local_secret_read", harness="claude-code") == "allow"
+    assert resolve_risk_action(loaded, "credential_exfiltration", harness="codex") == "require-reapproval"
 
 
 def test_dashboard_settings_update_preserves_nested_cli_policy_tables(tmp_path):

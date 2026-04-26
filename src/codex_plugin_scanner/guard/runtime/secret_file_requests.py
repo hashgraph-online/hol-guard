@@ -2035,6 +2035,7 @@ def build_tool_action_request_artifact(
         metadata={
             "tool_name": request.tool_name,
             "command_text": request.command_text,
+            "action_class": request.action_class,
             "request_summary": request_summary,
             "runtime_request_signals": [f"invokes a sensitive native tool action: {request.action_class}"],
             "runtime_request_summary": risk_summary,

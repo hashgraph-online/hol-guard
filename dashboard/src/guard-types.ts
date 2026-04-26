@@ -136,11 +136,15 @@ export type GuardInventoryItem = {
 
 export type GuardSettings = {
   mode: "observe" | "prompt" | "enforce";
+  security_level: "balanced" | "strict" | "custom";
   default_action: string;
   unknown_publisher_action: string;
   changed_hash_action: string;
   new_network_domain_action: string;
   subprocess_action: string;
+  risk_actions: Record<string, string>;
+  risk_action_overrides: Record<string, string>;
+  harness_risk_actions: Record<string, Record<string, string>>;
   approval_wait_timeout_seconds: number;
   approval_surface_policy: string;
   telemetry: boolean;
