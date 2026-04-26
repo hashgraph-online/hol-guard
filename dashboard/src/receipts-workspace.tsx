@@ -19,6 +19,7 @@ type ReceiptsState =
   | { kind: "ready"; items: GuardReceipt[] };
 
 const receiptPageSize = 8;
+const EMPTY_RECEIPTS: GuardReceipt[] = [];
 
 export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -47,7 +48,7 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
     setPage(1);
   }, [decisionFilter, harnessFilter, searchTerm, receiptCount]);
 
-  const receiptItems = props.receipts.kind === "ready" ? props.receipts.items : [];
+  const receiptItems = props.receipts.kind === "ready" ? props.receipts.items : EMPTY_RECEIPTS;
 
   const harnesses = useMemo(
     () => Array.from(new Set(receiptItems.map((receipt) => receipt.harness))).sort(),
