@@ -90,6 +90,10 @@ _DESTRUCTIVE_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.IGNORECASE,
     ),
     re.compile(
+        r"(?:^|[\s'\"`])(?:rm\s+-rf|rm\s+\S|del\s+\S|truncate\s+\S|chmod\s+\S|chown\s+\S|mv\s+\S)",
+        re.IGNORECASE,
+    ),
+    re.compile(
         r"\b(?:delete|remove|overwrite|truncate)\b.{0,60}\b(?:file|directory|repo|workspace|contents?)\b",
         re.IGNORECASE,
     ),
@@ -139,6 +143,26 @@ def _match_text(pattern: re.Pattern[str], text: str) -> str:
     return match.group(0).strip() if match is not None else ""
 
 
+def _first_match(patterns: tuple[re.Pattern[str], ...], text: str) -> re.Match[str] | None:
+    for pattern in patterns:
+        match = pattern.search(text)
+        if match is not None:
+            return match
+    return None
+
+
+def _iter_hint_occurrences(text: str, hint: str) -> list[tuple[int, int]]:
+    occurrences: list[tuple[int, int]] = []
+    current_pos = 0
+    while True:
+        start = text.find(hint, current_pos)
+        if start == -1:
+            return occurrences
+        end = start + len(hint)
+        occurrences.append((start, end))
+        current_pos = start + 1
+
+
 def guard_run(
     harness: str,
     context: HarnessContext,
@@ -170,15 +194,12 @@ def guard_run(
             if key in pending_evaluation:
                 reevaluated[key] = pending_evaluation[key]
         evaluation = reevaluated
-    evaluation.setdefault(
-        "config_paths",
-        list(detection.config_paths)
-        or _guard_run_config_paths(
+    if "config_paths" not in evaluation:
+        evaluation["config_paths"] = list(detection.config_paths) or _guard_run_config_paths(
             detection=detection,
             context=context,
             passthrough_args=passthrough_args,
-        ),
-    )
+        )
     if evaluation["blocked"] or dry_run:
         evaluation["launched"] = False
         evaluation["launch_command"] = []
@@ -281,29 +302,25 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
         )
 
     for pattern, label in _SECRET_REQUEST_PATTERNS:
-        match = pattern.search(normalized_prompt)
-        if match is None:
-            continue
-        if not _prompt_has_secret_read_intent(normalized_prompt, start=match.start(), end=match.end()):
-            continue
-        add_secret_request(label=label, matched=match.group(0).strip())
+        for match in pattern.finditer(normalized_prompt):
+            if not _prompt_has_secret_read_intent(normalized_prompt, start=match.start(), end=match.end()):
+                continue
+            add_secret_request(label=label, matched=match.group(0).strip())
+            break
     for hint, label in _SECRET_ABSOLUTE_HINTS:
-        if hint in lowered:
-            start = lowered.index(hint)
-            end = start + len(hint)
+        for start, end in _iter_hint_occurrences(lowered, hint):
             if _prompt_has_secret_read_intent(normalized_prompt, start=start, end=end):
                 add_secret_request(label=label, matched=hint)
-    exfil_match = next(
-        (pattern for pattern in _EXFIL_PROMPT_PATTERNS if pattern.search(normalized_prompt) is not None),
-        None,
-    )
+                break
+    exfil_match = _first_match(_EXFIL_PROMPT_PATTERNS, normalized_prompt)
     if exfil_match is not None:
+        matched_text = exfil_match.group(0).strip()
         requests.append(
             PromptRequest(
-                request_id=_prompt_request_id("exfil_intent", _match_text(exfil_match, normalized_prompt), lowered),
+                request_id=_prompt_request_id("exfil_intent", matched_text, lowered),
                 request_class="exfil_intent",
                 summary="Prompt includes exfiltration-oriented transfer intent.",
-                matched_text=_match_text(exfil_match, normalized_prompt),
+                matched_text=matched_text,
                 severity=8,
                 confidence=0.84,
                 remediation=(
@@ -316,21 +333,19 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
                 ),
             )
         )
-    destructive_match = next(
-        (pattern for pattern in _DESTRUCTIVE_PROMPT_PATTERNS if pattern.search(normalized_prompt) is not None),
-        None,
-    )
+    destructive_match = _first_match(_DESTRUCTIVE_PROMPT_PATTERNS, normalized_prompt)
     if destructive_match is not None:
+        matched_text = destructive_match.group(0).strip()
         requests.append(
             PromptRequest(
                 request_id=_prompt_request_id(
                     "destructive_intent",
-                    _match_text(destructive_match, normalized_prompt),
+                    matched_text,
                     lowered,
                 ),
                 request_class="destructive_intent",
                 summary="Prompt includes destructive filesystem mutation intent.",
-                matched_text=_match_text(destructive_match, normalized_prompt),
+                matched_text=matched_text,
                 severity=8,
                 confidence=0.87,
                 remediation=(
@@ -347,21 +362,19 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
                 ),
             )
         )
-    subprocess_match = next(
-        (pattern for pattern in _SUBPROCESS_PROMPT_PATTERNS if pattern.search(normalized_prompt) is not None),
-        None,
-    )
+    subprocess_match = _first_match(_SUBPROCESS_PROMPT_PATTERNS, normalized_prompt)
     if subprocess_match is not None:
+        matched_text = subprocess_match.group(0).strip()
         requests.append(
             PromptRequest(
                 request_id=_prompt_request_id(
                     "subprocess_intent",
-                    _match_text(subprocess_match, normalized_prompt),
+                    matched_text,
                     lowered,
                 ),
                 request_class="subprocess_intent",
                 summary="Prompt asks for subprocess or shell-wrapper execution.",
-                matched_text=_match_text(subprocess_match, normalized_prompt),
+                matched_text=matched_text,
                 severity=7,
                 confidence=0.8,
                 remediation=(

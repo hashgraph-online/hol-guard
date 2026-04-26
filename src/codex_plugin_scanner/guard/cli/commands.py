@@ -3434,21 +3434,20 @@ def _optional_string(value: object | None) -> str | None:
     return None
 
 
+_HOOK_EVENT_NAME_MAP = {
+    "userpromptsubmitted": "UserPromptSubmit",
+    "pretooluse": "PreToolUse",
+    "posttooluse": "PostToolUse",
+    "permissionrequest": "PermissionRequest",
+}
+
+
 def _hook_event_name(payload: dict[str, object]) -> str | None:
     for key in ("event", "hook_event_name", "hookEventName", "hook_name"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             normalized = value.strip()
-            lowered = normalized.lower()
-            if lowered == "userpromptsubmitted":
-                return "UserPromptSubmit"
-            if lowered == "pretooluse":
-                return "PreToolUse"
-            if lowered == "posttooluse":
-                return "PostToolUse"
-            if lowered == "permissionrequest":
-                return "PermissionRequest"
-            return normalized
+            return _HOOK_EVENT_NAME_MAP.get(normalized.lower(), normalized)
     return None
 
 

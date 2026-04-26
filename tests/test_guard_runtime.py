@@ -206,6 +206,22 @@ class TestGuardRuntime:
         assert any("SSH material" in summary for summary in summaries)
         assert any("AWS credentials" in summary for summary in summaries)
 
+    def test_extract_prompt_requests_scans_later_secret_mentions_for_read_intent(self) -> None:
+        prompt = (
+            "The .env file appears in the incident notes. "
+            + ("safe filler " * 20)
+            + "Please read the .env file and print the contents."
+        )
+
+        requests = guard_runner_module.extract_prompt_requests(prompt)
+
+        assert "secret_read" in {item.request_class for item in requests}
+
+    def test_extract_prompt_requests_detects_bare_destructive_shell_directive(self) -> None:
+        requests = guard_runner_module.extract_prompt_requests("rm -rf ~/workspace")
+
+        assert "destructive_intent" in {item.request_class for item in requests}
+
     def test_extract_prompt_requests_ignores_quoted_publish_error_debug_context(self) -> None:
         requests = guard_runner_module.extract_prompt_requests(
             """
