@@ -285,6 +285,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     )
     _add_guard_common_args(protect_parser)
     protect_parser.add_argument("--dry-run", action="store_true")
+    protect_parser.add_argument("--unsafe-raw-output", action="store_true")
     protect_parser.add_argument("--json", action="store_true")
     protect_parser.add_argument("protect_command", nargs=argparse.REMAINDER)
 
@@ -659,6 +660,7 @@ def run_guard_command(
             workspace_dir=workspace or Path.cwd(),
             dry_run=bool(getattr(args, "dry_run", False)),
             now=_now(),
+            unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
         )
         _emit("protect", payload, getattr(args, "json", False))
         return exit_code
