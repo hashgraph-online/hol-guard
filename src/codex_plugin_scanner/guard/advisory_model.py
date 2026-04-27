@@ -129,9 +129,7 @@ def _endpoint_indicator_matches(values: object, source_url: str | None) -> bool:
         return False
     normalized_source = _normalized_url_indicator(source_url)
     return any(
-        isinstance(item, str)
-        and _normalized_url_indicator(item) != ""
-        and _normalized_url_indicator(item) in normalized_source
+        isinstance(item, str) and _url_indicator_matches(normalized_source, _normalized_url_indicator(item))
         for item in values
     )
 
@@ -144,3 +142,9 @@ def _normalized_url_indicator(value: str | None) -> str:
         return normalize_identity_value(value)
     path = parsed.path.rstrip("/")
     return normalize_identity_value(f"{parsed.netloc}{path}")
+
+
+def _url_indicator_matches(normalized_source: str, normalized_indicator: str) -> bool:
+    if normalized_source == "" or normalized_indicator == "":
+        return False
+    return normalized_source == normalized_indicator or normalized_source.startswith(f"{normalized_indicator}/")

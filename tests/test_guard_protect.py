@@ -823,6 +823,51 @@ class TestGuardProtect:
 
         assert advisory_matches_target(advisory, target) is False
 
+    def test_guard_protect_matches_endpoint_indicators_on_url_boundaries(self) -> None:
+        advisory = {
+            "id": "adv-endpoint-boundary",
+            "ecosystem": "claude-code",
+            "endpoint_indicators": ["evil.example/mcp"],
+            "action": "review",
+        }
+        exact_target = ProtectTargetIdentity(
+            artifact_id="install:claude-code:mcp:exact",
+            artifact_name="exact",
+            ecosystem="claude-code",
+            package_name=None,
+            package_url=None,
+            source_url="https://evil.example/mcp",
+        )
+        child_target = ProtectTargetIdentity(
+            artifact_id="install:claude-code:mcp:child",
+            artifact_name="child",
+            ecosystem="claude-code",
+            package_name=None,
+            package_url=None,
+            source_url="https://evil.example/mcp/subpath",
+        )
+        sibling_target = ProtectTargetIdentity(
+            artifact_id="install:claude-code:mcp:sibling",
+            artifact_name="sibling",
+            ecosystem="claude-code",
+            package_name=None,
+            package_url=None,
+            source_url="https://evil.example/mcp-backup",
+        )
+        prefix_target = ProtectTargetIdentity(
+            artifact_id="install:claude-code:mcp:prefix",
+            artifact_name="prefix",
+            ecosystem="claude-code",
+            package_name=None,
+            package_url=None,
+            source_url="https://safe-evil.example/mcp",
+        )
+
+        assert advisory_matches_target(advisory, exact_target) is True
+        assert advisory_matches_target(advisory, child_target) is True
+        assert advisory_matches_target(advisory, sibling_target) is False
+        assert advisory_matches_target(advisory, prefix_target) is False
+
     def test_guard_protect_redacts_indented_secret_and_connection_env_lines(self) -> None:
         output = redact_text("  API_TOKEN=super-secret-token\n\tDATABASE_URL=postgres://user:pass@db.internal/app\n")
 
