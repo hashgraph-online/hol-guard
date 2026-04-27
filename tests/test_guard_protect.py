@@ -12,6 +12,8 @@ from typing import ClassVar
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import protect
+from codex_plugin_scanner.guard.advisory_model import ProtectTargetIdentity, advisory_matches_target
+from codex_plugin_scanner.guard.redaction import redact_text
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -635,6 +637,46 @@ class TestGuardProtect:
         assert output["verdict"]["action"] == "block"
         assert output["matched_advisories"][0]["id"] == "adv-purl-block"
 
+    def test_guard_protect_matches_blocking_advisory_by_scoped_package_url(self, tmp_path, capsys) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        store = GuardStore(home_dir)
+        store.cache_advisories(
+            [
+                {
+                    "id": "adv-purl-scoped-block",
+                    "ecosystem": "npm",
+                    "package_url": "pkg:npm/@scope/badpkg",
+                    "severity": "high",
+                    "action": "block",
+                    "headline": "Known scoped package URL match.",
+                }
+            ],
+            _now(),
+        )
+
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "npm",
+                "install",
+                "@scope/badpkg@1.2.3",
+            ]
+        )
+
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 2
+        assert output["verdict"]["action"] == "block"
+        assert output["matched_advisories"][0]["id"] == "adv-purl-scoped-block"
+
     def test_guard_protect_matches_review_advisory_by_remote_endpoint_indicator(
         self,
         tmp_path,
@@ -680,6 +722,75 @@ class TestGuardProtect:
         assert rc == 2
         assert output["verdict"]["action"] == "review"
         assert output["matched_advisories"][0]["id"] == "adv-endpoint-review"
+
+    def test_guard_protect_matches_review_advisory_by_remote_endpoint_indicator_url(
+        self,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir(parents=True)
+        store = GuardStore(home_dir)
+        store.cache_advisories(
+            [
+                {
+                    "id": "adv-endpoint-url-review",
+                    "ecosystem": "claude-code",
+                    "endpoint_indicators": ["https://evil.example/mcp/"],
+                    "severity": "medium",
+                    "action": "review",
+                    "headline": "Known risky endpoint URL.",
+                }
+            ],
+            _now(),
+        )
+
+        rc = main(
+            [
+                "guard",
+                "protect",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--json",
+                "claude",
+                "mcp",
+                "add",
+                "remote-risk",
+                "https://evil.example/mcp",
+            ]
+        )
+
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 2
+        assert output["verdict"]["action"] == "review"
+        assert output["matched_advisories"][0]["id"] == "adv-endpoint-url-review"
+
+    def test_guard_protect_does_not_match_blank_source_url_advisory(self) -> None:
+        advisory = {
+            "id": "adv-blank-source",
+            "ecosystem": "npm",
+            "source_url": "   ",
+            "action": "review",
+        }
+        target = ProtectTargetIdentity(
+            artifact_id="install:npm:package:safe",
+            artifact_name="safe",
+            ecosystem="npm",
+            package_name="safe",
+            package_url="pkg:npm/safe",
+            source_url=None,
+        )
+
+        assert advisory_matches_target(advisory, target) is False
+
+    def test_guard_protect_redacts_indented_secret_and_connection_env_lines(self) -> None:
+        output = redact_text("  API_TOKEN=super-secret-token\n\tDATABASE_URL=postgres://user:pass@db.internal/app\n")
+
+        assert output.text == "  API_TOKEN=*****\n\tDATABASE_URL=*****\n"
 
     def test_guard_store_keeps_distinct_advisories_without_ids(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

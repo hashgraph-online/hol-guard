@@ -79,9 +79,16 @@ def advisory_matches_target(advisory: dict[str, object], target: ProtectTargetId
         return True
 
     advisory_source_url = advisory.get("source_url")
-    return isinstance(advisory_source_url, str) and _normalized_url_indicator(
-        advisory_source_url
-    ) == _normalized_url_indicator(target.source_url)
+    if not isinstance(advisory_source_url, str):
+        return False
+
+    normalized_advisory_source = _normalized_url_indicator(advisory_source_url)
+    normalized_target_source = _normalized_url_indicator(target.source_url)
+    return (
+        normalized_advisory_source != ""
+        and normalized_target_source != ""
+        and normalized_advisory_source == normalized_target_source
+    )
 
 
 def normalize_identity_value(value: str | None) -> str:
@@ -107,9 +114,12 @@ def _package_url_matches(advisory_url: str, target_url: str | None) -> bool:
 
 def _package_url_base(package_url: str) -> str:
     normalized = normalize_identity_value(package_url)
-    if "@" not in normalized:
+    for separator in ("?", "#"):
+        normalized = normalized.split(separator, 1)[0]
+    last_at = normalized.rfind("@")
+    if last_at == -1 or last_at < normalized.rfind("/"):
         return normalized
-    return normalized.rsplit("@", 1)[0]
+    return normalized[:last_at]
 
 
 def _endpoint_indicator_matches(values: object, source_url: str | None) -> bool:
@@ -117,7 +127,9 @@ def _endpoint_indicator_matches(values: object, source_url: str | None) -> bool:
         return False
     normalized_source = _normalized_url_indicator(source_url)
     return any(
-        isinstance(item, str) and normalize_identity_value(item) and normalize_identity_value(item) in normalized_source
+        isinstance(item, str)
+        and _normalized_url_indicator(item) != ""
+        and _normalized_url_indicator(item) in normalized_source
         for item in values
     )
 

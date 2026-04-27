@@ -56,14 +56,14 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     (
         "secret-env",
         re.compile(
-            r"(?im)^([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY|CREDENTIAL)[A-Z0-9_]*)=(.+)$",
+            r"(?im)^([ \t]*)([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY|CREDENTIAL)[A-Z0-9_]*)=(.+)$",
         ),
-        r"\1=*****",
+        r"\1\2=*****",
     ),
     (
         "connection-env",
-        re.compile(r"(?im)^([A-Z0-9_]*(?:URL|URI|DSN))=([A-Za-z][A-Za-z0-9+.-]*://.+)$"),
-        r"\1=*****",
+        re.compile(r"(?im)^([ \t]*)([A-Z0-9_]*(?:URL|URI|DSN))=([A-Za-z][A-Za-z0-9+.-]*://.+)$"),
+        r"\1\2=*****",
     ),
     (
         "connection-string",
