@@ -787,6 +787,42 @@ class TestGuardProtect:
 
         assert advisory_matches_target(advisory, target) is False
 
+    def test_guard_protect_does_not_match_blank_package_advisory(self) -> None:
+        advisory = {
+            "id": "adv-blank-package",
+            "ecosystem": "*",
+            "package": "   ",
+            "action": "review",
+        }
+        target = ProtectTargetIdentity(
+            artifact_id="install:claude-code:mcp:remote-risk",
+            artifact_name="remote-risk",
+            ecosystem="claude-code",
+            package_name=None,
+            package_url=None,
+            source_url="https://evil.example/mcp",
+        )
+
+        assert advisory_matches_target(advisory, target) is False
+
+    def test_guard_protect_does_not_match_blank_publisher_advisory(self) -> None:
+        advisory = {
+            "id": "adv-blank-publisher",
+            "ecosystem": "*",
+            "publisher": "   ",
+            "action": "review",
+        }
+        target = ProtectTargetIdentity(
+            artifact_id="install:claude-code:mcp:remote-risk",
+            artifact_name="remote-risk",
+            ecosystem="claude-code",
+            package_name=None,
+            package_url=None,
+            source_url="https://evil.example/mcp",
+        )
+
+        assert advisory_matches_target(advisory, target) is False
+
     def test_guard_protect_redacts_indented_secret_and_connection_env_lines(self) -> None:
         output = redact_text("  API_TOKEN=super-secret-token\n\tDATABASE_URL=postgres://user:pass@db.internal/app\n")
 

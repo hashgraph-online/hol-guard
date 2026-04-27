@@ -60,16 +60,18 @@ def advisory_matches_target(advisory: dict[str, object], target: ProtectTargetId
         return True
 
     advisory_package = advisory.get("package") or advisory.get("name")
-    if isinstance(advisory_package, str) and normalize_identity_value(advisory_package) in {
+    normalized_advisory_package = (
+        normalize_identity_value(advisory_package) if isinstance(advisory_package, str) else ""
+    )
+    if normalized_advisory_package != "" and normalized_advisory_package in {
         normalize_identity_value(target.package_name),
         normalize_identity_value(target.artifact_name),
     }:
         return True
 
     publisher = advisory.get("publisher")
-    if isinstance(publisher, str) and normalize_identity_value(publisher) == normalize_identity_value(
-        target.package_name
-    ):
+    normalized_publisher = normalize_identity_value(publisher) if isinstance(publisher, str) else ""
+    if normalized_publisher != "" and normalized_publisher == normalize_identity_value(target.package_name):
         return True
 
     if _normalized_membership(advisory.get("publisher_identities"), target.package_name):
