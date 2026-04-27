@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
+from .advisory_model import ProtectTargetIdentity, advisory_matches_target, build_package_url
 from .models import GuardReceipt
 from .receipts import build_receipt
+from .redaction import redact_text
 from .store import GuardStore
 
 ProtectAction = Literal["allow", "review", "block"]
@@ -38,6 +40,7 @@ class ProtectTarget:
     artifact_type: str
     ecosystem: str
     package_name: str | None
+    package_url: str | None
     raw_spec: str | None
     version: str | None
     source_url: str | None
@@ -50,6 +53,7 @@ class ProtectTarget:
             "artifact_type": self.artifact_type,
             "ecosystem": self.ecosystem,
             "package_name": self.package_name,
+            "package_url": self.package_url,
             "raw_spec": self.raw_spec,
             "version": self.version,
             "source_url": self.source_url,
@@ -109,6 +113,7 @@ def build_protect_payload(
     workspace_dir: Path,
     dry_run: bool,
     now: str,
+    unsafe_raw_output: bool = False,
 ) -> tuple[dict[str, object], int]:
     """Evaluate and optionally execute an install command."""
 
@@ -151,11 +156,16 @@ def build_protect_payload(
         text=True,
         timeout=_protect_command_timeout_seconds(),
     )
+    redacted_stdout = redact_text(execution.stdout)
+    redacted_stderr = redact_text(execution.stderr)
     payload["executed"] = True
     payload["execution"] = {
         "returncode": execution.returncode,
-        "stdout": execution.stdout,
-        "stderr": execution.stderr,
+        "stdout": execution.stdout if unsafe_raw_output else redacted_stdout.text,
+        "stderr": execution.stderr if unsafe_raw_output else redacted_stderr.text,
+        "stdout_redactions": redacted_stdout.to_dict(),
+        "stderr_redactions": redacted_stderr.to_dict(),
+        "raw_output_enabled": unsafe_raw_output,
     }
     if execution.returncode == 0:
         store.add_receipt(receipt)
@@ -287,6 +297,7 @@ def _parse_codex_request(command: list[str]) -> ProtectRequest:
             artifact_type="mcp_server",
             ecosystem="codex",
             package_name=name,
+            package_url=None,
             raw_spec=name,
             version=None,
             source_url=_option_value(command, "--url"),
@@ -309,6 +320,7 @@ def _parse_claude_request(command: list[str]) -> ProtectRequest:
             artifact_type="mcp_server",
             ecosystem="claude-code",
             package_name=name,
+            package_url=None,
             raw_spec=command_or_url,
             version=None,
             source_url=command_or_url if command_or_url.startswith(("http://", "https://")) else None,
@@ -334,6 +346,7 @@ def _parse_cursor_request(command: list[str]) -> ProtectRequest:
             artifact_type="mcp_server",
             ecosystem="cursor",
             package_name=name,
+            package_url=None,
             raw_spec=name,
             version=None,
             source_url=_option_value(command, "--url"),
@@ -352,6 +365,7 @@ def _parse_gemini_request(command: list[str]) -> ProtectRequest:
             artifact_type="extension",
             ecosystem="gemini",
             package_name=name,
+            package_url=None,
             raw_spec=name,
             version=None,
             source_url=_option_value(command, "--url"),
@@ -372,6 +386,7 @@ def _parse_gemini_request(command: list[str]) -> ProtectRequest:
             artifact_type=artifact_type,
             ecosystem="gemini",
             package_name=name if artifact_type == "extension" else None,
+            package_url=build_package_url("gemini", name if artifact_type == "extension" else None, None),
             raw_spec=spec,
             version=None,
             source_url=_spec_url(spec),
@@ -389,6 +404,7 @@ def _parse_gemini_request(command: list[str]) -> ProtectRequest:
             artifact_type="mcp_server",
             ecosystem="gemini",
             package_name=name,
+            package_url=None,
             raw_spec=command_or_url,
             version=None,
             source_url=source_url,
@@ -407,6 +423,7 @@ def _parse_antigravity_request(command: list[str]) -> ProtectRequest:
             artifact_type="extension",
             ecosystem="antigravity",
             package_name=extension_name,
+            package_url=build_package_url("antigravity", extension_name, None),
             raw_spec=extension_name,
             version=None,
             source_url=_spec_url(extension_name),
@@ -429,6 +446,7 @@ def _parse_opencode_request(command: list[str]) -> ProtectRequest:
             artifact_type="plugin" if command[1] == "plugin" else "skill",
             ecosystem="opencode",
             package_name=name,
+            package_url=None,
             raw_spec=name,
             version=None,
             source_url=_option_value(command, "--url"),
@@ -446,6 +464,7 @@ def _parse_custom_request(command: list[str]) -> ProtectRequest:
         artifact_type="custom_command",
         ecosystem="custom",
         package_name=None,
+        package_url=None,
         raw_spec=shlex.join(command),
         version=None,
         source_url=_first_url(command),
@@ -464,6 +483,7 @@ def _package_manager_request(command: list[str], ecosystem: str, specs: tuple[st
                 artifact_type="package_request",
                 ecosystem=ecosystem,
                 package_name=None,
+                package_url=None,
                 raw_spec=shlex.join(command),
                 version=None,
                 source_url=_first_url(command),
@@ -483,6 +503,7 @@ def _package_target(ecosystem: str, spec: str) -> ProtectTarget:
         artifact_type=f"{ecosystem}_package",
         ecosystem=ecosystem,
         package_name=package_name,
+        package_url=build_package_url(ecosystem, package_name, version),
         raw_spec=spec,
         version=version,
         source_url=source_url,
@@ -613,6 +634,7 @@ def _parse_antigravity_mcp_target(raw_payload: str) -> ProtectTarget:
         artifact_type="mcp_server",
         ecosystem="antigravity",
         package_name=name,
+        package_url=None,
         raw_spec=raw_payload,
         version=None,
         source_url=source_url,
@@ -640,6 +662,7 @@ def _parse_claude_mcp_target(name: str, raw_payload: str) -> ProtectTarget:
         artifact_type="mcp_server",
         ecosystem="claude-code",
         package_name=name,
+        package_url=None,
         raw_spec=raw_payload,
         version=None,
         source_url=source_url,
@@ -670,17 +693,17 @@ def _matching_advisories(
 
 
 def _advisory_matches_target(advisory: dict[str, object], target: ProtectTarget) -> bool:
-    advisory_id = advisory.get("artifact_id")
-    if isinstance(advisory_id, str) and advisory_id == target.artifact_id:
-        return True
-    advisory_ecosystem = advisory.get("ecosystem")
-    if isinstance(advisory_ecosystem, str) and advisory_ecosystem not in {target.ecosystem, "*"}:
-        return False
-    advisory_package = advisory.get("package") or advisory.get("name")
-    if isinstance(advisory_package, str):
-        return advisory_package == target.package_name or advisory_package == target.artifact_name
-    advisory_publisher = advisory.get("publisher")
-    return isinstance(advisory_publisher, str) and advisory_publisher == target.package_name
+    return advisory_matches_target(
+        advisory,
+        ProtectTargetIdentity(
+            artifact_id=target.artifact_id,
+            artifact_name=target.artifact_name,
+            ecosystem=target.ecosystem,
+            package_name=target.package_name,
+            package_url=target.package_url,
+            source_url=target.source_url,
+        ),
+    )
 
 
 def _advisory_severity(advisory: dict[str, object]) -> SeverityLabel:
