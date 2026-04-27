@@ -67,9 +67,8 @@ def advisory_matches_target(advisory: dict[str, object], target: ProtectTargetId
         return True
 
     publisher = advisory.get("publisher")
-    if (
-        isinstance(publisher, str)
-        and normalize_identity_value(publisher) == normalize_identity_value(target.package_name)
+    if isinstance(publisher, str) and normalize_identity_value(publisher) == normalize_identity_value(
+        target.package_name
     ):
         return True
 
