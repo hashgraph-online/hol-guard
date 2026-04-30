@@ -1601,8 +1601,9 @@ def run_guard_command(
                             }
                         ]
                     }
+                    browser_approval_daemon_client = None
                     try:
-                        daemon_client = load_guard_surface_daemon_client(guard_home)
+                        browser_approval_daemon_client = load_guard_surface_daemon_client(guard_home)
                     except RuntimeError:
                         queued = queue_blocked_approvals(
                             detection=runtime_detection,
@@ -1612,7 +1613,7 @@ def run_guard_command(
                             now=_now(),
                         )
                     else:
-                        session = daemon_client.start_session(
+                        session = browser_approval_daemon_client.start_session(
                             harness=args.harness,
                             surface="harness-adapter",
                             workspace=str(workspace) if workspace else None,
@@ -1622,7 +1623,7 @@ def run_guard_command(
                             capabilities=["approval-resolution", "receipt-view"],
                         )
                         response_payload["session_id"] = str(session["session_id"])
-                        blocked_operation = daemon_client.queue_blocked_operation(
+                        blocked_operation = browser_approval_daemon_client.queue_blocked_operation(
                             session_id=str(session["session_id"]),
                             operation_type="tool_call",
                             harness=args.harness,
@@ -1681,6 +1682,7 @@ def run_guard_command(
                 response_payload=response_payload,
                 store=store,
                 config=config,
+                daemon_client=locals().get("browser_approval_daemon_client"),
             )
             if codex_browser_decision == "allow":
                 return 0
@@ -1940,6 +1942,7 @@ def _codex_browser_approval_decision(
     response_payload: dict[str, object],
     store: GuardStore,
     config: GuardConfig,
+    daemon_client: object | None = None,
 ) -> str | None:
     if _canonical_harness_name(args.harness) != "codex":
         return None
@@ -1972,10 +1975,27 @@ def _codex_browser_approval_decision(
         return None
     resolved_items = [item for item in wait_result.get("items", []) if isinstance(item, dict)]
     if any(str(item.get("resolution_action")) == "block" for item in resolved_items):
+        _update_codex_browser_operation_status(response_payload, daemon_client, "blocked")
         response_payload["review_hint"] = "Browser decision saved. HOL Guard kept this Codex action blocked."
         return "block"
+    _update_codex_browser_operation_status(response_payload, daemon_client, "completed")
     response_payload["review_hint"] = "Approval received in HOL Guard. Codex is resuming this action."
     return "allow"
+
+
+def _update_codex_browser_operation_status(
+    response_payload: dict[str, object],
+    daemon_client: object | None,
+    status: str,
+) -> None:
+    operation_id = response_payload.get("operation_id")
+    if daemon_client is None or not isinstance(operation_id, str) or not operation_id:
+        return
+    update_operation_status = getattr(daemon_client, "update_operation_status", None)
+    if not callable(update_operation_status):
+        return
+    with suppress(Exception):
+        update_operation_status(operation_id=operation_id, status=status)
 
 
 def _should_emit_prequeue_native_hook_response(
