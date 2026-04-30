@@ -9545,6 +9545,11 @@ def test_guard_hook_codex_queues_approval_before_native_deny_output(tmp_path, ca
     _build_guard_fixture(home_dir, workspace_dir)
     monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        guard_commands_module,
+        "load_guard_surface_daemon_client",
+        lambda _guard_home: (_ for _ in ()).throw(RuntimeError("daemon unavailable")),
+    )
     blocked_event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
@@ -9577,6 +9582,54 @@ def test_guard_hook_codex_queues_approval_before_native_deny_output(tmp_path, ca
     assert pending[0]["artifact_type"] == "tool_action_request"
 
 
+def _install_fake_guard_surface_daemon(
+    monkeypatch: pytest.MonkeyPatch,
+    store: GuardStore,
+    statuses: list[dict[str, object]] | None = None,
+) -> None:
+    class _FakeDaemonClient:
+        def start_session(self, **_kwargs) -> dict[str, object]:
+            return {"session_id": "session-1"}
+
+        def queue_blocked_operation(self, **kwargs) -> dict[str, object]:
+            evaluation = kwargs["evaluation"]
+            artifacts = evaluation["artifacts"] if isinstance(evaluation, dict) else []
+            item = artifacts[0] if artifacts and isinstance(artifacts[0], dict) else {}
+            request_id = f"request-{len(store.list_approval_requests(limit=50)) + 1}"
+            approval_center_url = str(kwargs["approval_center_url"]).rstrip("/")
+            request = GuardApprovalRequest(
+                request_id=request_id,
+                harness=str(kwargs["harness"]),
+                artifact_id=str(item.get("artifact_id") or request_id),
+                artifact_name=str(item.get("artifact_name") or item.get("artifact_id") or "Guard request"),
+                artifact_hash=str(item.get("artifact_hash") or "hash-1"),
+                policy_action=str(item.get("policy_action") or "block"),
+                recommended_scope="artifact",
+                changed_fields=tuple(str(field) for field in item.get("changed_fields", [])),
+                source_scope=str(item.get("source_scope") or "project"),
+                config_path=str(item.get("config_path") or "~/.codex/config.toml"),
+                review_command=f"hol-guard approvals approve {request_id}",
+                approval_url=f"{approval_center_url}/approvals/{request_id}",
+                launch_target=str(item.get("launch_target") or "Codex request"),
+                artifact_type=str(item.get("artifact_type") or "artifact"),
+            )
+            store.add_approval_request(request, "2026-04-30T00:00:00+00:00")
+            return {
+                "operation": {"operation_id": "operation-1"},
+                "approval_requests": [request.to_dict()],
+            }
+
+        def update_operation_status(self, **kwargs) -> None:
+            if statuses is not None:
+                statuses.append(dict(kwargs))
+
+    monkeypatch.setattr(
+        guard_commands_module,
+        "load_guard_surface_daemon_client",
+        lambda _guard_home: _FakeDaemonClient(),
+    )
+
+
 def test_guard_hook_codex_pretooluse_browser_approval_resumes_original_tool(
     tmp_path,
     capsys,
@@ -9589,6 +9642,7 @@ def test_guard_hook_codex_pretooluse_browser_approval_resumes_original_tool(
     monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     store = GuardStore(home_dir)
+    _install_fake_guard_surface_daemon(monkeypatch, store)
     blocked_event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
@@ -9649,6 +9703,7 @@ def test_guard_hook_codex_pretooluse_browser_deny_keeps_tool_blocked(
     monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     store = GuardStore(home_dir)
+    _install_fake_guard_surface_daemon(monkeypatch, store)
     blocked_event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
@@ -9914,6 +9969,11 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_includes_approval_url(
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        guard_commands_module,
+        "load_guard_surface_daemon_client",
+        lambda _guard_home: (_ for _ in ()).throw(RuntimeError("daemon unavailable")),
+    )
     event = {
         "hook_event_name": "UserPromptSubmit",
         "prompt": "Open ./.npmrc",
@@ -9950,6 +10010,7 @@ def test_guard_hook_codex_user_prompt_submit_browser_approval_resumes_prompt(
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     store = GuardStore(home_dir)
+    _install_fake_guard_surface_daemon(monkeypatch, store)
     event = {
         "hook_event_name": "UserPromptSubmit",
         "prompt": "Open ./.npmrc",
@@ -10364,6 +10425,11 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
     }
     monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        guard_commands_module,
+        "load_guard_surface_daemon_client",
+        lambda _guard_home: (_ for _ in ()).throw(RuntimeError("daemon unavailable")),
+    )
 
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
     rc = main(
@@ -10407,6 +10473,7 @@ def test_guard_hook_codex_post_tool_use_browser_approval_resumes_result(
     monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     store = GuardStore(home_dir)
+    _install_fake_guard_surface_daemon(monkeypatch, store)
 
     def approve_pending() -> None:
         for _ in range(40):
