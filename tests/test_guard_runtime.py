@@ -27,7 +27,7 @@ from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
 from codex_plugin_scanner.guard.policy import decide_action
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
@@ -10406,6 +10406,110 @@ def test_guard_hook_codex_post_tool_use_browser_approval_resumes_result(
     assert captured.out == ""
     assert captured.err == ""
     assert store.list_approval_requests(limit=10) == []
+
+
+def test_codex_browser_approval_decision_updates_daemon_operation_status(tmp_path):
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    request = GuardApprovalRequest(
+        request_id="request-1",
+        harness="codex",
+        artifact_id="artifact-1",
+        artifact_name="Bash request",
+        artifact_hash="hash-1",
+        policy_action="block",
+        recommended_scope="artifact",
+        changed_fields=("command",),
+        source_scope="project",
+        config_path="~/.codex/config.toml",
+        review_command="hol-guard approvals approve request-1",
+        approval_url="http://127.0.0.1:4455/approvals/request-1",
+        launch_target="bash ./guard-canary.sh",
+    )
+    store.add_approval_request(request, "2026-04-30T00:00:00+00:00")
+    apply_approval_resolution(
+        store=store,
+        request_id="request-1",
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="approved in browser",
+    )
+    statuses: list[dict[str, object]] = []
+
+    class _FakeDaemonClient:
+        def update_operation_status(self, **kwargs) -> None:
+            statuses.append(dict(kwargs))
+
+    payload: dict[str, object] = {
+        "operation_id": "operation-1",
+        "approval_requests": [{"request_id": "request-1"}],
+    }
+
+    decision = guard_commands_module._codex_browser_approval_decision(
+        args=argparse.Namespace(harness="codex", json=False),
+        event_name="PostToolUse",
+        policy_action="block",
+        response_payload=payload,
+        store=store,
+        config=GuardConfig(home_dir, None, approval_wait_timeout_seconds=1),
+        daemon_client=_FakeDaemonClient(),
+    )
+
+    assert decision == "allow"
+    assert statuses == [{"operation_id": "operation-1", "status": "completed"}]
+
+
+def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path):
+    home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    request = GuardApprovalRequest(
+        request_id="request-1",
+        harness="codex",
+        artifact_id="artifact-1",
+        artifact_name="Bash request",
+        artifact_hash="hash-1",
+        policy_action="block",
+        recommended_scope="artifact",
+        changed_fields=("command",),
+        source_scope="project",
+        config_path="~/.codex/config.toml",
+        review_command="hol-guard approvals approve request-1",
+        approval_url="http://127.0.0.1:4455/approvals/request-1",
+        launch_target="bash ./guard-canary.sh",
+    )
+    store.add_approval_request(request, "2026-04-30T00:00:00+00:00")
+    apply_approval_resolution(
+        store=store,
+        request_id="request-1",
+        action="block",
+        scope="artifact",
+        workspace=None,
+        reason="blocked in browser",
+    )
+    statuses: list[dict[str, object]] = []
+
+    class _FakeDaemonClient:
+        def update_operation_status(self, **kwargs) -> None:
+            statuses.append(dict(kwargs))
+
+    payload: dict[str, object] = {
+        "operation_id": "operation-1",
+        "approval_requests": [{"request_id": "request-1"}],
+    }
+
+    decision = guard_commands_module._codex_browser_approval_decision(
+        args=argparse.Namespace(harness="codex", json=False),
+        event_name="PostToolUse",
+        policy_action="block",
+        response_payload=payload,
+        store=store,
+        config=GuardConfig(home_dir, None, approval_wait_timeout_seconds=1),
+        daemon_client=_FakeDaemonClient(),
+    )
+
+    assert decision == "block"
+    assert statuses == [{"operation_id": "operation-1", "status": "blocked"}]
 
 
 def test_guard_hook_codex_post_tool_use_blocks_named_secret_output(
