@@ -61,6 +61,7 @@ _SECRET_ABSOLUTE_HINTS: tuple[tuple[str, str], ...] = (
 _SECRET_READ_INTENT_PATTERN = re.compile(
     r"\b("
     r"read|open|print|show|dump|cat|head|tail|less|copy|cp|scp|reveal|display|summari[sz]e|inspect|extract|"
+    r"use|include|grab|"
     r"contain(?:s)?|contents?\s+of|what(?:'s| is)\s+in"
     r")\b",
     re.IGNORECASE,
@@ -345,8 +346,6 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
 
     for pattern, label in _SECRET_REQUEST_PATTERNS:
         for match in pattern.finditer(normalized_prompt):
-            if not _prompt_has_secret_read_intent(normalized_prompt, start=match.start(), end=match.end()):
-                continue
             add_secret_request(label=label, matched=match.group(0).strip())
             break
     for hint, label in _SECRET_ABSOLUTE_HINTS:
