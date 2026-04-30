@@ -9196,6 +9196,38 @@ def test_guard_hook_codex_prompt_dotfile_scan_uses_bounded_file_read(
     assert "credential-looking local file" in payload["reason"]
 
 
+@pytest.mark.parametrize("prompt", ["read .nvmrc.", "print ./.nvmrc, please"])
+def test_guard_hook_codex_prompt_dotfile_scan_ignores_trailing_punctuation(
+    prompt,
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(workspace_dir / ".nvmrc", "token = fixture-only\n")
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": prompt,
+        "source_scope": "project",
+    }
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    payload = json.loads(output)
+
+    assert rc == 0
+    assert payload["decision"] == "block"
+    assert "credential-looking local file" in payload["reason"]
+
+
 def test_guard_hook_codex_runtime_risk_ignores_broad_allow_policy(
     tmp_path,
     capsys,
