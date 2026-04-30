@@ -9423,6 +9423,7 @@ def test_guard_hook_codex_emits_native_deny_for_sensitive_bash_command(tmp_path,
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     event_path = tmp_path / "codex-hook.json"
@@ -9543,6 +9544,7 @@ def test_guard_hook_codex_queues_approval_before_native_deny_output(tmp_path, ca
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     monkeypatch.setattr(
@@ -9756,6 +9758,7 @@ def test_guard_hook_claude_native_block_does_not_queue_approval_center_request(t
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     blocked_event = {
         "hook_event_name": "PreToolUse",
@@ -9796,6 +9799,7 @@ def test_guard_hook_codex_keeps_artifact_approval_for_same_sensitive_tool_action
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
 
     blocked_event = {
@@ -9934,6 +9938,7 @@ def test_guard_hook_blocks_codex_user_prompt_submit_sensitive_file_read(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     event = {
         "hook_event_name": "UserPromptSubmit",
         "prompt": "Open ./.npmrc",
@@ -9968,6 +9973,7 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_includes_approval_url(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     monkeypatch.setattr(
         guard_commands_module,
@@ -10284,6 +10290,7 @@ def test_guard_hook_codex_permission_request_declines_to_native_prompt_for_reapp
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     event = {
         "hook_event_name": "PermissionRequest",
         "tool_name": "Bash",
@@ -10416,6 +10423,7 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     event = {
         "hook_event_name": "PostToolUse",
         "tool_name": "Bash",
