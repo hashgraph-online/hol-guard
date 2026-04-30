@@ -4118,6 +4118,18 @@ _PROMPT_CONTENT_SCAN_SKIP_BASENAMES = frozenset(
         ".git-credentials",
     }
 )
+_PROMPT_CONTENT_SCAN_SECRET_BASENAME_MARKERS = frozenset(
+    {
+        "auth",
+        "credential",
+        "credentials",
+        "key",
+        "passwd",
+        "password",
+        "secret",
+        "token",
+    }
+)
 
 
 def _codex_prompt_credential_file_artifact(
@@ -4134,6 +4146,8 @@ def _codex_prompt_credential_file_artifact(
         if path is None or path.name in _PROMPT_CONTENT_SCAN_SKIP_BASENAMES:
             continue
         if not path.name.startswith("."):
+            continue
+        if not _prompt_path_looks_secret_bearing(path):
             continue
         if not path.is_file():
             continue
@@ -4179,6 +4193,11 @@ def _codex_prompt_credential_file_artifact(
             },
         )
     return None
+
+
+def _prompt_path_looks_secret_bearing(path: Path) -> bool:
+    lowered_name = path.name.lower()
+    return any(marker in lowered_name for marker in _PROMPT_CONTENT_SCAN_SECRET_BASENAME_MARKERS)
 
 
 def _with_codex_prompt_display_metadata(artifact: GuardArtifact, *, prompt_text: str) -> GuardArtifact:
