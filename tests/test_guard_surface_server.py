@@ -39,6 +39,9 @@ class TestGuardSurfaceServer:
                 assert response.status == 200
                 assert "text/html" in response.headers.get("Content-Type", "")
                 assert "Loading Local approval center" in body
+                assert "sessionStorage.setItem" not in body
+                assert "guard-token" not in body
+                assert daemon._server.auth_token not in body
         finally:
             daemon.stop()
 
@@ -68,7 +71,7 @@ class TestGuardSurfaceServer:
         assert favicon_response.status == 200
         assert favicon_response.headers.get("Cache-Control") == "no-store, max-age=0"
 
-    def test_guard_daemon_dashboard_shell_seeds_local_auth_token(self, tmp_path) -> None:
+    def test_guard_daemon_dashboard_shell_omits_local_auth_token(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         store.add_approval_request(
             GuardApprovalRequest(
@@ -112,9 +115,9 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert response.status == 200
-        assert "sessionStorage.setItem" in body
-        assert "guard-token" in body
-        assert daemon._server.auth_token in body
+        assert "sessionStorage.setItem" not in body
+        assert "guard-token" not in body
+        assert daemon._server.auth_token not in body
         assert approval_response.status == 200
         assert approval_payload["resolved"] is True
 

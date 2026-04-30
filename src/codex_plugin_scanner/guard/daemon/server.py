@@ -1019,19 +1019,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _write_dashboard_shell(self) -> None:
         if _INDEX_PATH.is_file() and _ENTRY_PATH.is_file():
-            body = _INDEX_PATH.read_text(encoding="utf-8")
-            token_script = (
-                "<script>"
-                "try{window.sessionStorage.setItem("
-                f"{json.dumps('guard-token')},{json.dumps(self.server.auth_token)}"  # type: ignore[attr-defined]
-                ");}catch(_error){}"
-                "</script>"
-            )
-            if "</head>" in body:
-                body = body.replace("</head>", f"{token_script}</head>", 1)
-            else:
-                body = f"{token_script}{body}"
-            encoded = body.encode("utf-8")
+            encoded = _INDEX_PATH.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(encoded)))
