@@ -4293,18 +4293,34 @@ def _truncate_codex_display_text(value: str, *, limit: int) -> str:
 
 
 def _resolve_prompt_scan_path(requested_path: str, *, cwd: Path | None) -> Path | None:
-    stripped = requested_path.strip().strip("'\"").rstrip(".,;:!?)]}")
+    stripped = requested_path.strip().strip("'\"")
     if not stripped:
         return None
+    exact_path = _expand_prompt_scan_path(stripped, cwd=cwd)
+    if _prompt_scan_path_exists(exact_path):
+        return exact_path
+    normalized = stripped.rstrip(".,;:!?)]}")
+    if not normalized or normalized == stripped:
+        return exact_path
+    return _expand_prompt_scan_path(normalized, cwd=cwd)
+
+
+def _expand_prompt_scan_path(requested_path: str, *, cwd: Path | None) -> Path:
     try:
-        expanded = Path(stripped).expanduser()
+        expanded = Path(requested_path).expanduser()
     except RuntimeError:
-        return None
+        return Path(requested_path)
     if not expanded.is_absolute():
         expanded = (cwd or Path.cwd()) / expanded
     with suppress(OSError):
         return expanded.resolve(strict=False)
     return expanded
+
+
+def _prompt_scan_path_exists(path: Path) -> bool:
+    with suppress(OSError):
+        return path.is_file()
+    return False
 
 
 def _legacy_claude_alias_runtime_artifact(
