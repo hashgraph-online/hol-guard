@@ -9165,6 +9165,37 @@ def test_guard_hook_codex_user_prompt_submit_blocks_bare_credential_dotfile(
     assert "credential-looking local file" in payload["reason"]
 
 
+def test_guard_hook_codex_prompt_dotfile_scan_uses_bounded_file_read(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(workspace_dir / ".nvmrc", "token = fixture-only\n")
+    monkeypatch.setattr(Path, "read_bytes", lambda _path: (_ for _ in ()).throw(AssertionError("unbounded read")))
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "read .nvmrc",
+        "source_scope": "project",
+    }
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    payload = json.loads(output)
+
+    assert rc == 0
+    assert payload["decision"] == "block"
+    assert "credential-looking local file" in payload["reason"]
+
+
 def test_guard_hook_codex_runtime_risk_ignores_broad_allow_policy(
     tmp_path,
     capsys,
