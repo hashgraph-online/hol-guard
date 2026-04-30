@@ -1956,7 +1956,7 @@ def _codex_browser_approval_decision(
     if not isinstance(approval_requests, list):
         return None
     request_ids = [
-        str(item["request_id"])
+        item["request_id"]
         for item in approval_requests
         if isinstance(item, dict) and isinstance(item.get("request_id"), str)
     ]
