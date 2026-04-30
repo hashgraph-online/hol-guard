@@ -165,6 +165,35 @@ def test_scan_skips_symlinked_mcp_config_outside_plugin_root(monkeypatch, tmp_pa
     assert loader_state["called"] is False
 
 
+def test_scan_resolves_in_root_symlink_targets_before_analysis(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+    real_source = plugin_dir / "real.py"
+    real_source.write_text("print('real')\n", encoding="utf-8")
+    (plugin_dir / "link.py").symlink_to(real_source)
+    analyzed_paths: list[str] = []
+
+    class RecordingYaraAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        async def analyze(self, content: str, context: dict[str, Any] | None = None) -> list[FakeCiscoFinding]:
+            analyzed_paths.append(str((context or {}).get("file_path", "")))
+            return []
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        lambda: {"YaraAnalyzer": RecordingYaraAnalyzer},
+    )
+
+    summary = run_cisco_mcp_scan(plugin_dir, mode="on")
+
+    assert summary.status == CiscoIntegrationStatus.ENABLED
+    assert summary.targets_scanned == 3
+    assert str(real_source.resolve()) in analyzed_paths
+    assert str(plugin_dir / "link.py") not in analyzed_paths
+
+
 def test_mcp_security_auto_mode_unavailable_is_not_applicable(monkeypatch, tmp_path: Path) -> None:
     plugin_dir = tmp_path / "plugin"
     _write_plugin(plugin_dir)

@@ -15,7 +15,6 @@ from threading import Thread
 from typing import TypeVar
 
 from ..models import Finding, Severity, severity_from_value
-from ..path_support import resolves_within_root
 from .cisco_skill_scanner import CiscoIntegrationStatus
 
 _EXCLUDED_DIRS = {
@@ -238,13 +237,16 @@ def _normalize_finding(plugin_dir: Path, file_path: Path, finding: object) -> Fi
 
 def _collect_static_targets(plugin_dir: Path) -> tuple[Path, ...]:
     config_path = plugin_dir / ".mcp.json"
-    if not _is_safe_static_target(plugin_dir, config_path):
+    resolved_config_path = _safe_resolved_static_target(plugin_dir, config_path)
+    if resolved_config_path is None:
         return ()
 
     targets: list[Path] = []
+    seen_targets: set[Path] = set()
     try:
-        if config_path.stat().st_size <= _MAX_TARGET_SIZE_BYTES:
-            targets.append(config_path)
+        if resolved_config_path.stat().st_size <= _MAX_TARGET_SIZE_BYTES:
+            targets.append(resolved_config_path)
+            seen_targets.add(resolved_config_path)
     except OSError:
         pass
     for root, dirs, files in os.walk(plugin_dir, topdown=True):
@@ -254,24 +256,32 @@ def _collect_static_targets(plugin_dir: Path) -> tuple[Path, ...]:
             file_path = current_dir / file_name
             if file_path == config_path or file_path.suffix.lower() not in _SOURCE_SUFFIXES:
                 continue
-            if not _is_safe_static_target(plugin_dir, file_path):
+            resolved_file_path = _safe_resolved_static_target(plugin_dir, file_path)
+            if resolved_file_path is None or resolved_file_path in seen_targets:
                 continue
             try:
-                if file_path.stat().st_size > _MAX_TARGET_SIZE_BYTES:
+                if resolved_file_path.stat().st_size > _MAX_TARGET_SIZE_BYTES:
                     continue
             except OSError:
                 continue
-            targets.append(file_path)
+            targets.append(resolved_file_path)
+            seen_targets.add(resolved_file_path)
     return tuple(targets)
 
 
-def _is_safe_static_target(plugin_dir: Path, target: Path) -> bool:
+def _safe_resolved_static_target(plugin_dir: Path, target: Path) -> Path | None:
     try:
-        if not target.is_file():
-            return False
-    except OSError:
-        return False
-    return resolves_within_root(plugin_dir, target, require_exists=True)
+        resolved_root = plugin_dir.resolve(strict=True)
+        resolved_target = target.resolve(strict=True)
+        if not resolved_target.is_file():
+            return None
+    except (OSError, RuntimeError):
+        return None
+    try:
+        resolved_target.relative_to(resolved_root)
+    except ValueError:
+        return None
+    return resolved_target
 
 
 def _run_awaitable(awaitable: Awaitable[T]) -> T:
@@ -335,7 +345,7 @@ def run_cisco_mcp_scan(plugin_dir: Path, mode: str = "auto") -> CiscoMcpScanSumm
             message="Cisco MCP scanning disabled by configuration.",
         )
 
-    if not _is_safe_static_target(plugin_dir, config_path):
+    if _safe_resolved_static_target(plugin_dir, config_path) is None:
         return _build_summary(
             status=CiscoIntegrationStatus.SKIPPED,
             message="No .mcp.json found; Cisco MCP scan skipped.",
