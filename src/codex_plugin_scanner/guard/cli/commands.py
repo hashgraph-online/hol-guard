@@ -2799,7 +2799,7 @@ def _runtime_stored_policy_action(
     scope = _optional_string(decision.get("scope"))
     if (
         action in {"allow", "warn", "review"}
-        and scope in {"publisher", "harness", "global"}
+        and scope in {"workspace", "publisher", "harness", "global"}
         and _runtime_artifact_risk_classes(artifact)
     ):
         return None

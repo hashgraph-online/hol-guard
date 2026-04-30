@@ -9228,7 +9228,9 @@ def test_guard_hook_codex_prompt_dotfile_scan_ignores_trailing_punctuation(
     assert "credential-looking local file" in payload["reason"]
 
 
+@pytest.mark.parametrize("scope", ["workspace", "global"])
 def test_guard_hook_codex_runtime_risk_ignores_broad_allow_policy(
+    scope,
     tmp_path,
     capsys,
     monkeypatch,
@@ -9240,8 +9242,9 @@ def test_guard_hook_codex_runtime_risk_ignores_broad_allow_policy(
     store.upsert_policy(
         PolicyDecision(
             harness="codex",
-            scope="global",
+            scope=scope,
             action="allow",
+            workspace=str(workspace_dir) if scope == "workspace" else None,
             reason="broad local allow must not bypass runtime risk",
         ),
         "2026-04-30T00:00:00+00:00",
