@@ -3874,7 +3874,7 @@ def _codex_prompt_credential_file_artifact(
 
 
 def _resolve_prompt_scan_path(requested_path: str, *, cwd: Path | None) -> Path | None:
-    stripped = requested_path.strip().strip("'\"")
+    stripped = requested_path.strip().strip("'\"").rstrip(".,;:!?)]}")
     if not stripped:
         return None
     try:
