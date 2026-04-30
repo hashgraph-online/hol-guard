@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shlex
 import sys
 from copy import deepcopy
@@ -43,11 +44,13 @@ def _read_toml(path: Path) -> dict[str, object]:
 _MANAGED_HOOK_STATUS_MESSAGE = "HOL Guard checking tool action"
 _MANAGED_PROMPT_HOOK_STATUS_MESSAGE = "HOL Guard checking prompt"
 _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE = "HOL Guard checking Codex approval request"
+_MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE = "HOL Guard checking tool result"
 _LEGACY_MANAGED_HOOK_STATUS_MESSAGES = {
     "HOL Guard checking Bash command",
     _MANAGED_HOOK_STATUS_MESSAGE,
     _MANAGED_PROMPT_HOOK_STATUS_MESSAGE,
     _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE,
+    _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE,
 }
 
 
@@ -113,7 +116,7 @@ def _pre_tool_hook_group(context: HarnessContext) -> dict[str, object]:
             {
                 "type": "command",
                 "command": _hook_command(context),
-                "timeoutSec": 30,
+                "timeout": 30,
                 "statusMessage": _MANAGED_HOOK_STATUS_MESSAGE,
             }
         ],
@@ -126,7 +129,7 @@ def _prompt_hook_group(context: HarnessContext) -> dict[str, object]:
             {
                 "type": "command",
                 "command": _hook_command(context),
-                "timeoutSec": 30,
+                "timeout": 30,
                 "statusMessage": _MANAGED_PROMPT_HOOK_STATUS_MESSAGE,
             }
         ],
@@ -140,8 +143,22 @@ def _permission_request_hook_group(context: HarnessContext) -> dict[str, object]
             {
                 "type": "command",
                 "command": _hook_command(context),
-                "timeoutSec": 30,
+                "timeout": 30,
                 "statusMessage": _MANAGED_PERMISSION_HOOK_STATUS_MESSAGE,
+            }
+        ],
+    }
+
+
+def _post_tool_hook_group(context: HarnessContext) -> dict[str, object]:
+    return {
+        "matcher": "Bash",
+        "hooks": [
+            {
+                "type": "command",
+                "command": _hook_command(context),
+                "timeout": 30,
+                "statusMessage": _MANAGED_POST_TOOL_HOOK_STATUS_MESSAGE,
             }
         ],
     }
@@ -152,6 +169,7 @@ def _managed_hook_groups(context: HarnessContext) -> dict[str, dict[str, object]
         "PreToolUse": _pre_tool_hook_group(context),
         "PermissionRequest": _permission_request_hook_group(context),
         "UserPromptSubmit": _prompt_hook_group(context),
+        "PostToolUse": _post_tool_hook_group(context),
     }
 
 
@@ -179,13 +197,16 @@ def _is_managed_hook_command(command: object) -> bool:
     if tokens[1] != "-c":
         return False
     code = tokens[2]
+    has_guard_call = (
+        re.search(r"['\"]guard['\"]", code) is not None
+        and re.search(r"['\"]hook['\"]", code) is not None
+        and re.search(r"['\"]--harness['\"]", code) is not None
+        and re.search(r"['\"]codex['\"]", code) is not None
+    )
     return (
         "codex_plugin_scanner.cli" in code
         and "main([" in code
-        and "'guard'" in code
-        and "'hook'" in code
-        and "'--harness'" in code
-        and "'codex'" in code
+        and has_guard_call
     )
 
 
@@ -249,7 +270,7 @@ def _remove_hook_groups(groups: object) -> list[object]:
 def _remove_managed_hook_events(hooks: dict[str, object]) -> tuple[dict[str, object], bool]:
     updated_hooks = dict(hooks)
     changed = False
-    for event_name in ("PreToolUse", "PermissionRequest", "UserPromptSubmit"):
+    for event_name in ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse"):
         original_groups = deepcopy(updated_hooks.get(event_name))
         remaining = _remove_hook_groups(original_groups)
         managed_removed = isinstance(original_groups, list) and remaining != original_groups
@@ -273,6 +294,7 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     pre_tool_groups = hooks.get("PreToolUse") if isinstance(hooks, dict) else None
     permission_groups = hooks.get("PermissionRequest") if isinstance(hooks, dict) else None
     prompt_groups = hooks.get("UserPromptSubmit") if isinstance(hooks, dict) else None
+    post_tool_groups = hooks.get("PostToolUse") if isinstance(hooks, dict) else None
     pre_tool_hook_installed = isinstance(pre_tool_groups, list) and any(
         _is_managed_hook_group(group) for group in pre_tool_groups
     )
@@ -282,7 +304,12 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
     prompt_hook_installed = isinstance(prompt_groups, list) and any(
         _is_managed_hook_group(group) for group in prompt_groups
     )
-    managed_hook_installed = pre_tool_hook_installed and permission_hook_installed and prompt_hook_installed
+    post_tool_hook_installed = isinstance(post_tool_groups, list) and any(
+        _is_managed_hook_group(group) for group in post_tool_groups
+    )
+    managed_hook_installed = (
+        pre_tool_hook_installed and permission_hook_installed and prompt_hook_installed and post_tool_hook_installed
+    )
     return {
         "config_path": str(config_path),
         "config_present": config_path.is_file(),
@@ -292,6 +319,7 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
         "managed_pre_tool_hook_installed": pre_tool_hook_installed,
         "managed_permission_request_hook_installed": permission_hook_installed,
         "managed_prompt_hook_installed": prompt_hook_installed,
+        "managed_post_tool_hook_installed": post_tool_hook_installed,
         "managed_hook_installed": managed_hook_installed,
         "protection_active": isinstance(features, dict)
         and features.get("codex_hooks") is True

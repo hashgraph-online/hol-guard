@@ -1170,11 +1170,31 @@ class GuardStore:
         publisher: str | None = None,
         now: str | None = None,
     ) -> str | None:
+        decision = self.resolve_policy_decision(
+            harness,
+            artifact_id,
+            artifact_hash,
+            workspace,
+            publisher,
+            now,
+        )
+        return str(decision["action"]) if decision is not None else None
+
+    def resolve_policy_decision(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None = None,
+        workspace: str | None = None,
+        publisher: str | None = None,
+        now: str | None = None,
+    ) -> dict[str, str | None] | None:
         current_time = now or _now()
         with self._connect() as connection:
             rows = connection.execute(
                 """
-                select scope, action, artifact_hash from policy_decisions
+                select harness, scope, artifact_id, action, artifact_hash, workspace, publisher, source
+                from policy_decisions
                 where (harness = ? or harness = '*') and (
                   (
                     scope = 'artifact' and artifact_id = ? and (
@@ -1193,7 +1213,19 @@ class GuardStore:
                 """,
                 (harness, artifact_id, artifact_hash, artifact_hash, workspace, publisher, current_time),
             ).fetchall()
-        return str(rows[0]["action"]) if rows else None
+        if not rows:
+            return None
+        row = rows[0]
+        return {
+            "harness": row["harness"],
+            "scope": row["scope"],
+            "artifact_id": row["artifact_id"],
+            "artifact_hash": row["artifact_hash"],
+            "workspace": row["workspace"],
+            "publisher": row["publisher"],
+            "action": row["action"],
+            "source": row["source"],
+        }
 
     @staticmethod
     def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:

@@ -9020,6 +9020,162 @@ PY
     assert "http://127.0.0.1:4455/approvals/" in captured.err
 
 
+def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "cat .nvmrc"},
+        "tool_response": {"stdout": "HOL_GUARD_FAKE_CREDENTIAL=fixture-only\n"},
+        "source_scope": "project",
+    }
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    payload = json.loads(captured.out)
+    assert payload["continue"] is False
+    assert "HOL Guard" in payload["stopReason"]
+    assert "credential-looking output" in payload["stopReason"]
+    assert "http://127.0.0.1:4455/approvals/" in payload["stopReason"]
+
+
+def test_guard_hook_codex_user_prompt_submit_blocks_credential_looking_dotfile(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(workspace_dir / ".nvmrc", "fake_credential\n")
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Use bash to print the full contents of ./.nvmrc exactly.",
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    payload = json.loads(output)
+
+    assert rc == 0
+    assert payload["decision"] == "block"
+    assert "HOL Guard" in payload["reason"]
+    assert "credential-looking local file" in payload["reason"]
+    assert "http://127.0.0.1:4455/approvals/" in payload["reason"]
+
+
+def test_guard_hook_codex_user_prompt_submit_blocks_bare_credential_dotfile(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(workspace_dir / ".nvmrc", "fake_credential\n")
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "read .nvmrc",
+        "source_scope": "project",
+    }
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    payload = json.loads(output)
+
+    assert rc == 0
+    assert payload["decision"] == "block"
+    assert "HOL Guard" in payload["reason"]
+    assert "credential-looking local file" in payload["reason"]
+
+
+def test_guard_hook_codex_runtime_risk_ignores_broad_allow_policy(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    store = GuardStore(home_dir)
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="global",
+            action="allow",
+            reason="broad local allow must not bypass runtime risk",
+        ),
+        "2026-04-30T00:00:00+00:00",
+    )
+    event = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "sed -n '1,20p' .nvmrc"},
+        "tool_response": "fake_credential\n",
+        "source_scope": "project",
+    }
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert rc == 0
+    assert payload["continue"] is False
+    assert "HOL Guard" in payload["stopReason"]
+    assert "credential-looking output" in payload["stopReason"]
+
+
 def test_guard_hook_allows_codex_safe_user_prompt_submit_without_output(
     tmp_path,
     capsys,
