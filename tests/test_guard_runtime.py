@@ -52,6 +52,7 @@ def _write_text(path: Path, text: str) -> None:
 
 
 def _build_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
     _write_text(
         home_dir / ".codex" / "config.toml",
         """
