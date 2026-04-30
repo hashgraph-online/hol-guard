@@ -19,14 +19,32 @@ type ReceiptsState =
   | { kind: "ready"; items: GuardReceipt[] };
 
 const receiptPageSize = 8;
-const EMPTY_RECEIPTS: GuardReceipt[] = [];
 
 export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
+  if (props.receipts.kind === "loading") {
+    return (
+      <div className="space-y-4">
+        <div className="guard-skeleton h-8 w-64" />
+        <div className="guard-skeleton h-32 w-full" />
+      </div>
+    );
+  }
+  if (props.receipts.kind === "error") {
+    return (
+      <Surface tone="danger">
+        <p className="text-sm text-brand-purple">{props.receipts.message}</p>
+      </Surface>
+    );
+  }
+  return <ReadyReceiptsWorkspace receiptItems={props.receipts.items} />;
+}
+
+function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [harnessFilter, setHarnessFilter] = useState("all");
   const [decisionFilter, setDecisionFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const receiptCount = props.receipts.kind === "ready" ? props.receipts.items.length : 0;
+  const receiptCount = props.receiptItems.length;
 
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
@@ -48,7 +66,7 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
     setPage(1);
   }, [decisionFilter, harnessFilter, searchTerm, receiptCount]);
 
-  const receiptItems = props.receipts.kind === "ready" ? props.receipts.items : EMPTY_RECEIPTS;
+  const receiptItems = props.receiptItems;
 
   const harnesses = useMemo(
     () => Array.from(new Set(receiptItems.map((receipt) => receipt.harness))).sort(),
@@ -94,21 +112,6 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
     setPage((value) => Math.min(totalPages, value + 1));
   }, [totalPages]);
 
-  if (props.receipts.kind === "loading") {
-    return (
-      <div className="space-y-4">
-        <div className="guard-skeleton h-8 w-64" />
-        <div className="guard-skeleton h-32 w-full" />
-      </div>
-    );
-  }
-  if (props.receipts.kind === "error") {
-    return (
-      <Surface tone="danger">
-        <p className="text-sm text-brand-purple">{props.receipts.message}</p>
-      </Surface>
-    );
-  }
   if (receiptItems.length === 0) {
     return (
       <EmptyState
@@ -132,7 +135,7 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge tone="info">{props.receipts.items.length} saved</Badge>
+            <Badge tone="info">{props.receiptItems.length} saved</Badge>
             <Tag tone="slate">{filteredReceipts.length} shown</Tag>
           </div>
         </div>
