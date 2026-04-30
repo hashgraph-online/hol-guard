@@ -1962,10 +1962,12 @@ def _codex_browser_approval_decision(
     ]
     if not request_ids:
         return None
+    has_daemon_operation = isinstance(response_payload.get("operation_id"), str)
+    wait_timeout_seconds = min(config.approval_wait_timeout_seconds, 25 if has_daemon_operation else 5)
     wait_result = wait_for_approval_requests(
         store=store,
         request_ids=request_ids,
-        timeout_seconds=min(config.approval_wait_timeout_seconds, 25),
+        timeout_seconds=wait_timeout_seconds,
     )
     response_payload["approval_wait"] = wait_result
     if not bool(wait_result.get("resolved")):
