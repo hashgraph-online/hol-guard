@@ -42,7 +42,7 @@ _PAIN_SIGNAL_EVENTS = frozenset(
 )
 _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
 _SECRET_REQUEST_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"(?<![\w-])\.env(?:\.[\w.-]+)?\b"), "local .env file"),
+    (re.compile(r"(?<![\w-])\.env(?!\.example\b)(?:\.[\w.-]+)?\b"), "local .env file"),
     (re.compile(r"(?:^|[\s'\"`])~?/.ssh(?:/|\b)"), "SSH material"),
     (re.compile(r"(?:^|[\s'\"`])~?/.aws/(?:credentials|config)\b"), "AWS credentials"),
     (re.compile(r"(?:^|[\s'\"`])~?/.kube/config\b"), "kubeconfig"),
@@ -61,6 +61,7 @@ _SECRET_ABSOLUTE_HINTS: tuple[tuple[str, str], ...] = (
 _SECRET_READ_INTENT_PATTERN = re.compile(
     r"\b("
     r"read|open|print|show|dump|cat|head|tail|less|copy|cp|scp|reveal|display|summari[sz]e|inspect|extract|"
+    r"use|include|grab|"
     r"contain(?:s)?|contents?\s+of|what(?:'s| is)\s+in"
     r")\b",
     re.IGNORECASE,
