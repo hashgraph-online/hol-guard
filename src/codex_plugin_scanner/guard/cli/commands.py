@@ -1955,6 +1955,8 @@ def _codex_browser_approval_decision(
     approval_requests = response_payload.get("approval_requests")
     if not isinstance(approval_requests, list):
         return None
+    if not isinstance(response_payload.get("operation_id"), str):
+        return None
     request_ids = [
         str(item["request_id"])
         for item in approval_requests
