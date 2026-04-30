@@ -147,6 +147,9 @@ _CURL_SHORT_FLAGS_WITH_VALUES = frozenset(
     }
 )
 _WGET_UPLOAD_FLAGS_WITH_VALUE = frozenset({"--body-file", "--post-file"})
+_WGET_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE = frozenset(
+    {"--body-data", "--header", "--method", "--password", "--post-data", "--user", "-U"}
+)
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
 _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
 _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS = frozenset({"cat", "curl", "echo", "printf", "sed", "tr", "wget"})
@@ -755,7 +758,7 @@ def _shell_segment_credential_exfiltration_text(
         return _curl_segment_credential_exfiltration_text(segment, command_index=command_index)
     if command_name == "wget":
         return _wget_segment_credential_exfiltration_text(segment, command_index=command_index)
-    return " ".join(segment)
+    return " ".join(segment[command_index:])
 
 
 def _curl_segment_credential_exfiltration_text(segment: list[str], *, command_index: int) -> str:
@@ -776,6 +779,12 @@ def _curl_segment_credential_exfiltration_text(segment: list[str], *, command_in
             surface_tokens.append(token)
             surface_tokens.append(segment[index + 1])
             index += clustered_tokens_consumed
+            continue
+        if len(token) == 2 and token[0] == "-" and token[1] in _CURL_SHORT_FLAGS_WITH_VALUES:
+            surface_tokens.append(token)
+            if index + 1 < len(segment):
+                surface_tokens.append(segment[index + 1])
+            index += 2
             continue
         if token.startswith("--") and "=" in token:
             surface_tokens.append(token)
@@ -828,13 +837,17 @@ def _wget_segment_credential_exfiltration_text(segment: list[str], *, command_in
         if token == "--":
             surface_tokens.extend(_network_destination_tokens(segment[index + 1 :]))
             break
-        if token in {"--post-data", "--body-data", "--method", "--header"}:
+        if token in _WGET_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE:
             surface_tokens.append(token)
             if index + 1 < len(segment):
                 surface_tokens.append(segment[index + 1])
             index += 2
             continue
-        if token.startswith(("--post-data=", "--body-data=", "--method=", "--header=")):
+        if any(
+            token.startswith(f"{flag}=")
+            for flag in _WGET_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE
+            if flag.startswith("--")
+        ):
             surface_tokens.append(token)
             index += 1
             continue
