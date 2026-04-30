@@ -203,11 +203,7 @@ def _is_managed_hook_command(command: object) -> bool:
         and re.search(r"['\"]--harness['\"]", code) is not None
         and re.search(r"['\"]codex['\"]", code) is not None
     )
-    return (
-        "codex_plugin_scanner.cli" in code
-        and "main([" in code
-        and has_guard_call
-    )
+    return "codex_plugin_scanner.cli" in code and "main([" in code and has_guard_call
 
 
 def _argv_targets_codex(argv: list[str]) -> bool:
