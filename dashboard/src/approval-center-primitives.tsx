@@ -402,7 +402,7 @@ function SidebarLink(props: {
       aria-current={props.active ? "page" : undefined}
       className={`flex min-h-10 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors duration-150 ${
         props.active
-          ? "bg-brand-blue/10 font-semibold text-brand-dark"
+          ? "bg-brand-blue/[0.05] font-semibold text-brand-dark"
           : "text-slate-600 hover:bg-slate-200/50 hover:text-slate-900"
       }`}
     >
