@@ -4122,10 +4122,9 @@ _PROMPT_CONTENT_SCAN_SECRET_BASENAME_MARKERS = frozenset(
     {
         "auth",
         "credential",
-        "credentials",
+        "env",
         "key",
-        "passwd",
-        "password",
+        "pass",
         "secret",
         "token",
     }
