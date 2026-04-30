@@ -3994,12 +3994,19 @@ def _codex_search_targets_are_source_like(args: list[str], *, cwd: Path | None, 
     positional: list[str] = []
     skip_next = False
     pattern_from_option = False
+    after_option_terminator = False
     option_value_flags = _CODEX_SEARCH_OPTION_VALUE_FLAGS | _CODEX_SEARCH_OPTION_VALUE_FLAGS_BY_EXECUTABLE.get(
         executable, frozenset()
     )
     for arg in args:
         if skip_next:
             skip_next = False
+            continue
+        if after_option_terminator:
+            positional.append(arg)
+            continue
+        if arg == "--":
+            after_option_terminator = True
             continue
         if _codex_search_arg_is_unsafe(arg, executable=executable, option_value_flags=option_value_flags):
             return False
@@ -4017,8 +4024,6 @@ def _codex_search_targets_are_source_like(args: list[str], *, cwd: Path | None, 
             pattern_from_option = True
             continue
         if any(arg.startswith(f"{flag}=") for flag in option_value_flags):
-            continue
-        if arg == "--":
             continue
         if arg.startswith("-"):
             continue
