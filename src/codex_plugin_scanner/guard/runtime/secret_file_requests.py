@@ -115,6 +115,9 @@ _CURL_EXPAND_FLAGS_WITH_VALUE = frozenset(
 _CURL_FORM_FLAGS_WITH_VALUE = frozenset({"--form", "-F"})
 _CURL_DIRECT_FILE_FLAGS_WITH_VALUE = frozenset({"--upload-file", "-T"})
 _CURL_VARIABLE_FLAGS_WITH_VALUE = frozenset({"--variable"})
+_CURL_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE = frozenset(
+    {"--data-raw", "--header", "--proxy-user", "--request", "--user"}
+)
 _CURL_SHORT_FLAGS_WITH_VALUES = frozenset(
     {
         "A",
@@ -148,7 +151,7 @@ _CURL_SHORT_FLAGS_WITH_VALUES = frozenset(
 )
 _WGET_UPLOAD_FLAGS_WITH_VALUE = frozenset({"--body-file", "--post-file"})
 _WGET_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE = frozenset(
-    {"--body-data", "--header", "--method", "--password", "--post-data", "--user", "-U"}
+    {"--body-data", "--header", "--method", "--password", "--post-data", "--user"}
 )
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
 _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
@@ -808,7 +811,7 @@ def _curl_segment_credential_exfiltration_text(segment: list[str], *, command_in
                 surface_tokens.append(segment[index + 1])
             index += 2
             continue
-        if token in {"--data-raw", "--header", "--request", "-H", "-X"}:
+        if token in _CURL_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE or token in {"-H", "-X"}:
             surface_tokens.append(token)
             if index + 1 < len(segment):
                 surface_tokens.append(segment[index + 1])
