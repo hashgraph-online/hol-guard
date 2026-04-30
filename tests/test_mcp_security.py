@@ -194,6 +194,39 @@ def test_scan_resolves_in_root_symlink_targets_before_analysis(monkeypatch, tmp_
     assert str(plugin_dir / "link.py") not in analyzed_paths
 
 
+def test_scan_preserves_symlinked_mcp_config_identity(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+    real_config = plugin_dir / "configs" / "base.json"
+    real_config.parent.mkdir()
+    real_config.write_text(
+        json.dumps({"mcpServers": {"demo": {"command": "python", "args": ["server.py"]}}}),
+        encoding="utf-8",
+    )
+    (plugin_dir / ".mcp.json").unlink()
+    (plugin_dir / ".mcp.json").symlink_to(real_config)
+    analyzed_contexts: list[dict[str, Any]] = []
+
+    class RecordingYaraAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        async def analyze(self, content: str, context: dict[str, Any] | None = None) -> list[FakeCiscoFinding]:
+            analyzed_contexts.append(dict(context or {}))
+            return []
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        lambda: {"YaraAnalyzer": RecordingYaraAnalyzer},
+    )
+
+    summary = run_cisco_mcp_scan(plugin_dir, mode="on")
+
+    assert summary.status == CiscoIntegrationStatus.ENABLED
+    assert analyzed_contexts[0]["tool_name"] == ".mcp.json"
+    assert analyzed_contexts[0]["content_type"] == "mcp-config"
+
+
 def test_mcp_security_auto_mode_unavailable_is_not_applicable(monkeypatch, tmp_path: Path) -> None:
     plugin_dir = tmp_path / "plugin"
     _write_plugin(plugin_dir)

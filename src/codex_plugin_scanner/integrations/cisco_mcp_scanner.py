@@ -47,6 +47,13 @@ class CiscoMcpScanSummary:
     scan_mode: str = "static"
 
 
+@dataclass(frozen=True, slots=True)
+class _StaticScanTarget:
+    read_path: Path
+    tool_name: str
+    content_type: str
+
+
 def _empty_counts() -> dict[str, int]:
     return {severity.value: 0 for severity in Severity}
 
@@ -235,17 +242,23 @@ def _normalize_finding(plugin_dir: Path, file_path: Path, finding: object) -> Fi
     )
 
 
-def _collect_static_targets(plugin_dir: Path) -> tuple[Path, ...]:
+def _collect_static_targets(plugin_dir: Path) -> tuple[_StaticScanTarget, ...]:
     config_path = plugin_dir / ".mcp.json"
     resolved_config_path = _safe_resolved_static_target(plugin_dir, config_path)
     if resolved_config_path is None:
         return ()
 
-    targets: list[Path] = []
+    targets: list[_StaticScanTarget] = []
     seen_targets: set[Path] = set()
     try:
         if resolved_config_path.stat().st_size <= _MAX_TARGET_SIZE_BYTES:
-            targets.append(resolved_config_path)
+            targets.append(
+                _StaticScanTarget(
+                    read_path=resolved_config_path,
+                    tool_name=config_path.name,
+                    content_type="mcp-config",
+                )
+            )
             seen_targets.add(resolved_config_path)
     except OSError:
         pass
@@ -264,7 +277,13 @@ def _collect_static_targets(plugin_dir: Path) -> tuple[Path, ...]:
                     continue
             except OSError:
                 continue
-            targets.append(resolved_file_path)
+            targets.append(
+                _StaticScanTarget(
+                    read_path=resolved_file_path,
+                    tool_name=resolved_file_path.name,
+                    content_type="mcp-source",
+                )
+            )
             seen_targets.add(resolved_file_path)
     return tuple(targets)
 
@@ -310,27 +329,26 @@ def _run_awaitable(awaitable: Awaitable[T]) -> T:
 
 
 async def _scan_targets(
-    plugin_dir: Path, targets: tuple[Path, ...], analyzer: object
+    plugin_dir: Path, targets: tuple[_StaticScanTarget, ...], analyzer: object
 ) -> tuple[tuple[Finding, ...], int]:
     findings: list[Finding] = []
     targets_scanned = 0
     for target in targets:
         try:
-            content = target.read_text(encoding="utf-8", errors="ignore")
+            content = target.read_path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        content_type = "mcp-config" if target.name == ".mcp.json" else "mcp-source"
         external_findings = await analyzer.analyze(
             content,
             {
-                "tool_name": target.name,
-                "content_type": content_type,
-                "file_path": str(target),
+                "tool_name": target.tool_name,
+                "content_type": target.content_type,
+                "file_path": str(target.read_path),
             },
         )
         targets_scanned += 1
         for finding in external_findings:
-            findings.append(_normalize_finding(plugin_dir, target, finding))
+            findings.append(_normalize_finding(plugin_dir, target.read_path, finding))
     return tuple(findings), targets_scanned
 
 
