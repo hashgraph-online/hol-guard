@@ -9061,6 +9061,45 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
     assert "http://127.0.0.1:4455/approvals/" in payload["stopReason"]
 
 
+def test_guard_hook_codex_post_tool_use_blocks_named_secret_output(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "sed -n '1,20p' .npmrc"},
+        "tool_response": "token = fixture-only\n",
+        "source_scope": "project",
+    }
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert rc == 0
+    assert payload["continue"] is False
+    assert "credential-looking output" in payload["stopReason"]
+
+
 def test_guard_hook_codex_user_prompt_submit_blocks_credential_looking_dotfile(
     tmp_path,
     capsys,

@@ -3716,8 +3716,11 @@ def _hook_runtime_artifact(
 
 _CODEX_SECRET_OUTPUT_PATTERN = re.compile(
     r"(?i)(?:fake[_-]?credential|fake[_-]?secret|"
-    r"(?:api[_-]?key|auth[_-]?token|credential|npm[_-]?token|private[_-]?key|secret|token|password)\\s*[:=])"
+    r"(?:api[_-]?key|auth[_-]?token|credential|npm[_-]?token|private[_-]?key|secret|token|password)\s*[:=])"
 )
+_CODEX_TOOL_RESPONSE_MAX_DEPTH = 5
+_CODEX_TOOL_RESPONSE_TEXT_LIMIT = 20000
+_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH = 24
 
 
 def _codex_post_tool_output_artifact(
@@ -3775,10 +3778,10 @@ def _codex_post_tool_output_artifact(
 
 
 def _collect_codex_tool_response_text(value: object, *, depth: int = 0) -> str:
-    if depth > 5:
+    if depth > _CODEX_TOOL_RESPONSE_MAX_DEPTH:
         return ""
     if isinstance(value, str):
-        return value[:20000]
+        return value[:_CODEX_TOOL_RESPONSE_TEXT_LIMIT]
     if isinstance(value, dict):
         parts: list[str] = []
         for key, child in value.items():
@@ -3787,15 +3790,17 @@ def _collect_codex_tool_response_text(value: object, *, depth: int = 0) -> str:
                 text = _collect_codex_tool_response_text(child, depth=depth + 1)
                 if text:
                     parts.append(text)
-        return "\n".join(parts)[:20000]
+        return "\n".join(parts)[:_CODEX_TOOL_RESPONSE_TEXT_LIMIT]
     if isinstance(value, list):
-        return "\n".join(_collect_codex_tool_response_text(item, depth=depth + 1) for item in value)[:20000]
+        return "\n".join(_collect_codex_tool_response_text(item, depth=depth + 1) for item in value)[
+            :_CODEX_TOOL_RESPONSE_TEXT_LIMIT
+        ]
     return ""
 
 
 _PROMPT_PATH_TOKEN_PATTERN = re.compile(
-    r"(?P<path>(?:~|\.{1,2}|/)[A-Za-z0-9_./@%+=:,~-]*\.[A-Za-z0-9_.-]+|"
-    r"(?<![\w/.-])\.[A-Za-z0-9][A-Za-z0-9_.-]*)"
+    r"(?<![\w/.-])\.[A-Za-z0-9][A-Za-z0-9_.-]{0,255}|"
+    r"(?:~|\.{1,2}|/)[^\s'\"`<>|;(){}\[\]]{0,255}"
 )
 _PROMPT_FILE_READ_VERB_PATTERN = re.compile(r"\b(?:read|open|print|show|dump|cat|head|tail|less|view|display)\b", re.I)
 _PROMPT_CONTENT_SCAN_MAX_BYTES = 64 * 1024
@@ -3819,7 +3824,7 @@ def _codex_prompt_credential_file_artifact(
     if _PROMPT_FILE_READ_VERB_PATTERN.search(prompt_text) is None:
         return None
     for match in _PROMPT_PATH_TOKEN_PATTERN.finditer(prompt_text):
-        requested_path = match.group("path")
+        requested_path = match.group(0)
         path = _resolve_prompt_scan_path(requested_path, cwd=cwd)
         if path is None or path.name in _PROMPT_CONTENT_SCAN_SKIP_BASENAMES:
             continue
@@ -3843,7 +3848,7 @@ def _codex_prompt_credential_file_artifact(
                 },
                 sort_keys=True,
             ).encode("utf-8")
-        ).hexdigest()[:24]
+        ).hexdigest()[:_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH]
         return GuardArtifact(
             artifact_id=f"codex:project:prompt-file:{fingerprint}",
             name=f"credential-looking local file {path.name}",
