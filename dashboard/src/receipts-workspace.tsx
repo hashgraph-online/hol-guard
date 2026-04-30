@@ -112,6 +112,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
     setPage((value) => Math.min(totalPages, value + 1));
   }, [totalPages]);
 
+
   if (receiptItems.length === 0) {
     return (
       <EmptyState
@@ -126,7 +127,6 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
       <section className="guard-surface-in rounded-[2rem] border border-brand-blue/15 bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_62%,rgba(181,108,255,0.08)_100%)] p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-1">
-            <SectionLabel>History</SectionLabel>
             <h1 className="mt-2 text-3xl font-semibold tracking-[-0.02em] text-brand-dark">
             History
             </h1>
@@ -143,7 +143,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
 
       <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
         <SectionLabel>Find history</SectionLabel>
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
           <ListControls
             searchLabel="Search history"
             searchValue={searchTerm}
@@ -155,7 +155,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
             onSearchChange={handleSearchChange}
             onFilterChange={handleHarnessFilterChange}
           />
-          <label className="block sm:max-w-[180px]">
+          <label className="block">
             <span className="sr-only">Filter evidence by decision</span>
             <select
               value={decisionFilter}
@@ -205,10 +205,10 @@ function HistoryRow(props: { receipt: GuardReceipt }) {
   const changed = receipt.changed_capabilities.join(", ") || "Nothing recorded";
   const decisionTone = receipt.policy_decision === "allow" ? "green" : receipt.policy_decision === "block" ? "purple" : "blue";
   return (
-    <article className="px-4 py-4 transition-colors duration-150 hover:bg-surface-1/70 sm:px-5">
+    <article className="px-4 py-3 transition-colors duration-150 hover:bg-surface-1/70 sm:px-5">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_150px_120px] lg:items-start">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <Tag tone={decisionTone}>{policyActionLabel(receipt.policy_decision)}</Tag>
             <span className="text-xs font-medium text-muted-foreground">{harnessDisplayName(receipt.harness)}</span>
           </div>
@@ -224,13 +224,15 @@ function HistoryRow(props: { receipt: GuardReceipt }) {
           <p className="mt-1 line-clamp-2 text-xs font-medium leading-relaxed text-brand-dark">{changed}</p>
         </div>
         <div className="text-xs font-medium text-muted-foreground lg:text-right">
-          {receipt.timestamp}
+          {new Date(receipt.timestamp).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
         </div>
       </div>
-      <details className="group mt-3">
-        <summary className="inline-flex cursor-pointer select-none items-center gap-2 text-xs font-semibold text-brand-blue [&::-webkit-details-marker]:hidden">
-          <span className="transition-transform duration-150 group-open:rotate-90">›</span>
-          More details
+      <details className="group mt-2">
+        <summary className="flex cursor-pointer select-none items-center justify-between gap-3 text-xs font-semibold text-brand-blue [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center gap-2">
+            <span className="transition-transform duration-150 group-open:rotate-90">›</span>
+            More details
+          </span>
         </summary>
         <div className="mt-3 rounded-xl border border-slate-200/70 bg-white p-3">
           <KeyValueGrid
