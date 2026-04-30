@@ -1419,11 +1419,13 @@ def run_guard_command(
             artifact_id = runtime_artifact.artifact_id
             artifact_name = runtime_artifact.name
             policy_harness = _canonical_harness_name(args.harness)
-            stored_policy_action = store.resolve_policy(
-                policy_harness,
-                artifact_id,
-                runtime_artifact_hash,
-                str(runtime_workspace) if runtime_workspace else None,
+            stored_policy_action = _runtime_stored_policy_action(
+                store=store,
+                harness=policy_harness,
+                artifact=runtime_artifact,
+                artifact_id=artifact_id,
+                artifact_hash=runtime_artifact_hash,
+                workspace=str(runtime_workspace) if runtime_workspace else None,
             )
             if stored_policy_action is None:
                 legacy_artifact = _legacy_claude_alias_runtime_artifact(
@@ -1433,11 +1435,13 @@ def run_guard_command(
                     workspace=runtime_workspace,
                 )
                 if legacy_artifact is not None:
-                    stored_policy_action = store.resolve_policy(
-                        args.harness,
-                        legacy_artifact.artifact_id,
-                        artifact_hash(legacy_artifact),
-                        str(runtime_workspace) if runtime_workspace else None,
+                    stored_policy_action = _runtime_stored_policy_action(
+                        store=store,
+                        harness=args.harness,
+                        artifact=legacy_artifact,
+                        artifact_id=legacy_artifact.artifact_id,
+                        artifact_hash=artifact_hash(legacy_artifact),
+                        workspace=str(runtime_workspace) if runtime_workspace else None,
                     )
             policy_action = _coalesce_string(
                 getattr(args, "policy_action", None),
@@ -2771,6 +2775,37 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
     )
 
 
+def _runtime_stored_policy_action(
+    *,
+    store: GuardStore,
+    harness: str,
+    artifact: GuardArtifact,
+    artifact_id: str,
+    artifact_hash: str,
+    workspace: str | None,
+) -> str | None:
+    decision = store.resolve_policy_decision(
+        harness,
+        artifact_id,
+        artifact_hash,
+        workspace,
+        artifact.publisher,
+    )
+    if decision is None:
+        return None
+    action = _optional_string(decision.get("action"))
+    if action is None:
+        return None
+    scope = _optional_string(decision.get("scope"))
+    if (
+        action in {"allow", "warn", "review"}
+        and scope in {"workspace", "publisher", "harness", "global"}
+        and _runtime_artifact_risk_classes(artifact)
+    ):
+        return None
+    return action
+
+
 def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> str:
     if _prompt_requires_hard_block(artifact):
         return "block"
@@ -2933,6 +2968,13 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
         harness = response_payload.get("harness")
         prompt_classes = _prompt_request_classes(artifact)
         if harness == "codex" and "secret_read" in prompt_classes:
+            prompt_summary = artifact.metadata.get("prompt_summary")
+            if isinstance(prompt_summary, str) and "credential-looking local file" in prompt_summary:
+                return (
+                    "HOL Guard stopped this Codex prompt before Codex could open a credential-looking local file. "
+                    "Codex does not expose native approval prompts for Read-tool file reads, so Guard blocks this "
+                    "request at prompt time."
+                )
             return (
                 "HOL Guard stopped this Codex prompt before Codex could open a sensitive local file. Codex does not "
                 "expose native approval prompts for Read-tool file reads, so Guard blocks this request at prompt time."
@@ -3163,6 +3205,13 @@ def _emit_native_hook_response(
             }
         if payload:
             _write_json_line(payload, output_stream=output_stream)
+        return
+    if event_name == "PostToolUse" and policy_action in {"block", "sandbox-required", "require-reapproval"}:
+        payload["decision"] = "block"
+        payload["reason"] = reason
+        payload["continue"] = False
+        payload["stopReason"] = reason
+        _write_json_line(payload, output_stream=output_stream)
         return
     permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
     if harness == "codex" and event_name == "PreToolUse" and permission_decision is None:
@@ -3555,6 +3604,7 @@ def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]
     prompt_signals: list[str] = []
     prompt_matched_texts: list[str] = []
     prompt_request_classes: list[str] = []
+    prompt_display_texts: list[str] = []
     request_identity = "|".join(sorted(artifact.artifact_id for artifact in artifacts))
     for artifact in artifacts:
         metadata = artifact.metadata
@@ -3562,12 +3612,19 @@ def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]
         matched_text = metadata.get("prompt_matched_text")
         if isinstance(matched_text, str) and matched_text.strip():
             prompt_matched_texts.append(matched_text.strip())
+        display_text = metadata.get("prompt_display_text")
+        if isinstance(display_text, str) and display_text.strip():
+            prompt_display_texts.append(display_text.strip())
         request_class = metadata.get("prompt_request_class")
         if isinstance(request_class, str) and request_class.strip():
             prompt_request_classes.append(request_class.strip())
     deduped_signals = list(dict.fromkeys(prompt_signals))
     deduped_matches = list(dict.fromkeys(prompt_matched_texts))
     deduped_classes = list(dict.fromkeys(prompt_request_classes))
+    deduped_display = list(dict.fromkeys(prompt_display_texts))
+    request_summary = (
+        deduped_display[0] if len(deduped_display) == 1 else "Prompt matches multiple guarded request classes."
+    )
     return GuardArtifact(
         artifact_id=f"{harness}:session:prompt:multi:{hashlib.sha256(request_identity.encode('utf-8')).hexdigest()[:24]}",
         name="prompt multi-signal request",
@@ -3579,7 +3636,10 @@ def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]
             "prompt_signals": deduped_signals,
             "prompt_summary": "Prompt matches multiple guarded request classes.",
             "prompt_matched_texts": deduped_matches,
+            "prompt_display_text": request_summary,
             "prompt_request_classes": deduped_classes,
+            "request_summary": request_summary,
+            "runtime_request_summary": request_summary,
         },
     )
 
@@ -3594,6 +3654,15 @@ def _hook_runtime_artifact(
 ) -> GuardArtifact | None:
     harness = _canonical_harness_name(harness)
     event_name = _hook_event_name(payload)
+    if harness == "codex" and event_name == "PostToolUse":
+        output_artifact = _codex_post_tool_output_artifact(
+            payload=payload,
+            config_path=str(_runtime_policy_path(harness, home_dir, workspace)),
+            source_scope=_coalesce_string(payload.get("source_scope"), "project"),
+            cwd=workspace,
+        )
+        if output_artifact is not None:
+            return output_artifact
     if event_name == "UserPromptSubmit":
         prompt_text = payload.get("prompt")
         if isinstance(prompt_text, str) and prompt_text.strip():
@@ -3618,7 +3687,19 @@ def _hook_runtime_artifact(
                     requests=prompt_requests,
                 )
                 if prompt_artifacts:
+                    if harness == "codex":
+                        prompt_artifacts = [
+                            _with_codex_prompt_display_metadata(artifact, prompt_text=prompt_text)
+                            for artifact in prompt_artifacts
+                        ]
                     return _merged_prompt_runtime_artifact(harness, prompt_artifacts)
+            prompt_file_artifact = _codex_prompt_credential_file_artifact(
+                prompt_text=prompt_text,
+                cwd=workspace,
+                config_path=config_path,
+            )
+            if prompt_file_artifact is not None:
+                return prompt_file_artifact
     request = extract_sensitive_file_read_request(
         payload.get("tool_name"),
         payload.get("tool_input", payload.get("arguments")),
@@ -3648,6 +3729,537 @@ def _hook_runtime_artifact(
         config_path=config_path,
         source_scope=source_scope,
     )
+
+
+_CODEX_SECRET_OUTPUT_PATTERN = re.compile(
+    r"(?i)(?:fake[_-]?credential|fake[_-]?secret|"
+    r"(?:api[_-]?key|auth[_-]?token|credential|npm[_-]?token|private[_-]?key|secret|token|password)\s*[:=])"
+)
+_CODEX_PROMPT_SECRET_KEY_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "PASS", "API_KEY", "API-KEY", "AUTH", "CREDENTIAL")
+_CODEX_TOOL_RESPONSE_MAX_DEPTH = 5
+_CODEX_TOOL_RESPONSE_TEXT_LIMIT = 20000
+_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH = 24
+
+
+def _codex_post_tool_output_artifact(
+    *,
+    payload: dict[str, object],
+    config_path: str,
+    source_scope: str,
+    cwd: Path | None,
+) -> GuardArtifact | None:
+    response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
+    if not response_text or _CODEX_SECRET_OUTPUT_PATTERN.search(response_text) is None:
+        return None
+    tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
+    tool_input = payload.get("tool_input")
+    command_text = ""
+    if isinstance(tool_input, dict):
+        command = tool_input.get("command")
+        if isinstance(command, str):
+            command_text = command.strip()
+    if not command_text:
+        command_text = tool_name
+    if _codex_command_is_read_only_source_search(command_text, cwd=cwd):
+        return None
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "tool_name": tool_name,
+                "command_text": command_text,
+                "output_class": "credential-looking output",
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    return GuardArtifact(
+        artifact_id=f"codex:{source_scope}:tool-output:{fingerprint}",
+        name=f"{tool_name} credential-looking output",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope=source_scope,
+        config_path=config_path,
+        metadata={
+            "tool_name": tool_name,
+            "command_text": command_text,
+            "action_class": "credential exfiltration shell command",
+            "request_summary": (
+                f"Codex tool `{tool_name}` produced credential-looking output while running `{command_text}`."
+            ),
+            "runtime_request_signals": ["tool output contains credential-looking material"],
+            "runtime_request_summary": (
+                "Requests a sensitive native tool action: credential-looking output reached Codex."
+            ),
+            "runtime_request_reason": (
+                "Guard inspects supported Codex tool output before Codex uses it, so accidental secret reads can be "
+                "stopped even when the filename was not obviously sensitive."
+            ),
+        },
+    )
+
+
+_CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"rg", "grep", "egrep", "fgrep"})
+_CODEX_READ_ONLY_SEARCH_WRAPPERS = frozenset({"bash", "sh", "zsh"})
+_CODEX_SEARCH_PATTERN_VALUE_FLAGS = frozenset({"-e", "--regexp", "-f", "--file"})
+_CODEX_SEARCH_OPTION_VALUE_FLAGS = frozenset(
+    {
+        *_CODEX_SEARCH_PATTERN_VALUE_FLAGS,
+        "-g",
+        "--glob",
+        "--iglob",
+        "--max-depth",
+        "--type",
+        "-t",
+        "--type-not",
+    }
+)
+_CODEX_SEARCH_OPTION_VALUE_FLAGS_BY_EXECUTABLE = {
+    "rg": frozenset({"-T"}),
+}
+_CODEX_SEARCH_UNSAFE_FLAGS = frozenset({"--pre"})
+_CODEX_GIT_GLOBAL_VALUE_FLAGS = frozenset(
+    {"-c", "--config-env", "--exec-path", "--git-dir", "--work-tree", "--namespace"}
+)
+_CODEX_SOURCE_SEARCH_PREFIXES = (
+    "src/",
+    "app/",
+    "lib/",
+    "tests/",
+    "__tests__/",
+    "workers/",
+    "scripts/",
+    "dashboard/",
+    "packages/",
+)
+_CODEX_SOURCE_SEARCH_EXTENSIONS = frozenset(
+    {
+        ".c",
+        ".cc",
+        ".cpp",
+        ".css",
+        ".go",
+        ".h",
+        ".hpp",
+        ".html",
+        ".java",
+        ".js",
+        ".jsx",
+        ".json",
+        ".md",
+        ".mjs",
+        ".py",
+        ".rs",
+        ".sh",
+        ".toml",
+        ".ts",
+        ".tsx",
+        ".yaml",
+        ".yml",
+    }
+)
+_CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
+    {
+        ".aws",
+        ".docker",
+        ".env",
+        ".git-credentials",
+        ".kube",
+        ".netrc",
+        ".npmrc",
+        ".pypirc",
+        ".ssh",
+        "credentials",
+        "id_rsa",
+    }
+)
+
+
+def _codex_command_is_read_only_source_search(command_text: str, *, cwd: Path | None) -> bool:
+    command = command_text.strip()
+    if not command:
+        return False
+    if _codex_command_has_unquoted_shell_control(command):
+        return False
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return False
+    if not parts:
+        return False
+    if _codex_command_uses_untrusted_search_binary(parts[0]):
+        return False
+    executable = Path(parts[0]).name
+    if executable in _CODEX_READ_ONLY_SEARCH_COMMANDS:
+        if executable == "rg" and "--no-config" not in parts and os.environ.get("RIPGREP_CONFIG_PATH"):
+            return False
+        return _codex_search_targets_are_source_like(parts[1:], cwd=cwd, executable=executable)
+    git_grep_args = _git_grep_search_args(parts[1:]) if executable == "git" else None
+    if git_grep_args is not None:
+        if _git_grep_uses_external_execution(git_grep_args):
+            return False
+        return _codex_search_targets_are_source_like(git_grep_args, cwd=cwd, executable=executable)
+    script_index = _shell_wrapper_script_index(parts) if executable in _CODEX_READ_ONLY_SEARCH_WRAPPERS else None
+    if script_index is not None and script_index < len(parts):
+        return _codex_command_is_read_only_source_search(parts[script_index], cwd=cwd)
+    return False
+
+
+def _codex_command_uses_untrusted_search_binary(executable_token: str) -> bool:
+    return executable_token.startswith(".") or "/" in executable_token or "\\" in executable_token
+
+
+def _git_grep_search_args(args: list[str]) -> list[str] | None:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "grep":
+            return args[index + 1 :]
+        if arg in _CODEX_GIT_GLOBAL_VALUE_FLAGS:
+            index += 2
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in _CODEX_GIT_GLOBAL_VALUE_FLAGS):
+            index += 1
+            continue
+        if arg in {
+            "--no-pager",
+            "--bare",
+            "--literal-pathspecs",
+            "--no-literal-pathspecs",
+            "--glob-pathspecs",
+            "--noglob-pathspecs",
+        }:
+            index += 1
+            continue
+        return None
+    return None
+
+
+def _git_grep_uses_external_execution(args: list[str]) -> bool:
+    return any(
+        arg == "-O"
+        or (arg.startswith("-O") and len(arg) > 2)
+        or arg == "--open-files-in-pager"
+        or arg.startswith("--open-files-in-pager=")
+        or arg in {"--textconv", "--ext-grep"}
+        for arg in args
+    )
+
+
+def _shell_wrapper_script_index(parts: list[str]) -> int | None:
+    for index, arg in enumerate(parts[1:], start=1):
+        if arg == "-c":
+            return index + 1
+        if arg.startswith("-") and not arg.startswith("--") and "c" in arg[1:]:
+            return index + 1
+    return None
+
+
+def _codex_command_has_unquoted_shell_control(command: str) -> bool:
+    quote: str | None = None
+    escaped = False
+    for index, char in enumerate(command):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if quote is not None:
+            if char == quote:
+                quote = None
+            if quote == '"' and char == "`":
+                return True
+            if quote == '"' and char == "$" and index + 1 < len(command) and command[index + 1] == "(":
+                return True
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            continue
+        if char in {"\n", "\r"}:
+            return True
+        if char in {"|", "&", ";", ">", "<", "`"}:
+            return True
+        if char == "$" and index + 1 < len(command) and command[index + 1] == "(":
+            return True
+    return False
+
+
+def _codex_search_targets_are_source_like(args: list[str], *, cwd: Path | None, executable: str) -> bool:
+    positional: list[str] = []
+    skip_next = False
+    pattern_from_option = False
+    option_value_flags = _CODEX_SEARCH_OPTION_VALUE_FLAGS | _CODEX_SEARCH_OPTION_VALUE_FLAGS_BY_EXECUTABLE.get(
+        executable, frozenset()
+    )
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in _CODEX_SEARCH_UNSAFE_FLAGS or any(arg.startswith(f"{flag}=") for flag in _CODEX_SEARCH_UNSAFE_FLAGS):
+            return False
+        if arg in _CODEX_SEARCH_PATTERN_VALUE_FLAGS:
+            pattern_from_option = True
+            skip_next = True
+            continue
+        if any(arg.startswith(flag) and len(arg) > len(flag) for flag in ("-e", "-f")):
+            pattern_from_option = True
+            continue
+        if arg in option_value_flags:
+            skip_next = True
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in _CODEX_SEARCH_PATTERN_VALUE_FLAGS):
+            pattern_from_option = True
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in option_value_flags):
+            continue
+        if arg == "--":
+            continue
+        if arg.startswith("-"):
+            continue
+        positional.append(arg)
+    if pattern_from_option:
+        targets = positional
+    elif len(positional) >= 2:
+        targets = positional[1:]
+    else:
+        return False
+    return bool(targets) and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+
+
+def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> bool:
+    stripped = target.strip().strip("'\"")
+    if not stripped:
+        return False
+    if stripped.startswith(("~", "/")):
+        return False
+    target_path = Path(stripped)
+    base_dir = (cwd or Path.cwd()).resolve()
+    unresolved_candidate = base_dir / target_path
+    if _path_contains_symlink(unresolved_candidate, base_dir=base_dir):
+        return False
+    try:
+        candidate = unresolved_candidate.resolve(strict=False)
+    except RuntimeError:
+        return False
+    if candidate.exists():
+        try:
+            relative_candidate = candidate.relative_to(base_dir)
+        except ValueError:
+            return False
+        parts = [part for part in relative_candidate.parts if part not in {"", "."}]
+    else:
+        parts = [part for part in target_path.parts if part not in {"", "."}]
+    if not parts:
+        return False
+    lowered_parts = [part.lower() for part in parts]
+    if any(part in _CODEX_SENSITIVE_SEARCH_BASENAMES for part in lowered_parts):
+        return False
+    if any(part.startswith(".") for part in parts):
+        return False
+    normalized = "/".join(parts)
+    if normalized in {prefix.rstrip("/") for prefix in _CODEX_SOURCE_SEARCH_PREFIXES}:
+        return True
+    if any(normalized.startswith(prefix) for prefix in _CODEX_SOURCE_SEARCH_PREFIXES):
+        return True
+    return Path(stripped).suffix.lower() in _CODEX_SOURCE_SEARCH_EXTENSIONS
+
+
+def _path_contains_symlink(path: Path, *, base_dir: Path) -> bool:
+    candidate = base_dir
+    try:
+        relative_parts = path.relative_to(base_dir).parts
+    except ValueError:
+        return True
+    for part in relative_parts:
+        if part in {"", "."}:
+            continue
+        candidate /= part
+        try:
+            if candidate.is_symlink():
+                return True
+        except OSError:
+            return True
+    return False
+
+
+def _collect_codex_tool_response_text(value: object, *, depth: int = 0) -> str:
+    if depth > _CODEX_TOOL_RESPONSE_MAX_DEPTH:
+        return ""
+    if isinstance(value, str):
+        return value[:_CODEX_TOOL_RESPONSE_TEXT_LIMIT]
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key, child in value.items():
+            key_text = str(key).lower()
+            if key_text in {"stdout", "stderr", "output", "text", "content", "result", "message"} or depth > 0:
+                text = _collect_codex_tool_response_text(child, depth=depth + 1)
+                if text:
+                    parts.append(text)
+        return "\n".join(parts)[:_CODEX_TOOL_RESPONSE_TEXT_LIMIT]
+    if isinstance(value, list):
+        return "\n".join(_collect_codex_tool_response_text(item, depth=depth + 1) for item in value)[
+            :_CODEX_TOOL_RESPONSE_TEXT_LIMIT
+        ]
+    return ""
+
+
+_PROMPT_PATH_TOKEN_PATTERN = re.compile(
+    r"(?<![\w/.-])\.[A-Za-z0-9][A-Za-z0-9_.-]{0,255}|"
+    r"(?:~|\.{1,2}|/)[^\s'\"`<>|;(){}\[\]]{0,255}"
+)
+_PROMPT_FILE_READ_VERB_PATTERN = re.compile(r"\b(?:read|open|print|show|dump|cat|head|tail|less|view|display)\b", re.I)
+_PROMPT_CONTENT_SCAN_MAX_BYTES = 64 * 1024
+_PROMPT_CONTENT_SCAN_SKIP_BASENAMES = frozenset(
+    {
+        ".env",
+        ".npmrc",
+        ".pypirc",
+        ".netrc",
+        ".git-credentials",
+    }
+)
+
+
+def _codex_prompt_credential_file_artifact(
+    *,
+    prompt_text: str,
+    cwd: Path | None,
+    config_path: str,
+) -> GuardArtifact | None:
+    if _PROMPT_FILE_READ_VERB_PATTERN.search(prompt_text) is None:
+        return None
+    for match in _PROMPT_PATH_TOKEN_PATTERN.finditer(prompt_text):
+        requested_path = match.group(0)
+        path = _resolve_prompt_scan_path(requested_path, cwd=cwd)
+        if path is None or path.name in _PROMPT_CONTENT_SCAN_SKIP_BASENAMES:
+            continue
+        if not path.name.startswith("."):
+            continue
+        if not path.is_file():
+            continue
+        try:
+            with path.open("rb") as handle:
+                content = handle.read(_PROMPT_CONTENT_SCAN_MAX_BYTES).decode("utf-8", errors="ignore")
+        except OSError:
+            continue
+        if _CODEX_SECRET_OUTPUT_PATTERN.search(content) is None:
+            continue
+        normalized_path = str(path)
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    "harness": "codex",
+                    "prompt_path": normalized_path,
+                    "content_class": "credential-looking local file",
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()[:_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH]
+        prompt_display = _codex_prompt_display_text(prompt_text, requested_path=requested_path)
+        return GuardArtifact(
+            artifact_id=f"codex:project:prompt-file:{fingerprint}",
+            name=f"credential-looking local file {path.name}",
+            harness="codex",
+            artifact_type="prompt_request",
+            source_scope="project",
+            config_path=config_path,
+            metadata={
+                "prompt_signals": ["requested file content contains credential-looking material"],
+                "prompt_summary": "Prompt asks Codex to read a credential-looking local file.",
+                "prompt_matched_text": requested_path,
+                "prompt_display_text": prompt_display,
+                "prompt_request_class": "secret_read",
+                "prompt_request_classes": ["secret_read"],
+                "request_summary": prompt_display,
+                "runtime_request_summary": prompt_display,
+                "runtime_request_reason": (
+                    "Guard scanned a small local dotfile before Codex read it and found credential-looking text."
+                ),
+                "normalized_path": normalized_path,
+            },
+        )
+    return None
+
+
+def _with_codex_prompt_display_metadata(artifact: GuardArtifact, *, prompt_text: str) -> GuardArtifact:
+    matched_text = artifact.metadata.get("prompt_matched_text")
+    display = _codex_prompt_display_text(
+        prompt_text,
+        requested_path=matched_text if isinstance(matched_text, str) else None,
+    )
+    metadata = {
+        **artifact.metadata,
+        "prompt_display_text": display,
+        "request_summary": display,
+        "runtime_request_summary": display,
+    }
+    return replace(artifact, metadata=metadata)
+
+
+def _codex_prompt_display_text(prompt_text: str, *, requested_path: str | None = None) -> str:
+    sanitized_prompt = _sanitize_codex_display_text(prompt_text)
+    path_suffix = ""
+    if requested_path is not None and requested_path.strip():
+        path_suffix = f" for `{_sanitize_codex_display_text(requested_path.strip())}`"
+    return f"Codex prompt{path_suffix}: {_truncate_codex_display_text(sanitized_prompt, limit=320)}"
+
+
+def _sanitize_codex_display_text(value: str) -> str:
+    collapsed = " ".join(value.strip().split())
+    redacted = _redact_codex_prompt_secret_assignments(collapsed)
+    sanitized = re.sub(r"/(?:Users|home)/[^/\s]+", "~", redacted)
+    return re.sub(r"[A-Za-z]:\\Users\\[^\\\s]+", "~", sanitized)
+
+
+def _redact_codex_prompt_secret_assignments(value: str) -> str:
+    output: list[str] = []
+    index = 0
+    while index < len(value):
+        equals_index = value.find("=", index)
+        if equals_index == -1:
+            output.append(value[index:])
+            break
+        key_start = equals_index - 1
+        while key_start >= index and value[key_start] not in {" ", "\t", "\n", "\r", ",", ";"}:
+            key_start -= 1
+        key_start += 1
+        key = value[key_start:equals_index].strip()
+        key_upper = key.upper()
+        if key and any(marker in key_upper for marker in _CODEX_PROMPT_SECRET_KEY_MARKERS):
+            value_start = equals_index + 1
+            while value_start < len(value) and value[value_start].isspace():
+                value_start += 1
+            value_end = value_start
+            while value_end < len(value) and value[value_end] not in {" ", "\t", "\n", "\r", ",", ";"}:
+                value_end += 1
+            output.append(value[index:value_start])
+            output.append("[redacted]")
+            index = value_end
+            continue
+        output.append(value[index : equals_index + 1])
+        index = equals_index + 1
+    return "".join(output)
+
+
+def _truncate_codex_display_text(value: str, *, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return f"{value[: limit - 1].rstrip()}…"
+
+
+def _resolve_prompt_scan_path(requested_path: str, *, cwd: Path | None) -> Path | None:
+    stripped = requested_path.strip().strip("'\"").rstrip(".,;:!?)]}")
+    if not stripped:
+        return None
+    try:
+        expanded = Path(stripped).expanduser()
+    except RuntimeError:
+        return None
+    if not expanded.is_absolute():
+        expanded = (cwd or Path.cwd()) / expanded
+    with suppress(OSError):
+        return expanded.resolve(strict=False)
+    return expanded
 
 
 def _legacy_claude_alias_runtime_artifact(

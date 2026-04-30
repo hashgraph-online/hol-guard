@@ -19,14 +19,32 @@ type ReceiptsState =
   | { kind: "ready"; items: GuardReceipt[] };
 
 const receiptPageSize = 8;
-const EMPTY_RECEIPTS: GuardReceipt[] = [];
 
 export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
+  if (props.receipts.kind === "loading") {
+    return (
+      <div className="space-y-4">
+        <div className="guard-skeleton h-8 w-64" />
+        <div className="guard-skeleton h-32 w-full" />
+      </div>
+    );
+  }
+  if (props.receipts.kind === "error") {
+    return (
+      <Surface tone="danger">
+        <p className="text-sm text-brand-purple">{props.receipts.message}</p>
+      </Surface>
+    );
+  }
+  return <ReadyReceiptsWorkspace receiptItems={props.receipts.items} />;
+}
+
+function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [harnessFilter, setHarnessFilter] = useState("all");
   const [decisionFilter, setDecisionFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const receiptCount = props.receipts.kind === "ready" ? props.receipts.items.length : 0;
+  const receiptCount = props.receiptItems.length;
 
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
@@ -48,7 +66,7 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
     setPage(1);
   }, [decisionFilter, harnessFilter, searchTerm, receiptCount]);
 
-  const receiptItems = props.receipts.kind === "ready" ? props.receipts.items : EMPTY_RECEIPTS;
+  const receiptItems = props.receiptItems;
 
   const harnesses = useMemo(
     () => Array.from(new Set(receiptItems.map((receipt) => receipt.harness))).sort(),
@@ -94,21 +112,7 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
     setPage((value) => Math.min(totalPages, value + 1));
   }, [totalPages]);
 
-  if (props.receipts.kind === "loading") {
-    return (
-      <div className="space-y-4">
-        <div className="guard-skeleton h-8 w-64" />
-        <div className="guard-skeleton h-32 w-full" />
-      </div>
-    );
-  }
-  if (props.receipts.kind === "error") {
-    return (
-      <Surface tone="danger">
-        <p className="text-sm text-brand-purple">{props.receipts.message}</p>
-      </Surface>
-    );
-  }
+
   if (receiptItems.length === 0) {
     return (
       <EmptyState
@@ -123,7 +127,6 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
       <section className="guard-surface-in rounded-[2rem] border border-brand-blue/15 bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_62%,rgba(181,108,255,0.08)_100%)] p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-1">
-            <SectionLabel>History</SectionLabel>
             <h1 className="mt-2 text-3xl font-semibold tracking-[-0.02em] text-brand-dark">
             History
             </h1>
@@ -132,7 +135,7 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge tone="info">{props.receipts.items.length} saved</Badge>
+            <Badge tone="info">{props.receiptItems.length} saved</Badge>
             <Tag tone="slate">{filteredReceipts.length} shown</Tag>
           </div>
         </div>
@@ -140,7 +143,7 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
 
       <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
         <SectionLabel>Find history</SectionLabel>
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
           <ListControls
             searchLabel="Search history"
             searchValue={searchTerm}
@@ -152,7 +155,7 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
             onSearchChange={handleSearchChange}
             onFilterChange={handleHarnessFilterChange}
           />
-          <label className="block sm:max-w-[180px]">
+          <label className="block">
             <span className="sr-only">Filter evidence by decision</span>
             <select
               value={decisionFilter}
@@ -202,10 +205,10 @@ function HistoryRow(props: { receipt: GuardReceipt }) {
   const changed = receipt.changed_capabilities.join(", ") || "Nothing recorded";
   const decisionTone = receipt.policy_decision === "allow" ? "green" : receipt.policy_decision === "block" ? "purple" : "blue";
   return (
-    <article className="px-4 py-4 transition-colors duration-150 hover:bg-surface-1/70 sm:px-5">
+    <article className="px-4 py-3 transition-colors duration-150 hover:bg-surface-1/70 sm:px-5">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_150px_120px] lg:items-start">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <Tag tone={decisionTone}>{policyActionLabel(receipt.policy_decision)}</Tag>
             <span className="text-xs font-medium text-muted-foreground">{harnessDisplayName(receipt.harness)}</span>
           </div>
@@ -221,13 +224,15 @@ function HistoryRow(props: { receipt: GuardReceipt }) {
           <p className="mt-1 line-clamp-2 text-xs font-medium leading-relaxed text-brand-dark">{changed}</p>
         </div>
         <div className="text-xs font-medium text-muted-foreground lg:text-right">
-          {receipt.timestamp}
+          {new Date(receipt.timestamp).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
         </div>
       </div>
-      <details className="group mt-3">
-        <summary className="inline-flex cursor-pointer select-none items-center gap-2 text-xs font-semibold text-brand-blue [&::-webkit-details-marker]:hidden">
-          <span className="transition-transform duration-150 group-open:rotate-90">›</span>
-          More details
+      <details className="group mt-2">
+        <summary className="flex cursor-pointer select-none items-center gap-2 text-xs font-semibold text-brand-blue [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center gap-2">
+            <span className="transition-transform duration-150 group-open:rotate-90">›</span>
+            More details
+          </span>
         </summary>
         <div className="mt-3 rounded-xl border border-slate-200/70 bg-white p-3">
           <KeyValueGrid
