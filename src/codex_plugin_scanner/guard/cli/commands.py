@@ -1965,7 +1965,7 @@ def _codex_browser_approval_decision(
     wait_result = wait_for_approval_requests(
         store=store,
         request_ids=request_ids,
-        timeout_seconds=config.approval_wait_timeout_seconds,
+        timeout_seconds=min(config.approval_wait_timeout_seconds, 25),
     )
     response_payload["approval_wait"] = wait_result
     if not bool(wait_result.get("resolved")):
