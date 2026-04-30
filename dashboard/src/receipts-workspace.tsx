@@ -224,11 +224,11 @@ function HistoryRow(props: { receipt: GuardReceipt }) {
           <p className="mt-1 line-clamp-2 text-xs font-medium leading-relaxed text-brand-dark">{changed}</p>
         </div>
         <div className="text-xs font-medium text-muted-foreground lg:text-right">
-          {new Date(receipt.timestamp).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+          {new Date(receipt.timestamp).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
         </div>
       </div>
       <details className="group mt-2">
-        <summary className="flex cursor-pointer select-none items-center justify-between gap-3 text-xs font-semibold text-brand-blue [&::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer select-none items-center gap-2 text-xs font-semibold text-brand-blue [&::-webkit-details-marker]:hidden">
           <span className="flex items-center gap-2">
             <span className="transition-transform duration-150 group-open:rotate-90">›</span>
             More details
