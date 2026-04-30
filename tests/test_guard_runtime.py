@@ -10639,13 +10639,35 @@ def test_codex_browser_approval_caps_wait_below_hook_timeout(tmp_path, monkeypat
         args=argparse.Namespace(harness="codex", json=False),
         event_name="PreToolUse",
         policy_action="block",
-        response_payload={"approval_requests": [{"request_id": "request-1"}]},
+        response_payload={"operation_id": "operation-1", "approval_requests": [{"request_id": "request-1"}]},
         store=GuardStore(tmp_path / "home"),
         config=GuardConfig(tmp_path / "home", None, approval_wait_timeout_seconds=120),
     )
 
     assert decision is None
     assert captured_timeout == [25]
+
+
+def test_codex_browser_approval_caps_fallback_wait(tmp_path, monkeypatch):
+    captured_timeout: list[int] = []
+
+    def _fake_wait_for_approval_requests(**kwargs) -> dict[str, object]:
+        captured_timeout.append(int(kwargs["timeout_seconds"]))
+        return {"resolved": False, "pending_request_ids": ["request-1"], "items": []}
+
+    monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", _fake_wait_for_approval_requests)
+
+    decision = guard_commands_module._codex_browser_approval_decision(
+        args=argparse.Namespace(harness="codex", json=False),
+        event_name="PreToolUse",
+        policy_action="block",
+        response_payload={"approval_requests": [{"request_id": "request-1"}]},
+        store=GuardStore(tmp_path / "home"),
+        config=GuardConfig(tmp_path / "home", None, approval_wait_timeout_seconds=120),
+    )
+
+    assert decision is None
+    assert captured_timeout == [5]
 
 
 def test_guard_hook_codex_post_tool_use_blocks_named_secret_output(
