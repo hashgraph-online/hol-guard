@@ -1419,11 +1419,13 @@ def run_guard_command(
             artifact_id = runtime_artifact.artifact_id
             artifact_name = runtime_artifact.name
             policy_harness = _canonical_harness_name(args.harness)
-            stored_policy_action = store.resolve_policy(
-                policy_harness,
-                artifact_id,
-                runtime_artifact_hash,
-                str(runtime_workspace) if runtime_workspace else None,
+            stored_policy_action = _runtime_stored_policy_action(
+                store=store,
+                harness=policy_harness,
+                artifact=runtime_artifact,
+                artifact_id=artifact_id,
+                artifact_hash=runtime_artifact_hash,
+                workspace=str(runtime_workspace) if runtime_workspace else None,
             )
             if stored_policy_action is None:
                 legacy_artifact = _legacy_claude_alias_runtime_artifact(
@@ -1433,11 +1435,13 @@ def run_guard_command(
                     workspace=runtime_workspace,
                 )
                 if legacy_artifact is not None:
-                    stored_policy_action = store.resolve_policy(
-                        args.harness,
-                        legacy_artifact.artifact_id,
-                        artifact_hash(legacy_artifact),
-                        str(runtime_workspace) if runtime_workspace else None,
+                    stored_policy_action = _runtime_stored_policy_action(
+                        store=store,
+                        harness=args.harness,
+                        artifact=legacy_artifact,
+                        artifact_id=legacy_artifact.artifact_id,
+                        artifact_hash=artifact_hash(legacy_artifact),
+                        workspace=str(runtime_workspace) if runtime_workspace else None,
                     )
             policy_action = _coalesce_string(
                 getattr(args, "policy_action", None),
@@ -2771,6 +2775,37 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
     )
 
 
+def _runtime_stored_policy_action(
+    *,
+    store: GuardStore,
+    harness: str,
+    artifact: GuardArtifact,
+    artifact_id: str,
+    artifact_hash: str,
+    workspace: str | None,
+) -> str | None:
+    decision = store.resolve_policy_decision(
+        harness,
+        artifact_id,
+        artifact_hash,
+        workspace,
+        artifact.publisher,
+    )
+    if decision is None:
+        return None
+    action = _optional_string(decision.get("action"))
+    if action is None:
+        return None
+    scope = _optional_string(decision.get("scope"))
+    if (
+        action in {"allow", "warn", "review"}
+        and scope in {"publisher", "harness", "global"}
+        and _runtime_artifact_risk_classes(artifact)
+    ):
+        return None
+    return action
+
+
 def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> str:
     if _prompt_requires_hard_block(artifact):
         return "block"
@@ -2933,6 +2968,13 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
         harness = response_payload.get("harness")
         prompt_classes = _prompt_request_classes(artifact)
         if harness == "codex" and "secret_read" in prompt_classes:
+            prompt_summary = artifact.metadata.get("prompt_summary")
+            if isinstance(prompt_summary, str) and "credential-looking local file" in prompt_summary:
+                return (
+                    "HOL Guard stopped this Codex prompt before Codex could open a credential-looking local file. "
+                    "Codex does not expose native approval prompts for Read-tool file reads, so Guard blocks this "
+                    "request at prompt time."
+                )
             return (
                 "HOL Guard stopped this Codex prompt before Codex could open a sensitive local file. Codex does not "
                 "expose native approval prompts for Read-tool file reads, so Guard blocks this request at prompt time."
@@ -3163,6 +3205,13 @@ def _emit_native_hook_response(
             }
         if payload:
             _write_json_line(payload, output_stream=output_stream)
+        return
+    if event_name == "PostToolUse" and policy_action in {"block", "sandbox-required", "require-reapproval"}:
+        payload["decision"] = "block"
+        payload["reason"] = reason
+        payload["continue"] = False
+        payload["stopReason"] = reason
+        _write_json_line(payload, output_stream=output_stream)
         return
     permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
     if harness == "codex" and event_name == "PreToolUse" and permission_decision is None:
@@ -3594,6 +3643,14 @@ def _hook_runtime_artifact(
 ) -> GuardArtifact | None:
     harness = _canonical_harness_name(harness)
     event_name = _hook_event_name(payload)
+    if harness == "codex" and event_name == "PostToolUse":
+        output_artifact = _codex_post_tool_output_artifact(
+            payload=payload,
+            config_path=str(_runtime_policy_path(harness, home_dir, workspace)),
+            source_scope=_coalesce_string(payload.get("source_scope"), "project"),
+        )
+        if output_artifact is not None:
+            return output_artifact
     if event_name == "UserPromptSubmit":
         prompt_text = payload.get("prompt")
         if isinstance(prompt_text, str) and prompt_text.strip():
@@ -3619,6 +3676,13 @@ def _hook_runtime_artifact(
                 )
                 if prompt_artifacts:
                     return _merged_prompt_runtime_artifact(harness, prompt_artifacts)
+            prompt_file_artifact = _codex_prompt_credential_file_artifact(
+                prompt_text=prompt_text,
+                cwd=workspace,
+                config_path=config_path,
+            )
+            if prompt_file_artifact is not None:
+                return prompt_file_artifact
     request = extract_sensitive_file_read_request(
         payload.get("tool_name"),
         payload.get("tool_input", payload.get("arguments")),
@@ -3648,6 +3712,174 @@ def _hook_runtime_artifact(
         config_path=config_path,
         source_scope=source_scope,
     )
+
+
+_CODEX_SECRET_OUTPUT_PATTERN = re.compile(
+    r"(?i)(?:fake[_-]?credential|fake[_-]?secret|"
+    r"(?:api[_-]?key|auth[_-]?token|credential|npm[_-]?token|private[_-]?key|secret|token|password)\\s*[:=])"
+)
+
+
+def _codex_post_tool_output_artifact(
+    *,
+    payload: dict[str, object],
+    config_path: str,
+    source_scope: str,
+) -> GuardArtifact | None:
+    response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
+    if not response_text or _CODEX_SECRET_OUTPUT_PATTERN.search(response_text) is None:
+        return None
+    tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
+    tool_input = payload.get("tool_input")
+    command_text = ""
+    if isinstance(tool_input, dict):
+        command = tool_input.get("command")
+        if isinstance(command, str):
+            command_text = command.strip()
+    if not command_text:
+        command_text = tool_name
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {
+                "tool_name": tool_name,
+                "command_text": command_text,
+                "output_class": "credential-looking output",
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    return GuardArtifact(
+        artifact_id=f"codex:{source_scope}:tool-output:{fingerprint}",
+        name=f"{tool_name} credential-looking output",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope=source_scope,
+        config_path=config_path,
+        metadata={
+            "tool_name": tool_name,
+            "command_text": command_text,
+            "action_class": "credential exfiltration shell command",
+            "request_summary": (
+                f"Codex tool `{tool_name}` produced credential-looking output while running `{command_text}`."
+            ),
+            "runtime_request_signals": ["tool output contains credential-looking material"],
+            "runtime_request_summary": (
+                "Requests a sensitive native tool action: credential-looking output reached Codex."
+            ),
+            "runtime_request_reason": (
+                "Guard inspects supported Codex tool output before Codex uses it, so accidental secret reads can be "
+                "stopped even when the filename was not obviously sensitive."
+            ),
+        },
+    )
+
+
+def _collect_codex_tool_response_text(value: object, *, depth: int = 0) -> str:
+    if depth > 5:
+        return ""
+    if isinstance(value, str):
+        return value[:20000]
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key, child in value.items():
+            key_text = str(key).lower()
+            if key_text in {"stdout", "stderr", "output", "text", "content", "result", "message"} or depth > 0:
+                text = _collect_codex_tool_response_text(child, depth=depth + 1)
+                if text:
+                    parts.append(text)
+        return "\n".join(parts)[:20000]
+    if isinstance(value, list):
+        return "\n".join(_collect_codex_tool_response_text(item, depth=depth + 1) for item in value)[:20000]
+    return ""
+
+
+_PROMPT_PATH_TOKEN_PATTERN = re.compile(
+    r"(?P<path>(?:~|\.{1,2}|/)[A-Za-z0-9_./@%+=:,~-]*\.[A-Za-z0-9_.-]+|"
+    r"(?<![\w/.-])\.[A-Za-z0-9][A-Za-z0-9_.-]*)"
+)
+_PROMPT_FILE_READ_VERB_PATTERN = re.compile(r"\b(?:read|open|print|show|dump|cat|head|tail|less|view|display)\b", re.I)
+_PROMPT_CONTENT_SCAN_MAX_BYTES = 64 * 1024
+_PROMPT_CONTENT_SCAN_SKIP_BASENAMES = frozenset(
+    {
+        ".env",
+        ".npmrc",
+        ".pypirc",
+        ".netrc",
+        ".git-credentials",
+    }
+)
+
+
+def _codex_prompt_credential_file_artifact(
+    *,
+    prompt_text: str,
+    cwd: Path | None,
+    config_path: str,
+) -> GuardArtifact | None:
+    if _PROMPT_FILE_READ_VERB_PATTERN.search(prompt_text) is None:
+        return None
+    for match in _PROMPT_PATH_TOKEN_PATTERN.finditer(prompt_text):
+        requested_path = match.group("path")
+        path = _resolve_prompt_scan_path(requested_path, cwd=cwd)
+        if path is None or path.name in _PROMPT_CONTENT_SCAN_SKIP_BASENAMES:
+            continue
+        if not path.name.startswith("."):
+            continue
+        if not path.is_file():
+            continue
+        try:
+            content = path.read_bytes()[:_PROMPT_CONTENT_SCAN_MAX_BYTES].decode("utf-8", errors="ignore")
+        except OSError:
+            continue
+        if _CODEX_SECRET_OUTPUT_PATTERN.search(content) is None:
+            continue
+        normalized_path = str(path)
+        fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    "harness": "codex",
+                    "prompt_path": normalized_path,
+                    "content_class": "credential-looking local file",
+                },
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()[:24]
+        return GuardArtifact(
+            artifact_id=f"codex:project:prompt-file:{fingerprint}",
+            name=f"credential-looking local file {path.name}",
+            harness="codex",
+            artifact_type="prompt_request",
+            source_scope="project",
+            config_path=config_path,
+            metadata={
+                "prompt_signals": ["requested file content contains credential-looking material"],
+                "prompt_summary": "Prompt asks Codex to read a credential-looking local file.",
+                "prompt_matched_text": requested_path,
+                "prompt_request_class": "secret_read",
+                "prompt_request_classes": ["secret_read"],
+                "runtime_request_summary": "Prompt requests direct access to a credential-looking local file.",
+                "runtime_request_reason": (
+                    "Guard scanned a small local dotfile before Codex read it and found credential-looking text."
+                ),
+                "normalized_path": normalized_path,
+            },
+        )
+    return None
+
+
+def _resolve_prompt_scan_path(requested_path: str, *, cwd: Path | None) -> Path | None:
+    stripped = requested_path.strip().strip("'\"")
+    if not stripped:
+        return None
+    try:
+        expanded = Path(stripped).expanduser()
+    except RuntimeError:
+        return None
+    if not expanded.is_absolute():
+        expanded = (cwd or Path.cwd()) / expanded
+    with suppress(OSError):
+        return expanded.resolve(strict=False)
+    return expanded
 
 
 def _legacy_claude_alias_runtime_artifact(
