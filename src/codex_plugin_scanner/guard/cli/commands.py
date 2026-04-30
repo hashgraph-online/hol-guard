@@ -3833,7 +3833,8 @@ def _codex_prompt_credential_file_artifact(
         if not path.is_file():
             continue
         try:
-            content = path.read_bytes()[:_PROMPT_CONTENT_SCAN_MAX_BYTES].decode("utf-8", errors="ignore")
+            with path.open("rb") as handle:
+                content = handle.read(_PROMPT_CONTENT_SCAN_MAX_BYTES).decode("utf-8", errors="ignore")
         except OSError:
             continue
         if _CODEX_SECRET_OUTPUT_PATTERN.search(content) is None:
