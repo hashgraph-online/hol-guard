@@ -115,6 +115,9 @@ _CURL_EXPAND_FLAGS_WITH_VALUE = frozenset(
 _CURL_FORM_FLAGS_WITH_VALUE = frozenset({"--form", "-F"})
 _CURL_DIRECT_FILE_FLAGS_WITH_VALUE = frozenset({"--upload-file", "-T"})
 _CURL_VARIABLE_FLAGS_WITH_VALUE = frozenset({"--variable"})
+_CURL_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE = frozenset(
+    {"--data-raw", "--header", "--proxy-user", "--request", "--user"}
+)
 _CURL_SHORT_FLAGS_WITH_VALUES = frozenset(
     {
         "A",
@@ -147,6 +150,9 @@ _CURL_SHORT_FLAGS_WITH_VALUES = frozenset(
     }
 )
 _WGET_UPLOAD_FLAGS_WITH_VALUE = frozenset({"--body-file", "--post-file"})
+_WGET_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE = frozenset(
+    {"--body-data", "--header", "--method", "--password", "--post-data", "--user"}
+)
 _SHELL_COMMAND_SEPARATORS = frozenset({"&&", "||", ";", "|", "&", "|&"})
 _SHELL_COMMAND_WRAPPERS = frozenset({"command", "env", "nice", "nohup", "stdbuf", "sudo", "time"})
 _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS = frozenset({"cat", "curl", "echo", "printf", "sed", "tr", "wget"})
@@ -198,6 +204,7 @@ _READ_ONLY_INTERPRETER_MUTATION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b(?:fdopen|os\.fdopen)\s*\([^)]*,\s*['\"][^'\"]*[wax+][^'\"]*['\"]", re.IGNORECASE),
     re.compile(r"\bos\.open\s*\([^)]*\b(?:O_WRONLY|O_RDWR|O_CREAT|O_TRUNC|O_APPEND)\b", re.IGNORECASE),
     re.compile(r"\bos\.write\s*\(", re.IGNORECASE),
+    re.compile(r"\bos\.exec(?:l|le|lp|lpe|v|ve|vp|vpe)\s*\(", re.IGNORECASE),
     re.compile(
         r"\b(?:os\.system|subprocess\.(?:run|popen|call|check_call|check_output)|run|popen|call|check_call|check_output|system)\s*\(",
         re.IGNORECASE,
@@ -732,11 +739,133 @@ def _shell_segments_contain_credential_exfiltration(parts: list[str]) -> bool:
         command_name, command_index = _shell_segment_primary_command(segment)
         if command_name is None or command_index is None:
             continue
-        if command_name in _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS:
+        if command_name in _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS and command_name not in {"curl", "wget"}:
             continue
-        if _text_contains_credential_exfiltration(" ".join(segment[command_index:])):
+        segment_text = _shell_segment_credential_exfiltration_text(
+            segment,
+            command_name=command_name,
+            command_index=command_index,
+        )
+        if segment_text and _text_contains_credential_exfiltration(segment_text):
             return True
     return False
+
+
+def _shell_segment_credential_exfiltration_text(
+    segment: list[str],
+    *,
+    command_name: str,
+    command_index: int,
+) -> str:
+    if command_name == "curl":
+        return _curl_segment_credential_exfiltration_text(segment, command_index=command_index)
+    if command_name == "wget":
+        return _wget_segment_credential_exfiltration_text(segment, command_index=command_index)
+    return " ".join(segment[command_index:])
+
+
+def _curl_segment_credential_exfiltration_text(segment: list[str], *, command_index: int) -> str:
+    surface_tokens = [
+        token
+        for token in segment[:command_index]
+        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(token))
+    ]
+    surface_tokens.append(segment[command_index])
+    index = command_index + 1
+    while index < len(segment):
+        token = segment[index]
+        if token == "--":
+            surface_tokens.extend(_network_destination_tokens(segment[index + 1 :]))
+            break
+        clustered_tokens_consumed = _curl_clustered_short_flag_tokens_consumed(segment, index)
+        if clustered_tokens_consumed > 1:
+            surface_tokens.append(token)
+            surface_tokens.append(segment[index + 1])
+            index += clustered_tokens_consumed
+            continue
+        if len(token) == 2 and token[0] == "-" and token[1] in _CURL_SHORT_FLAGS_WITH_VALUES:
+            surface_tokens.append(token)
+            if index + 1 < len(segment):
+                surface_tokens.append(segment[index + 1])
+            index += 2
+            continue
+        if token.startswith("--") and "=" in token:
+            surface_tokens.append(token)
+            index += 1
+            continue
+        if token in _CURL_CONFIG_FLAGS_WITH_VALUE or token in _CURL_AT_FILE_FLAGS_WITH_VALUE:
+            surface_tokens.append(token)
+            if index + 1 < len(segment):
+                surface_tokens.append(segment[index + 1])
+            index += 2
+            continue
+        if token in _CURL_DATA_URLENCODE_FLAGS_WITH_VALUE or token in _CURL_FORM_FLAGS_WITH_VALUE:
+            surface_tokens.append(token)
+            if index + 1 < len(segment):
+                surface_tokens.append(segment[index + 1])
+            index += 2
+            continue
+        if token in _CURL_DIRECT_FILE_FLAGS_WITH_VALUE or token in _CURL_VARIABLE_FLAGS_WITH_VALUE:
+            surface_tokens.append(token)
+            if index + 1 < len(segment):
+                surface_tokens.append(segment[index + 1])
+            index += 2
+            continue
+        if token in _CURL_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE or token in {"-H", "-X"}:
+            surface_tokens.append(token)
+            if index + 1 < len(segment):
+                surface_tokens.append(segment[index + 1])
+            index += 2
+            continue
+        if not token.startswith("-"):
+            if _SECRET_EXFILTRATION_DESTINATION_PATTERN.search(token):
+                surface_tokens.append(token)
+            index += 1
+            continue
+        surface_tokens.append(token)
+        index += 1
+    return " ".join(surface_tokens)
+
+
+def _wget_segment_credential_exfiltration_text(segment: list[str], *, command_index: int) -> str:
+    surface_tokens = [
+        token
+        for token in segment[:command_index]
+        if _SHELL_ASSIGNMENT_PATTERN.match(_shell_command_token_without_attached_redirection(token))
+    ]
+    surface_tokens.append(segment[command_index])
+    index = command_index + 1
+    while index < len(segment):
+        token = segment[index]
+        if token == "--":
+            surface_tokens.extend(_network_destination_tokens(segment[index + 1 :]))
+            break
+        if token in _WGET_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE:
+            surface_tokens.append(token)
+            if index + 1 < len(segment):
+                surface_tokens.append(segment[index + 1])
+            index += 2
+            continue
+        if any(
+            token.startswith(f"{flag}=")
+            for flag in _WGET_CREDENTIAL_EXFILTRATION_FLAGS_WITH_VALUE
+            if flag.startswith("--")
+        ):
+            surface_tokens.append(token)
+            index += 1
+            continue
+        if not token.startswith("-"):
+            if _SECRET_EXFILTRATION_DESTINATION_PATTERN.search(token):
+                surface_tokens.append(token)
+            index += 1
+            continue
+        surface_tokens.append(token)
+        index += 1
+    return " ".join(surface_tokens)
+
+
+def _network_destination_tokens(tokens: list[str]) -> list[str]:
+    return [token for token in tokens if _SECRET_EXFILTRATION_DESTINATION_PATTERN.search(token)]
 
 
 def _text_contains_credential_exfiltration(text: str) -> bool:
