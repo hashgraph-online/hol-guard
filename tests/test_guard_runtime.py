@@ -9407,6 +9407,126 @@ def test_guard_hook_codex_queues_approval_before_native_deny_output(tmp_path, ca
     assert pending[0]["artifact_type"] == "tool_action_request"
 
 
+def test_guard_hook_codex_pretooluse_browser_approval_resumes_original_tool(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    store = GuardStore(home_dir)
+    blocked_event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo MALICIOUS > dangerous-marker.json"},
+        "policy_action": "block",
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+
+    def approve_pending() -> None:
+        for _ in range(40):
+            pending = store.list_approval_requests(limit=10)
+            if pending:
+                apply_approval_resolution(
+                    store=store,
+                    request_id=str(pending[0]["request_id"]),
+                    action="allow",
+                    scope="artifact",
+                    workspace=None,
+                    reason="approved in browser",
+                )
+                return
+            threading.Event().wait(0.05)
+
+    worker = threading.Thread(target=approve_pending, daemon=True)
+    worker.start()
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert captured.out == ""
+    assert captured.err == ""
+    assert store.list_approval_requests(limit=10) == []
+
+
+def test_guard_hook_codex_pretooluse_browser_deny_keeps_tool_blocked(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    store = GuardStore(home_dir)
+    blocked_event = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo MALICIOUS > dangerous-marker.json"},
+        "policy_action": "block",
+        "source_scope": "project",
+        "cwd": str(workspace_dir),
+    }
+
+    def deny_pending() -> None:
+        for _ in range(40):
+            pending = store.list_approval_requests(limit=10)
+            if pending:
+                apply_approval_resolution(
+                    store=store,
+                    request_id=str(pending[0]["request_id"]),
+                    action="block",
+                    scope="artifact",
+                    workspace=None,
+                    reason="denied in browser",
+                )
+                return
+            threading.Event().wait(0.05)
+
+    worker = threading.Thread(target=deny_pending, daemon=True)
+    worker.start()
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 2
+    assert captured.out == ""
+    assert "HOL Guard" in captured.err
+    assert "blocked" in captured.err.lower()
+
+
 def test_guard_hook_claude_native_block_does_not_queue_approval_center_request(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -9647,6 +9767,55 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_includes_approval_url(
     pending = GuardStore(home_dir).list_approval_requests(limit=10)
     assert len(pending) == 1
     assert pending[0]["artifact_type"] == "prompt_request"
+
+
+def test_guard_hook_codex_user_prompt_submit_browser_approval_resumes_prompt(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    store = GuardStore(home_dir)
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Open ./.npmrc",
+        "source_scope": "project",
+    }
+
+    def approve_pending() -> None:
+        for _ in range(40):
+            pending = store.list_approval_requests(limit=10)
+            if pending:
+                apply_approval_resolution(
+                    store=store,
+                    request_id=str(pending[0]["request_id"]),
+                    action="allow",
+                    scope="artifact",
+                    workspace=None,
+                    reason="approved in browser",
+                )
+                return
+            threading.Event().wait(0.05)
+
+    worker = threading.Thread(target=approve_pending, daemon=True)
+    worker.start()
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+
+    assert rc == 0
+    assert output == ""
+    assert store.list_approval_requests(limit=10) == []
 
 
 def test_guard_hook_codex_user_prompt_submit_uses_strictest_mixed_prompt_risk(
@@ -10047,6 +10216,65 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
     assert "HOL Guard" in payload["stopReason"]
     assert "credential-looking output" in payload["stopReason"]
     assert "http://127.0.0.1:4455/approvals/" in payload["stopReason"]
+
+
+def test_guard_hook_codex_post_tool_use_browser_approval_resumes_result(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 2\n")
+    event = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "cat .nvmrc"},
+        "tool_response": {"stdout": "HOL_GUARD_FAKE_CREDENTIAL=fixture-only\n"},
+        "source_scope": "project",
+    }
+    monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    store = GuardStore(home_dir)
+
+    def approve_pending() -> None:
+        for _ in range(40):
+            pending = store.list_approval_requests(limit=10)
+            if pending:
+                apply_approval_resolution(
+                    store=store,
+                    request_id=str(pending[0]["request_id"]),
+                    action="allow",
+                    scope="artifact",
+                    workspace=None,
+                    reason="approved in browser",
+                )
+                return
+            threading.Event().wait(0.05)
+
+    worker = threading.Thread(target=approve_pending, daemon=True)
+    worker.start()
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "codex",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert captured.out == ""
+    assert captured.err == ""
+    assert store.list_approval_requests(limit=10) == []
 
 
 def test_guard_hook_codex_post_tool_use_blocks_named_secret_output(
