@@ -15,6 +15,7 @@ from threading import Thread
 from typing import TypeVar
 
 from ..models import Finding, Severity, severity_from_value
+from ..path_support import resolves_within_root
 from .cisco_skill_scanner import CiscoIntegrationStatus
 
 _EXCLUDED_DIRS = {
@@ -237,7 +238,7 @@ def _normalize_finding(plugin_dir: Path, file_path: Path, finding: object) -> Fi
 
 def _collect_static_targets(plugin_dir: Path) -> tuple[Path, ...]:
     config_path = plugin_dir / ".mcp.json"
-    if not config_path.is_file():
+    if not _is_safe_static_target(plugin_dir, config_path):
         return ()
 
     targets: list[Path] = []
@@ -253,6 +254,8 @@ def _collect_static_targets(plugin_dir: Path) -> tuple[Path, ...]:
             file_path = current_dir / file_name
             if file_path == config_path or file_path.suffix.lower() not in _SOURCE_SUFFIXES:
                 continue
+            if not _is_safe_static_target(plugin_dir, file_path):
+                continue
             try:
                 if file_path.stat().st_size > _MAX_TARGET_SIZE_BYTES:
                     continue
@@ -260,6 +263,15 @@ def _collect_static_targets(plugin_dir: Path) -> tuple[Path, ...]:
                 continue
             targets.append(file_path)
     return tuple(targets)
+
+
+def _is_safe_static_target(plugin_dir: Path, target: Path) -> bool:
+    try:
+        if not target.is_file():
+            return False
+    except OSError:
+        return False
+    return resolves_within_root(plugin_dir, target, require_exists=True)
 
 
 def _run_awaitable(awaitable: Awaitable[T]) -> T:
@@ -315,13 +327,15 @@ async def _scan_targets(
 def run_cisco_mcp_scan(plugin_dir: Path, mode: str = "auto") -> CiscoMcpScanSummary:
     """Run Cisco MCP scanner static analysis when available."""
 
+    config_path = plugin_dir / ".mcp.json"
+
     if mode == "off":
         return _build_summary(
             status=CiscoIntegrationStatus.SKIPPED,
             message="Cisco MCP scanning disabled by configuration.",
         )
 
-    if not (plugin_dir / ".mcp.json").is_file():
+    if not _is_safe_static_target(plugin_dir, config_path):
         return _build_summary(
             status=CiscoIntegrationStatus.SKIPPED,
             message="No .mcp.json found; Cisco MCP scan skipped.",

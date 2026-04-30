@@ -103,6 +103,68 @@ def test_scan_includes_dist_descendants(monkeypatch, tmp_path: Path) -> None:
     assert any(path.endswith("dist/server.js") for path in analyzed_paths)
 
 
+def test_scan_skips_source_symlink_resolving_outside_plugin_root(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+    outside_secret = tmp_path / "outside.py"
+    outside_secret.write_text("auth_token = 'outside-secret'\n", encoding="utf-8")
+    (plugin_dir / "leak.py").symlink_to(outside_secret)
+    analyzed_paths: list[str] = []
+    analyzed_contents: list[str] = []
+
+    class RecordingYaraAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+        async def analyze(self, content: str, context: dict[str, Any] | None = None) -> list[FakeCiscoFinding]:
+            analyzed_paths.append(str((context or {}).get("file_path", "")))
+            analyzed_contents.append(content)
+            return []
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        lambda: {"YaraAnalyzer": RecordingYaraAnalyzer},
+    )
+
+    summary = run_cisco_mcp_scan(plugin_dir, mode="on")
+
+    assert summary.status == CiscoIntegrationStatus.ENABLED
+    assert summary.targets_scanned == 2
+    assert str(plugin_dir / "leak.py") not in analyzed_paths
+    assert all("outside-secret" not in content for content in analyzed_contents)
+
+
+def test_scan_skips_symlinked_mcp_config_outside_plugin_root(monkeypatch, tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugin"
+    _write_plugin(plugin_dir)
+    (plugin_dir / ".mcp.json").unlink()
+    outside_config = tmp_path / "outside-mcp.json"
+    outside_config.write_text(
+        json.dumps({"mcpServers": {"outside": {"command": "python", "args": ["secret.py"]}}}),
+        encoding="utf-8",
+    )
+    (plugin_dir / ".mcp.json").symlink_to(outside_config)
+    loader_state = {"called": False}
+
+    class RecordingYaraAnalyzer:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            return None
+
+    def _loader() -> dict[str, type[RecordingYaraAnalyzer]]:
+        loader_state["called"] = True
+        return {"YaraAnalyzer": RecordingYaraAnalyzer}
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.integrations.cisco_mcp_scanner._load_mcp_scanner_components",
+        _loader,
+    )
+
+    summary = run_cisco_mcp_scan(plugin_dir, mode="on")
+
+    assert summary.status == CiscoIntegrationStatus.SKIPPED
+    assert loader_state["called"] is False
+
+
 def test_mcp_security_auto_mode_unavailable_is_not_applicable(monkeypatch, tmp_path: Path) -> None:
     plugin_dir = tmp_path / "plugin"
     _write_plugin(plugin_dir)

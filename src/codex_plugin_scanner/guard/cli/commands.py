@@ -3816,7 +3816,13 @@ _CODEX_SEARCH_OPTION_VALUE_FLAGS = frozenset(
 _CODEX_SEARCH_OPTION_VALUE_FLAGS_BY_EXECUTABLE = {
     "rg": frozenset({"-T"}),
 }
-_CODEX_SEARCH_UNSAFE_FLAGS = frozenset({"--pre"})
+_CODEX_SEARCH_UNSAFE_FLAGS = frozenset({"--dereference-recursive", "--follow", "--pre"})
+_CODEX_SEARCH_UNSAFE_SHORT_FLAGS_BY_EXECUTABLE = {
+    "egrep": frozenset({"R"}),
+    "fgrep": frozenset({"R"}),
+    "grep": frozenset({"R"}),
+    "rg": frozenset({"L"}),
+}
 _CODEX_GIT_GLOBAL_VALUE_FLAGS = frozenset(
     {"-c", "--config-env", "--exec-path", "--git-dir", "--work-tree", "--namespace"}
 )
@@ -3995,7 +4001,7 @@ def _codex_search_targets_are_source_like(args: list[str], *, cwd: Path | None, 
         if skip_next:
             skip_next = False
             continue
-        if arg in _CODEX_SEARCH_UNSAFE_FLAGS or any(arg.startswith(f"{flag}=") for flag in _CODEX_SEARCH_UNSAFE_FLAGS):
+        if _codex_search_arg_is_unsafe(arg, executable=executable):
             return False
         if arg in _CODEX_SEARCH_PATTERN_VALUE_FLAGS:
             pattern_from_option = True
@@ -4024,6 +4030,17 @@ def _codex_search_targets_are_source_like(args: list[str], *, cwd: Path | None, 
     else:
         return False
     return bool(targets) and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+
+
+def _codex_search_arg_is_unsafe(arg: str, *, executable: str) -> bool:
+    if arg in _CODEX_SEARCH_UNSAFE_FLAGS:
+        return True
+    if any(arg.startswith(f"{flag}=") for flag in _CODEX_SEARCH_UNSAFE_FLAGS if flag.startswith("--")):
+        return True
+    if not arg.startswith("-") or arg.startswith("--"):
+        return False
+    unsafe_short_flags = _CODEX_SEARCH_UNSAFE_SHORT_FLAGS_BY_EXECUTABLE.get(executable, frozenset())
+    return any(flag in unsafe_short_flags for flag in arg[1:])
 
 
 def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> bool:
