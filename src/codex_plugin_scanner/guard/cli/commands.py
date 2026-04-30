@@ -1674,6 +1674,18 @@ def run_guard_command(
                     output_stream=output_stream,
                 )
                 return 0
+            codex_browser_decision = _codex_browser_approval_decision(
+                args=args,
+                event_name=event_name,
+                policy_action=policy_action,
+                response_payload=response_payload,
+                store=store,
+                config=config,
+            )
+            if codex_browser_decision == "allow":
+                return 0
+            if codex_browser_decision == "block":
+                policy_action = "block"
             if _should_emit_native_hook_exit_block(args, event_name=event_name, policy_action=policy_action):
                 _emit_native_hook_block_stderr(
                     _native_hook_reason_for_harness(
@@ -1918,6 +1930,52 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
         and not getattr(args, "json", False)
         and bool(codex_runtime_marker)
     )
+
+
+def _codex_browser_approval_decision(
+    *,
+    args: argparse.Namespace,
+    event_name: str,
+    policy_action: str,
+    response_payload: dict[str, object],
+    store: GuardStore,
+    config: GuardConfig,
+) -> str | None:
+    if _canonical_harness_name(args.harness) != "codex":
+        return None
+    if getattr(args, "json", False):
+        return None
+    if event_name not in {"PreToolUse", "PostToolUse", "UserPromptSubmit"}:
+        return None
+    if policy_action not in {"block", "sandbox-required", "require-reapproval"}:
+        return None
+    approval_requests = response_payload.get("approval_requests")
+    if not isinstance(approval_requests, list):
+        return None
+    request_ids = [
+        str(item["request_id"])
+        for item in approval_requests
+        if isinstance(item, dict) and isinstance(item.get("request_id"), str)
+    ]
+    if not request_ids:
+        return None
+    wait_result = wait_for_approval_requests(
+        store=store,
+        request_ids=request_ids,
+        timeout_seconds=config.approval_wait_timeout_seconds,
+    )
+    response_payload["approval_wait"] = wait_result
+    if not bool(wait_result.get("resolved")):
+        response_payload["review_hint"] = (
+            "Approval is still pending in HOL Guard. Approve it in the browser, then retry the same Codex action."
+        )
+        return None
+    resolved_items = [item for item in wait_result.get("items", []) if isinstance(item, dict)]
+    if any(str(item.get("resolution_action")) == "block" for item in resolved_items):
+        response_payload["review_hint"] = "Browser decision saved. HOL Guard kept this Codex action blocked."
+        return "block"
+    response_payload["review_hint"] = "Approval received in HOL Guard. Codex is resuming this action."
+    return "allow"
 
 
 def _should_emit_prequeue_native_hook_response(
