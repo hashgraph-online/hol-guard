@@ -2474,14 +2474,40 @@ def _runtime_relative_part_is_unsafe(part: str) -> bool:
     return any(separator in part for separator in separators)
 
 
-def _runtime_entry_name_matches(entry_name: str, requested_name: str) -> bool:
-    return entry_name == requested_name or os.path.normcase(entry_name) == os.path.normcase(requested_name)
+def _runtime_entry_name_matches(
+    entry_name: str,
+    requested_name: str,
+    *,
+    entry_path: str,
+    requested_path: str,
+) -> bool:
+    if entry_name == requested_name or os.path.normcase(entry_name) == os.path.normcase(requested_name):
+        return True
+    if entry_name.casefold() != requested_name.casefold():
+        return False
+    try:
+        return os.path.samefile(entry_path, requested_path)
+    except OSError:
+        return False
 
 
 def _runtime_entry_for_name(directory_text: str, requested_name: str) -> os.DirEntry[str] | None:
+    requested_path = os.path.join(directory_text, requested_name)
     try:
         with os.scandir(directory_text) as entries:
-            return next((entry for entry in entries if _runtime_entry_name_matches(entry.name, requested_name)), None)
+            return next(
+                (
+                    entry
+                    for entry in entries
+                    if _runtime_entry_name_matches(
+                        entry.name,
+                        requested_name,
+                        entry_path=entry.path,
+                        requested_path=requested_path,
+                    )
+                ),
+                None,
+            )
     except OSError:
         return None
 

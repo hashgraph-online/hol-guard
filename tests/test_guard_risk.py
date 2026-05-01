@@ -31,6 +31,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     _path_text_is_within_root_text,
     _read_small_runtime_text_file,
     _resolved_runtime_path,
+    _runtime_entry_for_name,
     _script_has_aliased_risky_import,
     _split_attached_redirection_token,
     build_file_read_request_artifact,
@@ -2061,6 +2062,23 @@ def test_path_text_is_within_root_text_preserves_windows_case_insensitivity(monk
         "C:\\Users\\Michael\\Workspace\\config.toml",
         "c:\\users\\michael\\workspace",
     )
+
+
+def test_runtime_entry_for_name_uses_filesystem_case_matching(tmp_path, monkeypatch):
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    (workspace_dir / "Actual.cfg").write_text("ok\n", encoding="utf-8")
+
+    monkeypatch.setattr("os.path.normcase", lambda value: value)
+    monkeypatch.setattr(
+        "os.path.samefile",
+        lambda entry_path, requested_path: Path(entry_path).name.casefold() == Path(requested_path).name.casefold(),
+    )
+
+    entry = _runtime_entry_for_name(str(workspace_dir), "actual.cfg")
+
+    assert entry is not None
+    assert entry.name == "Actual.cfg"
 
 
 def test_read_small_runtime_text_file_rejects_growth_after_stat(tmp_path, monkeypatch):
