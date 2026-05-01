@@ -3990,6 +3990,8 @@ def _codex_command_is_read_only_source_inspection(command_text: str, *, cwd: Pat
     command = command_text.strip()
     if not command:
         return False
+    if _codex_command_has_unquoted_glob_metachar(command):
+        return False
     segments = _split_codex_safe_read_only_pipeline(command)
     if segments is None:
         return _codex_command_is_read_only_source_search(command, cwd=cwd) or _codex_command_is_read_only_source_view(
@@ -4004,6 +4006,28 @@ def _codex_command_is_read_only_source_inspection(command_text: str, *, cwd: Pat
     ):
         return False
     return all(_codex_command_is_bounded_read_only_filter(segment) for segment in filter_segments)
+
+
+def _codex_command_has_unquoted_glob_metachar(command: str) -> bool:
+    quote: str | None = None
+    escaped = False
+    for char in command:
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if quote is not None:
+            if char == quote:
+                quote = None
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            continue
+        if char in {"*", "?", "[", "]", "{", "}"}:
+            return True
+    return False
 
 
 def _split_codex_safe_read_only_pipeline(command: str) -> list[str] | None:
@@ -4455,7 +4479,7 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
         return False
     if stripped.startswith(("~", "/")):
         return False
-    if any(char in stripped for char in ("*", "?", "[", "]", "{", "}")):
+    if any(char in stripped for char in ("*", "?", "{", "}")):
         return False
     target_path = Path(stripped)
     base_dir = (cwd or Path.cwd()).resolve()

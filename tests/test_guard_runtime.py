@@ -11965,12 +11965,31 @@ def test_codex_read_only_source_inspection_rejects_globbed_targets(tmp_path: Pat
 
     commands = [
         "cat src/*.ts",
+        "cat src/[leak].ts",
         "sed -n '1,40p' src/*.ts | head -40",
         "rg safe src/*.ts",
     ]
 
     for command in commands:
         assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+            command,
+            cwd=workspace_dir,
+        )
+
+
+def test_codex_read_only_source_inspection_allows_quoted_bracket_targets(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    route_file = workspace_dir / "app" / "[slug]" / "page.tsx"
+    _write_text(route_file, "export default function Page() { return null; }\n")
+
+    commands = [
+        "cat 'app/[slug]/page.tsx'",
+        "sed -n '1,40p' 'app/[slug]/page.tsx' | head -40",
+        "rg Page 'app/[slug]/page.tsx'",
+    ]
+
+    for command in commands:
+        assert guard_commands_module._codex_command_is_read_only_source_inspection(
             command,
             cwd=workspace_dir,
         )
