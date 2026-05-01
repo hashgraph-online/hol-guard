@@ -11,6 +11,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from ..redaction import redact_text
+
 try:
     from rich import box
     from rich.console import Console
@@ -39,9 +41,18 @@ _SAFE_POLICY_LITERALS = frozenset(
     {"allow", "warn", "review", "block", "require-reapproval", "sandbox-required", "strict", "balanced", "custom"}
 )
 _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(
+            r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
+            re.DOTALL,
+        ),
+        "*****",
+    ),
     (re.compile(r"(?i)(authorization:\s*)(bearer\s+)?[^\s,;]+"), r"\1*****"),
     (re.compile(r"(?i)(api[-_ ]?key:\s*)[^\s,;]+"), r"\1*****"),
     (re.compile(r"(?i)(bearer\s+)[^\s,;]+"), r"\1*****"),
+    (re.compile(r"(?im)\b(?:_authToken|npm[_ -]?token)\s*[:=]\s*[^\s]+"), "npm token redacted"),
+    (re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s]+", re.IGNORECASE), "*****"),
     (
         re.compile(
             r"(?i)([a-z0-9_-]*(?:token|secret|api[-_]?key|password|credential)[a-z0-9_-]*=)(?:'[^']*'|\"[^\"]*\"|[^&\s]+)"
@@ -54,12 +65,13 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
 def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) -> None:
     """Render Guard payloads as JSON or human-friendly rich output."""
 
-    redacted_payload = _redact_payload(payload)
     if as_json or not _RICH_AVAILABLE:
-        sys.stdout.write(_render_redacted_json_payload(_json_payload_for_command(command, redacted_payload)))
+        redacted_output = redact_text(_safe_json_output_text(command, payload))
+        sys.stdout.write(redacted_output.text)
         sys.stdout.write("\n")
         return
 
+    redacted_payload = _redact_payload(payload)
     console = Console(file=sys.stdout, soft_wrap=True)
     renderer = _RENDERERS.get(command, _render_fallback)
     renderer(console, redacted_payload)
@@ -88,11 +100,21 @@ def _render_redacted_json_payload(redacted_payload: object) -> str:
     return _serialize_redacted_json(redacted_payload, indent=0)
 
 
-def _json_payload_for_command(command: str, redacted_payload: dict[str, object]) -> dict[str, object]:
+def _safe_json_output_text(command: str, payload: dict[str, object]) -> str:
+    json_payload = _json_payload_for_command(command, payload)
+    sanitized_payload = _sanitize_payload_for_output(json_payload)
+    return _render_redacted_json_payload(sanitized_payload)
+
+
+def _sanitize_payload_for_output(value: object) -> object:
+    return _redact_payload(value)
+
+
+def _json_payload_for_command(command: str, payload: dict[str, object]) -> dict[str, object]:
     json_renderer = _JSON_RENDERERS.get(command)
     if json_renderer is None:
-        return redacted_payload
-    return json_renderer(redacted_payload)
+        return dict(payload)
+    return json_renderer(dict(payload))
 
 
 def _render_settings_json_payload(redacted_payload: dict[str, object]) -> dict[str, object]:
