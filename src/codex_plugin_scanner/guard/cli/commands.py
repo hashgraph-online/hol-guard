@@ -4308,7 +4308,7 @@ def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path |
 
 
 def _codex_count_arg_is_bounded(value: str) -> bool:
-    normalized = value.strip().lstrip("+-")
+    normalized = value.strip()
     return bool(re.fullmatch(r"\d{1,6}", normalized))
 
 
