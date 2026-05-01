@@ -27,7 +27,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-ai-skill-scanner~=2.0.9" in dependency_entries
     assert "click==8.1.8" in override_entries
     assert "jsonschema==4.23.0" in override_entries
-    assert "litellm>=1.83.7" in override_entries
+    assert "litellm==1.83.0" in override_entries
     assert "openai==2.30.0" in override_entries
     assert "python-dotenv>=1.2.2" in override_entries
     assert "python-multipart>=0.0.26" in override_entries
@@ -79,17 +79,7 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     source_copy_index = dockerfile.index("COPY src /app/src")
     assert requirements_copy_index < source_copy_index
     assert "cisco-ai-mcp-scanner==" in docker_requirements
-    patched_litellm_versions = (
-        "litellm==1.83.7",
-        "litellm==1.83.8",
-        "litellm==1.83.9",
-        "litellm==1.83.10",
-        "litellm==1.83.11",
-        "litellm==1.83.12",
-        "litellm==1.83.13",
-        "litellm==1.83.14",
-    )
-    assert any(version in docker_requirements for version in patched_litellm_versions)
+    assert "litellm==1.83.0" in docker_requirements
     assert "python-dotenv==1.2.2" in docker_requirements
     assert "python-multipart==0.0.26" in docker_requirements
     assert "--hash=sha256:" in docker_requirements
@@ -104,4 +94,4 @@ def test_publish_workflow_builds_only_guard_and_scanner_packages() -> None:
     assert "Build codex compatibility alias" not in publish_workflow
     assert 'name = "codex-plugin-scanner"' not in publish_workflow
     assert 'codex-plugin-scanner = "codex_plugin_scanner.cli:main"' not in publish_workflow
-    assert 'uv tool install codex-plugin-scanner==' not in publish_workflow
+    assert "uv tool install codex-plugin-scanner==" not in publish_workflow
