@@ -90,7 +90,7 @@ def test_guard_json_render_redacts_private_key_without_breaking_json(capsys) -> 
     output = capsys.readouterr().out
     rendered = json.loads(output)
     assert "super-secret-material" not in output
-    assert rendered["details"] == "-----BEGIN PRIVATE KEY-----\n*****\n-----END PRIVATE KEY-----"
+    assert rendered["details"] == "*****"
 
 
 def test_guard_json_renderer_receives_payload_copy(monkeypatch, capsys) -> None:

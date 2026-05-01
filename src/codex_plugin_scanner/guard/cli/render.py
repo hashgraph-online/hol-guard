@@ -11,6 +11,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from ..redaction import redact_text
+
 try:
     from rich import box
     from rich.console import Console
@@ -44,7 +46,7 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
             r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
             re.DOTALL,
         ),
-        "-----BEGIN PRIVATE KEY-----\n*****\n-----END PRIVATE KEY-----",
+        "*****",
     ),
     (re.compile(r"(?i)(authorization:\s*)(bearer\s+)?[^\s,;]+"), r"\1*****"),
     (re.compile(r"(?i)(api[-_ ]?key:\s*)[^\s,;]+"), r"\1*****"),
@@ -62,7 +64,8 @@ def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) 
     """Render Guard payloads as JSON or human-friendly rich output."""
 
     if as_json or not _RICH_AVAILABLE:
-        sys.stdout.write(_safe_json_output_text(command, payload))
+        redacted_output = redact_text(_safe_json_output_text(command, payload))
+        sys.stdout.write(redacted_output.text)
         sys.stdout.write("\n")
         return
 
