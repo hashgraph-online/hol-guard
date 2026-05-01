@@ -42,7 +42,7 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
     (
         "npm-token",
-        re.compile(r"(?im)\b(_authToken|npm[_ -]?token)\s*[:=]\s*([^\s]+)"),
+        re.compile(r"(?im)\b(_authToken|npm[_ -]?token)\s*[:=]\s*([^\s\"',}]+)"),
         r"\1=*****",
     ),
     (
@@ -51,7 +51,7 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
             r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
             re.DOTALL,
         ),
-        "-----BEGIN PRIVATE KEY-----\n*****\n-----END PRIVATE KEY-----",
+        "*****",
     ),
     (
         "secret-env",
@@ -67,7 +67,7 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
     (
         "connection-string",
-        re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s]+", re.IGNORECASE),
+        re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s\"',}]+", re.IGNORECASE),
         "*****",
     ),
 )

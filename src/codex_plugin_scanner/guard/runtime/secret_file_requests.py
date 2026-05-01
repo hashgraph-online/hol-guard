@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import base64
 import binascii
+import contextlib
 import hashlib
 import json
 import os
@@ -2431,7 +2432,105 @@ def _runtime_read_roots(cwd: Path | None, home_dir: Path | None) -> tuple[Path, 
 
 
 def _path_is_within_roots(path: Path, roots: tuple[Path, ...]) -> bool:
-    return any(path.is_relative_to(root) for root in roots)
+    path_text = os.path.realpath(os.fspath(path))
+    root_texts = _runtime_read_root_texts(roots)
+    return any(_path_text_is_within_root_text(path_text, root_text) for root_text in root_texts)
+
+
+def _path_text_is_within_root(path_text: str, root: Path) -> bool:
+    return _path_text_is_within_root_text(path_text, os.path.realpath(os.fspath(root)))
+
+
+def _path_text_is_within_root_text(path_text: str, root_text: str) -> bool:
+    normalized_path_text = os.path.normcase(path_text)
+    normalized_root_text = os.path.normcase(root_text)
+    try:
+        return os.path.commonpath((normalized_path_text, normalized_root_text)) == normalized_root_text
+    except ValueError:
+        return False
+
+
+def _runtime_read_root_texts(roots: tuple[Path, ...]) -> tuple[str, ...]:
+    return tuple(os.path.realpath(os.fspath(root)) for root in roots)
+
+
+def _runtime_relative_parts(path_text: str, root_text: str) -> tuple[str, ...] | None:
+    try:
+        relative_text = os.path.relpath(path_text, root_text)
+    except ValueError:
+        return None
+    if relative_text in {"", "."}:
+        return None
+    parts = Path(relative_text).parts
+    if not parts or any(_runtime_relative_part_is_unsafe(part) for part in parts):
+        return None
+    return parts
+
+
+def _runtime_relative_part_is_unsafe(part: str) -> bool:
+    if part in {"", ".", ".."}:
+        return True
+    separators = (os.sep, os.altsep) if os.altsep else (os.sep,)
+    return any(separator in part for separator in separators)
+
+
+def _runtime_entry_name_matches(
+    entry_name: str,
+    requested_name: str,
+    *,
+    entry_path: str,
+    requested_path: str,
+) -> bool:
+    if entry_name == requested_name or os.path.normcase(entry_name) == os.path.normcase(requested_name):
+        return True
+    if entry_name.casefold() != requested_name.casefold():
+        return False
+    try:
+        return os.path.samefile(entry_path, requested_path)
+    except OSError:
+        return False
+
+
+def _runtime_entry_for_name(directory_text: str, requested_name: str) -> os.DirEntry[str] | None:
+    requested_path = os.path.join(directory_text, requested_name)
+    try:
+        with os.scandir(directory_text) as entries:
+            return next(
+                (
+                    entry
+                    for entry in entries
+                    if _runtime_entry_name_matches(
+                        entry.name,
+                        requested_name,
+                        entry_path=entry.path,
+                        requested_path=requested_path,
+                    )
+                ),
+                None,
+            )
+    except OSError:
+        return None
+
+
+def _runtime_file_entry_under_root(path_text: str, root_text: str) -> os.DirEntry[str] | None:
+    relative_parts = _runtime_relative_parts(path_text, root_text)
+    if relative_parts is None:
+        return None
+    current_dir_text = root_text
+    for directory_name in relative_parts[:-1]:
+        directory_entry = _runtime_entry_for_name(current_dir_text, directory_name)
+        if directory_entry is None:
+            return None
+        try:
+            directory_stat = directory_entry.stat(follow_symlinks=False)
+        except OSError:
+            return None
+        if not stat.S_ISDIR(directory_stat.st_mode):
+            return None
+        current_dir_text = os.path.realpath(directory_entry.path)
+        if not _path_text_is_within_root_text(current_dir_text, root_text):
+            return None
+    return _runtime_entry_for_name(current_dir_text, relative_parts[-1])
 
 
 def _resolved_runtime_path(
@@ -2449,29 +2548,55 @@ def _resolved_runtime_path(
     read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
     if not read_roots:
         return None
-    try:
-        resolved_path = normalized_path.resolve(strict=False)
-    except OSError:
+    path_text = os.path.realpath(os.fspath(normalized_path))
+    root_texts = _runtime_read_root_texts(read_roots)
+    if not any(_path_text_is_within_root_text(path_text, root_text) for root_text in root_texts):
         return None
-    return resolved_path if _path_is_within_roots(resolved_path, read_roots) else None
+    return Path(path_text)
 
 
 def _read_small_runtime_text_file(path: Path, *, allowed_roots: tuple[Path, ...]) -> str | None:
+    path_text = os.path.realpath(os.fspath(path))
+    root_texts = _runtime_read_root_texts(allowed_roots)
+    if not any(_path_text_is_within_root_text(path_text, root_text) for root_text in root_texts):
+        return None
+    runtime_entry = next(
+        (
+            entry
+            for root_text in root_texts
+            if _path_text_is_within_root_text(path_text, root_text)
+            for entry in (_runtime_file_entry_under_root(path_text, root_text),)
+            if entry is not None
+        ),
+        None,
+    )
+    if runtime_entry is None:
+        return None
+    open_flags = os.O_RDONLY
+    nofollow_flag = getattr(os, "O_NOFOLLOW", 0)
+    if isinstance(nofollow_flag, int):
+        open_flags |= nofollow_flag
     try:
-        resolved_path = path.resolve(strict=True)
+        entry_stat = runtime_entry.stat(follow_symlinks=False)
     except OSError:
         return None
-    if not _path_is_within_roots(resolved_path, allowed_roots):
+    if not stat.S_ISREG(entry_stat.st_mode) or entry_stat.st_size > _MAX_DECODED_PAYLOAD_BYTES:
         return None
     try:
-        stat_result = resolved_path.stat()
+        descriptor = os.open(runtime_entry.path, open_flags)
     except OSError:
         return None
-    if not stat.S_ISREG(stat_result.st_mode) or stat_result.st_size > _MAX_DECODED_PAYLOAD_BYTES:
-        return None
     try:
-        return resolved_path.read_text(encoding="utf-8")
+        stat_result = os.fstat(descriptor)
+        if not stat.S_ISREG(stat_result.st_mode) or stat_result.st_size > _MAX_DECODED_PAYLOAD_BYTES:
+            os.close(descriptor)
+            return None
+        with os.fdopen(descriptor, encoding="utf-8") as runtime_file:
+            content = runtime_file.read(_MAX_DECODED_PAYLOAD_BYTES + 1)
+            return content if len(content) <= _MAX_DECODED_PAYLOAD_BYTES else None
     except (OSError, UnicodeDecodeError):
+        with contextlib.suppress(OSError):
+            os.close(descriptor)
         return None
 
 
@@ -2899,16 +3024,14 @@ def _contains_mutating_shell_redirection(parts: list[str]) -> bool:
             else:
                 index += 1
         else:
-            match = re.fullmatch(r"(?P<prefix>[^<>\s]*?)(?P<fd>[0-2]?)(?P<op>>\||>>|>)(?P<target>.*)", token)
-            if match is None:
+            redirection = _split_attached_redirection_token(token)
+            if redirection is None:
                 index += 1
                 continue
-            prefix = match.group("prefix") or ""
+            prefix, fd, _op, target = redirection
             if prefix.endswith("="):
                 index += 1
                 continue
-            fd = match.group("fd")
-            target = match.group("target")
             if target:
                 index += 1
             elif index + 1 < len(parts):
@@ -2925,6 +3048,32 @@ def _contains_mutating_shell_redirection(parts: list[str]) -> bool:
             continue
         return True
     return False
+
+
+def _split_attached_redirection_token(token: str) -> tuple[str, str, str, str] | None:
+    for index, character in enumerate(token):
+        if character != ">":
+            continue
+        op = _attached_redirection_operator(token, index)
+        prefix = token[:index]
+        if any(character.isspace() or character in {"<", ">"} for character in prefix):
+            continue
+        target = token[index + len(op) :]
+        fd = ""
+        if prefix and prefix[-1] in {"0", "1", "2"}:
+            fd = prefix[-1]
+            prefix = prefix[:-1]
+        return prefix, fd, op, target
+    return None
+
+
+def _attached_redirection_operator(token: str, index: int) -> str:
+    next_character = token[index + 1 : index + 2]
+    if next_character == "|":
+        return ">|"
+    if next_character == ">":
+        return ">>"
+    return ">"
 
 
 def _normalized_redirect_target(target: str) -> str:

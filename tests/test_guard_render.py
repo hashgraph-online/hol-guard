@@ -58,6 +58,74 @@ def test_guard_render_redacts_sensitive_values_before_rich_renderer(monkeypatch)
     assert payload["launch_summary"] == "api_key=***** token=*****"
 
 
+def test_guard_json_render_redacts_after_command_specific_payload_shape(capsys) -> None:
+    emit_guard_payload(
+        "connect",
+        {
+            "connected": True,
+            "connect_url": "https://hol.org/guard/connect?token=super-secret-token",
+            "sync_url": "https://hol.org/api/guard/receipts/sync?api_key=super-secret-key",
+            "api_key": "super-secret-key",
+        },
+        True,
+    )
+
+    output = capsys.readouterr().out
+    rendered = json.loads(output)
+    assert "super-secret" not in output
+    assert rendered["connect_url"] == "https://hol.org/guard/connect?token=*****"
+    assert rendered["sync_url"] == "https://hol.org/api/guard/receipts/sync?api_key=*****"
+    assert rendered["api_key"] == "*****"
+
+
+def test_guard_json_render_redacts_private_key_without_breaking_json(capsys) -> None:
+    private_key = (
+        "-----BEGIN PRIVATE KEY-----\n"
+        "super-secret-material\n"
+        "-----END PRIVATE KEY-----"
+    )
+
+    emit_guard_payload("status", {"details": private_key}, True)
+
+    output = capsys.readouterr().out
+    rendered = json.loads(output)
+    assert "super-secret-material" not in output
+    assert rendered["details"] == "*****"
+
+
+def test_guard_json_render_redacts_token_lines_without_breaking_json(capsys) -> None:
+    emit_guard_payload("status", {"details": "_authToken:abcdefghi"}, True)
+
+    output = capsys.readouterr().out
+    rendered = json.loads(output)
+    assert "abcdefghi" not in output
+    assert rendered["details"] == "npm token redacted"
+
+
+def test_guard_json_render_redacts_connection_string_without_breaking_json(capsys) -> None:
+    emit_guard_payload("status", {"details": "postgres://user:password@localhost/db"}, True)
+
+    output = capsys.readouterr().out
+    rendered = json.loads(output)
+    assert "password" not in output
+    assert rendered["details"] == "*****"
+
+
+def test_guard_json_renderer_receives_payload_copy(monkeypatch, capsys) -> None:
+    def mutating_renderer(payload: dict[str, object]) -> dict[str, object]:
+        payload["api_key"] = "mutated-secret"
+        return payload
+
+    source_payload: dict[str, object] = {"api_key": "original-secret"}
+    monkeypatch.setitem(render._JSON_RENDERERS, "mutating", mutating_renderer)
+
+    emit_guard_payload("mutating", source_payload, True)
+
+    output = capsys.readouterr().out
+    assert source_payload["api_key"] == "original-secret"
+    assert "mutated-secret" not in output
+
+
 def test_guard_settings_json_omits_billing_flag(capsys) -> None:
     emit_guard_payload(
         "settings",
