@@ -163,6 +163,15 @@ Hermes gets the normal Guard shim plus a Guard-owned bundle at `<guard-home>/her
 Guard injects the managed overlay paths through `HERMES_GUARD_MCP_OVERLAY_PATH` and `HERMES_GUARD_PRETOOL_PATH` when
 you launch Hermes through Guard.
 
+OpenClaw gets the normal Guard shim plus a Guard-owned bundle at `<guard-home>/openclaw/` with:
+
+- `overlay.json`
+- `pretool-hook.json`
+- `manifest.json`
+
+Guard injects the managed overlay paths through `OPENCLAW_GUARD_OVERLAY_PATH` and `OPENCLAW_GUARD_PRETOOL_PATH` when
+you launch OpenClaw through Guard. It does not mutate `~/.openclaw/openclaw.json`.
+
 ## Harness approval model
 
 Guard uses three approval tiers:
@@ -189,6 +198,9 @@ Current strategy:
 - `hermes`
   prefers the managed Hermes same-channel path when Guard owns the overlay bundle, falls back to the approval center,
   and keeps browser auto-open off for blocked requests
+- `openclaw`
+  scans OpenClaw gateway config, channel posture, MCP servers, workspace skills, user skills, and OpenClaw-owned skills,
+  then prefers native-or-center delivery once the managed overlay bundle exists
 - `gemini`
   scans `.gemini/settings.json`, extension manifests, hooks, MCP registrations, and Gemini skill directories before
   launch, then routes blocked changes to the approval center

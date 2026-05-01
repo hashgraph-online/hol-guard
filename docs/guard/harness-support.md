@@ -42,6 +42,11 @@ Current Guard support in this repo:
   - supports `hol-guard hermes bootstrap` and a Guard-managed Hermes overlay bundle under Guard home
   - rewrites managed Hermes MCP entries through Guard’s existing proxy path and uses native-or-center delivery when the managed bundle is present
   - blocks sensitive file reads and Docker-sensitive native pre-tool actions through the existing Guard hook path
+- `openclaw`
+  - detects `~/.openclaw/openclaw.json`, gateway posture, channels, MCP servers, workspace skills, user skills, and OpenClaw-owned skills
+  - supports a Guard-managed OpenClaw overlay bundle under Guard home without mutating user OpenClaw config
+  - flags open DM channel posture and remote MCP endpoints before launch so chat-originated agent work can be reviewed
+  - uses native-or-center delivery when the managed bundle is present and keeps browser auto-open off for blocked requests
 - `opencode`
   - detects global and project config, MCP servers, config-defined commands, markdown commands, npm plugins, local
     plugin files, and OpenCode-compatible skill directories
