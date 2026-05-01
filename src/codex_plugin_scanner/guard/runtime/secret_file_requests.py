@@ -2454,6 +2454,59 @@ def _runtime_read_root_texts(roots: tuple[Path, ...]) -> tuple[str, ...]:
     return tuple(os.path.realpath(os.fspath(root)) for root in roots)
 
 
+def _runtime_relative_parts(path_text: str, root_text: str) -> tuple[str, ...] | None:
+    try:
+        relative_text = os.path.relpath(path_text, root_text)
+    except ValueError:
+        return None
+    if relative_text in {"", "."}:
+        return None
+    parts = Path(relative_text).parts
+    if not parts or any(_runtime_relative_part_is_unsafe(part) for part in parts):
+        return None
+    return parts
+
+
+def _runtime_relative_part_is_unsafe(part: str) -> bool:
+    if part in {"", ".", ".."}:
+        return True
+    separators = (os.sep, os.altsep) if os.altsep else (os.sep,)
+    return any(separator in part for separator in separators)
+
+
+def _runtime_entry_name_matches(entry_name: str, requested_name: str) -> bool:
+    return entry_name == requested_name or os.path.normcase(entry_name) == os.path.normcase(requested_name)
+
+
+def _runtime_entry_for_name(directory_text: str, requested_name: str) -> os.DirEntry[str] | None:
+    try:
+        with os.scandir(directory_text) as entries:
+            return next((entry for entry in entries if _runtime_entry_name_matches(entry.name, requested_name)), None)
+    except OSError:
+        return None
+
+
+def _runtime_file_entry_under_root(path_text: str, root_text: str) -> os.DirEntry[str] | None:
+    relative_parts = _runtime_relative_parts(path_text, root_text)
+    if relative_parts is None:
+        return None
+    current_dir_text = root_text
+    for directory_name in relative_parts[:-1]:
+        directory_entry = _runtime_entry_for_name(current_dir_text, directory_name)
+        if directory_entry is None:
+            return None
+        try:
+            directory_stat = directory_entry.stat(follow_symlinks=False)
+        except OSError:
+            return None
+        if not stat.S_ISDIR(directory_stat.st_mode):
+            return None
+        current_dir_text = os.path.realpath(directory_entry.path)
+        if not _path_text_is_within_root_text(current_dir_text, root_text):
+            return None
+    return _runtime_entry_for_name(current_dir_text, relative_parts[-1])
+
+
 def _resolved_runtime_path(
     value: str,
     *,
@@ -2481,21 +2534,22 @@ def _read_small_runtime_text_file(path: Path, *, allowed_roots: tuple[Path, ...]
     root_texts = _runtime_read_root_texts(allowed_roots)
     if not any(_path_text_is_within_root_text(path_text, root_text) for root_text in root_texts):
         return None
-    parent_text = os.path.dirname(path_text)
-    file_name = os.path.basename(path_text)
-    if not file_name or not any(_path_text_is_within_root_text(parent_text, root_text) for root_text in root_texts):
+    runtime_entry = next(
+        (
+            entry
+            for root_text in root_texts
+            if _path_text_is_within_root_text(path_text, root_text)
+            for entry in (_runtime_file_entry_under_root(path_text, root_text),)
+            if entry is not None
+        ),
+        None,
+    )
+    if runtime_entry is None:
         return None
     open_flags = os.O_RDONLY
     nofollow_flag = getattr(os, "O_NOFOLLOW", 0)
     if isinstance(nofollow_flag, int):
         open_flags |= nofollow_flag
-    try:
-        with os.scandir(parent_text) as entries:
-            runtime_entry = next((entry for entry in entries if entry.name == file_name), None)
-    except OSError:
-        return None
-    if runtime_entry is None:
-        return None
     try:
         entry_stat = runtime_entry.stat(follow_symlinks=False)
     except OSError:
