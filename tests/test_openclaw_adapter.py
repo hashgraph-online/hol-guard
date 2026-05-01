@@ -79,7 +79,7 @@ def test_detects_openclaw_config_channels_mcp_and_skills(tmp_path: Path) -> None
     assert "openclaw:channel:telegram" in artifacts
     assert "openclaw:mcp:docs" in artifacts
     assert "openclaw:mcp:local" in artifacts
-    assert "openclaw:skill:deploy-helper" in artifacts
+    assert any(artifact.name == "deploy-helper" for artifact in artifacts.values())
     assert artifacts["openclaw:config:global"].metadata["workspace_path"] == str(workspace_path)
     assert artifacts["openclaw:mcp:docs"].transport == "http"
     assert artifacts["openclaw:mcp:local"].to_dict()["metadata"]["env"]["API_TOKEN"] == "*****"
@@ -106,6 +106,19 @@ def test_openclaw_flags_open_dm_policy_and_remote_mcp(tmp_path: Path) -> None:
 
     assert any("network traffic" in signal for signal in channel_signals)
     assert any("remote server" in signal for signal in mcp_signals)
+
+
+def test_openclaw_flags_legacy_dm_policy_fields(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    _write(
+        context.home_dir / ".openclaw" / "openclaw.json",
+        json.dumps({"channels": {"telegram": {"dm": {"policy": "open", "allowFrom": ["*"]}}}}),
+    )
+
+    detection = OpenClawHarnessAdapter().detect(context)
+    channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
+
+    assert any("network traffic" in signal for signal in artifact_risk_signals(channel))
 
 
 def test_openclaw_accepts_json5_comments_trailing_commas_and_extra_skill_dirs(tmp_path: Path) -> None:
@@ -136,7 +149,49 @@ def test_openclaw_accepts_json5_comments_trailing_commas_and_extra_skill_dirs(tm
     artifacts = {artifact.artifact_id for artifact in detection.artifacts}
 
     assert "openclaw:channel:telegram" in artifacts
-    assert "openclaw:skill:reviewer" in artifacts
+    assert any(artifact.name == "reviewer" for artifact in detection.artifacts)
+
+
+def test_openclaw_extra_skill_dirs_skip_blank_and_anchor_relative_paths(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    _write(
+        context.home_dir / ".openclaw" / "openclaw.json",
+        json.dumps({"skills": {"load": {"extraDirs": [" ", "relative-skills"]}}}),
+    )
+    _write(context.home_dir / "relative-skills" / "helper" / "SKILL.md", "---\nname: helper\n---\nOK.\n")
+    _write(context.home_dir / "accidental" / "SKILL.md", "---\nname: accidental\n---\nShould not load.\n")
+
+    detection = OpenClawHarnessAdapter().detect(context)
+    skill_names = {artifact.name for artifact in detection.artifacts if artifact.artifact_type == "skill"}
+
+    assert "helper" in skill_names
+    assert "accidental" not in skill_names
+
+
+def test_openclaw_skill_artifact_ids_include_root_identity(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    workspace_path = context.home_dir / ".openclaw" / "workspace"
+    shared_root = context.home_dir / "shared-skills"
+    _write(
+        context.home_dir / ".openclaw" / "openclaw.json",
+        json.dumps(
+            {
+                "agents": {"defaults": {"workspace": str(workspace_path)}},
+                "skills": {"load": {"extraDirs": [str(shared_root)]}},
+            }
+        ),
+    )
+    _write(workspace_path / "skills" / "reviewer" / "SKILL.md", "---\nname: reviewer\n---\nWorkspace.\n")
+    _write(shared_root / "reviewer" / "SKILL.md", "---\nname: reviewer\n---\nShared.\n")
+
+    detection = OpenClawHarnessAdapter().detect(context)
+    reviewer_ids = {
+        artifact.artifact_id
+        for artifact in detection.artifacts
+        if artifact.artifact_type == "skill" and artifact.name == "reviewer"
+    }
+
+    assert len(reviewer_ids) == 2
 
 
 def test_install_exports_guard_managed_openclaw_overlay(tmp_path: Path) -> None:
@@ -149,11 +204,13 @@ def test_install_exports_guard_managed_openclaw_overlay(tmp_path: Path) -> None:
     manifest = OpenClawHarnessAdapter().install(context)
     overlay_path = Path(str(manifest["managed_overlay_path"]))
     pretool_path = Path(str(manifest["pretool_hook_path"]))
+    pretool = json.loads(pretool_path.read_text(encoding="utf-8"))
     env = OpenClawHarnessAdapter().launch_environment(context)
 
     assert manifest["install_state"] == "installed"
     assert overlay_path.exists() is True
     assert pretool_path.exists() is True
+    assert pretool["command"][pretool["command"].index("--home") + 1] == str(context.home_dir)
     assert env["OPENCLAW_GUARD_OVERLAY_PATH"] == str(overlay_path)
     assert env["OPENCLAW_GUARD_PRETOOL_PATH"] == str(pretool_path)
     assert env["OPENCLAW_GUARD_CHANNEL_POSTURE"] == "enabled"
@@ -175,6 +232,22 @@ def test_openclaw_skips_symlinked_skill_files(tmp_path: Path) -> None:
     artifacts = {artifact.artifact_id for artifact in detection.artifacts}
 
     assert "openclaw:skill:linked-secret" not in artifacts
+
+
+def test_uninstall_rejects_manifest_paths_outside_managed_root(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    adapter = OpenClawHarnessAdapter()
+    manifest = adapter.install(context)
+    manifest_path = Path(str(manifest["managed_manifest_path"]))
+    outside_path = tmp_path / "outside.json"
+    outside_path.write_text("{}", encoding="utf-8")
+    manifest["managed_manifest_path"] = str(outside_path)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="escapes the managed root"):
+        adapter.uninstall(context)
+
+    assert outside_path.exists() is True
 
 
 def test_openclaw_approval_flow_prefers_native_or_center_after_install(tmp_path: Path) -> None:

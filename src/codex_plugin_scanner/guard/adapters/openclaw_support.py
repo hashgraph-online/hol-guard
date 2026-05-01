@@ -38,7 +38,7 @@ def managed_root(context: HarnessContext) -> Path:
 def load_config(path: Path) -> dict[str, object]:
     try:
         raw = path.read_text(encoding="utf-8")
-    except (FileNotFoundError, PermissionError, OSError):
+    except (OSError, UnicodeDecodeError):
         return {}
     try:
         payload = json.loads(raw)
@@ -105,6 +105,8 @@ def pretool_payload(*, context: HarnessContext) -> dict[str, object]:
         "openclaw",
         "--guard-home",
         str(context.guard_home),
+        "--home",
+        str(context.home_dir),
         "--json",
     ]
     if context.workspace_dir is not None:
@@ -249,10 +251,9 @@ def _gateway_artifact(context: HarnessContext, path: Path, payload: dict[str, ob
 def _channel_artifacts(path: Path, payload: dict[str, object]) -> list[GuardArtifact]:
     artifacts: list[GuardArtifact] = []
     for name, config in _channels(payload).items():
-        dm_policy = _string_value(config.get("dmPolicy") or _dict_value(_dict_value(config.get("dm")).get("policy")))
-        allow_from = _string_list(
-            config.get("allowFrom") or _dict_value(_dict_value(config.get("dm")).get("allowFrom"))
-        )
+        dm = _dict_value(config.get("dm"))
+        dm_policy = _string_value(config.get("dmPolicy")) or _string_value(dm.get("policy"))
+        allow_from = _string_list(config.get("allowFrom")) or _string_list(dm.get("allowFrom"))
         signals: list[str] = []
         if dm_policy == "open" and "*" in allow_from:
             signals.append("network traffic from open chat channel can reach the agent without sender pairing")
@@ -312,19 +313,22 @@ def _artifacts_for_skill(root: Path, skill_md: Path) -> list[GuardArtifact]:
     content = _safe_read(skill_md)
     skill_dir = skill_md.parent
     skill_name = _frontmatter_name(content) or skill_dir.name
+    root_id = _path_digest(root)
+    source_scope = f"skill-root:{root_id}"
     artifacts = [
         GuardArtifact(
-            artifact_id=f"openclaw:skill:{skill_name}",
+            artifact_id=f"openclaw:skill:{root_id}:{skill_name}",
             name=skill_name,
             harness="openclaw",
             artifact_type="skill",
-            source_scope="global",
+            source_scope=source_scope,
             config_path=str(skill_md),
             command=str(skill_md),
             args=_risk_args(content),
             metadata={
                 "content_hash": _content_hash(content),
                 "skill_root": str(root),
+                "skill_root_id": root_id,
                 "env_mentions": sorted(_extract_env_mentions(content)),
             },
         )
@@ -342,17 +346,18 @@ def _artifacts_for_skill(root: Path, skill_md: Path) -> list[GuardArtifact]:
             rel_path = file_path.relative_to(skill_dir)
             artifacts.append(
                 GuardArtifact(
-                    artifact_id=f"openclaw:skill:{skill_name}:{rel_path}",
+                    artifact_id=f"openclaw:skill:{root_id}:{skill_name}:{rel_path}",
                     name=f"{skill_name}/{rel_path}",
                     harness="openclaw",
                     artifact_type="skill_file",
-                    source_scope="global",
+                    source_scope=source_scope,
                     config_path=str(file_path),
                     command=str(file_path),
                     args=_risk_args(file_content),
                     metadata={
                         "parent_skill": skill_name,
                         "content_hash": _content_hash(file_content),
+                        "skill_root_id": root_id,
                         "env_mentions": sorted(_extract_env_mentions(file_content)),
                     },
                 )
@@ -371,7 +376,9 @@ def _skill_roots(context: HarnessContext, payload: dict[str, object]) -> tuple[P
     skills = _dict_value(payload.get("skills"))
     load = _dict_value(skills.get("load"))
     for extra_dir in _string_list(load.get("extraDirs")):
-        roots.append(_expand_home(context.home_dir, extra_dir))
+        stripped = extra_dir.strip()
+        if stripped:
+            roots.append(_expand_home(context.home_dir, stripped))
     return tuple(roots)
 
 
@@ -389,7 +396,8 @@ def _expand_home(home_dir: Path, value: str) -> Path:
         return home_dir
     if value.startswith("~/"):
         return home_dir / value[2:]
-    return Path(value)
+    path = Path(value)
+    return path if path.is_absolute() else home_dir / path
 
 
 def _channels(payload: dict[str, object]) -> dict[str, dict[str, object]]:
@@ -493,3 +501,11 @@ def _safe_read(path: Path) -> str:
 
 def _content_hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+
+
+def _path_digest(path: Path) -> str:
+    try:
+        value = str(path.resolve())
+    except (OSError, RuntimeError):
+        value = str(path)
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]

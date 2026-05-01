@@ -7,7 +7,14 @@ from pathlib import Path
 
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
+from .base import (
+    HarnessAdapter,
+    HarnessContext,
+    _command_available,
+    _ensure_path_within_root,
+    _json_payload,
+    _run_command_probe,
+)
 from .openclaw_support import (
     config_artifacts,
     config_path,
@@ -108,6 +115,7 @@ class OpenClawHarnessAdapter(HarnessAdapter):
             if not isinstance(value, str) or not value:
                 continue
             path = Path(value)
+            _ensure_path_within_root(root, path, label=key)
             if path.exists():
                 path.unlink()
                 removed_paths.append(str(path))
