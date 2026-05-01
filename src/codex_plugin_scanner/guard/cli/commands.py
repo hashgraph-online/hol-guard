@@ -4080,6 +4080,8 @@ def _codex_command_is_bounded_read_only_filter(command_text: str) -> bool:
         return False
     if not parts:
         return False
+    if _codex_command_uses_untrusted_search_binary(parts[0]):
+        return False
     executable = Path(parts[0]).name
     if executable not in _CODEX_READ_ONLY_PIPE_FILTERS:
         return False
@@ -4097,6 +4099,8 @@ def _codex_command_is_read_only_source_view(command_text: str, *, cwd: Path | No
     except ValueError:
         return False
     if not parts:
+        return False
+    if _codex_command_uses_untrusted_search_binary(parts[0]):
         return False
     executable = Path(parts[0]).name
     if executable not in _CODEX_READ_ONLY_VIEW_COMMANDS:
@@ -4161,30 +4165,21 @@ def _codex_cat_targets_are_source_like(args: list[str], *, cwd: Path | None) -> 
 
 
 def _codex_head_tail_args_are_bounded_filter(args: list[str]) -> bool:
-    skip_next = False
-    for arg in args:
-        if skip_next:
-            skip_next = False
-            if not _codex_count_arg_is_bounded(arg):
-                return False
-            continue
-        if arg in {"-n", "--lines", "-c", "--bytes"}:
-            skip_next = True
-            continue
-        if arg.startswith("--lines=") or arg.startswith("--bytes="):
-            _, value = arg.split("=", 1)
-            if not _codex_count_arg_is_bounded(value):
-                return False
-            continue
-        if re.fullmatch(r"-\d{1,6}", arg):
-            continue
-        if arg.startswith("-"):
-            return False
-        return False
-    return not skip_next
+    targets, valid, skip_next = _parse_codex_head_tail_args(args)
+    return valid and not skip_next and not targets
 
 
 def _codex_head_tail_targets_are_source_like(args: list[str], *, cwd: Path | None) -> bool:
+    targets, valid, skip_next = _parse_codex_head_tail_args(args)
+    return (
+        valid
+        and not skip_next
+        and bool(targets)
+        and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+    )
+
+
+def _parse_codex_head_tail_args(args: list[str]) -> tuple[list[str], bool, bool]:
     targets: list[str] = []
     skip_next = False
     after_option_terminator = False
@@ -4192,7 +4187,7 @@ def _codex_head_tail_targets_are_source_like(args: list[str], *, cwd: Path | Non
         if skip_next:
             skip_next = False
             if not _codex_count_arg_is_bounded(arg):
-                return False
+                return [], False, False
             continue
         if after_option_terminator:
             targets.append(arg)
@@ -4206,20 +4201,16 @@ def _codex_head_tail_targets_are_source_like(args: list[str], *, cwd: Path | Non
         if arg.startswith("--lines=") or arg.startswith("--bytes="):
             _, value = arg.split("=", 1)
             if not _codex_count_arg_is_bounded(value):
-                return False
+                return [], False, False
             continue
         if re.fullmatch(r"-\d{1,6}", arg):
             continue
         if arg == "-":
-            return False
+            return [], False, False
         if arg.startswith("-"):
-            return False
+            return [], False, False
         targets.append(arg)
-    return (
-        bool(targets)
-        and not skip_next
-        and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
-    )
+    return targets, True, skip_next
 
 
 def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path | None) -> bool:
