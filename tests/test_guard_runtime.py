@@ -542,6 +542,292 @@ Please investigate the bug end to end, fix the publish flow, and make sure user-
         assert output["recorded"] is True
         assert "approval_requests" not in output
 
+    def test_codex_post_tool_use_allows_read_only_source_view_with_secret_like_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        source_file = workspace_dir / "__tests__" / "guard-connect-shell.test.tsx"
+        _write_text(source_file, "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": ("sed -n '1,40p' __tests__/guard-connect-shell.test.tsx 2>/dev/null | head -40")},
+            "tool_response": {"stdout": "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert "approval_requests" not in output
+
+    def test_codex_post_tool_use_blocks_hidden_file_view_with_secret_like_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "sed -n '1,40p' .npmrc 2>/dev/null | head -40"},
+            "tool_response": {"stdout": "token = fixture-only\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert payload["continue"] is False
+        assert "credential-looking output" in payload["stopReason"]
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "./sed -n '1,40p' __tests__/guard-connect-shell.test.tsx",
+            "sed -n '1,40p' __tests__/guard-connect-shell.test.tsx | ./head -40",
+        ],
+    )
+    def test_codex_post_tool_use_blocks_path_qualified_read_only_binaries(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+        command,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        source_file = workspace_dir / "__tests__" / "guard-connect-shell.test.tsx"
+        _write_text(source_file, "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert payload["continue"] is False
+        assert "credential-looking output" in payload["stopReason"]
+
+    def test_codex_post_tool_use_blocks_parameter_expansion_source_view(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        source_file = workspace_dir / "__tests__" / "guard-connect-shell.test.tsx"
+        _write_text(source_file, "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "sed -n '1,40p' ${GUARD_SOURCE_FILE}.tsx | head -40"},
+            "tool_response": {"stdout": "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert payload["continue"] is False
+        assert "credential-looking output" in payload["stopReason"]
+
+    def test_codex_post_tool_use_blocks_unbraced_env_expansion_source_view(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        source_file = workspace_dir / "__tests__" / "guard-connect-shell.test.tsx"
+        _write_text(source_file, "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "sed -n '1,40p' $GUARD_SOURCE_FILE.tsx | head -40"},
+            "tool_response": {"stdout": "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert payload["continue"] is False
+        assert "credential-looking output" in payload["stopReason"]
+
+    def test_codex_post_tool_use_allows_quoted_greater_than_search_pipeline(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        source_file = workspace_dir / "__tests__" / "guard-connect-shell.test.tsx"
+        _write_text(source_file, "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "rg '>' __tests__/guard-connect-shell.test.tsx | head -40"},
+            "tool_response": {"stdout": "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert "approval_requests" not in output
+
+    @pytest.mark.parametrize("filter_args", ["tail -n +1", "head -n -1"])
+    def test_codex_post_tool_use_blocks_unbounded_signed_head_tail_filters(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+        filter_args,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        source_file = workspace_dir / "__tests__" / "guard-connect-shell.test.tsx"
+        _write_text(source_file, "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": f"sed -n '1,40p' __tests__/guard-connect-shell.test.tsx | {filter_args}"},
+            "tool_response": {"stdout": "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert payload["continue"] is False
+        assert "credential-looking output" in payload["stopReason"]
+
     def test_codex_post_tool_use_allows_common_source_directory_searches(
         self,
         monkeypatch,
@@ -11670,3 +11956,40 @@ def test_sync_runtime_session_retries_once_after_read_timeout(tmp_path, monkeypa
 
     assert timeouts == [10, 90]
     assert payload["runtime_session_id"] == "session-read-timeout"
+
+
+def test_codex_read_only_source_inspection_rejects_globbed_targets(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    (workspace_dir / "src").mkdir(parents=True)
+    _write_text(workspace_dir / "src" / "safe.ts", "export const safe = true;\n")
+
+    commands = [
+        "cat src/*.ts",
+        "cat src/[leak].ts",
+        "sed -n '1,40p' src/*.ts | head -40",
+        "rg safe src/*.ts",
+    ]
+
+    for command in commands:
+        assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+            command,
+            cwd=workspace_dir,
+        )
+
+
+def test_codex_read_only_source_inspection_allows_quoted_bracket_targets(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    route_file = workspace_dir / "app" / "[slug]" / "page.tsx"
+    _write_text(route_file, "export default function Page() { return null; }\n")
+
+    commands = [
+        "cat 'app/[slug]/page.tsx'",
+        "sed -n '1,40p' 'app/[slug]/page.tsx' | head -40",
+        "rg Page 'app/[slug]/page.tsx'",
+    ]
+
+    for command in commands:
+        assert guard_commands_module._codex_command_is_read_only_source_inspection(
+            command,
+            cwd=workspace_dir,
+        )
