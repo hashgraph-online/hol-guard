@@ -2431,7 +2431,16 @@ def _runtime_read_roots(cwd: Path | None, home_dir: Path | None) -> tuple[Path, 
 
 
 def _path_is_within_roots(path: Path, roots: tuple[Path, ...]) -> bool:
-    return any(path.is_relative_to(root) for root in roots)
+    path_text = os.path.realpath(os.fspath(path))
+    return any(_path_text_is_within_root(path_text, root) for root in roots)
+
+
+def _path_text_is_within_root(path_text: str, root: Path) -> bool:
+    root_text = os.path.realpath(os.fspath(root))
+    try:
+        return os.path.commonpath((path_text, root_text)) == root_text
+    except ValueError:
+        return False
 
 
 def _resolved_runtime_path(
@@ -2449,28 +2458,25 @@ def _resolved_runtime_path(
     read_roots = allowed_roots or _runtime_read_roots(cwd, home_dir)
     if not read_roots:
         return None
-    try:
-        resolved_path = normalized_path.resolve(strict=False)
-    except OSError:
+    path_text = os.path.realpath(os.fspath(normalized_path))
+    if not any(_path_text_is_within_root(path_text, root) for root in read_roots):
         return None
-    return resolved_path if _path_is_within_roots(resolved_path, read_roots) else None
+    return Path(path_text)
 
 
 def _read_small_runtime_text_file(path: Path, *, allowed_roots: tuple[Path, ...]) -> str | None:
-    try:
-        resolved_path = path.resolve(strict=True)
-    except OSError:
-        return None
-    if not _path_is_within_roots(resolved_path, allowed_roots):
+    path_text = os.path.realpath(os.fspath(path))
+    if not any(_path_text_is_within_root(path_text, root) for root in allowed_roots):
         return None
     try:
-        stat_result = resolved_path.stat()
+        stat_result = os.stat(path_text)
     except OSError:
         return None
     if not stat.S_ISREG(stat_result.st_mode) or stat_result.st_size > _MAX_DECODED_PAYLOAD_BYTES:
         return None
     try:
-        return resolved_path.read_text(encoding="utf-8")
+        with open(path_text, encoding="utf-8") as runtime_file:
+            return runtime_file.read()
     except (OSError, UnicodeDecodeError):
         return None
 
@@ -2899,16 +2905,14 @@ def _contains_mutating_shell_redirection(parts: list[str]) -> bool:
             else:
                 index += 1
         else:
-            match = re.fullmatch(r"(?P<prefix>[^<>\s]*?)(?P<fd>[0-2]?)(?P<op>>\||>>|>)(?P<target>.*)", token)
-            if match is None:
+            redirection = _split_attached_redirection_token(token)
+            if redirection is None:
                 index += 1
                 continue
-            prefix = match.group("prefix") or ""
+            prefix, fd, _op, target = redirection
             if prefix.endswith("="):
                 index += 1
                 continue
-            fd = match.group("fd")
-            target = match.group("target")
             if target:
                 index += 1
             elif index + 1 < len(parts):
@@ -2925,6 +2929,32 @@ def _contains_mutating_shell_redirection(parts: list[str]) -> bool:
             continue
         return True
     return False
+
+
+def _split_attached_redirection_token(token: str) -> tuple[str, str, str, str] | None:
+    for index, character in enumerate(token):
+        if character != ">":
+            continue
+        op = _attached_redirection_operator(token, index)
+        prefix = token[:index]
+        if any(character.isspace() or character in {"<", ">"} for character in prefix):
+            continue
+        target = token[index + len(op) :]
+        fd = ""
+        if prefix and prefix[-1] in {"0", "1", "2"}:
+            fd = prefix[-1]
+            prefix = prefix[:-1]
+        return prefix, fd, op, target
+    return None
+
+
+def _attached_redirection_operator(token: str, index: int) -> str:
+    next_character = token[index + 1 : index + 2]
+    if next_character == "|":
+        return ">|"
+    if next_character == ">":
+        return ">>"
+    return ">"
 
 
 def _normalized_redirect_target(target: str) -> str:
