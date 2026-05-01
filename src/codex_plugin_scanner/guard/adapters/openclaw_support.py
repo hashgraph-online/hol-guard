@@ -314,10 +314,11 @@ def _artifacts_for_skill(root: Path, skill_md: Path) -> list[GuardArtifact]:
     skill_dir = skill_md.parent
     skill_name = _frontmatter_name(content) or skill_dir.name
     root_id = _path_digest(root)
+    skill_dir_id = _path_digest(skill_dir)
     source_scope = f"skill-root:{root_id}"
     artifacts = [
         GuardArtifact(
-            artifact_id=f"openclaw:skill:{root_id}:{skill_name}",
+            artifact_id=f"openclaw:skill:{root_id}:{skill_dir_id}:{skill_name}",
             name=skill_name,
             harness="openclaw",
             artifact_type="skill",
@@ -329,6 +330,8 @@ def _artifacts_for_skill(root: Path, skill_md: Path) -> list[GuardArtifact]:
                 "content_hash": _content_hash(content),
                 "skill_root": str(root),
                 "skill_root_id": root_id,
+                "skill_dir": str(skill_dir),
+                "skill_dir_id": skill_dir_id,
                 "env_mentions": sorted(_extract_env_mentions(content)),
             },
         )
@@ -346,7 +349,7 @@ def _artifacts_for_skill(root: Path, skill_md: Path) -> list[GuardArtifact]:
             rel_path = file_path.relative_to(skill_dir)
             artifacts.append(
                 GuardArtifact(
-                    artifact_id=f"openclaw:skill:{root_id}:{skill_name}:{rel_path}",
+                    artifact_id=f"openclaw:skill:{root_id}:{skill_dir_id}:{skill_name}:{rel_path}",
                     name=f"{skill_name}/{rel_path}",
                     harness="openclaw",
                     artifact_type="skill_file",
@@ -358,6 +361,7 @@ def _artifacts_for_skill(root: Path, skill_md: Path) -> list[GuardArtifact]:
                         "parent_skill": skill_name,
                         "content_hash": _content_hash(file_content),
                         "skill_root_id": root_id,
+                        "skill_dir_id": skill_dir_id,
                         "env_mentions": sorted(_extract_env_mentions(file_content)),
                     },
                 )
@@ -412,12 +416,15 @@ def _mcp_servers(payload: dict[str, object]) -> dict[str, dict[str, object]]:
     candidates = (mcp.get("servers"), mcp.get("mcpServers"), payload.get("mcpServers"))
     for candidate in candidates:
         server_map = _dict_value(candidate)
-        if server_map:
-            return {
-                str(name): config
-                for name, config in server_map.items()
-                if isinstance(name, str) and isinstance(config, dict) and config.get("enabled", True) is not False
-            }
+        if not server_map:
+            continue
+        enabled_servers = {
+            str(name): config
+            for name, config in server_map.items()
+            if isinstance(name, str) and isinstance(config, dict) and config.get("enabled", True) is not False
+        }
+        if enabled_servers:
+            return enabled_servers
     return {}
 
 

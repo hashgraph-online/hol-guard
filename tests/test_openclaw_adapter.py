@@ -108,6 +108,26 @@ def test_openclaw_flags_open_dm_policy_and_remote_mcp(tmp_path: Path) -> None:
     assert any("remote server" in signal for signal in mcp_signals)
 
 
+def test_openclaw_checks_fallback_mcp_maps_after_disabled_servers(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    _write(
+        context.home_dir / ".openclaw" / "openclaw.json",
+        json.dumps(
+            {
+                "mcp": {
+                    "servers": {"disabled": {"enabled": False, "url": "https://disabled.example/mcp"}},
+                    "mcpServers": {"remote": {"url": "https://remote.example/mcp"}},
+                }
+            }
+        ),
+    )
+
+    detection = OpenClawHarnessAdapter().detect(context)
+    mcp = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:mcp:remote")
+
+    assert any("remote server" in signal for signal in artifact_risk_signals(mcp))
+
+
 def test_openclaw_flags_legacy_dm_policy_fields(tmp_path: Path) -> None:
     context = _ctx(tmp_path)
     _write(
@@ -194,6 +214,26 @@ def test_openclaw_skill_artifact_ids_include_root_identity(tmp_path: Path) -> No
     assert len(reviewer_ids) == 2
 
 
+def test_openclaw_skill_artifact_ids_include_skill_directory_identity(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    workspace_path = context.home_dir / ".openclaw" / "workspace"
+    _write(
+        context.home_dir / ".openclaw" / "openclaw.json",
+        json.dumps({"agents": {"defaults": {"workspace": str(workspace_path)}}}),
+    )
+    _write(workspace_path / "skills" / "reviewer-a" / "SKILL.md", "---\nname: reviewer\n---\nA.\n")
+    _write(workspace_path / "skills" / "reviewer-b" / "SKILL.md", "---\nname: reviewer\n---\nB.\n")
+
+    detection = OpenClawHarnessAdapter().detect(context)
+    reviewer_ids = {
+        artifact.artifact_id
+        for artifact in detection.artifacts
+        if artifact.artifact_type == "skill" and artifact.name == "reviewer"
+    }
+
+    assert len(reviewer_ids) == 2
+
+
 def test_install_exports_guard_managed_openclaw_overlay(tmp_path: Path) -> None:
     context = _ctx(tmp_path)
     _write(
@@ -229,9 +269,7 @@ def test_openclaw_skips_symlinked_skill_files(tmp_path: Path) -> None:
         pytest.skip(f"symlinks unavailable: {error}")
 
     detection = OpenClawHarnessAdapter().detect(context)
-    artifacts = {artifact.artifact_id for artifact in detection.artifacts}
-
-    assert "openclaw:skill:linked-secret" not in artifacts
+    assert not any(artifact.name == "linked-secret" for artifact in detection.artifacts)
 
 
 def test_uninstall_rejects_manifest_paths_outside_managed_root(tmp_path: Path) -> None:
