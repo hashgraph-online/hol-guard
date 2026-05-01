@@ -4070,6 +4070,8 @@ def _strip_codex_safe_stderr_discard(segment: str) -> str | None:
         return None
     if not parts:
         return None
+    if _codex_command_uses_untrusted_search_binary(parts[0]):
+        return None
     return shlex.join(parts)
 
 
