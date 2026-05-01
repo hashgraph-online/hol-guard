@@ -2486,7 +2486,7 @@ def _read_small_runtime_text_file(path: Path, *, allowed_roots: tuple[Path, ...]
     if isinstance(nofollow_flag, int):
         open_flags |= nofollow_flag
     try:
-        # lgtm[py/path-injection] path_text is realpath-confined to allowed_roots above.
+        # lgtm [py/path-injection] path_text is realpath-confined to allowed_roots above.
         descriptor = os.open(path_text, open_flags)
     except OSError:
         return None
