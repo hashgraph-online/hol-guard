@@ -1685,6 +1685,14 @@ def run_guard_command(
                 daemon_client=locals().get("browser_approval_daemon_client"),
             )
             if codex_browser_decision == "allow":
+                if event_name != "PreToolUse":
+                    _emit_native_hook_response(
+                        harness=args.harness,
+                        policy_action="allow",
+                        event_name=event_name,
+                        reason="",
+                        output_stream=output_stream,
+                    )
                 return 0
             if codex_browser_decision == "block":
                 policy_action = "block"
