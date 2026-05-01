@@ -108,6 +108,19 @@ def test_openclaw_flags_open_dm_policy_and_remote_mcp(tmp_path: Path) -> None:
     assert any("remote server" in signal for signal in mcp_signals)
 
 
+def test_openclaw_skips_open_dm_risk_for_disabled_channels(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    _write(
+        context.home_dir / ".openclaw" / "openclaw.json",
+        json.dumps({"channels": {"telegram": {"enabled": False, "dmPolicy": "open", "allowFrom": ["*"]}}}),
+    )
+
+    detection = OpenClawHarnessAdapter().detect(context)
+    channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
+
+    assert not any("network traffic" in signal for signal in artifact_risk_signals(channel))
+
+
 def test_openclaw_checks_fallback_mcp_maps_after_disabled_servers(tmp_path: Path) -> None:
     context = _ctx(tmp_path)
     _write(
@@ -170,6 +183,62 @@ def test_openclaw_accepts_json5_comments_trailing_commas_and_extra_skill_dirs(tm
 
     assert "openclaw:channel:telegram" in artifacts
     assert any(artifact.name == "reviewer" for artifact in detection.artifacts)
+
+
+def test_openclaw_accepts_json5_unquoted_keys_and_single_quotes(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    _write(
+        context.home_dir / ".openclaw" / "openclaw.json",
+        """
+        {
+          channels: {
+            telegram: { dmPolicy: 'open', allowFrom: ['*'] },
+          },
+          mcp: {
+            servers: {
+              remote: { url: 'https://remote.example/mcp' },
+            },
+          },
+        }
+        """,
+    )
+
+    detection = OpenClawHarnessAdapter().detect(context)
+    channel = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:channel:telegram")
+    mcp = next(artifact for artifact in detection.artifacts if artifact.artifact_id == "openclaw:mcp:remote")
+
+    assert any("network traffic" in signal for signal in artifact_risk_signals(channel))
+    assert any("remote server" in signal for signal in artifact_risk_signals(mcp))
+
+
+def test_openclaw_resolves_config_includes_before_building_artifacts(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    config_dir = context.home_dir / ".openclaw"
+    _write(
+        config_dir / "channels.json5",
+        """
+        {
+          channels: {
+            telegram: { dmPolicy: 'open', allowFrom: ['*'] },
+          },
+        }
+        """,
+    )
+    _write(
+        config_dir / "openclaw.json",
+        """
+        {
+          $include: 'channels.json5',
+          mcp: { servers: { remote: { url: 'https://remote.example/mcp' } } },
+        }
+        """,
+    )
+
+    detection = OpenClawHarnessAdapter().detect(context)
+    artifact_ids = {artifact.artifact_id for artifact in detection.artifacts}
+
+    assert "openclaw:channel:telegram" in artifact_ids
+    assert "openclaw:mcp:remote" in artifact_ids
 
 
 def test_openclaw_extra_skill_dirs_skip_blank_and_anchor_relative_paths(tmp_path: Path) -> None:

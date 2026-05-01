@@ -15,11 +15,11 @@ from .base import (
     _json_payload,
     _run_command_probe,
 )
+from .openclaw_config import load_config
 from .openclaw_support import (
     config_artifacts,
     config_path,
     install_state,
-    load_config,
     managed_root,
     overlay_payload,
     pretool_payload,

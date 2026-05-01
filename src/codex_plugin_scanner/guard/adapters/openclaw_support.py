@@ -3,23 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import sys
 from pathlib import Path
 
 from ..models import GuardArtifact, HarnessDetection
 from .base import HarnessContext
-
-try:
-    import yaml as _yaml  # type: ignore[import-untyped]
-    from yaml import YAMLError as _YamlError
-
-    _HAS_PYYAML = True
-except ImportError:
-    _yaml = None  # type: ignore[assignment]
-    _YamlError = ValueError
-    _HAS_PYYAML = False
 
 _MAX_FILE_READ = 64 * 1024
 _SKILL_SUBDIRS = ("references", "templates", "scripts", "assets")
@@ -33,31 +22,6 @@ def config_path(context: HarnessContext) -> Path:
 
 def managed_root(context: HarnessContext) -> Path:
     return context.guard_home / "openclaw"
-
-
-def load_config(path: Path) -> dict[str, object]:
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return {}
-    try:
-        payload = json.loads(raw)
-        return payload if isinstance(payload, dict) else {}
-    except json.JSONDecodeError:
-        pass
-    stripped = _strip_json_comments(raw)
-    try:
-        payload = json.loads(_strip_trailing_json_commas(stripped))
-        return payload if isinstance(payload, dict) else {}
-    except json.JSONDecodeError:
-        pass
-    if not _HAS_PYYAML:
-        return {}
-    try:
-        payload = _yaml.safe_load(stripped)  # type: ignore[union-attr]
-        return payload if isinstance(payload, dict) else {}
-    except _YamlError:
-        return {}
 
 
 def config_artifacts(context: HarnessContext, path: Path, payload: dict[str, object]) -> list[GuardArtifact]:
@@ -127,93 +91,6 @@ def install_state(
     return "repaired_managed_install"
 
 
-def _strip_json_comments(text: str) -> str:
-    output: list[str] = []
-    in_string = False
-    escape = False
-    in_line_comment = False
-    in_block_comment = False
-    index = 0
-    while index < len(text):
-        char = text[index]
-        next_char = text[index + 1] if index + 1 < len(text) else ""
-        if in_line_comment:
-            if char == "\n":
-                in_line_comment = False
-                output.append(char)
-            index += 1
-            continue
-        if in_block_comment:
-            if char == "*" and next_char == "/":
-                in_block_comment = False
-                index += 2
-                continue
-            if char == "\n":
-                output.append(char)
-            index += 1
-            continue
-        if in_string:
-            output.append(char)
-            if escape:
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == '"':
-                in_string = False
-            index += 1
-            continue
-        if char == '"':
-            in_string = True
-            output.append(char)
-            index += 1
-            continue
-        if char == "/" and next_char == "/":
-            in_line_comment = True
-            index += 2
-            continue
-        if char == "/" and next_char == "*":
-            in_block_comment = True
-            index += 2
-            continue
-        output.append(char)
-        index += 1
-    return "".join(output)
-
-
-def _strip_trailing_json_commas(text: str) -> str:
-    output: list[str] = []
-    in_string = False
-    escape = False
-    index = 0
-    while index < len(text):
-        char = text[index]
-        if in_string:
-            output.append(char)
-            if escape:
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == '"':
-                in_string = False
-            index += 1
-            continue
-        if char == '"':
-            in_string = True
-            output.append(char)
-            index += 1
-            continue
-        if char == ",":
-            lookahead = index + 1
-            while lookahead < len(text) and text[lookahead] in " \t\r\n":
-                lookahead += 1
-            if lookahead < len(text) and text[lookahead] in "}]":
-                index += 1
-                continue
-        output.append(char)
-        index += 1
-    return "".join(output)
-
-
 def _gateway_artifact(context: HarnessContext, path: Path, payload: dict[str, object]) -> GuardArtifact:
     gateway = _dict_value(payload.get("gateway"))
     agents = _dict_value(payload.get("agents"))
@@ -254,8 +131,9 @@ def _channel_artifacts(path: Path, payload: dict[str, object]) -> list[GuardArti
         dm = _dict_value(config.get("dm"))
         dm_policy = _string_value(config.get("dmPolicy")) or _string_value(dm.get("policy"))
         allow_from = _string_list(config.get("allowFrom")) or _string_list(dm.get("allowFrom"))
+        enabled = config.get("enabled", True) is not False
         signals: list[str] = []
-        if dm_policy == "open" and "*" in allow_from:
+        if enabled and dm_policy == "open" and "*" in allow_from:
             signals.append("network traffic from open chat channel can reach the agent without sender pairing")
         artifacts.append(
             GuardArtifact(
@@ -268,7 +146,7 @@ def _channel_artifacts(path: Path, payload: dict[str, object]) -> list[GuardArti
                 args=(f"channel {name}", f"dmPolicy {dm_policy or 'default'}", f"allowFrom {','.join(allow_from)}"),
                 metadata={
                     "channel": name,
-                    "enabled": config.get("enabled", True) is not False,
+                    "enabled": enabled,
                     "dm_policy": dm_policy,
                     "allow_from": allow_from,
                     "runtime_request_signals": signals,
