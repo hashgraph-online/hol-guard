@@ -20,7 +20,9 @@ Manual verification should include:
 - `hol-guard detect antigravity --json`
 - `hol-guard detect gemini --json`
 - `hol-guard detect opencode --json`
+- `hol-guard detect openclaw --json`
 - `hol-guard install opencode --json`
+- `hol-guard install openclaw --json`
 - `hol-guard update --dry-run --json`
 - `hol-guard run cursor --dry-run --default-action allow --json`
 - `hol-guard run gemini --dry-run --default-action allow --json`
@@ -36,6 +38,7 @@ Manual verification should include:
 - `gemini --help`
 - `opencode --help`
 - `opencode run --help`
+- `openclaw --help`
 
 First-party canaries for local manual validation:
 
@@ -52,6 +55,15 @@ real `opencode` binary:
 - a newly added plugin blocks before launch
 - a blocked prompt request queues an approval
 - approving that request lets Guard hand off to `opencode run --dir <workspace> ...`
+
+OpenClaw manual validation should include one isolated local gateway config where you prove all of the following against
+the real `openclaw` binary:
+
+- an open DM policy with wildcard senders is surfaced as a channel risk
+- a remote MCP endpoint is surfaced as a network risk
+- a newly added workspace skill blocks before launch when policy requires reapproval
+- `hol-guard install openclaw` creates the managed overlay and pre-tool bundle under Guard home
+- approving a blocked OpenClaw request resolves through native-or-center delivery without mutating user config
 
 Nightly release-bar coverage should include:
 
