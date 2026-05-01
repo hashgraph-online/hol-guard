@@ -873,6 +873,25 @@ class TestGuardProtect:
 
         assert output.text == "  API_TOKEN=*****\n\tDATABASE_URL=*****\n"
 
+    def test_guard_redaction_preserves_serialized_json_delimiters(self) -> None:
+        payload = json.dumps(
+            {
+                "token": "_authToken:abcdefghi",
+                "dsn": "postgres://user:pass@db.internal/app",
+                "key": "-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----",
+            }
+        )
+
+        output = redact_text(payload)
+        redacted_payload = json.loads(output.text)
+
+        assert "abcdefghi" not in output.text
+        assert "pass" not in output.text
+        assert "secret" not in output.text
+        assert redacted_payload["token"] == "_authToken=*****"
+        assert redacted_payload["dsn"] == "*****"
+        assert redacted_payload["key"] == "*****"
+
     def test_guard_store_keeps_distinct_advisories_without_ids(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
 
