@@ -3751,6 +3751,8 @@ def _hook_runtime_artifact(
         )
         if output_artifact is not None:
             return output_artifact
+        if _codex_post_tool_command_is_read_only_source_inspection(payload=payload, cwd=workspace):
+            return None
     if event_name == "UserPromptSubmit":
         prompt_text = payload.get("prompt")
         if isinstance(prompt_text, str) and prompt_text.strip():
@@ -3840,12 +3842,7 @@ def _codex_post_tool_output_artifact(
     if not response_text or _CODEX_SECRET_OUTPUT_PATTERN.search(response_text) is None:
         return None
     tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
-    tool_input = payload.get("tool_input")
-    command_text = ""
-    if isinstance(tool_input, dict):
-        command = tool_input.get("command")
-        if isinstance(command, str):
-            command_text = command.strip()
+    command_text = _codex_post_tool_command_text(payload)
     if not command_text:
         command_text = tool_name
     if _codex_command_is_read_only_source_inspection(command_text, cwd=cwd):
@@ -3884,6 +3881,24 @@ def _codex_post_tool_output_artifact(
             ),
         },
     )
+
+
+def _codex_post_tool_command_is_read_only_source_inspection(
+    *,
+    payload: dict[str, object],
+    cwd: Path | None,
+) -> bool:
+    command_text = _codex_post_tool_command_text(payload)
+    return bool(command_text) and _codex_command_is_read_only_source_inspection(command_text, cwd=cwd)
+
+
+def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
+    tool_input = payload.get("tool_input")
+    if isinstance(tool_input, dict):
+        command = tool_input.get("command")
+        if isinstance(command, str):
+            return command.strip()
+    return ""
 
 
 _CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"rg", "grep", "egrep", "fgrep"})
@@ -4010,7 +4025,7 @@ def _split_codex_safe_read_only_pipeline(command: str) -> list[str] | None:
             if char == quote:
                 quote = None
             elif quote == '"' and (
-                char == "`" or (char == "$" and index + 1 < len(command) and command[index + 1] == "(")
+                char == "`" or (char == "$" and index + 1 < len(command) and command[index + 1] in {"(", "{"})
             ):
                 return None
             continue
@@ -4020,7 +4035,7 @@ def _split_codex_safe_read_only_pipeline(command: str) -> list[str] | None:
             continue
         if char in {"\n", "\r", "&", ";", "<", "`"}:
             return None
-        if char == "$" and index + 1 < len(command) and command[index + 1] == "(":
+        if char == "$" and index + 1 < len(command) and command[index + 1] in {"(", "{"}:
             return None
         if char == "|":
             segment = "".join(current).strip()
@@ -4046,31 +4061,61 @@ def _split_codex_safe_read_only_pipeline(command: str) -> list[str] | None:
 
 
 def _strip_codex_safe_stderr_discard(segment: str) -> str | None:
+    cleaned_segment = _remove_codex_safe_stderr_discard(segment)
+    if cleaned_segment is None:
+        return None
     try:
-        parts = shlex.split(segment)
+        parts = shlex.split(cleaned_segment)
     except ValueError:
         return None
     if not parts:
         return None
+    return shlex.join(parts)
+
+
+def _remove_codex_safe_stderr_discard(segment: str) -> str | None:
     cleaned: list[str] = []
+    quote: str | None = None
+    escaped = False
     index = 0
-    while index < len(parts):
-        part = parts[index]
-        if part == "2>/dev/null":
+    while index < len(segment):
+        char = segment[index]
+        if escaped:
+            cleaned.append(char)
+            escaped = False
             index += 1
             continue
-        if part == "2>" and index + 1 < len(parts) and parts[index + 1] == "/dev/null":
-            index += 2
+        if char == "\\":
+            cleaned.append(char)
+            escaped = True
+            index += 1
             continue
-        if part.startswith("2>") and part != "2>/dev/null":
+        if quote is not None:
+            cleaned.append(char)
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in {"'", '"'}:
+            cleaned.append(char)
+            quote = char
+            index += 1
+            continue
+        if segment.startswith("2>", index):
+            after_redirect = index + 2
+            while after_redirect < len(segment) and segment[after_redirect].isspace():
+                after_redirect += 1
+            if segment.startswith("/dev/null", after_redirect):
+                after_target = after_redirect + len("/dev/null")
+                if after_target == len(segment) or segment[after_target].isspace():
+                    index = after_target
+                    continue
             return None
-        if ">" in part:
+        if char == ">":
             return None
-        cleaned.append(part)
+        cleaned.append(char)
         index += 1
-    if not cleaned:
-        return None
-    return shlex.join(cleaned)
+    return "".join(cleaned).strip()
 
 
 def _codex_command_is_bounded_read_only_filter(command_text: str) -> bool:
@@ -4326,7 +4371,7 @@ def _codex_command_has_unquoted_shell_control(command: str) -> bool:
                 quote = None
             if quote == '"' and char == "`":
                 return True
-            if quote == '"' and char == "$" and index + 1 < len(command) and command[index + 1] == "(":
+            if quote == '"' and char == "$" and index + 1 < len(command) and command[index + 1] in {"(", "{"}:
                 return True
             continue
         if char in {"'", '"'}:
@@ -4336,7 +4381,7 @@ def _codex_command_has_unquoted_shell_control(command: str) -> bool:
             return True
         if char in {"|", "&", ";", ">", "<", "`"}:
             return True
-        if char == "$" and index + 1 < len(command) and command[index + 1] == "(":
+        if char == "$" and index + 1 < len(command) and command[index + 1] in {"(", "{"}:
             return True
     return False
 
