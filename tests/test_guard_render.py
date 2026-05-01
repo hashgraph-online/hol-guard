@@ -93,6 +93,24 @@ def test_guard_json_render_redacts_private_key_without_breaking_json(capsys) -> 
     assert rendered["details"] == "*****"
 
 
+def test_guard_json_render_redacts_token_lines_without_breaking_json(capsys) -> None:
+    emit_guard_payload("status", {"details": "_authToken:abcdefghi"}, True)
+
+    output = capsys.readouterr().out
+    rendered = json.loads(output)
+    assert "abcdefghi" not in output
+    assert rendered["details"] == "npm token redacted"
+
+
+def test_guard_json_render_redacts_connection_string_without_breaking_json(capsys) -> None:
+    emit_guard_payload("status", {"details": "postgres://user:password@localhost/db"}, True)
+
+    output = capsys.readouterr().out
+    rendered = json.loads(output)
+    assert "password" not in output
+    assert rendered["details"] == "*****"
+
+
 def test_guard_json_renderer_receives_payload_copy(monkeypatch, capsys) -> None:
     def mutating_renderer(payload: dict[str, object]) -> dict[str, object]:
         payload["api_key"] = "mutated-secret"

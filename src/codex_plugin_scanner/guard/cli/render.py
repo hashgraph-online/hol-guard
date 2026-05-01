@@ -51,6 +51,8 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?i)(authorization:\s*)(bearer\s+)?[^\s,;]+"), r"\1*****"),
     (re.compile(r"(?i)(api[-_ ]?key:\s*)[^\s,;]+"), r"\1*****"),
     (re.compile(r"(?i)(bearer\s+)[^\s,;]+"), r"\1*****"),
+    (re.compile(r"(?im)\b(?:_authToken|npm[_ -]?token)\s*[:=]\s*[^\s]+"), "npm token redacted"),
+    (re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s]+", re.IGNORECASE), "*****"),
     (
         re.compile(
             r"(?i)([a-z0-9_-]*(?:token|secret|api[-_]?key|password|credential)[a-z0-9_-]*=)(?:'[^']*'|\"[^\"]*\"|[^&\s]+)"
