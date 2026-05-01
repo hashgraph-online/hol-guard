@@ -78,6 +78,21 @@ def test_guard_json_render_redacts_after_command_specific_payload_shape(capsys) 
     assert rendered["api_key"] == "*****"
 
 
+def test_guard_json_render_redacts_private_key_without_breaking_json(capsys) -> None:
+    private_key = (
+        "-----BEGIN PRIVATE KEY-----\n"
+        "super-secret-material\n"
+        "-----END PRIVATE KEY-----"
+    )
+
+    emit_guard_payload("status", {"details": private_key}, True)
+
+    output = capsys.readouterr().out
+    rendered = json.loads(output)
+    assert "super-secret-material" not in output
+    assert rendered["details"] == "-----BEGIN PRIVATE KEY-----\n*****\n-----END PRIVATE KEY-----"
+
+
 def test_guard_json_renderer_receives_payload_copy(monkeypatch, capsys) -> None:
     def mutating_renderer(payload: dict[str, object]) -> dict[str, object]:
         payload["api_key"] = "mutated-secret"
