@@ -4011,7 +4011,7 @@ def _split_codex_safe_read_only_pipeline(command: str) -> list[str] | None:
     current: list[str] = []
     quote: str | None = None
     escaped = False
-    for index, char in enumerate(command):
+    for char in command:
         if escaped:
             current.append(char)
             escaped = False
@@ -4024,9 +4024,7 @@ def _split_codex_safe_read_only_pipeline(command: str) -> list[str] | None:
             current.append(char)
             if char == quote:
                 quote = None
-            elif quote == '"' and (
-                char == "`" or (char == "$" and index + 1 < len(command) and command[index + 1] in {"(", "{"})
-            ):
+            elif quote == '"' and (char == "`" or char == "$"):
                 return None
             continue
         if char in {"'", '"'}:
@@ -4035,7 +4033,7 @@ def _split_codex_safe_read_only_pipeline(command: str) -> list[str] | None:
             continue
         if char in {"\n", "\r", "&", ";", "<", "`"}:
             return None
-        if char == "$" and index + 1 < len(command) and command[index + 1] in {"(", "{"}:
+        if char == "$":
             return None
         if char == "|":
             segment = "".join(current).strip()
@@ -4361,7 +4359,7 @@ def _shell_wrapper_script_index(parts: list[str]) -> int | None:
 def _codex_command_has_unquoted_shell_control(command: str) -> bool:
     quote: str | None = None
     escaped = False
-    for index, char in enumerate(command):
+    for char in command:
         if escaped:
             escaped = False
             continue
@@ -4373,7 +4371,7 @@ def _codex_command_has_unquoted_shell_control(command: str) -> bool:
                 quote = None
             if quote == '"' and char == "`":
                 return True
-            if quote == '"' and char == "$" and index + 1 < len(command) and command[index + 1] in {"(", "{"}:
+            if quote == '"' and char == "$":
                 return True
             continue
         if char in {"'", '"'}:
@@ -4383,7 +4381,7 @@ def _codex_command_has_unquoted_shell_control(command: str) -> bool:
             return True
         if char in {"|", "&", ";", ">", "<", "`"}:
             return True
-        if char == "$" and index + 1 < len(command) and command[index + 1] in {"(", "{"}:
+        if char == "$":
             return True
     return False
 

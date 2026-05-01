@@ -707,6 +707,46 @@ Please investigate the bug end to end, fix the publish flow, and make sure user-
         assert payload["continue"] is False
         assert "credential-looking output" in payload["stopReason"]
 
+    def test_codex_post_tool_use_blocks_unbraced_env_expansion_source_view(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        source_file = workspace_dir / "__tests__" / "guard-connect-shell.test.tsx"
+        _write_text(source_file, "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "sed -n '1,40p' $GUARD_SOURCE_FILE.tsx | head -40"},
+            "tool_response": {"stdout": "const label = 'HOL_GUARD_FAKE_CREDENTIAL=fixture-only';\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert payload["continue"] is False
+        assert "credential-looking output" in payload["stopReason"]
+
     def test_codex_post_tool_use_allows_quoted_greater_than_search_pipeline(
         self,
         monkeypatch,
