@@ -2481,13 +2481,29 @@ def _read_small_runtime_text_file(path: Path, *, allowed_roots: tuple[Path, ...]
     root_texts = _runtime_read_root_texts(allowed_roots)
     if not any(_path_text_is_within_root_text(path_text, root_text) for root_text in root_texts):
         return None
+    parent_text = os.path.dirname(path_text)
+    file_name = os.path.basename(path_text)
+    if not file_name or not any(_path_text_is_within_root_text(parent_text, root_text) for root_text in root_texts):
+        return None
     open_flags = os.O_RDONLY
     nofollow_flag = getattr(os, "O_NOFOLLOW", 0)
     if isinstance(nofollow_flag, int):
         open_flags |= nofollow_flag
     try:
-        # lgtm [py/path-injection] path_text is realpath-confined to allowed_roots above.
-        descriptor = os.open(path_text, open_flags)
+        with os.scandir(parent_text) as entries:
+            runtime_entry = next((entry for entry in entries if entry.name == file_name), None)
+    except OSError:
+        return None
+    if runtime_entry is None:
+        return None
+    try:
+        entry_stat = runtime_entry.stat(follow_symlinks=False)
+    except OSError:
+        return None
+    if not stat.S_ISREG(entry_stat.st_mode) or entry_stat.st_size > _MAX_DECODED_PAYLOAD_BYTES:
+        return None
+    try:
+        descriptor = os.open(runtime_entry.path, open_flags)
     except OSError:
         return None
     try:
