@@ -10052,7 +10052,8 @@ def test_guard_hook_codex_user_prompt_submit_browser_approval_resumes_prompt(
     )
 
     assert rc == 0
-    assert output == ""
+    payload = json.loads(output)
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     assert store.list_approval_requests(limit=10) == []
 
 
@@ -10518,7 +10519,8 @@ def test_guard_hook_codex_post_tool_use_browser_approval_resumes_result(
     captured = capsys.readouterr()
 
     assert rc == 0
-    assert captured.out == ""
+    payload = json.loads(captured.out)
+    assert payload["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
     assert captured.err == ""
     assert store.list_approval_requests(limit=10) == []
 
