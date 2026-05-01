@@ -2050,6 +2050,27 @@ def test_read_small_runtime_text_file_rejects_symlink_escape(tmp_path):
     assert _read_small_runtime_text_file(symlink_path, allowed_roots=(workspace_dir,)) is None
 
 
+def test_read_small_runtime_text_file_rejects_growth_after_stat(tmp_path, monkeypatch):
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    target_path = workspace_dir / "payload.txt"
+    target_path.write_text("small", encoding="utf-8")
+
+    class GrowingRuntimeFile:
+        def __enter__(self) -> GrowingRuntimeFile:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self, _size: int) -> str:
+            return "x" * 32769
+
+    monkeypatch.setattr("os.fdopen", lambda *_args, **_kwargs: GrowingRuntimeFile())
+
+    assert _read_small_runtime_text_file(target_path, allowed_roots=(workspace_dir,)) is None
+
+
 def test_split_attached_redirection_token_handles_long_user_text_without_regex():
     token = f"{'!' * 20000}>danger.txt"
 

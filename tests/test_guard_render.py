@@ -78,6 +78,21 @@ def test_guard_json_render_redacts_after_command_specific_payload_shape(capsys) 
     assert rendered["api_key"] == "*****"
 
 
+def test_guard_json_renderer_receives_payload_copy(monkeypatch, capsys) -> None:
+    def mutating_renderer(payload: dict[str, object]) -> dict[str, object]:
+        payload["api_key"] = "mutated-secret"
+        return payload
+
+    source_payload: dict[str, object] = {"api_key": "original-secret"}
+    monkeypatch.setitem(render._JSON_RENDERERS, "mutating", mutating_renderer)
+
+    emit_guard_payload("mutating", source_payload, True)
+
+    output = capsys.readouterr().out
+    assert source_payload["api_key"] == "original-secret"
+    assert "mutated-secret" not in output
+
+
 def test_guard_settings_json_omits_billing_flag(capsys) -> None:
     emit_guard_payload(
         "settings",

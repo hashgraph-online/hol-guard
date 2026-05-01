@@ -11,6 +11,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from ..redaction import redact_text
+
 try:
     from rich import box
     from rich.console import Console
@@ -55,7 +57,8 @@ def emit_guard_payload(command: str, payload: dict[str, object], as_json: bool) 
     """Render Guard payloads as JSON or human-friendly rich output."""
 
     if as_json or not _RICH_AVAILABLE:
-        sys.stdout.write(_safe_json_output_text(command, payload))
+        redacted_output = redact_text(_safe_json_output_text(command, payload))
+        sys.stdout.write(redacted_output.text)
         sys.stdout.write("\n")
         return
 
@@ -101,8 +104,8 @@ def _sanitize_payload_for_output(value: object) -> object:
 def _json_payload_for_command(command: str, payload: dict[str, object]) -> dict[str, object]:
     json_renderer = _JSON_RENDERERS.get(command)
     if json_renderer is None:
-        return payload
-    return json_renderer(payload)
+        return dict(payload)
+    return json_renderer(dict(payload))
 
 
 def _render_settings_json_payload(redacted_payload: dict[str, object]) -> dict[str, object]:

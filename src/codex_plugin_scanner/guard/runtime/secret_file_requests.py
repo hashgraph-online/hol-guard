@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import base64
 import binascii
+import contextlib
 import hashlib
 import json
 import os
@@ -2432,15 +2433,23 @@ def _runtime_read_roots(cwd: Path | None, home_dir: Path | None) -> tuple[Path, 
 
 def _path_is_within_roots(path: Path, roots: tuple[Path, ...]) -> bool:
     path_text = os.path.realpath(os.fspath(path))
-    return any(_path_text_is_within_root(path_text, root) for root in roots)
+    root_texts = _runtime_read_root_texts(roots)
+    return any(_path_text_is_within_root_text(path_text, root_text) for root_text in root_texts)
 
 
 def _path_text_is_within_root(path_text: str, root: Path) -> bool:
-    root_text = os.path.realpath(os.fspath(root))
+    return _path_text_is_within_root_text(path_text, os.path.realpath(os.fspath(root)))
+
+
+def _path_text_is_within_root_text(path_text: str, root_text: str) -> bool:
     try:
         return os.path.commonpath((path_text, root_text)) == root_text
     except ValueError:
         return False
+
+
+def _runtime_read_root_texts(roots: tuple[Path, ...]) -> tuple[str, ...]:
+    return tuple(os.path.realpath(os.fspath(root)) for root in roots)
 
 
 def _resolved_runtime_path(
@@ -2459,25 +2468,36 @@ def _resolved_runtime_path(
     if not read_roots:
         return None
     path_text = os.path.realpath(os.fspath(normalized_path))
-    if not any(_path_text_is_within_root(path_text, root) for root in read_roots):
+    root_texts = _runtime_read_root_texts(read_roots)
+    if not any(_path_text_is_within_root_text(path_text, root_text) for root_text in root_texts):
         return None
     return Path(path_text)
 
 
 def _read_small_runtime_text_file(path: Path, *, allowed_roots: tuple[Path, ...]) -> str | None:
     path_text = os.path.realpath(os.fspath(path))
-    if not any(_path_text_is_within_root(path_text, root) for root in allowed_roots):
+    root_texts = _runtime_read_root_texts(allowed_roots)
+    if not any(_path_text_is_within_root_text(path_text, root_text) for root_text in root_texts):
         return None
+    open_flags = os.O_RDONLY
+    nofollow_flag = getattr(os, "O_NOFOLLOW", 0)
+    if isinstance(nofollow_flag, int):
+        open_flags |= nofollow_flag
     try:
-        stat_result = os.stat(path_text)
+        descriptor = os.open(path_text, open_flags)
     except OSError:
         return None
-    if not stat.S_ISREG(stat_result.st_mode) or stat_result.st_size > _MAX_DECODED_PAYLOAD_BYTES:
-        return None
     try:
-        with open(path_text, encoding="utf-8") as runtime_file:
-            return runtime_file.read()
+        stat_result = os.fstat(descriptor)
+        if not stat.S_ISREG(stat_result.st_mode) or stat_result.st_size > _MAX_DECODED_PAYLOAD_BYTES:
+            os.close(descriptor)
+            return None
+        with os.fdopen(descriptor, encoding="utf-8") as runtime_file:
+            content = runtime_file.read(_MAX_DECODED_PAYLOAD_BYTES + 1)
+            return content if len(content) <= _MAX_DECODED_PAYLOAD_BYTES else None
     except (OSError, UnicodeDecodeError):
+        with contextlib.suppress(OSError):
+            os.close(descriptor)
         return None
 
 
