@@ -395,9 +395,7 @@ def _expand_home(home_dir: Path, value: str) -> Path:
 def _channels(payload: dict[str, object]) -> dict[str, dict[str, object]]:
     channels = _dict_value(payload.get("channels"))
     return {
-        str(name): config
-        for name, config in channels.items()
-        if isinstance(name, str) and isinstance(config, dict)
+        str(name): config for name, config in channels.items() if isinstance(name, str) and isinstance(config, dict)
     }
 
 
