@@ -3751,6 +3751,8 @@ def _hook_runtime_artifact(
         )
         if output_artifact is not None:
             return output_artifact
+        if _codex_post_tool_command_is_read_only_source_inspection(payload=payload, cwd=workspace):
+            return None
     if event_name == "UserPromptSubmit":
         prompt_text = payload.get("prompt")
         if isinstance(prompt_text, str) and prompt_text.strip():
@@ -3840,15 +3842,10 @@ def _codex_post_tool_output_artifact(
     if not response_text or _CODEX_SECRET_OUTPUT_PATTERN.search(response_text) is None:
         return None
     tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
-    tool_input = payload.get("tool_input")
-    command_text = ""
-    if isinstance(tool_input, dict):
-        command = tool_input.get("command")
-        if isinstance(command, str):
-            command_text = command.strip()
+    command_text = _codex_post_tool_command_text(payload)
     if not command_text:
         command_text = tool_name
-    if _codex_command_is_read_only_source_search(command_text, cwd=cwd):
+    if _codex_command_is_read_only_source_inspection(command_text, cwd=cwd):
         return None
     fingerprint = hashlib.sha256(
         json.dumps(
@@ -3886,7 +3883,27 @@ def _codex_post_tool_output_artifact(
     )
 
 
+def _codex_post_tool_command_is_read_only_source_inspection(
+    *,
+    payload: dict[str, object],
+    cwd: Path | None,
+) -> bool:
+    command_text = _codex_post_tool_command_text(payload)
+    return bool(command_text) and _codex_command_is_read_only_source_inspection(command_text, cwd=cwd)
+
+
+def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
+    tool_input = payload.get("tool_input")
+    if isinstance(tool_input, dict):
+        command = tool_input.get("command")
+        if isinstance(command, str):
+            return command.strip()
+    return ""
+
+
 _CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"rg", "grep", "egrep", "fgrep"})
+_CODEX_READ_ONLY_VIEW_COMMANDS = frozenset({"cat", "head", "tail", "sed"})
+_CODEX_READ_ONLY_PIPE_FILTERS = frozenset({"head", "tail"})
 _CODEX_READ_ONLY_SEARCH_WRAPPERS = frozenset({"bash", "sh", "zsh"})
 _CODEX_SEARCH_PATTERN_VALUE_FLAGS = frozenset({"-e", "--regexp", "-f", "--file"})
 _CODEX_SEARCH_OPTION_VALUE_FLAGS = frozenset(
@@ -3966,6 +3983,202 @@ _CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
         "id_rsa",
     }
 )
+_CODEX_SED_PRINT_SCRIPT_PATTERN = re.compile(r"^\s*(?:\$|\d+)?(?:\s*,\s*(?:\$|\d+))?p\s*$")
+
+
+def _codex_command_is_read_only_source_inspection(command_text: str, *, cwd: Path | None) -> bool:
+    command = command_text.strip()
+    if not command:
+        return False
+    if _codex_command_has_unquoted_glob_metachar(command):
+        return False
+    segments = _split_codex_safe_read_only_pipeline(command)
+    if segments is None:
+        return _codex_command_is_read_only_source_search(command, cwd=cwd) or _codex_command_is_read_only_source_view(
+            command, cwd=cwd
+        )
+    if not segments:
+        return False
+    first_segment, *filter_segments = segments
+    if not (
+        _codex_command_is_read_only_source_search(first_segment, cwd=cwd)
+        or _codex_command_is_read_only_source_view(first_segment, cwd=cwd)
+    ):
+        return False
+    return all(_codex_command_is_bounded_read_only_filter(segment) for segment in filter_segments)
+
+
+def _codex_command_has_unquoted_glob_metachar(command: str) -> bool:
+    quote: str | None = None
+    escaped = False
+    for char in command:
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if quote is not None:
+            if char == quote:
+                quote = None
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            continue
+        if char in {"*", "?", "[", "]", "{", "}"}:
+            return True
+    return False
+
+
+def _split_codex_safe_read_only_pipeline(command: str) -> list[str] | None:
+    segments: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    escaped = False
+    for char in command:
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+        if char == "\\":
+            current.append(char)
+            escaped = True
+            continue
+        if quote is not None:
+            current.append(char)
+            if char == quote:
+                quote = None
+            elif quote == '"' and (char == "`" or char == "$"):
+                return None
+            continue
+        if char in {"'", '"'}:
+            current.append(char)
+            quote = char
+            continue
+        if char in {"\n", "\r", "&", ";", "<", "`"}:
+            return None
+        if char == "$":
+            return None
+        if char == "|":
+            segment = "".join(current).strip()
+            if not segment:
+                return None
+            stripped_segment = _strip_codex_safe_stderr_discard(segment)
+            if stripped_segment is None:
+                return None
+            segments.append(stripped_segment)
+            current = []
+            continue
+        current.append(char)
+    segment = "".join(current).strip()
+    if not segments:
+        return None
+    if not segment:
+        return None
+    stripped_segment = _strip_codex_safe_stderr_discard(segment)
+    if stripped_segment is None:
+        return None
+    segments.append(stripped_segment)
+    return segments
+
+
+def _strip_codex_safe_stderr_discard(segment: str) -> str | None:
+    cleaned_segment = _remove_codex_safe_stderr_discard(segment)
+    if cleaned_segment is None:
+        return None
+    try:
+        parts = shlex.split(cleaned_segment)
+    except ValueError:
+        return None
+    if not parts:
+        return None
+    if _codex_command_uses_untrusted_search_binary(parts[0]):
+        return None
+    return shlex.join(parts)
+
+
+def _remove_codex_safe_stderr_discard(segment: str) -> str | None:
+    cleaned: list[str] = []
+    quote: str | None = None
+    escaped = False
+    index = 0
+    while index < len(segment):
+        char = segment[index]
+        if escaped:
+            cleaned.append(char)
+            escaped = False
+            index += 1
+            continue
+        if char == "\\":
+            cleaned.append(char)
+            escaped = True
+            index += 1
+            continue
+        if quote is not None:
+            cleaned.append(char)
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in {"'", '"'}:
+            cleaned.append(char)
+            quote = char
+            index += 1
+            continue
+        if segment.startswith("2>", index):
+            after_redirect = index + 2
+            while after_redirect < len(segment) and segment[after_redirect].isspace():
+                after_redirect += 1
+            if segment.startswith("/dev/null", after_redirect):
+                after_target = after_redirect + len("/dev/null")
+                if after_target == len(segment) or segment[after_target].isspace():
+                    index = after_target
+                    continue
+            return None
+        if char == ">":
+            return None
+        cleaned.append(char)
+        index += 1
+    return "".join(cleaned).strip()
+
+
+def _codex_command_is_bounded_read_only_filter(command_text: str) -> bool:
+    try:
+        parts = shlex.split(command_text)
+    except ValueError:
+        return False
+    if not parts:
+        return False
+    if _codex_command_uses_untrusted_search_binary(parts[0]):
+        return False
+    executable = Path(parts[0]).name
+    if executable not in _CODEX_READ_ONLY_PIPE_FILTERS:
+        return False
+    return _codex_head_tail_args_are_bounded_filter(parts[1:])
+
+
+def _codex_command_is_read_only_source_view(command_text: str, *, cwd: Path | None) -> bool:
+    command = command_text.strip()
+    if not command:
+        return False
+    if _codex_command_has_unquoted_shell_control(command):
+        return False
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return False
+    if not parts:
+        return False
+    if _codex_command_uses_untrusted_search_binary(parts[0]):
+        return False
+    executable = Path(parts[0]).name
+    if executable not in _CODEX_READ_ONLY_VIEW_COMMANDS:
+        return False
+    if executable == "sed":
+        return _codex_sed_targets_are_read_only_source_like(parts[1:], cwd=cwd)
+    if executable in {"head", "tail"}:
+        return _codex_head_tail_targets_are_source_like(parts[1:], cwd=cwd)
+    return _codex_cat_targets_are_source_like(parts[1:], cwd=cwd)
 
 
 def _codex_command_is_read_only_source_search(command_text: str, *, cwd: Path | None) -> bool:
@@ -4000,6 +4213,125 @@ def _codex_command_is_read_only_source_search(command_text: str, *, cwd: Path | 
 
 def _codex_command_uses_untrusted_search_binary(executable_token: str) -> bool:
     return executable_token.startswith(".") or "/" in executable_token or "\\" in executable_token
+
+
+def _codex_cat_targets_are_source_like(args: list[str], *, cwd: Path | None) -> bool:
+    targets: list[str] = []
+    after_option_terminator = False
+    for arg in args:
+        if after_option_terminator:
+            targets.append(arg)
+            continue
+        if arg == "--":
+            after_option_terminator = True
+            continue
+        if arg == "-":
+            return False
+        if arg.startswith("-"):
+            continue
+        targets.append(arg)
+    return bool(targets) and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+
+
+def _codex_head_tail_args_are_bounded_filter(args: list[str]) -> bool:
+    targets, valid, skip_next = _parse_codex_head_tail_args(args)
+    return valid and not skip_next and not targets
+
+
+def _codex_head_tail_targets_are_source_like(args: list[str], *, cwd: Path | None) -> bool:
+    targets, valid, skip_next = _parse_codex_head_tail_args(args)
+    return (
+        valid
+        and not skip_next
+        and bool(targets)
+        and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+    )
+
+
+def _parse_codex_head_tail_args(args: list[str]) -> tuple[list[str], bool, bool]:
+    targets: list[str] = []
+    skip_next = False
+    after_option_terminator = False
+    for arg in args:
+        if skip_next:
+            skip_next = False
+            if not _codex_count_arg_is_bounded(arg):
+                return [], False, False
+            continue
+        if after_option_terminator:
+            targets.append(arg)
+            continue
+        if arg == "--":
+            after_option_terminator = True
+            continue
+        if arg in {"-n", "--lines", "-c", "--bytes"}:
+            skip_next = True
+            continue
+        if arg.startswith("--lines=") or arg.startswith("--bytes="):
+            _, value = arg.split("=", 1)
+            if not _codex_count_arg_is_bounded(value):
+                return [], False, False
+            continue
+        if re.fullmatch(r"-\d{1,6}", arg):
+            continue
+        if arg == "-":
+            return [], False, False
+        if arg.startswith("-"):
+            return [], False, False
+        targets.append(arg)
+    return targets, True, skip_next
+
+
+def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path | None) -> bool:
+    scripts: list[str] = []
+    targets: list[str] = []
+    skip_next_script = False
+    after_option_terminator = False
+    saw_print_suppression = False
+    for arg in args:
+        if skip_next_script:
+            skip_next_script = False
+            scripts.append(arg)
+            continue
+        if after_option_terminator:
+            targets.append(arg)
+            continue
+        if arg == "--":
+            after_option_terminator = True
+            continue
+        if arg in {"-i", "--in-place"} or arg.startswith(("-i", "--in-place=")):
+            return False
+        if arg == "-n" or arg == "--quiet" or arg == "--silent":
+            saw_print_suppression = True
+            continue
+        if arg == "-e" or arg == "--expression":
+            skip_next_script = True
+            continue
+        if arg.startswith("-e") and len(arg) > 2:
+            scripts.append(arg[2:])
+            continue
+        if arg.startswith("--expression="):
+            _, script = arg.split("=", 1)
+            scripts.append(script)
+            continue
+        if arg.startswith("-"):
+            return False
+        if not scripts:
+            scripts.append(arg)
+            continue
+        targets.append(arg)
+    if skip_next_script or not scripts or not targets:
+        return False
+    if not saw_print_suppression:
+        return False
+    if not all(_CODEX_SED_PRINT_SCRIPT_PATTERN.fullmatch(script.strip()) for script in scripts):
+        return False
+    return all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+
+
+def _codex_count_arg_is_bounded(value: str) -> bool:
+    normalized = value.strip()
+    return bool(re.fullmatch(r"\d{1,6}", normalized))
 
 
 def _git_grep_search_args(args: list[str]) -> list[str] | None:
@@ -4051,7 +4383,7 @@ def _shell_wrapper_script_index(parts: list[str]) -> int | None:
 def _codex_command_has_unquoted_shell_control(command: str) -> bool:
     quote: str | None = None
     escaped = False
-    for index, char in enumerate(command):
+    for char in command:
         if escaped:
             escaped = False
             continue
@@ -4063,7 +4395,7 @@ def _codex_command_has_unquoted_shell_control(command: str) -> bool:
                 quote = None
             if quote == '"' and char == "`":
                 return True
-            if quote == '"' and char == "$" and index + 1 < len(command) and command[index + 1] == "(":
+            if quote == '"' and char == "$":
                 return True
             continue
         if char in {"'", '"'}:
@@ -4073,7 +4405,7 @@ def _codex_command_has_unquoted_shell_control(command: str) -> bool:
             return True
         if char in {"|", "&", ";", ">", "<", "`"}:
             return True
-        if char == "$" and index + 1 < len(command) and command[index + 1] == "(":
+        if char == "$":
             return True
     return False
 
@@ -4146,6 +4478,8 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
     if not stripped:
         return False
     if stripped.startswith(("~", "/")):
+        return False
+    if any(char in stripped for char in ("*", "?", "{", "}")):
         return False
     target_path = Path(stripped)
     base_dir = (cwd or Path.cwd()).resolve()
