@@ -11956,3 +11956,21 @@ def test_sync_runtime_session_retries_once_after_read_timeout(tmp_path, monkeypa
 
     assert timeouts == [10, 90]
     assert payload["runtime_session_id"] == "session-read-timeout"
+
+
+def test_codex_read_only_source_inspection_rejects_globbed_targets(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    (workspace_dir / "src").mkdir(parents=True)
+    _write_text(workspace_dir / "src" / "safe.ts", "export const safe = true;\n")
+
+    commands = [
+        "cat src/*.ts",
+        "sed -n '1,40p' src/*.ts | head -40",
+        "rg safe src/*.ts",
+    ]
+
+    for command in commands:
+        assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+            command,
+            cwd=workspace_dir,
+        )

@@ -4455,6 +4455,8 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
         return False
     if stripped.startswith(("~", "/")):
         return False
+    if any(char in stripped for char in ("*", "?", "[", "]", "{", "}")):
+        return False
     target_path = Path(stripped)
     base_dir = (cwd or Path.cwd()).resolve()
     unresolved_candidate = base_dir / target_path
