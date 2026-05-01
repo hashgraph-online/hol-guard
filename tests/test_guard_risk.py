@@ -28,6 +28,7 @@ from codex_plugin_scanner.guard.risk import (
     detect_staged_download,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
+    _path_text_is_within_root_text,
     _read_small_runtime_text_file,
     _resolved_runtime_path,
     _script_has_aliased_risky_import,
@@ -2048,6 +2049,18 @@ def test_read_small_runtime_text_file_rejects_symlink_escape(tmp_path):
     symlink_path.symlink_to(outside_path)
 
     assert _read_small_runtime_text_file(symlink_path, allowed_roots=(workspace_dir,)) is None
+
+
+def test_path_text_is_within_root_text_preserves_windows_case_insensitivity(monkeypatch):
+    def fake_normcase(value: str) -> str:
+        return value.replace("\\", "/").lower()
+
+    monkeypatch.setattr("os.path.normcase", fake_normcase)
+
+    assert _path_text_is_within_root_text(
+        "C:\\Users\\Michael\\Workspace\\config.toml",
+        "c:\\users\\michael\\workspace",
+    )
 
 
 def test_read_small_runtime_text_file_rejects_growth_after_stat(tmp_path, monkeypatch):

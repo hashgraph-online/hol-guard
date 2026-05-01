@@ -2442,8 +2442,10 @@ def _path_text_is_within_root(path_text: str, root: Path) -> bool:
 
 
 def _path_text_is_within_root_text(path_text: str, root_text: str) -> bool:
+    normalized_path_text = os.path.normcase(path_text)
+    normalized_root_text = os.path.normcase(root_text)
     try:
-        return os.path.commonpath((path_text, root_text)) == root_text
+        return os.path.commonpath((normalized_path_text, normalized_root_text)) == normalized_root_text
     except ValueError:
         return False
 
