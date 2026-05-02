@@ -5935,6 +5935,39 @@ url = http://127.0.0.1:8787/guard-canary
         }
         assert store.get_device_metadata()["device_label"] == "Hermes Telegram agent"
 
+    def test_guard_service_login_trims_sync_url(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+
+        login_rc = main(
+            [
+                "guard",
+                "service",
+                "login",
+                "--home",
+                str(home_dir),
+                "--runtime",
+                "hermes",
+                "--label",
+                "Hermes Telegram agent",
+                "--workspace",
+                "workspace_ops",
+                "--sync-url",
+                "https://hol.org/api/guard/receipts/sync ",
+                "--token",
+                "guard_live_secretvalue",
+                "--json",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        store = GuardStore(home_dir)
+
+        assert login_rc == 0
+        assert payload["sync_url"] == "https://hol.org/api/guard/receipts/sync"
+        assert store.get_sync_credentials() == {
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "token": "guard_live_secretvalue",
+        }
+
     def test_guard_service_login_rejects_blank_token(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
 

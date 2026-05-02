@@ -5327,7 +5327,7 @@ def _guard_service_login_payload(
     now = _now()
     label = str(args.label).strip()
     workspace = _optional_string(args.workspace) or ""
-    sync_url = str(args.sync_url)
+    sync_url = str(args.sync_url).strip()
     token = str(args.token).strip()
     if not token:
         return {
