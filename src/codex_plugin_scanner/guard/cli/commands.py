@@ -5401,7 +5401,7 @@ def _guard_service_sync_payload(store: GuardStore) -> dict[str, object]:
             "client_name": service_profile["client_name"],
             "client_title": service_profile["client_title"],
             "client_version": service_profile["client_version"],
-            "workspace": service_profile["workspace"] or None,
+            "workspace": service_profile["workspace"],
             "capabilities": ["hosted-runtime", "guard-cloud-sync"],
         },
     )
