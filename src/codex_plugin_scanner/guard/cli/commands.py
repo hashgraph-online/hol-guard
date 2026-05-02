@@ -86,6 +86,7 @@ from ..runtime.runner import (
     guard_run,
     prompt_requests_to_artifacts,
     sync_receipts,
+    sync_runtime_session,
 )
 from ..runtime.secret_file_requests import (
     build_file_read_request_artifact,
@@ -108,6 +109,9 @@ from .product import build_guard_start_payload, build_guard_status_payload
 from .update_commands import run_guard_update
 
 _GUARD_CLIENT_VERSION = "2.0.0"
+_SERVICE_RUNTIME_PROFILE_STATE_KEY = "service_runtime_profile"
+_SERVICE_RUNTIME_CHOICES = ("hermes", "openclaw", "custom")
+_SERVICE_RUNTIME_SURFACE = "agent-sdk"
 _GUARD_HELP_GROUPS = (
     "Everyday protection:\n"
     "  start        First-run setup and the Guard operating loop\n"
@@ -121,6 +125,7 @@ _GUARD_HELP_GROUPS = (
     "  connect      Pair this machine to Guard Cloud\n"
     "  login        Compatibility alias for browser pairing\n"
     "  sync         Send local decisions to Guard Cloud\n"
+    "  service      Manage hosted-runtime Guard Cloud login and sync\n"
     "  device       Inspect or rotate this machine identity\n"
     "  bridge       Forward Guard signals to external channels\n"
     "\n"
@@ -436,6 +441,41 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     sync_parser.add_argument("--home")
     sync_parser.add_argument("--guard-home")
     sync_parser.add_argument("--json", action="store_true")
+
+    service_parser = guard_subparsers.add_parser(
+        "service",
+        help="Manage headless hosted-runtime Guard Cloud login, sync, and status",
+    )
+    service_subparsers = service_parser.add_subparsers(
+        dest="service_command",
+        required=True,
+        parser_class=FriendlyArgumentParser,
+    )
+
+    service_login_parser = service_subparsers.add_parser(
+        "login",
+        help="Save a hosted-runtime Guard Cloud token and runtime profile",
+    )
+    _add_guard_common_args(service_login_parser)
+    service_login_parser.add_argument("--runtime", choices=_SERVICE_RUNTIME_CHOICES, required=True)
+    service_login_parser.add_argument("--label", required=True)
+    service_login_parser.add_argument("--sync-url", required=True, type=_guard_http_url)
+    service_login_parser.add_argument("--token", required=True)
+    service_login_parser.add_argument("--json", action="store_true")
+
+    service_sync_parser = service_subparsers.add_parser(
+        "sync",
+        help="Publish the hosted runtime session, then sync receipts",
+    )
+    _add_guard_common_args(service_sync_parser)
+    service_sync_parser.add_argument("--json", action="store_true")
+
+    service_status_parser = service_subparsers.add_parser(
+        "status",
+        help="Show hosted-runtime Guard Cloud login state and latest sync summaries",
+    )
+    _add_guard_common_args(service_status_parser)
+    service_status_parser.add_argument("--json", action="store_true")
 
     device_parser = guard_subparsers.add_parser("device", help="Manage local Guard installation identity")
     _add_guard_common_args(device_parser)
@@ -1092,6 +1132,35 @@ def run_guard_command(
             return 1
         _emit("sync", payload, getattr(args, "json", False))
         return 0
+
+    if args.guard_command == "service":
+        service_command = getattr(args, "service_command", None)
+        if service_command == "login":
+            payload, exit_code = _guard_service_login_payload(args=args, store=store)
+            _emit("service-login", payload, getattr(args, "json", False))
+            return exit_code
+        if service_command == "sync":
+            try:
+                payload = _guard_service_sync_payload(store)
+            except (GuardSyncNotConfiguredError, RuntimeError) as error:
+                message = (
+                    _guard_service_sync_prerequisite_message()
+                    if isinstance(error, GuardSyncNotConfiguredError)
+                    else str(error)
+                )
+                if getattr(args, "json", False):
+                    _emit("service-sync", {"synced": False, "error": message}, True)
+                else:
+                    print(message, file=sys.stderr)
+                return 1
+            _emit("service-sync", payload, getattr(args, "json", False))
+            return 0
+        if service_command == "status":
+            payload = _guard_service_status_payload(store)
+            _emit("service-status", payload, getattr(args, "json", False))
+            return 0
+        print("service subcommand is required", file=sys.stderr)
+        return 2
 
     if args.guard_command == "device":
         command = getattr(args, "device_command", None)
@@ -5216,6 +5285,143 @@ def _manual_guard_login_payload(
     store.set_sync_credentials(manual_sync_url, manual_token, _now())
     store.add_event("sign_in", {"sync_url": manual_sync_url, "source": "local-cli"}, _now())
     return {"logged_in": True, "sync_url": manual_sync_url}, 0
+
+
+def _guard_service_runtime_profile(
+    store: GuardStore,
+) -> dict[str, str] | None:
+    payload = store.get_sync_payload(_SERVICE_RUNTIME_PROFILE_STATE_KEY)
+    if not isinstance(payload, dict):
+        return None
+    runtime = _optional_string(payload.get("runtime"))
+    label = _optional_string(payload.get("label"))
+    surface = _optional_string(payload.get("surface"))
+    client_name = _optional_string(payload.get("client_name"))
+    client_title = _optional_string(payload.get("client_title"))
+    client_version = _optional_string(payload.get("client_version"))
+    if (
+        runtime not in _SERVICE_RUNTIME_CHOICES
+        or label is None
+        or surface is None
+        or client_name is None
+        or client_title is None
+        or client_version is None
+    ):
+        return None
+    return {
+        "runtime": runtime,
+        "label": label,
+        "workspace": _optional_string(payload.get("workspace")) or "",
+        "surface": surface,
+        "client_name": client_name,
+        "client_title": client_title,
+        "client_version": client_version,
+    }
+
+
+def _guard_service_login_payload(
+    *,
+    args: argparse.Namespace,
+    store: GuardStore,
+) -> tuple[dict[str, object], int]:
+    now = _now()
+    label = str(args.label).strip()
+    workspace = _optional_string(args.workspace) or ""
+    sync_url = str(args.sync_url).strip()
+    token = str(args.token).strip()
+    if not token:
+        return {
+            "logged_in": False,
+            "error": "Hosted Guard runtime token cannot be empty.",
+        }, 2
+    runtime = str(args.runtime)
+    service_profile = {
+        "runtime": runtime,
+        "label": label,
+        "workspace": workspace,
+        "surface": _SERVICE_RUNTIME_SURFACE,
+        "client_name": "hol-guard",
+        "client_title": label,
+        "client_version": _GUARD_CLIENT_VERSION,
+    }
+    store.set_sync_credentials(sync_url, token, now)
+    store.set_sync_payload(_SERVICE_RUNTIME_PROFILE_STATE_KEY, service_profile, now)
+    device = store.set_device_label(label, now)
+    store.add_event(
+        "service_sign_in",
+        {
+            "runtime": runtime,
+            "label": label,
+            "workspace": workspace or None,
+            "sync_url": sync_url,
+            "source": "hosted-runtime-cli",
+        },
+        now,
+    )
+    return {
+        "logged_in": True,
+        "sync_url": sync_url,
+        "service": service_profile,
+        "device": device,
+    }, 0
+
+
+def _guard_service_sync_prerequisite_message() -> str:
+    return (
+        "Hosted Guard runtime is not configured yet. Run `hol-guard service login --runtime <runtime> "
+        '--label "<label>" --sync-url "<url>" --token "<token>"` first.'
+    )
+
+
+def _guard_service_status_payload(store: GuardStore) -> dict[str, object]:
+    credentials = store.get_sync_credentials()
+    service_profile = _guard_service_runtime_profile(store)
+    return {
+        "configured": credentials is not None and service_profile is not None,
+        "connection": {
+            "configured": credentials is not None,
+            "sync_url": credentials["sync_url"] if credentials is not None else None,
+        },
+        "service": service_profile,
+        "runtime": store.get_sync_payload("runtime_session_summary") or {},
+        "receipts": store.get_sync_payload("sync_summary") or {},
+    }
+
+
+def _guard_service_sync_payload(store: GuardStore) -> dict[str, object]:
+    service_profile = _guard_service_runtime_profile(store)
+    if service_profile is None:
+        raise GuardSyncNotConfiguredError(_guard_service_sync_prerequisite_message())
+    runtime_summary = sync_runtime_session(
+        store,
+        session={
+            "harness": service_profile["runtime"],
+            "surface": service_profile["surface"],
+            "status": "active",
+            "client_name": service_profile["client_name"],
+            "client_title": service_profile["client_title"],
+            "client_version": service_profile["client_version"],
+            "workspace": service_profile["workspace"],
+            "capabilities": ["hosted-runtime", "guard-cloud-sync"],
+        },
+    )
+    receipts_summary = sync_receipts(store)
+    store.add_event(
+        "service_sync",
+        {
+            "runtime": service_profile["runtime"],
+            "workspace": service_profile["workspace"] or None,
+            "runtime_session_id": runtime_summary.get("runtime_session_id"),
+            "synced_at": receipts_summary.get("synced_at"),
+        },
+        _now(),
+    )
+    return {
+        "synced": True,
+        "service": service_profile,
+        "runtime": runtime_summary,
+        "receipts": receipts_summary,
+    }
 
 
 def _guard_sync_prerequisite_message() -> str:

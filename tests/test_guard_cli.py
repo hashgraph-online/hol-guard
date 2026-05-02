@@ -5883,6 +5883,289 @@ url = http://127.0.0.1:8787/guard-canary
         assert login_rc == 2
         assert "Pass both --sync-url and --token to save credentials manually" in capsys.readouterr().err
 
+    def test_guard_service_login_stores_hosted_runtime_profile(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+
+        login_rc = main(
+            [
+                "guard",
+                "service",
+                "login",
+                "--home",
+                str(home_dir),
+                "--runtime",
+                "hermes",
+                "--label",
+                "Hermes Telegram agent",
+                "--workspace",
+                "workspace_ops",
+                "--sync-url",
+                "https://hol.org/api/guard/receipts/sync",
+                "--token",
+                "guard_live_secretvalue",
+                "--json",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        store = GuardStore(home_dir)
+
+        assert login_rc == 0
+        assert payload["logged_in"] is True
+        assert payload["service"] == {
+            "runtime": "hermes",
+            "label": "Hermes Telegram agent",
+            "workspace": "workspace_ops",
+            "surface": "agent-sdk",
+            "client_name": "hol-guard",
+            "client_title": "Hermes Telegram agent",
+            "client_version": guard_commands_module._GUARD_CLIENT_VERSION,
+        }
+        assert store.get_sync_credentials() == {
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "token": "guard_live_secretvalue",
+        }
+        assert store.get_sync_payload("service_runtime_profile") == {
+            "runtime": "hermes",
+            "label": "Hermes Telegram agent",
+            "workspace": "workspace_ops",
+            "surface": "agent-sdk",
+            "client_name": "hol-guard",
+            "client_title": "Hermes Telegram agent",
+            "client_version": guard_commands_module._GUARD_CLIENT_VERSION,
+        }
+        assert store.get_device_metadata()["device_label"] == "Hermes Telegram agent"
+
+    def test_guard_service_login_trims_sync_url(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+
+        login_rc = main(
+            [
+                "guard",
+                "service",
+                "login",
+                "--home",
+                str(home_dir),
+                "--runtime",
+                "hermes",
+                "--label",
+                "Hermes Telegram agent",
+                "--workspace",
+                "workspace_ops",
+                "--sync-url",
+                "https://hol.org/api/guard/receipts/sync ",
+                "--token",
+                "guard_live_secretvalue",
+                "--json",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        store = GuardStore(home_dir)
+
+        assert login_rc == 0
+        assert payload["sync_url"] == "https://hol.org/api/guard/receipts/sync"
+        assert store.get_sync_credentials() == {
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "token": "guard_live_secretvalue",
+        }
+
+    def test_guard_service_login_rejects_blank_token(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+
+        login_rc = main(
+            [
+                "guard",
+                "service",
+                "login",
+                "--home",
+                str(home_dir),
+                "--runtime",
+                "hermes",
+                "--label",
+                "Hermes Telegram agent",
+                "--workspace",
+                "workspace_ops",
+                "--sync-url",
+                "https://hol.org/api/guard/receipts/sync",
+                "--token",
+                "   ",
+                "--json",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        store = GuardStore(home_dir)
+
+        assert login_rc == 2
+        assert payload == {
+            "logged_in": False,
+            "error": "Hosted Guard runtime token cannot be empty.",
+        }
+        assert store.get_sync_credentials() is None
+
+    def test_guard_service_sync_publishes_runtime_session_before_receipts(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        now = "2026-05-01T00:00:00Z"
+        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "guard_live_secretvalue", now)
+        store.set_sync_payload(
+            "service_runtime_profile",
+            {
+                "runtime": "openclaw",
+                "label": "OpenClaw Runner",
+                "workspace": "workspace_ops",
+                "surface": "agent-sdk",
+                "client_name": "hol-guard",
+                "client_title": "OpenClaw Runner",
+                "client_version": "2.0.0",
+            },
+            now,
+        )
+
+        captured_session: dict[str, object] = {}
+
+        def fake_sync_runtime_session(current_store: GuardStore, *, session: dict[str, object]) -> dict[str, object]:
+            assert current_store is not None
+            captured_session.update(session)
+            return {
+                "synced_at": now,
+                "runtime_session_synced_at": now,
+                "runtime_session_id": "runtime-session-1",
+                "runtime_sessions_visible": 1,
+            }
+
+        def fake_sync_receipts(current_store: GuardStore) -> dict[str, object]:
+            assert current_store is not None
+            return {
+                "synced_at": now,
+                "receipts_stored": 0,
+                "inventory_stored": 0,
+                "guard_events_v1": {"accepted": 0, "events": 0, "synced_at": now},
+            }
+
+        monkeypatch.setattr(guard_commands_module, "sync_runtime_session", fake_sync_runtime_session)
+        monkeypatch.setattr(guard_commands_module, "sync_receipts", fake_sync_receipts)
+
+        sync_rc = main(["guard", "service", "sync", "--home", str(home_dir), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert sync_rc == 0
+        assert payload["service"]["runtime"] == "openclaw"
+        assert payload["runtime"]["runtime_session_id"] == "runtime-session-1"
+        assert payload["receipts"]["receipts_stored"] == 0
+        assert captured_session == {
+            "harness": "openclaw",
+            "surface": "agent-sdk",
+            "status": "active",
+            "client_name": "hol-guard",
+            "client_title": "OpenClaw Runner",
+            "client_version": "2.0.0",
+            "workspace": "workspace_ops",
+            "capabilities": ["hosted-runtime", "guard-cloud-sync"],
+        }
+
+    def test_guard_service_sync_preserves_empty_workspace(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        now = "2026-05-01T00:00:00Z"
+        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "guard_live_secretvalue", now)
+        store.set_sync_payload(
+            "service_runtime_profile",
+            {
+                "runtime": "openclaw",
+                "label": "OpenClaw Runner",
+                "workspace": "",
+                "surface": "agent-sdk",
+                "client_name": "hol-guard",
+                "client_title": "OpenClaw Runner",
+                "client_version": "2.0.0",
+            },
+            now,
+        )
+
+        captured_session: dict[str, object] = {}
+
+        def fake_sync_runtime_session(current_store: GuardStore, *, session: dict[str, object]) -> dict[str, object]:
+            assert current_store is not None
+            captured_session.update(session)
+            return {
+                "synced_at": now,
+                "runtime_session_synced_at": now,
+                "runtime_session_id": "runtime-session-1",
+                "runtime_sessions_visible": 1,
+            }
+
+        def fake_sync_receipts(current_store: GuardStore) -> dict[str, object]:
+            assert current_store is not None
+            return {
+                "synced_at": now,
+                "receipts_stored": 0,
+                "inventory_stored": 0,
+                "guard_events_v1": {"accepted": 0, "events": 0, "synced_at": now},
+            }
+
+        monkeypatch.setattr(guard_commands_module, "sync_runtime_session", fake_sync_runtime_session)
+        monkeypatch.setattr(guard_commands_module, "sync_receipts", fake_sync_receipts)
+
+        sync_rc = main(["guard", "service", "sync", "--home", str(home_dir), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert sync_rc == 0
+        assert payload["runtime"]["runtime_session_id"] == "runtime-session-1"
+        assert captured_session["workspace"] == ""
+
+    def test_guard_service_status_reports_hosted_runtime_state(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        store = GuardStore(home_dir)
+        now = "2026-05-01T00:00:00Z"
+        store.set_sync_credentials("https://hol.org/api/guard/receipts/sync", "guard_live_secretvalue", now)
+        store.set_sync_payload(
+            "service_runtime_profile",
+            {
+                "runtime": "hermes",
+                "label": "Hermes Telegram agent",
+                "workspace": "workspace_ops",
+                "surface": "agent-sdk",
+                "client_name": "hol-guard",
+                "client_title": "Hermes Telegram agent",
+                "client_version": "2.0.0",
+            },
+            now,
+        )
+        store.set_sync_payload(
+            "runtime_session_summary",
+            {
+                "runtime_session_id": "runtime-session-1",
+                "runtime_session_synced_at": now,
+                "runtime_sessions_visible": 1,
+            },
+            now,
+        )
+        store.set_sync_payload(
+            "sync_summary",
+            {
+                "synced_at": now,
+                "receipts_stored": 2,
+            },
+            now,
+        )
+
+        status_rc = main(["guard", "service", "status", "--home", str(home_dir), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+
+        assert status_rc == 0
+        assert payload["configured"] is True
+        assert payload["service"] == {
+            "runtime": "hermes",
+            "label": "Hermes Telegram agent",
+            "workspace": "workspace_ops",
+            "surface": "agent-sdk",
+            "client_name": "hol-guard",
+            "client_title": "Hermes Telegram agent",
+            "client_version": "2.0.0",
+        }
+        assert payload["runtime"]["runtime_session_id"] == "runtime-session-1"
+        assert payload["receipts"]["receipts_stored"] == 2
+        assert payload["connection"]["sync_url"] == "https://hol.org/api/guard/receipts/sync"
+
     def test_guard_connect_preserves_pairing_when_first_sync_fails(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
