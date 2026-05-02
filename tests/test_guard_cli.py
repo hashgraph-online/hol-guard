@@ -5911,9 +5911,15 @@ url = http://127.0.0.1:8787/guard-canary
 
         assert login_rc == 0
         assert payload["logged_in"] is True
-        assert payload["service"]["runtime"] == "hermes"
-        assert payload["service"]["label"] == "Hermes Telegram agent"
-        assert payload["service"]["workspace"] == "workspace_ops"
+        assert payload["service"] == {
+            "runtime": "hermes",
+            "label": "Hermes Telegram agent",
+            "workspace": "workspace_ops",
+            "surface": "agent-sdk",
+            "client_name": "hol-guard",
+            "client_title": "Hermes Telegram agent",
+            "client_version": guard_commands_module._GUARD_CLIENT_VERSION,
+        }
         assert store.get_sync_credentials() == {
             "sync_url": "https://hol.org/api/guard/receipts/sync",
             "token": "guard_live_secretvalue",
@@ -5928,6 +5934,39 @@ url = http://127.0.0.1:8787/guard-canary
             "client_version": guard_commands_module._GUARD_CLIENT_VERSION,
         }
         assert store.get_device_metadata()["device_label"] == "Hermes Telegram agent"
+
+    def test_guard_service_login_rejects_blank_token(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+
+        login_rc = main(
+            [
+                "guard",
+                "service",
+                "login",
+                "--home",
+                str(home_dir),
+                "--runtime",
+                "hermes",
+                "--label",
+                "Hermes Telegram agent",
+                "--workspace",
+                "workspace_ops",
+                "--sync-url",
+                "https://hol.org/api/guard/receipts/sync",
+                "--token",
+                "   ",
+                "--json",
+            ]
+        )
+        payload = json.loads(capsys.readouterr().out)
+        store = GuardStore(home_dir)
+
+        assert login_rc == 2
+        assert payload == {
+            "logged_in": False,
+            "error": "Hosted Guard runtime token cannot be empty.",
+        }
+        assert store.get_sync_credentials() is None
 
     def test_guard_service_sync_publishes_runtime_session_before_receipts(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"

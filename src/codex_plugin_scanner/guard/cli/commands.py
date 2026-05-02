@@ -1142,18 +1142,16 @@ def run_guard_command(
         if service_command == "sync":
             try:
                 payload = _guard_service_sync_payload(store)
-            except GuardSyncNotConfiguredError:
-                message = _guard_service_sync_prerequisite_message()
+            except (GuardSyncNotConfiguredError, RuntimeError) as error:
+                message = (
+                    _guard_service_sync_prerequisite_message()
+                    if isinstance(error, GuardSyncNotConfiguredError)
+                    else str(error)
+                )
                 if getattr(args, "json", False):
                     _emit("service-sync", {"synced": False, "error": message}, True)
                 else:
                     print(message, file=sys.stderr)
-                return 1
-            except RuntimeError as error:
-                if getattr(args, "json", False):
-                    _emit("service-sync", {"synced": False, "error": str(error)}, True)
-                else:
-                    print(str(error), file=sys.stderr)
                 return 1
             _emit("service-sync", payload, getattr(args, "json", False))
             return 0
@@ -5330,6 +5328,12 @@ def _guard_service_login_payload(
     label = str(args.label).strip()
     workspace = _optional_string(args.workspace) or ""
     sync_url = str(args.sync_url)
+    token = str(args.token).strip()
+    if not token:
+        return {
+            "logged_in": False,
+            "error": "Hosted Guard runtime token cannot be empty.",
+        }, 2
     runtime = str(args.runtime)
     service_profile = {
         "runtime": runtime,
@@ -5340,7 +5344,7 @@ def _guard_service_login_payload(
         "client_title": label,
         "client_version": _GUARD_CLIENT_VERSION,
     }
-    store.set_sync_credentials(sync_url, str(args.token).strip(), now)
+    store.set_sync_credentials(sync_url, token, now)
     store.set_sync_payload(_SERVICE_RUNTIME_PROFILE_STATE_KEY, service_profile, now)
     device = store.set_device_label(label, now)
     store.add_event(
@@ -5365,7 +5369,7 @@ def _guard_service_login_payload(
 def _guard_service_sync_prerequisite_message() -> str:
     return (
         "Hosted Guard runtime is not configured yet. Run `hol-guard service login --runtime <runtime> "
-        "--label \"<label>\" --sync-url \"<url>\" --token \"<token>\"` first."
+        '--label "<label>" --sync-url "<url>" --token "<token>"` first.'
     )
 
 
