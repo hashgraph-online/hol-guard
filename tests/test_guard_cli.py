@@ -6018,10 +6018,16 @@ url = http://127.0.0.1:8787/guard-canary
         assert payload["service"]["runtime"] == "openclaw"
         assert payload["runtime"]["runtime_session_id"] == "runtime-session-1"
         assert payload["receipts"]["receipts_stored"] == 0
-        assert captured_session["harness"] == "openclaw"
-        assert captured_session["surface"] == "agent-sdk"
-        assert captured_session["workspace"] == "workspace_ops"
-        assert captured_session["client_title"] == "OpenClaw Runner"
+        assert captured_session == {
+            "harness": "openclaw",
+            "surface": "agent-sdk",
+            "status": "active",
+            "client_name": "hol-guard",
+            "client_title": "OpenClaw Runner",
+            "client_version": "2.0.0",
+            "workspace": "workspace_ops",
+            "capabilities": ["hosted-runtime", "guard-cloud-sync"],
+        }
 
     def test_guard_service_status_reports_hosted_runtime_state(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -6064,8 +6070,15 @@ url = http://127.0.0.1:8787/guard-canary
 
         assert status_rc == 0
         assert payload["configured"] is True
-        assert payload["service"]["runtime"] == "hermes"
-        assert payload["service"]["label"] == "Hermes Telegram agent"
+        assert payload["service"] == {
+            "runtime": "hermes",
+            "label": "Hermes Telegram agent",
+            "workspace": "workspace_ops",
+            "surface": "agent-sdk",
+            "client_name": "hol-guard",
+            "client_title": "Hermes Telegram agent",
+            "client_version": "2.0.0",
+        }
         assert payload["runtime"]["runtime_session_id"] == "runtime-session-1"
         assert payload["receipts"]["receipts_stored"] == 2
         assert payload["connection"]["sync_url"] == "https://hol.org/api/guard/receipts/sync"
