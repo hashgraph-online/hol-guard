@@ -30,7 +30,7 @@ dependencies = [
     "rich>=13.0",
     "cryptography>=47.0.0",
     "tomli>=2.0; python_version < '3.11'",
-    "cisco-ai-skill-scanner~=2.0.9",
+    "cisco-ai-skill-scanner~=2.0.11",
 ]
 
 [project.optional-dependencies]
@@ -39,7 +39,7 @@ cisco = [
 ]
 dev = [
     "build>=1.2.2",
-    "jsonschema>=4.23.0",
+    "jsonschema>=4.26.0",
     "pyyaml>=6.0.3",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
