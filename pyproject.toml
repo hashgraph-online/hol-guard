@@ -27,7 +27,7 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 dependencies = [
-    "rich>=13.0",
+    "rich>=15.0.0",
     "cryptography>=47.0.0",
     "tomli>=2.0; python_version < '3.11'",
     "cisco-ai-skill-scanner~=2.0.9",
