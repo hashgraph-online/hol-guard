@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.cli.connect_flow import (
 )
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.client import GuardDaemonTransportError
+from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -166,6 +167,65 @@ def test_guard_connect_preserves_pairing_when_first_sync_fails(
     assert "guardPairSecret=" in str(payload["connect_url"])
     assert payload["sync"]["synced_at"] is None
     assert payload["proof"]["first_synced_at"] is None
+
+
+def test_guard_connect_preserves_local_protection_when_cloud_token_creation_fails(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+
+    store = GuardStore(home_dir)
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="harness",
+            action="allow",
+            reason="local protection stays active",
+        ),
+        "2026-04-15T00:00:00+00:00",
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.ensure_guard_daemon",
+        lambda guard_home: f"http://127.0.0.1:{daemon.port}",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.sync_receipts",
+        lambda current_store: (_ for _ in ()).throw(AssertionError("sync must not run without a cloud token")),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.connect_flow.sync_runtime_session",
+        lambda current_store, *, session: (_ for _ in ()).throw(
+            AssertionError("runtime sync must not run without a cloud token")
+        ),
+    )
+
+    try:
+        payload = run_guard_connect_command(
+            guard_home=home_dir,
+            store=store,
+            sync_url="https://hol.org/registry/api/v1",
+            connect_url="https://hol.org/guard/connect",
+            opener=lambda url: True,
+            wait_timeout_seconds=1,
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["connected"] is False
+    assert payload["status"] == "waiting"
+    assert payload["milestone"] == "waiting_for_browser"
+    assert payload["cloud_pairing_url"] == payload["connect_url"]
+    assert store.get_sync_credentials() is None
+    policies = store.list_policy_decisions()
+    assert len(policies) == 1
+    assert policies[0]["harness"] == "codex"
+    assert policies[0]["action"] == "allow"
+    assert (home_dir / ".codex" / "config.toml").read_text(encoding="utf-8") == 'approval_policy = "never"\n'
 
 
 def test_guard_connect_prefers_paid_plan_sync_note_over_runtime_sync_timeout(

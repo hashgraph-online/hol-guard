@@ -47,6 +47,17 @@ export type GuardRuntimeState = {
   approval_center_url: string;
 };
 
+export type GuardCloudPairingState = {
+  state: "local_only" | "paired_waiting" | "paired_active";
+  label: string;
+  detail: string;
+  sync_configured: boolean;
+  dashboard_url: string;
+  inbox_url: string;
+  fleet_url: string;
+  connect_url: string;
+};
+
 export type GuardRuntimeSnapshot = {
   generated_at: string;
   approval_center_url: string | null;
@@ -60,6 +71,7 @@ export type GuardRuntimeSnapshot = {
   cloud_state: "local_only" | "paired_waiting" | "paired_active";
   cloud_state_label: string;
   cloud_state_detail: string;
+  cloud_pairing_state: GuardCloudPairingState;
   dashboard_url: string;
   inbox_url: string;
   fleet_url: string;

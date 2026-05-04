@@ -299,6 +299,7 @@ def build_connect_payload(
         "sync_available": sync_available if sync_available is not None else connected,
         "browser_opened": browser_opened,
         "connect_url": connect_url,
+        "cloud_pairing_url": connect_url,
         "sync_url": sync_url,
         "status": str(state.get("status") or "waiting"),
         "milestone": str(state.get("milestone") or "waiting_for_browser"),
