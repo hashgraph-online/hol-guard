@@ -1468,6 +1468,110 @@ class TestGuardApprovals:
         assert status == 200
         assert allow_headers == "Content-Type, X-Guard-Token"
 
+    def test_guard_daemon_allows_hosted_guard_dashboard_to_resolve_requests(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-hosted",
+                harness="codex",
+                artifact_id="codex:session:prompt:demo",
+                artifact_name="prompt request",
+                artifact_type="prompt_request",
+                artifact_hash="hash-hosted",
+                policy_action="require-reapproval",
+                recommended_scope="artifact",
+                changed_fields=("prompt_request",),
+                source_scope="session",
+                config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                review_command="hol-guard approvals approve req-hosted",
+                approval_url="http://127.0.0.1/pending/req-hosted",
+            ),
+            "2026-05-01T00:00:00+00:00",
+        )
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            options_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests/req-hosted/approve",
+                headers={"Origin": "https://hol.org"},
+                method="OPTIONS",
+            )
+            with urllib.request.urlopen(options_request, timeout=5) as response:
+                options_origin = response.headers.get("Access-Control-Allow-Origin")
+
+            list_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests",
+                headers={
+                    "Origin": "https://hol.org",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+            )
+            with urllib.request.urlopen(list_request, timeout=5) as response:
+                list_origin = response.headers.get("Access-Control-Allow-Origin")
+                list_payload = json.loads(response.read().decode("utf-8"))
+
+            approve_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/requests/req-hosted/approve",
+                data=json.dumps({"scope": "artifact", "reason": "approved from hosted dashboard"}).encode("utf-8"),
+                headers={
+                    **_guard_json_headers(daemon._server.auth_token),
+                    "Origin": "https://hol.org",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(approve_request, timeout=5) as response:
+                approve_origin = response.headers.get("Access-Control-Allow-Origin")
+                approve_payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert options_origin == "https://hol.org"
+        assert list_origin == "https://hol.org"
+        assert list_payload["items"][0]["request_id"] == "req-hosted"
+        assert approve_origin == "https://hol.org"
+        assert approve_payload["resolved"] is True
+        assert store.list_approval_requests(limit=10) == []
+
+    def test_guard_daemon_blocks_hosted_origin_on_nondashboard_posts(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            options_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                headers={"Origin": "https://hol.org"},
+                method="OPTIONS",
+            )
+            try:
+                urllib.request.urlopen(options_request, timeout=5)
+            except urllib.error.HTTPError as error:
+                options_status = error.code
+            else:
+                options_status = 200
+
+            post_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                data=json.dumps({"client_name": "browser"}).encode("utf-8"),
+                headers={
+                    **_guard_json_headers(daemon._server.auth_token),
+                    "Origin": "https://hol.org",
+                },
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(post_request, timeout=5)
+            except urllib.error.HTTPError as error:
+                post_status = error.code
+            else:
+                post_status = 200
+        finally:
+            daemon.stop()
+
+        assert options_status == 403
+        assert post_status == 403
+
     def test_guard_daemon_includes_cors_headers_on_unauthorized_local_post(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)

@@ -336,6 +336,16 @@ Please investigate the bug end to end, fix the publish flow, and make sure user-
 
         assert requests == []
 
+    def test_extract_prompt_requests_ignores_document_request_with_section_key_label(self) -> None:
+        requests = guard_runner_module.extract_prompt_requests(
+            """
+Create planning markdown files. Section key: https://example.com/product needs
+clearer UX and an implementation plan with technical references.
+""".strip()
+        )
+
+        assert requests == []
+
     def test_prompt_requests_to_artifacts_generates_session_prompt_artifacts(self, tmp_path) -> None:
         context = HarnessContext(
             home_dir=tmp_path / "home",
@@ -10327,6 +10337,57 @@ def test_guard_hook_codex_user_prompt_submit_browser_approval_resumes_prompt(
 
     worker = threading.Thread(target=approve_pending, daemon=True)
     worker.start()
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+
+    assert rc == 0
+    payload = json.loads(output)
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    assert store.list_approval_requests(limit=10) == []
+
+
+def test_guard_hook_codex_user_prompt_submit_reuses_artifact_approval(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Open ./.npmrc",
+        "source_scope": "project",
+    }
+
+    _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    store = GuardStore(home_dir)
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    apply_approval_resolution(
+        store=store,
+        request_id=str(pending[0]["request_id"]),
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="approved in browser",
+    )
 
     rc, output = _run_guard_hook(
         home_dir=home_dir,

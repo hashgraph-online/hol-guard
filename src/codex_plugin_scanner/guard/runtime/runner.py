@@ -66,22 +66,28 @@ _SECRET_READ_INTENT_PATTERN = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_EXFIL_ACTIONS = r"(?:send|post|upload|transfer|paste|sync)"
+_EXFIL_ARTIFACTS = r"(?:contents?|data|payload|file|secret|token|key|credential|credentials|config|output)"
+_EXFIL_DESTINATIONS = r"(?:to|into|onto|via|through)"
+_EXFIL_REMOTE_TARGETS = r"(?:webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)"
+_SAME_SENTENCE_80 = r"[^.!?;\n]{0,80}"
+_SAME_SENTENCE_40 = r"[^.!?;\n]{0,40}"
 _EXFIL_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
-        r"\b(?:upload|exfiltrate|transfer|paste|gist|webhook)\b.{0,80}\b"
-        r"(?:file|contents?|data|payload|secret|token|key|credential|credentials|config|output)\b",
+        rf"\b(?:upload|exfiltrate|transfer|paste|gist|webhook)\b{_SAME_SENTENCE_80}\b"
+        rf"{_EXFIL_ARTIFACTS}\b",
         re.IGNORECASE,
     ),
     re.compile(
-        r"\b(?:send|post|upload|transfer|paste|sync)\b.{0,80}\b"
-        r"(?:contents?|data|payload|file|secret|token|key|credential|credentials|config|output)\b"
-        r"(?:.{0,40}\b(?:to|into|onto|via|through)\b)?",
+        rf"\b{_EXFIL_ACTIONS}\b{_SAME_SENTENCE_80}\b"
+        rf"{_EXFIL_ARTIFACTS}\b"
+        rf"(?:{_SAME_SENTENCE_40}\b{_EXFIL_DESTINATIONS}\b)?",
         re.IGNORECASE,
     ),
     re.compile(
-        r"\b(?:send|post|upload|transfer|paste|sync)\b.{0,80}\b"
-        r"(?:to|into|onto|via|through)\b.{0,40}\b"
-        r"(?:webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)\b",
+        rf"\b{_EXFIL_ACTIONS}\b{_SAME_SENTENCE_80}\b"
+        rf"{_EXFIL_DESTINATIONS}\b{_SAME_SENTENCE_40}\b"
+        rf"{_EXFIL_REMOTE_TARGETS}\b",
         re.IGNORECASE,
     ),
     re.compile(
