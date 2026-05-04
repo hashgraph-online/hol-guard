@@ -699,7 +699,7 @@ def _render_connect(console: Console, payload: dict[str, object]) -> None:
         if milestone:
             body.add_row("Next step", _connect_milestone_text(payload))
         cloud_pairing_url = payload.get("cloud_pairing_url") or payload.get("connect_url") or "unknown"
-        body.add_row("Cloud pairing URL", str(cloud_pairing_url))
+        body.add_row("Cloud URL", str(cloud_pairing_url))
         body.add_row("Sync endpoint", str(payload.get("sync_url") or "unknown"))
         sync_payload = payload.get("sync")
         should_render_sync_counts = False
