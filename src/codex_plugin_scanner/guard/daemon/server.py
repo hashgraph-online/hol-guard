@@ -79,6 +79,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
         path_parts = [part for part in parsed.path.split("/") if part]
+        if not self._origin_is_allowed_for_request(parsed.path, path_parts):
+            self._write_json({"error": "forbidden_origin"}, status=403)
+            return
+        if (
+            self._is_hosted_dashboard_origin()
+            and self._is_hosted_dashboard_api_path(parsed.path, path_parts)
+            and not self._header_token_is_valid()
+        ):
+            self._write_json({"error": "unauthorized"}, status=401)
+            return
         if parsed.path == "/healthz":
             self._write_json(
                 {
@@ -204,16 +214,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
-        if parsed.path != "/v1/connect/complete" and not self._origin_is_allowed():
+        path_parts = [part for part in parsed.path.split("/") if part]
+        if parsed.path != "/v1/connect/complete" and not self._origin_is_allowed_for_request(parsed.path, path_parts):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
-        path_parts = [part for part in parsed.path.split("/") if part]
         if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid():
-            origin = self._normalize_origin(self.headers.get("Origin"))
             self._write_json(
                 {"error": "unauthorized"},
                 status=401,
-                extra_headers=self._cors_headers(origin) if origin is not None else None,
+                extra_headers=self._cors_headers_for_request(),
             )
             return
         payload, body_error = self._load_request_body()
@@ -801,7 +810,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         finally:
             self._decrement_active_stream_clients()
 
-    def _origin_is_allowed(self) -> bool:
+    def _origin_is_allowed_for_request(self, path: str, path_parts: list[str]) -> bool:
         origin = self.headers.get("Origin")
         if origin is None:
             return True
@@ -810,7 +819,34 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return False
         parsed = urlparse(normalized_origin)
         local_origin = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
-        return local_origin or normalized_origin in _HOSTED_GUARD_DASHBOARD_ORIGINS
+        if local_origin:
+            return True
+        return normalized_origin in _HOSTED_GUARD_DASHBOARD_ORIGINS and self._is_hosted_dashboard_api_path(
+            path, path_parts
+        )
+
+    @staticmethod
+    def _is_hosted_dashboard_api_path(path: str, path_parts: list[str]) -> bool:
+        if path in {
+            "/v1/inventory",
+            "/v1/policy",
+            "/v1/policy/clear",
+            "/v1/receipts",
+            "/v1/receipts/latest",
+            "/v1/requests",
+            "/v1/runtime",
+            "/v1/settings",
+        }:
+            return True
+        if len(path_parts) == 3 and path_parts[:2] in (["v1", "requests"], ["v1", "receipts"]):
+            return True
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
+            return True
+        return len(path_parts) == 4 and path_parts[:2] == ["v1", "artifacts"] and path_parts[3] == "diff"
+
+    def _is_hosted_dashboard_origin(self) -> bool:
+        origin = self._normalize_origin(self.headers.get("Origin"))
+        return origin in _HOSTED_GUARD_DASHBOARD_ORIGINS
 
     @staticmethod
     def _normalize_origin(origin: str | None) -> str | None:
@@ -859,8 +895,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         allow_methods: str = "POST, OPTIONS",
         allow_headers: str = "Content-Type, X-Guard-Token",
     ) -> dict[str, str] | None:
+        parsed = urlparse(self.path)
+        path_parts = [part for part in parsed.path.split("/") if part]
         origin = self._normalize_origin(self.headers.get("Origin"))
-        if origin is None or not self._origin_is_allowed():
+        if origin is None or not self._origin_is_allowed_for_request(parsed.path, path_parts):
             return None
         return self._cors_headers(origin, allow_methods=allow_methods, allow_headers=allow_headers)
 

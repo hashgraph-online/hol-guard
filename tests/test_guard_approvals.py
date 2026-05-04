@@ -1502,7 +1502,10 @@ class TestGuardApprovals:
 
             list_request = urllib.request.Request(
                 f"http://127.0.0.1:{daemon.port}/v1/requests",
-                headers={"Origin": "https://hol.org"},
+                headers={
+                    "Origin": "https://hol.org",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
             )
             with urllib.request.urlopen(list_request, timeout=5) as response:
                 list_origin = response.headers.get("Access-Control-Allow-Origin")
@@ -1529,6 +1532,45 @@ class TestGuardApprovals:
         assert approve_origin == "https://hol.org"
         assert approve_payload["resolved"] is True
         assert store.list_approval_requests(limit=10) == []
+
+    def test_guard_daemon_blocks_hosted_origin_on_nondashboard_posts(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            options_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                headers={"Origin": "https://hol.org"},
+                method="OPTIONS",
+            )
+            try:
+                urllib.request.urlopen(options_request, timeout=5)
+            except urllib.error.HTTPError as error:
+                options_status = error.code
+            else:
+                options_status = 200
+
+            post_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/initialize",
+                data=json.dumps({"client_name": "browser"}).encode("utf-8"),
+                headers={
+                    **_guard_json_headers(daemon._server.auth_token),
+                    "Origin": "https://hol.org",
+                },
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(post_request, timeout=5)
+            except urllib.error.HTTPError as error:
+                post_status = error.code
+            else:
+                post_status = 200
+        finally:
+            daemon.stop()
+
+        assert options_status == 403
+        assert post_status == 403
 
     def test_guard_daemon_includes_cors_headers_on_unauthorized_local_post(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
