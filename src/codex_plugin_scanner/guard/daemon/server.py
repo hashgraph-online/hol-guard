@@ -85,6 +85,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if (
             self._is_hosted_dashboard_origin()
             and self._is_hosted_dashboard_api_path(parsed.path, path_parts)
+            and parsed.path != "/v1/connect/state"
             and not self._header_token_is_valid()
         ):
             self._write_json({"error": "unauthorized"}, status=401)
@@ -829,6 +830,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _is_hosted_dashboard_api_path(path: str, path_parts: list[str]) -> bool:
         if path in {
             "/v1/inventory",
+            "/v1/connect/state",
             "/v1/policy",
             "/v1/policy/clear",
             "/v1/receipts",
