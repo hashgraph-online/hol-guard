@@ -18,29 +18,85 @@ import {
 } from "./guard-demo";
 
 const GUARD_TOKEN_PARAM = "guard-token";
+const GUARD_DAEMON_PARAM = "guardDaemon";
 
 async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, init);
+  const response = await fetch(guardApiInput(input), withGuardAuth(init));
   if (!response.ok) {
     throw new Error(`Request failed with ${response.status}`);
   }
   return (await response.json()) as T;
 }
 
-function guardTokenFromHash(): string | null {
-  const fragment = window.location.hash.startsWith("#")
-    ? window.location.hash.slice(1)
-    : window.location.hash;
-  return new URLSearchParams(fragment).get(GUARD_TOKEN_PARAM);
+function guardParams(): URLSearchParams {
+  const params = new URLSearchParams(window.location.search);
+  const fragment = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+  for (const [key, value] of new URLSearchParams(fragment)) {
+    params.set(key, value);
+  }
+  return params;
+}
+
+function guardParam(name: string): string | null {
+  return guardParams().get(name);
 }
 
 function readGuardToken(): string | null {
-  const guardToken = guardTokenFromHash();
+  const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
     window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
     return guardToken;
   }
   return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
+}
+
+function readGuardDaemonOrigin(): string | null {
+  const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
+  if (rawDaemonUrl) {
+    const daemonOrigin = localGuardDaemonOrigin(rawDaemonUrl);
+    if (daemonOrigin) {
+      window.sessionStorage.setItem(GUARD_DAEMON_PARAM, daemonOrigin);
+      return daemonOrigin;
+    }
+  }
+  const storedDaemonUrl = window.sessionStorage.getItem(GUARD_DAEMON_PARAM);
+  return storedDaemonUrl ? localGuardDaemonOrigin(storedDaemonUrl) : null;
+}
+
+function localGuardDaemonOrigin(rawUrl: string): string | null {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]", "::1"].includes(url.hostname)) {
+      return null;
+    }
+    if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function guardApiInput(input: RequestInfo): RequestInfo {
+  const daemonOrigin = readGuardDaemonOrigin();
+  if (!daemonOrigin || typeof input !== "string" || !input.startsWith("/")) {
+    return input;
+  }
+  return `${daemonOrigin}${input}`;
+}
+
+function withGuardAuth(init?: RequestInit): RequestInit | undefined {
+  const guardToken = readGuardToken();
+  if (!guardToken) {
+    return init;
+  }
+  const headers = new Headers(init?.headers);
+  headers.set("X-Guard-Token", guardToken);
+  return {
+    ...init,
+    headers
+  };
 }
 
 function guardAuthHeaders(): HeadersInit {
@@ -59,7 +115,12 @@ export function guardAwareHref(href: string): string {
     return href;
   }
 
-  url.hash = new URLSearchParams([[GUARD_TOKEN_PARAM, guardToken]]).toString();
+  const fragmentPairs = [[GUARD_TOKEN_PARAM, guardToken]];
+  const daemonOrigin = readGuardDaemonOrigin();
+  if (daemonOrigin) {
+    fragmentPairs.push([GUARD_DAEMON_PARAM, daemonOrigin]);
+  }
+  url.hash = new URLSearchParams(fragmentPairs).toString();
   if (href.startsWith("http://") || href.startsWith("https://")) {
     return url.toString();
   }
@@ -193,7 +254,7 @@ export async function fetchLatestReceipt(
   if (isGuardDemoMode()) {
     return getDemoReceipts().find((entry) => entry.artifact_id === artifactId) ?? null;
   }
-  const response = await fetch(
+  const response = await fetchGuardApi(
     `/v1/receipts/latest?harness=${encodeURIComponent(harness)}&artifact_id=${encodeURIComponent(artifactId)}`
   );
   if (response.status === 404) {
@@ -252,7 +313,7 @@ export async function fetchDiff(
   if (isGuardDemoMode()) {
     return getDemoDiff(artifactId, harness);
   }
-  const response = await fetch(
+  const response = await fetchGuardApi(
     `/v1/artifacts/${encodeURIComponent(artifactId)}/diff?harness=${encodeURIComponent(harness)}`
   );
   if (response.status === 404) {
@@ -262,6 +323,10 @@ export async function fetchDiff(
     throw new Error(`Diff request failed with ${response.status}`);
   }
   return (await response.json()) as GuardArtifactDiff;
+}
+
+function fetchGuardApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  return fetch(guardApiInput(input), withGuardAuth(init));
 }
 
 export async function resolveRequest(input: {

@@ -68,19 +68,19 @@ _SECRET_READ_INTENT_PATTERN = re.compile(
 )
 _EXFIL_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
-        r"\b(?:upload|exfiltrate|transfer|paste|gist|webhook)\b.{0,80}\b"
+        r"\b(?:upload|exfiltrate|transfer|paste|gist|webhook)\b[^.!?;\n]{0,80}\b"
         r"(?:file|contents?|data|payload|secret|token|key|credential|credentials|config|output)\b",
         re.IGNORECASE,
     ),
     re.compile(
-        r"\b(?:send|post|upload|transfer|paste|sync)\b.{0,80}\b"
+        r"\b(?:send|post|upload|transfer|paste|sync)\b[^.!?;\n]{0,80}\b"
         r"(?:contents?|data|payload|file|secret|token|key|credential|credentials|config|output)\b"
-        r"(?:.{0,40}\b(?:to|into|onto|via|through)\b)?",
+        r"(?:[^.!?;\n]{0,40}\b(?:to|into|onto|via|through)\b)?",
         re.IGNORECASE,
     ),
     re.compile(
-        r"\b(?:send|post|upload|transfer|paste|sync)\b.{0,80}\b"
-        r"(?:to|into|onto|via|through)\b.{0,40}\b"
+        r"\b(?:send|post|upload|transfer|paste|sync)\b[^.!?;\n]{0,80}\b"
+        r"(?:to|into|onto|via|through)\b[^.!?;\n]{0,40}\b"
         r"(?:webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)\b",
         re.IGNORECASE,
     ),

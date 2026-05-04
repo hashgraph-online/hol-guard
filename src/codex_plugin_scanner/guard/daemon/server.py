@@ -54,6 +54,7 @@ _CLAUDE_HOOK_EXECUTION_LOCK = threading.Lock()
 _DEFAULT_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 30 * 60
 _EPHEMERAL_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 5
 _GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS = 0.5
+_HOSTED_GUARD_DASHBOARD_ORIGINS = frozenset({"https://hol.org", "https://www.hol.org"})
 
 
 class _GuardDaemonHandler(BaseHTTPRequestHandler):
@@ -809,7 +810,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if normalized_origin is None:
             return False
         parsed = urlparse(normalized_origin)
-        return parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+        local_origin = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+        return local_origin or normalized_origin in _HOSTED_GUARD_DASHBOARD_ORIGINS
 
     @staticmethod
     def _normalize_origin(origin: str | None) -> str | None:
@@ -964,10 +966,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         extra_headers: dict[str, str] | None = None,
     ) -> None:
         body = json.dumps(payload).encode("utf-8")
+        headers = dict(extra_headers or {})
+        origin = self._normalize_origin(self.headers.get("Origin"))
+        if origin is not None and self._origin_is_allowed():
+            headers = {
+                **self._cors_headers(origin, allow_methods="GET, POST, OPTIONS"),
+                **headers,
+            }
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        for key, value in self._validated_headers(extra_headers).items():
+        for key, value in self._validated_headers(headers).items():
             self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)
