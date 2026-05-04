@@ -69,7 +69,7 @@ function localGuardDaemonOrigin(rawUrl: string): string | null {
     if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]", "::1"].includes(url.hostname)) {
       return null;
     }
-    if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+    if (url.username || url.password || (url.pathname && url.pathname !== "/") || url.search || url.hash) {
       return null;
     }
     return url.origin;

@@ -65,15 +65,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if origin is None:
             self._write_empty(status=400)
             return
-        if not self._origin_is_allowed():
+        headers = self._cors_headers_for_request(
+            allow_methods="GET, POST, OPTIONS",
+            allow_headers="Content-Type, X-Guard-Token",
+        )
+        if headers is None:
             self._write_empty(status=403)
             return
-        self._write_empty(
-            status=200,
-            extra_headers=self._cors_headers(
-                origin, allow_methods="GET, POST, OPTIONS", allow_headers="Content-Type, X-Guard-Token"
-            ),
-        )
+        self._write_empty(status=200, extra_headers=headers)
 
     def do_GET(self) -> None:
         store = self.server.store  # type: ignore[attr-defined]
@@ -854,6 +853,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "Vary": "Origin",
         }
 
+    def _cors_headers_for_request(
+        self,
+        *,
+        allow_methods: str = "POST, OPTIONS",
+        allow_headers: str = "Content-Type, X-Guard-Token",
+    ) -> dict[str, str] | None:
+        origin = self._normalize_origin(self.headers.get("Origin"))
+        if origin is None or not self._origin_is_allowed():
+            return None
+        return self._cors_headers(origin, allow_methods=allow_methods, allow_headers=allow_headers)
+
     def _handle_policy_upsert(self, payload: dict[str, object]) -> None:
         harness = payload.get("harness")
         scope = payload.get("scope")
@@ -967,12 +977,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     ) -> None:
         body = json.dumps(payload).encode("utf-8")
         headers = dict(extra_headers or {})
-        origin = self._normalize_origin(self.headers.get("Origin"))
-        if origin is not None and self._origin_is_allowed():
-            headers = {
-                **self._cors_headers(origin, allow_methods="GET, POST, OPTIONS"),
-                **headers,
-            }
+        cors_headers = self._cors_headers_for_request(allow_methods="GET, POST, OPTIONS")
+        if cors_headers is not None:
+            headers = {**cors_headers, **headers}
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
