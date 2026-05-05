@@ -153,7 +153,7 @@ def _title_from_reason(reason: str) -> str:
 
 def _required_string(payload: Mapping[str, object], key: str) -> str:
     value = payload.get(key)
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{key} must be a non-empty string")
     return value
 

@@ -18,6 +18,8 @@ def __getattr__(name: str) -> object:
     if name not in __all__:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     runner = import_module(".runner", __name__)
+    if not hasattr(runner, name):
+        raise AttributeError(f"module {__name__!r} exports {name!r}, but runner does not define it")
     value = getattr(runner, name)
     globals()[name] = value
     return value
