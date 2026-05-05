@@ -8,6 +8,7 @@ from pathlib import PurePath
 from urllib.parse import urlsplit
 
 from .models import GuardArtifact
+from .runtime.signals import RiskSignalV2
 from .types import GuardSignal
 
 _RULE_VERSION = "guard-risk-v2"
@@ -237,6 +238,12 @@ def artifact_risk_signals(artifact: GuardArtifact) -> tuple[str, ...]:
     """Backward-compatible string signals derived from structured signals."""
 
     return tuple(signal.explanation for signal in artifact_risk_signals_typed(artifact))
+
+
+def artifact_risk_signals_v2(artifact: GuardArtifact) -> tuple[RiskSignalV2, ...]:
+    """Return product-facing V2 risk signals derived from legacy Guard signals."""
+
+    return tuple(RiskSignalV2.from_guard_signal(signal) for signal in artifact_risk_signals_typed(artifact))
 
 
 def artifact_risk_summary(artifact: GuardArtifact) -> str:
