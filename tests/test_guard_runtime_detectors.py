@@ -246,3 +246,50 @@ def test_guard_run_invokes_detector_registry_only_when_feature_flag_enabled(tmp_
     assert "runtime_detector_signals_v2" not in disabled_result
     assert enabled_result["runtime_detector_signals_v2"] == [_signal("secret:local", "secret").to_dict()]
     assert isinstance(enabled_result["runtime_detector_telemetry"], list)
+
+
+def test_guard_run_keeps_detector_results_after_blocked_resolver_reevaluation(tmp_path, monkeypatch):
+    calls: list[str] = []
+    detector = RecordingDetector("secret.local", ("secret",), calls, _signal("secret:local", "secret"))
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(),
+        artifacts=(),
+    )
+
+    def evaluate_stub(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {"blocked": True, "artifacts": [], "receipts_recorded": 0}
+
+    def blocked_resolver_stub(_detection: HarnessDetection, _evaluation: dict[str, object]) -> dict[str, object]:
+        return {"blocked": True, "artifacts": [], "approval_delivery": "queued"}
+
+    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_runner_module, "evaluate_detection", evaluate_stub)
+    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+        runtime_detector_registry=True,
+    )
+
+    result = guard_runner_module.guard_run(
+        "codex",
+        context,
+        GuardStore(tmp_path / "guard-home"),
+        config,
+        False,
+        [],
+        blocked_resolver=blocked_resolver_stub,
+    )
+
+    assert calls == ["secret.local"]
+    assert result["runtime_detector_signals_v2"] == [_signal("secret:local", "secret").to_dict()]
+    assert result["approval_delivery"] == "queued"

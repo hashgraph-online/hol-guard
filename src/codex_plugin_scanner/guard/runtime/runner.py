@@ -237,12 +237,6 @@ def guard_run(
             evaluation = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
 
     action_envelope = _guard_run_action_envelope(harness, context, passthrough_args)
-    evaluation = _evaluation_with_detector_registry(
-        evaluation,
-        action_envelope,
-        context,
-        config,
-    )
     if evaluation["blocked"]:
         evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
 
@@ -258,6 +252,12 @@ def guard_run(
             if key in pending_evaluation:
                 reevaluated[key] = pending_evaluation[key]
         evaluation = reevaluated
+    evaluation = _evaluation_with_detector_registry(
+        evaluation,
+        action_envelope,
+        context,
+        config,
+    )
     if "config_paths" not in evaluation:
         evaluation["config_paths"] = list(detection.config_paths) or _guard_run_config_paths(
             detection=detection,
