@@ -590,7 +590,13 @@ def _mcp_parts(tool_name: str | None) -> tuple[str | None, str | None]:
         suffix = tool_name[len("mcp_") :]
         if "_" not in suffix:
             return None, None
-        server, tool = suffix.split("_", 1)
+        parts = suffix.split("_")
+        if len(parts) >= 4:
+            server = "_".join(parts[:-2])
+            tool = "_".join(parts[-2:])
+        else:
+            server = parts[0]
+            tool = "_".join(parts[1:])
         if server and tool:
             return server, tool
         return None, None
