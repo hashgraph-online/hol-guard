@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from hashlib import sha256
+from pathlib import PurePath
 
 from ..models import GuardArtifact, HarnessDetection
 
@@ -76,6 +79,8 @@ def proxy_cli_args(
         guard_home,
         "--server-name",
         server.name,
+        "--server-id",
+        stable_mcp_server_identifier(server),
         "--source-scope",
         server.source_scope,
         "--config-path",
@@ -92,6 +97,21 @@ def proxy_cli_args(
     for value in server.args:
         args.append(f"--arg={value}")
     return args
+
+
+def stable_mcp_server_identifier(server: ManagedMcpServer) -> str:
+    """Build a Cloud-stable MCP server ID without local config path material."""
+
+    payload = {
+        "harness": server.harness,
+        "source_scope": server.source_scope,
+        "name": server.name.strip().lower(),
+        "command": PurePath(server.command).name.lower(),
+        "args": [_stable_arg_token(value) for value in server.args],
+        "transport": server.transport,
+    }
+    digest = sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:20]
+    return f"mcp_server:{server.harness}:{server.source_scope}:{server.name}:{digest}"
 
 
 def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
@@ -117,6 +137,14 @@ def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
         env=env,
         enabled=enabled,
     )
+
+
+def _stable_arg_token(value: str) -> str:
+    if value.startswith(("/", "~/", "./", "../")):
+        return "<path>"
+    if "\\Users\\" in value or value.startswith(".\\"):
+        return "<path>"
+    return value
 
 
 def _string_env(value: object) -> dict[str, str]:
@@ -149,4 +177,5 @@ __all__ = [
     "managed_stdio_servers",
     "proxy_cli_args",
     "skipped_stdio_server_names",
+    "stable_mcp_server_identifier",
 ]

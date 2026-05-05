@@ -40,6 +40,7 @@ class RuntimeMcpGuardProxy:
         source_scope: str,
         config_path: str,
         transport: str = "stdio",
+        server_id: str | None = None,
     ) -> None:
         self.harness = harness
         self.server_name = server_name
@@ -50,6 +51,7 @@ class RuntimeMcpGuardProxy:
         self.source_scope = source_scope
         self.config_path = config_path
         self.transport = transport
+        self.server_id = server_id
         self._inline_prompt_available = False
         self._inline_prompt_counter = 0
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}
@@ -185,6 +187,7 @@ class RuntimeMcpGuardProxy:
             source_scope=self.source_scope,
             config_path=self.config_path,
             transport=self.transport,
+            server_id=self.server_id,
             server_fingerprint={
                 "command": self.command,
                 "transport": self.transport,

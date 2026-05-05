@@ -539,6 +539,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     codex_proxy_parser = guard_subparsers.add_parser("codex-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(codex_proxy_parser)
     codex_proxy_parser.add_argument("--server-name", required=True)
+    codex_proxy_parser.add_argument("--server-id")
     codex_proxy_parser.add_argument("--source-scope", default="project")
     codex_proxy_parser.add_argument("--config-path", required=True)
     codex_proxy_parser.add_argument("--transport", default="stdio")
@@ -548,6 +549,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     opencode_proxy_parser = guard_subparsers.add_parser("opencode-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(opencode_proxy_parser)
     opencode_proxy_parser.add_argument("--server-name", required=True)
+    opencode_proxy_parser.add_argument("--server-id")
     opencode_proxy_parser.add_argument("--source-scope", default="project")
     opencode_proxy_parser.add_argument("--config-path", required=True)
     opencode_proxy_parser.add_argument("--transport", default="local")
@@ -557,6 +559,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     copilot_proxy_parser = guard_subparsers.add_parser("copilot-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(copilot_proxy_parser)
     copilot_proxy_parser.add_argument("--server-name", required=True)
+    copilot_proxy_parser.add_argument("--server-id")
     copilot_proxy_parser.add_argument("--source-scope", default="project")
     copilot_proxy_parser.add_argument("--config-path", required=True)
     copilot_proxy_parser.add_argument("--transport", default="stdio")
@@ -807,6 +810,7 @@ def run_guard_command(
             source_scope=args.source_scope,
             config_path=args.config_path,
             transport=args.transport,
+            server_id=args.server_id,
         )
         return proxy.serve()
 
@@ -820,6 +824,7 @@ def run_guard_command(
             source_scope=args.source_scope,
             config_path=args.config_path,
             transport=args.transport,
+            server_id=args.server_id,
         )
         return proxy.serve()
 
@@ -833,6 +838,7 @@ def run_guard_command(
             source_scope=args.source_scope,
             config_path=args.config_path,
             transport=args.transport,
+            server_id=args.server_id,
         )
         return proxy.serve()
 

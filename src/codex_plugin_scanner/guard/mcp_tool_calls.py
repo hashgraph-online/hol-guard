@@ -32,9 +32,12 @@ def build_tool_call_artifact(
     source_scope: str,
     config_path: str,
     transport: str,
+    server_id: str | None = None,
     server_fingerprint: object | None = None,
 ) -> GuardArtifact:
     metadata = {"server_name": server_name}
+    if server_id is not None:
+        metadata["server_id"] = server_id
     if server_fingerprint is not None:
         metadata["server_fingerprint"] = server_fingerprint
     return GuardArtifact(
@@ -136,6 +139,62 @@ def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[
     return tuple(_dedupe(signals))
 
 
+def tool_call_risk_categories(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
+    """Return normalized Cloud risk categories for one MCP tool call."""
+
+    tool_name = PurePath(artifact.command or artifact.name).name
+    serialized_arguments = json.dumps(arguments, sort_keys=True).lower() if arguments is not None else ""
+    combined = f"{artifact.name.lower()} {serialized_arguments}"
+    tool_name_tokens = set(_tool_name_tokens(tool_name))
+    categories: set[str] = set()
+
+    if len(tool_name_tokens.intersection({"delete", "remove", "rm", "destroy", "erase"})) > 0:
+        categories.add("destructive_mutation")
+    if len(tool_name_tokens.intersection({"shell", "bash", "exec", "execute", "command", "powershell"})) > 0:
+        categories.add("command_execution")
+    if any(token in combined for token in ("http://", "https://", "curl", "wget", "fetch", "axios", "requests")):
+        categories.add("outbound_network")
+    if any(
+        token in combined
+        for token in (".env", ".ssh", "id_rsa", "credentials", ".npmrc", ".pypirc", "token", "secret", "passwd")
+    ):
+        categories.add("secret_access")
+    if any(token in combined for token in ("sudo", "chmod", "chown", "launchctl", "systemctl")):
+        categories.add("privileged_system_mutation")
+
+    order = (
+        "command_execution",
+        "destructive_mutation",
+        "outbound_network",
+        "privileged_system_mutation",
+        "secret_access",
+    )
+    return tuple(category for category in order if category in categories)
+
+
+def _tool_call_risk_categories_from_signals(signals: tuple[str, ...]) -> tuple[str, ...]:
+    categories: set[str] = set()
+    combined = " ".join(signals).lower()
+    if "shell or command" in combined:
+        categories.add("command_execution")
+    if "destructive file" in combined or "system changes" in combined:
+        categories.add("destructive_mutation")
+    if "outbound network" in combined:
+        categories.add("outbound_network")
+    if "privileged system mutation" in combined:
+        categories.add("privileged_system_mutation")
+    if "sensitive local files" in combined or "secrets" in combined:
+        categories.add("secret_access")
+    order = (
+        "command_execution",
+        "destructive_mutation",
+        "outbound_network",
+        "privileged_system_mutation",
+        "secret_access",
+    )
+    return tuple(category for category in order if category in categories)
+
+
 def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
     signals = tool_call_risk_signals(artifact, arguments)
     if len(signals) == 0:
@@ -196,6 +255,7 @@ def allow_tool_call(
             "artifact_id": artifact.artifact_id,
             "artifact_hash": artifact_hash,
             "decision_source": decision_source,
+            "risk_categories": list(_tool_call_risk_categories_from_signals(signals)),
             "signals": list(signals),
         },
         now,
@@ -239,6 +299,7 @@ def block_tool_call(
             "artifact_id": artifact.artifact_id,
             "artifact_hash": artifact_hash,
             "decision_source": decision_source,
+            "risk_categories": list(_tool_call_risk_categories_from_signals(signals)),
             "signals": list(signals),
         },
         now,
