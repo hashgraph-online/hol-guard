@@ -73,6 +73,7 @@ _SENSITIVE_RAW_KEYS = frozenset(
 )
 _SENSITIVE_RAW_KEY_ALIASES = frozenset(key.replace("_", "") for key in _SENSITIVE_RAW_KEYS)
 _HOOK_EVENT_NAME_MAP = {
+    "userpromptsubmit": "UserPromptSubmit",
     "userpromptsubmitted": "UserPromptSubmit",
     "pretooluse": "PreToolUse",
     "posttooluse": "PostToolUse",
@@ -334,10 +335,11 @@ def _command_from_payload(tool_input: Mapping[str, object]) -> str | None:
 def _prompt_excerpt(value: object) -> str | None:
     if not isinstance(value, str):
         return None
-    stripped = " ".join(value.strip().split())
-    if not stripped:
+    redacted = redact_text(value.strip()).text
+    collapsed = " ".join(redacted.split())
+    if not collapsed:
         return None
-    return redact_text(stripped).text[:_PROMPT_EXCERPT_LIMIT]
+    return collapsed[:_PROMPT_EXCERPT_LIMIT]
 
 
 def _mcp_parts(tool_name: str | None) -> tuple[str | None, str | None]:

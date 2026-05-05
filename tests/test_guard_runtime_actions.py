@@ -158,8 +158,20 @@ def test_normalize_codex_prompt_excerpt_redacts_secret_like_text(tmp_path: Path)
 
     envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
-    assert envelope.prompt_excerpt == "NPM_TOKEN=*****"
+    assert envelope.prompt_excerpt == "NPM_TOKEN=***** Please summarize this setup."
     assert envelope.raw_payload_redacted["prompt"] == "NPM_TOKEN=*****\nPlease summarize this setup."
+
+
+def test_normalize_codex_lower_camel_prompt_event(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "userPromptSubmit",
+        "prompt": "Please inspect ~/.npmrc.",
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.event_name == "UserPromptSubmit"
+    assert envelope.action_type == "prompt"
 
 
 def test_normalize_codex_mcp_payload_extracts_server_and_tool(tmp_path: Path) -> None:
