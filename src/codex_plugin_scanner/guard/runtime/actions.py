@@ -257,7 +257,7 @@ def normalize_codex_hook_payload(
         package_manager=None,
         package_name=None,
         script_name=None,
-        raw_payload_redacted=_redacted_payload(normalized_payload),
+        raw_payload_redacted=_redacted_payload(normalized_payload, home_dir=home_dir),
     )
 
 
@@ -440,25 +440,53 @@ def _is_absolute_target_path(path: str) -> bool:
     return Path(path).expanduser().is_absolute()
 
 
-def _redacted_payload(payload: Mapping[str, object]) -> dict[str, object]:
-    return {str(key): _redacted_value(str(key), value) for key, value in payload.items() if isinstance(key, str)}
+def _redacted_payload(payload: Mapping[str, object], *, home_dir: Path | str | None) -> dict[str, object]:
+    return {
+        str(key): _redacted_value(str(key), value, home_dir=home_dir)
+        for key, value in payload.items()
+        if isinstance(key, str)
+    }
 
 
-def _redacted_value(key: str, value: object) -> object:
+def _redacted_value(key: str, value: object, *, home_dir: Path | str | None) -> object:
     normalized_key = _normalized_secret_key(key)
     if normalized_key in _SENSITIVE_RAW_KEYS or normalized_key.replace("_", "") in _SENSITIVE_RAW_KEY_ALIASES:
         return "[redacted]"
     if isinstance(value, Mapping):
         return {
-            str(child_key): _redacted_value(str(child_key), child_value) for child_key, child_value in value.items()
+            str(child_key): _redacted_value(str(child_key), child_value, home_dir=home_dir)
+            for child_key, child_value in value.items()
         }
     if isinstance(value, list):
-        return [_redacted_value(key, item) for item in value]
+        return [_redacted_value(key, item, home_dir=home_dir) for item in value]
     if isinstance(value, str):
-        return redact_text(value).text[:_PROMPT_EXCERPT_LIMIT]
+        return _redacted_string_value(key, value, home_dir=home_dir)[:_PROMPT_EXCERPT_LIMIT]
     if isinstance(value, (bool, int, float)) or value is None:
         return value
     return str(value)
+
+
+def _redacted_string_value(key: str, value: str, *, home_dir: Path | str | None) -> str:
+    if _is_path_like_key(key):
+        redacted_path = _redacted_target_path(value, home_dir=home_dir)
+        if redacted_path is not None:
+            return redacted_path
+    return _redact_path_mentions(redact_text(value).text, home_dir=home_dir)
+
+
+def _is_path_like_key(key: str) -> bool:
+    normalized_key = _normalized_secret_key(key)
+    path_keys = {_normalized_secret_key(path_key) for path_key in _PATH_KEYS}
+    return normalized_key in path_keys or normalized_key.replace("_", "") in {
+        path_key.replace("_", "") for path_key in path_keys
+    }
+
+
+def _redact_path_mentions(text: str, *, home_dir: Path | str | None) -> str:
+    def replace_path(match: re.Match[str]) -> str:
+        return _redacted_target_path(match.group("path"), home_dir=home_dir) or match.group("path")
+
+    return _PROMPT_PATH_PATTERN.sub(replace_path, text)
 
 
 def _normalized_secret_key(key: str) -> str:

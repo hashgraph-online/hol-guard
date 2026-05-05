@@ -253,6 +253,21 @@ def test_normalize_codex_file_target_redacts_absolute_home_path(tmp_path: Path) 
     assert str(home_dir) not in envelope.target_paths[0]
 
 
+def test_normalize_codex_raw_payload_redacts_absolute_path_strings(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home" / "alice"
+    target_path = home_dir / ".ssh" / "id_rsa"
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"path": str(target_path)},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=home_dir / "workspace", home_dir=home_dir)
+
+    assert envelope.raw_payload_redacted["tool_input"] == {"path": "~/.ssh/id_rsa"}
+    assert str(home_dir) not in str(envelope.raw_payload_redacted)
+
+
 def test_normalize_codex_file_target_redacts_windows_absolute_path(tmp_path: Path) -> None:
     payload = {
         "hook_event_name": "PreToolUse",
