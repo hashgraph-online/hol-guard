@@ -155,7 +155,12 @@ class HermesHarnessAdapter(HarnessAdapter):
             "HERMES_GUARD_MCP_OVERLAY_PATH": overlay_path,
             "HERMES_GUARD_PRETOOL_PATH": pretool_path,
         }
-        environment.update(cloud_agent_identity_environment(manifest.get("cloud_agent_identity"), prefix="HERMES"))
+        environment.update(
+            cloud_agent_identity_environment(
+                cloud_agent_identity_hints(context, runtime=self.harness),
+                prefix="HERMES",
+            )
+        )
         return environment
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
@@ -171,7 +176,9 @@ class HermesHarnessAdapter(HarnessAdapter):
                 and isinstance(pretool_path, str)
                 and Path(pretool_path).exists()
             ),
-            "cloud_agent_identity_configured": bool(manifest.get("cloud_agent_identity")),
+            "cloud_agent_identity_configured": bool(
+                cloud_agent_identity_hints(context, runtime=self.harness)
+            ),
         }
 
     def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:

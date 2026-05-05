@@ -64,11 +64,15 @@ def _read_service_runtime_profile(db_path: Path) -> dict[str, object] | None:
     if not db_path.exists():
         return None
     try:
-        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as connection:
+        db_uri = f"{db_path.resolve().as_uri()}?mode=ro"
+        connection = sqlite3.connect(db_uri, uri=True)
+        try:
             row = connection.execute(
                 "select payload_json from sync_state where state_key = ?",
                 (_SERVICE_RUNTIME_PROFILE_STATE_KEY,),
             ).fetchone()
+        finally:
+            connection.close()
     except (OSError, sqlite3.Error):
         return None
     if row is None:

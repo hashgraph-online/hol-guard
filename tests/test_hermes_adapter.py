@@ -122,6 +122,17 @@ def test_install_omits_cloud_identity_hints_for_other_runtimes(tmp_path: Path):
     assert "HERMES_GUARD_CLOUD_WORKSPACE" not in env
 
 
+def test_launch_environment_recomputes_cloud_identity_hints(tmp_path: Path):
+    context = _ctx(tmp_path)
+    _seed_cloud_profile(context)
+
+    HermesHarnessAdapter().install(context)
+    _seed_cloud_profile(context, runtime="openclaw")
+    env = HermesHarnessAdapter().launch_environment(context)
+
+    assert "HERMES_GUARD_CLOUD_WORKSPACE" not in env
+
+
 def test_install_stringifies_typed_env_values_in_managed_manifest(tmp_path: Path):
     _write(
         tmp_path / ".hermes" / "config.yaml",

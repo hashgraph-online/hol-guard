@@ -382,6 +382,17 @@ def test_install_ignores_cloud_identity_hints_for_other_runtimes(tmp_path: Path)
     assert "OPENCLAW_GUARD_CLOUD_WORKSPACE" not in env
 
 
+def test_launch_environment_recomputes_cloud_identity_hints(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    _seed_cloud_profile(context)
+
+    OpenClawHarnessAdapter().install(context)
+    _seed_cloud_profile(context, runtime="hermes")
+    env = OpenClawHarnessAdapter().launch_environment(context)
+
+    assert "OPENCLAW_GUARD_CLOUD_WORKSPACE" not in env
+
+
 def test_openclaw_skips_symlinked_skill_files(tmp_path: Path) -> None:
     context = _ctx(tmp_path)
     skill_root = context.home_dir / ".openclaw" / "workspace" / "skills" / "linked"

@@ -146,7 +146,12 @@ class OpenClawHarnessAdapter(HarnessAdapter):
             "OPENCLAW_GUARD_PRETOOL_PATH": pretool_path,
             "OPENCLAW_GUARD_CHANNEL_POSTURE": "enabled",
         }
-        environment.update(cloud_agent_identity_environment(manifest.get("cloud_agent_identity"), prefix="OPENCLAW"))
+        environment.update(
+            cloud_agent_identity_environment(
+                cloud_agent_identity_hints(context, runtime=self.harness),
+                prefix="OPENCLAW",
+            )
+        )
         return environment
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
@@ -162,7 +167,9 @@ class OpenClawHarnessAdapter(HarnessAdapter):
                 and isinstance(pretool_path, str)
                 and Path(pretool_path).exists()
             ),
-            "cloud_agent_identity_configured": bool(manifest.get("cloud_agent_identity")),
+            "cloud_agent_identity_configured": bool(
+                cloud_agent_identity_hints(context, runtime=self.harness)
+            ),
         }
 
     def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
