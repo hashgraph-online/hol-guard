@@ -7,7 +7,7 @@ import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Literal
 
 from ..redaction import redact_text
@@ -199,12 +199,12 @@ def redacted_workspace_label(workspace: Path | str | None, *, home_dir: Path | s
         return None
     workspace_path = Path(workspace).expanduser()
     home_path = Path(home_dir).expanduser() if home_dir is not None else Path.home()
-    resolved_workspace = workspace_path.resolve(strict=False)
-    resolved_home = home_path.resolve(strict=False)
+    resolved_workspace = _safe_resolve(workspace_path)
+    resolved_home = _safe_resolve(home_path)
     if resolved_workspace.is_relative_to(resolved_home):
         relative = resolved_workspace.relative_to(resolved_home)
         return "~" if str(relative) == "." else f"~/{relative.as_posix()}"
-    workspace_name = resolved_workspace.name or "workspace"
+    workspace_name = resolved_workspace.name or workspace_path.name or "workspace"
     return f".../{workspace_name}"
 
 
@@ -230,7 +230,12 @@ def normalize_codex_hook_payload(
         prompt_excerpt=prompt_excerpt,
         mcp_server=mcp_server,
     )
-    target_paths = _target_paths(tool_input=tool_input, command=command, prompt_excerpt=prompt_excerpt)
+    target_paths = _target_paths(
+        tool_input=tool_input,
+        command=command,
+        prompt_excerpt=prompt_excerpt,
+        home_dir=home_dir,
+    )
     network_hosts = _network_hosts(command, prompt_excerpt)
     workspace_label = redacted_workspace_label(workspace, home_dir=home_dir)
     workspace_hash = _workspace_hash(workspace)
@@ -378,6 +383,7 @@ def _target_paths(
     tool_input: Mapping[str, object],
     command: str | None,
     prompt_excerpt: str | None,
+    home_dir: Path | str | None,
 ) -> tuple[str, ...]:
     paths: list[str] = []
     for key in _PATH_KEYS:
@@ -387,7 +393,8 @@ def _target_paths(
     for text in (command, prompt_excerpt):
         if text is not None:
             paths.extend(match.group("path") for match in _PROMPT_PATH_PATTERN.finditer(text))
-    return tuple(dict.fromkeys(paths))
+    redacted_paths = (_redacted_target_path(path, home_dir=home_dir) for path in paths)
+    return tuple(dict.fromkeys(path for path in redacted_paths if path is not None))
 
 
 def _network_hosts(command: str | None, prompt_excerpt: str | None) -> tuple[str, ...]:
@@ -402,6 +409,35 @@ def _workspace_hash(workspace: Path | str | None) -> str | None:
         return None
     encoded = str(Path(workspace).expanduser()).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _safe_resolve(path: Path) -> Path:
+    try:
+        return path.resolve(strict=False)
+    except (OSError, RuntimeError):
+        return path
+
+
+def _redacted_target_path(path: str, *, home_dir: Path | str | None) -> str | None:
+    stripped = path.strip()
+    if not stripped:
+        return None
+    if stripped == "~" or stripped.startswith("~/"):
+        return redact_text(stripped).text
+    if stripped.startswith("~"):
+        target_name = Path(stripped).name or "path"
+        return f".../{target_name}"
+    windows_path = PureWindowsPath(stripped)
+    if windows_path.is_absolute():
+        target_name = windows_path.name or "path"
+        return f".../{target_name}"
+    if _is_absolute_target_path(stripped):
+        return redacted_workspace_label(stripped, home_dir=home_dir)
+    return redact_text(stripped).text
+
+
+def _is_absolute_target_path(path: str) -> bool:
+    return Path(path).expanduser().is_absolute()
 
 
 def _redacted_payload(payload: Mapping[str, object]) -> dict[str, object]:

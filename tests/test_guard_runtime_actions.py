@@ -115,6 +115,25 @@ def test_redacted_workspace_label_hides_non_home_absolute_path(tmp_path: Path) -
     assert str(tmp_path) not in label
 
 
+def test_redacted_workspace_label_falls_back_when_resolution_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_resolve = Path.resolve
+
+    def failing_resolve(self: Path, strict: bool = False) -> Path:
+        if self.name == "blocked":
+            raise OSError("blocked path")
+        return original_resolve(self, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", failing_resolve)
+
+    label = redacted_workspace_label(tmp_path / "blocked", home_dir=tmp_path / "home")
+
+    assert label == ".../blocked"
+    assert str(tmp_path) not in label
+
+
 def test_normalize_codex_pre_tool_bash_payload(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace = home_dir / "workspace"
@@ -216,6 +235,35 @@ def test_normalize_codex_shell_command_extracts_target_paths(tmp_path: Path) -> 
 
     assert envelope.action_type == "shell_command"
     assert envelope.target_paths == ("~/.npmrc",)
+
+
+def test_normalize_codex_file_target_redacts_absolute_home_path(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home" / "alice"
+    target_path = home_dir / ".ssh" / "id_rsa"
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"path": str(target_path)},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=home_dir / "workspace", home_dir=home_dir)
+
+    assert envelope.action_type == "file_read"
+    assert envelope.target_paths == ("~/.ssh/id_rsa",)
+    assert str(home_dir) not in envelope.target_paths[0]
+
+
+def test_normalize_codex_file_target_redacts_windows_absolute_path(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"filePath": r"C:\Users\alice\.ssh\id_rsa"},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.target_paths == (".../id_rsa",)
+    assert "alice" not in envelope.target_paths[0]
 
 
 def test_normalize_codex_raw_payload_redacts_secret_like_strings(tmp_path: Path) -> None:
