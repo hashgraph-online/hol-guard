@@ -37,11 +37,7 @@ def cloud_agent_identity_hints(
     payload = _read_service_runtime_profile(context.guard_home / "guard.db")
     if payload is None or _string_field(payload, "runtime") != runtime:
         return None
-    hints = {
-        field: value
-        for field in _PROFILE_FIELDS
-        if (value := _string_field(payload, field)) is not None
-    }
+    hints = {field: value for field in _PROFILE_FIELDS if (value := _string_field(payload, field)) is not None}
     return hints if hints else None
 
 

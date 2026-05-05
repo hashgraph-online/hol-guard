@@ -176,9 +176,7 @@ class HermesHarnessAdapter(HarnessAdapter):
                 and isinstance(pretool_path, str)
                 and Path(pretool_path).exists()
             ),
-            "cloud_agent_identity_configured": bool(
-                cloud_agent_identity_hints(context, runtime=self.harness)
-            ),
+            "cloud_agent_identity_configured": bool(cloud_agent_identity_hints(context, runtime=self.harness)),
         }
 
     def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
