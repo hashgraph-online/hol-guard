@@ -140,6 +140,18 @@ def test_normalize_codex_prompt_payload_extracts_prompt_excerpt(tmp_path: Path) 
     assert "prompt" in envelope.raw_payload_redacted
 
 
+def test_normalize_codex_prompt_excerpt_redacts_secret_like_text(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "NPM_TOKEN=abc123456789\nPlease summarize this setup.",
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.prompt_excerpt == "NPM_TOKEN=*****"
+    assert envelope.raw_payload_redacted["prompt"] == "NPM_TOKEN=*****\nPlease summarize this setup."
+
+
 def test_normalize_codex_mcp_payload_extracts_server_and_tool(tmp_path: Path) -> None:
     payload = {
         "hook_event_name": "PreToolUse",
@@ -199,6 +211,24 @@ def test_normalize_codex_raw_payload_redacts_secret_like_strings(tmp_path: Path)
     assert envelope.raw_payload_redacted["tool_input"] == {
         "command": "printf ok",
         "note": "NPM_TOKEN=*****",
+    }
+
+
+def test_normalize_codex_raw_payload_redacts_camel_case_secret_keys(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": "printf ok",
+            "accessToken": "abc123456789",
+        },
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.raw_payload_redacted["tool_input"] == {
+        "command": "printf ok",
+        "accessToken": "[redacted]",
     }
 
 

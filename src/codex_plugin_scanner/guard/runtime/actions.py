@@ -71,6 +71,7 @@ _SENSITIVE_RAW_KEYS = frozenset(
         "tool_response",
     }
 )
+_SENSITIVE_RAW_KEY_ALIASES = frozenset(key.replace("_", "") for key in _SENSITIVE_RAW_KEYS)
 _HOOK_EVENT_NAME_MAP = {
     "userpromptsubmitted": "UserPromptSubmit",
     "pretooluse": "PreToolUse",
@@ -335,7 +336,7 @@ def _prompt_excerpt(value: object) -> str | None:
     stripped = " ".join(value.strip().split())
     if not stripped:
         return None
-    return stripped[:_PROMPT_EXCERPT_LIMIT]
+    return redact_text(stripped).text[:_PROMPT_EXCERPT_LIMIT]
 
 
 def _mcp_parts(tool_name: str | None) -> tuple[str | None, str | None]:
@@ -405,8 +406,8 @@ def _redacted_payload(payload: Mapping[str, object]) -> dict[str, object]:
 
 
 def _redacted_value(key: str, value: object) -> object:
-    normalized_key = key.lower().replace("-", "_")
-    if normalized_key in _SENSITIVE_RAW_KEYS:
+    normalized_key = _normalized_secret_key(key)
+    if normalized_key in _SENSITIVE_RAW_KEYS or normalized_key.replace("_", "") in _SENSITIVE_RAW_KEY_ALIASES:
         return "[redacted]"
     if isinstance(value, Mapping):
         return {
@@ -419,6 +420,12 @@ def _redacted_value(key: str, value: object) -> object:
     if isinstance(value, (bool, int, float)) or value is None:
         return value
     return str(value)
+
+
+def _normalized_secret_key(key: str) -> str:
+    normalized = key.replace("-", "_")
+    normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", normalized)
+    return normalized.lower()
 
 
 def _normalized_command(command: str | None) -> str | None:
