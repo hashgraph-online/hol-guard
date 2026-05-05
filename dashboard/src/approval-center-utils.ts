@@ -5,7 +5,7 @@ import type {
   GuardReceipt
 } from "./guard-types";
 
-export function resolveEnvelopeDisplayText(envelope: GuardActionEnvelope): string {
+export function resolveEnvelopeDisplayText(envelope: GuardActionEnvelope): string | null {
   if (envelope.action_type === "shell_command" && envelope.command !== null) {
     return envelope.command;
   }
@@ -21,7 +21,7 @@ export function resolveEnvelopeDisplayText(envelope: GuardActionEnvelope): strin
   if (envelope.target_paths.length > 0) {
     return envelope.target_paths[0];
   }
-  return envelope.action_type;
+  return envelope.action_type === "harness_start" ? null : envelope.action_type;
 }
 
 export function humanizeList(values: string[]): string {

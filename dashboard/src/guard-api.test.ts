@@ -102,8 +102,14 @@ assert(
 
 const fallbackEnvelope: GuardActionEnvelope = { ...BASE_ENVELOPE, action_type: "harness_start" };
 assert(
-  resolveEnvelopeDisplayText(fallbackEnvelope) === "harness_start",
-  "T072: action_type used as last-resort fallback"
+  resolveEnvelopeDisplayText(fallbackEnvelope) === null,
+  "T072: generic harness_start envelope falls back to launch metadata"
+);
+
+const configChangeEnvelope: GuardActionEnvelope = { ...BASE_ENVELOPE, action_type: "config_change" };
+assert(
+  resolveEnvelopeDisplayText(configChangeEnvelope) === "config_change",
+  "T072: non-generic action_type used as last-resort fallback"
 );
 
 const BASE_REQUEST: GuardApprovalRequest = {
