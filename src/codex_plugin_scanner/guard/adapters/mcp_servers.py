@@ -102,16 +102,19 @@ def proxy_cli_args(
 def stable_mcp_server_identifier(server: ManagedMcpServer) -> str:
     """Build a Cloud-stable MCP server ID without local config path material."""
 
+    harness = server.harness.strip().lower()
+    source_scope = server.source_scope.strip().lower()
+    server_name = _stable_server_name(server.name)
     payload = {
-        "harness": server.harness,
-        "source_scope": server.source_scope,
-        "name": server.name.strip().lower(),
+        "harness": harness,
+        "source_scope": source_scope,
+        "name": server_name,
         "command": PurePath(server.command).name.lower(),
         "args": [_stable_arg_token(value) for value in server.args],
         "transport": server.transport,
     }
     digest = sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:20]
-    return f"mcp_server:{server.harness}:{server.source_scope}:{server.name}:{digest}"
+    return f"mcp_server:{harness}:{source_scope}:{server_name}:{digest}"
 
 
 def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
@@ -140,11 +143,23 @@ def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
 
 
 def _stable_arg_token(value: str) -> str:
-    if value.startswith(("/", "~/", "./", "../")):
-        return "<path>"
-    if "\\Users\\" in value or value.startswith(".\\"):
+    key, separator, item = value.partition("=")
+    if separator and _looks_like_path_token(item):
+        return f"{key}=<path>"
+    if _looks_like_path_token(value):
         return "<path>"
     return value
+
+
+def _stable_server_name(value: str) -> str:
+    return value.strip().lower()
+
+
+def _looks_like_path_token(value: str) -> bool:
+    normalized = value.strip().replace("\\", "/")
+    if normalized.startswith(("/", "~/", "./", "../")):
+        return True
+    return len(normalized) >= 3 and normalized[0].isalpha() and normalized[1:3] == ":/"
 
 
 def _string_env(value: object) -> dict[str, str]:

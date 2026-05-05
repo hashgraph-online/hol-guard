@@ -49,6 +49,48 @@ def test_stable_mcp_server_identifier_survives_config_path_changes() -> None:
     assert cli_args[cli_args.index("--server-id") + 1] == stable_mcp_server_identifier(first)
 
 
+def test_stable_mcp_server_identifier_canonicalizes_names_and_path_args() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name=" Filesystem ",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="/usr/local/bin/npx",
+        args=(
+            "-y",
+            "@modelcontextprotocol/server-filesystem",
+            "--root=/home/alice/workspace",
+            "--cache=D:\\alice\\repo",
+        ),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/bob/.codex/config.toml",
+        command="npx",
+        args=(
+            "-y",
+            "@modelcontextprotocol/server-filesystem",
+            "--root=/home/bob/project",
+            "--cache=D:\\bob\\repo",
+        ),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    identifier = stable_mcp_server_identifier(first)
+
+    assert identifier == stable_mcp_server_identifier(second)
+    assert ":filesystem:" in identifier
+    assert "Filesystem" not in identifier
+    assert "alice" not in identifier
+
+
 def test_normalized_capability_categories_include_mcp_tool_risk_families() -> None:
     artifact = GuardArtifact(
         artifact_id="mcp:filesystem",
