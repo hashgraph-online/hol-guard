@@ -88,6 +88,12 @@ _PROMPT_PATH_PATTERN = re.compile(
     r"(?![A-Za-z0-9_.-])"
 )
 _NETWORK_HOST_PATTERN = re.compile(r"(?:https?|wss?|grpcs?)://(?P<host>[A-Za-z0-9.-]+)(?::\d+)?(?:/|$)")
+_GENERIC_POSIX_ABSOLUTE_PATH_PATTERN = re.compile(
+    r"(?<![:A-Za-z0-9_./-])(?P<path>/(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+)(?![A-Za-z0-9_.-])"
+)
+_GENERIC_WINDOWS_ABSOLUTE_PATH_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_./\\:-])(?P<path>[A-Za-z]:\\(?:[^\\\s'\"<>|]+\\)+[^\\\s'\"<>|]+)"
+)
 _PROMPT_EXCERPT_LIMIT = 240
 
 
@@ -147,6 +153,8 @@ class GuardActionEnvelope:
         """Build an envelope from a persisted payload."""
 
         schema_version = _required_int(payload, "schema_version")
+        if schema_version != _SCHEMA_VERSION:
+            raise ValueError(f"Guard action envelope schema_version {schema_version} is not supported.")
         action_type = _required_action_type(payload.get("action_type"))
         return cls(
             schema_version=schema_version,
@@ -222,24 +230,25 @@ def normalize_codex_hook_payload(
     event_name = _hook_event_name(normalized_payload)
     tool_name = _string_value(normalized_payload.get("tool_name")) or _string_value(normalized_payload.get("toolName"))
     tool_input = _tool_input_from_payload(normalized_payload)
-    command = _command_from_payload(tool_input)
+    raw_command = _command_from_payload(tool_input)
+    command = _command_detail(raw_command, home_dir=home_dir)
     prompt_text = _prompt_text(normalized_payload.get("prompt"))
     prompt_excerpt = _prompt_excerpt(prompt_text)
     mcp_server, mcp_tool = _mcp_parts(tool_name)
     action_type = _codex_action_type(
         event_name=event_name,
         tool_name=tool_name,
-        command=command,
+        command=raw_command,
         prompt_excerpt=prompt_excerpt,
         mcp_server=mcp_server,
     )
     target_paths = _target_paths(
         tool_input=tool_input,
-        command=command,
+        command=raw_command,
         prompt_text=prompt_text,
         home_dir=home_dir,
     )
-    network_hosts = _network_hosts(command, prompt_text)
+    network_hosts = _network_hosts(raw_command, prompt_text)
     workspace_label = redacted_workspace_label(workspace, home_dir=home_dir)
     workspace_hash = _workspace_hash(workspace)
     return GuardActionEnvelope(
@@ -338,6 +347,12 @@ def _command_from_payload(tool_input: Mapping[str, object]) -> str | None:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
+
+
+def _command_detail(command: str | None, *, home_dir: Path | str | None) -> str | None:
+    if command is None:
+        return None
+    return _redact_path_mentions(redact_text(command).text, home_dir=home_dir)
 
 
 def _prompt_text(value: object) -> str | None:
@@ -495,7 +510,9 @@ def _redact_path_mentions(text: str, *, home_dir: Path | str | None) -> str:
     def replace_path(match: re.Match[str]) -> str:
         return _redacted_target_path(match.group("path"), home_dir=home_dir) or match.group("path")
 
-    return _PROMPT_PATH_PATTERN.sub(replace_path, text)
+    redacted = _GENERIC_WINDOWS_ABSOLUTE_PATH_PATTERN.sub(replace_path, text)
+    redacted = _GENERIC_POSIX_ABSOLUTE_PATH_PATTERN.sub(replace_path, redacted)
+    return _PROMPT_PATH_PATTERN.sub(replace_path, redacted)
 
 
 def _normalized_secret_key(key: str) -> str:

@@ -67,6 +67,18 @@ def test_guard_action_envelope_from_dict_requires_schema_version() -> None:
         GuardActionEnvelope.from_dict({"harness": "codex"})
 
 
+def test_guard_action_envelope_from_dict_rejects_future_schema_version() -> None:
+    payload = {
+        "schema_version": 999,
+        "harness": "codex",
+        "event_name": "PreToolUse",
+        "action_type": "shell_command",
+    }
+
+    with pytest.raises(ValueError, match="schema_version"):
+        GuardActionEnvelope.from_dict(payload)
+
+
 def test_stable_action_hash_trims_outer_command_whitespace_only() -> None:
     base = GuardActionEnvelope(
         schema_version=1,
@@ -316,6 +328,22 @@ def test_normalize_codex_file_target_redacts_windows_absolute_path(tmp_path: Pat
 
     assert envelope.target_paths == (".../id_rsa",)
     assert "alice" not in envelope.target_paths[0]
+
+
+def test_normalize_codex_command_redacts_generic_absolute_path_strings(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home" / "alice"
+    target_path = home_dir / "project" / "package.json"
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": f"cat {target_path}"},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=home_dir / "workspace", home_dir=home_dir)
+
+    assert envelope.command == "cat ~/project/package.json"
+    assert envelope.raw_payload_redacted["tool_input"] == {"command": "cat ~/project/package.json"}
+    assert str(home_dir) not in str(envelope.to_dict())
 
 
 def test_normalize_codex_raw_payload_redacts_secret_like_strings(tmp_path: Path) -> None:
