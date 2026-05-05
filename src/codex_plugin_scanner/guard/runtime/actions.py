@@ -101,21 +101,6 @@ _GENERIC_WINDOWS_UNC_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_./\\:-])(?P<path>\\\\[^\\\s'\"<>|]+\\[^\\\s'\"<>|]+(?:\\[^\\\s'\"<>|]+)+)"
 )
 _PROMPT_EXCERPT_LIMIT = 240
-_SINGLE_TOKEN_MCP_TOOLS = frozenset(
-    {
-        "call",
-        "delete",
-        "get",
-        "inspect",
-        "list",
-        "lookup",
-        "query",
-        "read",
-        "run",
-        "search",
-        "write",
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -573,8 +558,8 @@ def _prompt_excerpt(prompt_text: str | None) -> str | None:
 def _mcp_details(payload: Mapping[str, object], tool_name: str | None) -> tuple[str | None, str | None]:
     explicit_server = _string_from_keys(payload, ("mcp_server", "mcpServer", "server", "serverName"))
     explicit_tool = _string_from_keys(payload, ("mcp_tool", "mcpTool", "tool"))
-    tool_name_value = _string_from_keys(payload, ("toolName",))
-    parts_server, parts_tool = _mcp_parts(tool_name)
+    tool_name_value = _string_from_keys(payload, ("tool_name", "toolName"))
+    parts_server, parts_tool = _mcp_parts(tool_name, known_servers=_known_mcp_servers(payload))
     server = explicit_server or parts_server
     tool = explicit_tool or parts_tool
     if tool is None and server is not None and tool_name_value is not None:
@@ -590,7 +575,18 @@ def _string_from_keys(payload: Mapping[str, object], keys: tuple[str, ...]) -> s
     return None
 
 
-def _mcp_parts(tool_name: str | None) -> tuple[str | None, str | None]:
+def _known_mcp_servers(payload: Mapping[str, object]) -> tuple[str, ...]:
+    servers: set[str] = set()
+    for key in ("mcp_servers", "mcpServers", "servers"):
+        value = payload.get(key)
+        if isinstance(value, Mapping):
+            servers.update(str(server_name).strip() for server_name in value if isinstance(server_name, str))
+        elif isinstance(value, list):
+            servers.update(item.strip() for item in value if isinstance(item, str) and item.strip())
+    return tuple(sorted((server for server in servers if server), key=len, reverse=True))
+
+
+def _mcp_parts(tool_name: str | None, *, known_servers: tuple[str, ...] = ()) -> tuple[str | None, str | None]:
     if tool_name is None:
         return None, None
     if "/" in tool_name:
@@ -603,22 +599,11 @@ def _mcp_parts(tool_name: str | None) -> tuple[str | None, str | None]:
         return None, None
     if tool_name.startswith("mcp_"):
         suffix = tool_name[len("mcp_") :]
-        if "_" not in suffix:
-            return None, None
-        parts = suffix.split("_")
-        if len(parts) >= 3 and parts[-1] in _SINGLE_TOKEN_MCP_TOOLS:
-            server = "_".join(parts[:-1])
-            tool = parts[-1]
-        elif len(parts) >= 3:
-            server = "_".join(parts[:-2])
-            tool = "_".join(parts[-2:])
-        elif len(parts) == 2:
-            server = parts[0]
-            tool = parts[1]
-        else:
-            return None, None
-        if server and tool:
-            return server, tool
+        for server in known_servers:
+            prefix = f"{server}_"
+            if suffix.startswith(prefix):
+                tool = suffix[len(prefix) :]
+                return (server, tool) if tool else (None, None)
         return None, None
     return None, None
 

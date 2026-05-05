@@ -125,6 +125,7 @@ def test_normalize_copilot_prefixed_mcp_payload(tmp_path: Path) -> None:
         "hookName": "preToolUse",
         "toolName": "mcp_danger_lab_safe_echo",
         "toolInput": {"message": "hello"},
+        "mcpServers": {"danger_lab": {}},
     }
 
     envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
@@ -139,6 +140,7 @@ def test_normalize_copilot_three_part_prefixed_mcp_payload(tmp_path: Path) -> No
         "hookName": "preToolUse",
         "toolName": "mcp_guard_lab_inspect",
         "toolInput": {"target": "workspace"},
+        "mcpServers": {"guard_lab": {}},
     }
 
     envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
@@ -153,6 +155,7 @@ def test_normalize_copilot_long_server_prefixed_mcp_payload(tmp_path: Path) -> N
         "hookName": "preToolUse",
         "toolName": "mcp_my_server_name_my_tool",
         "toolInput": {"target": "workspace"},
+        "mcpServers": {"my_server_name": {}},
     }
 
     envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
@@ -165,15 +168,30 @@ def test_normalize_copilot_long_server_prefixed_mcp_payload(tmp_path: Path) -> N
 def test_normalize_copilot_single_token_tool_prefixed_mcp_payload(tmp_path: Path) -> None:
     payload = {
         "hookName": "preToolUse",
-        "toolName": "mcp_guard_team_lab_inspect",
+        "toolName": "mcp_guard_team_lab_ping",
         "toolInput": {"target": "workspace"},
+        "mcpServers": {"guard_team_lab": {}},
     }
 
     envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
     assert envelope.action_type == "mcp_tool"
     assert envelope.mcp_server == "guard_team_lab"
-    assert envelope.mcp_tool == "inspect"
+    assert envelope.mcp_tool == "ping"
+
+
+def test_normalize_copilot_unknown_prefixed_mcp_payload_stays_untyped(tmp_path: Path) -> None:
+    payload = {
+        "hookName": "preToolUse",
+        "toolName": "mcp_guard_team_lab_ping",
+        "toolInput": {"target": "workspace"},
+    }
+
+    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "config_change"
+    assert envelope.mcp_server is None
+    assert envelope.mcp_tool is None
 
 
 def test_normalize_harness_payload_uses_default_for_empty_event(tmp_path: Path) -> None:
@@ -201,6 +219,21 @@ def test_normalize_opencode_merges_partial_mcp_details(tmp_path: Path) -> None:
         "server": "guard_lab",
         "toolName": "inspect",
         "toolInput": {"target": "workspace"},
+    }
+
+    envelope = normalize_opencode_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "mcp_tool"
+    assert envelope.mcp_server == "guard_lab"
+    assert envelope.mcp_tool == "inspect"
+
+
+def test_normalize_opencode_merges_snake_case_partial_mcp_details(tmp_path: Path) -> None:
+    payload = {
+        "event": "permissionRequest",
+        "server": "guard_lab",
+        "tool_name": "inspect",
+        "tool_input": {"target": "workspace"},
     }
 
     envelope = normalize_opencode_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
