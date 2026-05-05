@@ -557,7 +557,7 @@ def _prompt_excerpt(prompt_text: str | None) -> str | None:
 
 def _mcp_details(payload: Mapping[str, object], tool_name: str | None) -> tuple[str | None, str | None]:
     explicit_server = _string_from_keys(payload, ("mcp_server", "mcpServer", "server", "serverName"))
-    explicit_tool = _string_from_keys(payload, ("mcp_tool", "mcpTool", "tool"))
+    explicit_tool = _string_from_keys(payload, ("mcp_tool", "mcpTool"))
     tool_name_value = _string_from_keys(payload, ("tool_name", "toolName"))
     parts_server, parts_tool = _mcp_parts(tool_name, known_servers=_known_mcp_servers(payload))
     server = explicit_server or parts_server
@@ -583,7 +583,11 @@ def _known_mcp_servers(payload: Mapping[str, object]) -> tuple[str, ...]:
             servers.update(str(server_name).strip() for server_name in value if isinstance(server_name, str))
         elif isinstance(value, list):
             servers.update(item.strip() for item in value if isinstance(item, str) and item.strip())
-    return tuple(sorted((server for server in servers if server), key=len, reverse=True))
+    return tuple(
+        sorted(
+            (server for server in servers if server), key=lambda server: len(_mcp_server_token(server)), reverse=True
+        )
+    )
 
 
 def _mcp_parts(tool_name: str | None, *, known_servers: tuple[str, ...] = ()) -> tuple[str | None, str | None]:
@@ -600,12 +604,18 @@ def _mcp_parts(tool_name: str | None, *, known_servers: tuple[str, ...] = ()) ->
     if tool_name.startswith("mcp_"):
         suffix = tool_name[len("mcp_") :]
         for server in known_servers:
-            prefix = f"{server}_"
+            server_token = _mcp_server_token(server)
+            prefix = f"{server_token}_"
             if suffix.startswith(prefix):
                 tool = suffix[len(prefix) :]
                 return (server, tool) if tool else (None, None)
         return None, None
     return None, None
+
+
+def _mcp_server_token(value: str) -> str:
+    token = re.sub(r"[^a-z0-9]+", "_", value.strip().lower())
+    return token.strip("_")
 
 
 def _action_type(

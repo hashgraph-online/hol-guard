@@ -194,6 +194,36 @@ def test_normalize_copilot_unknown_prefixed_mcp_payload_stays_untyped(tmp_path: 
     assert envelope.mcp_tool is None
 
 
+def test_normalize_copilot_tokenized_server_prefixed_mcp_payload(tmp_path: Path) -> None:
+    payload = {
+        "hookName": "preToolUse",
+        "toolName": "mcp_shared_tools_ping",
+        "toolInput": {"target": "workspace"},
+        "mcpServers": {"shared-tools": {}},
+    }
+
+    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "mcp_tool"
+    assert envelope.mcp_server == "shared-tools"
+    assert envelope.mcp_tool == "ping"
+
+
+def test_normalize_generic_tool_alias_does_not_set_mcp_tool(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool": "Read",
+        "tool_input": {"path": "~/.npmrc"},
+    }
+
+    envelope = normalize_claude_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "file_read"
+    assert envelope.tool_name == "Read"
+    assert envelope.mcp_server is None
+    assert envelope.mcp_tool is None
+
+
 def test_normalize_harness_payload_uses_default_for_empty_event(tmp_path: Path) -> None:
     payload = {
         "event": "",
