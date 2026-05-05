@@ -81,8 +81,10 @@ _HOOK_EVENT_NAME_MAP = {
 }
 _PROMPT_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_./-])"
-    r"(?P<path>(?:~|\.{1,2})?/?(?:[A-Za-z0-9_.-]+/)*"
-    r"(?:\.npmrc|\.env(?:\.[A-Za-z0-9_-]+)?|id_rsa|id_ed25519|credentials))"
+    r"(?P<path>(?:"
+    r"(?:~|\.{1,2})?/?(?:[A-Za-z0-9_.-]+/)*(?:\.npmrc|\.env(?:\.[A-Za-z0-9_-]+)?|id_rsa|id_ed25519)"
+    r"|(?:~|\.{1,2})?/?(?:[A-Za-z0-9_.-]+/)+credentials"
+    r"))"
     r"(?![A-Za-z0-9_.-])"
 )
 _NETWORK_HOST_PATTERN = re.compile(r"(?:https?|wss?|grpcs?)://(?P<host>[A-Za-z0-9.-]+)(?::\d+)?(?:/|$)")
@@ -221,7 +223,8 @@ def normalize_codex_hook_payload(
     tool_name = _string_value(normalized_payload.get("tool_name")) or _string_value(normalized_payload.get("toolName"))
     tool_input = _tool_input_from_payload(normalized_payload)
     command = _command_from_payload(tool_input)
-    prompt_excerpt = _prompt_excerpt(normalized_payload.get("prompt"))
+    prompt_text = _prompt_text(normalized_payload.get("prompt"))
+    prompt_excerpt = _prompt_excerpt(prompt_text)
     mcp_server, mcp_tool = _mcp_parts(tool_name)
     action_type = _codex_action_type(
         event_name=event_name,
@@ -233,10 +236,10 @@ def normalize_codex_hook_payload(
     target_paths = _target_paths(
         tool_input=tool_input,
         command=command,
-        prompt_excerpt=prompt_excerpt,
+        prompt_text=prompt_text,
         home_dir=home_dir,
     )
-    network_hosts = _network_hosts(command, prompt_excerpt)
+    network_hosts = _network_hosts(command, prompt_text)
     workspace_label = redacted_workspace_label(workspace, home_dir=home_dir)
     workspace_hash = _workspace_hash(workspace)
     return GuardActionEnvelope(
@@ -337,14 +340,20 @@ def _command_from_payload(tool_input: Mapping[str, object]) -> str | None:
     return None
 
 
-def _prompt_excerpt(value: object) -> str | None:
+def _prompt_text(value: object) -> str | None:
     if not isinstance(value, str):
         return None
     redacted = redact_text(value.strip()).text
     collapsed = " ".join(redacted.split())
     if not collapsed:
         return None
-    return collapsed[:_PROMPT_EXCERPT_LIMIT]
+    return collapsed
+
+
+def _prompt_excerpt(prompt_text: str | None) -> str | None:
+    if prompt_text is None:
+        return None
+    return prompt_text[:_PROMPT_EXCERPT_LIMIT]
 
 
 def _mcp_parts(tool_name: str | None) -> tuple[str | None, str | None]:
@@ -382,7 +391,7 @@ def _target_paths(
     *,
     tool_input: Mapping[str, object],
     command: str | None,
-    prompt_excerpt: str | None,
+    prompt_text: str | None,
     home_dir: Path | str | None,
 ) -> tuple[str, ...]:
     paths: list[str] = []
@@ -390,7 +399,7 @@ def _target_paths(
         value = tool_input.get(key)
         if isinstance(value, str) and value.strip():
             paths.append(value.strip())
-    for text in (command, prompt_excerpt):
+    for text in (command, prompt_text):
         if text is not None:
             paths.extend(match.group("path") for match in _PROMPT_PATH_PATTERN.finditer(text))
     redacted_paths = (_redacted_target_path(path, home_dir=home_dir) for path in paths)

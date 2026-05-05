@@ -169,6 +169,43 @@ def test_normalize_codex_prompt_payload_extracts_prompt_excerpt(tmp_path: Path) 
     assert "prompt" in envelope.raw_payload_redacted
 
 
+def test_normalize_codex_prompt_extracts_late_path_and_host(tmp_path: Path) -> None:
+    prompt = f"{'Summarize guard behavior. ' * 12}Then inspect ~/.npmrc and call https://api.example.test/v1."
+    payload = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": prompt,
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.prompt_excerpt is not None
+    assert "~/.npmrc" not in envelope.prompt_excerpt
+    assert envelope.target_paths == ("~/.npmrc",)
+    assert envelope.network_hosts == ("api.example.test",)
+
+
+def test_normalize_codex_prompt_ignores_bare_credentials_word(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Please rotate credentials for the service owner.",
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.target_paths == ()
+
+
+def test_normalize_codex_prompt_extracts_credentials_path(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Please inspect ~/.aws/credentials before deploy.",
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.target_paths == ("~/.aws/credentials",)
+
+
 def test_normalize_codex_prompt_excerpt_redacts_secret_like_text(tmp_path: Path) -> None:
     payload = {
         "hook_event_name": "UserPromptSubmit",
