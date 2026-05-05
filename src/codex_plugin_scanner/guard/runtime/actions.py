@@ -49,15 +49,22 @@ _SENSITIVE_RAW_KEYS = frozenset(
     {
         "api_key",
         "apikey",
+        "access_token",
         "auth",
         "authorization",
+        "client_secret",
         "content",
+        "cookie",
         "credential",
         "credentials",
+        "id_token",
         "output",
         "password",
         "private_key",
+        "refresh_token",
         "secret",
+        "session_token",
+        "set_cookie",
         "stderr",
         "stdout",
         "token",
@@ -73,7 +80,7 @@ _HOOK_EVENT_NAME_MAP = {
 _PROMPT_PATH_PATTERN = re.compile(
     r"(?P<path>(?:~|\.{1,2})?/?[A-Za-z0-9_./-]*(?:\.npmrc|\.env(?:\.[A-Za-z0-9_-]+)?|id_rsa|id_ed25519|credentials)[A-Za-z0-9_./-]*)"
 )
-_NETWORK_HOST_PATTERN = re.compile(r"https?://(?P<host>[A-Za-z0-9.-]+)(?::\d+)?(?:/|$)")
+_NETWORK_HOST_PATTERN = re.compile(r"(?:https?|wss?|grpcs?)://(?P<host>[A-Za-z0-9.-]+)(?::\d+)?(?:/|$)")
 _PROMPT_EXCERPT_LIMIT = 240
 
 
@@ -189,7 +196,7 @@ def redacted_workspace_label(workspace: Path | str | None, *, home_dir: Path | s
     except OSError:
         resolved_workspace = workspace_path.absolute()
         resolved_home = home_path.absolute()
-    if _path_is_relative_to(resolved_workspace, resolved_home):
+    if resolved_workspace.is_relative_to(resolved_home):
         relative = resolved_workspace.relative_to(resolved_home)
         return "~" if str(relative) == "." else f"~/{relative.as_posix()}"
     return resolved_workspace.as_posix()
@@ -205,8 +212,8 @@ def normalize_codex_hook_payload(
 
     normalized_payload = dict(payload)
     event_name = _hook_event_name(normalized_payload)
-    tool_name = _string_value(normalized_payload.get("tool_name"))
-    tool_input = _mapping_value(normalized_payload.get("tool_input"))
+    tool_name = _string_value(normalized_payload.get("tool_name")) or _string_value(normalized_payload.get("toolName"))
+    tool_input = _tool_input_from_payload(normalized_payload)
     command = _command_from_payload(tool_input)
     prompt_excerpt = _prompt_excerpt(normalized_payload.get("prompt"))
     mcp_server, mcp_tool = _mcp_parts(tool_name)
@@ -224,7 +231,7 @@ def normalize_codex_hook_payload(
         prompt_excerpt=prompt_excerpt,
     )
     network_hosts = _network_hosts(command, prompt_excerpt)
-    workspace_label = str(Path(workspace)) if workspace is not None else None
+    workspace_label = redacted_workspace_label(workspace, home_dir=home_dir)
     workspace_hash = _workspace_hash(workspace)
     envelope = GuardActionEnvelope(
         schema_version=_SCHEMA_VERSION,
@@ -293,6 +300,21 @@ def _mapping_value(value: object) -> Mapping[str, object]:
     return {}
 
 
+def _tool_input_from_payload(payload: Mapping[str, object]) -> Mapping[str, object]:
+    for key in ("tool_input", "toolInput", "toolArgs", "arguments"):
+        value = payload.get(key)
+        if isinstance(value, Mapping):
+            return value
+        if isinstance(value, str) and value.strip():
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, Mapping):
+                return parsed
+    return {}
+
+
 def _hook_event_name(payload: Mapping[str, object]) -> str:
     for key in ("event", "hook_event_name", "hookEventName", "hook_name"):
         value = payload.get(key)
@@ -358,11 +380,10 @@ def _target_paths(
     prompt_excerpt: str | None,
 ) -> tuple[str, ...]:
     paths: list[str] = []
-    if action_type in {"file_read", "file_write"}:
-        for key in _PATH_KEYS:
-            value = tool_input.get(key)
-            if isinstance(value, str) and value.strip():
-                paths.append(value.strip())
+    for key in _PATH_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value.strip():
+            paths.append(value.strip())
     for text in (command, prompt_excerpt):
         if text is not None:
             paths.extend(match.group("path") for match in _PROMPT_PATH_PATTERN.finditer(text))
@@ -393,8 +414,7 @@ def _redacted_value(key: str, value: object) -> object:
         return "[redacted]"
     if isinstance(value, Mapping):
         return {
-            str(child_key): _redacted_value(str(child_key), child_value)
-            for child_key, child_value in value.items()
+            str(child_key): _redacted_value(str(child_key), child_value) for child_key, child_value in value.items()
         }
     if isinstance(value, list):
         return [_redacted_value(key, item) for item in value]
@@ -409,14 +429,6 @@ def _normalized_command(command: str | None) -> str | None:
     if command is None:
         return None
     return command.strip()
-
-
-def _path_is_relative_to(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-    except ValueError:
-        return False
-    return True
 
 
 __all__ = [

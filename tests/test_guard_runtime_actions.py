@@ -106,21 +106,22 @@ def test_redacted_workspace_label_hides_home_directory(tmp_path: Path) -> None:
 
 
 def test_normalize_codex_pre_tool_bash_payload(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
+    home_dir = tmp_path / "home"
+    workspace = home_dir / "workspace"
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
         "tool_input": {"command": "printf ok"},
     }
 
-    envelope = normalize_codex_hook_payload(payload, workspace=workspace, home_dir=tmp_path)
+    envelope = normalize_codex_hook_payload(payload, workspace=workspace, home_dir=home_dir)
 
     assert envelope.harness == "codex"
     assert envelope.event_name == "PreToolUse"
     assert envelope.action_type == "shell_command"
     assert envelope.tool_name == "Bash"
     assert envelope.command == "printf ok"
-    assert envelope.workspace == str(workspace)
+    assert envelope.workspace == "~/workspace"
     assert envelope.workspace_hash is not None
     assert envelope.raw_payload_redacted["tool_input"] == {"command": "printf ok"}
 
@@ -199,3 +200,18 @@ def test_normalize_codex_raw_payload_redacts_secret_like_strings(tmp_path: Path)
         "command": "printf ok",
         "note": "NPM_TOKEN=*****",
     }
+
+
+def test_normalize_codex_camel_case_tool_payload(tmp_path: Path) -> None:
+    payload = {
+        "hookEventName": "PreToolUse",
+        "toolName": "Bash",
+        "toolInput": {"command": "cat ~/.npmrc"},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.event_name == "PreToolUse"
+    assert envelope.tool_name == "Bash"
+    assert envelope.command == "cat ~/.npmrc"
+    assert envelope.target_paths == ("~/.npmrc",)
