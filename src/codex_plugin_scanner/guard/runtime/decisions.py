@@ -132,14 +132,14 @@ def _approval_scopes_for_action(action: GuardDecisionAction) -> tuple[str, ...]:
 def _dashboard_detail_from_signals(signals: tuple[RiskSignalV2, ...], fallback: str) -> str:
     if not signals:
         return fallback
-    strongest = sorted(signals, key=lambda item: _confidence_rank(item.confidence), reverse=True)[0]
+    strongest = max(signals, key=lambda item: _confidence_rank(item.confidence))
     return strongest.plain_reason
 
 
 def _highest_confidence(signals: tuple[RiskSignalV2, ...]) -> RiskConfidenceLabel:
     if not signals:
         return "likely"
-    return sorted((signal.confidence for signal in signals), key=_confidence_rank, reverse=True)[0]
+    return max((signal.confidence for signal in signals), key=_confidence_rank)
 
 
 def _confidence_rank(confidence: RiskConfidenceLabel) -> int:
@@ -181,7 +181,12 @@ def _parse_confidence(value: object) -> RiskConfidenceLabel:
 def _parse_signals(value: object) -> tuple[RiskSignalV2, ...]:
     if not isinstance(value, list):
         raise ValueError("signals must be a list")
-    return tuple(RiskSignalV2.from_dict(item) for item in value if isinstance(item, Mapping))
+    signals: list[RiskSignalV2] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            raise ValueError(f"signal item must be an object, got {type(item).__name__}")
+        signals.append(RiskSignalV2.from_dict(item))
+    return tuple(signals)
 
 
 def _parse_string_tuple(value: object, key: str) -> tuple[str, ...]:
