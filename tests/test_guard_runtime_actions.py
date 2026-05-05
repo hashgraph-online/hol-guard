@@ -357,6 +357,22 @@ def test_normalize_codex_command_redacts_generic_absolute_path_strings(tmp_path:
     assert str(home_dir) not in str(envelope.to_dict())
 
 
+def test_normalize_codex_command_redacts_unc_path_strings(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": r"type \\server\share\alice\secret.txt"},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.command == "type .../secret.txt"
+    assert envelope.raw_payload_redacted["tool_input"] == {"command": "type .../secret.txt"}
+    assert "\\server" not in str(envelope.to_dict())
+    assert "share" not in str(envelope.to_dict())
+    assert "alice" not in str(envelope.to_dict())
+
+
 def test_normalize_codex_raw_payload_redacts_secret_like_strings(tmp_path: Path) -> None:
     payload = {
         "hook_event_name": "PreToolUse",

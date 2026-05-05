@@ -94,6 +94,9 @@ _GENERIC_POSIX_ABSOLUTE_PATH_PATTERN = re.compile(
 _GENERIC_WINDOWS_ABSOLUTE_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_./\\:-])(?P<path>[A-Za-z]:\\(?:[^\\\s'\"<>|]+\\)+[^\\\s'\"<>|]+)"
 )
+_GENERIC_WINDOWS_UNC_PATH_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_./\\:-])(?P<path>\\\\[^\\\s'\"<>|]+\\[^\\\s'\"<>|]+(?:\\[^\\\s'\"<>|]+)+)"
+)
 _PROMPT_EXCERPT_LIMIT = 240
 
 
@@ -510,7 +513,8 @@ def _redact_path_mentions(text: str, *, home_dir: Path | str | None) -> str:
     def replace_path(match: re.Match[str]) -> str:
         return _redacted_target_path(match.group("path"), home_dir=home_dir) or match.group("path")
 
-    redacted = _GENERIC_WINDOWS_ABSOLUTE_PATH_PATTERN.sub(replace_path, text)
+    redacted = _GENERIC_WINDOWS_UNC_PATH_PATTERN.sub(replace_path, text)
+    redacted = _GENERIC_WINDOWS_ABSOLUTE_PATH_PATTERN.sub(replace_path, redacted)
     redacted = _GENERIC_POSIX_ABSOLUTE_PATH_PATTERN.sub(replace_path, redacted)
     return _PROMPT_PATH_PATTERN.sub(replace_path, redacted)
 
