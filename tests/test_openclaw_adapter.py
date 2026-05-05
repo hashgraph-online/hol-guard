@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 from codex_plugin_scanner.guard.risk import artifact_risk_signals
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
@@ -26,6 +27,26 @@ def _ctx(tmp_path: Path) -> HarnessContext:
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def _seed_cloud_profile(context: HarnessContext, runtime: str = "openclaw") -> None:
+    GuardStore(context.guard_home).set_sync_payload(
+        "service_runtime_profile",
+        {
+            "runtime": runtime,
+            "label": "OpenClaw runtime",
+            "workspace": "workspace_ops",
+            "surface": "agent-sdk",
+            "client_name": "hol-guard",
+            "client_title": "OpenClaw runtime",
+            "client_version": "2.0.95",
+            "agent_id": "agent_456",
+            "principal_id": "principal_456",
+            "token": "guard_live_secret",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+        },
+        "2026-05-05T00:00:00.000Z",
+    )
 
 
 def test_openclaw_adapter_is_registered() -> None:
@@ -323,6 +344,42 @@ def test_install_exports_guard_managed_openclaw_overlay(tmp_path: Path) -> None:
     assert env["OPENCLAW_GUARD_OVERLAY_PATH"] == str(overlay_path)
     assert env["OPENCLAW_GUARD_PRETOOL_PATH"] == str(pretool_path)
     assert env["OPENCLAW_GUARD_CHANNEL_POSTURE"] == "enabled"
+
+
+def test_install_exports_cloud_identity_hints_without_secret_values(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    _seed_cloud_profile(context)
+
+    manifest = OpenClawHarnessAdapter().install(context)
+    identity = manifest["cloud_agent_identity"]
+    env = OpenClawHarnessAdapter().launch_environment(context)
+
+    assert identity == {
+        "runtime": "openclaw",
+        "label": "OpenClaw runtime",
+        "workspace": "workspace_ops",
+        "surface": "agent-sdk",
+        "client_name": "hol-guard",
+        "client_title": "OpenClaw runtime",
+        "client_version": "2.0.95",
+        "agent_id": "agent_456",
+        "principal_id": "principal_456",
+    }
+    assert "token" not in identity
+    assert "sync_url" not in identity
+    assert env["OPENCLAW_GUARD_CLOUD_WORKSPACE"] == "workspace_ops"
+    assert env["OPENCLAW_GUARD_CLOUD_AGENT_ID"] == "agent_456"
+
+
+def test_install_ignores_cloud_identity_hints_for_other_runtimes(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    _seed_cloud_profile(context, runtime="hermes")
+
+    manifest = OpenClawHarnessAdapter().install(context)
+    env = OpenClawHarnessAdapter().launch_environment(context)
+
+    assert "cloud_agent_identity" not in manifest
+    assert "OPENCLAW_GUARD_CLOUD_WORKSPACE" not in env
 
 
 def test_openclaw_skips_symlinked_skill_files(tmp_path: Path) -> None:

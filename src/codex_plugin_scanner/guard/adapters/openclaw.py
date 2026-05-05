@@ -15,6 +15,7 @@ from .base import (
     _json_payload,
     _run_command_probe,
 )
+from .cloud_identity import cloud_agent_identity_environment, cloud_agent_identity_hints
 from .openclaw_config import load_config
 from .openclaw_support import (
     config_artifacts,
@@ -77,6 +78,7 @@ class OpenClawHarnessAdapter(HarnessAdapter):
             pretool_path=pretool_path,
         )
         detection = self.detect(context)
+        cloud_identity = cloud_agent_identity_hints(context, runtime=self.harness)
         overlay_path.write_text(json.dumps(overlay_payload(detection), indent=2) + "\n", encoding="utf-8")
         pretool_path.write_text(json.dumps(pretool_payload(context=context), indent=2) + "\n", encoding="utf-8")
         manifest = {
@@ -102,6 +104,8 @@ class OpenClawHarnessAdapter(HarnessAdapter):
                 *[str(note) for note in shim_manifest.get("notes", [])],
             ],
         }
+        if cloud_identity is not None:
+            manifest["cloud_agent_identity"] = cloud_identity
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         return manifest
 
@@ -137,11 +141,13 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         pretool_path = manifest.get("pretool_hook_path")
         if not isinstance(overlay_path, str) or not isinstance(pretool_path, str):
             return {}
-        return {
+        environment = {
             "OPENCLAW_GUARD_OVERLAY_PATH": overlay_path,
             "OPENCLAW_GUARD_PRETOOL_PATH": pretool_path,
             "OPENCLAW_GUARD_CHANNEL_POSTURE": "enabled",
         }
+        environment.update(cloud_agent_identity_environment(manifest.get("cloud_agent_identity"), prefix="OPENCLAW"))
+        return environment
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         manifest = _json_payload(managed_root(context) / "manifest.json")
@@ -156,6 +162,7 @@ class OpenClawHarnessAdapter(HarnessAdapter):
                 and isinstance(pretool_path, str)
                 and Path(pretool_path).exists()
             ),
+            "cloud_agent_identity_configured": bool(manifest.get("cloud_agent_identity")),
         }
 
     def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:

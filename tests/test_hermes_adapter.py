@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.adapters.hermes import (
     _looks_like_secret,
 )
 from codex_plugin_scanner.guard.risk import artifact_risk_signals
+from codex_plugin_scanner.guard.store import GuardStore
 
 FIXTURES = Path(__file__).parent / "fixtures" / "hermes-plugin-evil"
 
@@ -28,6 +29,26 @@ def _ctx(tmp_path: Path) -> HarnessContext:
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def _seed_cloud_profile(context: HarnessContext, runtime: str = "hermes") -> None:
+    GuardStore(context.guard_home).set_sync_payload(
+        "service_runtime_profile",
+        {
+            "runtime": runtime,
+            "label": "Hermes Telegram agent",
+            "workspace": "workspace_ops",
+            "surface": "agent-sdk",
+            "client_name": "hol-guard",
+            "client_title": "Hermes Telegram agent",
+            "client_version": "2.0.95",
+            "agent_id": "agent_123",
+            "principal_id": "principal_123",
+            "sync_url": "https://hol.org/api/guard/receipts/sync",
+            "token": "guard_live_secret",
+        },
+        "2026-05-05T00:00:00.000Z",
+    )
 
 
 def test_install_generates_guard_managed_overlay_and_pretool_files(tmp_path: Path):
@@ -63,6 +84,42 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(tmp_path: Pat
     assert overlay_payload["remote-docs"]["args"][-3:] == ["--server", "yaml:remote-docs", "--stdio"]
     assert manifest["servers"]["yaml:remote-docs"]["env"] == {"GITHUB_TOKEN": "ghp_test_token"}
     assert manifest["servers"]["yaml:remote-docs"]["headers"] == {"Authorization": "Bearer test-token"}
+
+
+def test_install_includes_non_secret_cloud_identity_hints_when_configured(tmp_path: Path):
+    context = _ctx(tmp_path)
+    _seed_cloud_profile(context)
+
+    manifest = HermesHarnessAdapter().install(context)
+    identity = manifest["cloud_agent_identity"]
+    env = HermesHarnessAdapter().launch_environment(context)
+
+    assert identity == {
+        "runtime": "hermes",
+        "label": "Hermes Telegram agent",
+        "workspace": "workspace_ops",
+        "surface": "agent-sdk",
+        "client_name": "hol-guard",
+        "client_title": "Hermes Telegram agent",
+        "client_version": "2.0.95",
+        "agent_id": "agent_123",
+        "principal_id": "principal_123",
+    }
+    assert "token" not in identity
+    assert "sync_url" not in identity
+    assert env["HERMES_GUARD_CLOUD_WORKSPACE"] == "workspace_ops"
+    assert env["HERMES_GUARD_CLOUD_AGENT_ID"] == "agent_123"
+
+
+def test_install_omits_cloud_identity_hints_for_other_runtimes(tmp_path: Path):
+    context = _ctx(tmp_path)
+    _seed_cloud_profile(context, runtime="openclaw")
+
+    manifest = HermesHarnessAdapter().install(context)
+    env = HermesHarnessAdapter().launch_environment(context)
+
+    assert "cloud_agent_identity" not in manifest
+    assert "HERMES_GUARD_CLOUD_WORKSPACE" not in env
 
 
 def test_install_stringifies_typed_env_values_in_managed_manifest(tmp_path: Path):
