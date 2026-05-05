@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -69,6 +70,26 @@ class TestGuardApprovals:
     def test_guard_store_persists_and_resolves_approval_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         workspace_dir = tmp_path / "workspace"
+        action_envelope_json = {
+            "schema_version": 1,
+            "action_id": "action-123",
+            "harness": "codex",
+            "event_name": "PreToolUse",
+            "action_type": "shell_command",
+            "workspace": "~/workspace",
+            "workspace_hash": "workspace-hash",
+            "tool_name": "Bash",
+            "command": "cat ~/.npmrc",
+            "prompt_excerpt": None,
+            "target_paths": ["~/.npmrc"],
+            "network_hosts": [],
+            "mcp_server": None,
+            "mcp_tool": None,
+            "package_manager": None,
+            "package_name": None,
+            "script_name": None,
+            "raw_payload_redacted": {"tool_name": "Bash"},
+        }
         request = GuardApprovalRequest(
             request_id="req-123",
             harness="codex",
@@ -83,6 +104,7 @@ class TestGuardApprovals:
             workspace=str(workspace_dir),
             review_command="hol-guard approvals approve req-123",
             approval_url="http://127.0.0.1:4455/approvals/req-123",
+            action_envelope_json=action_envelope_json,
         )
 
         store.add_approval_request(request, "2026-04-11T00:00:00+00:00")
@@ -99,10 +121,110 @@ class TestGuardApprovals:
         assert pending[0]["status"] == "pending"
         assert pending[0]["approval_url"] == "http://127.0.0.1:4455/approvals/req-123"
         assert pending[0]["workspace"] == str(workspace_dir)
+        assert pending[0]["action_envelope_json"] == action_envelope_json
         assert resolved is not None
         assert resolved["status"] == "resolved"
         assert resolved["resolution_action"] == "allow"
         assert resolved["resolution_scope"] == "artifact"
+        assert resolved["action_envelope_json"] == action_envelope_json
+
+    def test_guard_store_loads_old_approval_rows_without_action_envelope(self, tmp_path):
+        guard_home = tmp_path / "guard-home"
+        guard_home.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(guard_home / "guard.db")
+        try:
+            connection.execute(
+                """
+                create table approval_requests (
+                  request_id text primary key,
+                  harness text not null,
+                  artifact_id text not null,
+                  artifact_name text not null,
+                  artifact_type text not null,
+                  artifact_hash text not null,
+                  publisher text,
+                  policy_action text not null,
+                  recommended_scope text not null,
+                  changed_fields_json text not null,
+                  source_scope text not null,
+                  config_path text not null,
+                  workspace text,
+                  launch_target text,
+                  transport text,
+                  risk_summary text,
+                  risk_signals_json text not null default '[]',
+                  artifact_label text,
+                  source_label text,
+                  trigger_summary text,
+                  why_now text,
+                  launch_summary text,
+                  risk_headline text,
+                  review_command text not null,
+                  approval_url text not null,
+                  status text not null,
+                  resolution_action text,
+                  resolution_scope text,
+                  reason text,
+                  created_at text not null,
+                  resolved_at text
+                )
+                """
+            )
+            connection.execute(
+                """
+                insert into approval_requests (
+                  request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher,
+                  policy_action, recommended_scope, changed_fields_json, source_scope, config_path, workspace,
+                  launch_target, transport, risk_summary, risk_signals_json, artifact_label, source_label,
+                  trigger_summary, why_now, launch_summary, risk_headline, review_command, approval_url, status,
+                  resolution_action, resolution_scope, reason, created_at, resolved_at
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "req-old",
+                    "codex",
+                    "codex:project:workspace_skill",
+                    "workspace_skill",
+                    "artifact",
+                    "hash-old",
+                    None,
+                    "require-reapproval",
+                    "artifact",
+                    json.dumps(["args"]),
+                    "project",
+                    str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                    None,
+                    None,
+                    None,
+                    None,
+                    "[]",
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    "hol-guard approvals approve req-old",
+                    "http://127.0.0.1/pending",
+                    "pending",
+                    None,
+                    None,
+                    None,
+                    "2026-04-11T00:00:00+00:00",
+                    None,
+                ),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        store = GuardStore(guard_home)
+        request = store.get_approval_request("req-old")
+
+        assert request is not None
+        assert request["request_id"] == "req-old"
+        assert request["action_envelope_json"] is None
 
     def test_guard_surface_daemon_client_recovers_missing_auth_token(self, tmp_path, monkeypatch):
         guard_home = tmp_path / "guard-home"
