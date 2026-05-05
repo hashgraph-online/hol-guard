@@ -12,6 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ from ..consumer import detect_harness, evaluate_detection
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..store import GuardStore
 from ..types import PromptRequest, RemediationAction
+from .actions import GuardActionEnvelope, redacted_workspace_label
 
 _APPROVAL_METADATA_KEYS = (
     "approval_center_url",
@@ -233,12 +235,18 @@ def guard_run(
         if not evaluation["blocked"]:
             evaluation = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
 
+    action_envelope = _guard_run_action_envelope(harness, context, passthrough_args)
+    if evaluation["blocked"]:
+        evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
+
     if not dry_run and interactive_resolver is not None and evaluation["blocked"]:
         evaluation = interactive_resolver(detection, evaluation)
     elif not dry_run and blocked_resolver is not None and evaluation["blocked"]:
         pending_evaluation = blocked_resolver(detection, evaluation)
         detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
         reevaluated = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
+        if reevaluated["blocked"]:
+            reevaluated = _evaluation_with_action_envelope(reevaluated, action_envelope)
         for key in _APPROVAL_METADATA_KEYS:
             if key in pending_evaluation:
                 reevaluated[key] = pending_evaluation[key]
@@ -272,6 +280,61 @@ def guard_run(
     evaluation["launched"] = True
     evaluation["return_code"] = result.returncode
     return evaluation
+
+
+def _guard_run_action_envelope(
+    harness: str,
+    context: HarnessContext,
+    passthrough_args: list[str],
+) -> GuardActionEnvelope:
+    workspace = context.workspace_dir
+    workspace_hash = None
+    if workspace is not None:
+        workspace_path = workspace.expanduser()
+        with suppress(OSError):
+            workspace_path = workspace_path.resolve()
+        workspace_hash = hashlib.sha256(str(workspace_path).encode("utf-8")).hexdigest()
+    return GuardActionEnvelope(
+        schema_version=1,
+        action_id="",
+        harness=harness,
+        event_name="HarnessStart",
+        action_type="harness_start",
+        workspace=redacted_workspace_label(workspace, home_dir=context.home_dir),
+        workspace_hash=workspace_hash,
+        tool_name=None,
+        command=None,
+        prompt_excerpt=None,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={"passthrough_arg_count": len(passthrough_args)},
+    )
+
+
+def _evaluation_with_action_envelope(
+    evaluation: dict[str, Any],
+    action_envelope: GuardActionEnvelope,
+) -> dict[str, Any]:
+    artifacts = evaluation.get("artifacts")
+    if not isinstance(artifacts, list):
+        return evaluation
+    action_payload = action_envelope.to_dict()
+    normalized_artifacts: list[object] = []
+    changed = False
+    for item in artifacts:
+        if isinstance(item, dict) and "action_envelope_json" not in item:
+            normalized_artifacts.append({**item, "action_envelope_json": action_payload})
+            changed = True
+        else:
+            normalized_artifacts.append(item)
+    if not changed:
+        return evaluation
+    return {**evaluation, "artifacts": normalized_artifacts}
 
 
 def _guard_run_config_paths(

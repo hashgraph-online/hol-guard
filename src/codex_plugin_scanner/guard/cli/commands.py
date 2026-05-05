@@ -80,6 +80,7 @@ from ..proxy import (
 )
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_summary
+from ..runtime.actions import GuardActionEnvelope, normalize_harness_payload
 from ..runtime.runner import (
     GuardSyncNotConfiguredError,
     extract_prompt_requests,
@@ -1206,6 +1207,12 @@ def run_guard_command(
                     runtime_workspace = current_workspace
         if args.harness == "copilot":
             runtime_workspace = _resolve_copilot_workspace_root(runtime_workspace)
+        action_envelope = _hook_action_envelope(
+            harness=args.harness,
+            payload=payload,
+            home_dir=context.home_dir,
+            workspace=runtime_workspace,
+        )
         copilot_hook_stage = _copilot_hook_stage(payload) if args.harness == "copilot" else None
         copilot_runtime_tool_call = (
             _copilot_runtime_tool_call(
@@ -1309,6 +1316,7 @@ def run_guard_command(
                         "launch_target": json.dumps(runtime_arguments, sort_keys=True)
                         if runtime_arguments is not None
                         else runtime_artifact.command,
+                        "action_envelope_json": _action_envelope_json(action_envelope),
                     }
                 ]
             }
@@ -1667,6 +1675,7 @@ def run_guard_command(
                                 "source_scope": runtime_artifact.source_scope,
                                 "config_path": runtime_artifact.config_path,
                                 "launch_target": _runtime_request_summary(runtime_artifact),
+                                "action_envelope_json": _action_envelope_json(action_envelope),
                             }
                         ]
                     }
@@ -3617,6 +3626,32 @@ def _load_hook_payload(event_file: str | None, *, input_text: str | None = None)
         return {}
     payload = json.loads(raw)
     return _normalize_hook_payload(payload) if isinstance(payload, dict) else {}
+
+
+_ACTION_ENVELOPE_HARNESSES = frozenset({"codex", "claude-code", "opencode", "copilot", "gemini"})
+
+
+def _hook_action_envelope(
+    *,
+    harness: str,
+    payload: dict[str, object],
+    home_dir: Path,
+    workspace: Path | None,
+) -> GuardActionEnvelope | None:
+    canonical_harness = _canonical_harness_name(harness)
+    if canonical_harness not in _ACTION_ENVELOPE_HARNESSES:
+        return None
+    return normalize_harness_payload(
+        canonical_harness,
+        _hook_event_name(payload) or "PreToolUse",
+        payload,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
+def _action_envelope_json(envelope: GuardActionEnvelope | None) -> dict[str, object] | None:
+    return envelope.to_dict() if envelope is not None else None
 
 
 def _normalize_hook_payload(payload: dict[str, object]) -> dict[str, object]:
