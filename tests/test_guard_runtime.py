@@ -28,7 +28,7 @@ from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
-from codex_plugin_scanner.guard.policy import decide_action
+from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_v2
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
@@ -2023,6 +2023,8 @@ clearer UX and an implementation plan with technical references.
 
         assert evaluation["blocked"] is True
         assert evaluation["artifacts"][0]["policy_action"] == "block"
+        assert evaluation["artifacts"][0]["decision_v2_json"]["action"] == "block"
+        assert evaluation["artifacts"][0]["decision_v2_json"]["harness_message"] == "HOL Guard blocked this action."
         assert receipts[0]["capabilities_summary"] == "mcp server • stdio • node"
 
     def test_guard_evaluate_detection_blocks_for_sandbox_required_override(self, tmp_path):
@@ -7132,6 +7134,30 @@ def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
     assert reason.endswith("...")
 
 
+def test_runtime_artifact_native_reason_prefers_decision_v2_harness_message() -> None:
+    artifact = GuardArtifact(
+        artifact_id="claude-code:project:tool-action:test",
+        name="destructive shell command",
+        harness="claude-code",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/tmp/settings.local.json",
+        metadata={},
+    )
+
+    reason = guard_commands_module._runtime_artifact_native_reason(
+        artifact,
+        {
+            "decision_v2_json": {
+                "harness_message": "HOL Guard stopped this exact shell command before it touched secrets.",
+            },
+            "risk_summary": "Generic fallback summary.",
+        },
+    )
+
+    assert reason == "HOL Guard stopped this exact shell command before it touched secrets."
+
+
 def test_native_approval_center_context_uses_harness_specific_retry_copy() -> None:
     payload = {
         "approval_center_url": "http://127.0.0.1:4455",
@@ -9489,6 +9515,27 @@ def test_guard_invalid_default_action_falls_back_to_reapproval(tmp_path):
     action = decide_action(configured_action=None, default_action=None, config=config, changed=False)
 
     assert action == "require-reapproval"
+
+
+def test_decide_action_with_v2_preserves_legacy_action_and_adds_decision(tmp_path):
+    config = GuardConfig(
+        guard_home=tmp_path / "guard-home",
+        workspace=None,
+        default_action="block",
+    )
+
+    action, decision = decide_action_with_v2(
+        configured_action=None,
+        default_action=None,
+        config=config,
+        changed=False,
+        reason="invalid-default-fallback",
+    )
+
+    assert action == "block"
+    assert decision.action == "block"
+    assert decision.reason == "invalid-default-fallback"
+    assert decision.harness_message == "HOL Guard blocked this action."
 
 
 def test_guard_hook_invalid_policy_action_falls_back_to_reapproval(tmp_path, capsys, monkeypatch):
