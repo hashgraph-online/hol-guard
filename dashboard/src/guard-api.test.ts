@@ -1,6 +1,16 @@
-import { buildDemoRuntimeSnapshot, normalizeApprovalRequest, parseActionEnvelope } from "./guard-api";
-import { resolveEnvelopeDisplayText } from "./approval-center-utils";
-import type { GuardActionEnvelope, GuardApprovalRequest } from "./guard-types";
+import {
+  buildDemoRuntimeSnapshot,
+  normalizeApprovalRequest,
+  parseActionEnvelope,
+  parseDecisionV2
+} from "./guard-api";
+import {
+  resolveDecisionV2Detail,
+  resolveDecisionV2Title,
+  resolveEnvelopeDisplayText,
+  resolveStoppedCommandText
+} from "./approval-center-utils";
+import type { GuardActionEnvelope, GuardApprovalRequest, GuardDecisionV2 } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -145,4 +155,132 @@ const normalizedMalformedRequest = normalizeApprovalRequest({
 assert(
   normalizedMalformedRequest.action_envelope_json === null,
   "T071: detail-route approval payloads normalize malformed envelopes before rendering"
+);
+
+const BASE_DECISION_V2: GuardDecisionV2 = {
+  action: "block",
+  reason: "Credential file access detected",
+  user_title: "Wants to read a credential file",
+  user_body: "The agent is attempting to read a file that may contain secrets.",
+  harness_message: "BLOCKED: credential file read",
+  dashboard_primary_detail: "cat ~/.aws/credentials",
+  approval_scopes: ["artifact", "workspace"],
+  retry_instruction: null,
+  signals: [
+    {
+      signal_id: "secret:filesystem:env",
+      category: "secret",
+      severity: "high",
+      confidence: "strong",
+      detector: "guard-risk-v2",
+      title: "Secret file read",
+      plain_reason: "The action can read a credential file.",
+      technical_detail: null,
+      evidence_ref: "metadata.path_class",
+      redaction_level: "summary",
+      false_positive_hint: null,
+      advisory_id: null
+    }
+  ],
+  confidence: "strong"
+};
+
+assert(parseDecisionV2(undefined) === null, "T080: missing decision_v2_json falls back to null");
+assert(parseDecisionV2(null) === null, "T080: null decision_v2_json falls back to null");
+assert(parseDecisionV2({}) === null, "T080: empty object falls back to null");
+assert(parseDecisionV2("block") === null, "T080: string decision_v2_json falls back to null");
+assert(
+  parseDecisionV2({ ...BASE_DECISION_V2, action: "unknown_action" }) === null,
+  "T080: invalid action value falls back to null"
+);
+assert(
+  parseDecisionV2({ ...BASE_DECISION_V2, confidence: "unsure" }) === null,
+  "T080: invalid confidence value falls back to null"
+);
+assert(
+  parseDecisionV2({ ...BASE_DECISION_V2, approval_scopes: [42] }) === null,
+  "T080: non-string approval_scopes element falls back to null"
+);
+assert(
+  parseDecisionV2({ ...BASE_DECISION_V2, signals: [{ ...BASE_DECISION_V2.signals[0], signal_id: 1 }] }) === null,
+  "T080: invalid signal_id type falls back to null"
+);
+assert(
+  parseDecisionV2({ ...BASE_DECISION_V2, signals: [{ ...BASE_DECISION_V2.signals[0], severity: "extreme" }] }) === null,
+  "T080: invalid signal severity falls back to null"
+);
+assert(
+  parseDecisionV2({ ...BASE_DECISION_V2, signals: [{ ...BASE_DECISION_V2.signals[0], redaction_level: "full" }] }) ===
+    null,
+  "T080: invalid signal redaction level falls back to null"
+);
+
+const parsedDecisionV2 = parseDecisionV2(BASE_DECISION_V2);
+assert(parsedDecisionV2 !== null, "T080: valid decision_v2 object parses correctly");
+assert(parsedDecisionV2?.action === "block", "T080: parsed action matches source");
+assert(parsedDecisionV2?.user_title === "Wants to read a credential file", "T080: parsed user_title matches source");
+assert(parsedDecisionV2?.dashboard_primary_detail === "cat ~/.aws/credentials", "T080: parsed dashboard_primary_detail matches source");
+assert(parsedDecisionV2?.confidence === "strong", "T080: parsed confidence matches source");
+assert(parsedDecisionV2?.retry_instruction === null, "T080: null retry_instruction preserved");
+assert(parsedDecisionV2?.signals.length === 1, "T080: signals array length preserved");
+assert(parsedDecisionV2?.signals[0].signal_id === "secret:filesystem:env", "T080: signal_id preserved");
+
+const normalizedWithV2 = normalizeApprovalRequest({ ...BASE_REQUEST, decision_v2_json: BASE_DECISION_V2 });
+assert(normalizedWithV2.decision_v2_json !== null, "T081: valid decision_v2_json normalizes to non-null");
+assert(
+  normalizedWithV2.decision_v2_json?.user_title === "Wants to read a credential file",
+  "T081: normalized user_title preserved"
+);
+
+const normalizedMalformedV2 = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  decision_v2_json: { action: "not-a-real-action" }
+});
+assert(normalizedMalformedV2.decision_v2_json === null, "T081: malformed decision_v2_json normalizes to null");
+
+const normalizedMissingV2 = normalizeApprovalRequest({ ...BASE_REQUEST });
+assert(normalizedMissingV2.decision_v2_json === null, "T081: absent decision_v2_json normalizes to null");
+
+const requestWithV2: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  decision_v2_json: BASE_DECISION_V2
+};
+
+assert(
+  resolveDecisionV2Title(requestWithV2) === "Wants to read a credential file",
+  "T082: resolveDecisionV2Title returns user_title when decision_v2_json present"
+);
+assert(
+  resolveDecisionV2Detail(requestWithV2) === "cat ~/.aws/credentials",
+  "T082: resolveDecisionV2Detail returns dashboard_primary_detail when decision_v2_json present"
+);
+assert(
+  resolveStoppedCommandText(requestWithV2) === "git status",
+  "T082: stopped command remains launch target when decision detail is present"
+);
+assert(
+  resolveDecisionV2Title(BASE_REQUEST) === null,
+  "T082: resolveDecisionV2Title returns null when decision_v2_json absent"
+);
+assert(
+  resolveDecisionV2Detail(BASE_REQUEST) === null,
+  "T082: resolveDecisionV2Detail returns null when decision_v2_json absent"
+);
+
+const requestWithWhitespaceV2Title: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  decision_v2_json: { ...BASE_DECISION_V2, user_title: "   " }
+};
+assert(
+  resolveDecisionV2Title(requestWithWhitespaceV2Title) === null,
+  "T082: resolveDecisionV2Title returns null for whitespace-only user_title"
+);
+
+const requestWithEmptyV2Detail: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  decision_v2_json: { ...BASE_DECISION_V2, dashboard_primary_detail: "" }
+};
+assert(
+  resolveDecisionV2Detail(requestWithEmptyV2Detail) === null,
+  "T082: resolveDecisionV2Detail returns null for empty dashboard_primary_detail"
 );
