@@ -2267,6 +2267,44 @@ clearer UX and an implementation plan with technical references.
         assert rc == 1
         assert output["policy_action"] == "require-reapproval"
 
+    def test_guard_hook_uses_decision_v2_harness_message_for_native_block(self, tmp_path, capsys, monkeypatch):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        message = "HOL Guard blocked this launch because the action matched a sensitive local secret path."
+        event = {
+            "event": "PreToolUse",
+            "artifact_id": "claude-code:project:workspace-tools",
+            "artifact_name": "workspace-tools",
+            "policy_action": "block",
+            "decision_v2_json": {
+                "harness_message": message,
+            },
+            "permission_decision_reason": "Generic fallback reason.",
+            "changed_capabilities": ["tool_name"],
+            "provenance_summary": "project artifact defined at .mcp.json",
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "claude-code",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert output["hookSpecificOutput"]["permissionDecisionReason"] == message
+
     def test_guard_hook_fallback_artifact_id_uses_scope(self, tmp_path, capsys, monkeypatch):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

@@ -209,6 +209,36 @@ function capitalizeHarness(harness: string): string {
   return `${harness.charAt(0).toUpperCase()}${harness.slice(1)}`;
 }
 
+export function resolveDecisionV2Title(item: GuardApprovalRequest): string | null {
+  const title = item.decision_v2_json?.user_title;
+  return title !== undefined && title.trim().length > 0 ? title : null;
+}
+
+export function resolveDecisionV2Detail(item: GuardApprovalRequest): string | null {
+  const detail = item.decision_v2_json?.dashboard_primary_detail;
+  return detail !== undefined && detail.trim().length > 0 ? detail : null;
+}
+
+export function resolveStoppedCommandText(item: GuardApprovalRequest): string {
+  if (item.action_envelope_json) {
+    const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
+    if (envelopeText !== null) {
+      return envelopeText;
+    }
+  }
+  if (item.launch_target?.trim()) {
+    return item.launch_target;
+  }
+  if (item.launch_summary?.trim()) {
+    const commandMatch = item.launch_summary.match(/`([^`]+)`/);
+    if (commandMatch?.[1]) {
+      return commandMatch[1];
+    }
+    return item.launch_summary;
+  }
+  return item.artifact_name.trim() || item.artifact_id;
+}
+
 export function harnessDisplayName(harness: string): string {
   switch (harness) {
     case "claude-code":

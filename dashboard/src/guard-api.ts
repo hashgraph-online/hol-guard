@@ -1,15 +1,27 @@
-import { GUARD_ACTION_TYPES } from "./guard-types";
+import {
+  GUARD_ACTION_TYPES,
+  GUARD_DECISION_V2_ACTIONS,
+  GUARD_DECISION_V2_CONFIDENCES,
+  GUARD_RISK_SIGNAL_V2_CATEGORIES,
+  GUARD_RISK_SIGNAL_V2_REDACTION_LEVELS,
+  GUARD_RISK_SIGNAL_V2_SEVERITIES
+} from "./guard-types";
 import type {
   GuardActionEnvelope,
   GuardActionType,
   GuardApprovalRequest,
   GuardArtifactDiff,
+  GuardDecisionV2,
   GuardInventoryItem,
   GuardPolicyDecision,
   GuardReceipt,
   GuardRuntimeSnapshot,
   GuardSettingsPayload,
-  GuardSettings
+  GuardSettings,
+  RiskSignalV2,
+  RiskSignalV2Category,
+  RiskSignalV2RedactionLevel,
+  RiskSignalV2Severity
 } from "./guard-types";
 import {
   getDemoDiff,
@@ -23,8 +35,9 @@ import {
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
 
-type RawGuardApprovalRequest = Omit<GuardApprovalRequest, "action_envelope_json"> & {
+type RawGuardApprovalRequest = Omit<GuardApprovalRequest, "action_envelope_json" | "decision_v2_json"> & {
   action_envelope_json?: unknown;
+  decision_v2_json?: unknown;
 };
 
 type ApprovalRequestListPayload = {
@@ -158,6 +171,10 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item): item is string => typeof item === "string");
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   if (!isRecord(raw)) {
     return null;
@@ -231,8 +248,99 @@ export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
   };
 }
 
+function isDecisionV2Action(value: unknown): value is GuardDecisionV2["action"] {
+  return typeof value === "string" && GUARD_DECISION_V2_ACTIONS.some((a) => a === value);
+}
+
+function isDecisionV2Confidence(value: unknown): value is GuardDecisionV2["confidence"] {
+  return typeof value === "string" && GUARD_DECISION_V2_CONFIDENCES.some((c) => c === value);
+}
+
+function isRiskSignalV2Category(value: unknown): value is RiskSignalV2Category {
+  return typeof value === "string" && GUARD_RISK_SIGNAL_V2_CATEGORIES.some((category) => category === value);
+}
+
+function isRiskSignalV2Severity(value: unknown): value is RiskSignalV2Severity {
+  return typeof value === "string" && GUARD_RISK_SIGNAL_V2_SEVERITIES.some((s) => s === value);
+}
+
+function isRiskSignalV2RedactionLevel(value: unknown): value is RiskSignalV2RedactionLevel {
+  return typeof value === "string" && GUARD_RISK_SIGNAL_V2_REDACTION_LEVELS.some((level) => level === value);
+}
+
+function isRiskSignalV2Array(value: unknown): value is RiskSignalV2[] {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  return value.every((item) => {
+    if (!isRecord(item)) {
+      return false;
+    }
+    return (
+      isNonEmptyString(item["signal_id"]) &&
+      isRiskSignalV2Category(item["category"]) &&
+      isRiskSignalV2Severity(item["severity"]) &&
+      isDecisionV2Confidence(item["confidence"]) &&
+      isNonEmptyString(item["detector"]) &&
+      isNonEmptyString(item["title"]) &&
+      isNonEmptyString(item["plain_reason"]) &&
+      isStringOrNull(item["technical_detail"]) &&
+      isStringOrNull(item["evidence_ref"]) &&
+      isRiskSignalV2RedactionLevel(item["redaction_level"]) &&
+      isStringOrNull(item["false_positive_hint"]) &&
+      isStringOrNull(item["advisory_id"])
+    );
+  });
+}
+
+export function parseDecisionV2(raw: unknown): GuardDecisionV2 | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const action = raw["action"];
+  const reason = raw["reason"];
+  const userTitle = raw["user_title"];
+  const userBody = raw["user_body"];
+  const harnessMessage = raw["harness_message"];
+  const dashboardPrimaryDetail = raw["dashboard_primary_detail"];
+  const approvalScopes = raw["approval_scopes"];
+  const retryInstruction = raw["retry_instruction"];
+  const signals = raw["signals"];
+  const confidence = raw["confidence"];
+  if (
+    !isDecisionV2Action(action) ||
+    !isNonEmptyString(reason) ||
+    !isNonEmptyString(userTitle) ||
+    !isNonEmptyString(userBody) ||
+    !isNonEmptyString(harnessMessage) ||
+    !isNonEmptyString(dashboardPrimaryDetail) ||
+    !isStringArray(approvalScopes) ||
+    !isStringOrNull(retryInstruction) ||
+    !isRiskSignalV2Array(signals) ||
+    !isDecisionV2Confidence(confidence)
+  ) {
+    return null;
+  }
+  return {
+    action,
+    reason,
+    user_title: userTitle,
+    user_body: userBody,
+    harness_message: harnessMessage,
+    dashboard_primary_detail: dashboardPrimaryDetail,
+    approval_scopes: approvalScopes,
+    retry_instruction: retryInstruction,
+    signals,
+    confidence
+  };
+}
+
 export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardApprovalRequest {
-  return { ...item, action_envelope_json: parseActionEnvelope(item.action_envelope_json) };
+  return {
+    ...item,
+    action_envelope_json: parseActionEnvelope(item.action_envelope_json),
+    decision_v2_json: parseDecisionV2(item.decision_v2_json)
+  };
 }
 
 function normalizeApprovalRequests(items: RawGuardApprovalRequest[] | null | undefined): GuardApprovalRequest[] {

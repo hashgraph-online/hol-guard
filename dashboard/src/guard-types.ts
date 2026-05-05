@@ -15,6 +15,62 @@ export const GUARD_ACTION_TYPES = [
 
 export type GuardActionType = (typeof GUARD_ACTION_TYPES)[number];
 
+export const GUARD_DECISION_V2_ACTIONS = ["allow", "warn", "ask", "block"] as const;
+export const GUARD_DECISION_V2_CONFIDENCES = ["weak", "likely", "strong"] as const;
+export const GUARD_RISK_SIGNAL_V2_CATEGORIES = [
+  "secret",
+  "network",
+  "prompt",
+  "mcp",
+  "skill",
+  "supply_chain",
+  "encoded",
+  "persistence",
+  "bypass",
+  "false_positive",
+  "filesystem",
+  "execution",
+  "publisher",
+  "policy",
+  "provenance"
+] as const;
+export const GUARD_RISK_SIGNAL_V2_SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
+export const GUARD_RISK_SIGNAL_V2_REDACTION_LEVELS = ["none", "summary", "redacted"] as const;
+
+export type GuardDecisionV2Action = (typeof GUARD_DECISION_V2_ACTIONS)[number];
+export type GuardDecisionV2Confidence = (typeof GUARD_DECISION_V2_CONFIDENCES)[number];
+export type RiskSignalV2Category = (typeof GUARD_RISK_SIGNAL_V2_CATEGORIES)[number];
+export type RiskSignalV2Severity = (typeof GUARD_RISK_SIGNAL_V2_SEVERITIES)[number];
+export type RiskSignalV2RedactionLevel = (typeof GUARD_RISK_SIGNAL_V2_REDACTION_LEVELS)[number];
+
+export type RiskSignalV2 = {
+  signal_id: string;
+  category: RiskSignalV2Category;
+  severity: RiskSignalV2Severity;
+  confidence: GuardDecisionV2Confidence;
+  detector: string;
+  title: string;
+  plain_reason: string;
+  technical_detail: string | null;
+  evidence_ref: string | null;
+  redaction_level: RiskSignalV2RedactionLevel;
+  false_positive_hint: string | null;
+  advisory_id: string | null;
+};
+
+export type GuardDecisionV2 = {
+  action: GuardDecisionV2Action;
+  reason: string;
+  user_title: string;
+  user_body: string;
+  harness_message: string;
+  dashboard_primary_detail: string;
+  approval_scopes: string[];
+  retry_instruction: string | null;
+  signals: RiskSignalV2[];
+  confidence: GuardDecisionV2Confidence;
+};
+
 export type GuardActionEnvelope = {
   schema_version: number;
   action_id: string;
@@ -74,6 +130,7 @@ export type GuardApprovalRequest = {
   created_at: string;
   resolved_at: string | null;
   action_envelope_json?: GuardActionEnvelope | null;
+  decision_v2_json?: GuardDecisionV2 | null;
 };
 
 export type GuardRuntimeState = {
