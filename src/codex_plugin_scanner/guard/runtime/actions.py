@@ -73,9 +73,12 @@ _SENSITIVE_RAW_KEYS = frozenset(
 )
 _SENSITIVE_RAW_KEY_ALIASES = frozenset(key.replace("_", "") for key in _SENSITIVE_RAW_KEYS)
 _HOOK_EVENT_NAME_MAP = {
+    "prompt": "UserPromptSubmit",
     "userpromptsubmit": "UserPromptSubmit",
     "userpromptsubmitted": "UserPromptSubmit",
+    "pretool": "PreToolUse",
     "pretooluse": "PreToolUse",
+    "posttool": "PostToolUse",
     "posttooluse": "PostToolUse",
     "permissionrequest": "PermissionRequest",
 }
@@ -229,11 +232,122 @@ def normalize_codex_hook_payload(
 ) -> GuardActionEnvelope:
     """Normalize a Codex hook payload into a typed action envelope."""
 
-    normalized_payload = dict(payload)
-    event_name = _hook_event_name(normalized_payload)
-    explicit_tool_name = _string_value(normalized_payload.get("tool_name")) or _string_value(
-        normalized_payload.get("toolName")
+    return _normalize_action_payload(
+        payload,
+        harness="codex",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
     )
+
+
+def normalize_claude_hook_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a Claude Code hook payload into a typed action envelope."""
+
+    return _normalize_action_payload(
+        payload,
+        harness="claude-code",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
+def normalize_opencode_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize an OpenCode runtime payload into a typed action envelope."""
+
+    return _normalize_action_payload(
+        payload,
+        harness="opencode",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
+def normalize_copilot_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a Copilot runtime payload into a typed action envelope."""
+
+    return _normalize_action_payload(
+        payload,
+        harness="copilot",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
+def normalize_gemini_payload(
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize a Gemini runtime payload into a typed action envelope."""
+
+    return _normalize_action_payload(
+        payload,
+        harness="gemini",
+        default_event_name=None,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+
+
+def normalize_harness_payload(
+    harness: str,
+    event_name: str,
+    payload: Mapping[str, object],
+    *,
+    workspace: Path | str | None = None,
+    home_dir: Path | str | None = None,
+) -> GuardActionEnvelope:
+    """Normalize any supported Guard harness payload into a typed action envelope."""
+
+    normalized_harness = harness.strip().lower()
+    normalizers = {
+        "codex": normalize_codex_hook_payload,
+        "claude": normalize_claude_hook_payload,
+        "claude-code": normalize_claude_hook_payload,
+        "opencode": normalize_opencode_payload,
+        "copilot": normalize_copilot_payload,
+        "gemini": normalize_gemini_payload,
+    }
+    normalizer = normalizers.get(normalized_harness)
+    if normalizer is None:
+        raise ValueError(f"Unsupported Guard harness for action normalization: {harness}")
+    normalized_payload = _payload_with_default_event(payload, event_name)
+    return normalizer(normalized_payload, workspace=workspace, home_dir=home_dir)
+
+
+def _normalize_action_payload(
+    payload: Mapping[str, object],
+    *,
+    harness: str,
+    default_event_name: str | None,
+    workspace: Path | str | None,
+    home_dir: Path | str | None,
+) -> GuardActionEnvelope:
+    normalized_payload = dict(payload)
+    if default_event_name is not None:
+        normalized_payload = _payload_with_default_event(normalized_payload, default_event_name)
+    event_name = _hook_event_name(normalized_payload)
+    explicit_tool_name = _tool_name_from_payload(normalized_payload)
     tool_call_name, tool_call_input = _tool_call_from_payload(
         normalized_payload.get("toolCalls"),
         expected_tool_name=explicit_tool_name,
@@ -244,10 +358,10 @@ def normalize_codex_hook_payload(
         tool_input = tool_call_input
     raw_command = _command_from_payload(tool_input)
     command = _command_detail(raw_command, home_dir=home_dir)
-    prompt_text = _prompt_text(normalized_payload.get("prompt"))
+    prompt_text = _prompt_text(_prompt_value(normalized_payload))
     prompt_excerpt = _prompt_excerpt(prompt_text)
-    mcp_server, mcp_tool = _mcp_parts(tool_name)
-    action_type = _codex_action_type(
+    mcp_server, mcp_tool = _mcp_details(normalized_payload, tool_name)
+    action_type = _action_type(
         event_name=event_name,
         tool_name=tool_name,
         command=raw_command,
@@ -266,7 +380,7 @@ def normalize_codex_hook_payload(
     return GuardActionEnvelope(
         schema_version=_SCHEMA_VERSION,
         action_id="",
-        harness="codex",
+        harness=harness,
         event_name=event_name,
         action_type=action_type,
         workspace=workspace_label,
@@ -329,6 +443,26 @@ def _mapping_value(value: object) -> Mapping[str, object]:
     return {}
 
 
+def _payload_with_default_event(payload: Mapping[str, object], event_name: str) -> dict[str, object]:
+    normalized_payload = dict(payload)
+    if not event_name.strip():
+        return normalized_payload
+    for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
+        value = normalized_payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return normalized_payload
+    normalized_payload["hook_event_name"] = event_name
+    return normalized_payload
+
+
+def _tool_name_from_payload(payload: Mapping[str, object]) -> str | None:
+    for key in ("tool_name", "toolName", "name", "tool"):
+        value = _string_value(payload.get(key))
+        if value is not None:
+            return value
+    return None
+
+
 def _tool_input_from_payload(payload: Mapping[str, object]) -> Mapping[str, object]:
     for key in ("tool_input", "toolInput", "toolArgs", "arguments"):
         parsed = _mapping_from_value(payload.get(key))
@@ -375,12 +509,20 @@ def _mapping_from_value(value: object) -> Mapping[str, object] | None:
 
 
 def _hook_event_name(payload: Mapping[str, object]) -> str:
-    for key in ("event", "hook_event_name", "hookEventName", "hook_name"):
+    for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             stripped = value.strip()
             return _HOOK_EVENT_NAME_MAP.get(stripped.lower(), stripped)
     return "PreToolUse"
+
+
+def _prompt_value(payload: Mapping[str, object]) -> object:
+    for key in ("prompt", "userPrompt", "user_prompt", "message", "text", "input"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
 
 
 def _command_from_payload(tool_input: Mapping[str, object]) -> str | None:
@@ -413,16 +555,70 @@ def _prompt_excerpt(prompt_text: str | None) -> str | None:
     return prompt_text[:_PROMPT_EXCERPT_LIMIT]
 
 
-def _mcp_parts(tool_name: str | None) -> tuple[str | None, str | None]:
-    if tool_name is None or not tool_name.startswith("mcp__"):
-        return None, None
-    parts = tool_name.split("__", 2)
-    if len(parts) != 3 or not parts[1] or not parts[2]:
-        return None, None
-    return parts[1], parts[2]
+def _mcp_details(payload: Mapping[str, object], tool_name: str | None) -> tuple[str | None, str | None]:
+    explicit_server = _string_from_keys(payload, ("mcp_server", "mcpServer", "server", "serverName"))
+    explicit_tool = _string_from_keys(payload, ("mcp_tool", "mcpTool"))
+    tool_name_value = _string_from_keys(payload, ("tool_name", "toolName"))
+    parts_server, parts_tool = _mcp_parts(tool_name, known_servers=_known_mcp_servers(payload))
+    server = explicit_server or parts_server
+    tool = explicit_tool or parts_tool
+    if tool is None and server is not None and tool_name_value is not None:
+        tool = tool_name_value
+    return server, tool
 
 
-def _codex_action_type(
+def _string_from_keys(payload: Mapping[str, object], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = _string_value(payload.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _known_mcp_servers(payload: Mapping[str, object]) -> tuple[str, ...]:
+    servers: set[str] = set()
+    for key in ("mcp_servers", "mcpServers", "servers"):
+        value = payload.get(key)
+        if isinstance(value, Mapping):
+            servers.update(str(server_name).strip() for server_name in value if isinstance(server_name, str))
+        elif isinstance(value, list):
+            servers.update(item.strip() for item in value if isinstance(item, str) and item.strip())
+    return tuple(
+        sorted(
+            (server for server in servers if server), key=lambda server: len(_mcp_server_token(server)), reverse=True
+        )
+    )
+
+
+def _mcp_parts(tool_name: str | None, *, known_servers: tuple[str, ...] = ()) -> tuple[str | None, str | None]:
+    if tool_name is None:
+        return None, None
+    if "/" in tool_name:
+        server, tool = tool_name.split("/", 1)
+        return (server, tool) if server and tool else (None, None)
+    if tool_name.startswith("mcp__"):
+        parts = tool_name.split("__", 2)
+        if len(parts) == 3 and parts[1] and parts[2]:
+            return parts[1], parts[2]
+        return None, None
+    if tool_name.startswith("mcp_"):
+        suffix = tool_name[len("mcp_") :]
+        for server in known_servers:
+            server_token = _mcp_server_token(server)
+            prefix = f"{server_token}_"
+            if suffix.startswith(prefix):
+                tool = suffix[len(prefix) :]
+                return (server, tool) if tool else (None, None)
+        return None, None
+    return None, None
+
+
+def _mcp_server_token(value: str) -> str:
+    token = re.sub(r"[^a-z0-9]+", "_", value.strip().lower())
+    return token.strip("_")
+
+
+def _action_type(
     *,
     event_name: str,
     tool_name: str | None,
@@ -573,7 +769,12 @@ def _normalized_command(command: str | None) -> str | None:
 __all__ = [
     "GuardActionEnvelope",
     "GuardActionType",
+    "normalize_claude_hook_payload",
     "normalize_codex_hook_payload",
+    "normalize_copilot_payload",
+    "normalize_gemini_payload",
+    "normalize_harness_payload",
+    "normalize_opencode_payload",
     "redacted_workspace_label",
     "stable_action_hash",
 ]
