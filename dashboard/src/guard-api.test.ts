@@ -1,6 +1,6 @@
-import { buildDemoRuntimeSnapshot, parseActionEnvelope } from "./guard-api";
+import { buildDemoRuntimeSnapshot, normalizeApprovalRequest, parseActionEnvelope } from "./guard-api";
 import { resolveEnvelopeDisplayText } from "./approval-center-utils";
-import type { GuardActionEnvelope } from "./guard-types";
+import type { GuardActionEnvelope, GuardApprovalRequest } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -56,6 +56,10 @@ assert(
   parseActionEnvelope({ ...BASE_ENVELOPE, target_paths: ["ok", 42] }) === null,
   "T070: non-string element in target_paths falls back to null"
 );
+assert(
+  parseActionEnvelope({ ...BASE_ENVELOPE, target_paths: undefined }) === null,
+  "T070: missing target_paths falls back to null"
+);
 
 const parsedShell = parseActionEnvelope({ ...BASE_ENVELOPE, action_type: "shell_command", command: "git diff HEAD~1 -- src/" });
 assert(parsedShell !== null && parsedShell.action_type === "shell_command", "T070: valid shell_command envelope parses correctly");
@@ -100,4 +104,39 @@ const fallbackEnvelope: GuardActionEnvelope = { ...BASE_ENVELOPE, action_type: "
 assert(
   resolveEnvelopeDisplayText(fallbackEnvelope) === "harness_start",
   "T072: action_type used as last-resort fallback"
+);
+
+const BASE_REQUEST: GuardApprovalRequest = {
+  request_id: "request-shell",
+  harness: "claude-code",
+  artifact_id: "claude-code:project:shell",
+  artifact_name: "bash",
+  artifact_type: "command",
+  artifact_hash: "sha256-shell",
+  publisher: null,
+  policy_action: "require-reapproval",
+  recommended_scope: "artifact",
+  changed_fields: ["first_seen"],
+  source_scope: "project",
+  config_path: "./claude.json",
+  launch_target: "git status",
+  transport: "stdio",
+  review_command: "hol-guard approvals approve request-shell",
+  approval_url: "http://127.0.0.1:4781/approvals/request-shell",
+  status: "pending",
+  resolution_action: null,
+  resolution_scope: null,
+  reason: null,
+  created_at: "2026-04-11T12:00:00Z",
+  resolved_at: null,
+  action_envelope_json: null
+};
+
+const normalizedMalformedRequest = normalizeApprovalRequest({
+  ...BASE_REQUEST,
+  action_envelope_json: { ...BASE_ENVELOPE, target_paths: undefined }
+});
+assert(
+  normalizedMalformedRequest.action_envelope_json === null,
+  "T071: detail-route approval payloads normalize malformed envelopes before rendering"
 );

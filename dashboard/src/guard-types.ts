@@ -1,16 +1,19 @@
 export type DecisionScope = "artifact" | "workspace" | "publisher" | "harness" | "global";
 
-export type GuardActionType =
-  | "prompt"
-  | "shell_command"
-  | "file_read"
-  | "file_write"
-  | "mcp_tool"
-  | "package_script"
-  | "network_request"
-  | "config_change"
-  | "browser_action"
-  | "harness_start";
+export const GUARD_ACTION_TYPES = [
+  "prompt",
+  "shell_command",
+  "file_read",
+  "file_write",
+  "mcp_tool",
+  "package_script",
+  "network_request",
+  "config_change",
+  "browser_action",
+  "harness_start"
+] as const;
+
+export type GuardActionType = (typeof GUARD_ACTION_TYPES)[number];
 
 export type GuardActionEnvelope = {
   schema_version: number;
