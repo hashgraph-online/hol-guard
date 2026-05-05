@@ -35,7 +35,9 @@ import {
   buildTechnicalSummary,
   humanizeChangedFields,
   harnessDisplayName,
-  resolveEnvelopeDisplayText
+  resolveEnvelopeDisplayText,
+  resolveDecisionV2Title,
+  resolveDecisionV2Detail
 } from "./approval-center-utils";
 import type {
   GuardApprovalRequest,
@@ -849,6 +851,10 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
 }
 
 function actionDisplayTitle(item: GuardApprovalRequest): string {
+  const v2Title = resolveDecisionV2Title(item);
+  if (v2Title !== null) {
+    return v2Title;
+  }
   const artifactName = displayArtifactName(item);
   if (item.artifact_type === "tool_action_request") {
     return `${harnessDisplayName(item.harness)} wants to run a tool`;
@@ -866,6 +872,10 @@ function actionDisplayTitle(item: GuardApprovalRequest): string {
 }
 
 function actionLaunchText(item: GuardApprovalRequest): string {
+  const v2Detail = resolveDecisionV2Detail(item);
+  if (v2Detail !== null) {
+    return v2Detail;
+  }
   if (item.action_envelope_json) {
     const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
     if (envelopeText !== null) {
