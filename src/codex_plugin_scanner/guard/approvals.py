@@ -88,6 +88,7 @@ def queue_blocked_approvals(
             launch_summary=incident["launch_summary"],
             risk_headline=incident["risk_headline"],
             action_envelope_json=_item_action_envelope_json(item),
+            decision_v2_json=_item_decision_v2_json(item),
         )
         persisted_request_id = store.add_approval_request(request, timestamp)
         if persisted_request_id != request.request_id:
@@ -337,6 +338,13 @@ def _item_risk_signals(item: dict[str, object], artifact) -> tuple[str, ...]:
 
 def _item_action_envelope_json(item: dict[str, object]) -> dict[str, object] | None:
     value = item.get("action_envelope_json")
+    if not isinstance(value, Mapping):
+        return None
+    return {str(key): item_value for key, item_value in value.items() if isinstance(key, str)}
+
+
+def _item_decision_v2_json(item: dict[str, object]) -> dict[str, object] | None:
+    value = item.get("decision_v2_json")
     if not isinstance(value, Mapping):
         return None
     return {str(key): item_value for key, item_value in value.items() if isinstance(key, str)}

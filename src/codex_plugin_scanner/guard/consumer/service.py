@@ -15,9 +15,10 @@ from ..capabilities import compute_capability_delta, normalize_artifact_capabili
 from ..config import GuardConfig
 from ..incident import build_incident_context
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
-from ..policy import decide_action
+from ..policy import build_decision_v2, decide_action
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals_typed, artifact_risk_summary, summarize_signals
+from ..runtime.signals import RiskSignalV2
 from ..schemas import build_consumer_mode_contract
 from ..store import GuardStore
 from ..types import (
@@ -384,6 +385,7 @@ def evaluate_detection(
         current_capabilities = normalize_artifact_capabilities(artifact)
         capability_delta = compute_capability_delta(previous_capabilities, current_capabilities)
         structured_signals = artifact_risk_signals_typed(artifact)
+        risk_signals_v2 = tuple(RiskSignalV2.from_guard_signal(signal) for signal in structured_signals)
         history_context = build_history_context(store, detection.harness, artifact.artifact_id, artifact.publisher)
         provenance_bundle = build_provenance_bundle(store, artifact.publisher)
         verdict = score_verdict(structured_signals, capability_delta, provenance_bundle, history_context)
@@ -405,6 +407,7 @@ def evaluate_detection(
             )
         if _is_blocking_action(policy_action):
             blocked = True
+        decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=risk_signals_v2)
         risk_signals = tuple(signal.explanation for signal in structured_signals)
         risk_summary = artifact_risk_summary(artifact) if structured_signals else summarize_signals(())
         changed_capabilities = [delta.delta_type for delta in capability_delta] or list(diff["changed_fields"])
@@ -495,6 +498,7 @@ def evaluate_detection(
                 "changed": diff["changed"],
                 "changed_fields": diff["changed_fields"],
                 "policy_action": policy_action,
+                "decision_v2_json": decision_v2.to_dict(),
                 "artifact_hash": diff["current_hash"],
                 "risk_signals": list(risk_signals),
                 "risk_summary": risk_summary,
@@ -536,6 +540,7 @@ def evaluate_detection(
         )
         if _is_blocking_action(policy_action):
             blocked = True
+        decision_v2 = build_decision_v2(policy_action, reason=policy_action)
         artifact_name = previous.get("name")
         source_scope = previous.get("source_scope")
         config_path = previous.get("config_path")
@@ -605,6 +610,7 @@ def evaluate_detection(
                 "changed": True,
                 "changed_fields": ["removed"],
                 "policy_action": policy_action,
+                "decision_v2_json": decision_v2.to_dict(),
                 "artifact_hash": previous_hash,
                 "removed": True,
                 "risk_signals": ["artifact removed from local harness configuration"],
