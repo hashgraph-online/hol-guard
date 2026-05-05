@@ -34,7 +34,8 @@ import {
   shortConfigPath,
   buildTechnicalSummary,
   humanizeChangedFields,
-  harnessDisplayName
+  harnessDisplayName,
+  resolveEnvelopeDisplayText
 } from "./approval-center-utils";
 import type {
   GuardApprovalRequest,
@@ -865,6 +866,12 @@ function actionDisplayTitle(item: GuardApprovalRequest): string {
 }
 
 function actionLaunchText(item: GuardApprovalRequest): string {
+  if (item.action_envelope_json) {
+    const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
+    if (envelopeText !== null) {
+      return envelopeText;
+    }
+  }
   if (item.launch_target?.trim()) {
     return item.launch_target;
   }
