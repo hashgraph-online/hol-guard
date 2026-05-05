@@ -219,6 +219,26 @@ export function resolveDecisionV2Detail(item: GuardApprovalRequest): string | nu
   return detail !== undefined && detail.trim().length > 0 ? detail : null;
 }
 
+export function resolveStoppedCommandText(item: GuardApprovalRequest): string {
+  if (item.action_envelope_json) {
+    const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
+    if (envelopeText !== null) {
+      return envelopeText;
+    }
+  }
+  if (item.launch_target?.trim()) {
+    return item.launch_target;
+  }
+  if (item.launch_summary?.trim()) {
+    const commandMatch = item.launch_summary.match(/`([^`]+)`/);
+    if (commandMatch?.[1]) {
+      return commandMatch[1];
+    }
+    return item.launch_summary;
+  }
+  return item.artifact_name.trim() || item.artifact_id;
+}
+
 export function harnessDisplayName(harness: string): string {
   switch (harness) {
     case "claude-code":

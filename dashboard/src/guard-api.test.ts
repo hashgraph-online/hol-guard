@@ -7,7 +7,8 @@ import {
 import {
   resolveDecisionV2Detail,
   resolveDecisionV2Title,
-  resolveEnvelopeDisplayText
+  resolveEnvelopeDisplayText,
+  resolveStoppedCommandText
 } from "./approval-center-utils";
 import type { GuardActionEnvelope, GuardApprovalRequest, GuardDecisionV2 } from "./guard-types";
 
@@ -252,6 +253,10 @@ assert(
 assert(
   resolveDecisionV2Detail(requestWithV2) === "cat ~/.aws/credentials",
   "T082: resolveDecisionV2Detail returns dashboard_primary_detail when decision_v2_json present"
+);
+assert(
+  resolveStoppedCommandText(requestWithV2) === "git status",
+  "T082: stopped command remains launch target when decision detail is present"
 );
 assert(
   resolveDecisionV2Title(BASE_REQUEST) === null,
