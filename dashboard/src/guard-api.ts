@@ -1,4 +1,6 @@
 import type {
+  GuardActionEnvelope,
+  GuardActionType,
   GuardApprovalRequest,
   GuardArtifactDiff,
   GuardInventoryItem,
@@ -127,19 +129,130 @@ export function guardAwareHref(href: string): string {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isGuardActionType(value: unknown): value is GuardActionType {
+  if (typeof value !== "string") {
+    return false;
+  }
+  switch (value) {
+    case "prompt":
+    case "shell_command":
+    case "file_read":
+    case "file_write":
+    case "mcp_tool":
+    case "package_script":
+    case "network_request":
+    case "config_change":
+    case "browser_action":
+    case "harness_start":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isStringOrNull(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const schemaVersion = raw["schema_version"];
+  const actionId = raw["action_id"];
+  const harness = raw["harness"];
+  const eventName = raw["event_name"];
+  const actionType = raw["action_type"];
+  const workspace = raw["workspace"];
+  const workspaceHash = raw["workspace_hash"];
+  const toolName = raw["tool_name"];
+  const command = raw["command"];
+  const promptExcerpt = raw["prompt_excerpt"];
+  const targetPaths = raw["target_paths"];
+  const networkHosts = raw["network_hosts"];
+  const mcpServer = raw["mcp_server"];
+  const mcpTool = raw["mcp_tool"];
+  const packageManager = raw["package_manager"];
+  const packageName = raw["package_name"];
+  const scriptName = raw["script_name"];
+  const rawPayloadRedacted = raw["raw_payload_redacted"];
+  if (
+    typeof schemaVersion !== "number" ||
+    typeof actionId !== "string" ||
+    typeof harness !== "string" ||
+    typeof eventName !== "string" ||
+    !isGuardActionType(actionType)
+  ) {
+    return null;
+  }
+  if (
+    !isStringOrNull(workspace) ||
+    !isStringOrNull(workspaceHash) ||
+    !isStringOrNull(toolName) ||
+    !isStringOrNull(command) ||
+    !isStringOrNull(promptExcerpt) ||
+    !isStringOrNull(mcpServer) ||
+    !isStringOrNull(mcpTool) ||
+    !isStringOrNull(packageManager) ||
+    !isStringOrNull(packageName) ||
+    !isStringOrNull(scriptName)
+  ) {
+    return null;
+  }
+  if (!isStringArray(targetPaths) || !isStringArray(networkHosts)) {
+    return null;
+  }
+  if (!isRecord(rawPayloadRedacted)) {
+    return null;
+  }
+  return {
+    schema_version: schemaVersion,
+    action_id: actionId,
+    harness,
+    event_name: eventName,
+    action_type: actionType,
+    workspace,
+    workspace_hash: workspaceHash,
+    tool_name: toolName,
+    command,
+    prompt_excerpt: promptExcerpt,
+    target_paths: targetPaths,
+    network_hosts: networkHosts,
+    mcp_server: mcpServer,
+    mcp_tool: mcpTool,
+    package_manager: packageManager,
+    package_name: packageName,
+    script_name: scriptName,
+    raw_payload_redacted: rawPayloadRedacted
+  };
+}
+
+function normalizeApprovalRequest(item: GuardApprovalRequest): GuardApprovalRequest {
+  return { ...item, action_envelope_json: parseActionEnvelope(item.action_envelope_json) };
+}
+
 export async function fetchRequests(): Promise<GuardApprovalRequest[]> {
   if (isGuardDemoMode()) {
     return getDemoRequests();
   }
   const payload = await readJson<{ items: GuardApprovalRequest[] }>("/v1/requests");
-  return payload.items;
+  return payload.items.map(normalizeApprovalRequest);
 }
 
 export async function fetchRuntimeSnapshot(): Promise<GuardRuntimeSnapshot> {
   if (isGuardDemoMode()) {
     return buildDemoRuntimeSnapshot();
   }
-  return readJson<GuardRuntimeSnapshot>("/v1/runtime");
+  const snapshot = await readJson<GuardRuntimeSnapshot>("/v1/runtime");
+  return { ...snapshot, items: snapshot.items.map(normalizeApprovalRequest) };
 }
 
 export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {

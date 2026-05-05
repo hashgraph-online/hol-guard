@@ -1,8 +1,28 @@
 import type {
+  GuardActionEnvelope,
   GuardApprovalRequest,
   GuardArtifactDiff,
   GuardReceipt
 } from "./guard-types";
+
+export function resolveEnvelopeDisplayText(envelope: GuardActionEnvelope): string {
+  if (envelope.action_type === "shell_command" && envelope.command !== null) {
+    return envelope.command;
+  }
+  if (envelope.action_type === "prompt" && envelope.prompt_excerpt !== null) {
+    return envelope.prompt_excerpt;
+  }
+  if (envelope.action_type === "mcp_tool" && envelope.mcp_server !== null && envelope.mcp_tool !== null) {
+    return `${envelope.mcp_server} / ${envelope.mcp_tool}`;
+  }
+  if (envelope.tool_name !== null) {
+    return envelope.tool_name;
+  }
+  if (envelope.target_paths.length > 0) {
+    return envelope.target_paths[0];
+  }
+  return envelope.action_type;
+}
 
 export function humanizeList(values: string[]): string {
   if (values.length === 0) {
