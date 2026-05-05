@@ -137,41 +137,63 @@ export async function fetchRequests(): Promise<GuardApprovalRequest[]> {
 
 export async function fetchRuntimeSnapshot(): Promise<GuardRuntimeSnapshot> {
   if (isGuardDemoMode()) {
-    const demoRequests = getDemoRequests();
-    const demoReceipts = getDemoReceipts();
-    return {
-      generated_at: new Date().toISOString(),
-      approval_center_url: "http://127.0.0.1:4455",
-      runtime_state: {
-        session_id: "demo-runtime",
-        daemon_host: "127.0.0.1",
-        daemon_port: 4455,
-        started_at: new Date().toISOString(),
-        last_heartbeat_at: new Date().toISOString(),
-        approval_center_url: "http://127.0.0.1:4455"
-      },
-      pending_count: demoRequests.length,
-      receipt_count: demoReceipts.length,
-      headline_state: demoRequests.length > 0 ? "blocked" : "connected",
-      headline_label: demoRequests.length > 0 ? "Blocked" : "Connected",
-      headline_detail:
-        demoRequests.length > 0
-          ? "A blocked action is waiting for review."
-          : "This machine is connected to Guard Cloud and waiting for the first shared proof to appear.",
-      sync_configured: true,
-      cloud_state: "paired_waiting",
-      cloud_state_label: "Connected",
-      cloud_state_detail:
-        "This machine is connected to Guard Cloud, but the first shared proof has not landed yet. Open Watched Apps while the first sync settles.",
-      dashboard_url: "https://hol.org/guard",
-      inbox_url: "https://hol.org/guard/inbox",
-      fleet_url: "https://hol.org/guard/fleet",
-      connect_url: "https://hol.org/guard/connect",
-      items: demoRequests,
-      latest_receipts: demoReceipts.slice(0, 10)
-    };
+    return buildDemoRuntimeSnapshot();
   }
   return readJson<GuardRuntimeSnapshot>("/v1/runtime");
+}
+
+export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
+  const demoRequests = getDemoRequests();
+  const demoReceipts = getDemoReceipts();
+  const now = new Date().toISOString();
+  const cloudState = "paired_waiting";
+  const cloudLabel = "Connected";
+  const cloudDetail =
+    "This machine is connected to Guard Cloud, but the first shared proof has not landed yet. Open Watched Apps while the first sync settles.";
+  const dashboardUrl = "https://hol.org/guard";
+  const inboxUrl = "https://hol.org/guard/inbox";
+  const fleetUrl = "https://hol.org/guard/fleet";
+  const connectUrl = "https://hol.org/guard/connect";
+  return {
+    generated_at: now,
+    approval_center_url: "http://127.0.0.1:4455",
+    runtime_state: {
+      session_id: "demo-runtime",
+      daemon_host: "127.0.0.1",
+      daemon_port: 4455,
+      started_at: now,
+      last_heartbeat_at: now,
+      approval_center_url: "http://127.0.0.1:4455"
+    },
+    pending_count: demoRequests.length,
+    receipt_count: demoReceipts.length,
+    headline_state: demoRequests.length > 0 ? "blocked" : "connected",
+    headline_label: demoRequests.length > 0 ? "Blocked" : "Connected",
+    headline_detail:
+      demoRequests.length > 0
+        ? "A blocked action is waiting for review."
+        : "This machine is connected to Guard Cloud and waiting for the first shared proof to appear.",
+    sync_configured: true,
+    cloud_state: cloudState,
+    cloud_state_label: cloudLabel,
+    cloud_state_detail: cloudDetail,
+    cloud_pairing_state: {
+      state: cloudState,
+      label: cloudLabel,
+      detail: cloudDetail,
+      sync_configured: true,
+      dashboard_url: dashboardUrl,
+      inbox_url: inboxUrl,
+      fleet_url: fleetUrl,
+      connect_url: connectUrl
+    },
+    dashboard_url: dashboardUrl,
+    inbox_url: inboxUrl,
+    fleet_url: fleetUrl,
+    connect_url: connectUrl,
+    items: demoRequests,
+    latest_receipts: demoReceipts.slice(0, 10)
+  };
 }
 
 export async function fetchInventory(): Promise<GuardInventoryItem[]> {
