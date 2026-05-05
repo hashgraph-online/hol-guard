@@ -26,6 +26,7 @@ from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..store import GuardStore
 from ..types import PromptRequest, RemediationAction
 from .actions import GuardActionEnvelope, redacted_workspace_label
+from .detectors import DetectorContext, DetectorRegistry, register_default_detectors
 
 _APPROVAL_METADATA_KEYS = (
     "approval_center_url",
@@ -236,6 +237,12 @@ def guard_run(
             evaluation = evaluate_detection(detection, store, config, default_action=default_action, persist=True)
 
     action_envelope = _guard_run_action_envelope(harness, context, passthrough_args)
+    evaluation = _evaluation_with_detector_registry(
+        evaluation,
+        action_envelope,
+        context,
+        config,
+    )
     if evaluation["blocked"]:
         evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
 
@@ -335,6 +342,36 @@ def _evaluation_with_action_envelope(
     if not changed:
         return evaluation
     return {**evaluation, "artifacts": normalized_artifacts}
+
+
+def _evaluation_with_detector_registry(
+    evaluation: dict[str, Any],
+    action_envelope: GuardActionEnvelope,
+    context: HarnessContext,
+    config: GuardConfig,
+) -> dict[str, Any]:
+    if not config.runtime_detector_registry:
+        return evaluation
+    detector_context = DetectorContext(
+        config=config,
+        workspace=context.workspace_dir,
+        prior_decisions={},
+        threat_intel={},
+        redaction_settings={},
+    )
+    result = DetectorRegistry(register_default_detectors()).run(
+        action_envelope,
+        detector_context,
+        timeout_ms=config.runtime_detector_timeout_ms,
+        disabled_detector_ids=config.runtime_detector_disabled_ids,
+    )
+    if not result.signals and not result.telemetry:
+        return evaluation
+    return {
+        **evaluation,
+        "runtime_detector_signals_v2": [signal.to_dict() for signal in result.signals],
+        "runtime_detector_telemetry": [item.to_dict() for item in result.telemetry],
+    }
 
 
 def _guard_run_config_paths(
