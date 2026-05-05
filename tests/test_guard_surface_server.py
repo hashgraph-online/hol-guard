@@ -375,6 +375,16 @@ class TestGuardSurfaceServer:
         assert payload["headline_label"] == "Protected"
         assert payload["cloud_state"] == "paired_active"
         assert payload["cloud_state_label"] == "Connected"
+        assert payload["cloud_pairing_state"] == {
+            "state": "paired_active",
+            "label": "Connected",
+            "detail": payload["cloud_state_detail"],
+            "sync_configured": True,
+            "dashboard_url": "https://hol.org/guard",
+            "inbox_url": "https://hol.org/guard/inbox",
+            "fleet_url": "https://hol.org/guard/fleet",
+            "connect_url": "https://hol.org/guard/connect",
+        }
         assert payload["dashboard_url"] == "https://hol.org/guard"
         assert payload["inbox_url"] == "https://hol.org/guard/inbox"
         assert payload["fleet_url"] == "https://hol.org/guard/fleet"
@@ -429,6 +439,8 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         assert payload["cloud_state"] == "paired_waiting"
+        assert payload["cloud_pairing_state"]["state"] == "paired_waiting"
+        assert payload["cloud_pairing_state"]["sync_configured"] is True
         assert payload["dashboard_url"] == "https://guard.example.com/guard"
         assert payload["inbox_url"] == "https://guard.example.com/guard/inbox"
         assert payload["fleet_url"] == "https://guard.example.com/guard/fleet"
@@ -597,6 +609,18 @@ class TestGuardSurfaceServer:
         assert "session" in contract["entities"]
         assert "operation" in contract["entities"]
         assert "item" in contract["entities"]
+        runtime_snapshot = contract["entities"]["runtime_snapshot"]
+        assert "cloud_pairing_state" in runtime_snapshot["required_fields"]
+        assert runtime_snapshot["json_schema"]["properties"]["cloud_pairing_state"]["required"] == [
+            "state",
+            "label",
+            "detail",
+            "sync_configured",
+            "dashboard_url",
+            "inbox_url",
+            "fleet_url",
+            "connect_url",
+        ]
 
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
