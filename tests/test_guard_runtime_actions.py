@@ -168,3 +168,34 @@ def test_normalize_codex_post_tool_redacts_raw_output(tmp_path: Path) -> None:
     assert envelope.command == "cat fixture.txt"
     assert envelope.raw_payload_redacted["tool_response"] == "[redacted]"
     assert "secret output" not in str(envelope.raw_payload_redacted)
+
+
+def test_normalize_codex_shell_command_extracts_target_paths(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "cat ~/.npmrc"},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "shell_command"
+    assert envelope.target_paths == ("~/.npmrc",)
+
+
+def test_normalize_codex_raw_payload_redacts_secret_like_strings(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": "printf ok",
+            "note": "NPM_TOKEN=abc123456789",
+        },
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.raw_payload_redacted["tool_input"] == {
+        "command": "printf ok",
+        "note": "NPM_TOKEN=*****",
+    }

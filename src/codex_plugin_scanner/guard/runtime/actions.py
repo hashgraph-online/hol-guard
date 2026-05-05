@@ -10,6 +10,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
+from ..redaction import redact_text
+
 GuardActionType = Literal[
     "prompt",
     "shell_command",
@@ -215,7 +217,12 @@ def normalize_codex_hook_payload(
         prompt_excerpt=prompt_excerpt,
         mcp_server=mcp_server,
     )
-    target_paths = _target_paths(action_type=action_type, tool_input=tool_input, prompt_excerpt=prompt_excerpt)
+    target_paths = _target_paths(
+        action_type=action_type,
+        tool_input=tool_input,
+        command=command,
+        prompt_excerpt=prompt_excerpt,
+    )
     network_hosts = _network_hosts(command, prompt_excerpt)
     workspace_label = str(Path(workspace)) if workspace is not None else None
     workspace_hash = _workspace_hash(workspace)
@@ -347,6 +354,7 @@ def _target_paths(
     *,
     action_type: GuardActionType,
     tool_input: Mapping[str, object],
+    command: str | None,
     prompt_excerpt: str | None,
 ) -> tuple[str, ...]:
     paths: list[str] = []
@@ -355,8 +363,9 @@ def _target_paths(
             value = tool_input.get(key)
             if isinstance(value, str) and value.strip():
                 paths.append(value.strip())
-    if prompt_excerpt is not None:
-        paths.extend(match.group("path") for match in _PROMPT_PATH_PATTERN.finditer(prompt_excerpt))
+    for text in (command, prompt_excerpt):
+        if text is not None:
+            paths.extend(match.group("path") for match in _PROMPT_PATH_PATTERN.finditer(text))
     return tuple(dict.fromkeys(paths))
 
 
@@ -390,7 +399,7 @@ def _redacted_value(key: str, value: object) -> object:
     if isinstance(value, list):
         return [_redacted_value(key, item) for item in value]
     if isinstance(value, str):
-        return value[:_PROMPT_EXCERPT_LIMIT]
+        return redact_text(value).text[:_PROMPT_EXCERPT_LIMIT]
     if isinstance(value, (bool, int, float)) or value is None:
         return value
     return str(value)
