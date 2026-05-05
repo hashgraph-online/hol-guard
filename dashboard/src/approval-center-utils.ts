@@ -209,6 +209,16 @@ function capitalizeHarness(harness: string): string {
   return `${harness.charAt(0).toUpperCase()}${harness.slice(1)}`;
 }
 
+export function resolveDecisionV2Title(item: GuardApprovalRequest): string | null {
+  const title = item.decision_v2_json?.user_title;
+  return title !== undefined && title.trim().length > 0 ? title : null;
+}
+
+export function resolveDecisionV2Detail(item: GuardApprovalRequest): string | null {
+  const detail = item.decision_v2_json?.dashboard_primary_detail;
+  return detail !== undefined && detail.trim().length > 0 ? detail : null;
+}
+
 export function harnessDisplayName(harness: string): string {
   switch (harness) {
     case "claude-code":
