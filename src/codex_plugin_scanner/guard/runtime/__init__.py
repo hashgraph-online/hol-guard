@@ -1,13 +1,8 @@
 """Guard runtime helpers."""
 
-from .runner import (
-    GuardSyncNotAvailableError,
-    GuardSyncNotConfiguredError,
-    guard_run,
-    sync_guard_events,
-    sync_receipts,
-    sync_runtime_session,
-)
+from __future__ import annotations
+
+from importlib import import_module
 
 __all__ = [
     "GuardSyncNotAvailableError",
@@ -17,3 +12,14 @@ __all__ = [
     "sync_receipts",
     "sync_runtime_session",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name not in __all__:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    runner = import_module(".runner", __name__)
+    if not hasattr(runner, name):
+        raise AttributeError(f"module {__name__!r} exports {name!r}, but runner does not define it")
+    value = getattr(runner, name)
+    globals()[name] = value
+    return value
