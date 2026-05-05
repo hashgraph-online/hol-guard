@@ -22,7 +22,6 @@ import {
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
-const GUARD_ACTION_TYPE_SET = new Set<string>(GUARD_ACTION_TYPES);
 
 type RawGuardApprovalRequest = Omit<GuardApprovalRequest, "action_envelope_json"> & {
   action_envelope_json?: unknown;
@@ -148,7 +147,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isGuardActionType(value: unknown): value is GuardActionType {
-  return typeof value === "string" && GUARD_ACTION_TYPE_SET.has(value);
+  return typeof value === "string" && GUARD_ACTION_TYPES.some((actionType) => actionType === value);
 }
 
 function isStringOrNull(value: unknown): value is string | null {
@@ -156,7 +155,7 @@ function isStringOrNull(value: unknown): value is string | null {
 }
 
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return Array.isArray(value) && value.every((item): item is string => typeof item === "string");
 }
 
 export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
