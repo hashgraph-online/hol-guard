@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -78,7 +78,10 @@ _HOOK_EVENT_NAME_MAP = {
     "permissionrequest": "PermissionRequest",
 }
 _PROMPT_PATH_PATTERN = re.compile(
-    r"(?P<path>(?:~|\.{1,2})?/?[A-Za-z0-9_./-]*(?:\.npmrc|\.env(?:\.[A-Za-z0-9_-]+)?|id_rsa|id_ed25519|credentials)[A-Za-z0-9_./-]*)"
+    r"(?<![A-Za-z0-9_./-])"
+    r"(?P<path>(?:~|\.{1,2})?/?(?:[A-Za-z0-9_.-]+/)*"
+    r"(?:\.npmrc|\.env(?:\.[A-Za-z0-9_-]+)?|id_rsa|id_ed25519|credentials))"
+    r"(?![A-Za-z0-9_.-])"
 )
 _NETWORK_HOST_PATTERN = re.compile(r"(?:https?|wss?|grpcs?)://(?P<host>[A-Za-z0-9.-]+)(?::\d+)?(?:/|$)")
 _PROMPT_EXCERPT_LIMIT = 240
@@ -106,6 +109,10 @@ class GuardActionEnvelope:
     package_name: str | None
     script_name: str | None
     raw_payload_redacted: dict[str, object]
+
+    def __post_init__(self) -> None:
+        if not self.action_id:
+            object.__setattr__(self, "action_id", stable_action_hash(self))
 
     def to_dict(self) -> dict[str, object]:
         """Return the stable JSON payload stored with approvals and receipts."""
@@ -190,12 +197,8 @@ def redacted_workspace_label(workspace: Path | str | None, *, home_dir: Path | s
         return None
     workspace_path = Path(workspace).expanduser()
     home_path = Path(home_dir).expanduser() if home_dir is not None else Path.home()
-    try:
-        resolved_workspace = workspace_path.resolve()
-        resolved_home = home_path.resolve()
-    except OSError:
-        resolved_workspace = workspace_path.absolute()
-        resolved_home = home_path.absolute()
+    resolved_workspace = workspace_path.resolve(strict=False)
+    resolved_home = home_path.resolve(strict=False)
     if resolved_workspace.is_relative_to(resolved_home):
         relative = resolved_workspace.relative_to(resolved_home)
         return "~" if str(relative) == "." else f"~/{relative.as_posix()}"
@@ -224,16 +227,11 @@ def normalize_codex_hook_payload(
         prompt_excerpt=prompt_excerpt,
         mcp_server=mcp_server,
     )
-    target_paths = _target_paths(
-        action_type=action_type,
-        tool_input=tool_input,
-        command=command,
-        prompt_excerpt=prompt_excerpt,
-    )
+    target_paths = _target_paths(tool_input=tool_input, command=command, prompt_excerpt=prompt_excerpt)
     network_hosts = _network_hosts(command, prompt_excerpt)
     workspace_label = redacted_workspace_label(workspace, home_dir=home_dir)
     workspace_hash = _workspace_hash(workspace)
-    envelope = GuardActionEnvelope(
+    return GuardActionEnvelope(
         schema_version=_SCHEMA_VERSION,
         action_id="",
         harness="codex",
@@ -253,7 +251,6 @@ def normalize_codex_hook_payload(
         script_name=None,
         raw_payload_redacted=_redacted_payload(normalized_payload),
     )
-    return replace(envelope, action_id=stable_action_hash(envelope))
 
 
 def _required_int(payload: Mapping[str, object], key: str) -> int:
@@ -374,7 +371,6 @@ def _codex_action_type(
 
 def _target_paths(
     *,
-    action_type: GuardActionType,
     tool_input: Mapping[str, object],
     command: str | None,
     prompt_excerpt: str | None,
