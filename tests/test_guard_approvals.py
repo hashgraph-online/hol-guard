@@ -90,6 +90,18 @@ class TestGuardApprovals:
             "script_name": None,
             "raw_payload_redacted": {"tool_name": "Bash"},
         }
+        decision_v2_json = {
+            "action": "ask",
+            "reason": "require-reapproval",
+            "user_title": "Review workspace_skill",
+            "user_body": "HOL Guard needs approval before this action continues.",
+            "harness_message": "HOL Guard paused this action for approval.",
+            "dashboard_primary_detail": "Shell command can read a local secret file.",
+            "approval_scopes": ["artifact", "workspace"],
+            "retry_instruction": "Approve it in HOL Guard, then retry.",
+            "signals": [],
+            "confidence": "likely",
+        }
         request = GuardApprovalRequest(
             request_id="req-123",
             harness="codex",
@@ -105,6 +117,7 @@ class TestGuardApprovals:
             review_command="hol-guard approvals approve req-123",
             approval_url="http://127.0.0.1:4455/approvals/req-123",
             action_envelope_json=action_envelope_json,
+            decision_v2_json=decision_v2_json,
         )
 
         store.add_approval_request(request, "2026-04-11T00:00:00+00:00")
@@ -122,11 +135,13 @@ class TestGuardApprovals:
         assert pending[0]["approval_url"] == "http://127.0.0.1:4455/approvals/req-123"
         assert pending[0]["workspace"] == str(workspace_dir)
         assert pending[0]["action_envelope_json"] == action_envelope_json
+        assert pending[0]["decision_v2_json"] == decision_v2_json
         assert resolved is not None
         assert resolved["status"] == "resolved"
         assert resolved["resolution_action"] == "allow"
         assert resolved["resolution_scope"] == "artifact"
         assert resolved["action_envelope_json"] == action_envelope_json
+        assert resolved["decision_v2_json"] == decision_v2_json
 
     def test_guard_store_loads_old_approval_rows_without_action_envelope(self, tmp_path):
         guard_home = tmp_path / "guard-home"
@@ -225,8 +240,9 @@ class TestGuardApprovals:
         assert request is not None
         assert request["request_id"] == "req-old"
         assert request["action_envelope_json"] is None
+        assert request["decision_v2_json"] is None
 
-    def test_guard_store_ignores_malformed_action_envelope_json(self, tmp_path):
+    def test_guard_store_ignores_malformed_action_and_decision_json(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         connection = sqlite3.connect(store.path)
         try:
@@ -236,10 +252,13 @@ class TestGuardApprovals:
                   request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher,
                   policy_action, recommended_scope, changed_fields_json, source_scope, config_path, workspace,
                   launch_target, transport, risk_summary, risk_signals_json, artifact_label, source_label,
-                  trigger_summary, why_now, launch_summary, risk_headline, action_envelope_json, review_command,
+                  trigger_summary, why_now, launch_summary, risk_headline, action_envelope_json, decision_v2_json,
+                  review_command,
                   approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
                 )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (
+                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
                 """,
                 (
                     "req-bad-envelope",
@@ -266,6 +285,7 @@ class TestGuardApprovals:
                     None,
                     None,
                     "{not-json",
+                    "{also-not-json",
                     "hol-guard approvals approve req-bad-envelope",
                     "http://127.0.0.1/pending",
                     "pending",
@@ -284,6 +304,7 @@ class TestGuardApprovals:
 
         assert request is not None
         assert request["action_envelope_json"] is None
+        assert request["decision_v2_json"] is None
 
     def test_guard_surface_daemon_client_recovers_missing_auth_token(self, tmp_path, monkeypatch):
         guard_home = tmp_path / "guard-home"
@@ -1960,6 +1981,11 @@ class TestGuardApprovals:
         assert output["approval_center_url"].startswith("http://127.0.0.1:")
         assert approvals[0]["harness"] == "codex"
         assert approvals[0]["status"] == "pending"
+        assert approvals[0]["decision_v2_json"]["action"] == "ask"
+        assert (
+            approvals[0]["decision_v2_json"]["harness_message"]
+            == "HOL Guard needs a fresh approval because this action changed."
+        )
 
     def test_guard_approvals_cli_lists_and_resolves_requests(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
