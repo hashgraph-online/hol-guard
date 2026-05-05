@@ -15,6 +15,7 @@ import sys
 import urllib.error
 import urllib.parse
 import webbrowser
+from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -3130,6 +3131,9 @@ def _native_prompt_context(artifact: GuardArtifact) -> str:
 
 
 def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: dict[str, object]) -> str:
+    decision_message = _decision_v2_harness_message(response_payload)
+    if decision_message is not None:
+        return decision_message
     if artifact.artifact_type == "prompt_request":
         harness = response_payload.get("harness")
         prompt_classes = _prompt_request_classes(artifact)
@@ -3171,6 +3175,16 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
             trimmed_summary = f"{trimmed_summary[:177].rstrip()}..."
         return f"HOL Guard flagged this request: {trimmed_summary}"
     return "HOL Guard flagged this request for review."
+
+
+def _decision_v2_harness_message(response_payload: dict[str, object]) -> str | None:
+    decision_v2 = response_payload.get("decision_v2_json")
+    if not isinstance(decision_v2, Mapping):
+        return None
+    message = decision_v2.get("harness_message")
+    if isinstance(message, str) and message.strip():
+        return message.strip()
+    return None
 
 
 def _claude_prompt_additional_context(

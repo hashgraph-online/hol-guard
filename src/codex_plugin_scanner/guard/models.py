@@ -179,6 +179,7 @@ class GuardApprovalRequest:
     launch_summary: str | None = None
     risk_headline: str | None = None
     action_envelope_json: dict[str, object] | None = None
+    decision_v2_json: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
