@@ -16,6 +16,7 @@ from pathlib import Path
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
+from .cloud_identity import cloud_agent_identity_environment, cloud_agent_identity_hints
 
 # Optional: PyYAML is preferred when available for robust YAML parsing.
 # The adapter works without it via a line-based fallback parser.
@@ -83,6 +84,7 @@ class HermesHarnessAdapter(HarnessAdapter):
         )
         source_configs = _load_mcp_server_sources(context.home_dir / ".hermes")
         overlay_servers = _overlay_servers(context=context, source_configs=source_configs)
+        cloud_identity = cloud_agent_identity_hints(context, runtime=self.harness)
         overlay_path.write_text(json.dumps(overlay_servers, indent=2) + "\n", encoding="utf-8")
         pretool_path.write_text(
             json.dumps(_pretool_payload(context=context), indent=2) + "\n",
@@ -109,6 +111,8 @@ class HermesHarnessAdapter(HarnessAdapter):
                 *[str(note) for note in shim_manifest.get("notes", [])],
             ],
         }
+        if cloud_identity is not None:
+            manifest["cloud_agent_identity"] = cloud_identity
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         return manifest
 
@@ -147,10 +151,17 @@ class HermesHarnessAdapter(HarnessAdapter):
         pretool_path = manifest.get("pretool_hook_path")
         if not isinstance(overlay_path, str) or not isinstance(pretool_path, str):
             return {}
-        return {
+        environment = {
             "HERMES_GUARD_MCP_OVERLAY_PATH": overlay_path,
             "HERMES_GUARD_PRETOOL_PATH": pretool_path,
         }
+        environment.update(
+            cloud_agent_identity_environment(
+                cloud_agent_identity_hints(context, runtime=self.harness),
+                prefix="HERMES",
+            )
+        )
+        return environment
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         manifest = _json_payload(_managed_root(context) / "manifest.json")
@@ -165,6 +176,7 @@ class HermesHarnessAdapter(HarnessAdapter):
                 and isinstance(pretool_path, str)
                 and Path(pretool_path).exists()
             ),
+            "cloud_agent_identity_configured": bool(cloud_agent_identity_hints(context, runtime=self.harness)),
         }
 
     def approval_flow(self, *, managed_install: dict[str, object] | None = None) -> dict[str, object]:
