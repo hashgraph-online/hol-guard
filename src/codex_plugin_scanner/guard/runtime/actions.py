@@ -447,10 +447,10 @@ def _payload_with_default_event(payload: Mapping[str, object], event_name: str) 
     normalized_payload = dict(payload)
     if not event_name.strip():
         return normalized_payload
-    if any(
-        key in normalized_payload for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name")
-    ):
-        return normalized_payload
+    for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
+        value = normalized_payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return normalized_payload
     normalized_payload["hook_event_name"] = event_name
     return normalized_payload
 
@@ -509,7 +509,7 @@ def _mapping_from_value(value: object) -> Mapping[str, object] | None:
 
 
 def _hook_event_name(payload: Mapping[str, object]) -> str:
-    for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name"):
+    for key in ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             stripped = value.strip()
@@ -557,10 +557,14 @@ def _prompt_excerpt(prompt_text: str | None) -> str | None:
 
 def _mcp_details(payload: Mapping[str, object], tool_name: str | None) -> tuple[str | None, str | None]:
     explicit_server = _string_from_keys(payload, ("mcp_server", "mcpServer", "server", "serverName"))
-    explicit_tool = _string_from_keys(payload, ("mcp_tool", "mcpTool", "tool", "toolName"))
-    if explicit_server is not None and explicit_tool is not None:
-        return explicit_server, explicit_tool
-    return _mcp_parts(tool_name)
+    explicit_tool = _string_from_keys(payload, ("mcp_tool", "mcpTool", "tool"))
+    tool_name_value = _string_from_keys(payload, ("toolName",))
+    parts_server, parts_tool = _mcp_parts(tool_name)
+    server = explicit_server or parts_server
+    tool = explicit_tool or parts_tool
+    if tool is None and server is not None and tool_name_value is not None:
+        tool = tool_name_value
+    return server, tool
 
 
 def _string_from_keys(payload: Mapping[str, object], keys: tuple[str, ...]) -> str | None:
@@ -572,12 +576,25 @@ def _string_from_keys(payload: Mapping[str, object], keys: tuple[str, ...]) -> s
 
 
 def _mcp_parts(tool_name: str | None) -> tuple[str | None, str | None]:
-    if tool_name is None or not tool_name.startswith("mcp__"):
+    if tool_name is None:
         return None, None
-    parts = tool_name.split("__", 2)
-    if len(parts) != 3 or not parts[1] or not parts[2]:
+    if "/" in tool_name:
+        server, tool = tool_name.split("/", 1)
+        return (server, tool) if server and tool else (None, None)
+    if tool_name.startswith("mcp__"):
+        parts = tool_name.split("__", 2)
+        if len(parts) == 3 and parts[1] and parts[2]:
+            return parts[1], parts[2]
         return None, None
-    return parts[1], parts[2]
+    if tool_name.startswith("mcp_"):
+        suffix = tool_name[len("mcp_") :]
+        if "_" not in suffix:
+            return None, None
+        server, tool = suffix.split("_", 1)
+        if server and tool:
+            return server, tool
+        return None, None
+    return None, None
 
 
 def _action_type(

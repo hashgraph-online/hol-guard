@@ -93,6 +93,81 @@ def test_normalize_copilot_autopilot_shell_payload(tmp_path: Path) -> None:
     assert envelope.target_paths == ("~/.npmrc",)
 
 
+def test_normalize_copilot_hook_name_payload(tmp_path: Path) -> None:
+    payload = {
+        "hookName": "permissionRequest",
+        "toolName": "run_terminal_command",
+        "toolInput": {"command": "cat ~/.npmrc"},
+    }
+
+    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.event_name == "PermissionRequest"
+    assert envelope.action_type == "shell_command"
+
+
+def test_normalize_copilot_slash_mcp_payload(tmp_path: Path) -> None:
+    payload = {
+        "hookName": "preToolUse",
+        "toolName": "danger_lab/safe_echo",
+        "toolInput": {"message": "hello"},
+    }
+
+    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "mcp_tool"
+    assert envelope.mcp_server == "danger_lab"
+    assert envelope.mcp_tool == "safe_echo"
+
+
+def test_normalize_copilot_prefixed_mcp_payload(tmp_path: Path) -> None:
+    payload = {
+        "hookName": "preToolUse",
+        "toolName": "mcp_danger_lab_safe_echo",
+        "toolInput": {"message": "hello"},
+    }
+
+    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "mcp_tool"
+    assert envelope.mcp_server == "danger"
+    assert envelope.mcp_tool == "lab_safe_echo"
+
+
+def test_normalize_harness_payload_uses_default_for_empty_event(tmp_path: Path) -> None:
+    payload = {
+        "event": "",
+        "tool_name": "Bash",
+        "tool_input": {"command": "cat ~/.npmrc"},
+    }
+
+    envelope = normalize_harness_payload(
+        "claude-code",
+        "PermissionRequest",
+        payload,
+        workspace=tmp_path / "workspace",
+        home_dir=tmp_path,
+    )
+
+    assert envelope.event_name == "PermissionRequest"
+    assert envelope.action_type == "shell_command"
+
+
+def test_normalize_opencode_merges_partial_mcp_details(tmp_path: Path) -> None:
+    payload = {
+        "event": "permissionRequest",
+        "server": "guard_lab",
+        "toolName": "inspect",
+        "toolInput": {"target": "workspace"},
+    }
+
+    envelope = normalize_opencode_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "mcp_tool"
+    assert envelope.mcp_server == "guard_lab"
+    assert envelope.mcp_tool == "inspect"
+
+
 def test_normalize_gemini_prompt_payload(tmp_path: Path) -> None:
     payload = {
         "event": "prompt",
