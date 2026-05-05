@@ -110,6 +110,27 @@ def test_guard_config_loads_security_level_and_risk_action_overrides(tmp_path):
     assert resolve_risk_action(config, "credential_exfiltration", harness="codex") == "block"
 
 
+def test_load_guard_config_parses_hidden_runtime_detector_registry(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(
+        guard_home / "config.toml",
+        "\n".join(
+            [
+                "runtime_detector_registry = true",
+                "runtime_detector_timeout_ms = 75",
+                'runtime_detector_disabled_ids = ["secret.local"]',
+            ]
+        )
+        + "\n",
+    )
+
+    config = load_guard_config(guard_home)
+
+    assert config.runtime_detector_registry is True
+    assert config.runtime_detector_timeout_ms == 75
+    assert config.runtime_detector_disabled_ids == ("secret.local",)
+
+
 def test_guard_config_strict_profile_defaults_review_sensitive_risks(tmp_path):
     guard_home = tmp_path / ".hol-guard"
     _write_text(guard_home / "config.toml", 'security_level = "strict"\n')
