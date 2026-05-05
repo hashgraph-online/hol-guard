@@ -35,7 +35,9 @@ import {
   buildTechnicalSummary,
   humanizeChangedFields,
   harnessDisplayName,
-  resolveEnvelopeDisplayText
+  resolveDecisionV2Title,
+  resolveDecisionV2Detail,
+  resolveStoppedCommandText
 } from "./approval-center-utils";
 import type {
   GuardApprovalRequest,
@@ -782,6 +784,7 @@ function CopyCommandButton(props: { command: string }) {
 
 function BlockedActionCard(props: { item: GuardApprovalRequest }) {
   const launchText = actionLaunchText(props.item);
+  const decisionDetail = resolveDecisionV2Detail(props.item);
   const isBlocked = props.item.policy_action === "block";
   const bannerBg = isBlocked
     ? "bg-gradient-to-r from-brand-purple/90 to-brand-purple/75"
@@ -820,6 +823,11 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
         <p className="mt-2 text-sm leading-6 text-brand-dark/70">
           {harnessDisplayName(props.item.harness)} paused this because {buildQueueSummary(props.item).toLowerCase()}.
         </p>
+        {decisionDetail !== null ? (
+          <p className="mt-2 text-sm leading-6 text-brand-dark/80">
+            {decisionDetail}
+          </p>
+        ) : null}
         <div className="mt-4 rounded-[1.25rem] bg-[#090d1a] p-1 shadow-[0_14px_35px_rgba(9,13,26,0.18)]">
           <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
             <span className="h-2.5 w-2.5 rounded-full bg-brand-purple" />
@@ -849,6 +857,10 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
 }
 
 function actionDisplayTitle(item: GuardApprovalRequest): string {
+  const v2Title = resolveDecisionV2Title(item);
+  if (v2Title !== null) {
+    return v2Title;
+  }
   const artifactName = displayArtifactName(item);
   if (item.artifact_type === "tool_action_request") {
     return `${harnessDisplayName(item.harness)} wants to run a tool`;
@@ -866,23 +878,7 @@ function actionDisplayTitle(item: GuardApprovalRequest): string {
 }
 
 function actionLaunchText(item: GuardApprovalRequest): string {
-  if (item.action_envelope_json) {
-    const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
-    if (envelopeText !== null) {
-      return envelopeText;
-    }
-  }
-  if (item.launch_target?.trim()) {
-    return item.launch_target;
-  }
-  if (item.launch_summary?.trim()) {
-    const commandMatch = item.launch_summary.match(/`([^`]+)`/);
-    if (commandMatch?.[1]) {
-      return commandMatch[1];
-    }
-    return item.launch_summary;
-  }
-  return displayArtifactName(item);
+  return resolveStoppedCommandText(item);
 }
 
 function getRulePreviewText(

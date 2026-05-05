@@ -1912,12 +1912,11 @@ def run_guard_command(
                 output_stream=output_stream,
             )
             return 0
+        incoming_reason = _decision_v2_harness_message(payload) or payload.get("permission_decision_reason")
         if _should_emit_native_hook_exit_block(args, event_name=hook_event_name, policy_action=policy_action):
-            _emit_native_hook_block_stderr(
-                _native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason"))
-            )
+            _emit_native_hook_block_stderr(_native_hook_reason_for_harness(args.harness, incoming_reason))
             return 2
-        reason = _native_hook_reason_for_harness(args.harness, payload.get("permission_decision_reason"))
+        reason = _native_hook_reason_for_harness(args.harness, incoming_reason)
         if _should_emit_claude_native_pretooluse_notice(
             args,
             event_name=hook_event_name,
