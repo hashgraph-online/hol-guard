@@ -1,4 +1,41 @@
 export type DecisionScope = "artifact" | "workspace" | "publisher" | "harness" | "global";
+
+export const GUARD_ACTION_TYPES = [
+  "prompt",
+  "shell_command",
+  "file_read",
+  "file_write",
+  "mcp_tool",
+  "package_script",
+  "network_request",
+  "config_change",
+  "browser_action",
+  "harness_start"
+] as const;
+
+export type GuardActionType = (typeof GUARD_ACTION_TYPES)[number];
+
+export type GuardActionEnvelope = {
+  schema_version: number;
+  action_id: string;
+  harness: string;
+  event_name: string;
+  action_type: GuardActionType;
+  workspace: string | null;
+  workspace_hash: string | null;
+  tool_name: string | null;
+  command: string | null;
+  prompt_excerpt: string | null;
+  target_paths: string[];
+  network_hosts: string[];
+  mcp_server: string | null;
+  mcp_tool: string | null;
+  package_manager: string | null;
+  package_name: string | null;
+  script_name: string | null;
+  raw_payload_redacted: Record<string, unknown>;
+};
+
 export type GuardHeadlineState =
   | "setup"
   | "protected"
@@ -36,6 +73,7 @@ export type GuardApprovalRequest = {
   reason: string | null;
   created_at: string;
   resolved_at: string | null;
+  action_envelope_json?: GuardActionEnvelope | null;
 };
 
 export type GuardRuntimeState = {

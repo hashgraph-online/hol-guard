@@ -1,4 +1,7 @@
+import { GUARD_ACTION_TYPES } from "./guard-types";
 import type {
+  GuardActionEnvelope,
+  GuardActionType,
   GuardApprovalRequest,
   GuardArtifactDiff,
   GuardInventoryItem,
@@ -19,6 +22,18 @@ import {
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
+
+type RawGuardApprovalRequest = Omit<GuardApprovalRequest, "action_envelope_json"> & {
+  action_envelope_json?: unknown;
+};
+
+type ApprovalRequestListPayload = {
+  items?: RawGuardApprovalRequest[] | null;
+};
+
+type RuntimeSnapshotPayload = Omit<GuardRuntimeSnapshot, "items"> & {
+  items?: RawGuardApprovalRequest[] | null;
+};
 
 async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetch(guardApiInput(input), withGuardAuth(init));
@@ -127,19 +142,120 @@ export function guardAwareHref(href: string): string {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isGuardActionType(value: unknown): value is GuardActionType {
+  return typeof value === "string" && GUARD_ACTION_TYPES.some((actionType) => actionType === value);
+}
+
+function isStringOrNull(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item): item is string => typeof item === "string");
+}
+
+export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const schemaVersion = raw["schema_version"];
+  const actionId = raw["action_id"];
+  const harness = raw["harness"];
+  const eventName = raw["event_name"];
+  const actionType = raw["action_type"];
+  const workspace = raw["workspace"];
+  const workspaceHash = raw["workspace_hash"];
+  const toolName = raw["tool_name"];
+  const command = raw["command"];
+  const promptExcerpt = raw["prompt_excerpt"];
+  const targetPaths = raw["target_paths"];
+  const networkHosts = raw["network_hosts"];
+  const mcpServer = raw["mcp_server"];
+  const mcpTool = raw["mcp_tool"];
+  const packageManager = raw["package_manager"];
+  const packageName = raw["package_name"];
+  const scriptName = raw["script_name"];
+  const rawPayloadRedacted = raw["raw_payload_redacted"];
+  if (
+    typeof schemaVersion !== "number" ||
+    typeof actionId !== "string" ||
+    typeof harness !== "string" ||
+    typeof eventName !== "string" ||
+    !isGuardActionType(actionType)
+  ) {
+    return null;
+  }
+  if (
+    !isStringOrNull(workspace) ||
+    !isStringOrNull(workspaceHash) ||
+    !isStringOrNull(toolName) ||
+    !isStringOrNull(command) ||
+    !isStringOrNull(promptExcerpt) ||
+    !isStringOrNull(mcpServer) ||
+    !isStringOrNull(mcpTool) ||
+    !isStringOrNull(packageManager) ||
+    !isStringOrNull(packageName) ||
+    !isStringOrNull(scriptName)
+  ) {
+    return null;
+  }
+  if (!isStringArray(targetPaths) || !isStringArray(networkHosts)) {
+    return null;
+  }
+  if (!isRecord(rawPayloadRedacted)) {
+    return null;
+  }
+  return {
+    schema_version: schemaVersion,
+    action_id: actionId,
+    harness,
+    event_name: eventName,
+    action_type: actionType,
+    workspace,
+    workspace_hash: workspaceHash,
+    tool_name: toolName,
+    command,
+    prompt_excerpt: promptExcerpt,
+    target_paths: targetPaths,
+    network_hosts: networkHosts,
+    mcp_server: mcpServer,
+    mcp_tool: mcpTool,
+    package_manager: packageManager,
+    package_name: packageName,
+    script_name: scriptName,
+    raw_payload_redacted: rawPayloadRedacted
+  };
+}
+
+export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardApprovalRequest {
+  return { ...item, action_envelope_json: parseActionEnvelope(item.action_envelope_json) };
+}
+
+function normalizeApprovalRequests(items: RawGuardApprovalRequest[] | null | undefined): GuardApprovalRequest[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items.map(normalizeApprovalRequest);
+}
+
 export async function fetchRequests(): Promise<GuardApprovalRequest[]> {
   if (isGuardDemoMode()) {
     return getDemoRequests();
   }
-  const payload = await readJson<{ items: GuardApprovalRequest[] }>("/v1/requests");
-  return payload.items;
+  const payload = await readJson<ApprovalRequestListPayload>("/v1/requests");
+  return normalizeApprovalRequests(payload.items);
 }
 
 export async function fetchRuntimeSnapshot(): Promise<GuardRuntimeSnapshot> {
   if (isGuardDemoMode()) {
     return buildDemoRuntimeSnapshot();
   }
-  return readJson<GuardRuntimeSnapshot>("/v1/runtime");
+  const snapshot = await readJson<RuntimeSnapshotPayload>("/v1/runtime");
+  return { ...snapshot, items: normalizeApprovalRequests(snapshot.items) };
 }
 
 export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
@@ -258,7 +374,8 @@ export async function fetchRequest(requestId: string): Promise<GuardApprovalRequ
   if (isGuardDemoMode()) {
     return getDemoRequest(requestId);
   }
-  return readJson<GuardApprovalRequest>(`/v1/requests/${requestId}`);
+  const payload = await readJson<RawGuardApprovalRequest>(`/v1/requests/${requestId}`);
+  return normalizeApprovalRequest(payload);
 }
 
 export async function fetchReceipts(): Promise<GuardReceipt[]> {
