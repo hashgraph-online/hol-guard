@@ -141,6 +141,7 @@ class GuardReceipt:
     user_override: str | None = None
     artifact_name: str | None = None
     source_scope: str | None = None
+    action_envelope_json: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
@@ -177,6 +178,7 @@ class GuardApprovalRequest:
     why_now: str | None = None
     launch_summary: str | None = None
     risk_headline: str | None = None
+    action_envelope_json: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)

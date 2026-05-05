@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -86,6 +87,7 @@ def queue_blocked_approvals(
             why_now=incident["why_now"],
             launch_summary=incident["launch_summary"],
             risk_headline=incident["risk_headline"],
+            action_envelope_json=_item_action_envelope_json(item),
         )
         persisted_request_id = store.add_approval_request(request, timestamp)
         if persisted_request_id != request.request_id:
@@ -331,6 +333,13 @@ def _item_risk_signals(item: dict[str, object], artifact) -> tuple[str, ...]:
         if normalized:
             return normalized
     return artifact_risk_signals(artifact) if artifact is not None else ()
+
+
+def _item_action_envelope_json(item: dict[str, object]) -> dict[str, object] | None:
+    value = item.get("action_envelope_json")
+    if not isinstance(value, Mapping):
+        return None
+    return {str(key): item_value for key, item_value in value.items() if isinstance(key, str)}
 
 
 def _string_list(value: object) -> list[str]:
