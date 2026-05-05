@@ -45,6 +45,18 @@ def test_risk_signal_v2_round_trips_to_dict_payload() -> None:
     assert RiskSignalV2.from_dict(payload) == signal
 
 
+def test_runtime_package_lazy_exports_cache_runner_attribute() -> None:
+    import codex_plugin_scanner.guard.runtime as runtime
+
+    runtime.__dict__.pop("guard_run", None)
+
+    first = runtime.guard_run
+    second = runtime.guard_run
+
+    assert first is second
+    assert runtime.__dict__["guard_run"] is first
+
+
 def test_severity_label_from_score_maps_numeric_boundaries() -> None:
     assert severity_label_from_score(0) == "info"
     assert severity_label_from_score(2) == "info"
