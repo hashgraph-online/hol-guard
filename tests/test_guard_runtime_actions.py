@@ -105,6 +105,16 @@ def test_redacted_workspace_label_hides_home_directory(tmp_path: Path) -> None:
     assert str(home_dir) not in label
 
 
+def test_redacted_workspace_label_hides_non_home_absolute_path(tmp_path: Path) -> None:
+    home_dir = tmp_path / "home"
+    workspace = tmp_path / "external" / "demo"
+
+    label = redacted_workspace_label(workspace, home_dir=home_dir)
+
+    assert label == ".../demo"
+    assert str(tmp_path) not in label
+
+
 def test_normalize_codex_pre_tool_bash_payload(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace = home_dir / "workspace"

@@ -203,7 +203,8 @@ def redacted_workspace_label(workspace: Path | str | None, *, home_dir: Path | s
     if resolved_workspace.is_relative_to(resolved_home):
         relative = resolved_workspace.relative_to(resolved_home)
         return "~" if str(relative) == "." else f"~/{relative.as_posix()}"
-    return resolved_workspace.as_posix()
+    workspace_name = resolved_workspace.name or "workspace"
+    return f".../{workspace_name}"
 
 
 def normalize_codex_hook_payload(
