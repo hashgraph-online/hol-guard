@@ -231,8 +231,17 @@ def normalize_codex_hook_payload(
 
     normalized_payload = dict(payload)
     event_name = _hook_event_name(normalized_payload)
-    tool_name = _string_value(normalized_payload.get("tool_name")) or _string_value(normalized_payload.get("toolName"))
+    explicit_tool_name = _string_value(normalized_payload.get("tool_name")) or _string_value(
+        normalized_payload.get("toolName")
+    )
+    tool_call_name, tool_call_input = _tool_call_from_payload(
+        normalized_payload.get("toolCalls"),
+        expected_tool_name=explicit_tool_name,
+    )
+    tool_name = explicit_tool_name or tool_call_name
     tool_input = _tool_input_from_payload(normalized_payload)
+    if not tool_input and tool_call_input is not None:
+        tool_input = tool_call_input
     raw_command = _command_from_payload(tool_input)
     command = _command_detail(raw_command, home_dir=home_dir)
     prompt_text = _prompt_text(normalized_payload.get("prompt"))
@@ -322,17 +331,47 @@ def _mapping_value(value: object) -> Mapping[str, object]:
 
 def _tool_input_from_payload(payload: Mapping[str, object]) -> Mapping[str, object]:
     for key in ("tool_input", "toolInput", "toolArgs", "arguments"):
-        value = payload.get(key)
-        if isinstance(value, Mapping):
-            return value
-        if isinstance(value, str) and value.strip():
-            try:
-                parsed = json.loads(value)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(parsed, Mapping):
-                return parsed
+        parsed = _mapping_from_value(payload.get(key))
+        if parsed is not None:
+            return parsed
     return {}
+
+
+def _tool_call_from_payload(
+    value: object,
+    *,
+    expected_tool_name: str | None,
+) -> tuple[str | None, Mapping[str, object] | None]:
+    if not isinstance(value, list):
+        return None, None
+    fallback_tool_call: tuple[str, Mapping[str, object] | None] | None = None
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        tool_name = _string_value(item.get("name"))
+        if tool_name is None:
+            continue
+        tool_input = _mapping_from_value(item.get("args"))
+        if fallback_tool_call is None:
+            fallback_tool_call = (tool_name, tool_input)
+        if expected_tool_name is None or tool_name == expected_tool_name:
+            return tool_name, tool_input
+    if fallback_tool_call is not None:
+        return fallback_tool_call
+    return None, None
+
+
+def _mapping_from_value(value: object) -> Mapping[str, object] | None:
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(parsed, Mapping):
+            return parsed
+    return None
 
 
 def _hook_event_name(payload: Mapping[str, object]) -> str:

@@ -422,3 +422,46 @@ def test_normalize_codex_camel_case_tool_payload(tmp_path: Path) -> None:
     assert envelope.tool_name == "Bash"
     assert envelope.command == "cat ~/.npmrc"
     assert envelope.target_paths == ("~/.npmrc",)
+
+
+def test_normalize_codex_tool_calls_payload(tmp_path: Path) -> None:
+    payload = {
+        "hookEventName": "PreToolUse",
+        "toolCalls": [
+            {
+                "name": "Bash",
+                "args": {"command": "cat ~/.npmrc"},
+            }
+        ],
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.tool_name == "Bash"
+    assert envelope.action_type == "shell_command"
+    assert envelope.command == "cat ~/.npmrc"
+    assert envelope.target_paths == ("~/.npmrc",)
+
+
+def test_normalize_codex_tool_calls_matches_explicit_tool_name(tmp_path: Path) -> None:
+    payload = {
+        "hookEventName": "PreToolUse",
+        "toolName": "Read",
+        "toolCalls": [
+            {
+                "name": "Bash",
+                "args": {"command": "cat ~/.npmrc"},
+            },
+            {
+                "name": "Read",
+                "args": '{"path": "~/.npmrc"}',
+            },
+        ],
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.tool_name == "Read"
+    assert envelope.action_type == "file_read"
+    assert envelope.command is None
+    assert envelope.target_paths == ("~/.npmrc",)
