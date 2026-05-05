@@ -101,6 +101,21 @@ _GENERIC_WINDOWS_UNC_PATH_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_./\\:-])(?P<path>\\\\[^\\\s'\"<>|]+\\[^\\\s'\"<>|]+(?:\\[^\\\s'\"<>|]+)+)"
 )
 _PROMPT_EXCERPT_LIMIT = 240
+_SINGLE_TOKEN_MCP_TOOLS = frozenset(
+    {
+        "call",
+        "delete",
+        "get",
+        "inspect",
+        "list",
+        "lookup",
+        "query",
+        "read",
+        "run",
+        "search",
+        "write",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -591,12 +606,17 @@ def _mcp_parts(tool_name: str | None) -> tuple[str | None, str | None]:
         if "_" not in suffix:
             return None, None
         parts = suffix.split("_")
-        if len(parts) >= 3:
-            server = "_".join(parts[:2])
-            tool = "_".join(parts[2:])
-        else:
+        if len(parts) >= 3 and parts[-1] in _SINGLE_TOKEN_MCP_TOOLS:
+            server = "_".join(parts[:-1])
+            tool = parts[-1]
+        elif len(parts) >= 3:
+            server = "_".join(parts[:-2])
+            tool = "_".join(parts[-2:])
+        elif len(parts) == 2:
             server = parts[0]
-            tool = "_".join(parts[1:])
+            tool = parts[1]
+        else:
+            return None, None
         if server and tool:
             return server, tool
         return None, None

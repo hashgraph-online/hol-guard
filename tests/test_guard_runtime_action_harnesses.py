@@ -148,6 +148,34 @@ def test_normalize_copilot_three_part_prefixed_mcp_payload(tmp_path: Path) -> No
     assert envelope.mcp_tool == "inspect"
 
 
+def test_normalize_copilot_long_server_prefixed_mcp_payload(tmp_path: Path) -> None:
+    payload = {
+        "hookName": "preToolUse",
+        "toolName": "mcp_my_server_name_my_tool",
+        "toolInput": {"target": "workspace"},
+    }
+
+    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "mcp_tool"
+    assert envelope.mcp_server == "my_server_name"
+    assert envelope.mcp_tool == "my_tool"
+
+
+def test_normalize_copilot_single_token_tool_prefixed_mcp_payload(tmp_path: Path) -> None:
+    payload = {
+        "hookName": "preToolUse",
+        "toolName": "mcp_guard_team_lab_inspect",
+        "toolInput": {"target": "workspace"},
+    }
+
+    envelope = normalize_copilot_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "mcp_tool"
+    assert envelope.mcp_server == "guard_team_lab"
+    assert envelope.mcp_tool == "inspect"
+
+
 def test_normalize_harness_payload_uses_default_for_empty_event(tmp_path: Path) -> None:
     payload = {
         "event": "",
