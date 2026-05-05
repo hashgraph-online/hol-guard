@@ -291,7 +291,10 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
 def _optional_json_object(value: object) -> dict[str, object] | None:
     if value is None:
         return None
-    parsed = json.loads(str(value))
+    try:
+        parsed = json.loads(str(value))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
     if isinstance(parsed, dict):
         return {str(key): item for key, item in parsed.items() if isinstance(key, str)}
     return None

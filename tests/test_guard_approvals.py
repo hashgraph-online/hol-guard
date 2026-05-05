@@ -226,6 +226,65 @@ class TestGuardApprovals:
         assert request["request_id"] == "req-old"
         assert request["action_envelope_json"] is None
 
+    def test_guard_store_ignores_malformed_action_envelope_json(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        connection = sqlite3.connect(store.path)
+        try:
+            connection.execute(
+                """
+                insert into approval_requests (
+                  request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher,
+                  policy_action, recommended_scope, changed_fields_json, source_scope, config_path, workspace,
+                  launch_target, transport, risk_summary, risk_signals_json, artifact_label, source_label,
+                  trigger_summary, why_now, launch_summary, risk_headline, action_envelope_json, review_command,
+                  approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
+                )
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "req-bad-envelope",
+                    "codex",
+                    "codex:project:workspace_skill",
+                    "workspace_skill",
+                    "artifact",
+                    "hash-bad-envelope",
+                    None,
+                    "require-reapproval",
+                    "artifact",
+                    json.dumps(["args"]),
+                    "project",
+                    str(tmp_path / "workspace" / ".codex" / "config.toml"),
+                    None,
+                    None,
+                    None,
+                    None,
+                    "[]",
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    "{not-json",
+                    "hol-guard approvals approve req-bad-envelope",
+                    "http://127.0.0.1/pending",
+                    "pending",
+                    None,
+                    None,
+                    None,
+                    "2026-04-11T00:00:00+00:00",
+                    None,
+                ),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+        request = store.get_approval_request("req-bad-envelope")
+
+        assert request is not None
+        assert request["action_envelope_json"] is None
+
     def test_guard_surface_daemon_client_recovers_missing_auth_token(self, tmp_path, monkeypatch):
         guard_home = tmp_path / "guard-home"
         cleared: list[Path] = []
