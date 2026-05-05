@@ -87,7 +87,7 @@ _PROMPT_PATH_PATTERN = re.compile(
     r"))"
     r"(?![A-Za-z0-9_.-])"
 )
-_NETWORK_HOST_PATTERN = re.compile(r"(?:https?|wss?|grpcs?)://(?P<host>[A-Za-z0-9.-]+)(?::\d+)?(?:/|$)")
+_NETWORK_HOST_PATTERN = re.compile(r"(?:https?|wss?|grpcs?)://(?P<host>[A-Za-z0-9.-]+)(?::\d+)?(?:[/?#]|$)")
 _GENERIC_POSIX_ABSOLUTE_PATH_PATTERN = re.compile(
     r"(?<![:A-Za-z0-9_./-])(?P<path>/(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+)(?![A-Za-z0-9_.-])"
 )

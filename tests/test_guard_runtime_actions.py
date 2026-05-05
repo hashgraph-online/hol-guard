@@ -196,6 +196,17 @@ def test_normalize_codex_prompt_extracts_late_path_and_host(tmp_path: Path) -> N
     assert envelope.network_hosts == ("api.example.test",)
 
 
+def test_normalize_codex_prompt_extracts_query_and_fragment_hosts(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Call https://api.example.test?token=abc and wss://relay.example.test#session.",
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.network_hosts == ("api.example.test", "relay.example.test")
+
+
 def test_normalize_codex_prompt_ignores_bare_credentials_word(tmp_path: Path) -> None:
     payload = {
         "hook_event_name": "UserPromptSubmit",
