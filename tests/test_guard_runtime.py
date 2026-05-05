@@ -492,6 +492,8 @@ clearer UX and an implementation plan with technical references.
         assert output["artifact_type"] == "prompt_request"
         assert "read .authrc" in output["launch_summary"]
         assert approval_requests[0]["launch_target"] == "Codex prompt for `.authrc`: read .authrc"
+        assert approval_requests[0]["action_envelope_json"]["action_type"] == "prompt"
+        assert approval_requests[0]["action_envelope_json"]["prompt_excerpt"] == "read .authrc"
 
     def test_codex_prompt_display_sanitizes_common_home_paths(self) -> None:
         display = guard_commands_module._codex_prompt_display_text(
@@ -9418,6 +9420,8 @@ def test_guard_headless_blocked_run_persists_receipts_and_diffs(tmp_path, monkey
     latest_receipt = store.get_latest_receipt("claude-code", baseline.artifact_id)
 
     assert result["blocked"] is True
+    assert result["artifacts"][0]["action_envelope_json"]["action_type"] == "harness_start"
+    assert result["artifacts"][0]["action_envelope_json"]["harness"] == "claude-code"
     assert latest_diff is not None
     assert latest_diff["current_hash"] == artifact_hash(changed)
     assert latest_receipt is not None

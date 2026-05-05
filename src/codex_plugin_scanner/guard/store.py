@@ -666,6 +666,7 @@ class GuardStore:
             self._ensure_approval_column(connection, "why_now", "text")
             self._ensure_approval_column(connection, "launch_summary", "text")
             self._ensure_approval_column(connection, "risk_headline", "text")
+            self._ensure_approval_column(connection, "action_envelope_json", "text")
             self._ensure_approval_column(connection, "workspace", "text")
             self._ensure_attachment_column(connection, "lease_id", "text not null default ''")
             self._ensure_attachment_column(connection, "lease_expires_at", "text")
