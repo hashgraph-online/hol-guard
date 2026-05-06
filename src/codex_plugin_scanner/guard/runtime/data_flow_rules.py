@@ -55,6 +55,7 @@ _CLIPBOARD_SINK_PATTERN = re.compile(r"(?i)(?:^|[\s;&|])(?:pbcopy|xclip|xsel|wl-
 _TEMP_SECRET_WRITE_PATTERN = re.compile(r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\s+(?P<tee>/tmp/[^\s;&|]+))")
 _CHMOD_TEMP_PATTERN = re.compile(r"(?is)chmod\s+(?P<mode>[0-7]{3,4}|[A-Za-z,+=-]+)\s+(?P<path>/tmp/[^\s;&|]+)")
 _HTTP_UPLOAD_METHODS = frozenset({"POST", "PUT", "PATCH"})
+_SCP_OPTIONS_WITH_VALUES = frozenset({"-B", "-c", "-F", "-i", "-J", "-l", "-o", "-P", "-S"})
 _WEBHOOK_HOST_MARKERS = (
     "webhook.site",
     "hooks.slack.com",
@@ -117,7 +118,7 @@ def detect_data_flow_exfiltration(
                 category="network",
             )
         )
-    if _encoded_secret_send(command, secret_matches):
+    if _encoded_secret_send(command, secret_matches, workspace=workspace):
         findings.append(
             _data_flow_signal(
                 "encoded-secret-send",
@@ -271,11 +272,16 @@ def _node_fetches_secret(command: str, *, workspace: Path | None) -> bool:
     )
 
 
-def _encoded_secret_send(command: str, secret_matches: Sequence[SecretPathMatch]) -> bool:
+def _encoded_secret_send(command: str, secret_matches: Sequence[SecretPathMatch], *, workspace: Path | None) -> bool:
     if not secret_matches:
         return False
-    lowered = command.lower()
-    return "base64" in lowered and _has_http_upload(command) and bool(extract_urls(command))
+    return any(
+        _secret_path_matches_in_command(segment, workspace=workspace)
+        and "base64" in segment.lower()
+        and _has_http_upload(segment)
+        and bool(extract_urls(segment))
+        for segment in extract_command_segments(command)
+    )
 
 
 def _has_dns_exfil_hostname(command: str) -> bool:
@@ -327,7 +333,22 @@ def _scp_operands(body: str) -> tuple[str, ...]:
         tokens = shlex.split(body)
     except ValueError:
         tokens = body.split()
-    return tuple(token for token in tokens if token and not token.startswith("-"))
+    operands: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if not token:
+            index += 1
+            continue
+        if token in _SCP_OPTIONS_WITH_VALUES:
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        operands.append(token)
+        index += 1
+    return tuple(operands)
 
 
 def _is_scp_remote_target(value: str) -> bool:
