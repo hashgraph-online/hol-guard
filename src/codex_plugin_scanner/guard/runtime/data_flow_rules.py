@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.data_flow import (
     ShellPipe,
     extract_command_segments,
+    extract_command_substitutions,
     extract_input_redirects,
     extract_pipes,
     extract_urls,
@@ -37,6 +38,11 @@ _CURL_DATA_FILE_PATTERN = re.compile(
 _CURL_DATA_STDIN_PATTERN = re.compile(
     r"(?s)(?:^|[\s;&|])(?i:curl|curl\.exe)\b[^\r\n;&|]*?"
     r"(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@-|--upload-file(?:=|\s+)[.-](?=$|[\s;&|])|-T\s*[.-](?=$|[\s;&|]))"
+)
+_CURL_DATA_VALUE_PATTERN = re.compile(
+    r"(?s)(?:^|[\s;&|])(?i:curl|curl\.exe)\b[^\r\n;&|]*?"
+    r"(?:--data(?:-binary|-raw|-urlencode)?|-d)(?:=|\s*)"
+    r"(?P<value>\"[^\"]+\"|'[^']+'|[^\s;&|]+)"
 )
 _PYTHON_SECRET_POST_PATTERN = re.compile(
     r"(?is)\bpython(?:3)?\b.*?-c\s+.*?"
@@ -254,7 +260,24 @@ def _contains_http_upload_sink(command: str) -> bool:
 
 
 def _curl_uploads_secret_file(command: str, *, workspace: Path | None) -> bool:
-    return any(classify_secret_path(path, cwd=workspace) is not None for path in _curl_data_file_paths(command))
+    if any(classify_secret_path(path, cwd=workspace) is not None for path in _curl_data_file_paths(command)):
+        return True
+    return _curl_data_substitution_reads_secret(command, workspace=workspace)
+
+
+def _curl_data_substitution_reads_secret(command: str, *, workspace: Path | None) -> bool:
+    for segment in extract_command_segments(command):
+        if _first_shell_word(segment).lower() not in {"curl", "curl.exe"}:
+            continue
+        for match in _CURL_DATA_VALUE_PATTERN.finditer(segment):
+            value = match.group("value")
+            if not any(
+                _secret_path_matches_in_command(substitution, workspace=workspace)
+                for substitution in extract_command_substitutions(value)
+            ):
+                continue
+            return True
+    return False
 
 
 def _python_posts_secret(command: str, *, workspace: Path | None) -> bool:
@@ -370,7 +393,12 @@ def _is_scp_remote_target(value: str) -> bool:
 
 
 def _git_remote_adds_token_url(command: str) -> bool:
-    for match in _GIT_REMOTE_ADD_PATTERN.finditer(command):
+    for segment in extract_command_segments(command):
+        if _first_shell_word(segment).lower() != "git":
+            continue
+        match = _GIT_REMOTE_ADD_PATTERN.match(segment)
+        if match is None:
+            continue
         for url in extract_urls(match.group("body")):
             parsed = urlparse(url)
             if parsed.username and _looks_like_token(parsed.username):
@@ -383,6 +411,14 @@ def _git_remote_adds_token_url(command: str) -> bool:
 def _looks_like_token(value: str) -> bool:
     lowered = value.lower()
     return lowered.startswith(("ghp_", "github_pat_", "glpat-", "x-access-token")) or len(value) >= 24
+
+
+def _first_shell_word(command: str) -> str:
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = command.split()
+    return tokens[0] if tokens else ""
 
 
 def _npm_publish_with_token_source(command: str, *, workspace: Path | None) -> bool:
