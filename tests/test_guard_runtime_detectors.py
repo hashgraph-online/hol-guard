@@ -387,3 +387,45 @@ def test_guard_run_writes_detector_debug_trace_only_when_enabled(tmp_path, monke
     assert trace_payload["action"]["prompt_excerpt"] == "[redacted]"
     assert trace_payload["action"]["raw_payload_redacted"]["prompt"] == "[redacted]"
     assert trace_payload["signals"] == enabled_result["runtime_detector_signals_v2"]
+
+
+def test_guard_run_surfaces_detector_debug_trace_write_errors(tmp_path, monkeypatch):
+    calls: list[str] = []
+    detector = RecordingDetector("secret.local", ("secret",), calls, _signal("secret:local", "secret"))
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(),
+        artifacts=(),
+    )
+
+    def evaluate_stub(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {"blocked": False, "artifacts": [], "receipts_recorded": 0}
+
+    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_runner_module, "evaluate_detection", evaluate_stub)
+    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "debug").write_text("not a directory", encoding="utf-8")
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=guard_home,
+    )
+    config = GuardConfig(
+        guard_home=guard_home,
+        workspace=tmp_path / "workspace",
+        runtime_detector_registry=True,
+        runtime_detector_debug_trace=True,
+    )
+
+    result = guard_runner_module.guard_run("codex", context, GuardStore(guard_home), config, True, [])
+
+    assert calls == ["secret.local"]
+    assert result["runtime_detector_signals_v2"] == [_signal("secret:local", "secret").to_dict()]
+    trace_error = result["runtime_detector_trace_error"]
+    assert isinstance(trace_error, dict)
+    assert trace_error["error_type"] in {"FileExistsError", "NotADirectoryError"}

@@ -365,22 +365,28 @@ def _evaluation_with_detector_registry(
         timeout_ms=config.runtime_detector_timeout_ms,
         disabled_detector_ids=config.runtime_detector_disabled_ids,
     )
-    if config.runtime_detector_debug_trace:
-        _write_detector_debug_trace(config, action_envelope, result)
+    trace_error = (
+        _write_detector_debug_trace(config, action_envelope, result) if config.runtime_detector_debug_trace else None
+    )
     if not result.signals and not result.telemetry:
-        return evaluation
-    return {
+        if trace_error is None:
+            return evaluation
+        return {**evaluation, "runtime_detector_trace_error": trace_error}
+    next_evaluation = {
         **evaluation,
         "runtime_detector_signals_v2": [signal.to_dict() for signal in result.signals],
         "runtime_detector_telemetry": [item.to_dict() for item in result.telemetry],
     }
+    if trace_error is not None:
+        next_evaluation["runtime_detector_trace_error"] = trace_error
+    return next_evaluation
 
 
 def _write_detector_debug_trace(
     config: GuardConfig,
     action_envelope: GuardActionEnvelope,
     result: DetectorRunResult,
-) -> None:
+) -> dict[str, object] | None:
     created_at = datetime.now(timezone.utc)
     action_payload = action_envelope.to_dict()
     trace_payload = {
@@ -391,12 +397,16 @@ def _write_detector_debug_trace(
         "telemetry": [item.to_dict() for item in result.telemetry],
     }
     trace_dir = config.guard_home / "debug" / "detectors"
-    trace_dir.mkdir(parents=True, exist_ok=True)
     action_digest = hashlib.sha256(
         json.dumps(action_payload, sort_keys=True, default=str).encode("utf-8"),
     ).hexdigest()[:12]
     trace_path = trace_dir / f"{created_at.strftime('%Y%m%dT%H%M%S%fZ')}-{action_digest}.json"
-    trace_path.write_text(json.dumps(trace_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    try:
+        trace_dir.mkdir(parents=True, exist_ok=True)
+        trace_path.write_text(json.dumps(trace_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except OSError as error:
+        return {"error_type": type(error).__name__, "message": str(error)}
+    return None
 
 
 def _redact_detector_debug_payload(value: object) -> object:
