@@ -6,7 +6,29 @@ from dataclasses import dataclass, field
 from typing import Literal, cast
 
 GuardEventSource = Literal["edge", "approval-center", "policy", "protect-api"]
-GuardEventType = Literal["receipt.created", "approval.created", "approval.resolved", "policy.changed"]
+GuardEventType = Literal[
+    "receipt.created",
+    "approval.created",
+    "approval.resolved",
+    "policy.changed",
+    "runtime.session",
+    "access_graph.snapshot",
+    "agent.handshake",
+    "notification.delivery",
+]
+_GUARD_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "receipt.created",
+        "approval.created",
+        "approval.resolved",
+        "policy.changed",
+        "runtime.session",
+        "access_graph.snapshot",
+        "agent.handshake",
+        "notification.delivery",
+    }
+)
+_GUARD_EVENT_SOURCES: frozenset[str] = frozenset({"edge", "approval-center", "policy", "protect-api"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,9 +71,9 @@ class GuardEventV1:
         event_payload = payload.get("payload")
         if not isinstance(event_payload, dict):
             raise ValueError("Guard event payload must be an object")
-        if event_type not in {"receipt.created", "approval.created", "approval.resolved", "policy.changed"}:
+        if event_type not in _GUARD_EVENT_TYPES:
             raise ValueError(f"Unsupported Guard event type: {event_type}")
-        if source not in {"edge", "approval-center", "policy", "protect-api"}:
+        if source not in _GUARD_EVENT_SOURCES:
             raise ValueError(f"Unsupported Guard event source: {source}")
         workspace_id = payload.get("workspaceId")
         device_id = payload.get("deviceId")

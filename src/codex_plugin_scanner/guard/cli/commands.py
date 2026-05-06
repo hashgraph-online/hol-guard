@@ -5916,7 +5916,7 @@ def _guard_service_login_payload(
         "client_title": label,
         "client_version": _GUARD_CLIENT_VERSION,
     }
-    store.set_sync_credentials(sync_url, token, now)
+    store.set_sync_credentials(sync_url, token, now, workspace_id=workspace or None)
     store.set_sync_payload(_SERVICE_RUNTIME_PROFILE_STATE_KEY, service_profile, now)
     device = store.set_device_label(label, now)
     store.add_event(
