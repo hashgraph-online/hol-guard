@@ -1638,6 +1638,46 @@ clearer UX and an implementation plan with technical references.
         assert output["artifact_type"] == "tool_action_request"
         assert output["approval_requests"]
 
+    def test_codex_post_tool_use_asks_for_unspaced_operator_local_secret_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "printf ready&&grep OPENAI_API_KEY src/config.ts"},
+            "tool_response": {
+                "stdout": "src/config.ts:1:OPENAI_API_KEY=sk-" + "A" * 32,
+            },
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["approval_requests"]
+
     def test_codex_post_tool_use_blocks_piped_search_with_secret_like_output(
         self,
         monkeypatch,
@@ -11225,6 +11265,29 @@ def test_guard_runtime_tool_action_policy_prefers_configured_risk_action_over_de
     )
 
     assert guard_commands_module._runtime_artifact_policy_action(config, artifact, "codex") == "block"
+
+
+def test_guard_runtime_tool_action_policy_includes_defaults_for_unconfigured_risks(tmp_path):
+    artifact = GuardArtifact(
+        artifact_id="codex:test:tool-action:upload",
+        name="Codex credential-looking output",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="/dev/null",
+        metadata={
+            "action_class": "credential exfiltration shell command",
+            "guard_default_action": "warn",
+        },
+    )
+    config = GuardConfig(
+        guard_home=tmp_path,
+        workspace=None,
+        security_level="balanced",
+        risk_actions={"network_egress": "allow"},
+    )
+
+    assert guard_commands_module._runtime_artifact_policy_action(config, artifact, "codex") == "require-reapproval"
 
 
 def test_guard_hook_codex_user_prompt_submit_guard_bypass_hard_blocks_without_approval_url(
