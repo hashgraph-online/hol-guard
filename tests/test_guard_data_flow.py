@@ -192,6 +192,7 @@ def _data_flow_signal_ids(command: str, tmp_path) -> tuple[str, ...]:
         ),
         ("NPM_TOKEN=$(cat .npmrc) npm publish", "data-flow:npm-publish-token-source"),
         ("cat .env | pbcopy", "data-flow:clipboard-secret"),
+        ("cat .env | sed 's/.*/x/' | pbcopy", "data-flow:clipboard-secret"),
         ("cat .env > /tmp/guard-leak && chmod 644 /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
         ("cat .env > /tmp/guard-leak && chmod a+r /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
     ],
@@ -222,6 +223,7 @@ def test_data_flow_exfiltration_detector_flags_malicious_shell_patterns(tmp_path
         "cat .env > /tmp/guard-leak && chmod 644 /tmp/other-file",
         "cat README.md > /tmp/guard-leak && cat .env && chmod 644 /tmp/guard-leak",
         "cat .env && npm publish",
+        "scp host.example:/tmp/.env ./backup.env",
         "scp README.md host.example:/tmp/readme",
     ],
 )
