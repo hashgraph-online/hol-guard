@@ -60,7 +60,18 @@ _GUARD_POLICY_TAMPER_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"\bif\s+(?:blocked|denied|rejected)\b"
         rf"(?={_SAME_SENTENCE_120}\b(?:HOL\s+)?Guard\b)"
         rf"{_SAME_SENTENCE_120}\b(?:try|use|run)\b"
-        rf"{_SAME_SENTENCE_120}\b(?:shell|bash|sh|terminal|command)\b",
+        rf"{_SAME_SENTENCE_120}\b(?:shell|bash|sh|terminal)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bif\s+(?:HOL\s+)?Guard\s+(?:blocks?|blocked|denies|denied|rejects?|rejected)\b"
+        rf"{_SAME_SENTENCE_120}\b(?:try|use|run)\b"
+        rf"{_SAME_SENTENCE_120}\b(?:shell|bash|sh|terminal)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bif\s+(?:HOL\s+)?Guard\s+(?:blocks?|blocked|denies|denied|rejects?|rejected)\b"
+        rf"{_SAME_SENTENCE_120}\buse\s+another\s+MCP\s+servers?\b",
         re.IGNORECASE,
     ),
     re.compile(
