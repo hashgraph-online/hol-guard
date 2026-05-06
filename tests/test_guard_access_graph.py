@@ -218,3 +218,21 @@ def test_tool_call_risk_categories_avoid_broad_substring_matches() -> None:
     )
 
     assert categories == ()
+
+
+def test_tool_call_risk_categories_match_snake_case_secret_tokens() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="environment",
+        tool_name="readConfig",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = tool_call_risk_categories(
+        artifact,
+        {"keys": ["OPENAI_API_TOKEN", "aws_secret_key"]},
+    )
+
+    assert categories == ("secret_access",)

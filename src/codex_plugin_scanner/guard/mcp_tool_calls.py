@@ -165,7 +165,7 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
         (
             r"(?<![a-z0-9_-])\.env(?![a-z0-9_-])",
             r"(?<![a-z0-9_-])\.ssh(?![a-z0-9_-])",
-            r"\b(id_rsa|credentials|token|secret|passwd)\b",
+            r"(?<![a-z0-9])(id[_-]?rsa|credentials|token|secret|passwd)(?![a-z0-9])",
             r"(?<![a-z0-9_-])\.(npmrc|pypirc)(?![a-z0-9_-])",
         ),
     ):
