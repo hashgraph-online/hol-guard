@@ -226,8 +226,10 @@ def _has_secret_pipe_to_http_upload(pipes: Sequence[ShellPipe], command: str, *,
     if not pipes or not _has_http_upload(command):
         return False
     return any(
-        _secret_path_matches_in_command(pipe.left, workspace=workspace) and _contains_http_upload_sink(pipe.right)
-        for pipe in pipes
+        extract_pipes(segment)
+        and _secret_path_matches_in_command(segment, workspace=workspace)
+        and _contains_http_upload_sink(segment)
+        for segment in extract_command_segments(command)
     )
 
 
@@ -307,7 +309,7 @@ def _has_webhook_exfil(command: str, *, workspace: Path | None) -> bool:
 def _scp_sends_secret(command: str, *, workspace: Path | None) -> bool:
     for match in _SCP_PATTERN.finditer(command):
         body = match.group("body")
-        if _secret_path_matches_in_command(body, workspace=workspace) and re.search(r"\S+@[^:\s]+:", body):
+        if _secret_path_matches_in_command(body, workspace=workspace) and re.search(r"(?:\S+@)?[^:\s]+:", body):
             return True
     return False
 
@@ -333,7 +335,11 @@ def _npm_publish_with_token_source(command: str, secret_matches: Sequence[Secret
         return False
     if "--dry-run" in command:
         return False
-    return bool(secret_matches or _TOKEN_SOURCE_PATTERN.search(command))
+    return bool(_TOKEN_SOURCE_PATTERN.search(command) or _has_npm_secret_match(secret_matches))
+
+
+def _has_npm_secret_match(secret_matches: Sequence[SecretPathMatch]) -> bool:
+    return any("npm" in match.family.lower() or ".npmrc" in match.requested_path.lower() for match in secret_matches)
 
 
 def _clipboard_receives_secret(pipes: Sequence[ShellPipe], command: str, *, workspace: Path | None) -> bool:
