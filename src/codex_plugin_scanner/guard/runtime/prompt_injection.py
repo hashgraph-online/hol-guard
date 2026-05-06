@@ -295,7 +295,20 @@ def _is_documentation_context_stealth(text: str, match: re.Match[str]) -> bool:
 
 
 def _is_documentation_context_guard(text: str, match: re.Match[str]) -> bool:
-    return _is_documentation_context_with_subject(text, match, _GUARD_DOCUMENTATION_SUBJECT_PATTERN)
+    boundary = max(
+        text.rfind(".", 0, match.start()),
+        text.rfind("!", 0, match.start()),
+        text.rfind("?", 0, match.start()),
+        text.rfind(";", 0, match.start()),
+        text.rfind("\n", 0, match.start()),
+    )
+    context_start = boundary + 1
+    prefix = text[context_start : match.start()]
+    return (
+        _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
+        and _GUARD_DOCUMENTATION_SUBJECT_PATTERN.search(prefix) is not None
+        and _has_reported_phrase_prefix(prefix)
+    )
 
 
 def _is_documentation_context_with_subject(
