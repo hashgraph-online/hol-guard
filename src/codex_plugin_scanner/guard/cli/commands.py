@@ -4101,7 +4101,7 @@ _CODEX_SOURCE_SEARCH_EXTENSIONS = frozenset(
 )
 _CODEX_BENIGN_SOURCE_DOTFILES = frozenset({".nvmrc"})
 _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
-    r"(?im)(?:^|[^a-z0-9])fake[_-]?(?:credential|secret|token)\s*[:=]"
+    r"(?i)\s*fake[_-]?(?:credential|secret|token)\s*[:=]\s*(?:\"[^\r\n\"]+\"|'[^\r\n']+'|[^\s\"',}]+)\s*"
 )
 _CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
     {
@@ -4133,8 +4133,13 @@ def _codex_source_inspection_can_skip_secret_output(
     if any(match.sensitivity != "medium" for match in content_matches):
         return False
     if _codex_command_references_benign_source_dotfile(command_text):
-        return _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN.search(response_text) is not None
+        return _codex_output_is_only_benign_secret_fixture(response_text)
     return True
+
+
+def _codex_output_is_only_benign_secret_fixture(response_text: str) -> bool:
+    lines = [line for line in response_text.splitlines() if line.strip()]
+    return bool(lines) and all(_CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN.fullmatch(line) for line in lines)
 
 
 def _codex_command_references_benign_source_dotfile(command_text: str) -> bool:

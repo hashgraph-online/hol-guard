@@ -966,6 +966,46 @@ clearer UX and an implementation plan with technical references.
         assert output["continue"] is False
         assert "credential-looking output" in output["stopReason"]
 
+    def test_codex_post_tool_use_blocks_nvmrc_mixed_fake_and_secret_assignments(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        secret_output = "fake_credential=fixture-only\nDB_PASSWORD=fixture-pass\n"
+        _write_text(workspace_dir / ".nvmrc", secret_output)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "cat .nvmrc"},
+            "tool_response": {"stdout": secret_output},
+            "source_scope": "project",
+        }
+        monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["continue"] is False
+        assert "credential-looking output" in output["stopReason"]
+
     def test_codex_post_tool_use_allows_docs_fake_token_examples(
         self,
         monkeypatch,
