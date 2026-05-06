@@ -2400,6 +2400,52 @@ clearer UX and an implementation plan with technical references.
         assert output["policy_action"] == "require-reapproval"
         assert output["path_summary"] == str(home_dir / ".env")
 
+    @pytest.mark.parametrize(
+        "path",
+        [
+            ".env",
+            ".npmrc",
+            ".pypirc",
+            "~/.aws/" + "credentials",
+            "~/.ssh/id_rsa",
+            "~/.ssh/id_ed25519",
+            "~/.gnupg/private-keys-v1.d/example.key",
+            "~/.docker/" + "config.json",
+            "~/.kube/config",
+            ".terraform.tfvars",
+        ],
+    )
+    def test_guard_hook_asks_for_planned_secret_file_reads(self, tmp_path, capsys, monkeypatch, path):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "tool_name": "read_file",
+            "tool_input": {"path": path},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "copilot",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "file_read_request"
+        assert output["policy_action"] == "require-reapproval"
+
 
 def test_guard_hook_emits_copilot_native_ask_response(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
