@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.data_flow import (
     ShellPipe,
+    extract_command_segments,
     extract_http_methods,
     extract_input_redirects,
     extract_pipes,
@@ -51,7 +52,7 @@ _NPM_PUBLISH_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])npm\s+publish\b")
 _TOKEN_SOURCE_PATTERN = re.compile(r"(?i)\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|_authToken|npm[_-]?token)\b")
 _CLIPBOARD_SINK_PATTERN = re.compile(r"(?i)(?:^|[\s;&|])(?:pbcopy|xclip|xsel|wl-copy|clip(?:\.exe)?)\b")
 _TEMP_SECRET_WRITE_PATTERN = re.compile(r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\s+(?P<tee>/tmp/[^\s;&|]+))")
-_CHMOD_TEMP_PATTERN = re.compile(r"(?is)chmod\s+(?P<mode>[0-7]{3,4}|[A-Za-z,+-=]+)\s+(?P<path>/tmp/[^\s;&|]+)")
+_CHMOD_TEMP_PATTERN = re.compile(r"(?is)chmod\s+(?P<mode>[0-7]{3,4}|[A-Za-z,+=-]+)\s+(?P<path>/tmp/[^\s;&|]+)")
 _HTTP_UPLOAD_METHODS = frozenset({"POST", "PUT", "PATCH"})
 _WEBHOOK_HOST_MARKERS = (
     "webhook.site",
@@ -75,7 +76,6 @@ def detect_data_flow_exfiltration(
     findings: list[RiskSignalV2] = []
     secret_matches = _secret_path_matches_in_command(command, workspace=workspace)
     pipes = extract_pipes(command)
-    urls = extract_urls(command)
     if _has_secret_pipe_to_http_upload(pipes, command, workspace=workspace):
         findings.append(
             _data_flow_signal(
@@ -136,7 +136,7 @@ def detect_data_flow_exfiltration(
                 category="network",
             )
         )
-    if _has_webhook_sink(urls) and (secret_matches or _curl_uploads_secret_file(command, workspace=workspace)):
+    if _has_webhook_exfil(command, workspace=workspace):
         findings.append(
             _data_flow_signal(
                 "webhook-sink",
@@ -186,7 +186,7 @@ def detect_data_flow_exfiltration(
                 category="secret",
             )
         )
-    if _world_readable_temp_secret(command, secret_matches):
+    if _world_readable_temp_secret(command, workspace=workspace):
         findings.append(
             _data_flow_signal(
                 "world-readable-temp-secret",
@@ -291,6 +291,19 @@ def _has_webhook_sink(urls: Sequence[str]) -> bool:
     return False
 
 
+def _has_webhook_exfil(command: str, *, workspace: Path | None) -> bool:
+    for segment in extract_command_segments(command):
+        if not _has_webhook_sink(extract_urls(segment)):
+            continue
+        if _secret_path_matches_in_command(segment, workspace=workspace):
+            return True
+        if _curl_uploads_secret_file(segment, workspace=workspace):
+            return True
+        if _has_secret_pipe_to_http_upload(extract_pipes(segment), segment, workspace=workspace):
+            return True
+    return False
+
+
 def _scp_sends_secret(command: str, *, workspace: Path | None) -> bool:
     for match in _SCP_PATTERN.finditer(command):
         body = match.group("body")
@@ -332,12 +345,12 @@ def _clipboard_receives_secret(pipes: Sequence[ShellPipe], command: str, *, work
     )
 
 
-def _world_readable_temp_secret(command: str, secret_matches: Sequence[SecretPathMatch]) -> bool:
-    if not secret_matches:
-        return False
+def _world_readable_temp_secret(command: str, *, workspace: Path | None) -> bool:
     write_targets = {
         _strip_shell_token(target)
-        for match in _TEMP_SECRET_WRITE_PATTERN.finditer(command)
+        for segment in extract_command_segments(command)
+        if _secret_path_matches_in_command(segment, workspace=workspace)
+        for match in _TEMP_SECRET_WRITE_PATTERN.finditer(segment)
         for target in (match.group("redirect"), match.group("tee"))
         if target
     }
