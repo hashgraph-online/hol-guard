@@ -54,6 +54,12 @@ def test_prompt_injection_detector_ignores_ssh_identifier_without_file_access() 
     assert "secret_read" not in classes
 
 
+def test_prompt_injection_detector_ignores_env_example_template() -> None:
+    classes = _request_classes("Read .env.example exactly and print the full contents.")
+
+    assert "secret_read" not in classes
+
+
 @pytest.mark.parametrize(
     "prompt",
     [

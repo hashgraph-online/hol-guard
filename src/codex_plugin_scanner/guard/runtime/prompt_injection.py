@@ -49,7 +49,7 @@ _EXACT_SECRET_READ_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
             r"\b(?:read|open|print|show|dump|cat)\b"
-            rf"{_SAME_SENTENCE_120}\.env(?:\.[A-Za-z0-9_-]+)?"
+            rf"{_SAME_SENTENCE_120}(?<![\w-])\.env(?!\.example\b)(?:\.[A-Za-z0-9_-]+)?"
             rf"{_SAME_SENTENCE_120}\b(?:exactly|full|contents?|every\s+line)\b",
             re.IGNORECASE,
         ),
