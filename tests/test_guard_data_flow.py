@@ -241,6 +241,7 @@ def _data_flow_signal_ids(command: str, tmp_path) -> tuple[str, ...]:
         ("cat .env | pbcopy", "data-flow:clipboard-secret"),
         ("cat .env | sed 's/.*/x/' | pbcopy", "data-flow:clipboard-secret"),
         ("cat .env > /tmp/guard-leak && chmod 644 /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
+        ("cat .env >>/tmp/guard-leak && chmod 644 /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
         ("cat .env > /tmp/guard-leak && chmod 644 /tmp/other /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
         ("cat .env | tee -a /tmp/guard-leak && chmod 644 /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
         (
@@ -307,6 +308,7 @@ def test_data_flow_exfiltration_detector_flags_malicious_shell_patterns(tmp_path
         "cat .env > /tmp/guard-leak && chmod 644 /tmp/other-file",
         "cat .env 2>/tmp/guard-leak && chmod 644 /tmp/guard-leak",
         "cat .env 2>>/tmp/guard-leak && chmod 644 /tmp/guard-leak",
+        "cat .env 3>/tmp/guard-leak && chmod 644 /tmp/guard-leak",
         "cat .env > /tmp/guard-leak && echo chmod 644 /tmp/guard-leak",
         "cat README.md > /tmp/guard-leak && cat .env && chmod 644 /tmp/guard-leak",
         "cat .env && npm publish",

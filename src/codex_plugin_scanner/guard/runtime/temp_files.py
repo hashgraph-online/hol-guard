@@ -7,7 +7,9 @@ import re
 from codex_plugin_scanner.guard.runtime.data_flow import extract_command_segments
 from codex_plugin_scanner.guard.runtime.shell_commands import command_tokens_after_env_assignments, shell_tokens
 
-_TEMP_SECRET_WRITE_PATTERN = re.compile(r"(?is)(?:(?<![2>])>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\b(?P<tee>[^\r\n;&|]+))")
+_TEMP_SECRET_WRITE_PATTERN = re.compile(
+    r"(?is)(?:(?:^|[^\d>])>{1,2}\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\b(?P<tee>[^\r\n;&|]+))"
+)
 
 
 def temp_write_targets(segment: str) -> tuple[str, ...]:
