@@ -25,7 +25,7 @@ _DOCUMENTATION_SUBJECT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _STEALTH_DOCUMENTATION_SUBJECT_PATTERN = re.compile(
-    r"\b(?:prompt\s+injection|security|attacks?|bypass\s+prompt|malicious|adversarial|unsafe)\b",
+    r"\b(?:prompt\s+injection|attacks?|bypass\s+prompt|malicious|adversarial|unsafe)\b",
     re.IGNORECASE,
 )
 _GUARD_DOCUMENTATION_SUBJECT_PATTERN = re.compile(
@@ -325,10 +325,9 @@ def _is_documentation_context_with_subject(
     )
     context_start = boundary + 1
     prefix = text[context_start : match.start()]
-    local_context = text[context_start : min(len(text), match.end() + 80)]
     return (
         _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
-        and subject_pattern.search(local_context) is not None
+        and subject_pattern.search(prefix) is not None
         and _has_reported_phrase_prefix(prefix)
     )
 
