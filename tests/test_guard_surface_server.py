@@ -761,6 +761,70 @@ class TestGuardSurfaceServer:
 
         assert store.list_guard_operations(session_id=str(session["session_id"])) == []
 
+    def test_surface_runtime_preserves_prompt_request_explanation(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        runtime = GuardSurfaceRuntime(store)
+        workspace_dir = tmp_path / "workspace"
+        prompt_artifact = GuardArtifact(
+            artifact_id="codex:session:prompt-env-read:abc123",
+            name="prompt secret read",
+            harness="codex",
+            artifact_type="prompt_request",
+            source_scope="session",
+            config_path=str(workspace_dir / ".codex" / "config.toml"),
+            metadata={
+                "prompt_summary": "Prompt asks the harness to read a local .env file directly.",
+                "request_summary": "Codex prompt for `.env`: read .env",
+            },
+        )
+        session = runtime.start_session(
+            harness="codex",
+            surface="harness-adapter",
+            workspace=str(workspace_dir),
+            client_name="codex-hook",
+        )
+
+        queued = runtime.queue_blocked_operation(
+            session_id=str(session["session_id"]),
+            operation_type="prompt",
+            harness="codex",
+            metadata={"event": "UserPromptSubmit"},
+            detection={
+                "harness": "codex",
+                "installed": True,
+                "command_available": True,
+                "config_paths": [str(workspace_dir / ".codex" / "config.toml")],
+                "artifacts": [prompt_artifact.to_dict()],
+            },
+            evaluation={
+                "blocked": True,
+                "artifacts": [
+                    {
+                        "artifact_id": prompt_artifact.artifact_id,
+                        "artifact_name": prompt_artifact.name,
+                        "artifact_hash": "hash-123",
+                        "artifact_type": "prompt_request",
+                        "source_scope": "session",
+                        "config_path": prompt_artifact.config_path,
+                        "policy_action": "require-reapproval",
+                        "changed_fields": ["prompt_request"],
+                        "launch_target": "Codex prompt for `.env`: read .env",
+                        "risk_summary": "Prompt asks the harness to read a local .env file directly.",
+                    }
+                ],
+            },
+            approval_center_url="http://127.0.0.1:4455",
+            approval_surface_policy="native-or-center",
+            open_key=None,
+            opener=lambda _url: True,
+        )
+        request = queued["approval_requests"][0]
+
+        assert request["artifact_type"] == "prompt_request"
+        assert request["risk_headline"] == "Prompt asks the harness to read a local .env file directly."
+        assert "Codex prompt" in request["launch_summary"]
+        assert "active Codex prompt" in request["trigger_summary"]
+
     def test_guard_daemon_initializes_surface_client_and_tracks_attachments(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
