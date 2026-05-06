@@ -107,6 +107,36 @@ def test_stable_mcp_server_identifier_uses_safe_empty_name_fallback() -> None:
     assert ":unnamed:" in stable_mcp_server_identifier(server)
 
 
+def test_stable_mcp_server_identifier_normalizes_windows_command_paths() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="C:\\Users\\alice\\AppData\\Roaming\\npm\\npx.cmd",
+        args=("-y", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/bob/.codex/config.toml",
+        command="npx.cmd",
+        args=("-y", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    identifier = stable_mcp_server_identifier(first)
+
+    assert identifier == stable_mcp_server_identifier(second)
+    assert "alice" not in identifier
+
+
 def test_normalized_capability_categories_include_mcp_tool_risk_families() -> None:
     artifact = GuardArtifact(
         artifact_id="mcp:filesystem",

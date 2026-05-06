@@ -109,7 +109,7 @@ def stable_mcp_server_identifier(server: ManagedMcpServer) -> str:
         "harness": harness,
         "source_scope": source_scope,
         "name": server_name,
-        "command": PurePath(server.command).name.lower(),
+        "command": _stable_command_name(server.command),
         "args": [_stable_arg_token(value) for value in server.args],
         "transport": server.transport,
     }
@@ -153,6 +153,10 @@ def _stable_arg_token(value: str) -> str:
 
 def _stable_server_name(value: str) -> str:
     return value.strip().lower() or "unnamed"
+
+
+def _stable_command_name(value: str) -> str:
+    return PurePath(value.replace("\\", "/")).name.lower()
 
 
 def _looks_like_path_token(value: str) -> bool:
