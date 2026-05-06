@@ -270,7 +270,7 @@ def _split_top_level_commands(command: str) -> tuple[str, ...]:
         if next_index != index + 1:
             index = next_index
             continue
-        if state.is_top_level and command[index] == ";":
+        if state.is_top_level and command[index] in {";", "\n"}:
             _append_segment(parts, command[start:index])
             start = index + 1
         elif state.is_top_level and (command.startswith("&&", index) or command.startswith("||", index)):
