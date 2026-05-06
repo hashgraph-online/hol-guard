@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable
 
 from codex_plugin_scanner.guard.types import PromptRequest, RemediationAction
 
@@ -138,9 +139,9 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
     if not normalized:
         return ()
     requests: list[PromptRequest] = []
-    override_match = _first_match(_INSTRUCTION_OVERRIDE_PATTERNS, normalized)
-    if override_match is not None and not _is_non_actionable_fixture(normalized, override_match):
-        embedded_context = _embedded_context_label(normalized, override_match.start())
+    override_detection = _first_override_detection(normalized)
+    if override_detection is not None:
+        override_match, embedded_context = override_detection
         confidence = 0.62 if embedded_context is not None else 0.86
         severity = 6 if embedded_context is not None else 8
         summary = (
@@ -148,15 +149,6 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
             if embedded_context is not None
             else "Prompt asks the harness to override prior or system instructions."
         )
-        should_report_override = embedded_context is not None or not _is_documentation_context_override(
-            normalized, override_match
-        )
-    else:
-        should_report_override = False
-        confidence = 0.0
-        severity = 0
-        summary = ""
-    if override_match is not None and should_report_override:
         requests.append(
             _request(
                 request_class="prompt_injection_intent",
@@ -175,8 +167,12 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
                 normalized_prompt=normalized,
             )
         )
-    stealth_match = _first_match(_STEALTH_INSTRUCTION_PATTERNS, normalized)
-    if stealth_match is not None and not _is_documentation_context_stealth(normalized, stealth_match):
+    stealth_match = _first_actionable_match(
+        _STEALTH_INSTRUCTION_PATTERNS,
+        normalized,
+        _is_documentation_context_stealth,
+    )
+    if stealth_match is not None:
         requests.append(
             _request(
                 request_class="prompt_injection_intent",
@@ -195,8 +191,12 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
                 normalized_prompt=normalized,
             )
         )
-    guard_match = _first_match(_GUARD_POLICY_TAMPER_PATTERNS, normalized)
-    if guard_match is not None and not _is_documentation_context_guard(normalized, guard_match):
+    guard_match = _first_actionable_match(
+        _GUARD_POLICY_TAMPER_PATTERNS,
+        normalized,
+        _is_documentation_context_guard,
+    )
+    if guard_match is not None:
         requests.append(
             _request(
                 request_class="guard_bypass_intent",
@@ -294,6 +294,29 @@ def _first_match(patterns: tuple[re.Pattern[str], ...], text: str) -> re.Match[s
         match = pattern.search(text)
         if match is not None:
             return match
+    return None
+
+
+def _first_actionable_match(
+    patterns: tuple[re.Pattern[str], ...],
+    text: str,
+    is_documentation_context: Callable[[str, re.Match[str]], bool],
+) -> re.Match[str] | None:
+    for pattern in patterns:
+        for match in pattern.finditer(text):
+            if not is_documentation_context(text, match):
+                return match
+    return None
+
+
+def _first_override_detection(text: str) -> tuple[re.Match[str], str | None] | None:
+    for pattern in _INSTRUCTION_OVERRIDE_PATTERNS:
+        for match in pattern.finditer(text):
+            if _is_non_actionable_fixture(text, match):
+                continue
+            embedded_context = _embedded_context_label(text, match.start())
+            if embedded_context is not None or not _is_documentation_context_override(text, match):
+                return match, embedded_context
     return None
 
 
