@@ -232,6 +232,15 @@ def extract_urls(command: str) -> tuple[str, ...]:
     return _dedupe(url for url in urls if url)
 
 
+def extract_url_ranges(command: str) -> tuple[tuple[int, int], ...]:
+    """Return HTTP(S) URL character ranges in shell text."""
+
+    return tuple(
+        (match.start(), match.start() + len(_strip_url_suffix(match.group(0))))
+        for match in _URL_PATTERN.finditer(command)
+    )
+
+
 def _append_http_method(methods: list[str], method: str) -> None:
     normalized = method.upper()
     if normalized in _HTTP_METHODS:
