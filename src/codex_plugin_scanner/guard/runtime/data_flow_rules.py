@@ -20,7 +20,9 @@ from codex_plugin_scanner.guard.runtime.data_flow import (
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
 from codex_plugin_scanner.guard.runtime.shell_commands import (
     command_tokens_after_env_assignments,
+    git_remote_add_url_tokens,
     is_scp_remote_target,
+    npm_publish_index,
     npm_publish_is_dry_run,
     scp_operands,
     segment_executes_command,
@@ -376,9 +378,10 @@ def _scp_sends_secret(command: str, *, workspace: Path | None) -> bool:
 def _git_remote_adds_token_url(command: str) -> bool:
     for segment in extract_command_segments(command):
         tokens = command_tokens_after_env_assignments(segment)
-        if len(tokens) < 4 or tuple(token.lower() for token in tokens[:3]) != ("git", "remote", "add"):
+        url_tokens = git_remote_add_url_tokens(tokens)
+        if not url_tokens:
             continue
-        for url in extract_urls(" ".join(tokens[3:])):
+        for url in extract_urls(" ".join(url_tokens)):
             parsed = urlparse(url)
             if parsed.username and _looks_like_token(parsed.username):
                 return True
@@ -395,9 +398,10 @@ def _looks_like_token(value: str) -> bool:
 def _npm_publish_with_token_source(command: str, *, workspace: Path | None) -> bool:
     for segment in extract_command_segments(command):
         tokens = command_tokens_after_env_assignments(segment)
-        if len(tokens) < 2 or tuple(token.lower() for token in tokens[:2]) != ("npm", "publish"):
+        publish_index = npm_publish_index(tokens)
+        if publish_index is None:
             continue
-        if npm_publish_is_dry_run(tokens):
+        if npm_publish_is_dry_run(tokens, publish_index):
             continue
         if _TOKEN_SOURCE_PATTERN.search(segment):
             return True
