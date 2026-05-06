@@ -9368,7 +9368,10 @@ def test_guard_run_renderer_uses_context_preserving_diff_command():
         dry_run=True,
     )
 
-    assert steps[1]["command"] == "hol-guard diff codex --home /guard-home --workspace /workspace"
+    assert [step["command"] for step in steps] == [
+        "hol-guard run codex",
+        "hol-guard diff codex --home /guard-home --workspace /workspace",
+    ]
 
 
 def test_guard_run_renderer_uses_context_preserving_launch_command_for_clean_dry_runs():
@@ -9416,6 +9419,42 @@ def test_guard_run_renderer_uses_context_preserving_approvals_command_for_blocke
     )
 
     assert steps[0]["command"] == "hol-guard approvals --home /guard-home --workspace /workspace"
+
+
+def test_guard_run_renderer_uses_approval_queue_for_blocked_dry_run_when_center_is_available():
+    steps = guard_render_module._build_run_steps(
+        {
+            "harness": "codex",
+            "blocked": True,
+            "dry_run": True,
+            "approval_center_url": "http://127.0.0.1:4455",
+            "approvals_command": "hol-guard approvals --home /guard-home --workspace /workspace",
+            "diff_command": "hol-guard diff codex --home /guard-home --workspace /workspace",
+        },
+        blocked=True,
+        dry_run=True,
+    )
+
+    assert [step["command"] for step in steps] == [
+        "hol-guard run codex",
+        "hol-guard approvals --home /guard-home --workspace /workspace",
+        "hol-guard diff codex --home /guard-home --workspace /workspace",
+    ]
+
+
+def test_guard_run_renderer_uses_rerun_command_when_blocked_launch_has_no_approval_queue():
+    steps = guard_render_module._build_run_steps(
+        {
+            "harness": "codex",
+            "approvals_command": "hol-guard approvals --home /guard-home --workspace /workspace",
+            "rerun_command": "hol-guard run codex --home /guard-home --workspace /workspace",
+            "review_hint": "Approve the interactive prompt, then retry the guarded command.",
+        },
+        blocked=True,
+        dry_run=False,
+    )
+
+    assert steps[0]["command"] == "hol-guard run codex --home /guard-home --workspace /workspace"
 
 
 def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(tmp_path, capsys, monkeypatch):

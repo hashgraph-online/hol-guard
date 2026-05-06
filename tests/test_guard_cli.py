@@ -1594,6 +1594,62 @@ args = ["workspace-skill.js"]
         assert rc == 0
         assert "Recent Guard receipts" in output
 
+    def test_guard_run_blocked_human_output_lists_review_commands(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\n')
+
+        first_run = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--dry-run",
+                "--default-action",
+                "allow",
+                "--json",
+            ]
+        )
+        json.loads(capsys.readouterr().out)
+        _write_text(
+            workspace_dir / ".codex" / "config.toml",
+            """
+[mcp_servers.workspace_skill]
+command = "node"
+args = ["workspace-skill.js", "--changed"]
+""".strip()
+            + "\n",
+        )
+        _write_text(home_dir / "config.toml", 'changed_hash_action = "require-reapproval"\n')
+
+        rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--dry-run",
+            ]
+        )
+        output = capsys.readouterr().out
+
+        assert first_run == 0
+        assert rc == 1
+        assert "Dry run paused for review" in output
+        assert "workspace_skill" in output
+        assert "hol-guard run codex" in output
+        assert "hol-guard diff codex" in output
+        assert "hol-guard approvals" not in output
+        assert '"artifacts"' not in output
+
     def test_guard_allow_supports_expiring_exception(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
@@ -1929,6 +1985,104 @@ args = ["workspace-skill.js"]
         assert explain_output["artifact"]["artifact_id"] == "codex:project:workspace_skill"
         assert explain_output["latest_receipt"]["policy_decision"] == "allow"
         assert explain_output["latest_diff"]["current_hash"]
+
+    def test_guard_explain_human_output_renders_tracked_artifact_context(self, tmp_path, capsys):
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+
+        run_rc = main(
+            [
+                "guard",
+                "run",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--dry-run",
+                "--default-action",
+                "allow",
+                "--json",
+            ]
+        )
+        json.loads(capsys.readouterr().out)
+
+        explain_rc = main(
+            [
+                "guard",
+                "explain",
+                "codex:project:workspace_skill",
+                "--home",
+                str(home_dir),
+            ]
+        )
+        output = capsys.readouterr().out
+
+        assert run_rc == 0
+        assert explain_rc == 0
+        assert "Guard artifact evidence" in output
+        assert "workspace_skill" in output
+        assert "Latest decision" in output
+        assert "Latest diff" in output
+        assert '"latest_receipt"' not in output
+
+    def test_guard_explain_human_output_renders_matching_advisories(self, capsys):
+        advisory = {
+            "publisher": "hashgraph-online",
+            "severity": "high",
+            "headline": "Rotate token",
+            "updated_at": "2026-05-06",
+        }
+
+        emit_guard_payload(
+            "explain",
+            {
+                "generated_at": "2026-05-06T03:49:00Z",
+                "artifact": {
+                    "artifact_id": "codex:project:workspace_skill",
+                    "artifact_name": "workspace_skill",
+                    "harness": "codex",
+                    "artifact_type": "mcp_server",
+                    "source_scope": "project",
+                    "present": True,
+                },
+                "latest_receipt": {
+                    "policy_decision": "warn",
+                    "timestamp": "2026-05-06T03:47:00Z",
+                },
+                "advisories": [advisory],
+            },
+            False,
+        )
+        tracked_output = capsys.readouterr().out
+
+        assert "Matching advisories" in tracked_output
+        assert "Rotate token" in tracked_output
+        assert "Updated" in tracked_output
+        assert "2026-05-06" in tracked_output
+
+        emit_guard_payload(
+            "explain",
+            {
+                "generated_at": "2026-05-06T03:49:00Z",
+                "artifact_snapshot": {"path": "/workspace/plugin"},
+                "capability_manifest": {"ecosystems": ["codex"]},
+                "policy_recommendation": {
+                    "action": "warn",
+                    "reason": "Review the path before adding it to a harness.",
+                },
+                "advisories": [advisory],
+            },
+            False,
+        )
+        path_output = capsys.readouterr().out
+
+        assert "Path evidence" in path_output
+        assert "Matching advisories" in path_output
+        assert "Rotate token" in path_output
+        assert "Updated" in path_output
+        assert "2026-05-06" in path_output
 
     def test_guard_diff_reports_config_changes(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
@@ -4001,6 +4155,9 @@ args = ["-lc", "echo hi"]
         assert rc == 0
         assert "Detector registry" in output
         assert "enabled" in output
+        assert "Use status for current posture" in output
+        assert "Use diff for changed artifacts" in output
+        assert "Use events for the local timeline" in output
 
     def test_guard_codex_hook_blocks_shell_file_upload_script(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

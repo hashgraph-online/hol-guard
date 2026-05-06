@@ -285,37 +285,37 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         )
         adapters = _coerce_dict_list(payload.get("adapters"))
         console.print(_build_harness_table(adapters))
-        return
-
-    warnings = _coerce_string_list(payload.get("warnings"))
-    summary = Table.grid(padding=(0, 1))
-    summary.add_row("Harness", f"[bold]{payload.get('harness', 'unknown')}[/bold]")
-    summary.add_row("Installed", _bool_label(bool(payload.get("installed"))))
-    summary.add_row("Command", _bool_label(bool(payload.get("command_available"))))
-    summary.add_row("Artifacts", str(len(_coerce_dict_list(payload.get("artifacts")))))
-    registry = payload.get("runtime_detector_registry")
-    if isinstance(registry, dict):
-        registry_state = "enabled" if bool(registry.get("enabled")) else "disabled"
-        timeout_ms = registry.get("timeout_ms")
-        summary.add_row("Detector registry", f"{registry_state}, {timeout_ms} ms")
-    summary.add_row("Warnings", str(len(warnings)))
-    console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
-    if warnings:
-        warning_text = "\n".join(
-            textwrap.fill(
-                f"• {warning}",
-                width=72,
-                subsequent_indent="  ",
+    else:
+        warnings = _coerce_string_list(payload.get("warnings"))
+        summary = Table.grid(padding=(0, 1))
+        summary.add_row("Harness", f"[bold]{payload.get('harness', 'unknown')}[/bold]")
+        summary.add_row("Installed", _bool_label(bool(payload.get("installed"))))
+        summary.add_row("Command", _bool_label(bool(payload.get("command_available"))))
+        summary.add_row("Artifacts", str(len(_coerce_dict_list(payload.get("artifacts")))))
+        registry = payload.get("runtime_detector_registry")
+        if isinstance(registry, dict):
+            registry_state = "enabled" if bool(registry.get("enabled")) else "disabled"
+            timeout_ms = registry.get("timeout_ms")
+            summary.add_row("Detector registry", f"{registry_state}, {timeout_ms} ms")
+        summary.add_row("Warnings", str(len(warnings)))
+        console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
+        if warnings:
+            warning_text = "\n".join(
+                textwrap.fill(
+                    f"• {warning}",
+                    width=72,
+                    subsequent_indent="  ",
+                )
+                for warning in warnings
             )
-            for warning in warnings
-        )
-        console.print(Panel(Text(warning_text), title="Attention", border_style="yellow"))
-    runtime_probe = payload.get("runtime_probe")
-    if isinstance(runtime_probe, dict):
-        console.print(_build_runtime_probe_panel(runtime_probe))
-    artifacts = _coerce_dict_list(payload.get("artifacts"))
-    if artifacts:
-        console.print(_build_artifact_table(artifacts))
+            console.print(Panel(Text(warning_text), title="Attention", border_style="yellow"))
+        runtime_probe = payload.get("runtime_probe")
+        if isinstance(runtime_probe, dict):
+            console.print(_build_runtime_probe_panel(runtime_probe))
+        artifacts = _coerce_dict_list(payload.get("artifacts"))
+        if artifacts:
+            console.print(_build_artifact_table(artifacts))
+    console.print(_build_diagnostic_command_panel())
 
 
 def _render_run(console: Console, payload: dict[str, object]) -> None:
@@ -481,7 +481,11 @@ def _render_advisories(console: Console, payload: dict[str, object]) -> None:
             border_style="cyan",
         )
     )
-    table = Table(box=box.SIMPLE_HEAVY, show_header=True)
+    console.print(_build_advisory_table(items))
+
+
+def _build_advisory_table(items: list[dict[str, object]], *, title: str | None = None) -> Table:
+    table = Table(title=title, box=box.SIMPLE_HEAVY, show_header=True)
     table.add_column("Publisher", style="bold")
     table.add_column("Severity")
     table.add_column("Headline")
@@ -493,7 +497,7 @@ def _render_advisories(console: Console, payload: dict[str, object]) -> None:
             str(item.get("headline") or item.get("cache_key") or "advisory"),
             str(item.get("updated_at") or "unknown"),
         )
-    console.print(table)
+    return table
 
 
 def _render_events(console: Console, payload: dict[str, object]) -> None:
@@ -1077,6 +1081,40 @@ def _render_scan(console: Console, payload: dict[str, object]) -> None:
     _render_cisco_evidence(console, payload)
 
 
+def _render_explain(console: Console, payload: dict[str, object]) -> None:
+    advisories = _coerce_dict_list(payload.get("advisories"))
+    if "artifact_snapshot" in payload:
+        console.print(Panel(_build_consumer_summary_table(payload), title="Path evidence", border_style="cyan"))
+        _render_consumer_evidence_panels(console, payload)
+        _render_cisco_evidence(console, payload)
+        if advisories:
+            console.print(_build_advisory_table(advisories, title="Matching advisories"))
+        return
+    artifact = payload.get("artifact")
+    if not isinstance(artifact, dict):
+        _render_fallback(console, payload)
+        return
+    latest_receipt = payload.get("latest_receipt")
+    latest_diff = payload.get("latest_diff")
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Artifact", str(artifact.get("artifact_name") or artifact.get("artifact_id") or "unknown"))
+    body.add_row("Harness", str(artifact.get("harness") or "unknown"))
+    body.add_row("Type", str(artifact.get("artifact_type") or "artifact"))
+    body.add_row("Scope", str(artifact.get("source_scope") or "unknown"))
+    body.add_row("Present", _bool_label(bool(artifact.get("present"))))
+    if isinstance(latest_receipt, dict):
+        body.add_row("Latest decision", _action_text(str(latest_receipt.get("policy_decision") or "warn")))
+        body.add_row("Receipt time", str(latest_receipt.get("timestamp") or "unknown"))
+    if isinstance(latest_diff, dict):
+        changed_fields = ", ".join(_coerce_string_list(latest_diff.get("changed_fields"))) or "no field changes"
+        body.add_row("Latest diff", changed_fields)
+        body.add_row("Current hash", str(latest_diff.get("current_hash") or "unknown"))
+    body.add_row("Advisories", str(len(advisories)))
+    console.print(Panel(body, title="Guard artifact evidence", border_style="cyan"))
+    if advisories:
+        console.print(_build_advisory_table(advisories, title="Matching advisories"))
+
+
 def _render_preflight(console: Console, payload: dict[str, object]) -> None:
     install_verdict = payload.get("install_verdict")
     install_target = payload.get("install_target")
@@ -1209,6 +1247,21 @@ def _build_steps_panel(steps: list[dict[str, object]]) -> Panel:
     return Panel("\n\n".join(lines), title="Next steps", border_style="green")
 
 
+def _build_diagnostic_command_panel() -> Panel:
+    return Panel(
+        "\n".join(
+            (
+                "Use status for current posture: hol-guard status",
+                "Use doctor for setup and runtime probes: hol-guard doctor <harness>",
+                "Use diff for changed artifacts: hol-guard diff <harness>",
+                "Use events for the local timeline: hol-guard events",
+            )
+        ),
+        title="Which diagnostic command?",
+        border_style="blue",
+    )
+
+
 def _render_harness_detail(console: Console, detection: dict[str, object]) -> None:
     artifacts = _coerce_dict_list(detection.get("artifacts"))
     warnings = _coerce_string_list(detection.get("warnings"))
@@ -1308,13 +1361,7 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
     approvals_command = payload.get("approvals_command")
     if blocked and dry_run:
         review_command = (
-            str(approvals_command)
-            if approval_center_url and isinstance(approvals_command, str) and approvals_command
-            else "hol-guard approvals"
-            if approval_center_url
-            else str(rerun_command)
-            if isinstance(rerun_command, str) and rerun_command
-            else f"hol-guard run {harness}"
+            str(rerun_command) if isinstance(rerun_command, str) and rerun_command else f"hol-guard run {harness}"
         )
         inspect_command = (
             str(diff_command) if isinstance(diff_command, str) and diff_command else f"hol-guard diff {harness}"
@@ -1324,12 +1371,29 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
             if isinstance(review_hint, str) and review_hint
             else "Rerun without --dry-run to review the full blocker set and continue into the harness launch."
         )
-        return [
+        steps = [
             {
                 "title": "Resolve the blocked launch",
                 "command": review_command,
                 "detail": review_detail,
             },
+        ]
+        if approval_center_url:
+            approval_command = (
+                str(approvals_command)
+                if isinstance(approvals_command, str) and approvals_command
+                else "hol-guard approvals"
+            )
+            steps.append(
+                {
+                    "title": "Open the approvals queue",
+                    "command": approval_command,
+                    "detail": (
+                        "Review any queued approval requests after the prompt appears, then retry the guarded command."
+                    ),
+                }
+            )
+        steps.append(
             {
                 "title": "Inspect only the changed config entries (optional)",
                 "command": inspect_command,
@@ -1338,17 +1402,19 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
                     "Guard still needs you to review."
                 ),
             },
-        ]
-    if blocked and isinstance(review_hint, str) and review_hint:
-        command = (
-            str(approvals_command)
-            if approval_center_url and isinstance(approvals_command, str) and approvals_command
-            else "hol-guard approvals"
-            if approval_center_url
-            else str(rerun_command)
-            if isinstance(rerun_command, str) and rerun_command
-            else f"hol-guard run {harness}"
         )
+        return steps
+    if blocked and isinstance(review_hint, str) and review_hint:
+        if approval_center_url:
+            command = (
+                str(approvals_command)
+                if isinstance(approvals_command, str) and approvals_command
+                else "hol-guard approvals"
+            )
+        elif isinstance(rerun_command, str) and rerun_command:
+            command = str(rerun_command)
+        else:
+            command = f"hol-guard run {harness}"
         return [{"title": "Resolve the blocked launch", "command": command, "detail": review_hint}]
     if dry_run:
         launch_command = (
@@ -1749,5 +1815,5 @@ _RENDERERS: dict[str, Any] = {
     "protect": _render_protect,
     "preflight": _render_preflight,
     "scan": _render_scan,
-    "explain": _render_scan,
+    "explain": _render_explain,
 }
