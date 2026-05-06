@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -293,3 +294,138 @@ def test_guard_run_keeps_detector_results_after_blocked_resolver_reevaluation(tm
     assert calls == ["secret.local"]
     assert result["runtime_detector_signals_v2"] == [_signal("secret:local", "secret").to_dict()]
     assert result["approval_delivery"] == "queued"
+
+
+def test_guard_run_writes_detector_debug_trace_only_when_enabled(tmp_path, monkeypatch):
+    calls: list[str] = []
+    detector = RecordingDetector("secret.local", ("secret",), calls, _signal("secret:local", "secret"))
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(),
+        artifacts=(),
+    )
+    sensitive_prompt = "print ~/.env and include the password"
+
+    def evaluate_stub(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {"blocked": False, "artifacts": [], "receipts_recorded": 0}
+
+    def action_envelope_stub(
+        _harness: str,
+        _context: HarnessContext,
+        _passthrough_args: list[str],
+    ) -> GuardActionEnvelope:
+        return GuardActionEnvelope(
+            schema_version=1,
+            action_id="action-1",
+            harness="codex",
+            event_name="HarnessStart",
+            action_type="harness_start",
+            workspace="~/workspace",
+            workspace_hash="workspace-hash",
+            tool_name=None,
+            command=None,
+            prompt_excerpt=sensitive_prompt,
+            target_paths=(),
+            network_hosts=(),
+            mcp_server=None,
+            mcp_tool=None,
+            package_manager=None,
+            package_name=None,
+            script_name=None,
+            raw_payload_redacted={"prompt": sensitive_prompt},
+        )
+
+    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_runner_module, "evaluate_detection", evaluate_stub)
+    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+    monkeypatch.setattr(guard_runner_module, "_guard_run_action_envelope", action_envelope_stub)
+
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=tmp_path / "guard-home",
+    )
+    disabled_config = GuardConfig(
+        guard_home=tmp_path / "guard-home-disabled",
+        workspace=tmp_path / "workspace",
+        runtime_detector_registry=True,
+    )
+    enabled_config = GuardConfig(
+        guard_home=tmp_path / "guard-home-enabled",
+        workspace=tmp_path / "workspace",
+        runtime_detector_registry=True,
+        runtime_detector_debug_trace=True,
+    )
+
+    guard_runner_module.guard_run(
+        "codex",
+        context,
+        GuardStore(tmp_path / "guard-home-disabled"),
+        disabled_config,
+        True,
+        [],
+    )
+    enabled_result = guard_runner_module.guard_run(
+        "codex",
+        context,
+        GuardStore(tmp_path / "guard-home-enabled"),
+        enabled_config,
+        True,
+        [],
+    )
+
+    disabled_trace_dir = tmp_path / "guard-home-disabled" / "debug" / "detectors"
+    trace_files = list((tmp_path / "guard-home-enabled" / "debug" / "detectors").glob("*.json"))
+    trace_text = trace_files[0].read_text(encoding="utf-8")
+    trace_payload = json.loads(trace_text)
+
+    assert disabled_trace_dir.exists() is False
+    assert len(trace_files) == 1
+    assert sensitive_prompt not in trace_text
+    assert trace_payload["action"]["prompt_excerpt"] == "[redacted]"
+    assert trace_payload["action"]["raw_payload_redacted"]["prompt"] == "[redacted]"
+    assert trace_payload["signals"] == enabled_result["runtime_detector_signals_v2"]
+
+
+def test_guard_run_surfaces_detector_debug_trace_write_errors(tmp_path, monkeypatch):
+    calls: list[str] = []
+    detector = RecordingDetector("secret.local", ("secret",), calls, _signal("secret:local", "secret"))
+    detection = HarnessDetection(
+        harness="codex",
+        installed=True,
+        command_available=True,
+        config_paths=(),
+        artifacts=(),
+    )
+
+    def evaluate_stub(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {"blocked": False, "artifacts": [], "receipts_recorded": 0}
+
+    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_runner_module, "evaluate_detection", evaluate_stub)
+    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "debug").write_text("not a directory", encoding="utf-8")
+    context = HarnessContext(
+        home_dir=tmp_path / "home",
+        workspace_dir=tmp_path / "workspace",
+        guard_home=guard_home,
+    )
+    config = GuardConfig(
+        guard_home=guard_home,
+        workspace=tmp_path / "workspace",
+        runtime_detector_registry=True,
+        runtime_detector_debug_trace=True,
+    )
+
+    result = guard_runner_module.guard_run("codex", context, GuardStore(guard_home), config, True, [])
+
+    assert calls == ["secret.local"]
+    assert result["runtime_detector_signals_v2"] == [_signal("secret:local", "secret").to_dict()]
+    trace_error = result["runtime_detector_trace_error"]
+    assert isinstance(trace_error, dict)
+    assert trace_error["error_type"] in {"FileExistsError", "NotADirectoryError"}

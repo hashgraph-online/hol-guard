@@ -293,6 +293,11 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
     summary.add_row("Installed", _bool_label(bool(payload.get("installed"))))
     summary.add_row("Command", _bool_label(bool(payload.get("command_available"))))
     summary.add_row("Artifacts", str(len(_coerce_dict_list(payload.get("artifacts")))))
+    registry = payload.get("runtime_detector_registry")
+    if isinstance(registry, dict):
+        registry_state = "enabled" if bool(registry.get("enabled")) else "disabled"
+        timeout_ms = registry.get("timeout_ms")
+        summary.add_row("Detector registry", f"{registry_state}, {timeout_ms} ms")
     summary.add_row("Warnings", str(len(warnings)))
     console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
     if warnings:
