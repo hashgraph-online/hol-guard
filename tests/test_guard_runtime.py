@@ -32,6 +32,7 @@ from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -12727,6 +12728,28 @@ def test_guard_hook_strict_profile_blocks_data_flow_exfiltration_path(tmp_path, 
     assert isinstance(output, dict)
     assert output["policy_action"] == "block"
     assert output["approval_requests"][0]["decision_v2_json"]["action"] == "block"
+
+
+def test_runtime_data_flow_summary_names_non_network_sink() -> None:
+    signal = RiskSignalV2(
+        signal_id="data-flow:clipboard-secret",
+        category="secret",
+        severity="critical",
+        confidence="strong",
+        detector="data_flow.exfiltration",
+        title="Clipboard receives a local secret",
+        plain_reason="This command copies local secret contents into the clipboard.",
+        technical_detail="clipboard command receives sensitive source through a pipe",
+        evidence_ref="command",
+        redaction_level="summary",
+        false_positive_hint="Allow only when the clipboard target is intentional.",
+        advisory_id=None,
+    )
+
+    summary = guard_commands_module._runtime_data_flow_summary((signal,))
+
+    assert "clipboard" in summary
+    assert "network host" not in summary
 
 
 def test_remote_proxy_forwards_local_requests_and_redacts_auth_headers():

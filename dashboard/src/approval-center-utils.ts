@@ -22,14 +22,29 @@ export function deriveDataFlowEvidence(item: GuardApprovalRequest): DataFlowEvid
     return null;
   }
   const primary = dataFlowSignals[0];
-  const sinkLabel = primary.category === "network" ? "Network host" : "External sink";
   return {
     signalTitle: primary.title,
     sourceLabel: "Local secret",
-    sinkLabel,
+    sinkLabel: resolveDataFlowSinkLabel(primary),
     signalId: primary.signal_id,
     count: dataFlowSignals.length,
   };
+}
+
+function resolveDataFlowSinkLabel(signal: RiskSignalV2): string {
+  if (signal.category === "network") {
+    return "Network host";
+  }
+  if (signal.signal_id === "data-flow:clipboard-secret") {
+    return "Clipboard";
+  }
+  if (signal.signal_id === "data-flow:world-readable-temp-secret") {
+    return "World-readable temp file";
+  }
+  if (signal.signal_id === "data-flow:git-remote-token") {
+    return "Git remote config";
+  }
+  return "External sink";
 }
 
 export function resolveEnvelopeDisplayText(envelope: GuardActionEnvelope): string | null {

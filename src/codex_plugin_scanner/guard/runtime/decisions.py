@@ -134,9 +134,10 @@ def _dashboard_detail_from_signals(signals: tuple[RiskSignalV2, ...], fallback: 
     if not signals:
         return fallback
     if _has_data_flow_exfiltration_signal(signals):
+        sink_type = _data_flow_sink_type(signals)
         return (
-            "Source-to-sink route: local secret -> network host. "
-            "This command sends local secret to network host without exposing the raw secret in Guard evidence."
+            f"Source-to-sink route: local secret -> {sink_type}. "
+            f"This command sends local secret to {sink_type} without exposing the raw secret in Guard evidence."
         )
     strongest = max(signals, key=lambda item: _confidence_rank(item.confidence))
     return strongest.plain_reason
@@ -144,8 +145,22 @@ def _dashboard_detail_from_signals(signals: tuple[RiskSignalV2, ...], fallback: 
 
 def _harness_message_from_signals(signals: tuple[RiskSignalV2, ...], fallback: str) -> str:
     if _has_data_flow_exfiltration_signal(signals):
-        return "HOL Guard paused this action because it sends local secret to network host."
+        sink_type = _data_flow_sink_type(signals)
+        return f"HOL Guard paused this action because it sends local secret to {sink_type}."
     return fallback
+
+
+def _data_flow_sink_type(signals: tuple[RiskSignalV2, ...]) -> str:
+    signal_ids = {signal.signal_id for signal in signals}
+    if any(signal.category == "network" for signal in signals):
+        return "network host"
+    if "data-flow:clipboard-secret" in signal_ids:
+        return "clipboard"
+    if "data-flow:world-readable-temp-secret" in signal_ids:
+        return "world-readable temp file"
+    if "data-flow:git-remote-token" in signal_ids:
+        return "git remote configuration"
+    return "external sink"
 
 
 def _has_data_flow_exfiltration_signal(signals: tuple[RiskSignalV2, ...]) -> bool:

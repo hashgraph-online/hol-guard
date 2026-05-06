@@ -62,6 +62,23 @@ def _data_flow_signal() -> RiskSignalV2:
     )
 
 
+def _clipboard_data_flow_signal() -> RiskSignalV2:
+    return RiskSignalV2(
+        signal_id="data-flow:clipboard-secret",
+        category="secret",
+        severity="critical",
+        confidence="strong",
+        detector="data_flow.exfiltration",
+        title="Clipboard receives a local secret",
+        plain_reason="This command copies local secret contents into the clipboard.",
+        technical_detail="clipboard command receives sensitive source through a pipe",
+        evidence_ref="command",
+        redaction_level="summary",
+        false_positive_hint="Allow only when the clipboard target is intentional.",
+        advisory_id=None,
+    )
+
+
 def test_guard_decision_v2_round_trips_to_dict_payload() -> None:
     decision = GuardDecisionV2(
         action="ask",
@@ -155,3 +172,15 @@ def test_decision_from_legacy_policy_action_explains_data_flow_exfiltration() ->
 
     assert "sends local secret to network host" in decision.harness_message
     assert "Source-to-sink" in decision.dashboard_primary_detail
+
+
+def test_decision_from_legacy_policy_action_names_non_network_data_flow_sink() -> None:
+    decision = decision_from_legacy_policy_action(
+        "require-reapproval",
+        reason="data-flow-exfiltration",
+        signals=(_clipboard_data_flow_signal(),),
+    )
+
+    assert "clipboard" in decision.harness_message
+    assert "network host" not in decision.harness_message
+    assert "local secret -> clipboard" in decision.dashboard_primary_detail

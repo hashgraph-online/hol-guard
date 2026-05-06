@@ -17,7 +17,10 @@ _SECRET_VARIABLE_ASSIGNMENT_PATTERN = re.compile(
 _CURL_DATA_VALUE_PATTERN = re.compile(
     r"(?s)(?:^|[\s;&|])(?i:curl|curl\.exe)\b[^\r\n;&|]*?"
     r"(?:--data(?:-binary|-raw|-urlencode)?|-d)(?:=|\s*)"
-    r"(?P<value>\"[^\"]+\"|'[^']+'|[^\s;&|]+)"
+    r"(?P<value>\"[^\"]*\"|'[^']*'|[^\s;&|]+)"
+)
+_SHELL_VARIABLE_EXPANSION_PATTERN = re.compile(
+    r"\$(?:(?P<name>[A-Za-z_][A-Za-z0-9_]*)|\{(?P<braced_name>[A-Za-z_][A-Za-z0-9_]*)\})"
 )
 
 
@@ -85,7 +88,17 @@ def _curl_segment_uses_variable(segment: str, names: frozenset[str]) -> bool:
 
 
 def _value_uses_variable(value: str, names: frozenset[str]) -> bool:
-    return any(f"${name}" in value or f"${{{name}}}" in value for name in names)
+    if _is_single_quoted(value):
+        return False
+    return any(_expanded_variable_name(match) in names for match in _SHELL_VARIABLE_EXPANSION_PATTERN.finditer(value))
+
+
+def _expanded_variable_name(match: re.Match[str]) -> str:
+    return match.group("name") or match.group("braced_name")
+
+
+def _is_single_quoted(value: str) -> bool:
+    return len(value) >= 2 and value[0] == "'" and value[-1] == "'"
 
 
 def _value_encodes_secret(value: str) -> bool:

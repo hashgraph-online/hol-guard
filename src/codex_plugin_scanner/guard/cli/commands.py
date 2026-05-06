@@ -3080,9 +3080,23 @@ def _runtime_action_data_flow_signals(
 
 
 def _runtime_data_flow_summary(signals: tuple[RiskSignalV2, ...]) -> str:
+    sink_type = _runtime_data_flow_sink_type(signals)
     if signals:
-        return "This command sends local secret to network host. Guard kept raw secret contents out of the evidence."
-    return "This command sends local secret to network host."
+        return f"This command sends local secret to {sink_type}. Guard kept raw secret contents out of the evidence."
+    return f"This command sends local secret to {sink_type}."
+
+
+def _runtime_data_flow_sink_type(signals: tuple[RiskSignalV2, ...]) -> str:
+    signal_ids = {signal.signal_id for signal in signals}
+    if any(signal.category == "network" for signal in signals):
+        return "network host"
+    if "data-flow:clipboard-secret" in signal_ids:
+        return "clipboard"
+    if "data-flow:world-readable-temp-secret" in signal_ids:
+        return "world-readable temp file"
+    if "data-flow:git-remote-token" in signal_ids:
+        return "git remote configuration"
+    return "external sink"
 
 
 def _guard_action_severity(action: str) -> int:

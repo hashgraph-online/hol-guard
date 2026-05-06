@@ -341,6 +341,19 @@ assert(idPrefixEvidence !== null, "T092: evidence returned when signal_id starts
 assert(idPrefixEvidence?.signalId === "data-flow:env-to-curl", "T092: signalId preserved from signal");
 assert(idPrefixEvidence?.sinkLabel === "External sink", "T092: sinkLabel is 'External sink' for non-network category");
 
+const DATA_FLOW_CLIPBOARD_SIGNAL: RiskSignalV2 = {
+  ...DATA_FLOW_SIGNAL,
+  signal_id: "data-flow:clipboard-secret",
+  category: "secret",
+  title: "Clipboard receives a local secret"
+};
+const requestWithClipboardSignal: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  decision_v2_json: { ...BASE_DECISION_V2, signals: [DATA_FLOW_CLIPBOARD_SIGNAL] }
+};
+const clipboardEvidence = deriveDataFlowEvidence(requestWithClipboardSignal);
+assert(clipboardEvidence?.sinkLabel === "Clipboard", "T092: sinkLabel names clipboard for clipboard data-flow signal");
+
 const detectorEvidenceSummary = deriveDataFlowEvidence(requestWithDetectorSignal);
 assert(
   detectorEvidenceSummary !== null && !detectorEvidenceSummary.sourceLabel.includes(".env"),
