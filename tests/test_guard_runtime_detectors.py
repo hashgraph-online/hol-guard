@@ -269,7 +269,6 @@ def test_default_secret_path_detector_flags_planned_direct_file_reads(tmp_path, 
     "path",
     [
         ".../" + "credentials",
-        ".../" + "config.json",
         ".../id_rsa",
         ".../id_ed25519",
     ],
@@ -283,6 +282,16 @@ def test_default_secret_path_detector_flags_privacy_redacted_secret_paths(tmp_pa
     assert [item.status for item in result.telemetry] == ["ok"]
     assert len(result.signals) == 1
     assert result.signals[0].detector == "secret.path"
+
+
+def test_default_secret_path_detector_ignores_generic_redacted_config_json(tmp_path):
+    result = DetectorRegistry(register_default_detectors(), clock=StepClock([0.0, 0.001])).run(
+        _file_read_action(".../" + "config.json"),
+        _context(tmp_path),
+    )
+
+    assert [item.status for item in result.telemetry] == ["ok"]
+    assert result.signals == ()
 
 
 def test_guard_run_invokes_detector_registry_only_when_feature_flag_enabled(tmp_path, monkeypatch):

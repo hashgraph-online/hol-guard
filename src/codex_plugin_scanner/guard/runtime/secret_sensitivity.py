@@ -46,7 +46,6 @@ _SENSITIVE_BASENAME_LABELS = {
 }
 _REDACTED_BASENAME_LABELS = {
     "credentials": "AWS shared credentials file",
-    "config.json": "Docker client config",
     "id_rsa": "SSH private key",
     "id_ed25519": "SSH private key",
     "id_ecdsa": "SSH private key",
