@@ -1825,23 +1825,21 @@ class GuardStore:
             pending_count = self._count_guard_events_v1_in_connection(connection, uploaded=False)
             if pending_count >= self._guard_event_queue_limit:
                 drop_count = pending_count - self._guard_event_queue_limit + 1
-                rows = connection.execute(
+                cursor = connection.execute(
                     """
-                    select event_id
-                    from guard_cloud_events
-                    where uploaded_at is null
-                    order by occurred_at asc, event_id asc
-                    limit ?
+                    delete from guard_cloud_events
+                    where event_id in (
+                        select event_id
+                        from guard_cloud_events
+                        where uploaded_at is null
+                        order by occurred_at asc, event_id asc
+                        limit ?
+                    )
                     """,
                     (drop_count,),
-                ).fetchall()
-                dropped_ids = [str(row["event_id"]) for row in rows]
-                if dropped_ids:
-                    placeholders = ",".join("?" for _ in dropped_ids)
-                    connection.execute(
-                        f"delete from guard_cloud_events where event_id in ({placeholders})",
-                        tuple(dropped_ids),
-                    )
+                )
+                dropped_count = int(cursor.rowcount) if cursor.rowcount is not None and cursor.rowcount > 0 else 0
+                if dropped_count > 0:
                     connection.execute(
                         """
                         insert into guard_events (event_name, payload_json, occurred_at)
@@ -1851,7 +1849,7 @@ class GuardStore:
                             "cloud_event_queue_overflow",
                             json.dumps(
                                 {
-                                    "dropped_count": len(dropped_ids),
+                                    "dropped_count": dropped_count,
                                     "queue_limit": self._guard_event_queue_limit,
                                     "incoming_event_type": event.event_type,
                                 }

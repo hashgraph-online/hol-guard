@@ -24,6 +24,7 @@ from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
 from ..edge_events import build_runtime_session_event
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
+from ..redaction import redact_sensitive_text
 from ..store import GuardStore
 from ..types import PromptRequest, RemediationAction
 from .actions import GuardActionEnvelope, redacted_workspace_label
@@ -158,9 +159,7 @@ _RUNTIME_SYNC_TIMEOUT_SECONDS = 10
 _RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS = 90
 _PAIN_SIGNAL_TIMEOUT_SECONDS = 10
 _PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS = 90
-_SENSITIVE_SYNC_TEXT_PATTERN = re.compile(
-    r"(?i)(sk-[a-z0-9_-]+|(?:token|secret|api[_-]?key)(?:\s*[:=]\s*|\s+)[^\s,;]+)"
-)
+_GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_HOURS = 24
 
 
 class GuardSyncNotConfiguredError(RuntimeError):
@@ -827,10 +826,17 @@ def sync_guard_events(store: GuardStore) -> dict[str, object]:
             )
         except urllib.error.HTTPError as error:
             if error.code == 404:
+                skipped_ids = [
+                    str(event["event_id"])
+                    for event in pending_events
+                    if isinstance(event.get("event_id"), str)
+                ]
+                skipped_count = store.mark_guard_events_v1_uploaded(skipped_ids, synced_at)
                 summary = {
                     "synced_at": synced_at,
                     "events": total_events,
                     "accepted": total_accepted,
+                    "skipped": skipped_count,
                     "sync_skipped": True,
                     "sync_reason": "guard_events_endpoint_unavailable",
                 }
@@ -907,6 +913,23 @@ def _record_guard_events_sync_failure(
     store.set_sync_payload("guard_events_v1_summary", summary, recorded_at)
 
 
+def _guard_events_endpoint_unavailable_recently(store: GuardStore) -> bool:
+    summary = store.get_sync_payload("guard_events_v1_summary")
+    if not isinstance(summary, dict):
+        return False
+    if summary.get("sync_reason") != "guard_events_endpoint_unavailable":
+        return False
+    synced_at = summary.get("synced_at")
+    if not isinstance(synced_at, str):
+        return True
+    parsed = _parse_iso_timestamp(synced_at)
+    if parsed is None:
+        return True
+    return datetime.now(timezone.utc) - parsed < timedelta(
+        hours=_GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_HOURS
+    )
+
+
 def sync_runtime_session(
     store: GuardStore,
     *,
@@ -960,15 +983,16 @@ def sync_runtime_session(
     store.set_sync_payload("runtime_session_summary", summary, synced_at)
     workspace_id = store.get_cloud_workspace_id()
     device_id = store.get_or_create_installation_id()
-    store.add_guard_event_v1(
-        build_runtime_session_event(
-            session_id=str(session_payload["sessionId"]),
-            occurred_at=synced_at,
-            payload=session_payload,
-            workspace_id=workspace_id,
-            device_id=device_id,
+    if not _guard_events_endpoint_unavailable_recently(store):
+        store.add_guard_event_v1(
+            build_runtime_session_event(
+                session_id=str(session_payload["sessionId"]),
+                occurred_at=synced_at,
+                payload=session_payload,
+                workspace_id=workspace_id,
+                device_id=device_id,
+            )
         )
-    )
     return summary
 
 
@@ -1123,7 +1147,7 @@ def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
 
 
 def _redact_sync_text(value: str) -> str:
-    return _SENSITIVE_SYNC_TEXT_PATTERN.sub("[redacted]", value)
+    return redact_sensitive_text(value)
 
 
 _PLAN_403_KEYWORDS: frozenset[str] = frozenset(

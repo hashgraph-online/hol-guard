@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import urllib.error
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.edge_events import build_runtime_session_event
@@ -171,3 +173,97 @@ def test_sync_guard_events_records_failed_backoff_without_dropping_pending_event
     assert "next_retry_after" in summary
     assert "sk-live-secret-token" not in json.dumps(summary)
     assert len(pending) == 1
+
+
+def test_guard_cloud_event_queue_handles_large_overflow_without_sqlite_parameter_limit(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home", guard_event_queue_limit=1100)
+
+    for index in range(1005):
+        store.add_guard_event_v1(
+            build_runtime_session_event(
+                session_id=f"session-{index}",
+                occurred_at=f"2026-04-24T00:{index // 60:02d}:{index % 60:02d}+00:00",
+                payload={"index": index},
+                workspace_id="workspace-alpha",
+                device_id="device-1",
+            )
+        )
+    store._guard_event_queue_limit = 2
+    store.add_guard_event_v1(
+        build_runtime_session_event(
+            session_id="session-1005",
+            occurred_at="2026-04-24T00:16:45+00:00",
+            payload={"index": 1005},
+            workspace_id="workspace-alpha",
+            device_id="device-1",
+        )
+    )
+
+    pending = store.list_guard_events_v1(uploaded=False, limit=10)
+    overflow_events = store.list_events(limit=5, event_name="cloud_event_queue_overflow")
+
+    assert [item["payload"]["payload"]["index"] for item in pending] == [1004, 1005]
+    assert overflow_events[0]["payload"]["dropped_count"] == 1004
+
+
+def test_runtime_snapshot_treats_naive_sync_timestamps_as_utc(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:00:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+    store.set_sync_payload(
+        "guard_events_v1_summary",
+        {"synced_at": "2026-04-24T00:00:00"},
+        "2026-04-24T00:00:00+00:00",
+    )
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert snapshot["cloud_sync_health"]["state"] == "stale"
+    assert snapshot["cloud_sync_health"]["last_synced_at"] == "2026-04-24T00:00:00"
+
+
+def test_runtime_session_sync_skips_v1_event_when_ingest_was_recently_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:00:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+    store.set_sync_payload(
+        "guard_events_v1_summary",
+        {
+            "synced_at": datetime.now(timezone.utc).isoformat(),
+            "sync_skipped": True,
+            "sync_reason": "guard_events_endpoint_unavailable",
+        },
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+    def _runtime_sync_response(**_kwargs):
+        return {"syncedAt": "2026-04-24T00:01:00+00:00", "items": []}
+
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_urlopen_json_with_timeout_retry",
+        _runtime_sync_response,
+    )
+
+    result = guard_runner_module.sync_runtime_session(
+        store,
+        session={
+            "harness": "codex",
+            "surface": "cli",
+            "status": "active",
+        },
+    )
+
+    assert result["runtime_session_synced_at"] == "2026-04-24T00:01:00+00:00"
+    assert store.list_guard_events_v1(uploaded=False, limit=10) == []

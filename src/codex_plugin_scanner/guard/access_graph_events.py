@@ -4,15 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 
 from .edge_events import build_access_graph_snapshot_event
 from .models import HarnessDetection
+from .redaction import redact_sensitive_text
 from .store import GuardStore
-
-_SENSITIVE_TEXT_PATTERN = re.compile(
-    r"(?i)(sk-[a-z0-9_-]+|(?:token|secret|api[_-]?key)(?:\s*[:=]\s*|\s+)[^\s,;]+)"
-)
 
 
 def queue_access_graph_snapshot(
@@ -88,7 +84,7 @@ def queue_access_graph_snapshot(
             "access_graph_snapshot_queue_failed",
             {
                 "error_type": type(error).__name__,
-                "message": _redact_sensitive_text(str(error)),
+                "message": redact_sensitive_text(str(error)),
             },
             now,
         )
@@ -227,7 +223,3 @@ def _non_empty_string(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
     return None
-
-
-def _redact_sensitive_text(value: str) -> str:
-    return _SENSITIVE_TEXT_PATTERN.sub("[redacted]", value)

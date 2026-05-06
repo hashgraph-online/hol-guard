@@ -298,7 +298,8 @@ def test_sync_receipts_keeps_receipt_success_when_v1_events_endpoint_is_missing(
 
     assert result["receipts"] == 1
     assert result["guard_events_v1"]["sync_skipped"] is True
-    assert store.list_guard_events_v1(uploaded=False, limit=10)
+    assert result["guard_events_v1"]["skipped"] == 1
+    assert store.list_guard_events_v1(uploaded=False, limit=10) == []
 
 
 def test_sync_guard_events_marks_rejected_events_processed(tmp_path) -> None:
