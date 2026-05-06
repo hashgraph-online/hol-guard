@@ -5,10 +5,9 @@ from __future__ import annotations
 import re
 
 from codex_plugin_scanner.guard.runtime.data_flow import extract_command_segments
-from codex_plugin_scanner.guard.runtime.shell_commands import segment_executes_command, shell_tokens
+from codex_plugin_scanner.guard.runtime.shell_commands import command_tokens_after_env_assignments, shell_tokens
 
 _TEMP_SECRET_WRITE_PATTERN = re.compile(r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\b(?P<tee>[^\r\n;&|]+))")
-_CHMOD_TEMP_PATTERN = re.compile(r"(?is)chmod\s+(?P<mode>[0-7]{3,4}|[A-Za-z,+=-]+)\s+(?P<path>/tmp/[^\s;&|]+)")
 
 
 def temp_write_targets(segment: str) -> tuple[str, ...]:
@@ -26,17 +25,27 @@ def temp_write_targets(segment: str) -> tuple[str, ...]:
 def chmod_temp_targets(command: str) -> tuple[tuple[str, str], ...]:
     targets: list[tuple[str, str]] = []
     for segment in extract_command_segments(command):
-        if not segment_executes_command(segment, {"chmod"}):
+        tokens = command_tokens_after_env_assignments(segment)
+        if len(tokens) < 3 or tokens[0].lower() != "chmod":
             continue
-        targets.extend(
-            (_strip_shell_token(match.group("path")), match.group("mode"))
-            for match in _CHMOD_TEMP_PATTERN.finditer(segment)
-        )
+        mode_index = _chmod_mode_index(tokens)
+        if mode_index is None:
+            continue
+        targets.extend((_strip_shell_token(path), tokens[mode_index]) for path in tokens[mode_index + 1 :])
     return tuple(targets)
 
 
 def _tee_targets(body: str) -> tuple[str, ...]:
     return tuple(_strip_shell_token(token) for token in shell_tokens(body) if not token.startswith("-"))
+
+
+def _chmod_mode_index(tokens: tuple[str, ...]) -> int | None:
+    index = 1
+    while index < len(tokens) and tokens[index].startswith("-"):
+        index += 1
+    if index < len(tokens):
+        return index
+    return None
 
 
 def _strip_shell_token(value: str) -> str:
