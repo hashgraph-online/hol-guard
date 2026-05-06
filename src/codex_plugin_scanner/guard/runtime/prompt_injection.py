@@ -21,7 +21,7 @@ _DOCUMENTATION_SUBJECT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _REPORTED_PHRASE_PREFIX_PATTERN = re.compile(
-    r"\b(?:say|says|said|called|named|phrase|phrases?|string|strings?|example|examples?)\s+[\"'`]?\s*$",
+    r"\b(?:say|says|said|called|named|phrase|phrases?|string|strings?)\s+[\"'`]?\s*$",
     re.IGNORECASE,
 )
 _GUARD_POLICY_TAMPER_PATTERNS: tuple[re.Pattern[str], ...] = (
