@@ -1181,6 +1181,52 @@ clearer UX and an implementation plan with technical references.
         assert output["continue"] is False
         assert "credential-looking output" in output["stopReason"]
 
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "python -c \"print(open('.env').read())\"",
+            "node -e \"require('fs').readFileSync('.env', 'utf8')\"",
+        ],
+    )
+    def test_codex_post_tool_use_asks_for_inline_interpreter_local_secret_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+        command,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": "token=definitely-invalid\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["continue"] is False
+        assert "credential-looking output" in output["stopReason"]
+
     def test_codex_post_tool_use_allows_short_option_value_payloads(
         self,
         monkeypatch,
@@ -2393,6 +2439,37 @@ clearer UX and an implementation plan with technical references.
         assert evaluation["blocked"] is False
         assert evaluation["artifacts"][0]["changed_fields"] == ["first_seen"]
         assert evaluation["artifacts"][0]["policy_action"] == "allow"
+
+    def test_guard_evaluate_detection_honors_runtime_review_default_action(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        config = GuardConfig(
+            guard_home=tmp_path / "guard-home",
+            workspace=None,
+        )
+        artifact = GuardArtifact(
+            artifact_id="codex:project:tool-output:review-default",
+            name="Bash credential-looking output",
+            harness="codex",
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(tmp_path / "workspace" / ".codex" / "config.toml"),
+            metadata={
+                "guard_default_action": "review",
+                "action_class": "credential exfiltration shell command",
+            },
+        )
+        detection = HarnessDetection(
+            harness="codex",
+            installed=True,
+            command_available=True,
+            config_paths=(artifact.config_path,),
+            artifacts=(artifact,),
+        )
+
+        evaluation = evaluate_detection(detection, store, config, persist=False)
+
+        assert evaluation["blocked"] is False
+        assert evaluation["artifacts"][0]["policy_action"] == "review"
 
     def test_guard_run_keeps_prior_snapshot_when_reapproval_blocks(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
