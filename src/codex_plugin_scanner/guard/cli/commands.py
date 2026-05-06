@@ -3964,13 +3964,16 @@ def _codex_post_tool_output_artifact(
     cwd: Path | None,
 ) -> GuardArtifact | None:
     response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
-    if not classify_secret_content(response_text):
+    content_matches = classify_secret_content(response_text)
+    if not content_matches:
         return None
     tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
     command_text = _codex_post_tool_command_text(payload)
     if not command_text:
         command_text = tool_name
-    if _codex_command_is_read_only_source_inspection(command_text, cwd=cwd):
+    if _codex_command_is_read_only_source_inspection(command_text, cwd=cwd) and all(
+        match.sensitivity == "medium" for match in content_matches
+    ):
         return None
     fingerprint = hashlib.sha256(
         json.dumps(
