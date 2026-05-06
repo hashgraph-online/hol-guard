@@ -917,21 +917,29 @@ clearer UX and an implementation plan with technical references.
         assert output["recorded"] is True
         assert "approval_requests" not in output
 
+    @pytest.mark.parametrize(
+        "secret_output",
+        [
+            "NPM_TOKEN=" + "n" * 36 + "\n",
+            'NPM_TOKEN="' + "n" * 36 + '"\n',
+        ],
+    )
     def test_codex_post_tool_use_blocks_nvmrc_high_confidence_secret(
         self,
         monkeypatch,
         tmp_path,
         capsys,
+        secret_output,
     ) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        _write_text(workspace_dir / ".nvmrc", "NPM_TOKEN=" + "n" * 36 + "\n")
+        _write_text(workspace_dir / ".nvmrc", secret_output)
         event = {
             "event": "PostToolUse",
             "tool_name": "Bash",
             "tool_input": {"command": "cat .nvmrc"},
-            "tool_response": {"stdout": "NPM_TOKEN=" + "n" * 36 + "\n"},
+            "tool_response": {"stdout": secret_output},
             "source_scope": "project",
         }
         monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))

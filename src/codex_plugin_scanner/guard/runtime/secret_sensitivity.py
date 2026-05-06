@@ -90,12 +90,17 @@ _SENSITIVE_PATH_REASONS = {
         "Guard treats wallet and private-key files as sensitive because they can authorize account control."
     ),
 }
+_SECRET_ASSIGNMENT_VALUE_PATTERN = r"(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"
+_HEDERA_PRIVATE_KEY_VALUE_PATTERN = r"(?:\"(?:0x)?[0-9a-f]{64,96}\"|'(?:0x)?[0-9a-f]{64,96}'|(?:0x)?[0-9a-f]{64,96}\b)"
 _SECRET_CONTENT_PATTERNS: tuple[tuple[str, str, SecretContentSensitivity, re.Pattern[str], str], ...] = (
     (
         "npm-auth-token",
         "npm auth token",
         "high",
-        re.compile(r"(?im)\b(?:_authToken|npm[_ -]?token)\s*[:=]\s*[^ \t\r\n\"',}]+"),
+        re.compile(
+            r"(?im)[\"']?\b[A-Za-z0-9_-]*(?:_authToken|npm[_ -]?token)\b[\"']?\s*[:=]\s*"
+            + _SECRET_ASSIGNMENT_VALUE_PATTERN
+        ),
         "Guard found an npm registry token pattern.",
     ),
     (
@@ -130,7 +135,10 @@ _SECRET_CONTENT_PATTERNS: tuple[tuple[str, str, SecretContentSensitivity, re.Pat
         "hedera-private-key",
         "Hedera private key",
         "critical",
-        re.compile(r"(?im)\b(?:hedera[_-]?)?(?:operator[_-]?)?private[_-]?key\s*[:=]\s*(?:0x)?[0-9a-f]{64,96}\b"),
+        re.compile(
+            r"(?im)[\"']?\b[A-Za-z0-9_-]*(?:hedera[_-]?)?(?:operator[_-]?)?private[_-]?key\b[\"']?\s*[:=]\s*"
+            + _HEDERA_PRIVATE_KEY_VALUE_PATTERN
+        ),
         "Guard found a Hedera private-key-like value.",
     ),
     (
@@ -153,8 +161,7 @@ _SECRET_CONTENT_PATTERNS: tuple[tuple[str, str, SecretContentSensitivity, re.Pat
         "medium",
         re.compile(
             r"(?im)[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|"
-            r"private[_-]?key|secret|token|password)\b[\"']?\s*[:=]\s*"
-            r"(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"
+            r"private[_-]?key|secret|token|password)\b[\"']?\s*[:=]\s*" + _SECRET_ASSIGNMENT_VALUE_PATTERN
         ),
         "Guard found credential-looking assignment text.",
     ),
