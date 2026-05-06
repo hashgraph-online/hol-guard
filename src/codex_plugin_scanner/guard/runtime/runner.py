@@ -26,7 +26,7 @@ from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..store import GuardStore
 from ..types import PromptRequest, RemediationAction
 from .actions import GuardActionEnvelope, redacted_workspace_label
-from .detectors import DetectorContext, DetectorRegistry, register_default_detectors
+from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
 
 _APPROVAL_METADATA_KEYS = (
     "approval_center_url",
@@ -365,6 +365,8 @@ def _evaluation_with_detector_registry(
         timeout_ms=config.runtime_detector_timeout_ms,
         disabled_detector_ids=config.runtime_detector_disabled_ids,
     )
+    if config.runtime_detector_debug_trace:
+        _write_detector_debug_trace(config, action_envelope, result)
     if not result.signals and not result.telemetry:
         return evaluation
     return {
@@ -372,6 +374,44 @@ def _evaluation_with_detector_registry(
         "runtime_detector_signals_v2": [signal.to_dict() for signal in result.signals],
         "runtime_detector_telemetry": [item.to_dict() for item in result.telemetry],
     }
+
+
+def _write_detector_debug_trace(
+    config: GuardConfig,
+    action_envelope: GuardActionEnvelope,
+    result: DetectorRunResult,
+) -> None:
+    created_at = datetime.now(timezone.utc)
+    action_payload = action_envelope.to_dict()
+    trace_payload = {
+        "schema_version": 1,
+        "created_at": created_at.isoformat(),
+        "action": _redact_detector_debug_payload(action_payload),
+        "signals": [signal.to_dict() for signal in result.signals],
+        "telemetry": [item.to_dict() for item in result.telemetry],
+    }
+    trace_dir = config.guard_home / "debug" / "detectors"
+    trace_dir.mkdir(parents=True, exist_ok=True)
+    action_digest = hashlib.sha256(
+        json.dumps(action_payload, sort_keys=True, default=str).encode("utf-8"),
+    ).hexdigest()[:12]
+    trace_path = trace_dir / f"{created_at.strftime('%Y%m%dT%H%M%S%fZ')}-{action_digest}.json"
+    trace_path.write_text(json.dumps(trace_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _redact_detector_debug_payload(value: object) -> object:
+    if isinstance(value, dict):
+        redacted: dict[str, object] = {}
+        for key, item in value.items():
+            key_text = str(key)
+            if "prompt" in key_text.lower():
+                redacted[key_text] = "[redacted]"
+            else:
+                redacted[key_text] = _redact_detector_debug_payload(item)
+        return redacted
+    if isinstance(value, (tuple, list)):
+        return [_redact_detector_debug_payload(item) for item in value]
+    return value
 
 
 def _guard_run_config_paths(

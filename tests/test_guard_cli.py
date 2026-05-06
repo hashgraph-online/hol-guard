@@ -3962,6 +3962,46 @@ args = ["-lc", "echo hi"]
         assert any("native hooks are disabled" in warning for warning in output["warnings"])
         assert any("managed Codex hooks are missing" in warning for warning in output["warnings"])
 
+    def test_guard_doctor_reports_runtime_detector_registry_state(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        _write_text(
+            guard_home / "config.toml",
+            "\n".join(
+                [
+                    "runtime_detector_registry = true",
+                    "runtime_detector_timeout_ms = 75",
+                    'runtime_detector_disabled_ids = ["secret.local"]',
+                ]
+            )
+            + "\n",
+        )
+        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda command: True)
+
+        rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["runtime_detector_registry"] == {
+            "enabled": True,
+            "debug_trace": False,
+            "timeout_ms": 75,
+            "disabled_detector_ids": ["secret.local"],
+        }
+
+    def test_guard_doctor_human_output_includes_detector_registry_line(self, tmp_path, monkeypatch, capsys):
+        home_dir = tmp_path / "home"
+        guard_home = tmp_path / "guard-home"
+        _write_text(guard_home / "config.toml", "runtime_detector_registry = true\n")
+        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda command: True)
+
+        rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--guard-home", str(guard_home)])
+        output = capsys.readouterr().out
+
+        assert rc == 0
+        assert "Detector registry" in output
+        assert "enabled" in output
+
     def test_guard_codex_hook_blocks_shell_file_upload_script(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

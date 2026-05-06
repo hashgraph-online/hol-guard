@@ -118,6 +118,7 @@ def test_load_guard_config_parses_hidden_runtime_detector_registry(tmp_path):
             [
                 "runtime_detector_registry = true",
                 "runtime_detector_timeout_ms = 75",
+                "runtime_detector_debug_trace = true",
                 'runtime_detector_disabled_ids = ["secret.local"]',
             ]
         )
@@ -128,6 +129,7 @@ def test_load_guard_config_parses_hidden_runtime_detector_registry(tmp_path):
 
     assert config.runtime_detector_registry is True
     assert config.runtime_detector_timeout_ms == 75
+    assert config.runtime_detector_debug_trace is True
     assert config.runtime_detector_disabled_ids == ("secret.local",)
 
 
