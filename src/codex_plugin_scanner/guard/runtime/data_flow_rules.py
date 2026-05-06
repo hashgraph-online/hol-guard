@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.runtime.data_flow import (
     extract_command_substitutions,
     extract_input_redirects,
     extract_pipes,
+    extract_url_ranges,
     extract_urls,
 )
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
@@ -43,7 +44,8 @@ _CURL_DATA_FILE_PATTERN = re.compile(
 )
 _CURL_DATA_STDIN_PATTERN = re.compile(
     r"(?s)(?:^|[\s;&|])(?i:curl|curl\.exe)\b[^\r\n;&|]*?"
-    r"(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@-|--upload-file(?:=|\s+)[.-](?=$|[\s;&|])|-T\s*[.-](?=$|[\s;&|]))"
+    r"(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@-|(?:--form|-F)(?:=|\s*)[^\s;&|]*@[.-]|"
+    r"--upload-file(?:=|\s+)[.-](?=$|[\s;&|])|-T\s*[.-](?=$|[\s;&|]))"
 )
 _CURL_DATA_VALUE_PATTERN = re.compile(
     r"(?s)(?:^|[\s;&|])(?i:curl|curl\.exe)\b[^\r\n;&|]*?"
@@ -69,14 +71,8 @@ _TEMP_SECRET_WRITE_PATTERN = re.compile(
     r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\b(?:\s+(?:-[A-Za-z]+|--[A-Za-z-]+))*\s+(?P<tee>/tmp/[^\s;&|]+))"
 )
 _CHMOD_TEMP_PATTERN = re.compile(r"(?is)chmod\s+(?P<mode>[0-7]{3,4}|[A-Za-z,+=-]+)\s+(?P<path>/tmp/[^\s;&|]+)")
-_WEBHOOK_HOST_MARKERS = (
-    "webhook.site",
-    "hooks.slack.com",
-    "discord.com",
-    "pastebin.com",
-    "gist.github.com",
-    "transfer.sh",
-    "requestbin",
+_WEBHOOK_HOST_PATTERN = re.compile(
+    r"webhook\.site|hooks\.slack\.com|discord\.com|pastebin\.com|gist\.github\.com|transfer\.sh|requestbin"
 )
 
 
@@ -216,7 +212,12 @@ def detect_data_flow_exfiltration(
 
 def _secret_path_matches_in_command(command: str, *, workspace: Path | None) -> tuple[SecretPathMatch, ...]:
     candidates = list(extract_input_redirects(command))
-    candidates.extend(_strip_shell_token(match.group("path")) for match in _SECRET_PATH_TOKEN_PATTERN.finditer(command))
+    url_ranges = extract_url_ranges(command)
+    candidates.extend(
+        _strip_shell_token(match.group("path"))
+        for match in _SECRET_PATH_TOKEN_PATTERN.finditer(command)
+        if not any(start <= match.start("path") < end for start, end in url_ranges)
+    )
     candidates.extend(_curl_data_file_paths(command))
     return _secret_path_matches(tuple(candidates), workspace=workspace)
 
@@ -282,13 +283,13 @@ def _curl_data_substitution_reads_secret(command: str, *, workspace: Path | None
 
 def _python_posts_secret(command: str, *, workspace: Path | None) -> bool:
     for segment in extract_command_segments(command):
-        if not segment_executes_command(segment, {"python", "python3"}):
-            continue
-        if not extract_urls(segment):
-            continue
-        if any(
-            classify_secret_path(match.group("path"), cwd=workspace) is not None
-            for match in _PYTHON_SECRET_POST_PATTERN.finditer(segment)
+        if (
+            segment_executes_command(segment, {"python", "python3"})
+            and extract_urls(segment)
+            and any(
+                classify_secret_path(match.group("path"), cwd=workspace) is not None
+                for match in _PYTHON_SECRET_POST_PATTERN.finditer(segment)
+            )
         ):
             return True
     return False
@@ -296,13 +297,13 @@ def _python_posts_secret(command: str, *, workspace: Path | None) -> bool:
 
 def _node_fetches_secret(command: str, *, workspace: Path | None) -> bool:
     for segment in extract_command_segments(command):
-        if not segment_executes_command(segment, {"node"}):
-            continue
-        if not extract_urls(segment):
-            continue
-        if any(
-            classify_secret_path(match.group("path"), cwd=workspace) is not None
-            for match in _NODE_SECRET_FETCH_PATTERN.finditer(segment)
+        if (
+            segment_executes_command(segment, {"node"})
+            and extract_urls(segment)
+            and any(
+                classify_secret_path(match.group("path"), cwd=workspace) is not None
+                for match in _NODE_SECRET_FETCH_PATTERN.finditer(segment)
+            )
         ):
             return True
     return False
@@ -335,7 +336,7 @@ def _has_long_encoded_label(host: str) -> bool:
 def _has_webhook_sink(urls: Sequence[str]) -> bool:
     for url in urls:
         host = (urlparse(url).hostname or "").lower()
-        if any(marker in host for marker in _WEBHOOK_HOST_MARKERS):
+        if _WEBHOOK_HOST_PATTERN.search(host):
             return True
     return False
 
