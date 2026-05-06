@@ -262,32 +262,43 @@ The scanner evaluates only the surfaces a plugin actually exposes, then normaliz
 
 ```bash
 # Scan a plugin directory
-plugin-scanner ./my-plugin
+plugin-scanner scan ./my-plugin
 
 # Auto-detect all supported ecosystems inside a repo (default)
-plugin-scanner ./plugins-repo --ecosystem auto
+plugin-scanner scan ./plugins-repo --ecosystem auto
 
 # Scan only Claude package surfaces
-plugin-scanner ./plugins-repo --ecosystem claude
+plugin-scanner scan ./plugins-repo --ecosystem claude
 
 # List supported ecosystems
 plugin-scanner --list-ecosystems
 
 # Output JSON
-plugin-scanner ./my-plugin --json
+plugin-scanner scan ./my-plugin --format json
 
 # Write a SARIF report for GitHub code scanning
-plugin-scanner ./my-plugin --format sarif --output plugin-scanner.sarif
+plugin-scanner scan ./my-plugin --format sarif --output plugin-scanner.sarif
 
 # Fail CI on findings at or above high severity
-plugin-scanner ./my-plugin --fail-on-severity high
+plugin-scanner scan ./my-plugin --fail-on-severity high
 
 # Require Cisco skill scanning with a strict policy
-plugin-scanner ./my-plugin --cisco-skill-scan on --cisco-policy strict
+plugin-scanner scan ./my-plugin --cisco-skill-scan on --cisco-policy strict
 
 # Require optional Cisco MCP static analysis
-plugin-scanner ./my-plugin --cisco-mcp-scan on
+plugin-scanner scan ./my-plugin --cisco-mcp-scan on
 ```
+
+Use the bare `plugin-scanner ./my-plugin` form only for compatibility with older automation. New scripts and docs should
+prefer explicit subcommands so `scan`, `lint`, `verify`, `submit`, and `doctor` have predictable help, flags, and output.
+
+| Need | Command | Output contract |
+| :--- | :--- | :--- |
+| Human release summary | `plugin-scanner scan ./my-plugin` | terminal summary first, optional JSON/Markdown/SARIF with `--format` |
+| Rule-level authoring feedback | `plugin-scanner lint ./my-plugin` | human findings by default, JSON with `--format json` |
+| Runtime readiness details | `plugin-scanner verify ./my-plugin` | human pass/fail by default, JSON with `--format json` |
+| Publishable quality artifact | `plugin-scanner submit ./my-plugin --attest dist/plugin-quality.json` | writes one artifact for one plugin directory |
+| Troubleshooting bundle | `plugin-scanner doctor ./my-plugin --component mcp --bundle dist/doctor.zip` | diagnostic JSON and bundle artifacts |
 
 ## Quality Suite Commands
 

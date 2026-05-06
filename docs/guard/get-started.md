@@ -76,6 +76,30 @@ Use it when you want to protect a harness before local MCP servers, skills, hook
    hol-guard device rotate
    ```
 
+## Which command should I use?
+
+| Situation | Command | What it answers |
+| :--- | :--- | :--- |
+| I need the current protection posture | `hol-guard status` | What is Guard watching, is sync connected, and what is the next action? |
+| I need setup or runtime troubleshooting | `hol-guard doctor <harness>` | Why is this harness or Guard runtime not behaving correctly? |
+| A launch was blocked or changed | `hol-guard diff <harness>` | What changed since the last recorded snapshot? |
+| I need to resolve a queued block | `hol-guard approvals` | Which requests are waiting, and how do I approve or deny them? |
+| I need decision history | `hol-guard receipts` | What decisions did Guard record locally? |
+| I need the tracked catalog | `hol-guard inventory` | Which artifacts are currently tracked and present? |
+| I need an exportable evidence artifact | `hol-guard abom` | What local AI-BOM can I attach to an audit or handoff? |
+| I need the chronological log | `hol-guard events` | What happened over time on this machine? |
+
+## Troubleshooting
+
+| Symptom | Start here | Then try |
+| :--- | :--- | :--- |
+| Guard did not find my harness | `hol-guard detect --json` | `hol-guard doctor <harness> --json` for adapter-specific warnings |
+| `hol-guard run` paused a launch | `hol-guard diff <harness>` | `hol-guard approvals`, then retry `hol-guard run <harness>` |
+| I approved a prompt and want proof | `hol-guard receipts` | `hol-guard explain <artifact-id>` for the latest receipt and diff context |
+| I need audit or handoff evidence | `hol-guard inventory` | `hol-guard abom --format json` for machine-readable export |
+| I need to understand recent activity | `hol-guard events` | Use `--name <event>` to filter a noisy local timeline |
+| Cloud sync or pairing looks wrong | `hol-guard status` | `hol-guard connect` or `hol-guard sync --json` depending on the status output |
+
 ## Evidence-first decisions
 
 Guard now scores local decisions from structured evidence, not only string heuristics. Each changed artifact carries:

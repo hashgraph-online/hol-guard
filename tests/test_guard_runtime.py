@@ -9202,7 +9202,8 @@ def test_guard_run_renderer_uses_context_preserving_diff_command():
         dry_run=True,
     )
 
-    assert steps[1]["command"] == "hol-guard diff codex --home /guard-home --workspace /workspace"
+    assert steps[1]["command"] == "hol-guard approvals"
+    assert steps[2]["command"] == "hol-guard diff codex --home /guard-home --workspace /workspace"
 
 
 def test_guard_run_renderer_uses_context_preserving_launch_command_for_clean_dry_runs():

@@ -162,6 +162,42 @@ class TestMain:
         rc = main(["/nonexistent/path/that/does/not/exist"])
         assert rc == 1
 
+    def test_scan_and_lint_reject_nonexistent_directory_consistently(self, capsys):
+        scan_rc = main(["scan", str(NONEXISTENT_PLUGIN_DIR), "--format", "json"])
+        scan_captured = capsys.readouterr()
+
+        lint_rc = main(["lint", str(NONEXISTENT_PLUGIN_DIR), "--format", "json"])
+        lint_captured = capsys.readouterr()
+
+        expected = f'Error: "{NONEXISTENT_PLUGIN_DIR}" is not a directory.'
+        assert scan_rc == 1
+        assert lint_rc == 1
+        assert expected in scan_captured.err
+        assert expected in lint_captured.err
+        assert scan_captured.out == ""
+        assert lint_captured.out == ""
+
+    def test_scanner_human_outputs_stay_summary_first(self, capsys):
+        scan_rc = main(["scan", str(FIXTURES / "good-plugin")])
+        scan_output = capsys.readouterr().out
+
+        lint_rc = main(["lint", str(FIXTURES / "good-plugin")])
+        lint_output = capsys.readouterr().out
+
+        verify_rc = main(["verify", str(FIXTURES / "good-plugin")])
+        verify_output = capsys.readouterr().out
+
+        assert scan_rc == 0
+        assert lint_rc == 0
+        assert verify_rc == 0
+        assert "Plugin Scanner" in scan_output
+        assert "Final Score" in scan_output
+        assert "Lint profile" in lint_output
+        assert "Verification: PASS" in verify_output
+        assert '"schema_version"' not in scan_output
+        assert '"policy_pass"' not in lint_output
+        assert '"verify_pass"' not in verify_output
+
     def test_invalid_top_level_command_suggests_closest_match(self, capsys):
         with pytest.raises(SystemExit) as exc_info:
             main(["verfy"])
