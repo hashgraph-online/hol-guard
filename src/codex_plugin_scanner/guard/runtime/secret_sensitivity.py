@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 SecretSensitivity = Literal["high", "critical"]
+SecretContentSensitivity = Literal["medium", "high", "critical"]
 
 _AWS_CREDENTIALS_MARKER = "/".join((".aws", "credentials"))
 _DOCKER_CONFIG_MARKER = "/".join((".docker", "config.json"))
@@ -42,8 +44,12 @@ _SENSITIVE_BASENAME_LABELS = {
     ".netrc": "netrc credentials",
     ".git-credentials": "Git credential store",
     ".terraform.tfvars": "Terraform variable secrets",
+    "private-key.pem": "wallet/private-key file",
+    "private.key": "wallet/private-key file",
+    "wallet.key": "wallet/private-key file",
     "terraform.tfvars": "Terraform variable secrets",
 }
+_SENSITIVE_BASENAME_KEYWORDS = ("private-key", "private_key", "wallet-key", "wallet_key")
 _REDACTED_BASENAME_LABELS = {
     "id_rsa": "SSH private key",
     "id_ed25519": "SSH private key",
@@ -80,7 +86,78 @@ _SENSITIVE_PATH_REASONS = {
     "Terraform variable secrets": (
         "Guard treats Terraform variable files as sensitive because they often contain secrets."
     ),
+    "wallet/private-key file": (
+        "Guard treats wallet and private-key files as sensitive because they can authorize account control."
+    ),
 }
+_SECRET_CONTENT_PATTERNS: tuple[tuple[str, str, SecretContentSensitivity, re.Pattern[str], str], ...] = (
+    (
+        "npm-auth-token",
+        "npm auth token",
+        "high",
+        re.compile(r"(?im)\b(?:_authToken|npm[_ -]?token)\s*[:=]\s*[^ \t\r\n\"',}]+"),
+        "Guard found an npm registry token pattern.",
+    ),
+    (
+        "github-token",
+        "GitHub token",
+        "high",
+        re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}_[A-Za-z0-9_]{20,})\b"),
+        "Guard found a GitHub token pattern.",
+    ),
+    (
+        "aws-access-key",
+        "AWS access key",
+        "high",
+        re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
+        "Guard found an AWS access key pattern.",
+    ),
+    (
+        "openai-api-key",
+        "OpenAI API key",
+        "high",
+        re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b"),
+        "Guard found an OpenAI API key pattern.",
+    ),
+    (
+        "anthropic-api-key",
+        "Anthropic API key",
+        "high",
+        re.compile(r"\bsk-ant-api03-[A-Za-z0-9_-]{20,}\b"),
+        "Guard found an Anthropic API key pattern.",
+    ),
+    (
+        "hedera-private-key",
+        "Hedera private key",
+        "critical",
+        re.compile(r"(?im)\b(?:hedera[_-]?)?(?:operator[_-]?)?private[_-]?key\s*[:=]\s*(?:0x)?[0-9a-f]{64,96}\b"),
+        "Guard found a Hedera private-key-like value.",
+    ),
+    (
+        "pem-private-key",
+        "PEM private key",
+        "critical",
+        re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----", re.MULTILINE),
+        "Guard found a PEM private key header.",
+    ),
+    (
+        "credential-marker",
+        "credential assignment",
+        "medium",
+        re.compile(r"(?i)(?:^|[^a-z0-9])fake[_-]?(?:credential|secret)\b"),
+        "Guard found credential-looking marker text.",
+    ),
+    (
+        "credential-assignment",
+        "credential assignment",
+        "medium",
+        re.compile(
+            r"(?im)\b(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|"
+            r"private[_-]?key|secret|token|password)\s*[:=]\s*[^ \t\r\n\"',}]+"
+        ),
+        "Guard found credential-looking assignment text.",
+    ),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +175,14 @@ class SecretPathMatch:
     @property
     def path_class(self) -> str:
         return self.family
+
+
+@dataclass(frozen=True, slots=True)
+class SecretContentMatch:
+    classifier: str
+    family: str
+    sensitivity: SecretContentSensitivity
+    reason: str
 
 
 def classify_secret_path(
@@ -125,11 +210,20 @@ def classify_secret_path(
             sensitivity="critical",
         )
     if basename in _SENSITIVE_BASENAME_LABELS:
+        family = _SENSITIVE_BASENAME_LABELS[basename]
+        sensitivity: SecretSensitivity = "critical" if family == "wallet/private-key file" else "high"
         return _match(
             requested_path=requested_path,
             normalized_path=normalized_path,
-            family=_SENSITIVE_BASENAME_LABELS[basename],
-            sensitivity="high",
+            family=family,
+            sensitivity=sensitivity,
+        )
+    if any(keyword in basename for keyword in _SENSITIVE_BASENAME_KEYWORDS):
+        return _match(
+            requested_path=requested_path,
+            normalized_path=normalized_path,
+            family="wallet/private-key file",
+            sensitivity="critical",
         )
     if "..." in lowered_segments and basename in _REDACTED_BASENAME_LABELS:
         family = _REDACTED_BASENAME_LABELS[basename]
@@ -168,6 +262,26 @@ def classify_secret_path_families(text: str) -> set[str]:
 def classify_legacy_secret_path_families(text: str) -> set[str]:
     lowered = text.lower()
     return {family for marker, family in LEGACY_SECRET_PATH_TEXT_MARKERS if marker in lowered}
+
+
+def classify_secret_content(text: str | None) -> tuple[SecretContentMatch, ...]:
+    if not isinstance(text, str) or not text.strip():
+        return ()
+    matches: list[SecretContentMatch] = []
+    seen: set[str] = set()
+    for classifier, family, sensitivity, pattern, reason in _SECRET_CONTENT_PATTERNS:
+        if pattern.search(text) is None or classifier in seen:
+            continue
+        seen.add(classifier)
+        matches.append(
+            SecretContentMatch(
+                classifier=classifier,
+                family=family,
+                sensitivity=sensitivity,
+                reason=reason,
+            )
+        )
+    return tuple(matches)
 
 
 def redacted_secret_path_context(path: str) -> str | None:

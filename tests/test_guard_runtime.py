@@ -879,6 +879,83 @@ clearer UX and an implementation plan with technical references.
         assert output["recorded"] is True
         assert "approval_requests" not in output
 
+    def test_codex_post_tool_use_allows_benign_nvmrc_fake_credential_fixture(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        _write_text(workspace_dir / ".nvmrc", "fake_credential=fixture-only\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "cat .nvmrc"},
+            "tool_response": {"stdout": "fake_credential=fixture-only\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert "approval_requests" not in output
+
+    def test_codex_post_tool_use_allows_docs_fake_token_examples(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        docs_file = workspace_dir / "docs" / "secret-examples.md"
+        _write_text(docs_file, "Use fake_token=example-only in docs.\n")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "cat docs/secret-examples.md"},
+            "tool_response": {"stdout": "Use fake_token=example-only in docs.\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["recorded"] is True
+        assert "approval_requests" not in output
+
     def test_codex_post_tool_use_allows_short_option_value_payloads(
         self,
         monkeypatch,
@@ -10911,7 +10988,7 @@ def test_guard_hook_codex_post_tool_use_blocks_credential_looking_output(
     event = {
         "hook_event_name": "PostToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "cat .nvmrc"},
+        "tool_input": {"command": "cat .authrc"},
         "tool_response": {"stdout": "HOL_GUARD_FAKE_CREDENTIAL=fixture-only\n"},
         "source_scope": "project",
     }
@@ -10958,7 +11035,7 @@ def test_guard_hook_codex_post_tool_use_browser_approval_resumes_result(
     event = {
         "hook_event_name": "PostToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "cat .nvmrc"},
+        "tool_input": {"command": "cat .authrc"},
         "tool_response": {"stdout": "HOL_GUARD_FAKE_CREDENTIAL=fixture-only\n"},
         "source_scope": "project",
     }
@@ -11438,7 +11515,7 @@ def test_guard_hook_codex_runtime_risk_ignores_broad_allow_policy(
     event = {
         "hook_event_name": "PostToolUse",
         "tool_name": "Bash",
-        "tool_input": {"command": "sed -n '1,20p' .nvmrc"},
+        "tool_input": {"command": "sed -n '1,20p' .authrc"},
         "tool_response": "fake_credential\n",
         "source_scope": "project",
     }
