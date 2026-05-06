@@ -370,9 +370,10 @@ def _is_documentation_context_guard(text: str, match: re.Match[str]) -> bool:
     )
     context_start = boundary + 1
     prefix = text[context_start : match.start()]
+    subject_context = _reported_phrase_subject_context(text, prefix, match)
     return (
         _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
-        and _GUARD_DOCUMENTATION_SUBJECT_PATTERN.search(prefix) is not None
+        and _GUARD_DOCUMENTATION_SUBJECT_PATTERN.search(subject_context) is not None
         and _has_quoted_reported_phrase_prefix(prefix)
     )
 
@@ -391,11 +392,17 @@ def _is_documentation_context_with_subject(
     )
     context_start = boundary + 1
     prefix = text[context_start : match.start()]
+    subject_context = _reported_phrase_subject_context(text, prefix, match)
     return (
         _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
-        and subject_pattern.search(prefix) is not None
+        and subject_pattern.search(subject_context) is not None
         and _has_quoted_reported_phrase_prefix(prefix)
     )
+
+
+def _reported_phrase_subject_context(text: str, prefix: str, match: re.Match[str]) -> str:
+    suffix = text[match.end() : min(len(text), match.end() + 80)]
+    return f"{prefix} {suffix}"
 
 
 def _has_quoted_reported_phrase_prefix(prefix: str) -> bool:
