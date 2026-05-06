@@ -164,6 +164,33 @@ def test_stable_mcp_server_identifier_preserves_slash_flags() -> None:
     assert stable_mcp_server_identifier(first) != stable_mcp_server_identifier(second)
 
 
+def test_stable_mcp_server_identifier_redacts_path_assignments_with_root_dirs() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=("--root=/workspace", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/bob/.codex/config.toml",
+        command="npx",
+        args=("--root=/project", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    assert stable_mcp_server_identifier(first) == stable_mcp_server_identifier(second)
+
+
 def test_normalized_capability_categories_include_mcp_tool_risk_families() -> None:
     artifact = GuardArtifact(
         artifact_id="mcp:filesystem",

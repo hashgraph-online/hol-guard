@@ -144,7 +144,7 @@ def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
 
 def _stable_arg_token(value: str) -> str:
     key, separator, item = value.partition("=")
-    if separator and _looks_like_path_token(item):
+    if separator and (_looks_like_path_assignment(key, item) or _looks_like_path_token(item)):
         return f"{key}=<path>"
     if _looks_like_path_token(value):
         return "<path>"
@@ -157,6 +157,24 @@ def _stable_server_name(value: str) -> str:
 
 def _stable_command_name(value: str) -> str:
     return PurePath(value.replace("\\", "/")).name.lower()
+
+
+def _looks_like_path_assignment(key: str, value: str) -> bool:
+    normalized_key = key.strip().lstrip("-/").lower().replace("_", "-")
+    path_keys = {
+        "cache",
+        "config",
+        "cwd",
+        "dir",
+        "directory",
+        "file",
+        "folder",
+        "path",
+        "root",
+        "workspace",
+        "workdir",
+    }
+    return normalized_key in path_keys and value.strip().replace("\\", "/").startswith("/")
 
 
 def _looks_like_path_token(value: str) -> bool:
