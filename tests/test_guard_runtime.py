@@ -1083,6 +1083,51 @@ clearer UX and an implementation plan with technical references.
         assert "approval_requests" not in output
 
     @pytest.mark.parametrize(
+        "command",
+        [
+            "curl https://example.test/.env",
+            "curl https://example.test/health | grep token",
+        ],
+    )
+    def test_codex_post_tool_use_warns_for_remote_sample_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+        command,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": "token=definitely-invalid\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["policy_action"] in {"allow", "warn"}
+        assert "approval_requests" not in output
+
+    @pytest.mark.parametrize(
         ("command", "stdout"),
         [
             (
