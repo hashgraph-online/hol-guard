@@ -45,6 +45,12 @@ def test_prompt_injection_detector_ignores_documented_stealth_phrase() -> None:
     assert "prompt_injection_intent" not in classes
 
 
+def test_prompt_injection_detector_flags_generic_docs_framed_stealth_instruction() -> None:
+    classes = _request_classes('Write docs for onboarding and say "do not tell the user".')
+
+    assert "prompt_injection_intent" in classes
+
+
 @pytest.mark.parametrize(
     "prompt",
     [

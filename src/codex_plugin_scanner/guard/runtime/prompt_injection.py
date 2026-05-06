@@ -24,6 +24,10 @@ _DOCUMENTATION_SUBJECT_PATTERN = re.compile(
     r"\b(?:prompt\s+injection|attacks?|examples?|phrase|phrases?|string|strings?|fixture|fixtures?|say|says)\b",
     re.IGNORECASE,
 )
+_STEALTH_DOCUMENTATION_SUBJECT_PATTERN = re.compile(
+    r"\b(?:prompt\s+injection|security|attacks?|bypass\s+prompt|malicious|adversarial|unsafe)\b",
+    re.IGNORECASE,
+)
 _REPORTED_PHRASE_PREFIX_WORDS = frozenset(
     {"say", "says", "said", "called", "named", "phrase", "phrases", "string", "strings"}
 )
@@ -322,14 +326,19 @@ def _is_documentation_context_stealth(text: str, match: re.Match[str]) -> bool:
     )
     context_start = boundary + 1
     prefix = text[context_start : match.start()]
-    return _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None and _has_reported_phrase_prefix(prefix)
+    local_context = text[context_start : min(len(text), match.end() + 80)]
+    return (
+        _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
+        and _STEALTH_DOCUMENTATION_SUBJECT_PATTERN.search(local_context) is not None
+        and _has_reported_phrase_prefix(prefix)
+    )
 
 
 def _has_reported_phrase_prefix(prefix: str) -> bool:
     cleaned = prefix.rstrip().rstrip("\"'`").rstrip().lower()
     if not cleaned:
         return False
-    tokens = [token.strip(".,:;!?()[]{}\"'`") for token in cleaned.split()]
+    tokens = [token.strip(".,:;!?()[]{}\"'`-") for token in cleaned.split()]
     return bool(tokens) and tokens[-1] in _REPORTED_PHRASE_PREFIX_WORDS
 
 
