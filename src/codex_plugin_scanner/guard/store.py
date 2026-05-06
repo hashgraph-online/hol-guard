@@ -2213,16 +2213,24 @@ class GuardStore:
         normalized_workspace_id = (
             workspace_id.strip() if isinstance(workspace_id, str) and workspace_id.strip() else None
         )
+        previous_workspace_id: object = None
+        previous_row = connection.execute(
+            "select payload_json from sync_state where state_key = 'credentials'"
+        ).fetchone()
+        if previous_row is not None:
+            previous_payload = json.loads(str(previous_row["payload_json"]))
+            if isinstance(previous_payload, dict):
+                previous_workspace_id = previous_payload.get("workspace_id")
+        effective_workspace_id = normalized_workspace_id
+        if effective_workspace_id is None and isinstance(previous_workspace_id, str) and previous_workspace_id.strip():
+            effective_workspace_id = previous_workspace_id.strip()
         payload = {
             "sync_url": sync_url,
             "token_ref": self._sync_token_ref,
             _SYNC_TOKEN_HASH_KEY: _token_sha256(token),
         }
-        if normalized_workspace_id is not None:
-            payload["workspace_id"] = normalized_workspace_id
-        previous_row = connection.execute(
-            "select payload_json from sync_state where state_key = 'credentials'"
-        ).fetchone()
+        if effective_workspace_id is not None:
+            payload["workspace_id"] = effective_workspace_id
         if previous_row is None:
             credentials_changed = True
         else:
@@ -2237,7 +2245,7 @@ class GuardStore:
                     previous_sync_url != sync_url
                     or previous_token_hash is None
                     or previous_token_hash != payload[_SYNC_TOKEN_HASH_KEY]
-                    or previous_workspace_id != normalized_workspace_id
+                    or previous_workspace_id != effective_workspace_id
                 )
         connection.execute(
             """

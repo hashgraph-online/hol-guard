@@ -63,6 +63,26 @@ def test_sync_credentials_preserve_installation_id_when_cloud_workspace_changes(
     assert store.get_cloud_workspace_id() == "workspace-beta"
 
 
+def test_sync_credentials_refresh_preserves_existing_cloud_workspace_id(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:00:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+    store.set_sync_payload("policy", {"policy": "team"}, "2026-04-24T00:00:00+00:00")
+
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:01:00+00:00",
+    )
+
+    assert store.get_cloud_workspace_id() == "workspace-alpha"
+    assert store.get_sync_payload("policy") == {"policy": "team"}
+
+
 def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
