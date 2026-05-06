@@ -43,7 +43,23 @@ _SCHEMA_VERSION = 1
 _SHELL_TOOL_NAMES = frozenset({"bash", "shell", "sh", "zsh", "terminal", "run_command", "run_terminal_command"})
 _FILE_READ_TOOL_NAMES = frozenset({"read", "read_file", "open_file", "view", "view_file", "cat_file"})
 _FILE_WRITE_TOOL_NAMES = frozenset({"write", "edit", "multiedit", "write_file", "edit_file"})
-_PATH_KEYS = ("path", "file_path", "filePath", "filepath", "file", "filename", "target_path", "targetPath")
+_PATH_KEYS = (
+    "path",
+    "paths",
+    "file_path",
+    "file_paths",
+    "filePath",
+    "filePaths",
+    "filepath",
+    "file",
+    "files",
+    "filename",
+    "filenames",
+    "target_path",
+    "target_paths",
+    "targetPath",
+    "targetPaths",
+)
 _COMMAND_KEYS = ("command", "cmd", "shell_command", "shellCommand")
 _SENSITIVE_RAW_KEYS = frozenset(
     {
@@ -652,6 +668,8 @@ def _target_paths(
         value = tool_input.get(key)
         if isinstance(value, str) and value.strip():
             paths.append(value.strip())
+        elif isinstance(value, list):
+            paths.extend(item.strip() for item in value if isinstance(item, str) and item.strip())
     for text in (command, prompt_text):
         if text is not None:
             paths.extend(match.group("path") for match in _PROMPT_PATH_PATTERN.finditer(text))
