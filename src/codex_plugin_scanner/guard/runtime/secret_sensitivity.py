@@ -44,6 +44,13 @@ _SENSITIVE_BASENAME_LABELS = {
     ".terraform.tfvars": "Terraform variable secrets",
     "terraform.tfvars": "Terraform variable secrets",
 }
+_REDACTED_BASENAME_LABELS = {
+    "credentials": "AWS shared credentials file",
+    "config.json": "Docker client config",
+    "id_rsa": "SSH private key",
+    "id_ed25519": "SSH private key",
+    "id_ecdsa": "SSH private key",
+}
 _SENSITIVE_SUFFIX_LABELS = {
     (".aws", "credentials"): "AWS shared credentials file",
     (".aws", "config"): "AWS shared config file",
@@ -125,6 +132,15 @@ def classify_secret_path(
             normalized_path=normalized_path,
             family=_SENSITIVE_BASENAME_LABELS[basename],
             sensitivity="high",
+        )
+    if "..." in lowered_segments and basename in _REDACTED_BASENAME_LABELS:
+        family = _REDACTED_BASENAME_LABELS[basename]
+        sensitivity: SecretSensitivity = "critical" if family == "SSH private key" else "high"
+        return _match(
+            requested_path=requested_path,
+            normalized_path=normalized_path,
+            family=family,
+            sensitivity=sensitivity,
         )
     for directory, family in _SENSITIVE_DIRECTORY_LABELS.items():
         if directory in lowered_segments:
