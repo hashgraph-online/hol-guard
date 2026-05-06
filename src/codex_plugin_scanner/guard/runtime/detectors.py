@@ -121,7 +121,7 @@ class DetectorRegistry:
             if elapsed_ms > timeout_ms:
                 telemetry.append(_telemetry(detector, "timeout", elapsed_ms=elapsed_ms))
                 continue
-            signals.extend(detector_signals)
+            signals.extend(_filter_signals(detector_signals, category_filter))
             telemetry.append(_telemetry(detector, "ok", elapsed_ms=elapsed_ms))
         return DetectorRunResult(signals=tuple(signals), telemetry=tuple(telemetry))
 
@@ -177,6 +177,15 @@ def _secret_path_matches(paths: Sequence[str], *, workspace: Path | None) -> tup
 
 def _elapsed_ms(started_at: float, finished_at: float) -> int:
     return max(0, round((finished_at - started_at) * 1000))
+
+
+def _filter_signals(
+    signals: Sequence[RiskSignalV2],
+    category_filter: frozenset[RiskSignalCategory] | None,
+) -> tuple[RiskSignalV2, ...]:
+    if category_filter is None:
+        return tuple(signals)
+    return tuple(signal for signal in signals if signal.category in category_filter)
 
 
 def _slug(value: str) -> str:
