@@ -176,6 +176,9 @@ class GuardConfig:
     telemetry: bool = False
     sync: bool = False
     billing: bool = False
+    runtime_detector_registry: bool = False
+    runtime_detector_timeout_ms: int = 50
+    runtime_detector_disabled_ids: tuple[str, ...] = ()
     risk_actions: dict[str, GuardAction] | None = None
     harness_risk_actions: dict[str, dict[str, GuardAction]] | None = None
     harness_actions: dict[str, GuardAction] | None = None
@@ -252,6 +255,9 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         telemetry=bool(merged.get("telemetry", False)),
         sync=bool(merged.get("sync", False)),
         billing=bool(merged.get("billing", False)),
+        runtime_detector_registry=_coerce_loaded_bool(merged.get("runtime_detector_registry", False)),
+        runtime_detector_timeout_ms=_coerce_loaded_positive_int(merged.get("runtime_detector_timeout_ms", 50), 50),
+        runtime_detector_disabled_ids=_coerce_loaded_string_tuple(merged.get("runtime_detector_disabled_ids")),
         harness_actions=_coerce_action_map(merged.get("harnesses")),
         publisher_actions=_coerce_action_map(merged.get("publishers")),
         artifact_actions=_coerce_action_map(merged.get("artifacts")),
@@ -344,6 +350,22 @@ def _coerce_loaded_security_level(value: object) -> str:
     if isinstance(value, str) and value in VALID_SECURITY_LEVELS:
         return value
     return DEFAULT_SECURITY_LEVEL
+
+
+def _coerce_loaded_bool(value: object) -> bool:
+    return value if isinstance(value, bool) else False
+
+
+def _coerce_loaded_positive_int(value: object, fallback: int) -> int:
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return fallback
+
+
+def _coerce_loaded_string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, str) and item.strip())
 
 
 def _coerce_risk_action_payload(value: object) -> dict[str, GuardAction]:
