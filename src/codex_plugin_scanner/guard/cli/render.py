@@ -50,6 +50,7 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     ),
     (re.compile(r"(?i)(authorization:\s*)(bearer\s+)?[^\s,;]+"), r"\1*****"),
     (re.compile(r"(?i)(api[-_ ]?key:\s*)[^\s,;]+"), r"\1*****"),
+    (re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b"), "*****"),
     (re.compile(r"(?i)(bearer\s+)[^\s,;]+"), r"\1*****"),
     (re.compile(r"(?im)\b(?:_authToken|npm[_ -]?token)\s*[:=]\s*[^\s]+"), "npm token redacted"),
     (re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s]+", re.IGNORECASE), "*****"),
@@ -963,6 +964,8 @@ def _render_hook(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Recorded", _bool_label(bool(payload.get("recorded"))))
     body.add_row("Artifact", str(payload.get("artifact_name") or payload.get("artifact_id") or "unknown"))
     body.add_row("Decision", _action_text(str(payload.get("policy_action", "warn"))))
+    if payload.get("risk_summary"):
+        body.add_row("Why", str(payload.get("risk_summary")))
     if payload.get("path_summary"):
         body.add_row("Path", str(payload.get("path_summary")))
     if payload.get("approval_center_url"):

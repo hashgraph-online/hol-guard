@@ -1226,6 +1226,50 @@ clearer UX and an implementation plan with technical references.
         assert output["continue"] is False
         assert "credential-looking output" in output["stopReason"]
 
+    def test_codex_post_tool_use_queues_secret_family_copy_for_local_secret_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        raw_secret = "sk-" + "A" * 32
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "cat .env"},
+            "tool_response": {"stdout": f"OPENAI_API_KEY={raw_secret}\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        rendered = json.dumps(output)
+        approval = output["approval_requests"][0]
+
+        assert rc == 1
+        assert "local secrets" in approval["risk_summary"].lower()
+        assert ".env file" in approval["risk_summary"]
+        assert raw_secret not in rendered
+        assert "credential-looking output" not in approval["risk_summary"].lower()
+
     @pytest.mark.parametrize(
         "command",
         [
@@ -1677,6 +1721,47 @@ clearer UX and an implementation plan with technical references.
         assert rc == 1
         assert output["artifact_type"] == "tool_action_request"
         assert output["approval_requests"]
+
+    def test_codex_post_tool_use_asks_for_env_pipe_token_output_in_balanced(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "env | grep TOKEN"},
+            "tool_response": {
+                "stdout": "OPENAI_API_KEY=sk-" + "A" * 32,
+            },
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["approval_requests"]
+        assert "environment variables" in output["risk_summary"].lower()
 
     @pytest.mark.parametrize(
         "command",
