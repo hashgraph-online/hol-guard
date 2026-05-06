@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.runtime.data_flow import (
 )
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
 from codex_plugin_scanner.guard.runtime.shell_commands import (
+    command_execution_segments,
     command_tokens_after_env_assignments,
     git_remote_add_url_tokens,
     is_scp_remote_target,
@@ -69,7 +70,7 @@ _DNS_LONG_LABEL_PATTERN = re.compile(
 )
 _SCP_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])scp\b(?P<body>[^\r\n;&|]+)")
 _TOKEN_SOURCE_PATTERN = re.compile(r"(?i)\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|_authToken|npm[_-]?token)\b")
-_CLIPBOARD_SINK_PATTERN = re.compile(r"(?i)(?:^|[\s;&|])(?:pbcopy|xclip|xsel|wl-copy|clip(?:\.exe)?)\b")
+_CLIPBOARD_COMMANDS = frozenset({"pbcopy", "xclip", "xsel", "wl-copy", "clip", "clip.exe"})
 _WEBHOOK_HOST_PATTERN = re.compile(
     r"webhook\.site|hooks\.slack\.com|discord\.com|pastebin\.com|gist\.github\.com|transfer\.sh|requestbin"
 )
@@ -252,7 +253,10 @@ def _has_secret_pipe_to_http_upload(pipes: Sequence[ShellPipe], command: str, *,
 
 
 def _has_http_upload(command: str) -> bool:
-    return any(_CURL_DATA_STDIN_PATTERN.search(segment) for segment in extract_command_segments(command))
+    return any(
+        segment_executes_command(segment, {"curl", "curl.exe"}) and _CURL_DATA_STDIN_PATTERN.search(segment)
+        for segment in command_execution_segments(command)
+    )
 
 
 def _contains_http_upload_sink(command: str) -> bool:
@@ -260,9 +264,11 @@ def _contains_http_upload_sink(command: str) -> bool:
 
 
 def _curl_uploads_secret_file(command: str, *, workspace: Path | None) -> bool:
-    if any(classify_secret_path(path, cwd=workspace) is not None for path in _curl_data_file_paths(command)):
-        return True
-    return _curl_data_substitution_reads_secret(command, workspace=workspace)
+    return any(
+        extract_urls(segment)
+        and any(classify_secret_path(path, cwd=workspace) is not None for path in _curl_data_file_paths(segment))
+        for segment in extract_command_segments(command)
+    ) or _curl_data_substitution_reads_secret(command, workspace=workspace)
 
 
 def _curl_data_substitution_reads_secret(command: str, *, workspace: Path | None) -> bool:
@@ -412,12 +418,12 @@ def _has_npm_secret_match(secret_matches: Sequence[SecretPathMatch]) -> bool:
 
 
 def _clipboard_receives_secret(pipes: Sequence[ShellPipe], command: str, *, workspace: Path | None) -> bool:
-    if not pipes or not _CLIPBOARD_SINK_PATTERN.search(command):
+    if not pipes:
         return False
     return any(
-        extract_pipes(segment)
+        (segment_pipes := extract_pipes(segment))
         and _secret_path_matches_in_command(segment, workspace=workspace)
-        and _CLIPBOARD_SINK_PATTERN.search(segment)
+        and any(segment_executes_command(pipe.right, _CLIPBOARD_COMMANDS) for pipe in segment_pipes)
         for segment in extract_command_segments(command)
     )
 
