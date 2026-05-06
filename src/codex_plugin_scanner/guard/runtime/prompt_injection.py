@@ -12,11 +12,15 @@ _INSTRUCTION_OVERRIDE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bignore\s+(?:all\s+)?(?:previous|prior|earlier)\s+instructions?\b", re.IGNORECASE),
     re.compile(r"\bignore\s+(?:the\s+)?system\s+prompt\b", re.IGNORECASE),
 )
-_DOCUMENTATION_CONTEXT_PATTERN = re.compile(
-    r"\b(?:document|explain|describe|write\s+docs?|security\s+docs?|test\s+fixture)\b"
-    r"[^.!?;\n]{0,80}\b(?:prompt\s+injection|ignore\s+previous\s+instructions?)\b",
+_DOCUMENTATION_CONTEXT_TERM_PATTERN = re.compile(
+    r"\b(?:document|explain|describe|write\s+docs?|security\s+docs?|test\s+fixture)\b",
     re.IGNORECASE,
 )
+_DOCUMENTATION_SUBJECT_PATTERN = re.compile(
+    r"\b(?:prompt\s+injection|attacks?|examples?|phrase|phrases?|string|strings?|fixture|fixtures?|say|says)\b",
+    re.IGNORECASE,
+)
+_PROMPT_CONTINUATION_PATTERN = re.compile(r"\b(?:then|next|afterwards?|now)\b", re.IGNORECASE)
 _GUARD_POLICY_TAMPER_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b(?:disable|turn\s+off|uninstall|bypass)\s+HOL\s+Guard\b", re.IGNORECASE),
     re.compile(
@@ -87,7 +91,7 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
         return ()
     requests: list[PromptRequest] = []
     override_match = _first_match(_INSTRUCTION_OVERRIDE_PATTERNS, normalized)
-    if override_match is not None and not _DOCUMENTATION_CONTEXT_PATTERN.search(normalized):
+    if override_match is not None and not _is_documentation_context_override(normalized, override_match):
         requests.append(
             _request(
                 request_class="prompt_injection_intent",
@@ -206,6 +210,24 @@ def _first_match(patterns: tuple[re.Pattern[str], ...], text: str) -> re.Match[s
         if match is not None:
             return match
     return None
+
+
+def _is_documentation_context_override(text: str, match: re.Match[str]) -> bool:
+    boundary = max(
+        text.rfind(".", 0, match.start()),
+        text.rfind("!", 0, match.start()),
+        text.rfind("?", 0, match.start()),
+        text.rfind(";", 0, match.start()),
+        text.rfind("\n", 0, match.start()),
+    )
+    context_start = boundary + 1
+    prefix = text[context_start : match.start()]
+    local_context = text[context_start : min(len(text), match.end() + 80)]
+    return (
+        _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
+        and _DOCUMENTATION_SUBJECT_PATTERN.search(local_context) is not None
+        and _PROMPT_CONTINUATION_PATTERN.search(prefix) is None
+    )
 
 
 def _dedupe_requests(requests: list[PromptRequest]) -> tuple[PromptRequest, ...]:
