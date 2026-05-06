@@ -67,6 +67,12 @@ class TestGuardProductFlow:
         assert "Scan plugin ecosystems for CI and publish readiness." in output
         assert "{scan,lint,verify,submit,doctor}" in output
         assert "guard" not in output
+        assert "protect" not in output
+        assert "preflight" not in output
+        assert "approvals" not in output
+        assert "receipts" not in output
+        assert "abom" not in output
+        assert "events" not in output
 
     def test_python_module_entry_keeps_combined_surface(self, capsys, monkeypatch):
         monkeypatch.setattr(sys, "argv", ["cli.py"])
@@ -263,6 +269,11 @@ class TestGuardProductFlow:
         assert "start        First-run setup and the Guard operating loop" in output
         assert "connect      Pair this machine to Guard Cloud" in output
         assert "doctor       Run local diagnostics" in output
+        assert "Use status for current posture" in output
+        assert "Use doctor for setup and runtime probes" in output
+        assert "Use diff for changed artifacts" in output
+        assert "Use explain for detailed artifact evidence" in output
+        assert "Use events for the local timeline" in output
 
     def test_guard_start_human_output_highlights_guard_loop(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

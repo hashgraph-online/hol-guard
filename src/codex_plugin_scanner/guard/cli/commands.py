@@ -150,7 +150,15 @@ _GUARD_HELP_GROUPS = (
     "  bootstrap    Detect, install, and launch the approval center\n"
     "  install      Enable Guard management for a harness\n"
     "  uninstall    Disable Guard management for a harness\n"
-    "  update       Update hol-guard in the current environment"
+    "  update       Update hol-guard in the current environment\n"
+    "\n"
+    "Command selection:\n"
+    "  Use status for current posture and the next safe step\n"
+    "  Use doctor for setup and runtime probes\n"
+    "  Use diff for changed artifacts after a blocked launch\n"
+    "  Use explain for detailed artifact evidence\n"
+    "  Use approvals for queued decisions and receipts for audit history\n"
+    "  Use events for the local timeline"
 )
 
 
