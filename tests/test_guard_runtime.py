@@ -1045,6 +1045,142 @@ clearer UX and an implementation plan with technical references.
         assert output["recorded"] is True
         assert "approval_requests" not in output
 
+    def test_codex_post_tool_use_warns_for_standalone_credential_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "printenv"},
+            "tool_response": {"stdout": "DB_PASSWORD=fixture-pass\n"},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["policy_action"] == "warn"
+        assert "approval_requests" not in output
+
+    @pytest.mark.parametrize(
+        ("command", "stdout"),
+        [
+            (
+                "pnpm exec tsx -e \"await fetch('https://api.example.test/health?token=definitely-invalid')\"",
+                "GET https://api.example.test/health?token=definitely-invalid 200\n",
+            ),
+            (
+                "rg AWS_SECRET_ACCESS_KEY src tests",
+                "tests/aws-secret-fixture.test.ts:1:const keyName = 'AWS_SECRET_ACCESS_KEY';\n",
+            ),
+        ],
+    )
+    def test_codex_post_tool_use_allows_safe_token_lookups(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+        command,
+        stdout,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": stdout},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["policy_action"] in {"allow", "warn"}
+        assert "approval_requests" not in output
+
+    @pytest.mark.parametrize(
+        ("command", "stdout"),
+        [
+            ("cat .env", "OPENAI_API_KEY=" + "sk-" + "A" * 32 + "\n"),
+            ("cat .npmrc", "//registry.npmjs.org/:_authToken=" + "n" * 36 + "\n"),
+        ],
+    )
+    def test_codex_post_tool_use_asks_for_local_secret_file_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+        command,
+        stdout,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {"stdout": stdout},
+            "source_scope": "project",
+        }
+        monkeypatch.setenv("CODEX_HOME", str(home_dir / ".codex"))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["continue"] is False
+        assert "credential-looking output" in output["stopReason"]
+
     def test_codex_post_tool_use_allows_short_option_value_payloads(
         self,
         monkeypatch,
