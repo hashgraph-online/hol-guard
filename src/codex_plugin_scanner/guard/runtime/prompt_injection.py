@@ -20,7 +20,10 @@ _DOCUMENTATION_SUBJECT_PATTERN = re.compile(
     r"\b(?:prompt\s+injection|attacks?|examples?|phrase|phrases?|string|strings?|fixture|fixtures?|say|says)\b",
     re.IGNORECASE,
 )
-_PROMPT_CONTINUATION_PATTERN = re.compile(r"\b(?:then|next|afterwards?|now)\b", re.IGNORECASE)
+_REPORTED_PHRASE_PREFIX_PATTERN = re.compile(
+    r"\b(?:say|says|said|called|named|phrase|phrases?|string|strings?|example|examples?)\s+[\"'`]?\s*$",
+    re.IGNORECASE,
+)
 _GUARD_POLICY_TAMPER_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b(?:disable|turn\s+off|uninstall|bypass)\s+HOL\s+Guard\b", re.IGNORECASE),
     re.compile(
@@ -226,7 +229,7 @@ def _is_documentation_context_override(text: str, match: re.Match[str]) -> bool:
     return (
         _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
         and _DOCUMENTATION_SUBJECT_PATTERN.search(local_context) is not None
-        and _PROMPT_CONTINUATION_PATTERN.search(prefix) is None
+        and _REPORTED_PHRASE_PREFIX_PATTERN.search(prefix) is not None
     )
 
 
