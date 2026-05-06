@@ -24,9 +24,8 @@ _DOCUMENTATION_SUBJECT_PATTERN = re.compile(
     r"\b(?:prompt\s+injection|attacks?|examples?|phrase|phrases?|string|strings?|fixture|fixtures?|say|says)\b",
     re.IGNORECASE,
 )
-_REPORTED_PHRASE_PREFIX_PATTERN = re.compile(
-    r"\b(?:say|says|said|called|named|phrase|phrases?|string|strings?)\s+[\"'`]?\s*$",
-    re.IGNORECASE,
+_REPORTED_PHRASE_PREFIX_WORDS = frozenset(
+    {"say", "says", "said", "called", "named", "phrase", "phrases", "string", "strings"}
 )
 _GUARD_POLICY_TAMPER_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b(?:disable|turn\s+off|uninstall|bypass)\s+HOL\s+Guard\b", re.IGNORECASE),
@@ -279,7 +278,7 @@ def _is_documentation_context_override(text: str, match: re.Match[str]) -> bool:
     return (
         _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
         and _DOCUMENTATION_SUBJECT_PATTERN.search(local_context) is not None
-        and _REPORTED_PHRASE_PREFIX_PATTERN.search(prefix) is not None
+        and _has_reported_phrase_prefix(prefix)
     )
 
 
@@ -293,10 +292,15 @@ def _is_documentation_context_stealth(text: str, match: re.Match[str]) -> bool:
     )
     context_start = boundary + 1
     prefix = text[context_start : match.start()]
-    return (
-        _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
-        and _REPORTED_PHRASE_PREFIX_PATTERN.search(prefix) is not None
-    )
+    return _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None and _has_reported_phrase_prefix(prefix)
+
+
+def _has_reported_phrase_prefix(prefix: str) -> bool:
+    cleaned = prefix.rstrip().rstrip("\"'`").rstrip().lower()
+    if not cleaned:
+        return False
+    tokens = [token.strip(".,:;!?()[]{}\"'`") for token in cleaned.split()]
+    return bool(tokens) and tokens[-1] in _REPORTED_PHRASE_PREFIX_WORDS
 
 
 def _dedupe_requests(requests: list[PromptRequest]) -> tuple[PromptRequest, ...]:
