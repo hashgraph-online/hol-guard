@@ -301,9 +301,14 @@ def _encoded_secret_send(command: str, secret_matches: Sequence[SecretPathMatch]
 def _has_dns_exfil_hostname(command: str) -> bool:
     return any(
         segment_executes_command(segment, {"dig", "nslookup", "host"})
-        and any(_has_long_encoded_label(match.group("host")) for match in _DNS_LONG_LABEL_PATTERN.finditer(segment))
+        and any(_has_long_encoded_label(token) for token in _dns_query_tokens(segment))
         for segment in extract_command_segments(command)
     )
+
+
+def _dns_query_tokens(segment: str) -> tuple[str, ...]:
+    tokens = command_tokens_after_env_assignments(segment)
+    return tuple(token.strip("'\"") for token in tokens[1:] if "." in token and not token.startswith(("-", "+", "@")))
 
 
 def _has_long_encoded_label(host: str) -> bool:
