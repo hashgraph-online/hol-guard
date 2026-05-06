@@ -76,6 +76,8 @@ def _segment_secret_variable_assignments(
         index = match.end()
         while index < len(normalized) and normalized[index].isspace():
             index += 1
+    if index < len(normalized):
+        return ()
     return tuple(assignments)
 
 
