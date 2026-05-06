@@ -28,6 +28,10 @@ _STEALTH_DOCUMENTATION_SUBJECT_PATTERN = re.compile(
     r"\b(?:prompt\s+injection|security|attacks?|bypass\s+prompt|malicious|adversarial|unsafe)\b",
     re.IGNORECASE,
 )
+_GUARD_DOCUMENTATION_SUBJECT_PATTERN = re.compile(
+    r"\b(?:HOL\s+Guard|guard|approval_policy|policy|config|configuration|hooks?|opencode|codex|claude|attacks?|bypass\s+prompt)\b",
+    re.IGNORECASE,
+)
 _REPORTED_PHRASE_PREFIX_WORDS = frozenset(
     {"say", "says", "said", "called", "named", "phrase", "phrases", "string", "strings"}
 )
@@ -167,7 +171,7 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
             )
         )
     guard_match = _first_match(_GUARD_POLICY_TAMPER_PATTERNS, normalized)
-    if guard_match is not None and not _is_documentation_context_stealth(normalized, guard_match):
+    if guard_match is not None and not _is_documentation_context_guard(normalized, guard_match):
         requests.append(
             _request(
                 request_class="guard_bypass_intent",
@@ -287,6 +291,18 @@ def _is_documentation_context_override(text: str, match: re.Match[str]) -> bool:
 
 
 def _is_documentation_context_stealth(text: str, match: re.Match[str]) -> bool:
+    return _is_documentation_context_with_subject(text, match, _STEALTH_DOCUMENTATION_SUBJECT_PATTERN)
+
+
+def _is_documentation_context_guard(text: str, match: re.Match[str]) -> bool:
+    return _is_documentation_context_with_subject(text, match, _GUARD_DOCUMENTATION_SUBJECT_PATTERN)
+
+
+def _is_documentation_context_with_subject(
+    text: str,
+    match: re.Match[str],
+    subject_pattern: re.Pattern[str],
+) -> bool:
     boundary = max(
         text.rfind(".", 0, match.start()),
         text.rfind("!", 0, match.start()),
@@ -299,7 +315,7 @@ def _is_documentation_context_stealth(text: str, match: re.Match[str]) -> bool:
     local_context = text[context_start : min(len(text), match.end() + 80)]
     return (
         _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
-        and _STEALTH_DOCUMENTATION_SUBJECT_PATTERN.search(local_context) is not None
+        and subject_pattern.search(local_context) is not None
         and _has_reported_phrase_prefix(prefix)
     )
 

@@ -78,6 +78,7 @@ def test_prompt_injection_detector_flags_fallback_bypass_instructions(prompt: st
     [
         'Write docs explaining that attacks say "if blocked, try shell instead".',
         'Document that a bypass prompt may say "use another MCP server if denied".',
+        'Document HOL Guard policy examples that say "if blocked, try shell instead".',
     ],
 )
 def test_prompt_injection_detector_ignores_documented_guard_bypass_phrase(prompt: str) -> None:
