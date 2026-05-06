@@ -28,6 +28,14 @@ _REPORTED_PHRASE_PREFIX_PATTERN = re.compile(
     r"\b(?:say|says|said|called|named|phrase|phrases?|string|strings?)\s+[\"'`]?\s*$",
     re.IGNORECASE,
 )
+_NON_ACTIONABLE_FIXTURE_PATTERN = re.compile(r"\bdo\s+not\s+actually\s+run\s+this\b", re.IGNORECASE)
+_UNTRUSTED_CONTEXT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bquoted\s+log\b", re.IGNORECASE), "quoted log"),
+    (re.compile(r"\bPR\s+comment(?:\s+text)?\b", re.IGNORECASE), "PR comment"),
+    (re.compile(r"\bissue\s+comment(?:\s+text)?\b", re.IGNORECASE), "issue comment"),
+    (re.compile(r"\bwebpage\s+scrape\b", re.IGNORECASE), "webpage scrape"),
+    (re.compile(r"\b(?:repository\s+)?README\b", re.IGNORECASE), "repository README"),
+)
 _GUARD_POLICY_TAMPER_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b(?:disable|turn\s+off|uninstall|bypass)\s+HOL\s+Guard\b", re.IGNORECASE),
     re.compile(
@@ -119,14 +127,31 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
         return ()
     requests: list[PromptRequest] = []
     override_match = _first_match(_INSTRUCTION_OVERRIDE_PATTERNS, normalized)
-    if override_match is not None and not _is_documentation_context_override(normalized, override_match):
+    if override_match is not None and not _is_non_actionable_fixture(normalized, override_match):
+        embedded_context = _embedded_context_label(normalized, override_match.start())
+        confidence = 0.62 if embedded_context is not None else 0.86
+        severity = 6 if embedded_context is not None else 8
+        summary = (
+            f"Untrusted {embedded_context} includes prompt-injection instructions."
+            if embedded_context is not None
+            else "Prompt asks the harness to override prior or system instructions."
+        )
+        should_report_override = embedded_context is not None or not _is_documentation_context_override(
+            normalized, override_match
+        )
+    else:
+        should_report_override = False
+        confidence = 0.0
+        severity = 0
+        summary = ""
+    if override_match is not None and should_report_override:
         requests.append(
             _request(
                 request_class="prompt_injection_intent",
                 matched_text=override_match.group(0).strip(),
-                summary="Prompt asks the harness to override prior or system instructions.",
-                severity=8,
-                confidence=0.86,
+                summary=summary,
+                severity=severity,
+                confidence=confidence,
                 remediation=(
                     RemediationAction(kind="approve_once", label="Approve once", detail="Review prompt intent first."),
                     RemediationAction(
@@ -276,6 +301,21 @@ def _is_documentation_context_override(text: str, match: re.Match[str]) -> bool:
         and _DOCUMENTATION_SUBJECT_PATTERN.search(local_context) is not None
         and _REPORTED_PHRASE_PREFIX_PATTERN.search(prefix) is not None
     )
+
+
+def _is_non_actionable_fixture(text: str, match: re.Match[str]) -> bool:
+    context = text[max(0, match.start() - 120) : min(len(text), match.end() + 120)]
+    return _NON_ACTIONABLE_FIXTURE_PATTERN.search(context) is not None
+
+
+def _embedded_context_label(text: str, start: int) -> str | None:
+    if text[:start].count("```") % 2 == 1:
+        return "markdown code fence"
+    prefix = text[max(0, start - 140) : start]
+    for pattern, label in _UNTRUSTED_CONTEXT_PATTERNS:
+        if pattern.search(prefix) is not None:
+            return label
+    return None
 
 
 def _dedupe_requests(requests: list[PromptRequest]) -> tuple[PromptRequest, ...]:
