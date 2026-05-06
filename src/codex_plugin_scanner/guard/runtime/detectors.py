@@ -34,6 +34,8 @@ DETECTOR_CATEGORY_TAGS: tuple[RiskSignalCategory, ...] = (
     "persistence",
     "bypass",
     "false_positive",
+    "filesystem",
+    "execution",
 )
 DetectorRunStatus = Literal["ok", "disabled", "filtered", "timeout", "error"]
 
@@ -156,7 +158,7 @@ class DataFlowExfiltrationDetector:
 
 class PromptInjectionDetector:
     detector_id = "prompt.injection"
-    categories: tuple[RiskSignalCategory, ...] = ("prompt", "secret", "network", "bypass")
+    categories: tuple[RiskSignalCategory, ...] = ("prompt", "secret", "network", "bypass", "filesystem", "execution")
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
         del context
@@ -192,6 +194,8 @@ def _prompt_request_category(request: PromptRequest) -> RiskSignalCategory:
     return {
         "secret_read": "secret",
         "exfil_intent": "network",
+        "destructive_intent": "filesystem",
+        "subprocess_intent": "execution",
         "guard_bypass_intent": "bypass",
     }.get(request.request_class, "prompt")
 

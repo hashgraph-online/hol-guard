@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.runtime.detectors import (
 )
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalCategory, RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.types import PromptRequest, RemediationAction
 
 
 class StepClock:
@@ -274,6 +275,8 @@ def test_register_default_detectors_includes_secret_path_detector():
         "persistence",
         "bypass",
         "false_positive",
+        "filesystem",
+        "execution",
     }
     assert planned_categories.issubset(set(DETECTOR_CATEGORY_TAGS))
 
@@ -292,6 +295,42 @@ def test_default_prompt_injection_detector_flags_user_prompt_action(tmp_path):
     assert signal.severity == "high"
     assert signal.confidence == "strong"
     assert signal.evidence_ref == "prompt_excerpt"
+
+
+@pytest.mark.parametrize(
+    ("request_class", "enabled_category"),
+    [
+        ("destructive_intent", "filesystem"),
+        ("subprocess_intent", "execution"),
+    ],
+)
+def test_default_prompt_injection_detector_emits_granular_categories(
+    tmp_path,
+    monkeypatch,
+    request_class,
+    enabled_category,
+):
+    request = PromptRequest(
+        request_id=f"{request_class}:unit-test",
+        request_class=request_class,
+        summary="Prompt requests elevated action.",
+        matched_text="matched prompt",
+        severity=8,
+        confidence=0.9,
+        remediation=(RemediationAction(kind="approve_once", label="Approve once", detail="Review prompt."),),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.detectors.detect_prompt_injection_requests",
+        lambda prompt: (request,),
+    )
+
+    result = DetectorRegistry((PromptInjectionDetector(),), clock=StepClock([0.0, 0.001])).run(
+        _prompt_action("matched prompt"),
+        _context(tmp_path),
+        enabled_categories=(enabled_category,),
+    )
+
+    assert [signal.category for signal in result.signals] == [enabled_category]
 
 
 def test_default_prompt_injection_detector_ignores_non_prompt_action(tmp_path):
