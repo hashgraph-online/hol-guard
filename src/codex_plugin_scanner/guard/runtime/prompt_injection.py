@@ -13,7 +13,7 @@ _INSTRUCTION_OVERRIDE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bignore\s+(?:the\s+)?system\s+prompt\b", re.IGNORECASE),
 )
 _STEALTH_INSTRUCTION_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\bdo\s+not\s+(?:tell|notify|alert|inform)\s+the\s+user\b", re.IGNORECASE),
+    re.compile(r"\b(?:do\s+not|don't)\s+(?:tell|notify|alert|inform)\s+(?:the\s+)?users?\b", re.IGNORECASE),
     re.compile(r"\bhide\s+(?:this|it|the\s+(?:action|instruction|request))\s+from\s+logs?\b", re.IGNORECASE),
 )
 _DOCUMENTATION_CONTEXT_TERM_PATTERN = re.compile(
@@ -55,13 +55,13 @@ _GUARD_POLICY_TAMPER_PATTERNS: tuple[re.Pattern[str], ...] = (
         re.IGNORECASE,
     ),
     re.compile(
-        r"\buse\s+another\s+MCP\s+server\b"
+        r"\buse\s+another\s+MCP\s+servers?\b"
         rf"{_SAME_SENTENCE_120}\b(?:if|when)\s+(?:blocked|denied|rejected)\b",
         re.IGNORECASE,
     ),
     re.compile(
         r"\bif\s+(?:blocked|denied|rejected)\b"
-        rf"{_SAME_SENTENCE_120}\buse\s+another\s+MCP\s+server\b",
+        rf"{_SAME_SENTENCE_120}\buse\s+another\s+MCP\s+servers?\b",
         re.IGNORECASE,
     ),
 )
@@ -163,7 +163,7 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
             )
         )
     guard_match = _first_match(_GUARD_POLICY_TAMPER_PATTERNS, normalized)
-    if guard_match is not None:
+    if guard_match is not None and not _is_documentation_context_stealth(normalized, guard_match):
         requests.append(
             _request(
                 request_class="guard_bypass_intent",
