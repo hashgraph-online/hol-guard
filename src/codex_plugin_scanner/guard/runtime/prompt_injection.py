@@ -36,10 +36,11 @@ _GUARD_DOCUMENTATION_SUBJECT_PATTERN = re.compile(
 _REPORTED_PHRASE_PREFIX_WORDS = frozenset(
     {"say", "says", "said", "called", "named", "phrase", "phrases", "string", "strings"}
 )
-_NON_ACTIONABLE_FIXTURE_PATTERN = re.compile(r"\bdo\s+not\s+actually\s+run\s+this\b", re.IGNORECASE)
+_NON_ACTIONABLE_FIXTURE_PATTERN = re.compile(r"\b(?:do\s+not|don't)\s+actually\s+run\s+this\b", re.IGNORECASE)
+_TEST_PROMPT_CONTEXT_PATTERN = re.compile(r"\b(?:test\s+prompt|test\s+fixture)\b", re.IGNORECASE)
 _UNTRUSTED_CONTEXT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\bquoted\s+log\b", re.IGNORECASE), "quoted log"),
-    (re.compile(r"\bPR\s+comment(?:\s+text)?\b", re.IGNORECASE), "PR comment"),
+    (re.compile(r"\b(?:PR|Pull\s+Request)\s+comment(?:\s+text)?\b", re.IGNORECASE), "PR comment"),
     (re.compile(r"\bissue\s+comment(?:\s+text)?\b", re.IGNORECASE), "issue comment"),
     (re.compile(r"\bwebpage\s+scrape\b", re.IGNORECASE), "webpage scrape"),
     (re.compile(r"\b(?:repository\s+)?README\b", re.IGNORECASE), "repository README"),
@@ -353,7 +354,11 @@ def _is_documentation_context_override(text: str, match: re.Match[str]) -> bool:
 
 def _is_non_actionable_fixture(text: str, match: re.Match[str]) -> bool:
     context = text[max(0, match.start() - 120) : min(len(text), match.end() + 120)]
-    return _NON_ACTIONABLE_FIXTURE_PATTERN.search(context) is not None
+    prefix = text[max(0, match.start() - 120) : match.start()]
+    return (
+        _TEST_PROMPT_CONTEXT_PATTERN.search(prefix) is not None
+        and _NON_ACTIONABLE_FIXTURE_PATTERN.search(context) is not None
+    )
 
 
 def _is_documentation_context_stealth(text: str, match: re.Match[str]) -> bool:
