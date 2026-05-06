@@ -19,7 +19,7 @@ from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatc
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalCategory, RiskSignalV2
 
 _SECRET_PATH_TOKEN_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9_./-])"
+    r"(?<![A-Za-z0-9_.-])"
     r"(?P<path>"
     r"\.env(?:\.[A-Za-z0-9_-]+)?|\.npmrc|\.pypirc|\.netrc|\.git-credentials|"
     r"(?:~?/)?\.aws/credentials|(?:~?/)?\.ssh/id_(?:rsa|ed25519|ecdsa)|"
@@ -30,7 +30,7 @@ _SECRET_PATH_TOKEN_PATTERN = re.compile(
 )
 _CURL_DATA_FILE_PATTERN = re.compile(
     r"(?is)(?:^|[\s;&|])(?:curl|curl\.exe)\b.*?"
-    r"(?:--data(?:-binary|-raw|-urlencode)?|-d)\s+@(?P<path>[^\s;&|]+)"
+    r"(?:--data(?:-binary|-raw|-urlencode)?|-d)\s+@(?P<path>\"[^\"]+\"|'[^']+'|[^\s;&|]+)"
 )
 _CURL_DATA_STDIN_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])(?:curl|curl\.exe)\b.*?(?:--data|-d)\s+@-")
 _PYTHON_SECRET_POST_PATTERN = re.compile(
@@ -42,17 +42,16 @@ _NODE_SECRET_FETCH_PATTERN = re.compile(
     r"readFileSync\(['\"](?P<path>[^'\"]+)['\"]"
 )
 _DNS_LONG_LABEL_PATTERN = re.compile(
-    r"(?i)(?:^|[\s;&|])(?:dig|nslookup|host)\s+(?P<host>[A-Za-z0-9_-]{48,}\.[A-Za-z0-9.-]+)"
+    r"(?i)(?:^|[\s;&|])(?:dig|nslookup|host)\s+"
+    r"(?P<host>(?:[A-Za-z0-9_-]+\.)*[A-Za-z0-9_-]{48,}(?:\.[A-Za-z0-9_-]+)*)"
 )
 _SCP_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])scp\b(?P<body>[^\r\n;&|]+)")
 _GIT_REMOTE_ADD_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])git\s+remote\s+add\b(?P<body>[^\r\n;&|]+)")
 _NPM_PUBLISH_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])npm\s+publish\b")
 _TOKEN_SOURCE_PATTERN = re.compile(r"(?i)\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|_authToken|npm[_-]?token)\b")
 _CLIPBOARD_SINK_PATTERN = re.compile(r"(?i)(?:^|[\s;&|])(?:pbcopy|xclip|xsel|wl-copy|clip(?:\.exe)?)\b")
-_WORLD_READABLE_TEMP_PATTERN = re.compile(
-    r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\s+(?P<tee>/tmp/[^\s;&|]+)).*?"
-    r"chmod\s+(?:0?644|0?666)\s+/tmp/"
-)
+_TEMP_SECRET_WRITE_PATTERN = re.compile(r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\s+(?P<tee>/tmp/[^\s;&|]+))")
+_CHMOD_TEMP_PATTERN = re.compile(r"(?is)chmod\s+(?P<mode>[0-7]{3,4}|[A-Za-z,+-=]+)\s+(?P<path>/tmp/[^\s;&|]+)")
 _HTTP_UPLOAD_METHODS = frozenset({"POST", "PUT", "PATCH"})
 _WEBHOOK_HOST_MARKERS = (
     "webhook.site",
@@ -227,8 +226,7 @@ def _has_secret_pipe_to_http_upload(pipes: Sequence[ShellPipe], command: str, *,
     if not pipes or not _has_http_upload(command):
         return False
     return any(
-        _secret_path_matches_in_command(pipe.left, workspace=workspace)
-        and (_contains_http_tool_or_url(pipe.right) or _contains_http_tool_or_url(command))
+        _secret_path_matches_in_command(pipe.left, workspace=workspace) and _contains_http_upload_sink(pipe.right)
         for pipe in pipes
     )
 
@@ -242,6 +240,10 @@ def _has_http_upload(command: str) -> bool:
 def _contains_http_tool_or_url(command: str) -> bool:
     lowered = command.lower()
     return "curl" in lowered or "fetch" in lowered or "http" in lowered or bool(extract_urls(command))
+
+
+def _contains_http_upload_sink(command: str) -> bool:
+    return _contains_http_tool_or_url(command) and _has_http_upload(command)
 
 
 def _curl_uploads_secret_file(command: str, *, workspace: Path | None) -> bool:
@@ -324,11 +326,34 @@ def _npm_publish_with_token_source(command: str, secret_matches: Sequence[Secret
 def _clipboard_receives_secret(pipes: Sequence[ShellPipe], command: str, *, workspace: Path | None) -> bool:
     if not pipes or not _CLIPBOARD_SINK_PATTERN.search(command):
         return False
-    return any(_secret_path_matches_in_command(pipe.left, workspace=workspace) for pipe in pipes)
+    return any(
+        _secret_path_matches_in_command(pipe.left, workspace=workspace) and _CLIPBOARD_SINK_PATTERN.search(pipe.right)
+        for pipe in pipes
+    )
 
 
 def _world_readable_temp_secret(command: str, secret_matches: Sequence[SecretPathMatch]) -> bool:
-    return bool(secret_matches and _WORLD_READABLE_TEMP_PATTERN.search(command))
+    if not secret_matches:
+        return False
+    write_targets = {
+        _strip_shell_token(target)
+        for match in _TEMP_SECRET_WRITE_PATTERN.finditer(command)
+        for target in (match.group("redirect"), match.group("tee"))
+        if target
+    }
+    if not write_targets:
+        return False
+    return any(
+        _strip_shell_token(match.group("path")) in write_targets and _mode_makes_world_readable(match.group("mode"))
+        for match in _CHMOD_TEMP_PATTERN.finditer(command)
+    )
+
+
+def _mode_makes_world_readable(mode: str) -> bool:
+    normalized = mode.lower()
+    if normalized.isdigit():
+        return normalized[-1] in {"4", "5", "6", "7"}
+    return "a+r" in normalized or "o+r" in normalized or "ugo+r" in normalized or "go+r" in normalized
 
 
 def _strip_shell_token(value: str) -> str:
