@@ -97,7 +97,7 @@ from ..runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
 )
-from ..runtime.secret_sensitivity import SecretContentMatch, classify_secret_content
+from ..runtime.secret_sensitivity import SecretContentMatch, classify_secret_content, classify_secret_path
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from .approval_commands import add_approval_parser, run_approval_command
@@ -2991,6 +2991,9 @@ def _runtime_stored_policy_action(
 def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> str:
     if _prompt_requires_hard_block(artifact):
         return "block"
+    guard_default_action = _runtime_artifact_guard_default_action(artifact)
+    if guard_default_action is not None:
+        return guard_default_action
     risk_actions = [
         resolve_risk_action(config, risk_class, harness=_canonical_harness_name(harness))
         for risk_class in _runtime_artifact_risk_classes(artifact)
@@ -2999,6 +3002,13 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
     if resolved_actions:
         return max(resolved_actions, key=_guard_action_severity)
     return SAFE_CHANGED_HASH_ACTION
+
+
+def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> str | None:
+    value = artifact.metadata.get("guard_default_action")
+    if value in VALID_GUARD_ACTIONS:
+        return str(value)
+    return None
 
 
 def _guard_action_severity(action: str) -> int:
@@ -3977,13 +3987,16 @@ def _codex_post_tool_output_artifact(
     cwd: Path | None,
 ) -> GuardArtifact | None:
     response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
-    content_matches = classify_secret_content(response_text)
-    if not content_matches:
-        return None
     tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
     command_text = _codex_post_tool_command_text(payload)
     if not command_text:
         command_text = tool_name
+    references_local_content = _codex_command_may_read_local_content(command_text, cwd=cwd)
+    content_matches = classify_secret_content(response_text)
+    if not content_matches and references_local_content:
+        content_matches = classify_secret_content(response_text, suppress_samples=False)
+    if not content_matches:
+        return None
     if _codex_source_inspection_can_skip_secret_output(
         command_text=command_text,
         response_text=response_text,
@@ -4001,6 +4014,10 @@ def _codex_post_tool_output_artifact(
             sort_keys=True,
         ).encode("utf-8")
     ).hexdigest()
+    runtime_default_action = "require-reapproval" if references_local_content else "warn"
+    runtime_request_signals = ["tool output contains credential-looking material"]
+    if references_local_content:
+        runtime_request_signals.append("command references a sensitive local source")
     return GuardArtifact(
         artifact_id=f"codex:{source_scope}:tool-output:{fingerprint}",
         name=f"{tool_name} credential-looking output",
@@ -4012,10 +4029,11 @@ def _codex_post_tool_output_artifact(
             "tool_name": tool_name,
             "command_text": command_text,
             "action_class": "credential exfiltration shell command",
+            "guard_default_action": runtime_default_action,
             "request_summary": (
                 f"Codex tool `{tool_name}` produced credential-looking output while running `{command_text}`."
             ),
-            "runtime_request_signals": ["tool output contains credential-looking material"],
+            "runtime_request_signals": runtime_request_signals,
             "runtime_request_summary": (
                 "Requests a sensitive native tool action: credential-looking output reached Codex."
             ),
@@ -4025,6 +4043,37 @@ def _codex_post_tool_output_artifact(
             ),
         },
     )
+
+
+def _codex_command_references_sensitive_local_source(command_text: str, *, cwd: Path | None) -> bool:
+    try:
+        parts = shlex.split(command_text)
+    except ValueError:
+        return False
+    for part in parts:
+        stripped = part.strip()
+        if not stripped or stripped.startswith("-"):
+            continue
+        if classify_secret_path(stripped, cwd=cwd) is not None:
+            return True
+    return False
+
+
+def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None) -> bool:
+    if _codex_command_references_sensitive_local_source(command_text, cwd=cwd):
+        return True
+    if any(marker in command_text for marker in ("$(", "${", "`")):
+        return True
+    try:
+        parts = shlex.split(command_text)
+    except ValueError:
+        return True
+    local_read_commands = {"cat", "grep", "head", "rg", "sed", "tail"}
+    for part in parts:
+        executable = Path(part).name.lower()
+        if executable in local_read_commands:
+            return True
+    return len(parts) >= 2 and parts[0].lower() == "git" and parts[1].lower() == "grep"
 
 
 def _codex_post_tool_command_is_read_only_source_inspection(

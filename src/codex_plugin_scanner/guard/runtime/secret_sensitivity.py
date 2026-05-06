@@ -92,6 +92,7 @@ _SENSITIVE_PATH_REASONS = {
 }
 _SECRET_ASSIGNMENT_VALUE_PATTERN = r"(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"
 _HEDERA_PRIVATE_KEY_VALUE_PATTERN = r"(?:\"(?:0x)?[0-9a-f]{64,96}\"|'(?:0x)?[0-9a-f]{64,96}'|(?:0x)?[0-9a-f]{64,96}\b)"
+_SAMPLE_SECRET_VALUE_PATTERN = re.compile(r"(?i)\b(?:example|fake|dummy|invalid|test|canary)\b")
 _SECRET_CONTENT_PATTERNS: tuple[tuple[str, str, SecretContentSensitivity, re.Pattern[str], str], ...] = (
     (
         "npm-auth-token",
@@ -147,6 +148,13 @@ _SECRET_CONTENT_PATTERNS: tuple[tuple[str, str, SecretContentSensitivity, re.Pat
         "critical",
         re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----", re.MULTILINE),
         "Guard found a PEM private key header.",
+    ),
+    (
+        "generic-bearer-token",
+        "generic bearer token",
+        "medium",
+        re.compile(r"(?im)\bbearer\s+[A-Za-z0-9._~+/=-]{16,}\b"),
+        "Guard found a bearer token pattern.",
     ),
     (
         "credential-marker",
@@ -272,13 +280,18 @@ def classify_legacy_secret_path_families(text: str) -> set[str]:
     return {family for marker, family in LEGACY_SECRET_PATH_TEXT_MARKERS if marker in lowered}
 
 
-def classify_secret_content(text: str | None) -> tuple[SecretContentMatch, ...]:
+def classify_secret_content(text: str | None, *, suppress_samples: bool = True) -> tuple[SecretContentMatch, ...]:
     if not isinstance(text, str) or not text.strip():
         return ()
     matches: list[SecretContentMatch] = []
     seen: set[str] = set()
     for classifier, family, sensitivity, pattern, reason in _SECRET_CONTENT_PATTERNS:
-        if pattern.search(text) is None or classifier in seen:
+        if classifier in seen:
+            continue
+        if not any(
+            not _secret_content_match_is_sample(classifier=classifier, text=match.group(0), enabled=suppress_samples)
+            for match in pattern.finditer(text)
+        ):
             continue
         seen.add(classifier)
         matches.append(
@@ -290,6 +303,12 @@ def classify_secret_content(text: str | None) -> tuple[SecretContentMatch, ...]:
             )
         )
     return tuple(matches)
+
+
+def _secret_content_match_is_sample(*, classifier: str, text: str, enabled: bool) -> bool:
+    if not enabled or classifier == "credential-marker":
+        return False
+    return _SAMPLE_SECRET_VALUE_PATTERN.search(text) is not None
 
 
 def redacted_secret_path_context(path: str) -> str | None:
