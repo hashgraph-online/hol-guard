@@ -10,6 +10,7 @@ from typing import Literal, Protocol
 
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
+from codex_plugin_scanner.guard.runtime.data_flow_rules import detect_data_flow_exfiltration
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalCategory, RiskSignalV2
 
@@ -136,8 +137,16 @@ class SecretPathDetector:
         return tuple(_secret_path_signal(match, index=index) for index, match in enumerate(matches))
 
 
+class DataFlowExfiltrationDetector:
+    detector_id = "data_flow.exfiltration"
+    categories: tuple[RiskSignalCategory, ...] = ("secret", "network")
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        return detect_data_flow_exfiltration(action, workspace=context.workspace)
+
+
 def register_default_detectors() -> tuple[GuardDetector, ...]:
-    return (SecretPathDetector(),)
+    return (DataFlowExfiltrationDetector(), SecretPathDetector())
 
 
 def _secret_path_signal(match: SecretPathMatch, *, index: int) -> RiskSignalV2:
