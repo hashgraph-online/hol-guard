@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from hashlib import sha256
+from pathlib import PurePath
 
 from ..models import GuardArtifact, HarnessDetection
 
@@ -28,6 +31,23 @@ _GUARD_PROXY_COMMANDS = frozenset(
         "opencode-mcp-proxy",
         "copilot-mcp-proxy",
         "mcp-proxy",
+    }
+)
+
+_STABLE_SLASH_FLAG_TOKENS = frozenset(
+    {
+        "/?",
+        "/debug",
+        "/dry-run",
+        "/h",
+        "/help",
+        "/quiet",
+        "/read-only",
+        "/readonly",
+        "/ro",
+        "/safe",
+        "/trace",
+        "/verbose",
     }
 )
 
@@ -76,6 +96,8 @@ def proxy_cli_args(
         guard_home,
         "--server-name",
         server.name,
+        "--server-id",
+        stable_mcp_server_identifier(server),
         "--source-scope",
         server.source_scope,
         "--config-path",
@@ -92,6 +114,24 @@ def proxy_cli_args(
     for value in server.args:
         args.append(f"--arg={value}")
     return args
+
+
+def stable_mcp_server_identifier(server: ManagedMcpServer) -> str:
+    """Build a Cloud-stable MCP server ID without local config path material."""
+
+    harness = server.harness.strip().lower()
+    source_scope = server.source_scope.strip().lower()
+    server_name = _stable_server_name(server.name)
+    payload = {
+        "harness": harness,
+        "source_scope": source_scope,
+        "name": server_name,
+        "command": _stable_command_name(server.command),
+        "args": [_stable_arg_token(value) for value in server.args],
+        "transport": server.transport,
+    }
+    digest = sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:20]
+    return f"mcp_server:{harness}:{source_scope}:{server_name}:{digest}"
 
 
 def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
@@ -117,6 +157,50 @@ def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
         env=env,
         enabled=enabled,
     )
+
+
+def _stable_arg_token(value: str) -> str:
+    key, separator, item = value.partition("=")
+    if separator and (_looks_like_path_assignment(key, item) or _looks_like_path_token(item)):
+        return f"{key}=<path>"
+    if _looks_like_path_token(value):
+        return "<path>"
+    return value
+
+
+def _stable_server_name(value: str) -> str:
+    return value.strip().lower() or "unnamed"
+
+
+def _stable_command_name(value: str) -> str:
+    return PurePath(value.replace("\\", "/")).name.lower()
+
+
+def _looks_like_path_assignment(key: str, value: str) -> bool:
+    normalized_key = key.strip().lstrip("-/").lower().replace("_", "-")
+    path_keys = {
+        "cache",
+        "config",
+        "cwd",
+        "dir",
+        "directory",
+        "file",
+        "folder",
+        "path",
+        "root",
+        "workspace",
+        "workdir",
+    }
+    return normalized_key in path_keys and value.strip().replace("\\", "/").startswith("/")
+
+
+def _looks_like_path_token(value: str) -> bool:
+    normalized = value.strip().replace("\\", "/")
+    if normalized.startswith(("~/", "./", "../")):
+        return True
+    if normalized.startswith("/"):
+        return "/" in normalized[1:] or normalized.lower() not in _STABLE_SLASH_FLAG_TOKENS
+    return len(normalized) >= 3 and normalized[0].isalpha() and normalized[1:3] == ":/"
 
 
 def _string_env(value: object) -> dict[str, str]:
@@ -149,4 +233,5 @@ __all__ = [
     "managed_stdio_servers",
     "proxy_cli_args",
     "skipped_stdio_server_names",
+    "stable_mcp_server_identifier",
 ]
