@@ -313,6 +313,24 @@ def test_normalize_codex_file_target_redacts_absolute_home_path(tmp_path: Path) 
     assert str(home_dir) not in envelope.target_paths[0]
 
 
+def test_normalize_codex_file_targets_extracts_list_paths(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {
+            "paths": [
+                "~/.aws/" + "credentials",
+                "README.md",
+            ]
+        },
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.action_type == "file_read"
+    assert envelope.target_paths == ("~/.aws/" + "credentials", "README.md")
+
+
 def test_normalize_codex_raw_payload_redacts_absolute_path_strings(tmp_path: Path) -> None:
     home_dir = tmp_path / "home" / "alice"
     target_path = home_dir / ".ssh" / "id_rsa"
@@ -337,7 +355,33 @@ def test_normalize_codex_file_target_redacts_windows_absolute_path(tmp_path: Pat
 
     envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
-    assert envelope.target_paths == (".../id_rsa",)
+    assert envelope.target_paths == (".../.ssh/id_rsa",)
+    assert "alice" not in envelope.target_paths[0]
+
+
+def test_normalize_codex_file_target_preserves_secret_context_for_redacted_paths(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"filePath": r"C:\Users\alice\.aws\credentials"},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.target_paths == (".../.aws/" + "credentials",)
+    assert "alice" not in envelope.target_paths[0]
+
+
+def test_normalize_codex_file_target_preserves_secret_context_for_tilde_user_paths(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"path": "~alice/.aws/" + "credentials"},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.target_paths == (".../.aws/" + "credentials",)
     assert "alice" not in envelope.target_paths[0]
 
 
