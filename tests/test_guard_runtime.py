@@ -1678,6 +1678,55 @@ clearer UX and an implementation plan with technical references.
         assert output["artifact_type"] == "tool_action_request"
         assert output["approval_requests"]
 
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "env -i git grep OPENAI_API_KEY src",
+            "command grep OPENAI_API_KEY src/config.ts",
+            "env NODE_ENV=test cat src/config.ts",
+        ],
+    )
+    def test_codex_post_tool_use_asks_for_wrapped_local_secret_output(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+        command,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {
+                "stdout": "src/config.ts:1:OPENAI_API_KEY=sk-" + "A" * 32,
+            },
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["artifact_type"] == "tool_action_request"
+        assert output["approval_requests"]
+
     def test_codex_post_tool_use_blocks_piped_search_with_secret_like_output(
         self,
         monkeypatch,
