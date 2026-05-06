@@ -158,7 +158,13 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
         categories.add("destructive_mutation")
     if len(tool_name_tokens.intersection({"shell", "bash", "exec", "execute", "command", "powershell"})) > 0:
         categories.add("command_execution")
-    if _matches_any(combined, (r"https?://", r"\b(curl|wget|fetch|axios|requests)\b")):
+    if _matches_any(
+        combined,
+        (
+            r"https?://",
+            _token_pattern("curl", "wget", "fetch", "axios", "requests"),
+        ),
+    ):
         categories.add("outbound_network")
     if _matches_any(
         combined,
@@ -170,7 +176,10 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
         ),
     ):
         categories.add("secret_access")
-    if _matches_any(combined, (r"\b(sudo|chmod|chown|launchctl|systemctl)\b",)):
+    if _matches_any(
+        combined,
+        (_token_pattern("sudo", "chmod", "chown", "launchctl", "systemctl"),),
+    ):
         categories.add("privileged_system_mutation")
     return categories
 
@@ -186,6 +195,11 @@ def _serialized_tool_arguments(arguments: object) -> str:
 
 def _matches_any(value: str, patterns: tuple[str, ...]) -> bool:
     return any(re.search(pattern, value) is not None for pattern in patterns)
+
+
+def _token_pattern(*tokens: str) -> str:
+    alternatives = "|".join(re.escape(token) for token in tokens)
+    return rf"(?<![a-z0-9])({alternatives})(?![a-z0-9])"
 
 
 def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:

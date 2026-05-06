@@ -290,3 +290,33 @@ def test_tool_call_risk_categories_match_snake_case_secret_tokens() -> None:
     )
 
     assert categories == ("secret_access",)
+
+
+def test_tool_call_risk_categories_match_snake_case_network_tokens() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="remote",
+        tool_name="run_curl",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = tool_call_risk_categories(artifact, {"mode": "fetch_remote"})
+
+    assert categories == ("outbound_network",)
+
+
+def test_tool_call_risk_categories_match_snake_case_privileged_tokens() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="filesystem",
+        tool_name="sudo_exec",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = tool_call_risk_categories(artifact, {"operation": "chmod_file"})
+
+    assert categories == ("command_execution", "privileged_system_mutation")
