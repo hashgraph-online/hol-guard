@@ -84,9 +84,11 @@ def test_guard_config_loads_security_level_and_risk_action_overrides(tmp_path):
                 "[risk_actions]",
                 'local_secret_read = "allow"',
                 'credential_exfiltration = "block"',
+                'data_flow_exfiltration = "block"',
                 "",
                 "[harness_risk_actions.codex]",
                 'local_secret_read = "allow"',
+                'data_flow_exfiltration = "block"',
                 'destructive_shell = "require-reapproval"',
             ]
         )
@@ -99,15 +101,18 @@ def test_guard_config_loads_security_level_and_risk_action_overrides(tmp_path):
     assert config.risk_actions == {
         "local_secret_read": "allow",
         "credential_exfiltration": "block",
+        "data_flow_exfiltration": "block",
     }
     assert config.harness_risk_actions == {
         "codex": {
             "local_secret_read": "allow",
+            "data_flow_exfiltration": "block",
             "destructive_shell": "require-reapproval",
         }
     }
     assert resolve_risk_action(config, "local_secret_read", harness="codex") == "allow"
     assert resolve_risk_action(config, "credential_exfiltration", harness="codex") == "block"
+    assert resolve_risk_action(config, "data_flow_exfiltration", harness="codex") == "block"
 
 
 def test_load_guard_config_parses_hidden_runtime_detector_registry(tmp_path):
@@ -141,8 +146,18 @@ def test_guard_config_strict_profile_defaults_review_sensitive_risks(tmp_path):
 
     assert config.security_level == "strict"
     assert resolve_risk_action(config, "local_secret_read", harness="codex") == "require-reapproval"
+    assert resolve_risk_action(config, "data_flow_exfiltration", harness="codex") == "block"
     assert resolve_risk_action(config, "encoded_execution", harness="codex") == "require-reapproval"
     assert resolve_risk_action(config, "network_egress", harness="codex") == "require-reapproval"
+
+
+def test_guard_config_balanced_profile_defaults_data_flow_exfil_to_review(tmp_path):
+    guard_home = tmp_path / ".hol-guard"
+    _write_text(guard_home / "config.toml", 'security_level = "balanced"\n')
+
+    config = load_guard_config(guard_home)
+
+    assert resolve_risk_action(config, "data_flow_exfiltration", harness="codex") == "require-reapproval"
 
 
 def test_guard_config_invalid_security_level_falls_back_to_balanced(tmp_path):
@@ -192,6 +207,7 @@ def test_dashboard_settings_switch_to_custom_carries_forward_effective_risk_map(
     assert loaded.risk_actions == {
         "local_secret_read": "require-reapproval",
         "credential_exfiltration": "require-reapproval",
+        "data_flow_exfiltration": "block",
         "destructive_shell": "require-reapproval",
         "encoded_execution": "require-reapproval",
         "network_egress": "require-reapproval",

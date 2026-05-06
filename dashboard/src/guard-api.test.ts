@@ -8,9 +8,10 @@ import {
   resolveDecisionV2Detail,
   resolveDecisionV2Title,
   resolveEnvelopeDisplayText,
-  resolveStoppedCommandText
+  resolveStoppedCommandText,
+  deriveDataFlowEvidence
 } from "./approval-center-utils";
-import type { GuardActionEnvelope, GuardApprovalRequest, GuardDecisionV2 } from "./guard-types";
+import type { GuardActionEnvelope, GuardApprovalRequest, GuardDecisionV2, RiskSignalV2 } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -284,3 +285,84 @@ assert(
   resolveDecisionV2Detail(requestWithEmptyV2Detail) === null,
   "T082: resolveDecisionV2Detail returns null for empty dashboard_primary_detail"
 );
+
+const DATA_FLOW_SIGNAL: RiskSignalV2 = {
+  signal_id: "data-flow:exfil-env",
+  category: "network",
+  severity: "high",
+  confidence: "strong",
+  detector: "data_flow.exfiltration",
+  title: "Secret value sent to remote host",
+  plain_reason: "A value from a local credential file was passed to a network request.",
+  technical_detail: "source: /home/user/project/.env, sink: https://example.com/collect",
+  evidence_ref: "metadata.data_flow_path",
+  redaction_level: "redacted",
+  false_positive_hint: null,
+  advisory_id: null
+};
+
+assert(
+  deriveDataFlowEvidence(BASE_REQUEST) === null,
+  "T090: no data-flow evidence when request has no decision_v2_json"
+);
+
+const requestNoDataFlowSignals: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  decision_v2_json: { ...BASE_DECISION_V2, signals: [BASE_DECISION_V2.signals[0]] }
+};
+assert(
+  deriveDataFlowEvidence(requestNoDataFlowSignals) === null,
+  "T090: no data-flow evidence when signals contain no data-flow detector or id prefix"
+);
+
+const requestWithDetectorSignal: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  decision_v2_json: { ...BASE_DECISION_V2, signals: [DATA_FLOW_SIGNAL] }
+};
+const detectorEvidence = deriveDataFlowEvidence(requestWithDetectorSignal);
+assert(detectorEvidence !== null, "T091: evidence returned when signal detector is data_flow.exfiltration");
+assert(detectorEvidence?.sourceLabel === "Local secret", "T091: sourceLabel is 'Local secret' for exfiltration signal");
+assert(detectorEvidence?.sinkLabel === "Network host", "T091: sinkLabel is 'Network host' for network category signal");
+
+const DATA_FLOW_ID_SIGNAL: RiskSignalV2 = {
+  ...DATA_FLOW_SIGNAL,
+  detector: "guard-risk-v2",
+  signal_id: "data-flow:env-to-curl",
+  category: "secret",
+  title: "Env variable forwarded via shell"
+};
+
+const requestWithIdPrefixSignal: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  decision_v2_json: { ...BASE_DECISION_V2, signals: [DATA_FLOW_ID_SIGNAL] }
+};
+const idPrefixEvidence = deriveDataFlowEvidence(requestWithIdPrefixSignal);
+assert(idPrefixEvidence !== null, "T092: evidence returned when signal_id starts with data-flow:");
+assert(idPrefixEvidence?.signalId === "data-flow:env-to-curl", "T092: signalId preserved from signal");
+assert(idPrefixEvidence?.sinkLabel === "External sink", "T092: sinkLabel is 'External sink' for non-network category");
+
+const detectorEvidenceSummary = deriveDataFlowEvidence(requestWithDetectorSignal);
+assert(
+  detectorEvidenceSummary !== null && !detectorEvidenceSummary.sourceLabel.includes(".env"),
+  "T093: sourceLabel does not expose raw secret path even if technical_detail mentions .env"
+);
+assert(
+  detectorEvidenceSummary !== null && !detectorEvidenceSummary.sinkLabel.includes(".env"),
+  "T093: sinkLabel does not expose raw secret path"
+);
+assert(
+  detectorEvidenceSummary !== null && !detectorEvidenceSummary.signalTitle.includes("/home/"),
+  "T093: signalTitle does not echo raw filesystem paths from technical_detail"
+);
+assert(
+  detectorEvidenceSummary !== null && detectorEvidenceSummary.count === 1,
+  "T093: count matches number of data-flow signals"
+);
+
+const mixedSignals: RiskSignalV2[] = [BASE_DECISION_V2.signals[0], DATA_FLOW_SIGNAL, DATA_FLOW_ID_SIGNAL];
+const requestWithMixedSignals: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  decision_v2_json: { ...BASE_DECISION_V2, signals: mixedSignals }
+};
+const mixedEvidence = deriveDataFlowEvidence(requestWithMixedSignals);
+assert(mixedEvidence !== null && mixedEvidence.count === 2, "T094: count reflects only data-flow signals, not unrelated ones");
