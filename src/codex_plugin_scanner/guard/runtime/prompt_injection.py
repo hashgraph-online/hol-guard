@@ -15,7 +15,7 @@ _INSTRUCTION_OVERRIDE_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 _STEALTH_INSTRUCTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b(?:do\s+not|don't)\s+(?:tell|notify|alert|inform)\s+(?:the\s+)?users?\b", re.IGNORECASE),
-    re.compile(r"\bhide\s+(?:this|it|the\s+(?:action|instruction|request))\s+from\s+logs?\b", re.IGNORECASE),
+    re.compile(r"\bhide\s+(?:this|it|the\s+(?:action|instruction|request))\s+from\s+(?:the\s+)?logs?\b", re.IGNORECASE),
 )
 _DOCUMENTATION_CONTEXT_TERM_PATTERN = re.compile(
     r"\b(?:document|explain|describe|write\s+docs?|security\s+docs?|test\s+fixture)\b",
