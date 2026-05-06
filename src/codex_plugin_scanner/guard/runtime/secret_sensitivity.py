@@ -93,6 +93,7 @@ _SENSITIVE_PATH_REASONS = {
 _SECRET_ASSIGNMENT_VALUE_PATTERN = r"(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"
 _HEDERA_PRIVATE_KEY_VALUE_PATTERN = r"(?:\"(?:0x)?[0-9a-f]{64,96}\"|'(?:0x)?[0-9a-f]{64,96}'|(?:0x)?[0-9a-f]{64,96}\b)"
 _SAMPLE_SECRET_VALUE_PATTERN = re.compile(r"(?i)\b(?:example|fake|dummy|invalid|test|canary)\b")
+_SAMPLE_SUPPRESSIBLE_CONTENT_CLASSIFIERS = frozenset({"credential-assignment", "generic-bearer-token"})
 _SECRET_CONTENT_PATTERNS: tuple[tuple[str, str, SecretContentSensitivity, re.Pattern[str], str], ...] = (
     (
         "npm-auth-token",
@@ -306,8 +307,11 @@ def classify_secret_content(text: str | None, *, suppress_samples: bool = True) 
 
 
 def _secret_content_match_is_sample(*, classifier: str, text: str, enabled: bool) -> bool:
-    if not enabled or classifier == "credential-marker":
+    if not enabled or classifier not in _SAMPLE_SUPPRESSIBLE_CONTENT_CLASSIFIERS:
         return False
+    if classifier == "generic-bearer-token":
+        token = text.rsplit(None, 1)[-1]
+        return _SAMPLE_SECRET_VALUE_PATTERN.search(token) is not None and re.search(r"[A-Za-z0-9]{20,}", token) is None
     return _SAMPLE_SECRET_VALUE_PATTERN.search(text) is not None
 
 
