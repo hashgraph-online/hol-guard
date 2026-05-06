@@ -361,7 +361,12 @@ def _scp_operands(body: str) -> tuple[str, ...]:
 
 
 def _is_scp_remote_target(value: str) -> bool:
-    return bool(re.fullmatch(r"(?:\S+@)?[^:\s]+:.+", value))
+    if value.startswith(("./", "../", "/")):
+        return False
+    host, separator, _path = value.partition(":")
+    if not separator or not host or "/" in host:
+        return False
+    return not any(char.isspace() for char in host)
 
 
 def _git_remote_adds_token_url(command: str) -> bool:
