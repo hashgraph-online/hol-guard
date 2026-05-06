@@ -419,6 +419,7 @@ def test_secret_sensitivity_module_classifies_wallet_private_key_filenames(tmp_p
         ("HEDERA_PRIVATE_KEY=" + "a" * 64, "Hedera private key"),
         ('HEDERA_PRIVATE_KEY="' + "a" * 64 + '"', "Hedera private key"),
         ("-----BEGIN " + "PRIVATE KEY-----\nredacted\n-----END " + "PRIVATE KEY-----", "PEM private key"),
+        ("Authorization: Bearer " + "A" * 32, "generic bearer token"),
         ('TOKEN="' + "A" * 24 + '"', "credential assignment"),
         ("auth_token='" + "B" * 24 + "'", "credential assignment"),
         ('{"password": "' + "C" * 24 + '"}', "credential assignment"),
@@ -437,6 +438,23 @@ def test_secret_content_classifier_does_not_upgrade_npm_token_prose():
     matches = classify_secret_content("Docs say npm token: use an environment variable instead.")
 
     assert not any(match.family == "npm auth token" for match in matches)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "API_TOKEN=example-token",
+        "password=dummy-value",
+        "token=definitely-invalid",
+        "secret=fake-value",
+        "auth_token=canary-token",
+        "OPENAI_API_KEY=sk-test",
+        "https://api.example.test/health?token=definitely-invalid",
+        "Authorization: Bearer definitely-invalid",
+    ],
+)
+def test_secret_content_classifier_suppresses_sample_token_values(content):
+    assert classify_secret_content(content) == ()
 
 
 def test_file_read_request_classifier_is_argument_aware(tmp_path):
