@@ -4056,16 +4056,32 @@ def _codex_command_references_sensitive_local_source(command_text: str, *, cwd: 
         stripped = part.strip()
         if not stripped or stripped.startswith("-"):
             continue
+        if _codex_token_is_url(stripped):
+            continue
         if classify_secret_path(stripped, cwd=cwd) is not None:
             return True
     return False
 
 
+def _codex_token_is_url(token: str) -> bool:
+    parsed = urllib.parse.urlparse(token)
+    return bool(parsed.scheme and parsed.netloc)
+
+
 def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) -> bool:
     for match in _PROMPT_PATH_TOKEN_PATTERN.finditer(text):
+        if _codex_path_token_is_url_path(text, match.start()):
+            continue
         if classify_secret_path(match.group(0), cwd=cwd) is not None:
             return True
     return False
+
+
+def _codex_path_token_is_url_path(text: str, start: int) -> bool:
+    prefix = text[:start].lower()
+    last_separator = max(prefix.rfind(separator) for separator in " \t\r\n'\"`<>|;(){}[]")
+    token_prefix = prefix[last_separator + 1 :]
+    return bool(re.search(r"[a-z][a-z0-9+.-]*:/?$", token_prefix)) or "://" in token_prefix
 
 
 def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None) -> bool:
@@ -4073,16 +4089,48 @@ def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None
         return True
     if any(marker in command_text for marker in ("$(", "${", "`")):
         return True
+    pipeline_segments = _split_codex_safe_read_only_pipeline(command_text)
+    if pipeline_segments is not None:
+        return any(
+            _codex_pipeline_segment_may_read_local_content(segment, index=index, cwd=cwd)
+            for index, segment in enumerate(pipeline_segments)
+        )
     try:
         parts = shlex.split(command_text)
     except ValueError:
         return True
-    local_read_commands = {"cat", "grep", "head", "rg", "sed", "tail"}
-    for part in parts:
-        executable = Path(part).name.lower()
-        if executable in local_read_commands:
-            return True
+    if any(_codex_command_part_is_local_reader(parts, index, cwd=cwd) for index in range(len(parts))):
+        return True
     return len(parts) >= 2 and parts[0].lower() == "git" and parts[1].lower() == "grep"
+
+
+def _codex_pipeline_segment_may_read_local_content(segment: str, *, index: int, cwd: Path | None) -> bool:
+    try:
+        parts = shlex.split(segment)
+    except ValueError:
+        return True
+    if not parts:
+        return False
+    if index == 0:
+        return _codex_command_part_is_local_reader(parts, 0, cwd=cwd)
+    return _codex_command_is_read_only_source_search(segment, cwd=cwd) or _codex_command_is_read_only_source_view(
+        segment, cwd=cwd
+    )
+
+
+def _codex_command_part_is_local_reader(parts: list[str], index: int, *, cwd: Path | None) -> bool:
+    local_read_commands = {"cat", "grep", "head", "rg", "sed", "tail"}
+    executable = Path(parts[index]).name.lower()
+    if executable not in local_read_commands:
+        return False
+    if index == 0:
+        return True
+    if parts[index - 1] == "|":
+        segment = shlex.join(parts[index:])
+        return _codex_command_is_read_only_source_search(segment, cwd=cwd) or _codex_command_is_read_only_source_view(
+            segment, cwd=cwd
+        )
+    return parts[index - 1] in {"&&", "||", ";", "&", "|&"}
 
 
 def _codex_post_tool_command_is_read_only_source_inspection(
