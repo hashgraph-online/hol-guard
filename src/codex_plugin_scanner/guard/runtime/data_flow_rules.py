@@ -58,7 +58,7 @@ _DNS_LONG_LABEL_PATTERN = re.compile(
 )
 _SCP_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])scp\b(?P<body>[^\r\n;&|]+)")
 _GIT_REMOTE_ADD_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])git\s+remote\s+add\b(?P<body>[^\r\n;&|]+)")
-_NPM_PUBLISH_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])npm\s+publish\b")
+_NPM_PUBLISH_EXEC_PATTERN = re.compile(r"(?is)^\s*(?:[A-Za-z_][A-Za-z0-9_]*=.*\s+)*npm\s+publish\b")
 _TOKEN_SOURCE_PATTERN = re.compile(r"(?i)\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|_authToken|npm[_-]?token)\b")
 _CLIPBOARD_SINK_PATTERN = re.compile(r"(?i)(?:^|[\s;&|])(?:pbcopy|xclip|xsel|wl-copy|clip(?:\.exe)?)\b")
 _TEMP_SECRET_WRITE_PATTERN = re.compile(
@@ -230,6 +230,8 @@ def _secret_path_matches(paths: Sequence[str], *, workspace: Path | None) -> tup
 def _curl_data_file_paths(command: str) -> tuple[str, ...]:
     paths: list[str] = []
     for segment in extract_command_segments(command):
+        if not _segment_executes_command(segment, {"curl", "curl.exe"}):
+            continue
         for match in _CURL_DATA_FILE_PATTERN.finditer(segment):
             paths.append(_strip_shell_token(match.group("path")))
     return tuple(paths)
@@ -267,7 +269,7 @@ def _curl_uploads_secret_file(command: str, *, workspace: Path | None) -> bool:
 
 def _curl_data_substitution_reads_secret(command: str, *, workspace: Path | None) -> bool:
     for segment in extract_command_segments(command):
-        if _first_shell_word(segment).lower() not in {"curl", "curl.exe"}:
+        if not _segment_executes_command(segment, {"curl", "curl.exe"}):
             continue
         for match in _CURL_DATA_VALUE_PATTERN.finditer(segment):
             value = match.group("value")
@@ -394,7 +396,7 @@ def _is_scp_remote_target(value: str) -> bool:
 
 def _git_remote_adds_token_url(command: str) -> bool:
     for segment in extract_command_segments(command):
-        if _first_shell_word(segment).lower() != "git":
+        if not _segment_executes_command(segment, {"git"}):
             continue
         match = _GIT_REMOTE_ADD_PATTERN.match(segment)
         if match is None:
@@ -413,17 +415,30 @@ def _looks_like_token(value: str) -> bool:
     return lowered.startswith(("ghp_", "github_pat_", "glpat-", "x-access-token")) or len(value) >= 24
 
 
+def _segment_executes_command(command: str, names: set[str]) -> bool:
+    return _first_shell_word(command).lower() in names
+
+
 def _first_shell_word(command: str) -> str:
     try:
         tokens = shlex.split(command)
     except ValueError:
         tokens = command.split()
-    return tokens[0] if tokens else ""
+    for token in tokens:
+        if _is_env_assignment_token(token):
+            continue
+        return token
+    return ""
+
+
+def _is_env_assignment_token(value: str) -> bool:
+    name, separator, _tail = value.partition("=")
+    return bool(separator and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name))
 
 
 def _npm_publish_with_token_source(command: str, *, workspace: Path | None) -> bool:
     for segment in extract_command_segments(command):
-        if not _NPM_PUBLISH_PATTERN.search(segment):
+        if not _NPM_PUBLISH_EXEC_PATTERN.search(segment):
             continue
         if "--dry-run" in segment:
             continue
