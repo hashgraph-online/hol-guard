@@ -219,8 +219,9 @@ def _secret_path_matches(paths: Sequence[str], *, workspace: Path | None) -> tup
 
 def _curl_data_file_paths(command: str) -> tuple[str, ...]:
     paths: list[str] = []
-    for match in _CURL_DATA_FILE_PATTERN.finditer(command):
-        paths.append(_strip_shell_token(match.group("path")))
+    for segment in extract_command_segments(command):
+        for match in _CURL_DATA_FILE_PATTERN.finditer(segment):
+            paths.append(_strip_shell_token(match.group("path")))
     return tuple(paths)
 
 
@@ -255,21 +256,27 @@ def _curl_uploads_secret_file(command: str, *, workspace: Path | None) -> bool:
 
 
 def _python_posts_secret(command: str, *, workspace: Path | None) -> bool:
-    if not extract_urls(command):
-        return False
-    return any(
-        classify_secret_path(match.group("path"), cwd=workspace) is not None
-        for match in _PYTHON_SECRET_POST_PATTERN.finditer(command)
-    )
+    for segment in extract_command_segments(command):
+        if not extract_urls(segment):
+            continue
+        if any(
+            classify_secret_path(match.group("path"), cwd=workspace) is not None
+            for match in _PYTHON_SECRET_POST_PATTERN.finditer(segment)
+        ):
+            return True
+    return False
 
 
 def _node_fetches_secret(command: str, *, workspace: Path | None) -> bool:
-    if not extract_urls(command):
-        return False
-    return any(
-        classify_secret_path(match.group("path"), cwd=workspace) is not None
-        for match in _NODE_SECRET_FETCH_PATTERN.finditer(command)
-    )
+    for segment in extract_command_segments(command):
+        if not extract_urls(segment):
+            continue
+        if any(
+            classify_secret_path(match.group("path"), cwd=workspace) is not None
+            for match in _NODE_SECRET_FETCH_PATTERN.finditer(segment)
+        ):
+            return True
+    return False
 
 
 def _encoded_secret_send(command: str, secret_matches: Sequence[SecretPathMatch], *, workspace: Path | None) -> bool:
