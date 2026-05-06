@@ -31,12 +31,12 @@ _SECRET_PATH_TOKEN_PATTERN = re.compile(
 )
 _CURL_DATA_FILE_PATTERN = re.compile(
     r"(?s)(?:^|[\s;&|])(?i:curl|curl\.exe)\b.*?"
-    r"(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@|--upload-file(?:=|\s+)|-T(?:\s+|(?=[./~'\"])))"
+    r"(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@|--upload-file(?:=|\s+)|-T\s*)"
     r"(?P<path>\"[^\"]+\"|'[^']+'|[^\s;&|]+)"
 )
 _CURL_DATA_STDIN_PATTERN = re.compile(
     r"(?s)(?:^|[\s;&|])(?i:curl|curl\.exe)\b[^\r\n;&|]*?"
-    r"(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@-|--upload-file(?:=|\s+)-|-T\s*-)"
+    r"(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@-|--upload-file(?:=|\s+)[.-]|-T\s*[.-])"
 )
 _PYTHON_SECRET_POST_PATTERN = re.compile(
     r"(?is)\bpython(?:3)?\b.*?-c\s+.*?"
