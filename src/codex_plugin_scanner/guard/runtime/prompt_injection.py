@@ -26,7 +26,7 @@ _DOCUMENTATION_SUBJECT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _STEALTH_DOCUMENTATION_SUBJECT_PATTERN = re.compile(
-    r"\b(?:prompt\s+injection|attacks?|bypass\s+prompt|malicious|adversarial|unsafe)\b",
+    r"\b(?:prompt\s+injection|attacks?|bypass\s+prompt|examples?|phrases?|strings?|malicious|adversarial|unsafe)\b",
     re.IGNORECASE,
 )
 _GUARD_DOCUMENTATION_SUBJECT_PATTERN = re.compile(
