@@ -4046,6 +4046,8 @@ def _codex_post_tool_output_artifact(
 
 
 def _codex_command_references_sensitive_local_source(command_text: str, *, cwd: Path | None) -> bool:
+    if _codex_text_contains_sensitive_path_token(command_text, cwd=cwd):
+        return True
     try:
         parts = shlex.split(command_text)
     except ValueError:
@@ -4055,6 +4057,13 @@ def _codex_command_references_sensitive_local_source(command_text: str, *, cwd: 
         if not stripped or stripped.startswith("-"):
             continue
         if classify_secret_path(stripped, cwd=cwd) is not None:
+            return True
+    return False
+
+
+def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) -> bool:
+    for match in _PROMPT_PATH_TOKEN_PATTERN.finditer(text):
+        if classify_secret_path(match.group(0), cwd=cwd) is not None:
             return True
     return False
 
