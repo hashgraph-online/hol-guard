@@ -155,6 +155,7 @@ _GUARD_HELP_GROUPS = (
     "  Use status for current posture and the next safe step\n"
     "  Use doctor for setup and runtime probes\n"
     "  Use diff for changed artifacts after a blocked launch\n"
+    "  Use explain for detailed artifact evidence\n"
     "  Use approvals for queued decisions and receipts for audit history\n"
     "  Use events for the local timeline"
 )

@@ -272,6 +272,7 @@ class TestGuardProductFlow:
         assert "Use status for current posture" in output
         assert "Use doctor for setup and runtime probes" in output
         assert "Use diff for changed artifacts" in output
+        assert "Use explain for detailed artifact evidence" in output
         assert "Use events for the local timeline" in output
 
     def test_guard_start_human_output_highlights_guard_loop(self, tmp_path, capsys):

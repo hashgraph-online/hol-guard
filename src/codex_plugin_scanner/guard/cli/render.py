@@ -285,38 +285,36 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         )
         adapters = _coerce_dict_list(payload.get("adapters"))
         console.print(_build_harness_table(adapters))
-        console.print(_build_diagnostic_command_panel())
-        return
-
-    warnings = _coerce_string_list(payload.get("warnings"))
-    summary = Table.grid(padding=(0, 1))
-    summary.add_row("Harness", f"[bold]{payload.get('harness', 'unknown')}[/bold]")
-    summary.add_row("Installed", _bool_label(bool(payload.get("installed"))))
-    summary.add_row("Command", _bool_label(bool(payload.get("command_available"))))
-    summary.add_row("Artifacts", str(len(_coerce_dict_list(payload.get("artifacts")))))
-    registry = payload.get("runtime_detector_registry")
-    if isinstance(registry, dict):
-        registry_state = "enabled" if bool(registry.get("enabled")) else "disabled"
-        timeout_ms = registry.get("timeout_ms")
-        summary.add_row("Detector registry", f"{registry_state}, {timeout_ms} ms")
-    summary.add_row("Warnings", str(len(warnings)))
-    console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
-    if warnings:
-        warning_text = "\n".join(
-            textwrap.fill(
-                f"• {warning}",
-                width=72,
-                subsequent_indent="  ",
+    else:
+        warnings = _coerce_string_list(payload.get("warnings"))
+        summary = Table.grid(padding=(0, 1))
+        summary.add_row("Harness", f"[bold]{payload.get('harness', 'unknown')}[/bold]")
+        summary.add_row("Installed", _bool_label(bool(payload.get("installed"))))
+        summary.add_row("Command", _bool_label(bool(payload.get("command_available"))))
+        summary.add_row("Artifacts", str(len(_coerce_dict_list(payload.get("artifacts")))))
+        registry = payload.get("runtime_detector_registry")
+        if isinstance(registry, dict):
+            registry_state = "enabled" if bool(registry.get("enabled")) else "disabled"
+            timeout_ms = registry.get("timeout_ms")
+            summary.add_row("Detector registry", f"{registry_state}, {timeout_ms} ms")
+        summary.add_row("Warnings", str(len(warnings)))
+        console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
+        if warnings:
+            warning_text = "\n".join(
+                textwrap.fill(
+                    f"• {warning}",
+                    width=72,
+                    subsequent_indent="  ",
+                )
+                for warning in warnings
             )
-            for warning in warnings
-        )
-        console.print(Panel(Text(warning_text), title="Attention", border_style="yellow"))
-    runtime_probe = payload.get("runtime_probe")
-    if isinstance(runtime_probe, dict):
-        console.print(_build_runtime_probe_panel(runtime_probe))
-    artifacts = _coerce_dict_list(payload.get("artifacts"))
-    if artifacts:
-        console.print(_build_artifact_table(artifacts))
+            console.print(Panel(Text(warning_text), title="Attention", border_style="yellow"))
+        runtime_probe = payload.get("runtime_probe")
+        if isinstance(runtime_probe, dict):
+            console.print(_build_runtime_probe_panel(runtime_probe))
+        artifacts = _coerce_dict_list(payload.get("artifacts"))
+        if artifacts:
+            console.print(_build_artifact_table(artifacts))
     console.print(_build_diagnostic_command_panel())
 
 
@@ -483,7 +481,11 @@ def _render_advisories(console: Console, payload: dict[str, object]) -> None:
             border_style="cyan",
         )
     )
-    table = Table(box=box.SIMPLE_HEAVY, show_header=True)
+    console.print(_build_advisory_table(items))
+
+
+def _build_advisory_table(items: list[dict[str, object]], *, title: str | None = None) -> Table:
+    table = Table(title=title, box=box.SIMPLE_HEAVY, show_header=True)
     table.add_column("Publisher", style="bold")
     table.add_column("Severity")
     table.add_column("Headline")
@@ -494,20 +496,6 @@ def _render_advisories(console: Console, payload: dict[str, object]) -> None:
             str(item.get("severity") or "info"),
             str(item.get("headline") or item.get("cache_key") or "advisory"),
             str(item.get("updated_at") or "unknown"),
-        )
-    console.print(table)
-
-
-def _build_advisory_table(items: list[dict[str, object]]) -> Table:
-    table = Table(title="Matching advisories", box=box.SIMPLE_HEAVY, show_header=True)
-    table.add_column("Publisher", style="bold")
-    table.add_column("Severity")
-    table.add_column("Headline")
-    for item in items:
-        table.add_row(
-            str(item.get("publisher") or "unknown"),
-            str(item.get("severity") or "info"),
-            str(item.get("headline") or item.get("cache_key") or "advisory"),
         )
     return table
 
@@ -1094,10 +1082,13 @@ def _render_scan(console: Console, payload: dict[str, object]) -> None:
 
 
 def _render_explain(console: Console, payload: dict[str, object]) -> None:
+    advisories = _coerce_dict_list(payload.get("advisories"))
     if "artifact_snapshot" in payload:
         console.print(Panel(_build_consumer_summary_table(payload), title="Path evidence", border_style="cyan"))
         _render_consumer_evidence_panels(console, payload)
         _render_cisco_evidence(console, payload)
+        if advisories:
+            console.print(_build_advisory_table(advisories, title="Matching advisories"))
         return
     artifact = payload.get("artifact")
     if not isinstance(artifact, dict):
@@ -1105,7 +1096,6 @@ def _render_explain(console: Console, payload: dict[str, object]) -> None:
         return
     latest_receipt = payload.get("latest_receipt")
     latest_diff = payload.get("latest_diff")
-    advisories = _coerce_dict_list(payload.get("advisories"))
     body = Table.grid(padding=(0, 1))
     body.add_row("Artifact", str(artifact.get("artifact_name") or artifact.get("artifact_id") or "unknown"))
     body.add_row("Harness", str(artifact.get("harness") or "unknown"))
@@ -1122,7 +1112,7 @@ def _render_explain(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Advisories", str(len(advisories)))
     console.print(Panel(body, title="Guard artifact evidence", border_style="cyan"))
     if advisories:
-        console.print(_build_advisory_table(advisories))
+        console.print(_build_advisory_table(advisories, title="Matching advisories"))
 
 
 def _render_preflight(console: Console, payload: dict[str, object]) -> None:
