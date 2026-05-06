@@ -30,12 +30,13 @@ _SECRET_PATH_TOKEN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _CURL_DATA_FILE_PATTERN = re.compile(
-    r"(?is)(?:^|[\s;&|])(?:curl|curl\.exe)\b.*?"
-    r"(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@(?P<path>\"[^\"]+\"|'[^']+'|[^\s;&|]+)"
+    r"(?s)(?:^|[\s;&|])(?i:curl|curl\.exe)\b.*?"
+    r"(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@|--upload-file(?:=|\s+)|-T(?:\s+|(?=[./~'\"])))"
+    r"(?P<path>\"[^\"]+\"|'[^']+'|[^\s;&|]+)"
 )
 _CURL_DATA_STDIN_PATTERN = re.compile(
-    r"(?is)(?:^|[\s;&|])(?:curl|curl\.exe)\b[^\r\n;&|]*?"
-    r"(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@-"
+    r"(?s)(?:^|[\s;&|])(?i:curl|curl\.exe)\b[^\r\n;&|]*?"
+    r"(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@-|--upload-file(?:=|\s+)-|-T\s*-)"
 )
 _PYTHON_SECRET_POST_PATTERN = re.compile(
     r"(?is)\bpython(?:3)?\b.*?-c\s+.*?"
@@ -56,7 +57,7 @@ _TOKEN_SOURCE_PATTERN = re.compile(r"(?i)\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|_authTok
 _CLIPBOARD_SINK_PATTERN = re.compile(r"(?i)(?:^|[\s;&|])(?:pbcopy|xclip|xsel|wl-copy|clip(?:\.exe)?)\b")
 _TEMP_SECRET_WRITE_PATTERN = re.compile(r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\s+(?P<tee>/tmp/[^\s;&|]+))")
 _CHMOD_TEMP_PATTERN = re.compile(r"(?is)chmod\s+(?P<mode>[0-7]{3,4}|[A-Za-z,+=-]+)\s+(?P<path>/tmp/[^\s;&|]+)")
-_SCP_OPTIONS_WITH_VALUES = frozenset({"-c", "-F", "-i", "-J", "-l", "-o", "-P", "-S"})
+_SCP_OPTIONS_WITH_VALUES = frozenset({"-c", "-D", "-F", "-i", "-J", "-l", "-o", "-P", "-S", "-X"})
 _WEBHOOK_HOST_MARKERS = (
     "webhook.site",
     "hooks.slack.com",

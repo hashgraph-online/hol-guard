@@ -218,6 +218,23 @@ def test_detector_registry_filters_by_detector_categories(tmp_path):
     assert result.telemetry[0].detector_id == "network.egress"
 
 
+def test_detector_registry_filters_emitted_signal_categories(tmp_path):
+    calls: list[str] = []
+    registry = DetectorRegistry(
+        (
+            RecordingDetector("mixed.flow", ("network", "secret"), calls, _signal("network:flow", "network")),
+            RecordingDetector("mixed.secret", ("network", "secret"), calls, _signal("secret:flow", "secret")),
+        ),
+        clock=StepClock([0.0, 0.001, 0.002, 0.003]),
+    )
+
+    result = registry.run(_action(), _context(tmp_path), enabled_categories=("secret",))
+
+    assert calls == ["mixed.flow", "mixed.secret"]
+    assert [signal.signal_id for signal in result.signals] == ["secret:flow"]
+    assert [item.status for item in result.telemetry] == ["ok", "ok"]
+
+
 def test_register_default_detectors_includes_secret_path_detector():
     detector_ids = {detector.detector_id for detector in register_default_detectors()}
     assert "secret.path" in detector_ids
