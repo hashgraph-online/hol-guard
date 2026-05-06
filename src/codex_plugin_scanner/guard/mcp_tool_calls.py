@@ -150,7 +150,7 @@ def tool_call_risk_categories(artifact: GuardArtifact, arguments: object) -> tup
 def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> set[str]:
     tool_name = PurePath(artifact.command or artifact.name).name
     serialized_arguments = _serialized_tool_arguments(arguments)
-    combined = f"{artifact.name.lower()} {serialized_arguments}"
+    combined = _risk_match_text(f"{artifact.name} {serialized_arguments}")
     tool_name_tokens = set(_tool_name_tokens(tool_name))
     categories: set[str] = set()
 
@@ -188,9 +188,9 @@ def _serialized_tool_arguments(arguments: object) -> str:
     if arguments is None:
         return ""
     try:
-        return json.dumps(arguments, sort_keys=True, default=str).lower()
+        return json.dumps(arguments, sort_keys=True, default=str)
     except (TypeError, ValueError):
-        return str(arguments).lower()
+        return str(arguments)
 
 
 def _matches_any(value: str, patterns: tuple[str, ...]) -> bool:
@@ -328,8 +328,16 @@ def _dedupe(values: list[str]) -> list[str]:
 
 
 def _tool_name_tokens(tool_name: str) -> tuple[str, ...]:
-    camel_normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", tool_name)
+    camel_normalized = _camel_token_normalized(tool_name)
     return tuple(token for token in re.findall(r"[a-z0-9]+", camel_normalized.lower()) if token)
+
+
+def _risk_match_text(value: str) -> str:
+    return _camel_token_normalized(value).lower()
+
+
+def _camel_token_normalized(value: str) -> str:
+    return re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", value)
 
 
 def _coerce_guard_action(value: str) -> GuardAction | None:

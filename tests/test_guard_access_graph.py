@@ -191,6 +191,33 @@ def test_stable_mcp_server_identifier_redacts_path_assignments_with_root_dirs() 
     assert stable_mcp_server_identifier(first) == stable_mcp_server_identifier(second)
 
 
+def test_stable_mcp_server_identifier_redacts_one_segment_absolute_path_args() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=("@modelcontextprotocol/server-filesystem", "/workspace"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/bob/.codex/config.toml",
+        command="npx",
+        args=("@modelcontextprotocol/server-filesystem", "/repo"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    assert stable_mcp_server_identifier(first) == stable_mcp_server_identifier(second)
+
+
 def test_normalized_capability_categories_include_mcp_tool_risk_families() -> None:
     artifact = GuardArtifact(
         artifact_id="mcp:filesystem",
@@ -320,3 +347,22 @@ def test_tool_call_risk_categories_match_snake_case_privileged_tokens() -> None:
     categories = tool_call_risk_categories(artifact, {"operation": "chmod_file"})
 
     assert categories == ("command_execution", "privileged_system_mutation")
+
+
+def test_tool_call_risk_categories_match_camel_case_tokens() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="filesystem",
+        tool_name="runCurl",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = tool_call_risk_categories(artifact, {"operation": "readSecret", "mode": "chmodFile"})
+
+    assert categories == (
+        "outbound_network",
+        "privileged_system_mutation",
+        "secret_access",
+    )

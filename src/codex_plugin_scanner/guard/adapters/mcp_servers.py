@@ -34,6 +34,36 @@ _GUARD_PROXY_COMMANDS = frozenset(
     }
 )
 
+_PATH_LIKE_ABSOLUTE_ROOT_NAMES = frozenset(
+    {
+        "app",
+        "build",
+        "cache",
+        "code",
+        "data",
+        "files",
+        "home",
+        "mnt",
+        "opt",
+        "private",
+        "project",
+        "projects",
+        "repo",
+        "repos",
+        "root",
+        "source",
+        "sources",
+        "src",
+        "tmp",
+        "users",
+        "usr",
+        "var",
+        "volumes",
+        "workspace",
+        "workspaces",
+    }
+)
+
 
 def managed_stdio_servers(detection: HarnessDetection) -> tuple[ManagedMcpServer, ...]:
     """Extract local stdio MCP servers from a harness detection payload."""
@@ -182,7 +212,8 @@ def _looks_like_path_token(value: str) -> bool:
     if normalized.startswith(("~/", "./", "../")):
         return True
     if normalized.startswith("/"):
-        return "/" in normalized[1:]
+        root_name = normalized[1:].lower()
+        return normalized == "/" or "/" in root_name or root_name in _PATH_LIKE_ABSOLUTE_ROOT_NAMES
     return len(normalized) >= 3 and normalized[0].isalpha() and normalized[1:3] == ":/"
 
 
