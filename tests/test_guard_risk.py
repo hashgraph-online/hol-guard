@@ -24,6 +24,7 @@ from codex_plugin_scanner.guard.risk import (
     artifact_risk_signals_typed,
     artifact_risk_signals_v2,
     artifact_risk_summary,
+    classify_secret_paths,
     detect_encoded_command,
     detect_guard_bypass,
     detect_staged_download,
@@ -108,6 +109,16 @@ def test_artifact_risk_signals_legacy_strings_remain_stable():
         "runs through a shell wrapper",
         "includes exfiltration-oriented intent",
     )
+
+
+def test_classify_secret_paths_preserves_legacy_labels():
+    classes = classify_secret_paths(".pypirc ~/.aws/" + "credentials ~/.docker/" + "config.json")
+
+    assert classes == {
+        "python package credentials",
+        "aws shared credentials",
+        "docker credentials",
+    }
 
 
 def test_artifact_risk_signals_v2_adapts_existing_signal_metadata():

@@ -25,6 +25,17 @@ SECRET_PATH_TEXT_MARKERS: tuple[tuple[str, str], ...] = (
     ("terraform.tfvars", "Terraform variable secrets"),
     (".git-credentials", "Git credential store"),
 )
+LEGACY_SECRET_PATH_TEXT_MARKERS: tuple[tuple[str, str], ...] = (
+    (".env", "local .env file"),
+    (".npmrc", "npm registry credentials"),
+    (".pypirc", "python package credentials"),
+    (".aws/" + "credentials", "aws shared credentials"),
+    (".ssh/", "ssh material"),
+    (".gnupg/", "gpg material"),
+    (".docker/" + "config.json", "docker credentials"),
+    (".kube/config", "kubeconfig"),
+    (".git-credentials", "git credential store"),
+)
 _SENSITIVE_BASENAME_LABELS = {
     ".npmrc": "npm registry credentials",
     ".pypirc": "Python package credentials",
@@ -138,6 +149,11 @@ def classify_secret_path(
 def classify_secret_path_families(text: str) -> set[str]:
     lowered = text.lower()
     return {family for marker, family in SECRET_PATH_TEXT_MARKERS if marker in lowered}
+
+
+def classify_legacy_secret_path_families(text: str) -> set[str]:
+    lowered = text.lower()
+    return {family for marker, family in LEGACY_SECRET_PATH_TEXT_MARKERS if marker in lowered}
 
 
 def _match(
