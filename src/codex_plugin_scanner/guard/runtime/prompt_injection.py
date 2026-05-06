@@ -68,8 +68,7 @@ _GUARD_POLICY_TAMPER_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"\bif\s+(?:blocked|denied|rejected)\b"
         rf"(?={_SAME_SENTENCE_120}\b(?:HOL\s+)?Guard\b)"
         rf"{_SAME_SENTENCE_120}\b(?:try|use|run)\b"
-        rf"{_SAME_SENTENCE_120}\b(?:shell|bash|sh|terminal|command)\b"
-        rf"{_SAME_SENTENCE_120}\binstead\b",
+        rf"{_SAME_SENTENCE_120}\b(?:shell|bash|sh|terminal|command)\b",
         re.IGNORECASE,
     ),
     re.compile(
@@ -363,7 +362,7 @@ def _is_documentation_context_guard(text: str, match: re.Match[str]) -> bool:
     return (
         _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
         and _GUARD_DOCUMENTATION_SUBJECT_PATTERN.search(prefix) is not None
-        and _has_reported_phrase_prefix(prefix)
+        and _has_quoted_reported_phrase_prefix(prefix)
     )
 
 
@@ -384,8 +383,13 @@ def _is_documentation_context_with_subject(
     return (
         _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
         and subject_pattern.search(prefix) is not None
-        and _has_reported_phrase_prefix(prefix)
+        and _has_quoted_reported_phrase_prefix(prefix)
     )
+
+
+def _has_quoted_reported_phrase_prefix(prefix: str) -> bool:
+    stripped = prefix.rstrip()
+    return bool(stripped) and stripped[-1] in {"'", '"', "`"} and _has_reported_phrase_prefix(prefix)
 
 
 def _has_reported_phrase_prefix(prefix: str) -> bool:
