@@ -9253,6 +9253,21 @@ def test_guard_run_renderer_uses_context_preserving_approvals_command_for_blocke
     assert steps[0]["command"] == "hol-guard approvals --home /guard-home --workspace /workspace"
 
 
+def test_guard_run_renderer_uses_rerun_command_when_blocked_launch_has_no_approval_queue():
+    steps = guard_render_module._build_run_steps(
+        {
+            "harness": "codex",
+            "approvals_command": "hol-guard approvals --home /guard-home --workspace /workspace",
+            "rerun_command": "hol-guard run codex --home /guard-home --workspace /workspace",
+            "review_hint": "Approve the interactive prompt, then retry the guarded command.",
+        },
+        blocked=True,
+        dry_run=False,
+    )
+
+    assert steps[0]["command"] == "hol-guard run codex --home /guard-home --workspace /workspace"
+
+
 def test_guard_run_headless_allow_persists_state_when_approval_center_is_available(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"

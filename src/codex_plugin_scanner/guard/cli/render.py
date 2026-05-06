@@ -1409,15 +1409,16 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
             },
         ]
     if blocked and isinstance(review_hint, str) and review_hint:
-        command = (
-            str(approvals_command)
-            if isinstance(approvals_command, str) and approvals_command
-            else "hol-guard approvals"
-            if approval_center_url
-            else str(rerun_command)
-            if isinstance(rerun_command, str) and rerun_command
-            else f"hol-guard run {harness}"
-        )
+        if approval_center_url:
+            command = (
+                str(approvals_command)
+                if isinstance(approvals_command, str) and approvals_command
+                else "hol-guard approvals"
+            )
+        elif isinstance(rerun_command, str) and rerun_command:
+            command = str(rerun_command)
+        else:
+            command = f"hol-guard run {harness}"
         return [{"title": "Resolve the blocked launch", "command": command, "detail": review_hint}]
     if dry_run:
         launch_command = (
