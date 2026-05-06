@@ -205,7 +205,7 @@ def _secret_path_matches_in_command(command: str, *, workspace: Path | None) -> 
 
 def _curl_data_file_paths(command: str) -> tuple[str, ...]:
     paths: list[str] = []
-    for segment in extract_command_segments(command):
+    for segment in command_execution_segments(command):
         if not segment_executes_command(segment, {"curl", "curl.exe"}):
             continue
         for match in _CURL_DATA_FILE_PATTERN.finditer(segment):
@@ -244,8 +244,10 @@ def _curl_uploads_secret_file(command: str, *, workspace: Path | None) -> bool:
 
 
 def _curl_data_substitution_reads_secret(command: str, *, workspace: Path | None) -> bool:
-    for segment in extract_command_segments(command):
+    for segment in command_execution_segments(command):
         if not segment_executes_command(segment, {"curl", "curl.exe"}):
+            continue
+        if not extract_urls(segment):
             continue
         for match in _CURL_DATA_VALUE_PATTERN.finditer(segment):
             value = match.group("value")
