@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import shlex
 from collections.abc import Sequence
 from pathlib import Path
 from urllib.parse import urlparse
@@ -18,6 +17,13 @@ from codex_plugin_scanner.guard.runtime.data_flow import (
     extract_urls,
 )
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
+from codex_plugin_scanner.guard.runtime.shell_commands import (
+    command_tokens_after_env_assignments,
+    is_scp_remote_target,
+    npm_publish_is_dry_run,
+    scp_operands,
+    segment_executes_command,
+)
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalCategory, RiskSignalV2
 
 _SECRET_PATH_TOKEN_PATTERN = re.compile(
@@ -57,15 +63,12 @@ _DNS_LONG_LABEL_PATTERN = re.compile(
     r"(?P<host>(?:[A-Za-z0-9_-]+\.)*[A-Za-z0-9_-]{48,}(?:\.[A-Za-z0-9_-]+)*)"
 )
 _SCP_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])scp\b(?P<body>[^\r\n;&|]+)")
-_GIT_REMOTE_ADD_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])git\s+remote\s+add\b(?P<body>[^\r\n;&|]+)")
-_NPM_PUBLISH_EXEC_PATTERN = re.compile(r"(?is)^\s*(?:[A-Za-z_][A-Za-z0-9_]*=.*\s+)*npm\s+publish\b")
 _TOKEN_SOURCE_PATTERN = re.compile(r"(?i)\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|_authToken|npm[_-]?token)\b")
 _CLIPBOARD_SINK_PATTERN = re.compile(r"(?i)(?:^|[\s;&|])(?:pbcopy|xclip|xsel|wl-copy|clip(?:\.exe)?)\b")
 _TEMP_SECRET_WRITE_PATTERN = re.compile(
     r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\b(?:\s+(?:-[A-Za-z]+|--[A-Za-z-]+))*\s+(?P<tee>/tmp/[^\s;&|]+))"
 )
 _CHMOD_TEMP_PATTERN = re.compile(r"(?is)chmod\s+(?P<mode>[0-7]{3,4}|[A-Za-z,+=-]+)\s+(?P<path>/tmp/[^\s;&|]+)")
-_SCP_OPTIONS_WITH_VALUES = frozenset({"-c", "-D", "-F", "-i", "-J", "-l", "-o", "-P", "-S", "-X"})
 _WEBHOOK_HOST_MARKERS = (
     "webhook.site",
     "hooks.slack.com",
@@ -230,7 +233,7 @@ def _secret_path_matches(paths: Sequence[str], *, workspace: Path | None) -> tup
 def _curl_data_file_paths(command: str) -> tuple[str, ...]:
     paths: list[str] = []
     for segment in extract_command_segments(command):
-        if not _segment_executes_command(segment, {"curl", "curl.exe"}):
+        if not segment_executes_command(segment, {"curl", "curl.exe"}):
             continue
         for match in _CURL_DATA_FILE_PATTERN.finditer(segment):
             paths.append(_strip_shell_token(match.group("path")))
@@ -252,13 +255,8 @@ def _has_http_upload(command: str) -> bool:
     return any(_CURL_DATA_STDIN_PATTERN.search(segment) for segment in extract_command_segments(command))
 
 
-def _contains_http_tool_or_url(command: str) -> bool:
-    lowered = command.lower()
-    return "curl" in lowered or "fetch" in lowered or "http" in lowered or bool(extract_urls(command))
-
-
 def _contains_http_upload_sink(command: str) -> bool:
-    return _contains_http_tool_or_url(command) and _has_http_upload(command)
+    return bool(extract_urls(command)) and _has_http_upload(command)
 
 
 def _curl_uploads_secret_file(command: str, *, workspace: Path | None) -> bool:
@@ -269,7 +267,7 @@ def _curl_uploads_secret_file(command: str, *, workspace: Path | None) -> bool:
 
 def _curl_data_substitution_reads_secret(command: str, *, workspace: Path | None) -> bool:
     for segment in extract_command_segments(command):
-        if not _segment_executes_command(segment, {"curl", "curl.exe"}):
+        if not segment_executes_command(segment, {"curl", "curl.exe"}):
             continue
         for match in _CURL_DATA_VALUE_PATTERN.finditer(segment):
             value = match.group("value")
@@ -350,58 +348,24 @@ def _has_webhook_exfil(command: str, *, workspace: Path | None) -> bool:
 def _scp_sends_secret(command: str, *, workspace: Path | None) -> bool:
     for match in _SCP_PATTERN.finditer(command):
         body = match.group("body")
-        operands = _scp_operands(body)
+        operands = scp_operands(body)
         if len(operands) < 2:
             continue
         target = operands[-1]
         sources = operands[:-1]
-        if not _is_scp_remote_target(target):
+        if not is_scp_remote_target(target):
             continue
-        if any(not _is_scp_remote_target(source) and classify_secret_path(source, cwd=workspace) for source in sources):
+        if any(not is_scp_remote_target(source) and classify_secret_path(source, cwd=workspace) for source in sources):
             return True
     return False
 
 
-def _scp_operands(body: str) -> tuple[str, ...]:
-    try:
-        tokens = shlex.split(body)
-    except ValueError:
-        tokens = body.split()
-    operands: list[str] = []
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if not token:
-            index += 1
-            continue
-        if token in _SCP_OPTIONS_WITH_VALUES:
-            index += 2
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        operands.append(token)
-        index += 1
-    return tuple(operands)
-
-
-def _is_scp_remote_target(value: str) -> bool:
-    if value.startswith(("./", "../", "/")):
-        return False
-    host, separator, _path = value.partition(":")
-    if not separator or not host or "/" in host:
-        return False
-    return not any(char.isspace() for char in host)
-
-
 def _git_remote_adds_token_url(command: str) -> bool:
     for segment in extract_command_segments(command):
-        if not _segment_executes_command(segment, {"git"}):
+        tokens = command_tokens_after_env_assignments(segment)
+        if len(tokens) < 4 or tuple(token.lower() for token in tokens[:3]) != ("git", "remote", "add"):
             continue
-        match = _GIT_REMOTE_ADD_PATTERN.match(segment)
-        if match is None:
-            continue
-        for url in extract_urls(match.group("body")):
+        for url in extract_urls(" ".join(tokens[3:])):
             parsed = urlparse(url)
             if parsed.username and _looks_like_token(parsed.username):
                 return True
@@ -415,32 +379,12 @@ def _looks_like_token(value: str) -> bool:
     return lowered.startswith(("ghp_", "github_pat_", "glpat-", "x-access-token")) or len(value) >= 24
 
 
-def _segment_executes_command(command: str, names: set[str]) -> bool:
-    return _first_shell_word(command).lower() in names
-
-
-def _first_shell_word(command: str) -> str:
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        tokens = command.split()
-    for token in tokens:
-        if _is_env_assignment_token(token):
-            continue
-        return token
-    return ""
-
-
-def _is_env_assignment_token(value: str) -> bool:
-    name, separator, _tail = value.partition("=")
-    return bool(separator and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name))
-
-
 def _npm_publish_with_token_source(command: str, *, workspace: Path | None) -> bool:
     for segment in extract_command_segments(command):
-        if not _NPM_PUBLISH_EXEC_PATTERN.search(segment):
+        tokens = command_tokens_after_env_assignments(segment)
+        if len(tokens) < 2 or tuple(token.lower() for token in tokens[:2]) != ("npm", "publish"):
             continue
-        if "--dry-run" in segment:
+        if npm_publish_is_dry_run(tokens):
             continue
         if _TOKEN_SOURCE_PATTERN.search(segment):
             return True
