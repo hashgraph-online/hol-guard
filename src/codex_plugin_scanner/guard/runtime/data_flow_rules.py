@@ -15,6 +15,10 @@ from codex_plugin_scanner.guard.runtime.data_flow import (
     extract_pipes,
     extract_urls,
 )
+from codex_plugin_scanner.guard.runtime.data_flow_variables import (
+    curl_data_uses_encoded_secret_variable,
+    curl_data_uses_secret_variable,
+)
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
 from codex_plugin_scanner.guard.runtime.secret_sources import secret_path_matches_in_command, strip_shell_token
 from codex_plugin_scanner.guard.runtime.shell_commands import (
@@ -93,6 +97,16 @@ def detect_data_flow_exfiltration(
                 "Curl uploads a local secret file",
                 "This command sends a local secret file as curl request data.",
                 "curl data flag references a sensitive local path",
+                category="network",
+            )
+        )
+    if curl_data_uses_secret_variable(command, workspace=workspace):
+        findings.append(
+            _data_flow_signal(
+                "shell-variable-secret-http",
+                "Shell variable sends a local secret to a network host",
+                "This command sends local secret to network host through a shell variable.",
+                "shell variable is assigned from a sensitive path and later used as curl request data",
                 category="network",
             )
         )
@@ -291,6 +305,8 @@ def _node_fetches_secret(command: str, *, workspace: Path | None) -> bool:
 def _encoded_secret_send(command: str, secret_matches: Sequence[SecretPathMatch], *, workspace: Path | None) -> bool:
     if not secret_matches:
         return False
+    if curl_data_uses_encoded_secret_variable(command, workspace=workspace):
+        return True
     return any(
         _secret_path_matches_in_command(segment, workspace=workspace)
         and "base64" in segment.lower()

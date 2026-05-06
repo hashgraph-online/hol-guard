@@ -444,6 +444,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
         risk_actions: {
           local_secret_read: "require-reapproval",
           credential_exfiltration: "require-reapproval",
+          data_flow_exfiltration: "require-reapproval",
           destructive_shell: "require-reapproval",
           encoded_execution: "require-reapproval",
           network_egress: "warn"
