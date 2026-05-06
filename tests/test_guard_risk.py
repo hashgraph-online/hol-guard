@@ -416,6 +416,9 @@ def test_secret_sensitivity_module_classifies_wallet_private_key_filenames(tmp_p
         ("ANTHROPIC_API_KEY=" + "sk-ant-api03-" + "A" * 60, "Anthropic API key"),
         ("HEDERA_PRIVATE_KEY=" + "a" * 64, "Hedera private key"),
         ("-----BEGIN " + "PRIVATE KEY-----\nredacted\n-----END " + "PRIVATE KEY-----", "PEM private key"),
+        ('TOKEN="' + "A" * 24 + '"', "credential assignment"),
+        ("auth_token='" + "B" * 24 + "'", "credential assignment"),
+        ('{"password": "' + "C" * 24 + '"}', "credential assignment"),
     ],
 )
 def test_secret_content_classifier_detects_planned_secret_content(content, family):

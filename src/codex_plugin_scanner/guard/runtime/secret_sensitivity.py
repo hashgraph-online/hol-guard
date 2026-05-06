@@ -152,8 +152,9 @@ _SECRET_CONTENT_PATTERNS: tuple[tuple[str, str, SecretContentSensitivity, re.Pat
         "credential assignment",
         "medium",
         re.compile(
-            r"(?im)\b(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|"
-            r"private[_-]?key|secret|token|password)\s*[:=]\s*[^ \t\r\n\"',}]+"
+            r"(?im)[\"']?\b(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|"
+            r"private[_-]?key|secret|token|password)\b[\"']?\s*[:=]\s*"
+            r"(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"
         ),
         "Guard found credential-looking assignment text.",
     ),
