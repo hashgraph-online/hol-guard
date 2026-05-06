@@ -539,6 +539,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     codex_proxy_parser = guard_subparsers.add_parser("codex-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(codex_proxy_parser)
     codex_proxy_parser.add_argument("--server-name", required=True)
+    codex_proxy_parser.add_argument("--server-id")
     codex_proxy_parser.add_argument("--source-scope", default="project")
     codex_proxy_parser.add_argument("--config-path", required=True)
     codex_proxy_parser.add_argument("--transport", default="stdio")
@@ -548,6 +549,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     opencode_proxy_parser = guard_subparsers.add_parser("opencode-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(opencode_proxy_parser)
     opencode_proxy_parser.add_argument("--server-name", required=True)
+    opencode_proxy_parser.add_argument("--server-id")
     opencode_proxy_parser.add_argument("--source-scope", default="project")
     opencode_proxy_parser.add_argument("--config-path", required=True)
     opencode_proxy_parser.add_argument("--transport", default="local")
@@ -557,6 +559,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     copilot_proxy_parser = guard_subparsers.add_parser("copilot-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(copilot_proxy_parser)
     copilot_proxy_parser.add_argument("--server-name", required=True)
+    copilot_proxy_parser.add_argument("--server-id")
     copilot_proxy_parser.add_argument("--source-scope", default="project")
     copilot_proxy_parser.add_argument("--config-path", required=True)
     copilot_proxy_parser.add_argument("--transport", default="stdio")
@@ -807,6 +810,7 @@ def run_guard_command(
             source_scope=args.source_scope,
             config_path=args.config_path,
             transport=args.transport,
+            server_id=args.server_id,
         )
         return proxy.serve()
 
@@ -820,6 +824,7 @@ def run_guard_command(
             source_scope=args.source_scope,
             config_path=args.config_path,
             transport=args.transport,
+            server_id=args.server_id,
         )
         return proxy.serve()
 
@@ -833,6 +838,7 @@ def run_guard_command(
             source_scope=args.source_scope,
             config_path=args.config_path,
             transport=args.transport,
+            server_id=args.server_id,
         )
         return proxy.serve()
 
@@ -1253,6 +1259,7 @@ def run_guard_command(
                     decision_source="pre-tool-hook",
                     now=now,
                     signals=decision.signals,
+                    risk_categories=decision.risk_categories,
                     remember=False,
                 )
                 if _should_emit_copilot_hook_response(args):
@@ -1267,6 +1274,7 @@ def run_guard_command(
                         decision_source="pre-tool-hook",
                         now=now,
                         signals=decision.signals,
+                        risk_categories=decision.risk_categories,
                     )
                 if _should_emit_copilot_hook_response(args):
                     _emit_copilot_hook_response(
@@ -1345,6 +1353,7 @@ def run_guard_command(
                     decision_source=decision.source,
                     now=now,
                     signals=decision.signals,
+                    risk_categories=decision.risk_categories,
                     remember=False,
                 )
                 if _should_emit_copilot_hook_response(args):
@@ -1359,6 +1368,7 @@ def run_guard_command(
                 decision_source="permission-request-hook",
                 now=now,
                 signals=decision.signals,
+                risk_categories=decision.risk_categories,
             )
             approval_center_url = ensure_guard_daemon(guard_home)
             approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)
@@ -2010,16 +2020,17 @@ def _should_emit_native_hook_json_response(
 
 
 def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
-    codex_runtime_marker = (
-        os.environ.get("CODEX_HOME", "").strip() or os.environ.get("CODEX_MANAGED_BY_BUN", "").strip()
-    )
     return (
         args.harness == "codex"
         and event_name == "PreToolUse"
         and policy_action in {"block", "sandbox-required", "require-reapproval"}
         and not getattr(args, "json", False)
-        and bool(codex_runtime_marker)
+        and _is_codex_native_runtime()
     )
+
+
+def _is_codex_native_runtime() -> bool:
+    return bool(os.environ.get("CODEX_HOME", "").strip() or os.environ.get("CODEX_MANAGED_BY_BUN", "").strip())
 
 
 def _codex_browser_approval_decision(
@@ -2039,6 +2050,8 @@ def _codex_browser_approval_decision(
     if event_name not in {"PreToolUse", "PostToolUse", "UserPromptSubmit"}:
         return None
     if policy_action not in {"block", "sandbox-required", "require-reapproval"}:
+        return None
+    if event_name == "PreToolUse" and not _is_codex_native_runtime():
         return None
     approval_requests = response_payload.get("approval_requests")
     if not isinstance(approval_requests, list):

@@ -18,6 +18,7 @@ from ..mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
     evaluate_tool_call,
+    tool_call_risk_categories,
     tool_call_risk_summary,
 )
 from ..models import HarnessDetection
@@ -40,6 +41,7 @@ class RuntimeMcpGuardProxy:
         source_scope: str,
         config_path: str,
         transport: str = "stdio",
+        server_id: str | None = None,
     ) -> None:
         self.harness = harness
         self.server_name = server_name
@@ -50,6 +52,7 @@ class RuntimeMcpGuardProxy:
         self.source_scope = source_scope
         self.config_path = config_path
         self.transport = transport
+        self.server_id = server_id
         self._inline_prompt_available = False
         self._inline_prompt_counter = 0
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}
@@ -185,6 +188,7 @@ class RuntimeMcpGuardProxy:
             source_scope=self.source_scope,
             config_path=self.config_path,
             transport=self.transport,
+            server_id=self.server_id,
             server_fingerprint={
                 "command": self.command,
                 "transport": self.transport,
@@ -209,6 +213,7 @@ class RuntimeMcpGuardProxy:
                 artifact_hash=artifact_hash,
                 decision_source=_decision_source(decision.action, decision.source),
                 signals=decision.signals,
+                risk_categories=decision.risk_categories,
                 params=params,
             )
         if self._allow_after_native_prompt(decision):
@@ -222,6 +227,7 @@ class RuntimeMcpGuardProxy:
                 artifact_hash=artifact_hash,
                 decision_source="native-approved",
                 signals=decision.signals,
+                risk_categories=decision.risk_categories,
                 params=params,
             )
         if self._inline_prompt_available and approval_callback is not None:
@@ -237,6 +243,7 @@ class RuntimeMcpGuardProxy:
                     artifact_hash=artifact_hash,
                     decision_source="inline-approved",
                     signals=decision.signals,
+                    risk_categories=decision.risk_categories,
                     params=params,
                     remember=True,
                 )
@@ -248,6 +255,7 @@ class RuntimeMcpGuardProxy:
                     decision_source="inline-denied",
                     now=_now(),
                     signals=decision.signals,
+                    risk_categories=decision.risk_categories,
                 )
                 return _blocked_tool_response(
                     message.get("id"),
@@ -289,6 +297,7 @@ class RuntimeMcpGuardProxy:
         artifact_hash: str,
         decision_source: str,
         signals: tuple[str, ...],
+        risk_categories: tuple[str, ...],
         params: dict[str, Any],
         remember: bool = False,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -299,6 +308,7 @@ class RuntimeMcpGuardProxy:
             decision_source=decision_source,
             now=_now(),
             signals=signals,
+            risk_categories=risk_categories,
             remember=remember,
         )
         response = self._forward_message(
@@ -537,6 +547,7 @@ class RuntimeMcpGuardProxy:
             decision_source="approval-center-pending",
             now=_now(),
             signals=signals,
+            risk_categories=tool_call_risk_categories(artifact, params.get("arguments")),
         )
         request_id = str(queued[0]["request_id"]) if queued else "unknown"
         return _blocked_tool_response(
