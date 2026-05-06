@@ -706,6 +706,9 @@ def _redacted_target_path(path: str, *, home_dir: Path | str | None) -> str | No
     if stripped == "~" or stripped.startswith("~/"):
         return redact_text(stripped).text
     if stripped.startswith("~"):
+        secret_context = redacted_secret_path_context(stripped)
+        if secret_context is not None:
+            return secret_context
         target_name = Path(stripped).name or "path"
         return f".../{target_name}"
     windows_path = PureWindowsPath(stripped)
