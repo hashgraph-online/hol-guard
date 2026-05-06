@@ -79,11 +79,7 @@ def test_guard_json_render_redacts_after_command_specific_payload_shape(capsys) 
 
 
 def test_guard_json_render_redacts_private_key_without_breaking_json(capsys) -> None:
-    private_key = (
-        "-----BEGIN PRIVATE KEY-----\n"
-        "super-secret-material\n"
-        "-----END PRIVATE KEY-----"
-    )
+    private_key = "-----BEGIN PRIVATE KEY-----\nsuper-secret-material\n-----END PRIVATE KEY-----"
 
     emit_guard_payload("status", {"details": private_key}, True)
 
@@ -157,6 +153,28 @@ def test_guard_settings_json_omits_billing_flag(capsys) -> None:
     output = json.loads(capsys.readouterr().out)
     assert output["settings"]["sync"] is True
     assert "billing" not in output["settings"]
+
+
+def test_guard_hook_render_shows_local_secrets_without_internal_jargon(capsys) -> None:
+    raw_secret = "sk-" + "A" * 32
+
+    emit_guard_payload(
+        "hook",
+        {
+            "recorded": True,
+            "artifact_name": "Bash local secret output",
+            "policy_action": "require-reapproval",
+            "risk_summary": f"Local secrets from local .env file. {raw_secret}",
+            "path_summary": ".env",
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "local secrets" in output.lower()
+    assert ".env file" in output
+    assert raw_secret not in output
+    assert "credential-looking output" not in output.lower()
 
 
 def test_guard_connect_render_defaults_sync_not_available_to_upgrade_guidance(capsys) -> None:
