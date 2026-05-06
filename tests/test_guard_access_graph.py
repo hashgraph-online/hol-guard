@@ -218,6 +218,33 @@ def test_stable_mcp_server_identifier_redacts_one_segment_absolute_path_args() -
     assert stable_mcp_server_identifier(first) == stable_mcp_server_identifier(second)
 
 
+def test_stable_mcp_server_identifier_redacts_arbitrary_one_segment_absolute_path_args() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=("@modelcontextprotocol/server-filesystem", "/alice"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/bob/.codex/config.toml",
+        command="npx",
+        args=("@modelcontextprotocol/server-filesystem", "/DevDrive"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    assert stable_mcp_server_identifier(first) == stable_mcp_server_identifier(second)
+
+
 def test_normalized_capability_categories_include_mcp_tool_risk_families() -> None:
     artifact = GuardArtifact(
         artifact_id="mcp:filesystem",

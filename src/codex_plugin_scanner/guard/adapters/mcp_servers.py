@@ -34,33 +34,20 @@ _GUARD_PROXY_COMMANDS = frozenset(
     }
 )
 
-_PATH_LIKE_ABSOLUTE_ROOT_NAMES = frozenset(
+_STABLE_SLASH_FLAG_TOKENS = frozenset(
     {
-        "app",
-        "build",
-        "cache",
-        "code",
-        "data",
-        "files",
-        "home",
-        "mnt",
-        "opt",
-        "private",
-        "project",
-        "projects",
-        "repo",
-        "repos",
-        "root",
-        "source",
-        "sources",
-        "src",
-        "tmp",
-        "users",
-        "usr",
-        "var",
-        "volumes",
-        "workspace",
-        "workspaces",
+        "/?",
+        "/debug",
+        "/dry-run",
+        "/h",
+        "/help",
+        "/quiet",
+        "/read-only",
+        "/readonly",
+        "/ro",
+        "/safe",
+        "/trace",
+        "/verbose",
     }
 )
 
@@ -212,8 +199,7 @@ def _looks_like_path_token(value: str) -> bool:
     if normalized.startswith(("~/", "./", "../")):
         return True
     if normalized.startswith("/"):
-        root_name = normalized[1:].lower()
-        return normalized == "/" or "/" in root_name or root_name in _PATH_LIKE_ABSOLUTE_ROOT_NAMES
+        return "/" in normalized[1:] or normalized.lower() not in _STABLE_SLASH_FLAG_TOKENS
     return len(normalized) >= 3 and normalized[0].isalpha() and normalized[1:3] == ":/"
 
 
