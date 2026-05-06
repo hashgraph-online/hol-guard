@@ -152,7 +152,7 @@ _SECRET_CONTENT_PATTERNS: tuple[tuple[str, str, SecretContentSensitivity, re.Pat
         "credential assignment",
         "medium",
         re.compile(
-            r"(?im)[\"']?\b(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|"
+            r"(?im)[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|"
             r"private[_-]?key|secret|token|password)\b[\"']?\s*[:=]\s*"
             r"(?:\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"
         ),

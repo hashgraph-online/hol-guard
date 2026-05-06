@@ -419,6 +419,9 @@ def test_secret_sensitivity_module_classifies_wallet_private_key_filenames(tmp_p
         ('TOKEN="' + "A" * 24 + '"', "credential assignment"),
         ("auth_token='" + "B" * 24 + "'", "credential assignment"),
         ('{"password": "' + "C" * 24 + '"}', "credential assignment"),
+        ("MY_TOKEN=fixture-token", "credential assignment"),
+        ('MY_NPM_TOKEN="fixture-token"', "credential assignment"),
+        ('{"OPENAI_API_KEY": "fixture-key"}', "credential assignment"),
     ],
 )
 def test_secret_content_classifier_detects_planned_secret_content(content, family):
