@@ -433,6 +433,12 @@ def test_secret_content_classifier_detects_planned_secret_content(content, famil
     assert any(isinstance(match, SecretContentMatch) and match.family == family for match in matches)
 
 
+def test_secret_content_classifier_does_not_upgrade_npm_token_prose():
+    matches = classify_secret_content("Docs say npm token: use an environment variable instead.")
+
+    assert not any(match.family == "npm auth token" for match in matches)
+
+
 def test_file_read_request_classifier_is_argument_aware(tmp_path):
     env_request = extract_sensitive_file_read_request("read_file", {"path": ".env.local"})
     claude_request = extract_sensitive_file_read_request("Read", {"file_path": "~/.ssh/config"}, home_dir=tmp_path)

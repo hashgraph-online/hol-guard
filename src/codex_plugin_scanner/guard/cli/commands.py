@@ -97,7 +97,7 @@ from ..runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
 )
-from ..runtime.secret_sensitivity import classify_secret_content
+from ..runtime.secret_sensitivity import SecretContentMatch, classify_secret_content
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from .approval_commands import add_approval_parser, run_approval_command
@@ -3971,8 +3971,11 @@ def _codex_post_tool_output_artifact(
     command_text = _codex_post_tool_command_text(payload)
     if not command_text:
         command_text = tool_name
-    if _codex_command_is_read_only_source_inspection(command_text, cwd=cwd) and all(
-        match.sensitivity == "medium" for match in content_matches
+    if _codex_source_inspection_can_skip_secret_output(
+        command_text=command_text,
+        response_text=response_text,
+        content_matches=content_matches,
+        cwd=cwd,
     ):
         return None
     fingerprint = hashlib.sha256(
@@ -4097,6 +4100,9 @@ _CODEX_SOURCE_SEARCH_EXTENSIONS = frozenset(
     }
 )
 _CODEX_BENIGN_SOURCE_DOTFILES = frozenset({".nvmrc"})
+_CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
+    r"(?im)(?:^|[^a-z0-9])fake[_-]?(?:credential|secret|token)\s*[:=]"
+)
 _CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
     {
         ".aws",
@@ -4113,6 +4119,30 @@ _CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
     }
 )
 _CODEX_SED_PRINT_SCRIPT_PATTERN = re.compile(r"^\s*(?:\$|\d+)?(?:\s*,\s*(?:\$|\d+))?p\s*$")
+
+
+def _codex_source_inspection_can_skip_secret_output(
+    *,
+    command_text: str,
+    response_text: str,
+    content_matches: tuple[SecretContentMatch, ...],
+    cwd: Path | None,
+) -> bool:
+    if not _codex_command_is_read_only_source_inspection(command_text, cwd=cwd):
+        return False
+    if any(match.sensitivity != "medium" for match in content_matches):
+        return False
+    if _codex_command_references_benign_source_dotfile(command_text):
+        return _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN.search(response_text) is not None
+    return True
+
+
+def _codex_command_references_benign_source_dotfile(command_text: str) -> bool:
+    try:
+        parts = shlex.split(command_text)
+    except ValueError:
+        return False
+    return any(Path(part).name.lower() in _CODEX_BENIGN_SOURCE_DOTFILES for part in parts)
 
 
 def _codex_command_is_read_only_source_inspection(command_text: str, *, cwd: Path | None) -> bool:

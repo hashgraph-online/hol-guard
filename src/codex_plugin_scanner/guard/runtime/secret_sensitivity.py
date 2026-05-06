@@ -98,7 +98,7 @@ _SECRET_CONTENT_PATTERNS: tuple[tuple[str, str, SecretContentSensitivity, re.Pat
         "npm auth token",
         "high",
         re.compile(
-            r"(?im)[\"']?\b[A-Za-z0-9_-]*(?:_authToken|npm[_ -]?token)\b[\"']?\s*[:=]\s*"
+            r"(?im)[\"']?\b[A-Za-z0-9_-]*(?:_authToken|npm[_-]?token)\b[\"']?\s*[:=]\s*"
             + _SECRET_ASSIGNMENT_VALUE_PATTERN
         ),
         "Guard found an npm registry token pattern.",

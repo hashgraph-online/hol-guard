@@ -922,6 +922,8 @@ clearer UX and an implementation plan with technical references.
         [
             "NPM_TOKEN=" + "n" * 36 + "\n",
             'NPM_TOKEN="' + "n" * 36 + '"\n',
+            "DB_PASSWORD=fixture-pass\n",
+            "auth_token='fixture-token'\n",
         ],
     )
     def test_codex_post_tool_use_blocks_nvmrc_high_confidence_secret(
