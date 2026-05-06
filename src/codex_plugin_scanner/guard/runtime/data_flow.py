@@ -54,9 +54,7 @@ _VALID_SINK_TYPES = frozenset(
     }
 )
 _HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
-_INPUT_REDIRECT_PATTERN = re.compile(
-    r"(?<![<])(?:^|[ \t])(?:\d*)<\s*(?![<&])(?P<target>\"[^\"]+\"|'[^']+'|[^ \t\r\n;&|<>]+)"
-)
+_INPUT_REDIRECT_PATTERN = re.compile(r"(?<![<])(?:\d*)<\s*(?![<&])(?P<target>\"[^\"]+\"|'[^']+'|[^ \t\r\n;&|<>]+)")
 _URL_PATTERN = re.compile(r"https?://[^\s\"'<>)}\]]+", re.IGNORECASE)
 _CURL_METHOD_PATTERN = re.compile(
     r"(?i)(?:^|[\s;&|])(?:curl|curl\.exe)\b[^\r\n;&|]*?"
@@ -377,10 +375,10 @@ class _ShellScanState:
                 self.quote = '"'
             return index + 1
         if self.quote != "'" and command.startswith("$(", index):
+            _extracted, end_index = _extract_parenthesized(command, index + 2)
+            return min(len(command), end_index + 1)
+        if self.quote is None and char == "(":
             self.subshell_depth += 1
-            return index + 2
-        if self.quote != "'" and char == "(":
-            self.subshell_depth += 1
-        elif self.quote != "'" and char == ")" and self.subshell_depth > 0:
+        elif self.quote is None and char == ")" and self.subshell_depth > 0:
             self.subshell_depth -= 1
         return index + 1
