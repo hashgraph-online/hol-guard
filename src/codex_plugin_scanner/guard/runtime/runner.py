@@ -614,14 +614,12 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
                 ),
             )
         )
-    requests.extend(
-        request
-        for request in detect_prompt_injection_requests(normalized_prompt)
-        if not any(
-            existing.request_class == request.request_class and existing.matched_text == request.matched_text
-            for existing in requests
-        )
-    )
+    existing_classes = {request.request_class for request in requests}
+    for request in detect_prompt_injection_requests(normalized_prompt):
+        if request.request_class in existing_classes:
+            continue
+        requests.append(request)
+        existing_classes.add(request.request_class)
     deduped: dict[str, PromptRequest] = {}
     for request in requests:
         deduped[request.request_id] = request
