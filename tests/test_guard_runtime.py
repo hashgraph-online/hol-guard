@@ -11067,6 +11067,7 @@ def test_codex_browser_block_decision_updates_daemon_operation_status(tmp_path):
 
 def test_codex_browser_approval_caps_wait_below_hook_timeout(tmp_path, monkeypatch):
     captured_timeout: list[int] = []
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / ".codex"))
 
     def _fake_wait_for_approval_requests(**kwargs) -> dict[str, object]:
         captured_timeout.append(int(kwargs["timeout_seconds"]))
@@ -11089,6 +11090,7 @@ def test_codex_browser_approval_caps_wait_below_hook_timeout(tmp_path, monkeypat
 
 def test_codex_browser_approval_caps_fallback_wait(tmp_path, monkeypatch):
     captured_timeout: list[int] = []
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / ".codex"))
 
     def _fake_wait_for_approval_requests(**kwargs) -> dict[str, object]:
         captured_timeout.append(int(kwargs["timeout_seconds"]))

@@ -2020,16 +2020,17 @@ def _should_emit_native_hook_json_response(
 
 
 def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
-    codex_runtime_marker = (
-        os.environ.get("CODEX_HOME", "").strip() or os.environ.get("CODEX_MANAGED_BY_BUN", "").strip()
-    )
     return (
         args.harness == "codex"
         and event_name == "PreToolUse"
         and policy_action in {"block", "sandbox-required", "require-reapproval"}
         and not getattr(args, "json", False)
-        and bool(codex_runtime_marker)
+        and _is_codex_native_runtime()
     )
+
+
+def _is_codex_native_runtime() -> bool:
+    return bool(os.environ.get("CODEX_HOME", "").strip() or os.environ.get("CODEX_MANAGED_BY_BUN", "").strip())
 
 
 def _codex_browser_approval_decision(
@@ -2049,6 +2050,8 @@ def _codex_browser_approval_decision(
     if event_name not in {"PreToolUse", "PostToolUse", "UserPromptSubmit"}:
         return None
     if policy_action not in {"block", "sandbox-required", "require-reapproval"}:
+        return None
+    if event_name == "PreToolUse" and not _is_codex_native_runtime():
         return None
     approval_requests = response_payload.get("approval_requests")
     if not isinstance(approval_requests, list):
