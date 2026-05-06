@@ -47,7 +47,7 @@ _CURL_DATA_FILE_PATTERN = re.compile(
 )
 _CURL_DATA_STDIN_PATTERN = re.compile(
     r"(?s)(?:^|[\s;&|])(?i:curl|curl\.exe)\b[^\r\n;&|]*?"
-    r"(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@-|(?:--form|-F)(?:=|\s*)[^\s;&|]*@[.-]|"
+    r"(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@-|(?:--form|-F)(?:=|\s*)[^\s;&|]*@[.-](?=$|[\s;&|])|"
     r"--upload-file(?:=|\s+)[.-](?=$|[\s;&|])|-T\s*[.-](?=$|[\s;&|]))"
 )
 _CURL_DATA_VALUE_PATTERN = re.compile(
