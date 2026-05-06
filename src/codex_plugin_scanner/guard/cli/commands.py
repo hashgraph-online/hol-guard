@@ -97,7 +97,12 @@ from ..runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
 )
-from ..runtime.secret_sensitivity import SecretContentMatch, classify_secret_content, classify_secret_path
+from ..runtime.secret_sensitivity import (
+    SecretContentMatch,
+    SecretPathMatch,
+    classify_secret_content,
+    classify_secret_path,
+)
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from .approval_commands import add_approval_parser, run_approval_command
@@ -3236,6 +3241,12 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
         trimmed_summary = risk_summary.strip()
         if len(trimmed_summary) > 180:
             trimmed_summary = f"{trimmed_summary[:177].rstrip()}..."
+        action_class = artifact.metadata.get("action_class")
+        if (
+            action_class == "credential exfiltration shell command"
+            and "credential-looking output" not in trimmed_summary.lower()
+        ):
+            trimmed_summary = f"{trimmed_summary} Guard also detected credential-looking output."
         return f"HOL Guard flagged this request: {trimmed_summary}"
     return "HOL Guard flagged this request for review."
 
@@ -4020,7 +4031,10 @@ def _codex_post_tool_output_artifact(
     command_text = _codex_post_tool_command_text(payload)
     if not command_text:
         command_text = tool_name
-    references_local_content = _codex_command_may_read_local_content(command_text, cwd=cwd)
+    local_source_matches = _codex_sensitive_local_source_matches(command_text, cwd=cwd)
+    references_local_content = bool(local_source_matches) or _codex_command_may_read_local_content(
+        command_text, cwd=cwd
+    )
     content_matches = classify_secret_content(response_text)
     if not content_matches and references_local_content:
         content_matches = classify_secret_content(response_text, suppress_samples=False)
@@ -4043,10 +4057,38 @@ def _codex_post_tool_output_artifact(
             sort_keys=True,
         ).encode("utf-8")
     ).hexdigest()
+    local_secret_source = _codex_local_secret_source_label(
+        local_source_matches,
+        command_text=command_text,
+    )
     runtime_default_action = "require-reapproval" if references_local_content else "warn"
     runtime_request_signals = ["tool output contains credential-looking material"]
     if references_local_content:
-        runtime_request_signals.append("command references a sensitive local source")
+        source_signal = "command references local secrets"
+        if local_secret_source is not None:
+            source_signal = f"command references local secrets from {local_secret_source}"
+        runtime_request_signals.append(source_signal)
+    request_summary = _codex_tool_output_request_summary(
+        tool_name=tool_name,
+        command_text=command_text,
+        local_secret_source=local_secret_source,
+    )
+    runtime_request_summary = _codex_tool_output_runtime_summary(local_secret_source)
+    metadata: dict[str, object] = {
+        "tool_name": tool_name,
+        "command_text": command_text,
+        "action_class": "credential exfiltration shell command",
+        "guard_default_action": runtime_default_action,
+        "request_summary": request_summary,
+        "runtime_request_signals": runtime_request_signals,
+        "runtime_request_summary": runtime_request_summary,
+        "runtime_request_reason": (
+            "Guard inspects supported Codex tool output before Codex uses it, so accidental secret reads can be "
+            "stopped even when the filename was not obviously sensitive."
+        ),
+    }
+    if local_secret_source is not None:
+        metadata["secret_source_family"] = local_secret_source
     return GuardArtifact(
         artifact_id=f"codex:{source_scope}:tool-output:{fingerprint}",
         name=f"{tool_name} credential-looking output",
@@ -4054,28 +4096,12 @@ def _codex_post_tool_output_artifact(
         artifact_type="tool_action_request",
         source_scope=source_scope,
         config_path=config_path,
-        metadata={
-            "tool_name": tool_name,
-            "command_text": command_text,
-            "action_class": "credential exfiltration shell command",
-            "guard_default_action": runtime_default_action,
-            "request_summary": (
-                f"Codex tool `{tool_name}` produced credential-looking output while running `{command_text}`."
-            ),
-            "runtime_request_signals": runtime_request_signals,
-            "runtime_request_summary": (
-                "Requests a sensitive native tool action: credential-looking output reached Codex."
-            ),
-            "runtime_request_reason": (
-                "Guard inspects supported Codex tool output before Codex uses it, so accidental secret reads can be "
-                "stopped even when the filename was not obviously sensitive."
-            ),
-        },
+        metadata=metadata,
     )
 
 
 def _codex_command_references_sensitive_local_source(command_text: str, *, cwd: Path | None) -> bool:
-    if _codex_text_contains_sensitive_path_token(command_text, cwd=cwd):
+    if _codex_sensitive_local_source_matches(command_text, cwd=cwd):
         return True
     try:
         parts = shlex.split(command_text)
@@ -4092,18 +4118,52 @@ def _codex_command_references_sensitive_local_source(command_text: str, *, cwd: 
     return False
 
 
+def _codex_sensitive_local_source_matches(command_text: str, *, cwd: Path | None) -> list[SecretPathMatch]:
+    matches = _codex_sensitive_path_matches_in_text(command_text, cwd=cwd)
+    try:
+        parts = shlex.split(command_text)
+    except ValueError:
+        return matches
+    for part in parts:
+        stripped = part.strip()
+        if not stripped or stripped.startswith("-") or _codex_token_is_url(stripped):
+            continue
+        path_match = classify_secret_path(stripped, cwd=cwd)
+        if path_match is not None:
+            matches.append(path_match)
+    return _dedupe_codex_secret_path_matches(matches)
+
+
+def _dedupe_codex_secret_path_matches(matches: list[SecretPathMatch]) -> list[SecretPathMatch]:
+    deduped: list[SecretPathMatch] = []
+    seen: set[tuple[str, str]] = set()
+    for match in matches:
+        key = (match.family, match.requested_path or match.path)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(match)
+    return deduped
+
+
 def _codex_token_is_url(token: str) -> bool:
     parsed = urllib.parse.urlparse(token)
     return bool(parsed.scheme and parsed.netloc)
 
 
 def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) -> bool:
+    return bool(_codex_sensitive_path_matches_in_text(text, cwd=cwd))
+
+
+def _codex_sensitive_path_matches_in_text(text: str, *, cwd: Path | None) -> list[SecretPathMatch]:
+    matches: list[SecretPathMatch] = []
     for match in _PROMPT_PATH_TOKEN_PATTERN.finditer(text):
         if _codex_path_token_is_url_path(text, match.start()):
             continue
-        if classify_secret_path(match.group(0), cwd=cwd) is not None:
-            return True
-    return False
+        path_match = classify_secret_path(match.group(0), cwd=cwd)
+        if path_match is not None:
+            matches.append(path_match)
+    return matches
 
 
 def _codex_path_token_is_url_path(text: str, start: int) -> bool:
@@ -4150,7 +4210,10 @@ def _codex_pipeline_segment_may_read_local_content(segment: str, *, index: int, 
     if not parts:
         return False
     if index == 0:
-        return _codex_command_parts_may_read_local_content(parts, cwd=cwd)
+        return _codex_command_parts_are_environment_dump(parts) or _codex_command_parts_may_read_local_content(
+            parts,
+            cwd=cwd,
+        )
     return _codex_command_is_read_only_source_search(segment, cwd=cwd) or _codex_command_is_read_only_source_view(
         segment, cwd=cwd
     )
@@ -4205,6 +4268,63 @@ def _codex_command_sequence_starts_with_local_reader(parts: list[str], *, cwd: P
 
 def _codex_command_parts_are_git_grep(parts: list[str]) -> bool:
     return bool(parts) and Path(parts[0]).name.lower() == "git" and _git_grep_search_args(parts[1:]) is not None
+
+
+def _codex_command_reads_environment_pipeline(command_text: str) -> bool:
+    pipeline_segments = _split_codex_safe_read_only_pipeline(command_text)
+    if pipeline_segments is None:
+        return False
+    try:
+        first_parts = _codex_shell_split(pipeline_segments[0])
+    except ValueError:
+        return False
+    return _codex_command_parts_are_environment_dump(first_parts)
+
+
+def _codex_command_parts_are_environment_dump(parts: list[str]) -> bool:
+    if not parts:
+        return False
+    executable = Path(parts[0]).name.lower()
+    if executable == "printenv":
+        return True
+    if executable != "env":
+        return False
+    return not _codex_strip_env_wrapper(parts[1:])
+
+
+def _codex_local_secret_source_label(
+    matches: list[SecretPathMatch],
+    *,
+    command_text: str,
+) -> str | None:
+    families: list[str] = []
+    for match in matches:
+        if match.family not in families:
+            families.append(match.family)
+    if families:
+        if len(families) == 1:
+            return families[0]
+        return f"{families[0]} and other local secret files"
+    if _codex_command_reads_environment_pipeline(command_text):
+        return "environment variables"
+    return None
+
+
+def _codex_tool_output_request_summary(
+    *,
+    tool_name: str,
+    command_text: str,
+    local_secret_source: str | None,
+) -> str:
+    if local_secret_source is not None:
+        return f"Codex tool `{tool_name}` read local secrets from {local_secret_source} while running `{command_text}`."
+    return f"Codex tool `{tool_name}` produced credential-looking output while running `{command_text}`."
+
+
+def _codex_tool_output_runtime_summary(local_secret_source: str | None) -> str:
+    if local_secret_source is not None:
+        return f"Local secrets from {local_secret_source} reached Codex tool output."
+    return "Requests a sensitive native tool action: credential-looking output reached Codex."
 
 
 def _codex_unwrapped_command_parts(parts: list[str]) -> list[str]:
