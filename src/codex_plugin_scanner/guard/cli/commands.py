@@ -4131,9 +4131,7 @@ def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None
         parts = _codex_shell_split(command_text)
     except ValueError:
         return True
-    if any(_codex_command_part_is_local_reader(parts, index, cwd=cwd) for index in range(len(parts))):
-        return True
-    return _codex_command_parts_are_git_grep(parts)
+    return _codex_command_parts_may_read_local_content(parts, cwd=cwd)
 
 
 def _codex_pipeline_segment_may_read_local_content(segment: str, *, index: int, cwd: Path | None) -> bool:
@@ -4144,14 +4142,109 @@ def _codex_pipeline_segment_may_read_local_content(segment: str, *, index: int, 
     if not parts:
         return False
     if index == 0:
-        return _codex_command_part_is_local_reader(parts, 0, cwd=cwd) or _codex_command_parts_are_git_grep(parts)
+        return _codex_command_parts_may_read_local_content(parts, cwd=cwd)
     return _codex_command_is_read_only_source_search(segment, cwd=cwd) or _codex_command_is_read_only_source_view(
         segment, cwd=cwd
     )
 
 
+def _codex_command_parts_may_read_local_content(parts: list[str], *, cwd: Path | None) -> bool:
+    for start in _codex_command_start_indexes(parts):
+        previous_token = parts[start - 1] if start > 0 else None
+        segment_parts = _codex_command_segment_parts(parts, start)
+        if previous_token == "|":
+            if _codex_command_sequence_is_read_only_source_inspection(segment_parts, cwd=cwd):
+                return True
+            continue
+        if _codex_command_sequence_starts_with_local_reader(segment_parts, cwd=cwd):
+            return True
+    return False
+
+
+def _codex_command_start_indexes(parts: list[str]) -> list[int]:
+    starts = [0] if parts else []
+    for index, part in enumerate(parts[:-1]):
+        if part in {"&&", "||", ";", "&", "|", "|&"}:
+            starts.append(index + 1)
+    return starts
+
+
+def _codex_command_segment_parts(parts: list[str], start: int) -> list[str]:
+    end = start
+    while end < len(parts) and parts[end] not in {"&&", "||", ";", "&", "|", "|&"}:
+        end += 1
+    return parts[start:end]
+
+
+def _codex_command_sequence_is_read_only_source_inspection(parts: list[str], *, cwd: Path | None) -> bool:
+    command_parts = _codex_unwrapped_command_parts(parts)
+    if not command_parts:
+        return False
+    segment = shlex.join(command_parts)
+    return _codex_command_is_read_only_source_search(segment, cwd=cwd) or _codex_command_is_read_only_source_view(
+        segment, cwd=cwd
+    )
+
+
+def _codex_command_sequence_starts_with_local_reader(parts: list[str], *, cwd: Path | None) -> bool:
+    command_parts = _codex_unwrapped_command_parts(parts)
+    if not command_parts:
+        return False
+    if _codex_command_parts_are_git_grep(command_parts):
+        return True
+    return _codex_command_part_is_local_reader(command_parts, 0, cwd=cwd)
+
+
 def _codex_command_parts_are_git_grep(parts: list[str]) -> bool:
     return bool(parts) and Path(parts[0]).name.lower() == "git" and _git_grep_search_args(parts[1:]) is not None
+
+
+def _codex_unwrapped_command_parts(parts: list[str]) -> list[str]:
+    remaining = parts
+    while remaining:
+        executable = Path(remaining[0]).name.lower()
+        if executable == "command":
+            remaining = _codex_strip_command_wrapper(remaining[1:])
+            continue
+        if executable == "env":
+            remaining = _codex_strip_env_wrapper(remaining[1:])
+            continue
+        return remaining
+    return []
+
+
+def _codex_strip_command_wrapper(parts: list[str]) -> list[str]:
+    index = 0
+    while index < len(parts) and parts[index] in {"-p", "-v", "-V"}:
+        index += 1
+    if index < len(parts) and parts[index] == "--":
+        index += 1
+    return parts[index:]
+
+
+def _codex_strip_env_wrapper(parts: list[str]) -> list[str]:
+    index = 0
+    while index < len(parts):
+        part = parts[index]
+        if part == "--":
+            return parts[index + 1 :]
+        if part in {"-i", "-0", "--ignore-environment", "--null"}:
+            index += 1
+            continue
+        if part in {"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}:
+            index += 2
+            continue
+        if part.startswith(("--unset=", "--chdir=", "--split-string=")):
+            index += 1
+            continue
+        if part.startswith("-"):
+            index += 1
+            continue
+        if "=" in part and not part.startswith("="):
+            index += 1
+            continue
+        return parts[index:]
+    return []
 
 
 def _codex_shell_split(command_text: str) -> list[str]:
