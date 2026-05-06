@@ -196,6 +196,25 @@ def severity_from_deltas(deltas: tuple[CapabilityDelta, ...]) -> int:
     return max(delta.severity for delta in deltas)
 
 
+def normalized_capability_categories(capabilities: CapabilitySet) -> tuple[str, ...]:
+    """Return broad Cloud access graph categories for skills and MCP tools."""
+
+    categories: set[str] = set()
+    if capabilities.network_hosts or capabilities.network_schemes:
+        categories.add("network")
+    if capabilities.filesystem_paths:
+        categories.add("filesystem")
+    if capabilities.secret_classes:
+        categories.add("secret")
+    if capabilities.subprocess_invocation or capabilities.interpreters or capabilities.shell_wrappers:
+        categories.add("execution")
+    if capabilities.publisher:
+        categories.add("publisher")
+    if capabilities.transport != "local":
+        categories.add("transport")
+    return tuple(sorted(categories))
+
+
 def _first_seen_deltas(after: CapabilitySet) -> list[CapabilityDelta]:
     deltas: list[CapabilityDelta] = []
     if after.network_hosts:
