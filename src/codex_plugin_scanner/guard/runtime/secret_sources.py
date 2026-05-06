@@ -6,7 +6,11 @@ import re
 from collections.abc import Sequence
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.data_flow import extract_input_redirects, extract_url_ranges
+from codex_plugin_scanner.guard.runtime.data_flow import (
+    extract_command_substitutions,
+    extract_input_redirects,
+    extract_url_ranges,
+)
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
 from codex_plugin_scanner.guard.runtime.shell_commands import (
     command_execution_segments,
@@ -49,6 +53,11 @@ def secret_path_matches_in_command(
 ) -> tuple[SecretPathMatch, ...]:
     candidates = list(extract_input_redirects(command))
     candidates.extend(_secret_read_command_paths(command))
+    candidates.extend(
+        path
+        for substitution in extract_command_substitutions(command)
+        for path in _substitution_secret_paths(substitution)
+    )
     candidates.extend(extra_paths)
     return _secret_path_matches(tuple(candidates), workspace=workspace)
 
@@ -72,6 +81,12 @@ def _secret_read_command_paths(command: str) -> tuple[str, ...]:
             for match in _SECRET_PATH_TOKEN_PATTERN.finditer(segment)
             if not any(start <= match.start("path") < end for start, end in url_ranges)
         )
+    return tuple(paths)
+
+
+def _substitution_secret_paths(command: str) -> tuple[str, ...]:
+    paths = list(extract_input_redirects(command))
+    paths.extend(_secret_read_command_paths(command))
     return tuple(paths)
 
 
