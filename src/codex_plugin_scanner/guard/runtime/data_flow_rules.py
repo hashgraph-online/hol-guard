@@ -55,7 +55,7 @@ _CLIPBOARD_SINK_PATTERN = re.compile(r"(?i)(?:^|[\s;&|])(?:pbcopy|xclip|xsel|wl-
 _TEMP_SECRET_WRITE_PATTERN = re.compile(r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\s+(?P<tee>/tmp/[^\s;&|]+))")
 _CHMOD_TEMP_PATTERN = re.compile(r"(?is)chmod\s+(?P<mode>[0-7]{3,4}|[A-Za-z,+=-]+)\s+(?P<path>/tmp/[^\s;&|]+)")
 _HTTP_UPLOAD_METHODS = frozenset({"POST", "PUT", "PATCH"})
-_SCP_OPTIONS_WITH_VALUES = frozenset({"-B", "-c", "-F", "-i", "-J", "-l", "-o", "-P", "-S"})
+_SCP_OPTIONS_WITH_VALUES = frozenset({"-c", "-F", "-i", "-J", "-l", "-o", "-P", "-S"})
 _WEBHOOK_HOST_MARKERS = (
     "webhook.site",
     "hooks.slack.com",
