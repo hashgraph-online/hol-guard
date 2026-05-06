@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 from collections.abc import Sequence
 from pathlib import Path
 from urllib.parse import urlparse
@@ -309,9 +310,28 @@ def _has_webhook_exfil(command: str, *, workspace: Path | None) -> bool:
 def _scp_sends_secret(command: str, *, workspace: Path | None) -> bool:
     for match in _SCP_PATTERN.finditer(command):
         body = match.group("body")
-        if _secret_path_matches_in_command(body, workspace=workspace) and re.search(r"(?:\S+@)?[^:\s]+:", body):
+        operands = _scp_operands(body)
+        if len(operands) < 2:
+            continue
+        target = operands[-1]
+        sources = operands[:-1]
+        if not _is_scp_remote_target(target):
+            continue
+        if any(not _is_scp_remote_target(source) and classify_secret_path(source, cwd=workspace) for source in sources):
             return True
     return False
+
+
+def _scp_operands(body: str) -> tuple[str, ...]:
+    try:
+        tokens = shlex.split(body)
+    except ValueError:
+        tokens = body.split()
+    return tuple(token for token in tokens if token and not token.startswith("-"))
+
+
+def _is_scp_remote_target(value: str) -> bool:
+    return bool(re.fullmatch(r"(?:\S+@)?[^:\s]+:.+", value))
 
 
 def _git_remote_adds_token_url(command: str) -> bool:
@@ -346,8 +366,10 @@ def _clipboard_receives_secret(pipes: Sequence[ShellPipe], command: str, *, work
     if not pipes or not _CLIPBOARD_SINK_PATTERN.search(command):
         return False
     return any(
-        _secret_path_matches_in_command(pipe.left, workspace=workspace) and _CLIPBOARD_SINK_PATTERN.search(pipe.right)
-        for pipe in pipes
+        extract_pipes(segment)
+        and _secret_path_matches_in_command(segment, workspace=workspace)
+        and _CLIPBOARD_SINK_PATTERN.search(segment)
+        for segment in extract_command_segments(command)
     )
 
 
