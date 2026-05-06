@@ -1647,7 +1647,7 @@ args = ["workspace-skill.js", "--changed"]
         assert "workspace_skill" in output
         assert "hol-guard run codex" in output
         assert "hol-guard diff codex" in output
-        assert "hol-guard approvals" in output
+        assert "hol-guard approvals" not in output
         assert '"artifacts"' not in output
 
     def test_guard_allow_supports_expiring_exception(self, tmp_path, capsys):

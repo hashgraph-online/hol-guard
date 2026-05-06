@@ -1366,29 +1366,34 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
         inspect_command = (
             str(diff_command) if isinstance(diff_command, str) and diff_command else f"hol-guard diff {harness}"
         )
-        approval_command = (
-            str(approvals_command)
-            if isinstance(approvals_command, str) and approvals_command
-            else "hol-guard approvals"
-        )
         review_detail = (
             str(review_hint)
             if isinstance(review_hint, str) and review_hint
             else "Rerun without --dry-run to review the full blocker set and continue into the harness launch."
         )
-        return [
+        steps = [
             {
                 "title": "Resolve the blocked launch",
                 "command": review_command,
                 "detail": review_detail,
             },
-            {
-                "title": "Open the approvals queue",
-                "command": approval_command,
-                "detail": (
-                    "Review any queued approval requests after the prompt appears, then retry the guarded command."
-                ),
-            },
+        ]
+        if approval_center_url:
+            approval_command = (
+                str(approvals_command)
+                if isinstance(approvals_command, str) and approvals_command
+                else "hol-guard approvals"
+            )
+            steps.append(
+                {
+                    "title": "Open the approvals queue",
+                    "command": approval_command,
+                    "detail": (
+                        "Review any queued approval requests after the prompt appears, then retry the guarded command."
+                    ),
+                }
+            )
+        steps.append(
             {
                 "title": "Inspect only the changed config entries (optional)",
                 "command": inspect_command,
@@ -1397,7 +1402,8 @@ def _build_run_steps(payload: dict[str, object], *, blocked: bool, dry_run: bool
                     "Guard still needs you to review."
                 ),
             },
-        ]
+        )
+        return steps
     if blocked and isinstance(review_hint, str) and review_hint:
         if approval_center_url:
             command = (
