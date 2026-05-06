@@ -248,6 +248,9 @@ def test_register_default_detectors_includes_secret_path_detector():
         "~/.docker/" + "config.json",
         "~/.kube/config",
         ".terraform.tfvars",
+        "wallet.key",
+        "private-key.pem",
+        "operator-private-key.txt",
     ],
 )
 def test_default_secret_path_detector_flags_planned_direct_file_reads(tmp_path, path):

@@ -44,7 +44,12 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     is_explicitly_benign_tool_action_request,
     is_file_read_tool_name,
 )
-from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
+from codex_plugin_scanner.guard.runtime.secret_sensitivity import (
+    SecretContentMatch,
+    SecretPathMatch,
+    classify_secret_content,
+    classify_secret_path,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -382,6 +387,56 @@ def test_secret_sensitivity_module_classifies_planned_secret_path_families(tmp_p
     assert match.path == match.normalized_path
     assert match.sensitivity in {"high", "critical"}
     assert match.reason
+
+
+@pytest.mark.parametrize(
+    ("path", "family"),
+    [
+        ("wallet.key", "wallet/private-key file"),
+        ("private-key.pem", "wallet/private-key file"),
+        ("operator-private-key.txt", "wallet/private-key file"),
+    ],
+)
+def test_secret_sensitivity_module_classifies_wallet_private_key_filenames(tmp_path, path, family):
+    match = classify_secret_path(path, home_dir=tmp_path)
+
+    assert isinstance(match, SecretPathMatch)
+    assert match.family == family
+    assert match.sensitivity == "critical"
+
+
+@pytest.mark.parametrize(
+    ("content", "family"),
+    [
+        ("//registry.npmjs.org/:_authToken=" + "n" * 36, "npm auth token"),
+        ('//registry.npmjs.org/:_authToken="' + "n" * 36 + '"', "npm auth token"),
+        ('MY_NPM_TOKEN="' + "n" * 36 + '"', "npm auth token"),
+        ("token=" + "ghp_" + "A" * 36, "GitHub token"),
+        ("token=" + "github_pat_" + "A" * 22 + "_" + "B" * 59, "GitHub token"),
+        ("aws_access_key_id=" + "AKIA" + "A" * 16, "AWS access key"),
+        ("OPENAI_API_KEY=" + "sk-" + "A" * 32, "OpenAI API key"),
+        ("ANTHROPIC_API_KEY=" + "sk-ant-api03-" + "A" * 60, "Anthropic API key"),
+        ("HEDERA_PRIVATE_KEY=" + "a" * 64, "Hedera private key"),
+        ('HEDERA_PRIVATE_KEY="' + "a" * 64 + '"', "Hedera private key"),
+        ("-----BEGIN " + "PRIVATE KEY-----\nredacted\n-----END " + "PRIVATE KEY-----", "PEM private key"),
+        ('TOKEN="' + "A" * 24 + '"', "credential assignment"),
+        ("auth_token='" + "B" * 24 + "'", "credential assignment"),
+        ('{"password": "' + "C" * 24 + '"}', "credential assignment"),
+        ("MY_TOKEN=fixture-token", "credential assignment"),
+        ('MY_NPM_TOKEN="fixture-token"', "credential assignment"),
+        ('{"OPENAI_API_KEY": "fixture-key"}', "credential assignment"),
+    ],
+)
+def test_secret_content_classifier_detects_planned_secret_content(content, family):
+    matches = classify_secret_content(content)
+
+    assert any(isinstance(match, SecretContentMatch) and match.family == family for match in matches)
+
+
+def test_secret_content_classifier_does_not_upgrade_npm_token_prose():
+    matches = classify_secret_content("Docs say npm token: use an environment variable instead.")
+
+    assert not any(match.family == "npm auth token" for match in matches)
 
 
 def test_file_read_request_classifier_is_argument_aware(tmp_path):
