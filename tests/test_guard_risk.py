@@ -480,12 +480,12 @@ def test_file_read_request_classifier_is_argument_aware(tmp_path):
     assert extract_sensitive_file_read_request("write_file", {"path": ".env"}) is None
 
 
-def test_file_read_request_classifier_uses_normalized_action_paths(tmp_path):
+def test_file_read_request_classifier_uses_exact_normalized_action_paths(tmp_path):
     action = normalize_codex_hook_payload(
         {
             "event": "PreToolUse",
             "toolName": "Read",
-            "toolInput": {"filePath": "~alice/.aws/" + "credentials"},
+            "toolInput": {"filePath": ".env.local"},
         },
         workspace=tmp_path / "workspace",
         home_dir=tmp_path,
@@ -495,7 +495,24 @@ def test_file_read_request_classifier_uses_normalized_action_paths(tmp_path):
 
     assert request is not None
     assert request.tool_name == "Read"
-    assert request.path_match.family == "AWS shared credentials file"
+    assert request.path_match.family == "local .env file"
+
+
+def test_file_read_request_classifier_skips_redacted_action_paths(tmp_path):
+    action = normalize_codex_hook_payload(
+        {
+            "event": "PreToolUse",
+            "toolName": "Read",
+            "toolInput": {"filePath": str(tmp_path.parent / "outside" / ".env")},
+        },
+        workspace=tmp_path / "workspace",
+        home_dir=tmp_path / "home",
+    )
+
+    request = extract_sensitive_file_read_request_from_action(action, cwd=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert action.target_paths == (".../.env",)
+    assert request is None
 
 
 @pytest.mark.parametrize(

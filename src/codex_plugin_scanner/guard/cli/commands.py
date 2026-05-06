@@ -4076,17 +4076,17 @@ def _hook_runtime_artifact(
             )
             if prompt_file_artifact is not None:
                 return prompt_file_artifact
-    request = (
-        extract_sensitive_file_read_request_from_action(action_envelope, cwd=workspace, home_dir=home_dir)
-        if action_envelope is not None
-        else None
+    request = extract_sensitive_file_read_request(
+        payload.get("tool_name"),
+        payload.get("tool_input", payload.get("arguments")),
+        cwd=workspace,
+        home_dir=home_dir,
     )
     if request is None:
-        request = extract_sensitive_file_read_request(
-            payload.get("tool_name"),
-            payload.get("tool_input", payload.get("arguments")),
-            cwd=workspace,
-            home_dir=home_dir,
+        request = (
+            extract_sensitive_file_read_request_from_action(action_envelope, cwd=workspace, home_dir=home_dir)
+            if action_envelope is not None
+            else None
         )
     source_scope = _coalesce_string(payload.get("source_scope"), "project")
     config_path = str(_runtime_policy_path(harness, home_dir, workspace))

@@ -439,6 +439,8 @@ def extract_sensitive_file_read_request_from_action(
     if normalized_tool_name not in _FILE_READ_TOOL_NAMES:
         return None
     for candidate in action.target_paths:
+        if _is_lossy_redacted_path(candidate):
+            continue
         path_match = classify_sensitive_path(candidate, cwd=cwd, home_dir=home_dir)
         if path_match is not None:
             return FileReadRequestMatch(
@@ -447,6 +449,10 @@ def extract_sensitive_file_read_request_from_action(
                 path_match=path_match,
             )
     return None
+
+
+def _is_lossy_redacted_path(path: str) -> bool:
+    return path.strip().startswith(".../")
 
 
 def build_file_read_request_artifact(
