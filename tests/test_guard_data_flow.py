@@ -224,7 +224,13 @@ def _data_flow_signal_ids(command: str, tmp_path) -> tuple[str, ...]:
             "GIT_TRACE=1 git remote add leak https://ghp_123456789012345678901234567890123456@github.com/acme/repo.git",
             "data-flow:git-remote-token",
         ),
+        (
+            "git -c core.abbrev=7 remote add leak https://ghp_123456789012345678901234567890123456@github.com/acme/repo.git",
+            "data-flow:git-remote-token",
+        ),
         ("NPM_TOKEN=$(cat .npmrc) npm publish", "data-flow:npm-publish-token-source"),
+        ("NPM_TOKEN=`cat .npmrc` npm publish", "data-flow:npm-publish-token-source"),
+        ("NPM_TOKEN=abc npm --registry=https://registry.npmjs.org publish", "data-flow:npm-publish-token-source"),
         ("echo --dry-run; NPM_TOKEN=abc npm publish", "data-flow:npm-publish-token-source"),
         ("NPM_TOKEN=abc npm publish --dry-run=false", "data-flow:npm-publish-token-source"),
         ("NPM_TOKEN=abc npm publish --no-dry-run", "data-flow:npm-publish-token-source"),
