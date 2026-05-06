@@ -10,6 +10,8 @@ Automated coverage in this phase includes:
 - consumer-mode JSON contract generation against scanner fixtures
 - local HTTP sync against a live in-process server instead of mocked transport
 - scheduled self-hosted harness smoke through `.github/workflows/harness-smoke.yml`
+- CLI DX contract tests for summary-first `run`, `explain`, `doctor`, `scan`, `lint`, and `verify` output
+- scanner command consistency tests for nonexistent target handling across `scan`, `lint`, `verify`, `doctor`, and `submit`
 
 Manual verification should include:
 
@@ -32,6 +34,14 @@ Manual verification should include:
 - `hol-guard install codex`
 - `hol-guard run codex --dry-run --default-action allow --json`
 - `hol-guard receipts`
+- `hol-guard explain codex:project:<artifact-name>`
+- `hol-guard diff codex`
+- `hol-guard events`
+- `hol-guard abom`
+- `plugin-scanner scan tests/fixtures/good-plugin --format json`
+- `plugin-scanner lint tests/fixtures/good-plugin --format json`
+- `plugin-scanner verify tests/fixtures/good-plugin --format json`
+- `plugin-scanner doctor tests/fixtures/good-plugin --component mcp --bundle dist/doctor.zip`
 - `codex mcp list`
 - `cursor-agent mcp list`
 - `antigravity --help`
