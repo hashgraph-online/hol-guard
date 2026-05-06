@@ -16,6 +16,7 @@ from ..config import GuardConfig
 from ..incident import build_incident_context
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..policy import build_decision_v2, decide_action
+from ..policy.engine import VALID_GUARD_ACTIONS
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals_typed, artifact_risk_summary, summarize_signals
 from ..runtime.signals import RiskSignalV2
@@ -104,7 +105,7 @@ def _is_blocking_action(policy_action: str) -> bool:
 
 def _guard_default_action(artifact: GuardArtifact) -> str | None:
     value = artifact.metadata.get("guard_default_action")
-    if value in {"allow", "warn", "block", "sandbox-required", "require-reapproval"}:
+    if value in VALID_GUARD_ACTIONS:
         return str(value)
     return None
 
