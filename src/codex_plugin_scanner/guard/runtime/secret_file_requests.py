@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..models import GuardArtifact
+from .secret_sensitivity import SecretPathMatch as SensitivePathMatch
+from .secret_sensitivity import classify_secret_path
 
 _FILE_READ_TOOL_NAMES = frozenset(
     {
@@ -360,16 +362,6 @@ _SENSITIVE_PATH_REASONS = {
 
 
 @dataclass(frozen=True, slots=True)
-class SensitivePathMatch:
-    """A normalized sensitive path classification."""
-
-    requested_path: str
-    normalized_path: str
-    path_class: str
-    reason: str
-
-
-@dataclass(frozen=True, slots=True)
 class FileReadRequestMatch:
     """A sensitive file-read tool call."""
 
@@ -405,41 +397,7 @@ def classify_sensitive_path(
 ) -> SensitivePathMatch | None:
     """Classify a path if it points at a high-confidence sensitive local file."""
 
-    if not isinstance(path, str):
-        return None
-    requested_path = path.strip().strip("'").strip('"')
-    if not requested_path:
-        return None
-    expanded_home = _expand_home(requested_path, home_dir)
-    normalized_path = _normalize_path(expanded_home, cwd)
-    lowered_segments = tuple(segment for segment in normalized_path.replace("\\", "/").lower().split("/") if segment)
-    if not lowered_segments:
-        return None
-    basename = lowered_segments[-1]
-    if basename == ".env" or basename.startswith(".env."):
-        return SensitivePathMatch(
-            requested_path=requested_path,
-            normalized_path=normalized_path,
-            path_class="local .env file",
-            reason=_SENSITIVE_PATH_REASONS["local .env file"],
-        )
-    if basename in _SENSITIVE_BASENAME_LABELS:
-        path_class = _SENSITIVE_BASENAME_LABELS[basename]
-        return SensitivePathMatch(
-            requested_path=requested_path,
-            normalized_path=normalized_path,
-            path_class=path_class,
-            reason=_SENSITIVE_PATH_REASONS[path_class],
-        )
-    for suffix, path_class in _SENSITIVE_SUFFIX_LABELS.items():
-        if lowered_segments[-len(suffix) :] == suffix:
-            return SensitivePathMatch(
-                requested_path=requested_path,
-                normalized_path=normalized_path,
-                path_class=path_class,
-                reason=_SENSITIVE_PATH_REASONS[path_class],
-            )
-    return None
+    return classify_secret_path(path, cwd=cwd, home_dir=home_dir)
 
 
 def extract_sensitive_file_read_request(

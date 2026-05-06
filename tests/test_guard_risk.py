@@ -24,6 +24,7 @@ from codex_plugin_scanner.guard.risk import (
     artifact_risk_signals_typed,
     artifact_risk_signals_v2,
     artifact_risk_summary,
+    classify_secret_paths,
     detect_encoded_command,
     detect_guard_bypass,
     detect_staged_download,
@@ -43,6 +44,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     is_explicitly_benign_tool_action_request,
     is_file_read_tool_name,
 )
+from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -107,6 +109,16 @@ def test_artifact_risk_signals_legacy_strings_remain_stable():
         "runs through a shell wrapper",
         "includes exfiltration-oriented intent",
     )
+
+
+def test_classify_secret_paths_preserves_legacy_labels():
+    classes = classify_secret_paths(".pypirc ~/.aws/" + "credentials ~/.docker/" + "config.json")
+
+    assert classes == {
+        "python package credentials",
+        "aws shared credentials",
+        "docker credentials",
+    }
 
 
 def test_artifact_risk_signals_v2_adapts_existing_signal_metadata():
@@ -346,6 +358,32 @@ def test_secret_file_path_classifier_stays_precise(tmp_path):
     assert classify_sensitive_path(".envrc") is None
 
 
+@pytest.mark.parametrize(
+    ("path", "family"),
+    [
+        (".env", "local .env file"),
+        (".npmrc", "npm registry credentials"),
+        (".pypirc", "Python package credentials"),
+        ("~/.aws/" + "credentials", "AWS shared credentials file"),
+        ("~/.ssh/id_rsa", "SSH private key"),
+        ("~/.ssh/id_ed25519", "SSH private key"),
+        ("~/.gnupg/private-keys-v1.d/example.key", "GnuPG key material"),
+        ("~/.docker/" + "config.json", "Docker client config"),
+        ("~/.kube/config", "Kubernetes config"),
+        (".terraform.tfvars", "Terraform variable secrets"),
+    ],
+)
+def test_secret_sensitivity_module_classifies_planned_secret_path_families(tmp_path, path, family):
+    match = classify_secret_path(path, home_dir=tmp_path)
+
+    assert isinstance(match, SecretPathMatch)
+    assert match.family == family
+    assert match.path_class == family
+    assert match.path == match.normalized_path
+    assert match.sensitivity in {"high", "critical"}
+    assert match.reason
+
+
 def test_file_read_request_classifier_is_argument_aware(tmp_path):
     env_request = extract_sensitive_file_read_request("read_file", {"path": ".env.local"})
     claude_request = extract_sensitive_file_read_request("Read", {"file_path": "~/.ssh/config"}, home_dir=tmp_path)
@@ -363,6 +401,28 @@ def test_file_read_request_classifier_is_argument_aware(tmp_path):
     assert copilot_request.path_match.path_class == "local .env file"
     assert extract_sensitive_file_read_request("read_file", {"path": "README.md"}) is None
     assert extract_sensitive_file_read_request("write_file", {"path": ".env"}) is None
+
+
+@pytest.mark.parametrize(
+    ("path", "family"),
+    [
+        (".env", "local .env file"),
+        (".npmrc", "npm registry credentials"),
+        (".pypirc", "Python package credentials"),
+        ("~/.aws/" + "credentials", "AWS shared credentials file"),
+        ("~/.ssh/id_rsa", "SSH private key"),
+        ("~/.ssh/id_ed25519", "SSH private key"),
+        ("~/.gnupg/private-keys-v1.d/example.key", "GnuPG key material"),
+        ("~/.docker/" + "config.json", "Docker client config"),
+        ("~/.kube/config", "Kubernetes config"),
+        (".terraform.tfvars", "Terraform variable secrets"),
+    ],
+)
+def test_file_read_request_classifier_covers_planned_secret_paths(tmp_path, path, family):
+    request = extract_sensitive_file_read_request("Read", {"file_path": path}, home_dir=tmp_path)
+
+    assert request is not None
+    assert request.path_match.family == family
 
 
 def test_file_read_request_artifact_hash_is_exact_to_tool_and_path():
