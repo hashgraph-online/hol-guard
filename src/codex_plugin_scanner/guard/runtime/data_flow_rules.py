@@ -55,7 +55,9 @@ _GIT_REMOTE_ADD_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])git\s+remote\s+add\b(?P
 _NPM_PUBLISH_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])npm\s+publish\b")
 _TOKEN_SOURCE_PATTERN = re.compile(r"(?i)\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|_authToken|npm[_-]?token)\b")
 _CLIPBOARD_SINK_PATTERN = re.compile(r"(?i)(?:^|[\s;&|])(?:pbcopy|xclip|xsel|wl-copy|clip(?:\.exe)?)\b")
-_TEMP_SECRET_WRITE_PATTERN = re.compile(r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\s+(?P<tee>/tmp/[^\s;&|]+))")
+_TEMP_SECRET_WRITE_PATTERN = re.compile(
+    r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\b(?:\s+(?:-[A-Za-z]+|--[A-Za-z-]+))*\s+(?P<tee>/tmp/[^\s;&|]+))"
+)
 _CHMOD_TEMP_PATTERN = re.compile(r"(?is)chmod\s+(?P<mode>[0-7]{3,4}|[A-Za-z,+=-]+)\s+(?P<path>/tmp/[^\s;&|]+)")
 _SCP_OPTIONS_WITH_VALUES = frozenset({"-c", "-D", "-F", "-i", "-J", "-l", "-o", "-P", "-S", "-X"})
 _WEBHOOK_HOST_MARKERS = (
