@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable
 
 from codex_plugin_scanner.guard.types import PromptRequest, RemediationAction
 
@@ -11,6 +12,10 @@ _SAME_SENTENCE_120 = r"[^.!?;\n]{0,120}"
 _INSTRUCTION_OVERRIDE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bignore\s+(?:all\s+)?(?:previous|prior|earlier)\s+instructions?\b", re.IGNORECASE),
     re.compile(r"\bignore\s+(?:the\s+)?system\s+prompt\b", re.IGNORECASE),
+)
+_STEALTH_INSTRUCTION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(?:do\s+not|don't)\s+(?:tell|notify|alert|inform)\s+(?:the\s+)?users?\b", re.IGNORECASE),
+    re.compile(r"\bhide\s+(?:this|it|the\s+(?:action|instruction|request))\s+from\s+(?:the\s+)?logs?\b", re.IGNORECASE),
 )
 _DOCUMENTATION_CONTEXT_TERM_PATTERN = re.compile(
     r"\b(?:document|explain|describe|write\s+docs?|security\s+docs?|test\s+fixture)\b",
@@ -20,9 +25,16 @@ _DOCUMENTATION_SUBJECT_PATTERN = re.compile(
     r"\b(?:prompt\s+injection|attacks?|examples?|phrase|phrases?|string|strings?|fixture|fixtures?|say|says)\b",
     re.IGNORECASE,
 )
-_REPORTED_PHRASE_PREFIX_PATTERN = re.compile(
-    r"\b(?:say|says|said|called|named|phrase|phrases?|string|strings?)\s+[\"'`]?\s*$",
+_STEALTH_DOCUMENTATION_SUBJECT_PATTERN = re.compile(
+    r"\b(?:prompt\s+injection|attacks?|bypass\s+prompt|examples?|phrases?|strings?|malicious|adversarial|unsafe)\b",
     re.IGNORECASE,
+)
+_GUARD_DOCUMENTATION_SUBJECT_PATTERN = re.compile(
+    r"\b(?:HOL\s+Guard|guard|approval_policy|policy|config|configuration|hooks?|opencode|codex|claude|attacks?|bypass\s+prompt)\b",
+    re.IGNORECASE,
+)
+_REPORTED_PHRASE_PREFIX_WORDS = frozenset(
+    {"say", "says", "said", "called", "named", "phrase", "phrases", "string", "strings"}
 )
 _GUARD_POLICY_TAMPER_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b(?:disable|turn\s+off|uninstall|bypass)\s+HOL\s+Guard\b", re.IGNORECASE),
@@ -42,6 +54,36 @@ _GUARD_POLICY_TAMPER_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"\b(?:remove|delete|disable)\b"
         rf"{_SAME_SENTENCE_120}\b(?:OpenCode|opencode)\b"
         rf"{_SAME_SENTENCE_120}\b(?:Guard|guard|config|configuration)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bif\s+(?:blocked|denied|rejected)\b"
+        rf"(?={_SAME_SENTENCE_120}\b(?:HOL\s+)?Guard\b)"
+        rf"{_SAME_SENTENCE_120}\b(?:try|use|run)\b"
+        rf"{_SAME_SENTENCE_120}\b(?:shell|bash|sh|terminal)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:if\s+)?(?:HOL\s+)?Guard\s+(?:blocks?|blocked|denies|denied|rejects?|rejected)\b"
+        rf"{_SAME_SENTENCE_120}\b(?:try|use|run)\b"
+        rf"{_SAME_SENTENCE_120}\b(?:shell|bash|sh|terminal)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:if\s+)?(?:HOL\s+)?Guard\s+(?:blocks?|blocked|denies|denied|rejects?|rejected)\b"
+        rf"{_SAME_SENTENCE_120}\buse\s+another\s+MCP\s+servers?\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\buse\s+another\s+MCP\s+servers?\b"
+        rf"{_SAME_SENTENCE_120}\b(?:if|when)\s+(?:blocked|denied|rejected)\b"
+        rf"(?={_SAME_SENTENCE_120}\b(?:HOL\s+)?Guard\b)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bif\s+(?:blocked|denied|rejected)\b"
+        rf"(?={_SAME_SENTENCE_120}\b(?:HOL\s+)?Guard\b)"
+        rf"{_SAME_SENTENCE_120}\buse\s+another\s+MCP\s+servers?\b",
         re.IGNORECASE,
     ),
 )
@@ -102,8 +144,12 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
     if not normalized:
         return ()
     requests: list[PromptRequest] = []
-    override_match = _first_match(_INSTRUCTION_OVERRIDE_PATTERNS, normalized)
-    if override_match is not None and not _is_documentation_context_override(normalized, override_match):
+    override_match = _first_actionable_match(
+        _INSTRUCTION_OVERRIDE_PATTERNS,
+        normalized,
+        _is_documentation_context_override,
+    )
+    if override_match is not None:
         requests.append(
             _request(
                 request_class="prompt_injection_intent",
@@ -122,7 +168,35 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
                 normalized_prompt=normalized,
             )
         )
-    guard_match = _first_match(_GUARD_POLICY_TAMPER_PATTERNS, normalized)
+    stealth_match = _first_actionable_match(
+        _STEALTH_INSTRUCTION_PATTERNS,
+        normalized,
+        _is_documentation_context_stealth,
+    )
+    if stealth_match is not None:
+        requests.append(
+            _request(
+                request_class="prompt_injection_intent",
+                matched_text=stealth_match.group(0).strip(),
+                summary="Prompt asks the harness to conceal actions from the user or logs.",
+                severity=8,
+                confidence=0.84,
+                remediation=(
+                    RemediationAction(kind="approve_once", label="Approve once", detail="Review concealment intent."),
+                    RemediationAction(
+                        kind="open_investigation",
+                        label="Investigate",
+                        detail="Inspect prompt source for stealth instructions.",
+                    ),
+                ),
+                normalized_prompt=normalized,
+            )
+        )
+    guard_match = _first_actionable_match(
+        _GUARD_POLICY_TAMPER_PATTERNS,
+        normalized,
+        _is_documentation_context_guard,
+    )
     if guard_match is not None:
         requests.append(
             _request(
@@ -224,6 +298,18 @@ def _first_match(patterns: tuple[re.Pattern[str], ...], text: str) -> re.Match[s
     return None
 
 
+def _first_actionable_match(
+    patterns: tuple[re.Pattern[str], ...],
+    text: str,
+    is_documentation_context: Callable[[str, re.Match[str]], bool],
+) -> re.Match[str] | None:
+    for pattern in patterns:
+        for match in pattern.finditer(text):
+            if not is_documentation_context(text, match):
+                return match
+    return None
+
+
 def _is_documentation_context_override(text: str, match: re.Match[str]) -> bool:
     boundary = max(
         text.rfind(".", 0, match.start()),
@@ -238,8 +324,70 @@ def _is_documentation_context_override(text: str, match: re.Match[str]) -> bool:
     return (
         _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
         and _DOCUMENTATION_SUBJECT_PATTERN.search(local_context) is not None
-        and _REPORTED_PHRASE_PREFIX_PATTERN.search(prefix) is not None
+        and _has_reported_phrase_prefix(prefix)
     )
+
+
+def _is_documentation_context_stealth(text: str, match: re.Match[str]) -> bool:
+    return _is_documentation_context_with_subject(text, match, _STEALTH_DOCUMENTATION_SUBJECT_PATTERN)
+
+
+def _is_documentation_context_guard(text: str, match: re.Match[str]) -> bool:
+    boundary = max(
+        text.rfind(".", 0, match.start()),
+        text.rfind("!", 0, match.start()),
+        text.rfind("?", 0, match.start()),
+        text.rfind(";", 0, match.start()),
+        text.rfind("\n", 0, match.start()),
+    )
+    context_start = boundary + 1
+    prefix = text[context_start : match.start()]
+    subject_context = _reported_phrase_subject_context(text, prefix, match)
+    return (
+        _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
+        and _GUARD_DOCUMENTATION_SUBJECT_PATTERN.search(subject_context) is not None
+        and _has_quoted_reported_phrase_prefix(prefix)
+    )
+
+
+def _is_documentation_context_with_subject(
+    text: str,
+    match: re.Match[str],
+    subject_pattern: re.Pattern[str],
+) -> bool:
+    boundary = max(
+        text.rfind(".", 0, match.start()),
+        text.rfind("!", 0, match.start()),
+        text.rfind("?", 0, match.start()),
+        text.rfind(";", 0, match.start()),
+        text.rfind("\n", 0, match.start()),
+    )
+    context_start = boundary + 1
+    prefix = text[context_start : match.start()]
+    subject_context = _reported_phrase_subject_context(text, prefix, match)
+    return (
+        _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
+        and subject_pattern.search(subject_context) is not None
+        and _has_quoted_reported_phrase_prefix(prefix)
+    )
+
+
+def _reported_phrase_subject_context(text: str, prefix: str, match: re.Match[str]) -> str:
+    suffix = text[match.end() : min(len(text), match.end() + 80)]
+    return f"{prefix} {suffix}"
+
+
+def _has_quoted_reported_phrase_prefix(prefix: str) -> bool:
+    stripped = prefix.rstrip()
+    return bool(stripped) and stripped[-1] in {"'", '"', "`"} and _has_reported_phrase_prefix(prefix)
+
+
+def _has_reported_phrase_prefix(prefix: str) -> bool:
+    cleaned = prefix.rstrip().rstrip("\"'`").rstrip().lower()
+    if not cleaned:
+        return False
+    tokens = [token.strip(".,:;!?()[]{}\"'`-") for token in cleaned.split()]
+    return bool(tokens) and tokens[-1] in _REPORTED_PHRASE_PREFIX_WORDS
 
 
 def _dedupe_requests(requests: list[PromptRequest]) -> tuple[PromptRequest, ...]:
