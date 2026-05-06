@@ -97,6 +97,7 @@ from ..runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
 )
+from ..runtime.secret_sensitivity import SecretContentMatch, classify_secret_content
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from .approval_commands import add_approval_parser, run_approval_command
@@ -3962,10 +3963,6 @@ def _hook_runtime_artifact(
     )
 
 
-_CODEX_SECRET_OUTPUT_PATTERN = re.compile(
-    r"(?i)(?:fake[_-]?credential|fake[_-]?secret|"
-    r"(?:api[_-]?key|auth[_-]?token|credential|npm[_-]?token|private[_-]?key|secret|token|password)\s*[:=])"
-)
 _CODEX_PROMPT_SECRET_KEY_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "PASS", "API_KEY", "API-KEY", "AUTH", "CREDENTIAL")
 _CODEX_TOOL_RESPONSE_MAX_DEPTH = 5
 _CODEX_TOOL_RESPONSE_TEXT_LIMIT = 20000
@@ -3980,13 +3977,19 @@ def _codex_post_tool_output_artifact(
     cwd: Path | None,
 ) -> GuardArtifact | None:
     response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
-    if not response_text or _CODEX_SECRET_OUTPUT_PATTERN.search(response_text) is None:
+    content_matches = classify_secret_content(response_text)
+    if not content_matches:
         return None
     tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
     command_text = _codex_post_tool_command_text(payload)
     if not command_text:
         command_text = tool_name
-    if _codex_command_is_read_only_source_inspection(command_text, cwd=cwd):
+    if _codex_source_inspection_can_skip_secret_output(
+        command_text=command_text,
+        response_text=response_text,
+        content_matches=content_matches,
+        cwd=cwd,
+    ):
         return None
     fingerprint = hashlib.sha256(
         json.dumps(
@@ -4109,6 +4112,10 @@ _CODEX_SOURCE_SEARCH_EXTENSIONS = frozenset(
         ".yml",
     }
 )
+_CODEX_BENIGN_SOURCE_DOTFILES = frozenset({".nvmrc"})
+_CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
+    r"(?i)\s*fake[_-]?(?:credential|secret|token)\s*[:=]\s*(?:\"[^\r\n\"]+\"|'[^\r\n']+'|[^\s\"',}]+)\s*"
+)
 _CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
     {
         ".aws",
@@ -4125,6 +4132,35 @@ _CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
     }
 )
 _CODEX_SED_PRINT_SCRIPT_PATTERN = re.compile(r"^\s*(?:\$|\d+)?(?:\s*,\s*(?:\$|\d+))?p\s*$")
+
+
+def _codex_source_inspection_can_skip_secret_output(
+    *,
+    command_text: str,
+    response_text: str,
+    content_matches: tuple[SecretContentMatch, ...],
+    cwd: Path | None,
+) -> bool:
+    if not _codex_command_is_read_only_source_inspection(command_text, cwd=cwd):
+        return False
+    if any(match.sensitivity != "medium" for match in content_matches):
+        return False
+    if _codex_command_references_benign_source_dotfile(command_text):
+        return _codex_output_is_only_benign_secret_fixture(response_text)
+    return True
+
+
+def _codex_output_is_only_benign_secret_fixture(response_text: str) -> bool:
+    lines = [line for line in response_text.splitlines() if line.strip()]
+    return bool(lines) and all(_CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN.fullmatch(line) for line in lines)
+
+
+def _codex_command_references_benign_source_dotfile(command_text: str) -> bool:
+    try:
+        parts = shlex.split(command_text)
+    except ValueError:
+        return False
+    return any(Path(part).name.lower() in _CODEX_BENIGN_SOURCE_DOTFILES for part in parts)
 
 
 def _codex_command_is_read_only_source_inspection(command_text: str, *, cwd: Path | None) -> bool:
@@ -4644,12 +4680,15 @@ def _codex_search_target_is_source_like(target: str, *, cwd: Path | None) -> boo
     lowered_parts = [part.lower() for part in parts]
     if any(part in _CODEX_SENSITIVE_SEARCH_BASENAMES for part in lowered_parts):
         return False
-    if any(part.startswith(".") for part in parts):
+    hidden_parts = [part for part in lowered_parts if part.startswith(".")]
+    if hidden_parts and not all(part in _CODEX_BENIGN_SOURCE_DOTFILES for part in hidden_parts):
         return False
     normalized = "/".join(parts)
     if normalized in {prefix.rstrip("/") for prefix in _CODEX_SOURCE_SEARCH_PREFIXES}:
         return True
     if any(normalized.startswith(prefix) for prefix in _CODEX_SOURCE_SEARCH_PREFIXES):
+        return True
+    if Path(stripped).name.lower() in _CODEX_BENIGN_SOURCE_DOTFILES:
         return True
     return Path(stripped).suffix.lower() in _CODEX_SOURCE_SEARCH_EXTENSIONS
 
@@ -4745,7 +4784,7 @@ def _codex_prompt_credential_file_artifact(
                 content = handle.read(_PROMPT_CONTENT_SCAN_MAX_BYTES).decode("utf-8", errors="ignore")
         except OSError:
             continue
-        if _CODEX_SECRET_OUTPUT_PATTERN.search(content) is None:
+        if not classify_secret_content(content):
             continue
         normalized_path = str(path)
         fingerprint = hashlib.sha256(
