@@ -277,9 +277,18 @@ def _split_top_level_commands(command: str) -> tuple[str, ...]:
             _append_segment(parts, command[start:index])
             start = index + 2
             index += 1
+        elif state.is_top_level and command[index] == "&" and _is_background_separator(command, index):
+            _append_segment(parts, command[start:index])
+            start = index + 1
         index += 1
     _append_segment(parts, command[start:])
     return tuple(parts)
+
+
+def _is_background_separator(command: str, index: int) -> bool:
+    previous_char = command[index - 1] if index > 0 else ""
+    next_char = command[index + 1] if index + 1 < len(command) else ""
+    return previous_char not in {">", "<"} and next_char not in {"&", ">"}
 
 
 def _split_top_level_pipes(command: str) -> tuple[str, ...]:
