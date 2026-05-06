@@ -67,7 +67,16 @@ _EXACT_SECRET_READ_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
             r"\b(?:print|show|dump|cat|read|open)\b"
-            rf"{_SAME_SENTENCE_120}\b(?:SSH\s+private\s+key|id_rsa|id_ed25519)\b",
+            rf"{_SAME_SENTENCE_120}(?:~?/\.ssh|\.ssh)/(?:id_rsa|id_ed25519)\b",
+            re.IGNORECASE,
+        ),
+        "Prompt asks to print SSH private-key material.",
+    ),
+    (
+        re.compile(
+            r"\b(?:print|show|dump|cat|read|open)\b"
+            rf"{_SAME_SENTENCE_120}\b(?:SSH\s+)?private\s+key\b"
+            rf"{_SAME_SENTENCE_120}\b(?:contents?|material|full|exact)\b",
             re.IGNORECASE,
         ),
         "Prompt asks to print SSH private-key material.",

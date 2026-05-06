@@ -48,6 +48,12 @@ def test_prompt_injection_detector_flags_exact_secret_file_requests(prompt: str)
     assert "secret_read" in _request_classes(prompt)
 
 
+def test_prompt_injection_detector_ignores_ssh_identifier_without_file_access() -> None:
+    classes = _request_classes("Read the code review note that mentions id_rsa and id_ed25519 naming conventions.")
+
+    assert "secret_read" not in classes
+
+
 @pytest.mark.parametrize(
     "prompt",
     [
