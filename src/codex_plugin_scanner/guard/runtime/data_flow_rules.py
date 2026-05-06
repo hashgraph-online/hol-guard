@@ -28,6 +28,7 @@ from codex_plugin_scanner.guard.runtime.shell_commands import (
     segment_executes_command,
 )
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalCategory, RiskSignalV2
+from codex_plugin_scanner.guard.runtime.temp_files import chmod_temp_targets, temp_write_targets
 
 _SECRET_PATH_TOKEN_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_.-])"
@@ -69,10 +70,6 @@ _DNS_LONG_LABEL_PATTERN = re.compile(
 _SCP_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])scp\b(?P<body>[^\r\n;&|]+)")
 _TOKEN_SOURCE_PATTERN = re.compile(r"(?i)\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|_authToken|npm[_-]?token)\b")
 _CLIPBOARD_SINK_PATTERN = re.compile(r"(?i)(?:^|[\s;&|])(?:pbcopy|xclip|xsel|wl-copy|clip(?:\.exe)?)\b")
-_TEMP_SECRET_WRITE_PATTERN = re.compile(
-    r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\b(?:\s+(?:-[A-Za-z]+|--[A-Za-z-]+))*\s+(?P<tee>/tmp/[^\s;&|]+))"
-)
-_CHMOD_TEMP_PATTERN = re.compile(r"(?is)chmod\s+(?P<mode>[0-7]{3,4}|[A-Za-z,+=-]+)\s+(?P<path>/tmp/[^\s;&|]+)")
 _WEBHOOK_HOST_PATTERN = re.compile(
     r"webhook\.site|hooks\.slack\.com|discord\.com|pastebin\.com|gist\.github\.com|transfer\.sh|requestbin"
 )
@@ -427,18 +424,15 @@ def _clipboard_receives_secret(pipes: Sequence[ShellPipe], command: str, *, work
 
 def _world_readable_temp_secret(command: str, *, workspace: Path | None) -> bool:
     write_targets = {
-        _strip_shell_token(target)
+        target
         for segment in extract_command_segments(command)
         if _secret_path_matches_in_command(segment, workspace=workspace)
-        for match in _TEMP_SECRET_WRITE_PATTERN.finditer(segment)
-        for target in (match.group("redirect"), match.group("tee"))
-        if target
+        for target in temp_write_targets(segment)
     }
     if not write_targets:
         return False
     return any(
-        _strip_shell_token(match.group("path")) in write_targets and _mode_makes_world_readable(match.group("mode"))
-        for match in _CHMOD_TEMP_PATTERN.finditer(command)
+        target in write_targets and _mode_makes_world_readable(mode) for target, mode in chmod_temp_targets(command)
     )
 
 
