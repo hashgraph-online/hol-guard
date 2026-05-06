@@ -1043,10 +1043,12 @@ def run_guard_command(
         if args.harness:
             adapter = get_adapter(args.harness)
             payload = adapter.diagnostics(context)
+            payload["runtime_detector_registry"] = _runtime_detector_registry_payload(config)
         else:
             payload = {
                 "tables": store.list_table_names(),
                 "adapters": [detection.to_dict() for detection in detect_all(context)],
+                "runtime_detector_registry": _runtime_detector_registry_payload(config),
             }
         _emit("doctor", payload, getattr(args, "json", False))
         return 0
@@ -3046,6 +3048,15 @@ def _guard_cli_settings_payload(config: GuardConfig) -> dict[str, object]:
     return {
         **payload,
         "settings": cli_settings,
+    }
+
+
+def _runtime_detector_registry_payload(config: GuardConfig) -> dict[str, object]:
+    return {
+        "enabled": config.runtime_detector_registry,
+        "debug_trace": config.runtime_detector_debug_trace,
+        "timeout_ms": config.runtime_detector_timeout_ms,
+        "disabled_detector_ids": list(config.runtime_detector_disabled_ids),
     }
 
 
