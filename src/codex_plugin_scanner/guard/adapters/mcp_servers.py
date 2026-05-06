@@ -161,8 +161,10 @@ def _stable_command_name(value: str) -> str:
 
 def _looks_like_path_token(value: str) -> bool:
     normalized = value.strip().replace("\\", "/")
-    if normalized.startswith(("/", "~/", "./", "../")):
+    if normalized.startswith(("~/", "./", "../")):
         return True
+    if normalized.startswith("/"):
+        return "/" in normalized[1:]
     return len(normalized) >= 3 and normalized[0].isalpha() and normalized[1:3] == ":/"
 
 

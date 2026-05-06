@@ -137,6 +137,33 @@ def test_stable_mcp_server_identifier_normalizes_windows_command_paths() -> None
     assert "alice" not in identifier
 
 
+def test_stable_mcp_server_identifier_preserves_slash_flags() -> None:
+    first = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=("/safe", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+    second = ManagedMcpServer(
+        harness="codex",
+        name="filesystem",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=("/readonly", "@modelcontextprotocol/server-filesystem"),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    assert stable_mcp_server_identifier(first) != stable_mcp_server_identifier(second)
+
+
 def test_normalized_capability_categories_include_mcp_tool_risk_families() -> None:
     artifact = GuardArtifact(
         artifact_id="mcp:filesystem",
