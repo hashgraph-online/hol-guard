@@ -210,7 +210,8 @@ def normalized_capability_categories(capabilities: CapabilitySet) -> tuple[str, 
         categories.add("execution")
     if capabilities.publisher:
         categories.add("publisher")
-    categories.add("transport")
+    if capabilities.transport != "local":
+        categories.add("transport")
     return tuple(sorted(categories))
 
 

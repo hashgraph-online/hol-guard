@@ -91,6 +91,22 @@ def test_stable_mcp_server_identifier_canonicalizes_names_and_path_args() -> Non
     assert "alice" not in identifier
 
 
+def test_stable_mcp_server_identifier_uses_safe_empty_name_fallback() -> None:
+    server = ManagedMcpServer(
+        harness="codex",
+        name="   ",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        command="npx",
+        args=(),
+        transport="stdio",
+        env={},
+        enabled=True,
+    )
+
+    assert ":unnamed:" in stable_mcp_server_identifier(server)
+
+
 def test_normalized_capability_categories_include_mcp_tool_risk_families() -> None:
     artifact = GuardArtifact(
         artifact_id="mcp:filesystem",
@@ -111,7 +127,6 @@ def test_normalized_capability_categories_include_mcp_tool_risk_families() -> No
         "execution",
         "filesystem",
         "secret",
-        "transport",
     )
 
 
@@ -140,3 +155,36 @@ def test_tool_call_risk_categories_are_emitted_from_runtime_arguments() -> None:
         "privileged_system_mutation",
         "secret_access",
     )
+
+
+def test_tool_call_risk_categories_tolerate_non_json_arguments() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="filesystem",
+        tool_name="read_secret",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = tool_call_risk_categories(artifact, {"paths": {".env"}})
+
+    assert categories == ("secret_access",)
+
+
+def test_tool_call_risk_categories_avoid_broad_substring_matches() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="metadata",
+        tool_name="prefetchIndex",
+        source_scope="user",
+        config_path="/Users/alice/.codex/config.toml",
+        transport="stdio",
+    )
+
+    categories = tool_call_risk_categories(
+        artifact,
+        {"filename": "myapp.env", "mode": "prefetch"},
+    )
+
+    assert categories == ()

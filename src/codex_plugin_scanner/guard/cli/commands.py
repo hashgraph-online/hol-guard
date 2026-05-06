@@ -1257,6 +1257,7 @@ def run_guard_command(
                     decision_source="pre-tool-hook",
                     now=now,
                     signals=decision.signals,
+                    risk_categories=decision.risk_categories,
                     remember=False,
                 )
                 if _should_emit_copilot_hook_response(args):
@@ -1271,6 +1272,7 @@ def run_guard_command(
                         decision_source="pre-tool-hook",
                         now=now,
                         signals=decision.signals,
+                        risk_categories=decision.risk_categories,
                     )
                 if _should_emit_copilot_hook_response(args):
                     _emit_copilot_hook_response(
@@ -1349,6 +1351,7 @@ def run_guard_command(
                     decision_source=decision.source,
                     now=now,
                     signals=decision.signals,
+                    risk_categories=decision.risk_categories,
                     remember=False,
                 )
                 if _should_emit_copilot_hook_response(args):
@@ -1363,6 +1366,7 @@ def run_guard_command(
                 decision_source="permission-request-hook",
                 now=now,
                 signals=decision.signals,
+                risk_categories=decision.risk_categories,
             )
             approval_center_url = ensure_guard_daemon(guard_home)
             approval_flow = get_adapter(args.harness).approval_flow(managed_install=managed_install)

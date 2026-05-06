@@ -152,7 +152,7 @@ def _stable_arg_token(value: str) -> str:
 
 
 def _stable_server_name(value: str) -> str:
-    return value.strip().lower()
+    return value.strip().lower() or "unnamed"
 
 
 def _looks_like_path_token(value: str) -> bool:
