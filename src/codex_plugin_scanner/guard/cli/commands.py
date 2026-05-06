@@ -4101,21 +4101,7 @@ def _codex_post_tool_output_artifact(
 
 
 def _codex_command_references_sensitive_local_source(command_text: str, *, cwd: Path | None) -> bool:
-    if _codex_sensitive_local_source_matches(command_text, cwd=cwd):
-        return True
-    try:
-        parts = shlex.split(command_text)
-    except ValueError:
-        return False
-    for part in parts:
-        stripped = part.strip()
-        if not stripped or stripped.startswith("-"):
-            continue
-        if _codex_token_is_url(stripped):
-            continue
-        if classify_secret_path(stripped, cwd=cwd) is not None:
-            return True
-    return False
+    return bool(_codex_sensitive_local_source_matches(command_text, cwd=cwd))
 
 
 def _codex_sensitive_local_source_matches(command_text: str, *, cwd: Path | None) -> list[SecretPathMatch]:
@@ -4289,6 +4275,8 @@ def _codex_command_parts_are_environment_dump(parts: list[str]) -> bool:
         return True
     if executable != "env":
         return False
+    if _codex_env_args_clear_environment(parts[1:]):
+        return False
     return not _codex_strip_env_wrapper(parts[1:])
 
 
@@ -4373,6 +4361,18 @@ def _codex_strip_env_wrapper(parts: list[str]) -> list[str]:
             continue
         return parts[index:]
     return []
+
+
+def _codex_env_args_clear_environment(parts: list[str]) -> bool:
+    for part in parts:
+        if part == "--":
+            return False
+        if part in {"-i", "--ignore-environment"}:
+            return True
+        if part.startswith("-") or ("=" in part and not part.startswith("=")):
+            continue
+        return False
+    return False
 
 
 def _codex_shell_split(command_text: str) -> list[str]:
