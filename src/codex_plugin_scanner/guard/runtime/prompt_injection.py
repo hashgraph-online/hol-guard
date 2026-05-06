@@ -68,6 +68,11 @@ _GUARD_POLICY_TAMPER_PATTERNS: tuple[re.Pattern[str], ...] = (
         rf"{_SAME_SENTENCE_120}\b(?:if|when)\s+(?:blocked|denied|rejected)\b",
         re.IGNORECASE,
     ),
+    re.compile(
+        r"\bif\s+(?:blocked|denied|rejected)\b"
+        rf"{_SAME_SENTENCE_120}\buse\s+another\s+MCP\s+server\b",
+        re.IGNORECASE,
+    ),
 )
 _EXACT_SECRET_READ_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
@@ -164,7 +169,7 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
             )
         )
     stealth_match = _first_match(_STEALTH_INSTRUCTION_PATTERNS, normalized)
-    if stealth_match is not None:
+    if stealth_match is not None and not _is_documentation_context_stealth(normalized, stealth_match):
         requests.append(
             _request(
                 request_class="prompt_injection_intent",
@@ -306,6 +311,22 @@ def _is_documentation_context_override(text: str, match: re.Match[str]) -> bool:
 def _is_non_actionable_fixture(text: str, match: re.Match[str]) -> bool:
     context = text[max(0, match.start() - 120) : min(len(text), match.end() + 120)]
     return _NON_ACTIONABLE_FIXTURE_PATTERN.search(context) is not None
+
+
+def _is_documentation_context_stealth(text: str, match: re.Match[str]) -> bool:
+    boundary = max(
+        text.rfind(".", 0, match.start()),
+        text.rfind("!", 0, match.start()),
+        text.rfind("?", 0, match.start()),
+        text.rfind(";", 0, match.start()),
+        text.rfind("\n", 0, match.start()),
+    )
+    context_start = boundary + 1
+    prefix = text[context_start : match.start()]
+    return (
+        _DOCUMENTATION_CONTEXT_TERM_PATTERN.search(prefix) is not None
+        and _REPORTED_PHRASE_PREFIX_PATTERN.search(prefix) is not None
+    )
 
 
 def _embedded_context_label(text: str, start: int) -> str | None:
