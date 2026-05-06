@@ -22,6 +22,7 @@ from ..mcp_tool_calls import (
     tool_call_risk_summary,
 )
 from ..models import HarnessDetection
+from ..runtime.mcp_protection import build_mcp_server_identity
 from ..store import GuardStore
 from .stdio import _blocked_tool_response, _redact_json
 
@@ -193,6 +194,13 @@ class RuntimeMcpGuardProxy:
                 "command": self.command,
                 "transport": self.transport,
             },
+            server_identity=build_mcp_server_identity(
+                config_path=self.config_path,
+                command=self.command[0] if self.command else "",
+                args=tuple(self.command[1:]),
+                transport=self.transport,
+                env={},
+            ),
         )
         artifact_hash = build_tool_call_hash(artifact, arguments)
         decision = evaluate_tool_call(

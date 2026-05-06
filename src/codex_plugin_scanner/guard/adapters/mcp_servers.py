@@ -8,6 +8,7 @@ from hashlib import sha256
 from pathlib import PurePath
 
 from ..models import GuardArtifact, HarnessDetection
+from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,7 @@ class ManagedMcpServer:
     transport: str
     env: dict[str, str]
     enabled: bool
+    identity: McpServerIdentity | None = None
 
 
 _GUARD_PROXY_COMMANDS = frozenset(
@@ -156,6 +158,13 @@ def _managed_stdio_server(artifact: GuardArtifact) -> ManagedMcpServer | None:
         transport=transport,
         env=env,
         enabled=enabled,
+        identity=build_mcp_server_identity(
+            config_path=artifact.config_path,
+            command=artifact.command,
+            args=artifact.args,
+            transport=transport,
+            env=env,
+        ),
     )
 
 
