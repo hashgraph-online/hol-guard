@@ -427,10 +427,17 @@ def _embedded_context_label(text: str, start: int) -> str | None:
     if text[:start].count("```") % 2 == 1:
         return "markdown code fence"
     prefix = text[max(0, start - 140) : start]
+    if not _has_embedded_context_boundary(prefix):
+        return None
     for pattern, label in _UNTRUSTED_CONTEXT_PATTERNS:
         if pattern.search(prefix) is not None:
             return label
     return None
+
+
+def _has_embedded_context_boundary(prefix: str) -> bool:
+    stripped = prefix.rstrip()
+    return bool(stripped) and (stripped[-1] in {"'", '"', "`"} or _has_reported_phrase_prefix(prefix))
 
 
 def _dedupe_requests(requests: list[PromptRequest]) -> tuple[PromptRequest, ...]:
