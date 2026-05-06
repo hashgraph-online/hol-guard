@@ -178,6 +178,7 @@ class GuardConfig:
     billing: bool = False
     runtime_detector_registry: bool = False
     runtime_detector_timeout_ms: int = 50
+    runtime_detector_debug_trace: bool = False
     runtime_detector_disabled_ids: tuple[str, ...] = ()
     risk_actions: dict[str, GuardAction] | None = None
     harness_risk_actions: dict[str, dict[str, GuardAction]] | None = None
@@ -257,6 +258,7 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         billing=bool(merged.get("billing", False)),
         runtime_detector_registry=_coerce_loaded_bool(merged.get("runtime_detector_registry", False)),
         runtime_detector_timeout_ms=_coerce_loaded_positive_int(merged.get("runtime_detector_timeout_ms", 50), 50),
+        runtime_detector_debug_trace=_coerce_loaded_bool(merged.get("runtime_detector_debug_trace", False)),
         runtime_detector_disabled_ids=_coerce_loaded_string_tuple(merged.get("runtime_detector_disabled_ids")),
         harness_actions=_coerce_action_map(merged.get("harnesses")),
         publisher_actions=_coerce_action_map(merged.get("publishers")),
