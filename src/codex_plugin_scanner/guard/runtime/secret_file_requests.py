@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..models import GuardArtifact
+from .actions import GuardActionEnvelope
 from .secret_sensitivity import SecretPathMatch as SensitivePathMatch
 from .secret_sensitivity import classify_secret_path
 
@@ -417,6 +418,31 @@ def extract_sensitive_file_read_request(
         if path_match is not None:
             return FileReadRequestMatch(
                 tool_name=str(tool_name).strip(),
+                normalized_tool_name=normalized_tool_name,
+                path_match=path_match,
+            )
+    return None
+
+
+def extract_sensitive_file_read_request_from_action(
+    action: GuardActionEnvelope,
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+) -> FileReadRequestMatch | None:
+    """Extract a sensitive file-read request from a normalized action envelope."""
+
+    if action.action_type != "file_read":
+        return None
+    normalized_tool_name = _normalize_tool_name(action.tool_name) or "read"
+    tool_name = action.tool_name.strip() if isinstance(action.tool_name, str) and action.tool_name.strip() else "Read"
+    if normalized_tool_name not in _FILE_READ_TOOL_NAMES:
+        return None
+    for candidate in action.target_paths:
+        path_match = classify_sensitive_path(candidate, cwd=cwd, home_dir=home_dir)
+        if path_match is not None:
+            return FileReadRequestMatch(
+                tool_name=tool_name,
                 normalized_tool_name=normalized_tool_name,
                 path_match=path_match,
             )

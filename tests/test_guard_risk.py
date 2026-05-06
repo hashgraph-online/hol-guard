@@ -29,6 +29,7 @@ from codex_plugin_scanner.guard.risk import (
     detect_guard_bypass,
     detect_staged_download,
 )
+from codex_plugin_scanner.guard.runtime.actions import normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     _path_text_is_within_root_text,
     _read_small_runtime_text_file,
@@ -40,6 +41,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     classify_sensitive_path,
     extract_sensitive_file_read_request,
+    extract_sensitive_file_read_request_from_action,
     extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
     is_file_read_tool_name,
@@ -476,6 +478,24 @@ def test_file_read_request_classifier_is_argument_aware(tmp_path):
     assert copilot_request.path_match.path_class == "local .env file"
     assert extract_sensitive_file_read_request("read_file", {"path": "README.md"}) is None
     assert extract_sensitive_file_read_request("write_file", {"path": ".env"}) is None
+
+
+def test_file_read_request_classifier_uses_normalized_action_paths(tmp_path):
+    action = normalize_codex_hook_payload(
+        {
+            "event": "PreToolUse",
+            "toolName": "Read",
+            "toolInput": {"filePath": "~alice/.aws/" + "credentials"},
+        },
+        workspace=tmp_path / "workspace",
+        home_dir=tmp_path,
+    )
+
+    request = extract_sensitive_file_read_request_from_action(action, cwd=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert request is not None
+    assert request.tool_name == "Read"
+    assert request.path_match.family == "AWS shared credentials file"
 
 
 @pytest.mark.parametrize(

@@ -11,8 +11,17 @@ from typing import Literal, Protocol
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.data_flow_rules import detect_data_flow_exfiltration
+from codex_plugin_scanner.guard.runtime.prompt_injection import detect_prompt_injection_requests
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
-from codex_plugin_scanner.guard.runtime.signals import RiskSignalCategory, RiskSignalV2
+from codex_plugin_scanner.guard.runtime.signals import (
+    RiskConfidenceLabel,
+    RiskSeverityLabel,
+    RiskSignalCategory,
+    RiskSignalV2,
+    confidence_label_from_score,
+    severity_label_from_score,
+)
+from codex_plugin_scanner.guard.types import PromptRequest
 
 DETECTOR_CATEGORY_TAGS: tuple[RiskSignalCategory, ...] = (
     "secret",
@@ -145,8 +154,72 @@ class DataFlowExfiltrationDetector:
         return detect_data_flow_exfiltration(action, workspace=context.workspace)
 
 
+class PromptInjectionDetector:
+    detector_id = "prompt.injection"
+    categories: tuple[RiskSignalCategory, ...] = ("prompt", "secret", "network", "bypass")
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        if action.action_type != "prompt" or action.prompt_excerpt is None:
+            return ()
+        requests = detect_prompt_injection_requests(action.prompt_excerpt)
+        return tuple(_prompt_request_signal(request) for request in requests)
+
+
 def register_default_detectors() -> tuple[GuardDetector, ...]:
-    return (DataFlowExfiltrationDetector(), SecretPathDetector())
+    return (DataFlowExfiltrationDetector(), PromptInjectionDetector(), SecretPathDetector())
+
+
+def _prompt_request_signal(request: PromptRequest) -> RiskSignalV2:
+    category = _prompt_request_category(request)
+    return RiskSignalV2(
+        signal_id=f"prompt-injection:{request.request_class}:{request.request_id[:16]}",
+        category=category,
+        severity=_severity_label(request.severity),
+        confidence=_confidence_label(request.confidence),
+        detector="prompt.injection",
+        title=_prompt_request_title(request.request_class),
+        plain_reason=request.summary,
+        technical_detail=f"matched prompt request class: {request.request_class}",
+        evidence_ref="prompt_excerpt",
+        redaction_level="summary",
+        false_positive_hint=_prompt_request_false_positive_hint(request),
+        advisory_id=None,
+    )
+
+
+def _prompt_request_category(request: PromptRequest) -> RiskSignalCategory:
+    return {
+        "secret_read": "secret",
+        "exfil_intent": "network",
+        "guard_bypass_intent": "bypass",
+    }.get(request.request_class, "prompt")
+
+
+def _severity_label(score: int) -> RiskSeverityLabel:
+    return severity_label_from_score(score)
+
+
+def _confidence_label(score: float) -> RiskConfidenceLabel:
+    return confidence_label_from_score(score)
+
+
+def _prompt_request_title(request_class: str) -> str:
+    return {
+        "secret_read": "Prompt requests local secret access",
+        "exfil_intent": "Prompt requests data exfiltration",
+        "destructive_intent": "Prompt requests destructive action",
+        "subprocess_intent": "Prompt requests subprocess execution",
+        "guard_bypass_intent": "Prompt requests Guard bypass",
+        "prompt_injection_intent": "Prompt includes injection intent",
+    }.get(request_class, "Prompt request needs review")
+
+
+def _prompt_request_false_positive_hint(request: PromptRequest) -> str | None:
+    for remediation in request.remediation:
+        if remediation.detail is not None and remediation.detail.strip():
+            return remediation.detail
+    return None
 
 
 def _secret_path_signal(match: SecretPathMatch, *, index: int) -> RiskSignalV2:
