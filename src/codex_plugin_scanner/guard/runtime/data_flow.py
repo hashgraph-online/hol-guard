@@ -288,7 +288,7 @@ def _split_top_level_commands(command: str) -> tuple[str, ...]:
 def _is_background_separator(command: str, index: int) -> bool:
     previous_char = command[index - 1] if index > 0 else ""
     next_char = command[index + 1] if index + 1 < len(command) else ""
-    return previous_char not in {">", "<"} and next_char not in {"&", ">"}
+    return previous_char not in {">", "<", "|"} and next_char not in {"&", ">"}
 
 
 def _split_top_level_pipes(command: str) -> tuple[str, ...]:
@@ -306,7 +306,7 @@ def _split_top_level_pipes(command: str) -> tuple[str, ...]:
             next_is_pipe = index + 1 < len(command) and command[index + 1] == "|"
             if not previous_is_pipe and not next_is_pipe:
                 _append_segment(parts, command[start:index])
-                start = index + 1
+                start = index + 2 if index + 1 < len(command) and command[index + 1] == "&" else index + 1
         index += 1
     _append_segment(parts, command[start:])
     return tuple(parts)
