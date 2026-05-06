@@ -12,12 +12,11 @@ from codex_plugin_scanner.guard.runtime.data_flow import (
     ShellPipe,
     extract_command_segments,
     extract_command_substitutions,
-    extract_input_redirects,
     extract_pipes,
-    extract_url_ranges,
     extract_urls,
 )
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
+from codex_plugin_scanner.guard.runtime.secret_sources import secret_path_matches_in_command, strip_shell_token
 from codex_plugin_scanner.guard.runtime.shell_commands import (
     command_execution_segments,
     command_tokens_after_env_assignments,
@@ -31,16 +30,6 @@ from codex_plugin_scanner.guard.runtime.shell_commands import (
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalCategory, RiskSignalV2
 from codex_plugin_scanner.guard.runtime.temp_files import chmod_temp_targets, temp_write_targets
 
-_SECRET_PATH_TOKEN_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9_.-])"
-    r"(?P<path>"
-    r"\.env(?:\.[A-Za-z0-9_-]+)?|\.npmrc|\.pypirc|\.netrc|\.git-credentials|"
-    r"(?:~?/)?\.aws/credentials|(?:~?/)?\.ssh/id_(?:rsa|ed25519|ecdsa)|"
-    r"wallet\.key|private-key\.pem|terraform\.tfvars"
-    r")"
-    r"(?![A-Za-z0-9_.-])",
-    re.IGNORECASE,
-)
 _CURL_DATA_FILE_PATTERN = re.compile(
     r"(?s)(?:^|[\s;&|])(?i:curl|curl\.exe)\b.*?"
     r"(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@|--upload-file(?:=|\s+)|-T\s*)"
@@ -211,24 +200,7 @@ def detect_data_flow_exfiltration(
 
 
 def _secret_path_matches_in_command(command: str, *, workspace: Path | None) -> tuple[SecretPathMatch, ...]:
-    candidates = list(extract_input_redirects(command))
-    url_ranges = extract_url_ranges(command)
-    candidates.extend(
-        _strip_shell_token(match.group("path"))
-        for match in _SECRET_PATH_TOKEN_PATTERN.finditer(command)
-        if not any(start <= match.start("path") < end for start, end in url_ranges)
-    )
-    candidates.extend(_curl_data_file_paths(command))
-    return _secret_path_matches(tuple(candidates), workspace=workspace)
-
-
-def _secret_path_matches(paths: Sequence[str], *, workspace: Path | None) -> tuple[SecretPathMatch, ...]:
-    matches: list[SecretPathMatch] = []
-    for path in paths:
-        match = classify_secret_path(path, cwd=workspace)
-        if match is not None:
-            matches.append(match)
-    return tuple(matches)
+    return secret_path_matches_in_command(command, workspace=workspace, extra_paths=_curl_data_file_paths(command))
 
 
 def _curl_data_file_paths(command: str) -> tuple[str, ...]:
@@ -237,7 +209,7 @@ def _curl_data_file_paths(command: str) -> tuple[str, ...]:
         if not segment_executes_command(segment, {"curl", "curl.exe"}):
             continue
         for match in _CURL_DATA_FILE_PATTERN.finditer(segment):
-            paths.append(_strip_shell_token(match.group("path")))
+            paths.append(strip_shell_token(match.group("path")))
     return tuple(paths)
 
 
@@ -456,13 +428,6 @@ def _mode_makes_world_readable(mode: str) -> bool:
             if "r" in permissions and (not who or "a" in who or "o" in who):
                 return True
     return False
-
-
-def _strip_shell_token(value: str) -> str:
-    stripped = value.strip().strip(",")
-    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}:
-        return stripped[1:-1]
-    return stripped
 
 
 def _data_flow_signal(
