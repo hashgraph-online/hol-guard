@@ -27,6 +27,7 @@ from ..store import GuardStore
 from ..types import PromptRequest, RemediationAction
 from .actions import GuardActionEnvelope, redacted_workspace_label
 from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
+from .prompt_injection import detect_prompt_injection_requests
 
 _APPROVAL_METADATA_KEYS = (
     "approval_center_url",
@@ -613,6 +614,14 @@ def extract_prompt_requests(prompt_text: str) -> list[PromptRequest]:
                 ),
             )
         )
+    requests.extend(
+        request
+        for request in detect_prompt_injection_requests(normalized_prompt)
+        if not any(
+            existing.request_class == request.request_class and existing.matched_text == request.matched_text
+            for existing in requests
+        )
+    )
     deduped: dict[str, PromptRequest] = {}
     for request in requests:
         deduped[request.request_id] = request

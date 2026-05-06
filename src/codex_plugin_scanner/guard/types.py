@@ -37,6 +37,7 @@ PromptRequestClass = Literal[
     "destructive_intent",
     "subprocess_intent",
     "guard_bypass_intent",
+    "prompt_injection_intent",
 ]
 RemediationActionKind = Literal[
     "approve_once",
