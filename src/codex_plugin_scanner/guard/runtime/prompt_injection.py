@@ -12,6 +12,10 @@ _INSTRUCTION_OVERRIDE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bignore\s+(?:all\s+)?(?:previous|prior|earlier)\s+instructions?\b", re.IGNORECASE),
     re.compile(r"\bignore\s+(?:the\s+)?system\s+prompt\b", re.IGNORECASE),
 )
+_STEALTH_INSTRUCTION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\bdo\s+not\s+(?:tell|notify|alert|inform)\s+the\s+user\b", re.IGNORECASE),
+    re.compile(r"\bhide\s+(?:this|it|the\s+(?:action|instruction|request))\s+from\s+logs?\b", re.IGNORECASE),
+)
 _DOCUMENTATION_CONTEXT_TERM_PATTERN = re.compile(
     r"\b(?:document|explain|describe|write\s+docs?|security\s+docs?|test\s+fixture)\b",
     re.IGNORECASE,
@@ -42,6 +46,18 @@ _GUARD_POLICY_TAMPER_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"\b(?:remove|delete|disable)\b"
         rf"{_SAME_SENTENCE_120}\b(?:OpenCode|opencode)\b"
         rf"{_SAME_SENTENCE_120}\b(?:Guard|guard|config|configuration)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bif\s+(?:blocked|denied|rejected)\b"
+        rf"{_SAME_SENTENCE_120}\b(?:try|use|run)\b"
+        rf"{_SAME_SENTENCE_120}\b(?:shell|bash|sh|terminal|command)\b"
+        rf"{_SAME_SENTENCE_120}\binstead\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\buse\s+another\s+MCP\s+server\b"
+        rf"{_SAME_SENTENCE_120}\b(?:if|when)\s+(?:blocked|denied|rejected)\b",
         re.IGNORECASE,
     ),
 )
@@ -117,6 +133,26 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
                         kind="open_investigation",
                         label="Investigate",
                         detail="Inspect prompt source for injection.",
+                    ),
+                ),
+                normalized_prompt=normalized,
+            )
+        )
+    stealth_match = _first_match(_STEALTH_INSTRUCTION_PATTERNS, normalized)
+    if stealth_match is not None:
+        requests.append(
+            _request(
+                request_class="prompt_injection_intent",
+                matched_text=stealth_match.group(0).strip(),
+                summary="Prompt asks the harness to conceal actions from the user or logs.",
+                severity=8,
+                confidence=0.84,
+                remediation=(
+                    RemediationAction(kind="approve_once", label="Approve once", detail="Review concealment intent."),
+                    RemediationAction(
+                        kind="open_investigation",
+                        label="Investigate",
+                        detail="Inspect prompt source for stealth instructions.",
                     ),
                 ),
                 normalized_prompt=normalized,
