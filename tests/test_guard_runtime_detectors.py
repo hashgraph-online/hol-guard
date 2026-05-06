@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.runtime.detectors import (
     DETECTOR_CATEGORY_TAGS,
     DetectorContext,
     DetectorRegistry,
+    SecretPathDetector,
     register_default_detectors,
 )
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalCategory, RiskSignalV2
@@ -254,7 +255,7 @@ def test_register_default_detectors_includes_secret_path_detector():
     ],
 )
 def test_default_secret_path_detector_flags_planned_direct_file_reads(tmp_path, path):
-    result = DetectorRegistry(register_default_detectors(), clock=StepClock([0.0, 0.001])).run(
+    result = DetectorRegistry((SecretPathDetector(),), clock=StepClock([0.0, 0.001])).run(
         _file_read_action(path),
         _context(tmp_path),
     )
@@ -279,7 +280,7 @@ def test_default_secret_path_detector_flags_list_style_file_read_paths(tmp_path)
         home_dir=tmp_path,
     )
 
-    result = DetectorRegistry(register_default_detectors(), clock=StepClock([0.0, 0.001])).run(
+    result = DetectorRegistry((SecretPathDetector(),), clock=StepClock([0.0, 0.001])).run(
         action,
         _context(tmp_path),
     )
@@ -295,7 +296,7 @@ def test_default_secret_path_detector_flags_list_style_file_read_paths(tmp_path)
     ],
 )
 def test_default_secret_path_detector_flags_privacy_redacted_secret_paths(tmp_path, path):
-    result = DetectorRegistry(register_default_detectors(), clock=StepClock([0.0, 0.001])).run(
+    result = DetectorRegistry((SecretPathDetector(),), clock=StepClock([0.0, 0.001])).run(
         _file_read_action(path),
         _context(tmp_path),
     )
@@ -316,7 +317,7 @@ def test_default_secret_path_detector_flags_redacted_paths_with_secret_context(t
         home_dir=tmp_path,
     )
 
-    result = DetectorRegistry(register_default_detectors(), clock=StepClock([0.0, 0.001])).run(
+    result = DetectorRegistry((SecretPathDetector(),), clock=StepClock([0.0, 0.001])).run(
         action,
         _context(tmp_path),
     )
@@ -336,7 +337,7 @@ def test_default_secret_path_detector_flags_tilde_user_paths_with_secret_context
         home_dir=tmp_path,
     )
 
-    result = DetectorRegistry(register_default_detectors(), clock=StepClock([0.0, 0.001])).run(
+    result = DetectorRegistry((SecretPathDetector(),), clock=StepClock([0.0, 0.001])).run(
         action,
         _context(tmp_path),
     )
@@ -346,7 +347,7 @@ def test_default_secret_path_detector_flags_tilde_user_paths_with_secret_context
 
 
 def test_default_secret_path_detector_ignores_generic_redacted_credentials(tmp_path):
-    result = DetectorRegistry(register_default_detectors(), clock=StepClock([0.0, 0.001])).run(
+    result = DetectorRegistry((SecretPathDetector(),), clock=StepClock([0.0, 0.001])).run(
         _file_read_action(".../" + "credentials"),
         _context(tmp_path),
     )
@@ -356,7 +357,7 @@ def test_default_secret_path_detector_ignores_generic_redacted_credentials(tmp_p
 
 
 def test_default_secret_path_detector_ignores_generic_redacted_config_json(tmp_path):
-    result = DetectorRegistry(register_default_detectors(), clock=StepClock([0.0, 0.001])).run(
+    result = DetectorRegistry((SecretPathDetector(),), clock=StepClock([0.0, 0.001])).run(
         _file_read_action(".../" + "config.json"),
         _context(tmp_path),
     )
