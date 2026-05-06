@@ -5,6 +5,8 @@ from __future__ import annotations
 import shlex
 from collections.abc import Sequence
 
+from codex_plugin_scanner.guard.runtime.data_flow import extract_command_segments, extract_pipes
+
 _SCP_OPTIONS_WITH_VALUES = frozenset({"-c", "-D", "-F", "-i", "-J", "-l", "-o", "-P", "-S", "-X"})
 _GIT_OPTIONS_WITH_VALUES = frozenset({"-C", "-c", "--config-env", "--exec-path", "--git-dir", "--work-tree"})
 _NPM_OPTIONS_WITH_VALUES = frozenset(
@@ -19,6 +21,14 @@ def segment_executes_command(command: str, names: set[str]) -> bool:
 
 def command_tokens_after_env_assignments(command: str) -> tuple[str, ...]:
     return shell_tokens(strip_env_assignment_prefix(command))
+
+
+def command_execution_segments(command: str) -> tuple[str, ...]:
+    segments: list[str] = []
+    for segment in extract_command_segments(command):
+        segments.append(segment)
+        segments.extend(pipe.right for pipe in extract_pipes(segment))
+    return tuple(segments)
 
 
 def shell_tokens(command: str) -> tuple[str, ...]:
