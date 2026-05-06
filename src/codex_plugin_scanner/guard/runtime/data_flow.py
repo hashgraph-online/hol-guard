@@ -55,11 +55,12 @@ _VALID_SINK_TYPES = frozenset(
 )
 _HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
 _INPUT_REDIRECT_PATTERN = re.compile(
-    r"(?<![<])(?:^|[ \t])(?:\d*)<\s*(?![<&<])(?P<target>\"[^\"]+\"|'[^']+'|[^ \t\r\n;&|<>]+)"
+    r"(?<![<])(?:^|[ \t])(?:\d*)<\s*(?![<&])(?P<target>\"[^\"]+\"|'[^']+'|[^ \t\r\n;&|<>]+)"
 )
 _URL_PATTERN = re.compile(r"https?://[^\s\"'<>)}\]]+", re.IGNORECASE)
 _CURL_METHOD_PATTERN = re.compile(
-    r"(?i)(?:^|[\s;&|])(?:curl|curl\.exe)\b[^\r\n;&|]*?(?:--request(?:=|\s+)|-X\s*)(?P<method>[a-z]+)\b"
+    r"(?i)(?:^|[\s;&|])(?:curl|curl\.exe)\b[^\r\n;&|]*?"
+    r"(?:--request(?:=|\s+)|-X\s*)['\"]?(?P<method>[a-z]+)['\"]?\b"
 )
 _FETCH_METHOD_PATTERN = re.compile(r"(?i)\bmethod\s*:\s*['\"](?P<method>[a-z]+)['\"]")
 _REQUESTS_METHOD_PATTERN = re.compile(r"(?i)\brequests\.(?P<method>get|post|put|patch|delete|head|options)\s*\(")
@@ -111,15 +112,20 @@ class DataSink:
             raise ValueError("value must be a non-empty redacted sink identifier")
         if not self.description.strip():
             raise ValueError("description must be a non-empty sink description")
-        if self.method is not None and self.method.upper() not in _HTTP_METHODS:
-            raise ValueError("method must be a known HTTP method")
+        if self.method is not None:
+            if not isinstance(self.method, str):
+                raise ValueError("method must be a known HTTP method")
+            normalized = self.method.upper()
+            if normalized not in _HTTP_METHODS:
+                raise ValueError("method must be a known HTTP method")
+            object.__setattr__(self, "method", normalized)
 
     def to_dict(self) -> dict[str, object]:
         return {
             "sink_type": self.sink_type,
             "value": self.value,
             "description": self.description,
-            "method": self.method.upper() if self.method is not None else None,
+            "method": self.method,
             "evidence": self.evidence,
         }
 
@@ -228,12 +234,10 @@ def _append_http_method(methods: list[str], method: str) -> None:
         methods.append(normalized)
 
 
-def _dedupe(values: Iterable[object]) -> tuple[str, ...]:
+def _dedupe(values: Iterable[str]) -> tuple[str, ...]:
     seen: set[str] = set()
     result: list[str] = []
     for value in values:
-        if not isinstance(value, str):
-            continue
         if value in seen:
             continue
         seen.add(value)
@@ -249,7 +253,7 @@ def _strip_shell_quotes(value: str) -> str:
 
 
 def _strip_url_suffix(value: str) -> str:
-    return value.rstrip(".,;:")
+    return value.rstrip(".,;")
 
 
 def _split_top_level_commands(command: str) -> tuple[str, ...]:
@@ -344,27 +348,38 @@ class _ShellScanState:
     def __init__(self) -> None:
         self.quote: str | None = None
         self.subshell_depth = 0
+        self.in_backtick = False
 
     @property
     def is_top_level(self) -> bool:
-        return self.quote is None and self.subshell_depth == 0
+        return self.quote is None and self.subshell_depth == 0 and not self.in_backtick
 
     def advance(self, command: str, index: int) -> int:
         char = command[index]
         if char == "\\":
             return min(len(command), index + 2)
-        if char == "'" and self.quote is None:
+        if char == "`" and self.quote != "'":
+            self.in_backtick = not self.in_backtick
+            return index + 1
+        if self.in_backtick:
+            return index + 1
+        if self.quote == "'":
+            if char == "'":
+                self.quote = None
+            return index + 1
+        if char == "'":
             self.quote = "'"
-        elif char == "'" and self.quote == "'":
-            self.quote = None
-        elif char == '"' and self.quote is None:
-            self.quote = '"'
-        elif char == '"' and self.quote == '"':
-            self.quote = None
-        elif self.quote != "'" and command.startswith("$(", index):
+            return index + 1
+        if char == '"':
+            if self.quote == '"':
+                self.quote = None
+            elif self.quote is None:
+                self.quote = '"'
+            return index + 1
+        if self.quote != "'" and command.startswith("$(", index):
             self.subshell_depth += 1
             return index + 2
-        elif self.quote != "'" and char == "(" and self.subshell_depth > 0:
+        if self.quote != "'" and char == "(":
             self.subshell_depth += 1
         elif self.quote != "'" and char == ")" and self.subshell_depth > 0:
             self.subshell_depth -= 1
