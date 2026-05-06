@@ -168,7 +168,7 @@ def detect_data_flow_exfiltration(
                 category="secret",
             )
         )
-    if _npm_publish_with_token_source(command, secret_matches):
+    if _npm_publish_with_token_source(command, workspace=workspace):
         findings.append(
             _data_flow_signal(
                 "npm-publish-token-source",
@@ -378,12 +378,17 @@ def _looks_like_token(value: str) -> bool:
     return lowered.startswith(("ghp_", "github_pat_", "glpat-", "x-access-token")) or len(value) >= 24
 
 
-def _npm_publish_with_token_source(command: str, secret_matches: Sequence[SecretPathMatch]) -> bool:
-    if not _NPM_PUBLISH_PATTERN.search(command):
-        return False
-    if "--dry-run" in command:
-        return False
-    return bool(_TOKEN_SOURCE_PATTERN.search(command) or _has_npm_secret_match(secret_matches))
+def _npm_publish_with_token_source(command: str, *, workspace: Path | None) -> bool:
+    for segment in extract_command_segments(command):
+        if not _NPM_PUBLISH_PATTERN.search(segment):
+            continue
+        if "--dry-run" in segment:
+            continue
+        if _TOKEN_SOURCE_PATTERN.search(segment):
+            return True
+        if _has_npm_secret_match(_secret_path_matches_in_command(segment, workspace=workspace)):
+            return True
+    return False
 
 
 def _has_npm_secret_match(secret_matches: Sequence[SecretPathMatch]) -> bool:
@@ -422,7 +427,16 @@ def _mode_makes_world_readable(mode: str) -> bool:
     normalized = mode.lower()
     if normalized.isdigit():
         return normalized[-1] in {"4", "5", "6", "7"}
-    return "a+r" in normalized or "o+r" in normalized or "ugo+r" in normalized or "go+r" in normalized
+    for clause in normalized.split(","):
+        if "+r" in clause:
+            who = clause.split("+", 1)[0]
+            if not who or "a" in who or "o" in who:
+                return True
+        if "=" in clause:
+            who, permissions = clause.split("=", 1)
+            if "r" in permissions and (not who or "a" in who or "o" in who):
+                return True
+    return False
 
 
 def _strip_shell_token(value: str) -> str:
