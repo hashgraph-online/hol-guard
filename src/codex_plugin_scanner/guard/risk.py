@@ -8,6 +8,7 @@ from pathlib import PurePath
 from urllib.parse import urlsplit
 
 from .models import GuardArtifact
+from .runtime.secret_sensitivity import classify_secret_path_families
 from .runtime.signals import RiskSignalV2
 from .types import GuardSignal
 
@@ -305,12 +306,7 @@ def extract_network_hosts(text: str) -> set[str]:
 def classify_secret_paths(text: str) -> set[str]:
     """Classify secret-bearing file families referenced in text."""
 
-    lowered = text.lower()
-    classes: set[str] = set()
-    for pattern, label in _SECRET_PATH_LABELS:
-        if pattern in lowered:
-            classes.add(label)
-    return classes
+    return classify_secret_path_families(text)
 
 
 def detect_encoded_command(text: str) -> list[GuardSignal]:

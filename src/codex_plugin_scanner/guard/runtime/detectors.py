@@ -10,6 +10,7 @@ from typing import Literal, Protocol
 
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
+from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalCategory, RiskSignalV2
 
 DETECTOR_CATEGORY_TAGS: tuple[RiskSignalCategory, ...] = (
@@ -124,12 +125,53 @@ class DetectorRegistry:
         return DetectorRunResult(signals=tuple(signals), telemetry=tuple(telemetry))
 
 
+class SecretPathDetector:
+    detector_id = "secret.path"
+    categories: tuple[RiskSignalCategory, ...] = ("secret",)
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        if action.action_type != "file_read":
+            return ()
+        matches = tuple(_secret_path_matches(action.target_paths, workspace=context.workspace))
+        return tuple(_secret_path_signal(match, index=index) for index, match in enumerate(matches))
+
+
 def register_default_detectors() -> tuple[GuardDetector, ...]:
-    return ()
+    return (SecretPathDetector(),)
+
+
+def _secret_path_signal(match: SecretPathMatch, *, index: int) -> RiskSignalV2:
+    return RiskSignalV2(
+        signal_id=f"secret:path:{_slug(match.family)}:{index}",
+        category="secret",
+        severity="high",
+        confidence="strong",
+        detector="secret.path",
+        title=f"Direct access to {match.family}",
+        plain_reason=f"Requested direct access to {match.family}.",
+        technical_detail=f"matched secret path family: {match.family}",
+        evidence_ref="target_paths",
+        redaction_level="summary",
+        false_positive_hint="Allow only if this tool needs the exact local secret file for the current task.",
+        advisory_id=None,
+    )
+
+
+def _secret_path_matches(paths: Sequence[str], *, workspace: Path | None) -> tuple[SecretPathMatch, ...]:
+    matches: list[SecretPathMatch] = []
+    for path in paths:
+        match = classify_secret_path(path, cwd=workspace)
+        if match is not None:
+            matches.append(match)
+    return tuple(matches)
 
 
 def _elapsed_ms(started_at: float, finished_at: float) -> int:
     return max(0, round((finished_at - started_at) * 1000))
+
+
+def _slug(value: str) -> str:
+    return "-".join(part for part in value.lower().replace(".", " ").replace("/", " ").split() if part)
 
 
 def _telemetry(

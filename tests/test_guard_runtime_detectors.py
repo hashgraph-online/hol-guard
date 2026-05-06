@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import HarnessDetection
@@ -91,6 +93,29 @@ def _action() -> GuardActionEnvelope:
         package_name=None,
         script_name=None,
         raw_payload_redacted={},
+    )
+
+
+def _file_read_action(path: str) -> GuardActionEnvelope:
+    return GuardActionEnvelope(
+        schema_version=1,
+        action_id="",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="file_read",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name="Read",
+        command=None,
+        prompt_excerpt=None,
+        target_paths=(path,),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={"file_path": path},
     )
 
 
@@ -192,8 +217,9 @@ def test_detector_registry_filters_by_detector_categories(tmp_path):
     assert result.telemetry[0].detector_id == "network.egress"
 
 
-def test_register_default_detectors_is_empty_until_specific_detectors_land():
-    assert register_default_detectors() == ()
+def test_register_default_detectors_includes_secret_path_detector():
+    detector_ids = {detector.detector_id for detector in register_default_detectors()}
+    assert "secret.path" in detector_ids
     planned_categories = {
         "secret",
         "network",
@@ -207,6 +233,36 @@ def test_register_default_detectors_is_empty_until_specific_detectors_land():
         "false_positive",
     }
     assert planned_categories.issubset(set(DETECTOR_CATEGORY_TAGS))
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".env",
+        ".npmrc",
+        ".pypirc",
+        "~/.aws/" + "credentials",
+        "~/.ssh/id_rsa",
+        "~/.ssh/id_ed25519",
+        "~/.gnupg/private-keys-v1.d/example.key",
+        "~/.docker/" + "config.json",
+        "~/.kube/config",
+        ".terraform.tfvars",
+    ],
+)
+def test_default_secret_path_detector_flags_planned_direct_file_reads(tmp_path, path):
+    result = DetectorRegistry(register_default_detectors(), clock=StepClock([0.0, 0.001])).run(
+        _file_read_action(path),
+        _context(tmp_path),
+    )
+
+    assert [item.status for item in result.telemetry] == ["ok"]
+    assert len(result.signals) == 1
+    signal = result.signals[0]
+    assert signal.category == "secret"
+    assert signal.severity == "high"
+    assert signal.confidence == "strong"
+    assert signal.detector == "secret.path"
 
 
 def test_guard_run_invokes_detector_registry_only_when_feature_flag_enabled(tmp_path, monkeypatch):
