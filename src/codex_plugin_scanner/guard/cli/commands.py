@@ -2991,17 +2991,32 @@ def _runtime_stored_policy_action(
 def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact, harness: str) -> str:
     if _prompt_requires_hard_block(artifact):
         return "block"
+    canonical_harness = _canonical_harness_name(harness)
+    risk_classes = _runtime_artifact_risk_classes(artifact)
+    configured_actions = [
+        _resolve_configured_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes
+    ]
+    resolved_configured_actions = [action for action in configured_actions if action in VALID_GUARD_ACTIONS]
+    if resolved_configured_actions:
+        return max(resolved_configured_actions, key=_guard_action_severity)
     guard_default_action = _runtime_artifact_guard_default_action(artifact)
     if guard_default_action is not None:
         return guard_default_action
-    risk_actions = [
-        resolve_risk_action(config, risk_class, harness=_canonical_harness_name(harness))
-        for risk_class in _runtime_artifact_risk_classes(artifact)
-    ]
+    risk_actions = [resolve_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes]
     resolved_actions = [action for action in risk_actions if action in VALID_GUARD_ACTIONS]
     if resolved_actions:
         return max(resolved_actions, key=_guard_action_severity)
     return SAFE_CHANGED_HASH_ACTION
+
+
+def _resolve_configured_risk_action(config: GuardConfig, risk_class: str, *, harness: str) -> str | None:
+    if config.harness_risk_actions is not None:
+        harness_actions = config.harness_risk_actions.get(harness)
+        if harness_actions is not None and risk_class in harness_actions:
+            return harness_actions[risk_class]
+    if config.risk_actions is not None and risk_class in config.risk_actions:
+        return config.risk_actions[risk_class]
+    return None
 
 
 def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> str | None:
@@ -4081,7 +4096,18 @@ def _codex_path_token_is_url_path(text: str, start: int) -> bool:
     prefix = text[:start].lower()
     last_separator = max(prefix.rfind(separator) for separator in " \t\r\n'\"`<>|;(){}[]")
     token_prefix = prefix[last_separator + 1 :]
-    return bool(re.search(r"[a-z][a-z0-9+.-]*:/?$", token_prefix)) or "://" in token_prefix
+    if "://" in token_prefix:
+        return True
+    scheme = ""
+    if token_prefix.endswith(":/"):
+        scheme = token_prefix[:-2]
+    elif token_prefix.endswith(":"):
+        scheme = token_prefix[:-1]
+    return _codex_token_prefix_is_url_scheme(scheme)
+
+
+def _codex_token_prefix_is_url_scheme(scheme: str) -> bool:
+    return bool(scheme) and scheme[0].isalpha() and all(char.isalnum() or char in "+.-" for char in scheme)
 
 
 def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None) -> bool:
@@ -4101,7 +4127,7 @@ def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None
         return True
     if any(_codex_command_part_is_local_reader(parts, index, cwd=cwd) for index in range(len(parts))):
         return True
-    return len(parts) >= 2 and parts[0].lower() == "git" and parts[1].lower() == "grep"
+    return _codex_command_parts_are_git_grep(parts)
 
 
 def _codex_pipeline_segment_may_read_local_content(segment: str, *, index: int, cwd: Path | None) -> bool:
@@ -4112,10 +4138,14 @@ def _codex_pipeline_segment_may_read_local_content(segment: str, *, index: int, 
     if not parts:
         return False
     if index == 0:
-        return _codex_command_part_is_local_reader(parts, 0, cwd=cwd)
+        return _codex_command_part_is_local_reader(parts, 0, cwd=cwd) or _codex_command_parts_are_git_grep(parts)
     return _codex_command_is_read_only_source_search(segment, cwd=cwd) or _codex_command_is_read_only_source_view(
         segment, cwd=cwd
     )
+
+
+def _codex_command_parts_are_git_grep(parts: list[str]) -> bool:
+    return bool(parts) and Path(parts[0]).name.lower() == "git" and _git_grep_search_args(parts[1:]) is not None
 
 
 def _codex_command_part_is_local_reader(parts: list[str], index: int, *, cwd: Path | None) -> bool:
