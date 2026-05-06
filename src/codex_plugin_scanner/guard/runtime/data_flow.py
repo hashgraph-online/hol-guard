@@ -207,6 +207,12 @@ def extract_pipes(command: str) -> tuple[ShellPipe, ...]:
     return tuple(pipes)
 
 
+def extract_command_segments(command: str) -> tuple[str, ...]:
+    """Return top-level shell command segments split on command separators."""
+
+    return _split_top_level_commands(command)
+
+
 def extract_http_methods(command: str) -> tuple[str, ...]:
     """Return explicit or strongly implied HTTP methods referenced by shell text."""
 

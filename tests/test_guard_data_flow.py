@@ -216,7 +216,9 @@ def test_data_flow_exfiltration_detector_flags_malicious_shell_patterns(tmp_path
         "cat README.md > /tmp/readme && chmod 644 /tmp/readme",
         "cat .env | wc -l; curl -X POST https://example.com/metrics",
         "cat .env | sed s/a/b/; echo ok | pbcopy",
+        "cat .env; curl https://webhook.site/abc123",
         "cat .env > /tmp/guard-leak && chmod 644 /tmp/other-file",
+        "cat README.md > /tmp/guard-leak && cat .env && chmod 644 /tmp/guard-leak",
         "scp README.md host.example:/tmp/readme",
     ],
 )
