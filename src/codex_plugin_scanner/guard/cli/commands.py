@@ -3001,12 +3001,18 @@ def _runtime_artifact_policy_action(config: GuardConfig, artifact: GuardArtifact
         return "block"
     canonical_harness = _canonical_harness_name(harness)
     risk_classes = _runtime_artifact_risk_classes(artifact)
-    configured_actions = [
+    has_configured_risk_action = any(
         _resolve_configured_risk_action(config, risk_class, harness=canonical_harness) for risk_class in risk_classes
-    ]
-    resolved_configured_actions = [action for action in configured_actions if action in VALID_GUARD_ACTIONS]
-    if resolved_configured_actions:
-        return max(resolved_configured_actions, key=_guard_action_severity)
+    )
+    if has_configured_risk_action:
+        risk_actions = [
+            _resolve_configured_risk_action(config, risk_class, harness=canonical_harness)
+            or resolve_risk_action(config, risk_class, harness=canonical_harness)
+            for risk_class in risk_classes
+        ]
+        resolved_actions = [action for action in risk_actions if action in VALID_GUARD_ACTIONS]
+        if resolved_actions:
+            return max(resolved_actions, key=_guard_action_severity)
     guard_default_action = _runtime_artifact_guard_default_action(artifact)
     if guard_default_action is not None:
         return guard_default_action
@@ -4130,7 +4136,7 @@ def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None
             for index, segment in enumerate(pipeline_segments)
         )
     try:
-        parts = shlex.split(command_text)
+        parts = _codex_shell_split(command_text)
     except ValueError:
         return True
     if any(_codex_command_part_is_local_reader(parts, index, cwd=cwd) for index in range(len(parts))):
@@ -4140,7 +4146,7 @@ def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None
 
 def _codex_pipeline_segment_may_read_local_content(segment: str, *, index: int, cwd: Path | None) -> bool:
     try:
-        parts = shlex.split(segment)
+        parts = _codex_shell_split(segment)
     except ValueError:
         return True
     if not parts:
@@ -4154,6 +4160,13 @@ def _codex_pipeline_segment_may_read_local_content(segment: str, *, index: int, 
 
 def _codex_command_parts_are_git_grep(parts: list[str]) -> bool:
     return bool(parts) and Path(parts[0]).name.lower() == "git" and _git_grep_search_args(parts[1:]) is not None
+
+
+def _codex_shell_split(command_text: str) -> list[str]:
+    lexer = shlex.shlex(command_text, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    return list(lexer)
 
 
 def _codex_command_part_is_local_reader(parts: list[str], index: int, *, cwd: Path | None) -> bool:
