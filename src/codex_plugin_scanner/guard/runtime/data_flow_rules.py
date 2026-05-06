@@ -282,6 +282,8 @@ def _curl_data_substitution_reads_secret(command: str, *, workspace: Path | None
 
 def _python_posts_secret(command: str, *, workspace: Path | None) -> bool:
     for segment in extract_command_segments(command):
+        if not segment_executes_command(segment, {"python", "python3"}):
+            continue
         if not extract_urls(segment):
             continue
         if any(
@@ -294,6 +296,8 @@ def _python_posts_secret(command: str, *, workspace: Path | None) -> bool:
 
 def _node_fetches_secret(command: str, *, workspace: Path | None) -> bool:
     for segment in extract_command_segments(command):
+        if not segment_executes_command(segment, {"node"}):
+            continue
         if not extract_urls(segment):
             continue
         if any(
@@ -317,7 +321,11 @@ def _encoded_secret_send(command: str, secret_matches: Sequence[SecretPathMatch]
 
 
 def _has_dns_exfil_hostname(command: str) -> bool:
-    return any(_has_long_encoded_label(match.group("host")) for match in _DNS_LONG_LABEL_PATTERN.finditer(command))
+    return any(
+        segment_executes_command(segment, {"dig", "nslookup", "host"})
+        and any(_has_long_encoded_label(match.group("host")) for match in _DNS_LONG_LABEL_PATTERN.finditer(segment))
+        for segment in extract_command_segments(command)
+    )
 
 
 def _has_long_encoded_label(host: str) -> bool:
@@ -346,9 +354,13 @@ def _has_webhook_exfil(command: str, *, workspace: Path | None) -> bool:
 
 
 def _scp_sends_secret(command: str, *, workspace: Path | None) -> bool:
-    for match in _SCP_PATTERN.finditer(command):
-        body = match.group("body")
-        operands = scp_operands(body)
+    for segment in extract_command_segments(command):
+        if not segment_executes_command(segment, {"scp"}):
+            continue
+        match = _SCP_PATTERN.search(segment)
+        if match is None:
+            continue
+        operands = scp_operands(match.group("body"))
         if len(operands) < 2:
             continue
         target = operands[-1]
