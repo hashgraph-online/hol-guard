@@ -102,6 +102,13 @@ def _is_blocking_action(policy_action: str) -> bool:
     return policy_action in {"block", "sandbox-required", "require-reapproval"}
 
 
+def _guard_default_action(artifact: GuardArtifact) -> str | None:
+    value = artifact.metadata.get("guard_default_action")
+    if value in {"allow", "warn", "block", "sandbox-required", "require-reapproval"}:
+        return str(value)
+    return None
+
+
 def _build_removed_provenance(previous: dict[str, object]) -> str:
     scope = previous.get("source_scope")
     config_path = previous.get("config_path")
@@ -395,7 +402,7 @@ def evaluate_detection(
             "file_read_request",
             "tool_action_request",
         }:
-            policy_action = "require-reapproval"
+            policy_action = _guard_default_action(artifact) or "require-reapproval"
         elif is_first_seen and configured_action is None and effective_default_action is not None:
             policy_action = effective_default_action
         else:
