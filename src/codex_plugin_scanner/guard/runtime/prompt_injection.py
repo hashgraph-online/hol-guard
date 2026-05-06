@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable
 
 from codex_plugin_scanner.guard.types import PromptRequest, RemediationAction
 
@@ -130,8 +131,12 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
     if not normalized:
         return ()
     requests: list[PromptRequest] = []
-    override_match = _first_match(_INSTRUCTION_OVERRIDE_PATTERNS, normalized)
-    if override_match is not None and not _is_documentation_context_override(normalized, override_match):
+    override_match = _first_actionable_match(
+        _INSTRUCTION_OVERRIDE_PATTERNS,
+        normalized,
+        _is_documentation_context_override,
+    )
+    if override_match is not None:
         requests.append(
             _request(
                 request_class="prompt_injection_intent",
@@ -150,8 +155,12 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
                 normalized_prompt=normalized,
             )
         )
-    stealth_match = _first_match(_STEALTH_INSTRUCTION_PATTERNS, normalized)
-    if stealth_match is not None and not _is_documentation_context_stealth(normalized, stealth_match):
+    stealth_match = _first_actionable_match(
+        _STEALTH_INSTRUCTION_PATTERNS,
+        normalized,
+        _is_documentation_context_stealth,
+    )
+    if stealth_match is not None:
         requests.append(
             _request(
                 request_class="prompt_injection_intent",
@@ -170,8 +179,12 @@ def detect_prompt_injection_requests(prompt_text: str) -> tuple[PromptRequest, .
                 normalized_prompt=normalized,
             )
         )
-    guard_match = _first_match(_GUARD_POLICY_TAMPER_PATTERNS, normalized)
-    if guard_match is not None and not _is_documentation_context_guard(normalized, guard_match):
+    guard_match = _first_actionable_match(
+        _GUARD_POLICY_TAMPER_PATTERNS,
+        normalized,
+        _is_documentation_context_guard,
+    )
+    if guard_match is not None:
         requests.append(
             _request(
                 request_class="guard_bypass_intent",
@@ -269,6 +282,18 @@ def _first_match(patterns: tuple[re.Pattern[str], ...], text: str) -> re.Match[s
         match = pattern.search(text)
         if match is not None:
             return match
+    return None
+
+
+def _first_actionable_match(
+    patterns: tuple[re.Pattern[str], ...],
+    text: str,
+    is_documentation_context: Callable[[str, re.Match[str]], bool],
+) -> re.Match[str] | None:
+    for pattern in patterns:
+        for match in pattern.finditer(text):
+            if not is_documentation_context(text, match):
+                return match
     return None
 
 
