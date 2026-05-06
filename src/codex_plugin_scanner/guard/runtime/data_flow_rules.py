@@ -12,7 +12,6 @@ from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.data_flow import (
     ShellPipe,
     extract_command_segments,
-    extract_http_methods,
     extract_input_redirects,
     extract_pipes,
     extract_urls,
@@ -34,7 +33,10 @@ _CURL_DATA_FILE_PATTERN = re.compile(
     r"(?is)(?:^|[\s;&|])(?:curl|curl\.exe)\b.*?"
     r"(?:--data(?:-binary|-raw|-urlencode)?|-d)\s+@(?P<path>\"[^\"]+\"|'[^']+'|[^\s;&|]+)"
 )
-_CURL_DATA_STDIN_PATTERN = re.compile(r"(?is)(?:^|[\s;&|])(?:curl|curl\.exe)\b.*?(?:--data|-d)\s+@-")
+_CURL_DATA_STDIN_PATTERN = re.compile(
+    r"(?is)(?:^|[\s;&|])(?:curl|curl\.exe)\b[^\r\n;&|]*?"
+    r"(?:--data(?:-binary|-raw|-urlencode)?|-d)\s+@-"
+)
 _PYTHON_SECRET_POST_PATTERN = re.compile(
     r"(?is)\bpython(?:3)?\b.*?-c\s+.*?"
     r"(?:requests\.post|urllib\.request|http\.client).*?open\(['\"](?P<path>[^'\"]+)['\"]"
@@ -54,7 +56,6 @@ _TOKEN_SOURCE_PATTERN = re.compile(r"(?i)\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|_authTok
 _CLIPBOARD_SINK_PATTERN = re.compile(r"(?i)(?:^|[\s;&|])(?:pbcopy|xclip|xsel|wl-copy|clip(?:\.exe)?)\b")
 _TEMP_SECRET_WRITE_PATTERN = re.compile(r"(?is)(?:>\s*(?P<redirect>/tmp/[^\s;&|]+)|tee\s+(?P<tee>/tmp/[^\s;&|]+))")
 _CHMOD_TEMP_PATTERN = re.compile(r"(?is)chmod\s+(?P<mode>[0-7]{3,4}|[A-Za-z,+=-]+)\s+(?P<path>/tmp/[^\s;&|]+)")
-_HTTP_UPLOAD_METHODS = frozenset({"POST", "PUT", "PATCH"})
 _SCP_OPTIONS_WITH_VALUES = frozenset({"-c", "-F", "-i", "-J", "-l", "-o", "-P", "-S"})
 _WEBHOOK_HOST_MARKERS = (
     "webhook.site",
@@ -237,9 +238,7 @@ def _has_secret_pipe_to_http_upload(pipes: Sequence[ShellPipe], command: str, *,
 
 
 def _has_http_upload(command: str) -> bool:
-    has_upload_method = _HTTP_UPLOAD_METHODS.intersection(extract_http_methods(command))
-    has_stdin_upload = _CURL_DATA_STDIN_PATTERN.search(command)
-    return bool(has_upload_method or has_stdin_upload)
+    return any(_CURL_DATA_STDIN_PATTERN.search(segment) for segment in extract_command_segments(command))
 
 
 def _contains_http_tool_or_url(command: str) -> bool:
