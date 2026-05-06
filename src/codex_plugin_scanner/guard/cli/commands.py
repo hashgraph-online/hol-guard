@@ -70,7 +70,7 @@ from ..mcp_tool_calls import (
     evaluate_tool_call,
 )
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
-from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS
+from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2
 from ..protect import build_protect_payload
 from ..proxy import (
     CodexMcpGuardProxy,
@@ -80,8 +80,9 @@ from ..proxy import (
     StdioGuardProxy,
 )
 from ..receipts import build_receipt
-from ..risk import artifact_risk_signals, artifact_risk_summary
+from ..risk import artifact_risk_signals, artifact_risk_signals_v2, artifact_risk_summary
 from ..runtime.actions import GuardActionEnvelope, normalize_harness_payload
+from ..runtime.data_flow_rules import detect_data_flow_exfiltration
 from ..runtime.runner import (
     GuardSyncNotConfiguredError,
     extract_prompt_requests,
@@ -103,6 +104,7 @@ from ..runtime.secret_sensitivity import (
     classify_secret_content,
     classify_secret_path,
 )
+from ..runtime.signals import RiskSignalV2
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from .approval_commands import add_approval_parser, run_approval_command
@@ -1547,11 +1549,12 @@ def run_guard_command(
                         artifact_hash=artifact_hash(legacy_artifact),
                         workspace=str(runtime_workspace) if runtime_workspace else None,
                     )
-            policy_action = _coalesce_string(
+            requested_policy_action = _coalesce_string(
                 getattr(args, "policy_action", None),
                 stored_policy_action,
                 payload.get("policy_action"),
             )
+            policy_action = requested_policy_action
             if policy_action not in VALID_GUARD_ACTIONS:
                 policy_action = _runtime_artifact_policy_action(config, runtime_artifact, args.harness)
             if _canonical_harness_name(args.harness) == "claude-code" and event_name in {
@@ -1582,8 +1585,27 @@ def run_guard_command(
                     store.add_receipt(receipt)
                 return 0
             changed_capabilities = [runtime_artifact.artifact_type]
-            risk_signals = list(artifact_risk_signals(runtime_artifact))
-            risk_summary = artifact_risk_summary(runtime_artifact)
+            data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
+            if data_flow_signals and requested_policy_action not in VALID_GUARD_ACTIONS:
+                data_flow_action = resolve_risk_action(
+                    config,
+                    "data_flow_exfiltration",
+                    harness=policy_harness,
+                )
+                if _guard_action_severity(data_flow_action) > _guard_action_severity(policy_action):
+                    policy_action = data_flow_action
+            decision_signals = data_flow_signals or artifact_risk_signals_v2(runtime_artifact)
+            risk_signals = (
+                [signal.plain_reason for signal in data_flow_signals]
+                if data_flow_signals
+                else list(artifact_risk_signals(runtime_artifact))
+            )
+            risk_summary = (
+                _runtime_data_flow_summary(data_flow_signals)
+                if data_flow_signals
+                else artifact_risk_summary(runtime_artifact)
+            )
+            decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
             incident = build_incident_context(
                 harness=args.harness,
                 artifact=runtime_artifact,
@@ -1619,6 +1641,7 @@ def run_guard_command(
                 "policy_action": policy_action,
                 "risk_signals": risk_signals,
                 "risk_summary": risk_summary,
+                "decision_v2_json": decision_v2.to_dict(),
                 "artifact_label": incident["artifact_label"],
                 "source_label": incident["source_label"],
                 "trigger_summary": incident["trigger_summary"],
@@ -1703,6 +1726,7 @@ def run_guard_command(
                                 "config_path": runtime_artifact.config_path,
                                 "launch_target": _runtime_request_summary(runtime_artifact),
                                 "action_envelope_json": _action_envelope_json(action_envelope),
+                                "decision_v2_json": decision_v2.to_dict(),
                             }
                         ]
                     }
@@ -3045,6 +3069,36 @@ def _runtime_artifact_guard_default_action(artifact: GuardArtifact) -> str | Non
     return None
 
 
+def _runtime_action_data_flow_signals(
+    action_envelope: GuardActionEnvelope | None,
+    *,
+    workspace: Path | None,
+) -> tuple[RiskSignalV2, ...]:
+    if action_envelope is None:
+        return ()
+    return detect_data_flow_exfiltration(action_envelope, workspace=workspace)
+
+
+def _runtime_data_flow_summary(signals: tuple[RiskSignalV2, ...]) -> str:
+    sink_type = _runtime_data_flow_sink_type(signals)
+    if signals:
+        return f"This command sends local secret to {sink_type}. Guard kept raw secret contents out of the evidence."
+    return f"This command sends local secret to {sink_type}."
+
+
+def _runtime_data_flow_sink_type(signals: tuple[RiskSignalV2, ...]) -> str:
+    signal_ids = {signal.signal_id for signal in signals}
+    if any(signal.category == "network" for signal in signals):
+        return "network host"
+    if "data-flow:clipboard-secret" in signal_ids:
+        return "clipboard"
+    if "data-flow:world-readable-temp-secret" in signal_ids:
+        return "world-readable temp file"
+    if "data-flow:git-remote-token" in signal_ids:
+        return "git remote configuration"
+    return "external sink"
+
+
 def _guard_action_severity(action: str) -> int:
     return {
         "allow": 0,
@@ -3077,7 +3131,11 @@ def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
     if not isinstance(action_class, str):
         return []
     action_risk_classes = {
-        "credential exfiltration shell command": ["credential_exfiltration", "network_egress"],
+        "credential exfiltration shell command": [
+            "data_flow_exfiltration",
+            "credential_exfiltration",
+            "network_egress",
+        ],
         "docker-sensitive command": ["network_egress", "destructive_shell"],
         "docker client config access": ["local_secret_read"],
         "encoded or encrypted shell command": ["encoded_execution"],
@@ -3200,7 +3258,7 @@ def _native_prompt_context(artifact: GuardArtifact) -> str:
 
 def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: dict[str, object]) -> str:
     decision_message = _decision_v2_harness_message(response_payload)
-    if decision_message is not None:
+    if decision_message is not None and _should_use_decision_v2_harness_message(response_payload, decision_message):
         return decision_message
     if artifact.artifact_type == "prompt_request":
         harness = response_payload.get("harness")
@@ -3259,6 +3317,37 @@ def _decision_v2_harness_message(response_payload: dict[str, object]) -> str | N
     if isinstance(message, str) and message.strip():
         return message.strip()
     return None
+
+
+def _decision_v2_has_data_flow_signal(response_payload: dict[str, object]) -> bool:
+    decision_v2 = response_payload.get("decision_v2_json")
+    if not isinstance(decision_v2, Mapping):
+        return False
+    signals = decision_v2.get("signals")
+    if not isinstance(signals, list):
+        return False
+    for item in signals:
+        if not isinstance(item, Mapping):
+            continue
+        detector = item.get("detector")
+        signal_id = item.get("signal_id")
+        if detector == "data_flow.exfiltration":
+            return True
+        if isinstance(signal_id, str) and signal_id.startswith("data-flow:"):
+            return True
+    return False
+
+
+def _should_use_decision_v2_harness_message(response_payload: dict[str, object], message: str) -> bool:
+    if _decision_v2_has_data_flow_signal(response_payload):
+        return True
+    generic_messages = {
+        "HOL Guard blocked this action.",
+        "HOL Guard wants this action reviewed and run in a sandboxed path.",
+    }
+    if message in generic_messages:
+        return False
+    return not message.startswith("HOL Guard needs a fresh approval because this action changed.")
 
 
 def _claude_prompt_additional_context(

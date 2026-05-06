@@ -5,6 +5,48 @@ import type {
   GuardReceipt
 } from "./guard-types";
 
+export type DataFlowEvidenceSummary = {
+  signalTitle: string;
+  sourceLabel: string;
+  sinkLabel: string;
+  signalId: string;
+  count: number;
+};
+
+export function deriveDataFlowEvidence(item: GuardApprovalRequest): DataFlowEvidenceSummary | null {
+  const signals = item.decision_v2_json?.signals ?? [];
+  const dataFlowSignals = signals.filter(
+    (s) => s.detector === "data_flow.exfiltration" || s.signal_id.startsWith("data-flow:")
+  );
+  if (dataFlowSignals.length === 0) {
+    return null;
+  }
+  const primary = dataFlowSignals[0];
+  return {
+    signalTitle: primary.title,
+    sourceLabel: "Local secret",
+    sinkLabel: resolveDataFlowSinkLabel(primary),
+    signalId: primary.signal_id,
+    count: dataFlowSignals.length,
+  };
+}
+
+function resolveDataFlowSinkLabel(signal: RiskSignalV2): string {
+  if (signal.category === "network") {
+    return "Network host";
+  }
+  if (signal.signal_id === "data-flow:clipboard-secret") {
+    return "Clipboard";
+  }
+  if (signal.signal_id === "data-flow:world-readable-temp-secret") {
+    return "World-readable temp file";
+  }
+  if (signal.signal_id === "data-flow:git-remote-token") {
+    return "Git remote config";
+  }
+  return "External sink";
+}
+
 export function resolveEnvelopeDisplayText(envelope: GuardActionEnvelope): string | null {
   if (envelope.action_type === "shell_command" && envelope.command !== null) {
     return envelope.command;

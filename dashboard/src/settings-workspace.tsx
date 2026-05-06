@@ -75,6 +75,11 @@ const riskControls = [
     description: "Commands or scripts that appear to send keys, tokens, or credentials away."
   },
   {
+    key: "data_flow_exfiltration",
+    label: "Secret data flow",
+    description: "Detected source-to-sink route where a local secret is read and its value reaches a network or external sink."
+  },
+  {
     key: "destructive_shell",
     label: "Destructive commands",
     description: "Shell actions that delete, overwrite, or rewrite local files."
@@ -97,6 +102,7 @@ const riskProfileActions: Record<"balanced" | "strict" | "custom", Record<RiskKe
   balanced: {
     local_secret_read: "require-reapproval",
     credential_exfiltration: "require-reapproval",
+    data_flow_exfiltration: "require-reapproval",
     destructive_shell: "require-reapproval",
     encoded_execution: "require-reapproval",
     network_egress: "warn"
@@ -104,6 +110,7 @@ const riskProfileActions: Record<"balanced" | "strict" | "custom", Record<RiskKe
   strict: {
     local_secret_read: "require-reapproval",
     credential_exfiltration: "require-reapproval",
+    data_flow_exfiltration: "block",
     destructive_shell: "require-reapproval",
     encoded_execution: "require-reapproval",
     network_egress: "require-reapproval"
@@ -111,6 +118,7 @@ const riskProfileActions: Record<"balanced" | "strict" | "custom", Record<RiskKe
   custom: {
     local_secret_read: "require-reapproval",
     credential_exfiltration: "require-reapproval",
+    data_flow_exfiltration: "require-reapproval",
     destructive_shell: "require-reapproval",
     encoded_execution: "require-reapproval",
     network_egress: "warn"

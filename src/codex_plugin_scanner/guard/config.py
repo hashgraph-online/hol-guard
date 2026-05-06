@@ -37,6 +37,7 @@ VALID_SECURITY_LEVELS = {"balanced", "strict", "custom"}
 VALID_RISK_ACTION_KEYS = {
     "local_secret_read",
     "credential_exfiltration",
+    "data_flow_exfiltration",
     "destructive_shell",
     "encoded_execution",
     "network_egress",
@@ -46,6 +47,7 @@ SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
     "balanced": {
         "local_secret_read": "require-reapproval",
         "credential_exfiltration": "require-reapproval",
+        "data_flow_exfiltration": "require-reapproval",
         "destructive_shell": "require-reapproval",
         "encoded_execution": "require-reapproval",
         "network_egress": "warn",
@@ -53,6 +55,7 @@ SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
     "strict": {
         "local_secret_read": "require-reapproval",
         "credential_exfiltration": "require-reapproval",
+        "data_flow_exfiltration": "block",
         "destructive_shell": "require-reapproval",
         "encoded_execution": "require-reapproval",
         "network_egress": "require-reapproval",
@@ -60,6 +63,7 @@ SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
     "custom": {
         "local_secret_read": "require-reapproval",
         "credential_exfiltration": "require-reapproval",
+        "data_flow_exfiltration": "require-reapproval",
         "destructive_shell": "require-reapproval",
         "encoded_execution": "require-reapproval",
         "network_egress": "warn",
