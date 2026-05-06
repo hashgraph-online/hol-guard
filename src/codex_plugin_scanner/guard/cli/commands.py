@@ -3124,6 +3124,8 @@ def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
             risk_classes.append("destructive_shell")
         if "subprocess_intent" in prompt_classes:
             risk_classes.append("destructive_shell")
+        if "prompt_injection_intent" in prompt_classes:
+            risk_classes.append("destructive_shell")
         return risk_classes
     if artifact.artifact_type != "tool_action_request":
         return []
