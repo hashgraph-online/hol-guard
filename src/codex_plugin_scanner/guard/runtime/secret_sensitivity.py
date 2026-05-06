@@ -45,7 +45,6 @@ _SENSITIVE_BASENAME_LABELS = {
     "terraform.tfvars": "Terraform variable secrets",
 }
 _REDACTED_BASENAME_LABELS = {
-    "credentials": "AWS shared credentials file",
     "id_rsa": "SSH private key",
     "id_ed25519": "SSH private key",
     "id_ecdsa": "SSH private key",
@@ -169,6 +168,20 @@ def classify_secret_path_families(text: str) -> set[str]:
 def classify_legacy_secret_path_families(text: str) -> set[str]:
     lowered = text.lower()
     return {family for marker, family in LEGACY_SECRET_PATH_TEXT_MARKERS if marker in lowered}
+
+
+def redacted_secret_path_context(path: str) -> str | None:
+    segments = tuple(segment for segment in path.replace("\\", "/").split("/") if segment)
+    lowered_segments = tuple(segment.lower() for segment in segments)
+    if not lowered_segments:
+        return None
+    for suffix in _SENSITIVE_SUFFIX_LABELS:
+        if lowered_segments[-len(suffix) :] == suffix:
+            return ".../" + "/".join(suffix)
+    for directory in _SENSITIVE_DIRECTORY_LABELS:
+        if directory in lowered_segments and len(segments) > 1:
+            return f".../{directory}/{segments[-1]}"
+    return None
 
 
 def _match(

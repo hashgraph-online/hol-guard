@@ -11,6 +11,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Literal
 
 from ..redaction import redact_text
+from .secret_sensitivity import redacted_secret_path_context
 
 GuardActionType = Literal[
     "prompt",
@@ -709,10 +710,18 @@ def _redacted_target_path(path: str, *, home_dir: Path | str | None) -> str | No
         return f".../{target_name}"
     windows_path = PureWindowsPath(stripped)
     if windows_path.is_absolute():
+        secret_context = redacted_secret_path_context(stripped)
+        if secret_context is not None:
+            return secret_context
         target_name = windows_path.name or "path"
         return f".../{target_name}"
     if _is_absolute_target_path(stripped):
-        return redacted_workspace_label(stripped, home_dir=home_dir)
+        redacted_path = redacted_workspace_label(stripped, home_dir=home_dir)
+        if redacted_path.startswith(".../"):
+            secret_context = redacted_secret_path_context(stripped)
+            if secret_context is not None:
+                return secret_context
+        return redacted_path
     return redact_text(stripped).text
 
 

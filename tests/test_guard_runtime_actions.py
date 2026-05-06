@@ -355,7 +355,20 @@ def test_normalize_codex_file_target_redacts_windows_absolute_path(tmp_path: Pat
 
     envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
 
-    assert envelope.target_paths == (".../id_rsa",)
+    assert envelope.target_paths == (".../.ssh/id_rsa",)
+    assert "alice" not in envelope.target_paths[0]
+
+
+def test_normalize_codex_file_target_preserves_secret_context_for_redacted_paths(tmp_path: Path) -> None:
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"filePath": r"C:\Users\alice\.aws\credentials"},
+    }
+
+    envelope = normalize_codex_hook_payload(payload, workspace=tmp_path / "workspace", home_dir=tmp_path)
+
+    assert envelope.target_paths == (".../.aws/" + "credentials",)
     assert "alice" not in envelope.target_paths[0]
 
 

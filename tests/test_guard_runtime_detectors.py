@@ -287,7 +287,6 @@ def test_default_secret_path_detector_flags_list_style_file_read_paths(tmp_path)
 @pytest.mark.parametrize(
     "path",
     [
-        ".../" + "credentials",
         ".../id_rsa",
         ".../id_ed25519",
     ],
@@ -301,6 +300,36 @@ def test_default_secret_path_detector_flags_privacy_redacted_secret_paths(tmp_pa
     assert [item.status for item in result.telemetry] == ["ok"]
     assert len(result.signals) == 1
     assert result.signals[0].detector == "secret.path"
+
+
+def test_default_secret_path_detector_flags_redacted_paths_with_secret_context(tmp_path):
+    action = normalize_codex_hook_payload(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Read",
+            "tool_input": {"filePath": r"C:\Users\alice\.aws\credentials"},
+        },
+        workspace=tmp_path / "workspace",
+        home_dir=tmp_path,
+    )
+
+    result = DetectorRegistry(register_default_detectors(), clock=StepClock([0.0, 0.001])).run(
+        action,
+        _context(tmp_path),
+    )
+
+    assert action.target_paths == (".../.aws/" + "credentials",)
+    assert [signal.detector for signal in result.signals] == ["secret.path"]
+
+
+def test_default_secret_path_detector_ignores_generic_redacted_credentials(tmp_path):
+    result = DetectorRegistry(register_default_detectors(), clock=StepClock([0.0, 0.001])).run(
+        _file_read_action(".../" + "credentials"),
+        _context(tmp_path),
+    )
+
+    assert [item.status for item in result.telemetry] == ["ok"]
+    assert result.signals == ()
 
 
 def test_default_secret_path_detector_ignores_generic_redacted_config_json(tmp_path):
