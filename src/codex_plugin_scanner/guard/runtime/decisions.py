@@ -109,12 +109,13 @@ def decision_from_legacy_policy_action(
     signal_tuple = tuple(signals)
     confidence = _highest_confidence(signal_tuple)
     dashboard_detail = _dashboard_detail_from_signals(signal_tuple, harness_message)
+    harness_detail = _harness_message_from_signals(signal_tuple, harness_message)
     return GuardDecisionV2(
         action=action,
         reason=reason,
         user_title=user_title,
         user_body=dashboard_detail,
-        harness_message=harness_message,
+        harness_message=harness_detail,
         dashboard_primary_detail=dashboard_detail,
         approval_scopes=_approval_scopes_for_action(action),
         retry_instruction=None if action in {"allow", "warn"} else retry_instruction,
@@ -132,8 +133,40 @@ def _approval_scopes_for_action(action: GuardDecisionAction) -> tuple[str, ...]:
 def _dashboard_detail_from_signals(signals: tuple[RiskSignalV2, ...], fallback: str) -> str:
     if not signals:
         return fallback
+    if _has_data_flow_exfiltration_signal(signals):
+        sink_type = _data_flow_sink_type(signals)
+        return (
+            f"Source-to-sink route: local secret -> {sink_type}. "
+            f"This command sends local secret to {sink_type} without exposing the raw secret in Guard evidence."
+        )
     strongest = max(signals, key=lambda item: _confidence_rank(item.confidence))
     return strongest.plain_reason
+
+
+def _harness_message_from_signals(signals: tuple[RiskSignalV2, ...], fallback: str) -> str:
+    if _has_data_flow_exfiltration_signal(signals):
+        sink_type = _data_flow_sink_type(signals)
+        return f"HOL Guard paused this action because it sends local secret to {sink_type}."
+    return fallback
+
+
+def _data_flow_sink_type(signals: tuple[RiskSignalV2, ...]) -> str:
+    signal_ids = {signal.signal_id for signal in signals}
+    if any(signal.category == "network" for signal in signals):
+        return "network host"
+    if "data-flow:clipboard-secret" in signal_ids:
+        return "clipboard"
+    if "data-flow:world-readable-temp-secret" in signal_ids:
+        return "world-readable temp file"
+    if "data-flow:git-remote-token" in signal_ids:
+        return "git remote configuration"
+    return "external sink"
+
+
+def _has_data_flow_exfiltration_signal(signals: tuple[RiskSignalV2, ...]) -> bool:
+    return any(
+        signal.detector == "data_flow.exfiltration" or signal.signal_id.startswith("data-flow:") for signal in signals
+    )
 
 
 def _highest_confidence(signals: tuple[RiskSignalV2, ...]) -> RiskConfidenceLabel:

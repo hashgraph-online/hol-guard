@@ -21,6 +21,7 @@ import {
   ListControls,
   PaginationControls
 } from "./approval-center-primitives";
+import { DataFlowEvidenceCard } from "./data-flow-evidence-card";
 import { ReceiptsWorkspace } from "./receipts-workspace";
 import { RuntimeOverview } from "./runtime-overview";
 import {
@@ -555,6 +556,7 @@ function WhatChanged(props: { item: GuardApprovalRequest; diff: GuardArtifactDif
       <div className="mt-4 space-y-3 border-l-2 border-brand-blue/10 pl-4">
         <p className="text-sm leading-relaxed text-brand-dark/70">{buildStoppedReason(item, receipt)}</p>
         <WhyGuardCares item={item} />
+        <DataFlowEvidenceCard item={item} />
         {policy.length > 0 ? (
           <p className="text-sm leading-relaxed text-brand-dark/70">
             HOL Guard checked {policy.length} saved {policy.length === 1 ? "decision" : "decisions"} before asking you.
