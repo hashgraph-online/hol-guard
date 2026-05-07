@@ -150,7 +150,9 @@ def _apply_resource_limits(cpu_seconds: float, memory_bytes: int, max_processes:
     with contextlib.suppress(OSError, ValueError):
         resource.setrlimit(resource.RLIMIT_DATA, (memory_bytes, memory_bytes))
     with contextlib.suppress(OSError, ValueError):
-        resource.setrlimit(resource.RLIMIT_NPROC, (max_processes, max_processes))
+        soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
+        effective = max(max_processes, soft) if soft > 0 else max_processes
+        resource.setrlimit(resource.RLIMIT_NPROC, (effective, max(effective, hard) if hard > 0 else hard))
 
 
 def _write_sandbox_files(workspace: Path, files: dict[str, str]) -> None:
@@ -181,12 +183,17 @@ def _language_argv(language: SandboxLanguage, command: str, workspace: Path) -> 
     return ["/bin/sh", "-c", command]
 
 
-def _scan_writes(workspace: Path, before: set[str]) -> list[str]:
-    after: set[str] = set()
+def _scan_writes(workspace: Path, before: set[str], before_mtimes: dict[str, float]) -> list[str]:
+    after_new: set[str] = set()
+    modified: list[str] = []
     for p in workspace.rglob("*"):
         if p.is_file():
-            after.add(str(p.relative_to(workspace)))
-    return sorted(after - before)
+            rel = str(p.relative_to(workspace))
+            if rel not in before:
+                after_new.add(rel)
+            elif p.stat().st_mtime > before_mtimes.get(rel, 0):
+                modified.append(rel)
+    return sorted(after_new | set(modified))
 
 
 def _audit_combined_output(stdout: str, stderr: str) -> tuple[list[str], list[str]]:
@@ -227,9 +234,12 @@ def run_sandbox(request: SandboxRequest, *, analysis_mode: SandboxAnalysisMode =
         _write_sandbox_files(workspace, request.files)
 
         before_files: set[str] = set()
+        before_mtimes: dict[str, float] = {}
         for p in workspace.rglob("*"):
             if p.is_file():
-                before_files.add(str(p.relative_to(workspace)))
+                rel = str(p.relative_to(workspace))
+                before_files.add(rel)
+                before_mtimes[rel] = p.stat().st_mtime
 
         env = _build_env(request.env_policy)
         argv = _language_argv(request.language, request.command, workspace)
@@ -267,7 +277,7 @@ def run_sandbox(request: SandboxRequest, *, analysis_mode: SandboxAnalysisMode =
             duration_ms = (time.monotonic() - start) * 1000.0
             stdout = raw_out.decode("utf-8", errors="replace")
             stderr = raw_err.decode("utf-8", errors="replace")
-            writes = _scan_writes(workspace, before_files)
+            writes = _scan_writes(workspace, before_files, before_mtimes)
             network_attempts, process_attempts = _audit_combined_output(stdout, stderr)
             network_attempts = list(dict.fromkeys(network_pre + network_attempts))
 
