@@ -480,14 +480,11 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         choices=["low", "medium", "high", "critical"],
         help="Filter by minimum severity",
     )
-    _adv_list.add_argument("--json", action="store_true")
 
     _adv_sync = advisories_sub.add_parser("sync", help="Sync advisories from Guard Cloud")
-    _adv_sync.add_argument("--json", action="store_true")
 
     _adv_explain = advisories_sub.add_parser("explain", help="Explain a specific advisory by ID")
     _adv_explain.add_argument("advisory_id", help="Advisory ID to explain")
-    _adv_explain.add_argument("--json", action="store_true")
 
     events_parser = guard_subparsers.add_parser("events", help="List local Guard lifecycle events")
     _add_guard_common_args(events_parser)
@@ -1107,7 +1104,14 @@ def run_guard_command(
         elif adv_sub == "explain":
             all_advs = store.list_cached_advisories()
             target_id = getattr(args, "advisory_id", None)
-            match = next((a for a in all_advs if a.get("advisory_id") == target_id), None)
+            match = next(
+                (
+                    a
+                    for a in all_advs
+                    if a.get("advisory_id") == target_id or a.get("id") == target_id
+                ),
+                None,
+            )
             if match:
                 _emit("advisory_explain", match, getattr(args, "json", False))
             else:
