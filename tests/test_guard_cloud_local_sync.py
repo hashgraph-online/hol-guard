@@ -103,6 +103,26 @@ def test_sync_credentials_token_rotation_clears_stale_cloud_workspace_id(tmp_pat
     assert store.get_sync_payload("policy") is None
 
 
+def test_sync_credentials_workspace_metadata_update_preserves_cached_policy(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:00:00+00:00",
+    )
+    store.set_sync_payload("policy", {"policy": "team"}, "2026-04-24T00:00:00+00:00")
+
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:01:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+
+    assert store.get_cloud_workspace_id() == "workspace-alpha"
+    assert store.get_sync_payload("policy") == {"policy": "team"}
+
+
 def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
@@ -311,6 +331,32 @@ def test_sync_guard_events_drains_all_pending_events_when_v1_endpoint_is_unavail
     assert result["skipped"] == 250
     assert store.count_guard_events_v1(uploaded=False) == 0
     assert store.count_guard_events_v1(uploaded=True) == 250
+
+
+def test_sync_guard_events_preserves_unavailable_summary_when_no_events_pending(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:00:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+    store.set_sync_payload(
+        "guard_events_v1_summary",
+        {
+            "synced_at": datetime.now(timezone.utc).isoformat(),
+            "sync_skipped": True,
+            "sync_reason": "guard_events_endpoint_unavailable",
+        },
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+    result = guard_runner_module.sync_guard_events(store)
+    stored = store.get_sync_payload("guard_events_v1_summary")
+
+    assert result["sync_reason"] == "guard_events_endpoint_unavailable"
+    assert result["sync_skipped"] is True
+    assert stored == result
 
 
 def test_runtime_snapshot_treats_naive_sync_timestamps_as_utc(tmp_path: Path) -> None:

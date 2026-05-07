@@ -2247,10 +2247,7 @@ class GuardStore:
             credentials_changed = True
         else:
             credentials_changed = (
-                previous_sync_url != sync_url
-                or previous_token_hash is None
-                or previous_token_hash != token_hash
-                or previous_workspace_id != effective_workspace_id
+                previous_sync_url != sync_url or previous_token_hash is None or previous_token_hash != token_hash
             )
         self._secret_store.set_secret(self._sync_token_ref, token)
         connection.execute(

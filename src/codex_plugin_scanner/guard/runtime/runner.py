@@ -804,12 +804,20 @@ def sync_guard_events(store: GuardStore) -> dict[str, object]:
     if credentials is None:
         raise GuardSyncNotConfiguredError("Guard is not logged in.")
     sync_url = _guard_events_sync_url(str(credentials["sync_url"]))
+    previous_summary = store.get_sync_payload("guard_events_v1_summary")
     total_events = 0
     total_accepted = 0
     synced_at = _now()
     while True:
         pending_events = store.list_guard_events_v1(uploaded=False, limit=200)
         if not pending_events:
+            if (
+                total_events == 0
+                and isinstance(previous_summary, dict)
+                and previous_summary.get("sync_reason") == "guard_events_endpoint_unavailable"
+                and _guard_events_endpoint_unavailable_recently(store)
+            ):
+                return previous_summary
             break
         body = json.dumps({"events": [event["payload"] for event in pending_events]}).encode("utf-8")
         request = urllib.request.Request(
