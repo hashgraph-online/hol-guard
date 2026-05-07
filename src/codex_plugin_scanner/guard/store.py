@@ -2209,44 +2209,50 @@ class GuardStore:
         *,
         workspace_id: str | None = None,
     ) -> None:
-        self._secret_store.set_secret(self._sync_token_ref, token)
+        token_hash = _token_sha256(token)
         normalized_workspace_id = (
             workspace_id.strip() if isinstance(workspace_id, str) and workspace_id.strip() else None
         )
-        previous_workspace_id: object = None
+        previous_payload: dict[str, object] | None = None
         previous_row = connection.execute(
             "select payload_json from sync_state where state_key = 'credentials'"
         ).fetchone()
         if previous_row is not None:
-            previous_payload = json.loads(str(previous_row["payload_json"]))
-            if isinstance(previous_payload, dict):
-                previous_workspace_id = previous_payload.get("workspace_id")
+            previous_payload_candidate = json.loads(str(previous_row["payload_json"]))
+            if isinstance(previous_payload_candidate, dict):
+                previous_payload = previous_payload_candidate
+        previous_sync_url = previous_payload.get("sync_url") if previous_payload is not None else None
+        previous_token_hash = (
+            self._credential_payload_token_hash(previous_payload) if previous_payload is not None else None
+        )
+        previous_workspace_id = previous_payload.get("workspace_id") if previous_payload is not None else None
         effective_workspace_id = normalized_workspace_id
-        if effective_workspace_id is None and isinstance(previous_workspace_id, str) and previous_workspace_id.strip():
+        can_preserve_workspace = (
+            previous_sync_url == sync_url
+            and previous_token_hash is not None
+            and previous_token_hash == token_hash
+            and isinstance(previous_workspace_id, str)
+            and previous_workspace_id.strip()
+        )
+        if effective_workspace_id is None and can_preserve_workspace:
             effective_workspace_id = previous_workspace_id.strip()
         payload = {
             "sync_url": sync_url,
             "token_ref": self._sync_token_ref,
-            _SYNC_TOKEN_HASH_KEY: _token_sha256(token),
+            _SYNC_TOKEN_HASH_KEY: token_hash,
         }
         if effective_workspace_id is not None:
             payload["workspace_id"] = effective_workspace_id
-        if previous_row is None:
+        if previous_row is None or previous_payload is None:
             credentials_changed = True
         else:
-            previous_payload = json.loads(str(previous_row["payload_json"]))
-            if not isinstance(previous_payload, dict):
-                credentials_changed = True
-            else:
-                previous_sync_url = previous_payload.get("sync_url")
-                previous_token_hash = self._credential_payload_token_hash(previous_payload)
-                previous_workspace_id = previous_payload.get("workspace_id")
-                credentials_changed = (
-                    previous_sync_url != sync_url
-                    or previous_token_hash is None
-                    or previous_token_hash != payload[_SYNC_TOKEN_HASH_KEY]
-                    or previous_workspace_id != effective_workspace_id
-                )
+            credentials_changed = (
+                previous_sync_url != sync_url
+                or previous_token_hash is None
+                or previous_token_hash != token_hash
+                or previous_workspace_id != effective_workspace_id
+            )
+        self._secret_store.set_secret(self._sync_token_ref, token)
         connection.execute(
             """
             insert into sync_state (state_key, payload_json, updated_at)

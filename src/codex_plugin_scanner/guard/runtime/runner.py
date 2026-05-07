@@ -826,15 +826,10 @@ def sync_guard_events(store: GuardStore) -> dict[str, object]:
             )
         except urllib.error.HTTPError as error:
             if error.code == 404:
-                skipped_ids = [
-                    str(event["event_id"])
-                    for event in pending_events
-                    if isinstance(event.get("event_id"), str)
-                ]
-                skipped_count = store.mark_guard_events_v1_uploaded(skipped_ids, synced_at)
+                skipped_count = _mark_all_guard_events_v1_uploaded(store, synced_at)
                 summary = {
                     "synced_at": synced_at,
-                    "events": total_events,
+                    "events": total_events + skipped_count,
                     "accepted": total_accepted,
                     "skipped": skipped_count,
                     "sync_skipped": True,
@@ -886,6 +881,26 @@ def sync_guard_events(store: GuardStore) -> dict[str, object]:
     summary = {"synced_at": synced_at, "events": total_events, "accepted": total_accepted}
     store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
     return summary
+
+
+def _mark_all_guard_events_v1_uploaded(store: GuardStore, uploaded_at: str) -> int:
+    total_marked = 0
+    while True:
+        pending_events = store.list_guard_events_v1(uploaded=False, limit=200)
+        if not pending_events:
+            break
+        event_ids = [
+            str(event["event_id"])
+            for event in pending_events
+            if isinstance(event.get("event_id"), str)
+        ]
+        if not event_ids:
+            break
+        marked = store.mark_guard_events_v1_uploaded(event_ids, uploaded_at)
+        total_marked += marked
+        if marked == 0:
+            break
+    return total_marked
 
 
 def _record_guard_events_sync_failure(

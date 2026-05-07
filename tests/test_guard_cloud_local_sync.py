@@ -83,6 +83,26 @@ def test_sync_credentials_refresh_preserves_existing_cloud_workspace_id(tmp_path
     assert store.get_sync_payload("policy") == {"policy": "team"}
 
 
+def test_sync_credentials_token_rotation_clears_stale_cloud_workspace_id(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:00:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+    store.set_sync_payload("policy", {"policy": "team"}, "2026-04-24T00:00:00+00:00")
+
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-two",
+        "2026-04-24T00:01:00+00:00",
+    )
+
+    assert store.get_cloud_workspace_id() is None
+    assert store.get_sync_payload("policy") is None
+
+
 def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.set_sync_credentials(
@@ -246,6 +266,51 @@ def test_guard_cloud_event_queue_handles_large_overflow_without_sqlite_parameter
 
     assert [item["payload"]["payload"]["index"] for item in pending] == [1004, 1005]
     assert overflow_events[0]["payload"]["dropped_count"] == 1004
+
+
+def test_sync_guard_events_drains_all_pending_events_when_v1_endpoint_is_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home", guard_event_queue_limit=400)
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:00:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+    for index in range(250):
+        store.add_guard_event_v1(
+            build_runtime_session_event(
+                session_id=f"session-{index}",
+                occurred_at=f"2026-04-24T00:{index // 60:02d}:{index % 60:02d}+00:00",
+                payload={"index": index},
+                workspace_id="workspace-alpha",
+                device_id="device-1",
+            )
+        )
+
+    def _raise_not_found(**_kwargs):
+        raise urllib.error.HTTPError(
+            url="https://hol.org/api/v1/guard/events",
+            code=404,
+            msg="Not Found",
+            hdrs={},
+            fp=None,
+        )
+
+    monkeypatch.setattr(
+        guard_runner_module,
+        "_urlopen_json_with_timeout_retry",
+        _raise_not_found,
+    )
+
+    result = guard_runner_module.sync_guard_events(store)
+
+    assert result["sync_reason"] == "guard_events_endpoint_unavailable"
+    assert result["skipped"] == 250
+    assert store.count_guard_events_v1(uploaded=False) == 0
+    assert store.count_guard_events_v1(uploaded=True) == 250
 
 
 def test_runtime_snapshot_treats_naive_sync_timestamps_as_utc(tmp_path: Path) -> None:
