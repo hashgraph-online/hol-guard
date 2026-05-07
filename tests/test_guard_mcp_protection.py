@@ -253,6 +253,18 @@ def test_mcp_server_identity_reads_uvx_from_package_selector() -> None:
     assert identity.package_name == "httpie"
 
 
+def test_mcp_server_identity_skips_uvx_short_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("-i", "https://registry.example/simple", "httpie"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "httpie"
+
+
 def test_mcp_tool_identity_normalizes_set_and_path_schema_values() -> None:
     first = build_mcp_tool_identity(
         server_hash="server",
