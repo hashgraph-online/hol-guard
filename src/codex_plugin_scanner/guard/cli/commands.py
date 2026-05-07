@@ -475,6 +475,8 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     advisories_sub = advisories_parser.add_subparsers(dest="advisories_subcommand")
 
     _adv_list = advisories_sub.add_parser("list", help="List cached advisories")
+    _add_guard_common_args(_adv_list)
+    _adv_list.add_argument("--json", action="store_true")
     _adv_list.add_argument(
         "--severity",
         choices=["low", "medium", "high", "critical"],
@@ -482,8 +484,12 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     )
 
     _adv_sync = advisories_sub.add_parser("sync", help="Sync advisories from Guard Cloud")
+    _add_guard_common_args(_adv_sync)
+    _adv_sync.add_argument("--json", action="store_true")
 
     _adv_explain = advisories_sub.add_parser("explain", help="Explain a specific advisory by ID")
+    _add_guard_common_args(_adv_explain)
+    _adv_explain.add_argument("--json", action="store_true")
     _adv_explain.add_argument("advisory_id", help="Advisory ID to explain")
 
     events_parser = guard_subparsers.add_parser("events", help="List local Guard lifecycle events")
@@ -1096,11 +1102,19 @@ def run_guard_command(
     if args.guard_command == "advisories":
         adv_sub = getattr(args, "advisories_subcommand", None)
         if adv_sub == "sync":
-            _emit(
-                "advisories_sync",
-                {"generated_at": _now(), "status": "no_cloud_sync_configured"},
-                getattr(args, "json", False),
-            )
+            credentials = store.get_sync_credentials()
+            if credentials is None:
+                _emit(
+                    "advisories_sync",
+                    {"generated_at": _now(), "status": "no_cloud_sync_configured"},
+                    getattr(args, "json", False),
+                )
+            else:
+                _emit(
+                    "advisories_sync",
+                    {"generated_at": _now(), "status": "advisory_sync_not_available", "synced": False},
+                    getattr(args, "json", False),
+                )
         elif adv_sub == "explain":
             all_advs = store.list_cached_advisories()
             target_id = getattr(args, "advisory_id", None)

@@ -43,12 +43,12 @@ def escalate_for_advisories(
         return policy_action, None
 
     ranked = sorted(
-        (a for a in matched_advisories if a.severity in _ESCALATION_THRESHOLD_SEVERITIES),
-        key=lambda a: 0 if a.severity == "critical" else 1,
+        (a for a in matched_advisories if a.severity.lower() in _ESCALATION_THRESHOLD_SEVERITIES),
+        key=lambda a: 0 if a.severity.lower() == "critical" else 1,
     )
 
     for advisory in ranked:
-        escalation_map = _ESCALATION_TABLE.get(advisory.severity, {})
+        escalation_map = _ESCALATION_TABLE.get(advisory.severity.lower(), {})
         escalated = escalation_map.get(policy_action)
         if escalated is not None:
             return escalated, advisory.advisory_id  # type: ignore[return-value]
@@ -60,6 +60,6 @@ def advisory_match_summary(matched_advisories: tuple[ThreatAdvisory, ...]) -> st
     """Return a brief human-readable summary of matched advisories for logging."""
     if not matched_advisories:
         return "no advisory matches"
-    parts = [f"{a.advisory_id}({a.severity})" for a in matched_advisories[:5]]
+    parts = [f"{a.advisory_id}({a.severity.lower()})" for a in matched_advisories[:5]]
     suffix = f" +{len(matched_advisories) - 5} more" if len(matched_advisories) > 5 else ""
     return ", ".join(parts) + suffix

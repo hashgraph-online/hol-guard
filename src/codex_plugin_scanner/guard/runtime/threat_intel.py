@@ -206,6 +206,11 @@ def check_bundle_freshness(bundle: ThreatIntelBundle, now: float | None = None) 
         raise BundleExpiredError(
             f"Bundle generated_at {bundle.generated_at:.0f} is in the future (current time {ts:.0f})"
         )
+    bundle_age = ts - bundle.generated_at
+    if bundle_age > _BUNDLE_MAX_AGE_SECONDS:
+        raise BundleExpiredError(
+            f"Bundle age {bundle_age:.0f}s exceeds maximum allowed age of {_BUNDLE_MAX_AGE_SECONDS}s"
+        )
 
 
 def check_bundle_rollback(bundle: ThreatIntelBundle, cached_version: int) -> None:

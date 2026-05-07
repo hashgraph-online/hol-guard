@@ -100,3 +100,24 @@ def test_advisory_match_summary_exactly_five() -> None:
     advisories = tuple(_advisory(f"ID-{i}", "medium") for i in range(5))
     summary = advisory_match_summary(advisories)
     assert "more" not in summary
+
+
+def test_escalate_uppercase_severity_normalized() -> None:
+    high_upper = _advisory("GHSA-upper-01", "HIGH")
+    critical_upper = _advisory("GHSA-upper-02", "CRITICAL")
+    escalated, triggering_id = escalate_for_advisories("allow", (high_upper, critical_upper))  # type: ignore[arg-type]
+    assert escalated == "ask"
+    assert triggering_id == critical_upper.advisory_id
+
+
+def test_escalate_mixed_case_severity_normalized() -> None:
+    mixed = _advisory("GHSA-mixed-01", "Critical")
+    escalated, _ = escalate_for_advisories("warn", (mixed,))  # type: ignore[arg-type]
+    assert escalated == "ask"
+
+
+def test_advisory_match_summary_normalizes_severity_case() -> None:
+    upper_sev = _advisory("GHSA-upper-01", "CRITICAL")
+    summary = advisory_match_summary((upper_sev,))
+    assert "critical" in summary
+    assert "CRITICAL" not in summary

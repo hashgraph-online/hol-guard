@@ -215,6 +215,19 @@ class TestBundleFreshness:
         bundle = _make_bundle(generated_at=now - 100, expires_at=now + 200)
         check_bundle_freshness(bundle, now=now + 100)
 
+    def test_bundle_exceeding_max_age_fails(self) -> None:
+        now = time.time()
+        max_age = 86_400 * 7
+        bundle = _make_bundle(generated_at=now - max_age - 1, expires_at=now + 3600)
+        with pytest.raises(BundleExpiredError, match="maximum allowed age"):
+            check_bundle_freshness(bundle, now=now)
+
+    def test_bundle_at_max_age_boundary_passes(self) -> None:
+        now = time.time()
+        max_age = 86_400 * 7
+        bundle = _make_bundle(generated_at=now - max_age + 100, expires_at=now + 3600)
+        check_bundle_freshness(bundle, now=now)
+
 
 class TestBundleRollback:
     """T539 — rollback protection: older bundle version is rejected."""
