@@ -11,6 +11,12 @@ from pathlib import PurePath
 from .config import GuardConfig
 from .models import GUARD_ACTION_VALUES, GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .receipts import build_receipt
+from .runtime.mcp_protection import (
+    McpServerIdentity,
+    build_mcp_tool_identity,
+    mcp_server_identity_metadata,
+    mcp_tool_identity_metadata,
+)
 from .store import GuardStore
 
 
@@ -35,12 +41,30 @@ def build_tool_call_artifact(
     transport: str,
     server_id: str | None = None,
     server_fingerprint: object | None = None,
+    server_identity: McpServerIdentity | None = None,
+    tool_schema: object | None = None,
+    tool_description: str | None = None,
 ) -> GuardArtifact:
     metadata = {"server_name": server_name}
     if server_id is not None:
         metadata["server_id"] = server_id
     if server_fingerprint is not None:
         metadata["server_fingerprint"] = server_fingerprint
+    if server_identity is not None:
+        metadata["mcp_server_identity"] = mcp_server_identity_metadata(server_identity)
+    if server_id is not None:
+        server_hash = server_id
+    elif server_identity is not None:
+        server_hash = server_identity.identity_hash
+    else:
+        server_hash = server_id or sha256(f"{harness}:{source_scope}:{server_name}".encode()).hexdigest()
+    tool_identity = build_mcp_tool_identity(
+        server_hash=server_hash,
+        tool_name=tool_name,
+        schema=tool_schema,
+        description=tool_description,
+    )
+    metadata["mcp_tool_identity"] = mcp_tool_identity_metadata(tool_identity)
     return GuardArtifact(
         artifact_id=f"{harness}:runtime:{source_scope}:{server_name}:{tool_name}",
         name=f"{server_name}:{tool_name}",
@@ -61,6 +85,7 @@ def build_tool_call_hash(artifact: GuardArtifact, arguments: object) -> str:
             "config_path": artifact.config_path,
             "transport": artifact.transport,
             "server_fingerprint": artifact.metadata.get("server_fingerprint"),
+            "tool_identity": artifact.metadata.get("mcp_tool_identity"),
             "arguments": arguments,
         },
         sort_keys=True,

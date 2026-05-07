@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision, build_tool_call_artifact, build_tool_call_hash
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
+from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_tool_identity
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -975,6 +976,36 @@ def test_tool_call_hash_changes_when_server_identity_changes():
     )
 
 
+def test_tool_call_hash_changes_when_tool_schema_identity_changes():
+    artifact_a = build_tool_call_artifact(
+        harness="codex",
+        server_name="danger_lab",
+        tool_name="dangerous_delete",
+        source_scope="project",
+        config_path="/workspace/.codex/config.toml",
+        transport="stdio",
+        server_id="mcp_server:codex:project:danger_lab:1234",
+        tool_schema={"type": "object", "properties": {"target": {"type": "string"}}},
+        tool_description="Delete a file target.",
+    )
+    artifact_b = build_tool_call_artifact(
+        harness="codex",
+        server_name="danger_lab",
+        tool_name="dangerous_delete",
+        source_scope="project",
+        config_path="/workspace/.codex/config.toml",
+        transport="stdio",
+        server_id="mcp_server:codex:project:danger_lab:1234",
+        tool_schema={"type": "object", "properties": {"target": {"type": "string"}, "force": {"type": "boolean"}}},
+        tool_description="Delete files and directories.",
+    )
+
+    assert build_tool_call_hash(artifact_a, {"target": "canary.txt"}) != build_tool_call_hash(
+        artifact_b,
+        {"target": "canary.txt"},
+    )
+
+
 def test_codex_guard_proxy_buffers_other_inline_approval_responses(tmp_path):
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
@@ -1071,3 +1102,266 @@ def test_codex_guard_proxy_treats_non_blocking_policy_actions_as_pass_through(mo
     assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
     assert store.count_approval_requests() == 0
     assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
+
+
+def test_codex_guard_proxy_reuses_server_identity_with_env_keys(monkeypatch, tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+        server_env_keys=("TOKEN",),
+    )
+    captured: dict[str, object] = {}
+
+    def _fake_evaluate_tool_call(**kwargs):
+        captured["artifact"] = kwargs["artifact"]
+        return ToolCallDecision(
+            action="allow",
+            source="heuristic",
+            signals=(),
+            summary="No high-risk signal was detected in this tool call.",
+        )
+
+    monkeypatch.setattr(runtime_mcp_module, "evaluate_tool_call", _fake_evaluate_tool_call)
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "safe_echo", "arguments": {}}},
+        ]
+    )
+    artifact = captured["artifact"]
+    tool_identity = artifact.metadata["mcp_tool_identity"]
+    expected = build_mcp_tool_identity(
+        server_hash=tool_identity["server_hash"],
+        tool_name="safe_echo",
+        schema={"type": "object", "properties": {}},
+        description="Safe echo",
+    )
+
+    assert result["responses"][2]["result"]["content"][0]["text"] == "safe_echo"
+    assert hasattr(artifact, "metadata")
+    assert artifact.metadata["mcp_server_identity"]["env_keys"] == ["TOKEN"]
+    assert tool_identity["schema_hash"] == expected.schema_hash
+    assert tool_identity["description_hash"] == expected.description_hash
+
+
+def test_codex_guard_proxy_merges_paginated_tools_catalog_and_clears_stale_entries(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ],
+                "nextCursor": "",
+            }
+        }
+    )
+    assert set(proxy._tool_catalog) == {"safe_echo"}
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "dangerous_delete",
+                        "description": "Dangerous delete",
+                        "inputSchema": {"type": "object", "properties": {"target": {"type": "string"}}},
+                    }
+                ]
+            }
+        },
+        request_cursor="page-2",
+    )
+
+    assert set(proxy._tool_catalog) == {"safe_echo", "dangerous_delete"}
+
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo only",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ]
+            }
+        }
+    )
+
+    assert set(proxy._tool_catalog) == {"safe_echo"}
+
+    proxy._capture_tools_catalog({"result": {"tools": []}})
+
+    assert proxy._tool_catalog == {}
+
+
+def test_codex_guard_proxy_invalidates_catalog_on_list_changed_notification(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ],
+                "nextCursor": "cursor-2",
+            }
+        }
+    )
+
+    response, event = proxy._handle_message(
+        message={"jsonrpc": "2.0", "method": "notifications/tools/list_changed", "params": {}},
+        child_stdin=StringIO(),
+        child_stdout=StringIO(),
+        client_input=None,
+        server_output=None,
+        approval_callback=None,
+    )
+
+    assert response is None
+    assert event["decision"] == "forward-notification"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+
+def test_codex_guard_proxy_ignores_stale_tools_list_after_catalog_invalidation(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ]
+            }
+        },
+        request_generation=proxy._tool_catalog_generation,
+    )
+    stale_generation = proxy._tool_catalog_generation
+
+    proxy._invalidate_tools_catalog()
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "dangerous_delete",
+                        "description": "Dangerous delete",
+                        "inputSchema": {"type": "object", "properties": {"target": {"type": "string"}}},
+                    }
+                ]
+            }
+        },
+        request_generation=stale_generation,
+    )
+
+    assert proxy._tool_catalog_generation == stale_generation + 1
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+
+def test_codex_guard_proxy_invalidates_catalog_on_server_list_changed_notification(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ]
+            }
+        }
+    )
+
+    child_stdout = StringIO(
+        "\n".join(
+            [
+                json.dumps({"jsonrpc": "2.0", "method": "notifications/tools/list_changed", "params": {}}),
+                json.dumps({"jsonrpc": "2.0", "id": 7, "result": {"tools": []}}),
+            ]
+        )
+        + "\n"
+    )
+    response = proxy._forward_message(
+        {"jsonrpc": "2.0", "id": 7, "method": "tools/list", "params": {}},
+        child_stdin=StringIO(),
+        child_stdout=child_stdout,
+        client_input=None,
+        server_output=StringIO(),
+    )
+
+    assert response["id"] == 7
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
