@@ -717,3 +717,76 @@ def test_guard_run_surfaces_detector_debug_trace_write_errors(tmp_path, monkeypa
     trace_error = result["runtime_detector_trace_error"]
     assert isinstance(trace_error, dict)
     assert trace_error["error_type"] in {"FileExistsError", "NotADirectoryError"}
+
+
+def test_safe_decode_detector_id() -> None:
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    assert SafeDecodeDetector.detector_id == "safe-decode.content"
+
+
+def test_safe_decode_detector_emits_code_execution_signal(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    payload = base64.b64encode(b"eval(atob('dGVzdA=='))").decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="shell",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name=None,
+        command=None,
+        prompt_excerpt=None,
+        prompt_text=payload,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+    assert any(s.signal_id == "encoded.code-execution" for s in signals)
+
+
+def test_safe_decode_detector_returns_empty_for_plain_text(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-plain",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="shell",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name=None,
+        command=None,
+        prompt_excerpt=None,
+        prompt_text="echo hello world",
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+    assert signals == ()
+
+
+def test_safe_decode_detector_in_default_registry() -> None:
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector, register_default_detectors
+
+    detectors = register_default_detectors()
+    ids = [getattr(d, "detector_id", None) for d in detectors]
+    assert SafeDecodeDetector.detector_id in ids

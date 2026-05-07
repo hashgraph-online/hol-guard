@@ -575,13 +575,14 @@ def _render_approvals(console: Console, payload: dict[str, object]) -> None:
 def _render_managed_install(console: Console, payload: dict[str, object]) -> None:
     skill_scan = _coerce_dict_list(payload.get("skill_scan"))
     supply_chain_risks = _coerce_dict_list(payload.get("supply_chain_risks"))
+    safe_decode_risks = _coerce_dict_list(payload.get("safe_decode_risks"))
     managed_install = payload.get("managed_install")
     if isinstance(managed_install, dict):
         _render_single_managed_install(console, managed_install)
     else:
         managed_installs = _coerce_dict_list(payload.get("managed_installs"))
         if not managed_installs:
-            if not skill_scan and not supply_chain_risks:
+            if not skill_scan and not supply_chain_risks and not safe_decode_risks:
                 _render_fallback(console, payload)
                 return
         else:
@@ -600,6 +601,8 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
         _render_skill_scan_results(console, skill_scan)
     if supply_chain_risks:
         _render_supply_chain_risk_results(console, supply_chain_risks)
+    if safe_decode_risks:
+        _render_safe_decode_results(console, safe_decode_risks)
 
 
 def _render_supply_chain_risk_results(console: Console, supply_chain_risks: list[dict[str, object]]) -> None:
@@ -622,6 +625,31 @@ def _render_supply_chain_risk_results(console: Console, supply_chain_risks: list
             table,
             title=f"[bold yellow]Supply chain risks — {len(supply_chain_risks)} signal(s)[/bold yellow]",
             border_style="yellow",
+        )
+    )
+
+
+def _render_safe_decode_results(console: Console, safe_decode_risks: list[dict[str, object]]) -> None:
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True, expand=True)
+    table.add_column("Signal", overflow="fold")
+    table.add_column("Layers", no_wrap=True)
+    table.add_column("Severity", no_wrap=True)
+    table.add_column("Explanation", overflow="fold")
+    for entry in safe_decode_risks:
+        severity = str(entry.get("severity", "medium"))
+        severity_color = {"critical": "red", "high": "yellow", "medium": "cyan", "low": "dim"}.get(severity, "white")
+        layers = str(entry.get("technical_detail", ""))
+        table.add_row(
+            str(entry.get("signal_id", "?")),
+            layers[:60] if layers else "-",
+            f"[{severity_color}]{severity}[/{severity_color}]",
+            str(entry.get("plain_reason", "")),
+        )
+    console.print(
+        Panel(
+            table,
+            title=f"[bold magenta]Encoded payload risks — {len(safe_decode_risks)} signal(s)[/bold magenta]",
+            border_style="magenta",
         )
     )
 
