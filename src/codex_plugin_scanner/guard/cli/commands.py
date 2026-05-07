@@ -482,6 +482,11 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     doctor_parser.add_argument("harness", nargs="?")
     _add_guard_common_args(doctor_parser)
     doctor_parser.add_argument("--json", action="store_true")
+    doctor_parser.add_argument(
+        "--harnesses",
+        action="store_true",
+        help="List all supported harnesses with their protection contract",
+    )
 
     login_parser = guard_subparsers.add_parser(
         "login",
@@ -1125,6 +1130,25 @@ def run_guard_command(
         return 0
 
     if args.guard_command == "doctor":
+        if getattr(args, "harnesses", False):
+            from .adapters.contracts import HARNESS_CONTRACTS
+
+            contracts_payload = [
+                {
+                    "harness": c.harness,
+                    "install_aliases": list(c.install_aliases),
+                    "config_paths": list(c.config_paths),
+                    "event_surfaces": list(c.event_surfaces),
+                    "native_approval": c.native_approval,
+                    "browser_fallback": c.browser_fallback,
+                    "resume_support": c.resume_support,
+                    "known_blind_spots": c.known_blind_spots,
+                    "smoke_command": c.smoke_command,
+                }
+                for c in HARNESS_CONTRACTS
+            ]
+            _emit("doctor", {"harnesses": contracts_payload}, getattr(args, "json", False))
+            return 0
         if args.harness:
             adapter = get_adapter(args.harness)
             payload = adapter.diagnostics(context)
