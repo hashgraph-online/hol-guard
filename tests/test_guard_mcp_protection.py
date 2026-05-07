@@ -101,6 +101,45 @@ def test_mcp_server_identity_extracts_package_name_for_pipx_run() -> None:
     assert identity.package_name == "black"
 
 
+def test_mcp_server_identity_skips_pipx_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--python", "3.11", "black@24.4.2"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "black"
+    assert identity.package_version == "24.4.2"
+
+
+def test_mcp_server_identity_skips_npx_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("--registry", "https://registry.npmjs.org", "@scope/package@1.2.3"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/package"
+    assert identity.package_version == "1.2.3"
+
+
+def test_mcp_server_identity_normalizes_windows_launcher_suffixes() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command=r"C:\\Program Files\\nodejs\\npx.cmd",
+        args=("--registry", "https://registry.npmjs.org", "@scope/package@1.2.3"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/package"
+    assert identity.package_version == "1.2.3"
+
+
 def test_mcp_tool_identity_normalizes_set_and_path_schema_values() -> None:
     first = build_mcp_tool_identity(
         server_hash="server",

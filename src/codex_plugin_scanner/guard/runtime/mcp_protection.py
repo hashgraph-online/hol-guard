@@ -148,6 +148,9 @@ def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
         if value.startswith("--package="):
             package = value.partition("=")[2].strip()
             return package or None
+        if _option_takes_value(command_name=command_name, option=value):
+            index += 2
+            continue
         if value.startswith("-"):
             index += 1
             continue
@@ -174,7 +177,41 @@ def _split_package_token(value: str) -> tuple[str | None, str | None]:
 
 
 def _command_name(value: str) -> str:
-    return PurePath(value.replace("\\", "/")).name.lower()
+    command_name = PurePath(value.replace("\\", "/")).name.lower()
+    if command_name.endswith((".cmd", ".exe", ".bat", ".ps1")):
+        command_name = PurePath(command_name).stem
+    return command_name
+
+
+def _option_takes_value(*, command_name: str, option: str) -> bool:
+    option_name = option.strip()
+    if not option_name.startswith("-"):
+        return False
+    if option_name.startswith("--") and "=" in option_name:
+        return False
+    return option_name in _value_options_for_command(command_name)
+
+
+def _value_options_for_command(command_name: str) -> set[str]:
+    common = {
+        "--cache",
+        "--cache-dir",
+        "--call",
+        "--cwd",
+        "--prefix",
+        "--python",
+        "--registry",
+        "--userconfig",
+    }
+    command_specific: dict[str, set[str]] = {
+        "bunx": {"-c", "--config", "--package"},
+        "npx": {"-c"},
+        "pipx": {"--index-url", "--pip-args", "--spec", "--suffix"},
+        "pnpm": {"-c", "-C", "--dir", "--filter"},
+        "uvx": {"--extra-index-url", "--find-links", "--from", "--index-url", "--project"},
+        "yarn": {"--cwd", "--use-yarnrc"},
+    }
+    return common | command_specific.get(command_name, set())
 
 
 def _looks_like_runtime_path(value: str) -> bool:
