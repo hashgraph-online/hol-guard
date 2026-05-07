@@ -141,6 +141,18 @@ def test_mcp_server_identity_skips_pipx_option_values_before_package() -> None:
     assert identity.package_version == "24.4.2"
 
 
+def test_mcp_server_identity_skips_pipx_short_index_value_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "-i", "https://pypi.example/simple", "black"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "black"
+
+
 def test_mcp_server_identity_skips_npx_option_values_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
@@ -295,6 +307,30 @@ def test_mcp_server_identity_skips_uvx_constraints_values_before_package() -> No
         config_path=".mcp.json",
         command="uvx",
         args=("-c", "constraints.txt", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_index_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--index", "https://registry.example/simple", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_default_index_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--default-index", "https://registry.example/simple", "ruff"),
         transport="stdio",
         env={},
     )

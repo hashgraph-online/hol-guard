@@ -386,6 +386,8 @@ class RuntimeMcpGuardProxy:
             if "id" in payload:
                 self._buffer_child_response(payload)
                 continue
+            if str(payload.get("method", "")) in {"notifications/tools/list_changed", "tools/list_changed"}:
+                self._invalidate_tools_catalog()
             if server_output is not None:
                 server_output.write(json.dumps(payload) + "\n")
                 server_output.flush()
