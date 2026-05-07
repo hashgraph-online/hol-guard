@@ -14,6 +14,7 @@ import {
   Tag
 } from "./approval-center-primitives";
 import { clearEvidence, exportDiagnostics, fetchSettings, updateSettings, clearPolicy } from "./guard-api";
+import { resolveProtectionLevelCopy } from "./runtime-overview";
 import type { GuardSettings, GuardSettingsPayload } from "./guard-types";
 
 type SettingsState =
@@ -147,15 +148,7 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
   };
 }
 
-export function resolveSecurityLevelDescription(level: "balanced" | "strict" | "custom"): string {
-  if (level === "balanced") {
-    return "Asks before secrets and destructive commands";
-  }
-  if (level === "strict") {
-    return "Asks more often, including new network";
-  }
-  return "Custom rules active";
-}
+export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
 
 export function buildClearPolicyPayload(all: boolean): { harness?: string; all?: boolean } {
   return { all };
@@ -316,6 +309,9 @@ export function SettingsWorkspace() {
   }, [draft]);
 
   const handleClearApprovals = useCallback(async () => {
+    if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) {
+      return;
+    }
     setClearingApprovals(true);
     setActionMessage(null);
     try {
@@ -329,6 +325,9 @@ export function SettingsWorkspace() {
   }, []);
 
   const handleClearEvidence = useCallback(async () => {
+    if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) {
+      return;
+    }
     setClearingEvidence(true);
     setActionMessage(null);
     try {

@@ -2,12 +2,13 @@ import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag } from ".
 import { harnessDisplayName } from "./approval-center-utils";
 import type { GuardCloudSyncHealth, GuardInventoryItem, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
-const WATCHED_HARNESSES = ["codex", "claude", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw"] as const;
+const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw"] as const;
 
 type WatchedHarnessName = (typeof WATCHED_HARNESSES)[number];
 
 type RuntimeOverviewProps = {
   snapshot: GuardRuntimeSnapshot;
+  inventory?: GuardInventoryItem[];
 };
 
 function headlineTone(state: GuardRuntimeSnapshot["headline_state"]): "info" | "success" | "warning" | "destructive" {
@@ -46,12 +47,18 @@ export function resolveCloudSyncHealthCopy(health: GuardCloudSyncHealth): { labe
   };
 }
 
-export function resolveProtectionLevelCopy(level: "balanced" | "strict" | "custom"): string {
+export function resolveProtectionLevelCopy(level: "balanced" | "strict" | "custom" | "gentle" | "paranoid"): string {
+  if (level === "gentle") {
+    return "Monitors quietly, asks only for high-risk actions";
+  }
   if (level === "balanced") {
     return "Asks before secrets and destructive commands";
   }
   if (level === "strict") {
     return "Asks more often, including new network";
+  }
+  if (level === "paranoid") {
+    return "Asks before nearly every action";
   }
   return "Custom rules active";
 }
@@ -114,7 +121,7 @@ function WatchedHarnessChip(props: { harness: WatchedHarnessName; installed: boo
   );
 }
 
-function ProtectionLevelCard(props: { securityLevel: "balanced" | "strict" | "custom" | undefined }) {
+function ProtectionLevelCard(props: { securityLevel: "balanced" | "strict" | "custom" | "gentle" | "paranoid" | undefined }) {
   const level = props.securityLevel ?? "balanced";
   const copy = resolveProtectionLevelCopy(level);
   const toneClass = level === "strict" ? "text-brand-purple" : level === "balanced" ? "text-brand-blue" : "text-slate-500";
@@ -188,10 +195,11 @@ function formatRelativeTime(timestamp: string): string {
 }
 
 export function RuntimeOverview(props: RuntimeOverviewProps) {
-  const { snapshot } = props;
+  const { snapshot, inventory } = props;
   const securityLevel = snapshot.security_level;
   const latestReceipt = snapshot.latest_receipts[0];
   const daemonHealthLabel = snapshot.runtime_state !== null ? "running" : "offline";
+  const resolvedInventory = inventory ?? snapshot.inventory ?? [];
 
   return (
     <Surface className="mb-6" tone="accent">
@@ -225,14 +233,14 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
             items={[
               ["Review queue", snapshot.pending_count + " waiting"],
               ["Saved choices", snapshot.receipt_count + " stored"],
-              ["Watched apps", (snapshot.inventory ?? []).length + " seen"],
+              ["Watched apps", resolvedInventory.length + " seen"],
               ["Session", snapshot.runtime_state?.session_id.slice(0, 8) ?? "offline"],
             ]}
           />
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <WatchedAppsCard inventory={snapshot.inventory} />
+          <WatchedAppsCard inventory={resolvedInventory} />
           <ProtectionLevelCard securityLevel={securityLevel} />
           <RecentProtectionCard receipt={latestReceipt} />
           <CloudIntelCard cloudState={snapshot.cloud_state} connectUrl={snapshot.connect_url} />

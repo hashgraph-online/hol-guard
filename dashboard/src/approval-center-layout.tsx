@@ -53,6 +53,7 @@ import {
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
+  GuardInventoryItem,
   GuardPolicyDecision,
   GuardReceipt,
   GuardRuntimeSnapshot,
@@ -89,6 +90,7 @@ type LayoutProps = {
   detail: DetailState;
   receipts: ReceiptsState;
   runtime: RuntimeState;
+  inventory: GuardInventoryItem[];
   activeRequestId: string | null;
   resolutionMessage: string | null;
   homeContent: ReactNode;
@@ -183,7 +185,7 @@ function RuntimeBanner(props: { runtime: RuntimeState }) {
       </Surface>
     );
   }
-  return <RuntimeOverview snapshot={props.runtime.snapshot} />;
+  return <RuntimeOverview snapshot={props.runtime.snapshot} inventory={props.inventory} />;
 }
 
 function QueueWorkspace(props: {

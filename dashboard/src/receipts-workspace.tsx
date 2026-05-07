@@ -64,7 +64,7 @@ export function filterReceiptItems(
       receipt.policy_decision,
       receipt.capabilities_summary,
       sanitizeReceiptValue(receipt.provenance_summary),
-      receipt.changed_capabilities.join(" ")
+      (receipt.changed_capabilities ?? []).join(" ")
     ].join(" ").toLowerCase();
     return searchable.includes(normalizedSearchTerm);
   });
@@ -248,7 +248,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
 
 function HistoryRow(props: { receipt: GuardReceipt }) {
   const { receipt } = props;
-  const changed = receipt.changed_capabilities.join(", ") || "Nothing recorded";
+  const changed = (receipt.changed_capabilities ?? []).join(", ") || "Nothing recorded";
   const decisionTone = receipt.policy_decision === "allow" ? "green" : receipt.policy_decision === "block" ? "purple" : "blue";
   return (
     <article className="px-4 py-3 transition-colors duration-150 hover:bg-surface-1/70 sm:px-5">
