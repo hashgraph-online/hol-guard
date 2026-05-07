@@ -19,8 +19,6 @@ def queue_access_graph_snapshot(
     now: str,
 ) -> None:
     workspace_id = store.get_cloud_workspace_id()
-    if workspace_id is None:
-        return
     device_id = store.get_or_create_installation_id()
     device_fingerprint = f"device:{device_id}"
     harness_fingerprint = f"harness:{detection.harness}"

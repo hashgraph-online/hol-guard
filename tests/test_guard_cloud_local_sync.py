@@ -107,6 +107,28 @@ def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(tmp_pat
     assert any(entity["entityType"] == "mcp_server" for entity in payload["payload"]["entities"])
 
 
+def test_evaluate_detection_queues_access_graph_snapshot_without_cloud_workspace(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:00:00+00:00",
+    )
+    artifact = _artifact(tmp_path)
+    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
+
+    evaluation = evaluate_detection(_detection(artifact), store, config, default_action="allow", persist=True)
+    pending = store.list_guard_events_v1(uploaded=False, limit=10)
+    snapshot_events = [item for item in pending if item["event_type"] == "access_graph.snapshot"]
+
+    assert evaluation["blocked"] is False
+    assert len(snapshot_events) == 1
+    payload = snapshot_events[0]["payload"]
+    assert payload["workspaceId"] is None
+    assert payload["deviceId"] == store.get_or_create_installation_id()
+    assert any(entity["entityType"] == "mcp_server" for entity in payload["payload"]["entities"])
+
+
 class _FailingAccessGraphEventStore(GuardStore):
     def add_guard_event_v1(self, event) -> None:
         if event.event_type == "access_graph.snapshot":
@@ -236,14 +258,14 @@ def test_runtime_snapshot_treats_naive_sync_timestamps_as_utc(tmp_path: Path) ->
     )
     store.set_sync_payload(
         "guard_events_v1_summary",
-        {"synced_at": "2026-04-24T00:00:00"},
-        "2026-04-24T00:00:00+00:00",
+        {"synced_at": "2000-01-01T00:00:00"},
+        "2000-01-01T00:00:00+00:00",
     )
 
     snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
 
     assert snapshot["cloud_sync_health"]["state"] == "stale"
-    assert snapshot["cloud_sync_health"]["last_synced_at"] == "2026-04-24T00:00:00"
+    assert snapshot["cloud_sync_health"]["last_synced_at"] == "2000-01-01T00:00:00"
 
 
 def test_runtime_session_sync_skips_v1_event_when_ingest_was_recently_unavailable(
