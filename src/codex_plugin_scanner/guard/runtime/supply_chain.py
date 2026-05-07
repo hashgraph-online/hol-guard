@@ -12,15 +12,15 @@ from codex_plugin_scanner.guard.runtime.signals import (
 )
 
 _NPM_LIFECYCLE_SCRIPT = re.compile(
-    r'"(?:preinstall|install|postinstall|prepare|prepublish)"\s*:\s*"[^"]*(?:curl|wget|bash|sh|python|node|exec|eval)[^"]*"',
+    r'"(?:preinstall|install|postinstall|prepare|prepublish)"\s*:\s*"(?:[^"\\]|\\.)*(?:curl|wget|bash|sh|python|node|exec|eval)(?:[^"\\]|\\.)*"',
     re.IGNORECASE,
 )
 _NPM_POSTINSTALL_SECRET = re.compile(
-    r'"postinstall"\s*:\s*"[^"]*(?:\.env|\.ssh|\.aws|\.netrc|password|secret|token|key)[^"]*"',
+    r'"postinstall"\s*:\s*"(?:[^"\\]|\\.)*(?:\.env|\.ssh|\.aws|\.netrc|password|secret|token|key)(?:[^"\\]|\\.)*"',
     re.IGNORECASE,
 )
 _NPM_POSTINSTALL_NETWORK = re.compile(
-    r'"postinstall"\s*:\s*"[^"]*(?:curl|wget|fetch|http)[^"]*"',
+    r'"postinstall"\s*:\s*"(?:[^"\\]|\\.)*(?:curl|wget|fetch|http)(?:[^"\\]|\\.)*"',
     re.IGNORECASE,
 )
 _NPX_REMOTE = re.compile(
@@ -92,8 +92,9 @@ _SCRIPT_CRON = re.compile(
     re.IGNORECASE,
 )
 _PUBLISH_WITH_TOKEN = re.compile(
-    r"\bnpm\s+publish\b.*?--//|(?:NPM_TOKEN|NODE_AUTH_TOKEN)\s*=\s*\S+",
-    re.IGNORECASE,
+    r"(?:NPM_TOKEN|NODE_AUTH_TOKEN)\s*=\s*\S+\s+(?:npm|pnpm|yarn|bun)\s+publish\b"
+    r"|(?:npm|pnpm|yarn|bun)\s+publish\b.*?(?:NPM_TOKEN|NODE_AUTH_TOKEN)\s*=\s*\S+",
+    re.IGNORECASE | re.DOTALL,
 )
 
 
