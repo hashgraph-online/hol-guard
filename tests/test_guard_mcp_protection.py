@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
-from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
+from codex_plugin_scanner.guard.mcp_tool_calls import (
+    build_tool_call_artifact,
+    tool_call_risk_categories,
+    tool_call_risk_signals,
+)
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity, build_mcp_tool_identity
 
@@ -759,3 +763,222 @@ def test_mcp_tool_identity_normalizes_set_and_path_schema_values() -> None:
     )
 
     assert first.schema_hash == second.schema_hash
+
+
+def test_mcp_tool_schema_flags_file_command_and_url_arguments() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="inspect_resource",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "command": {"type": "string"},
+                "webhook": {"type": "string"},
+            },
+        },
+    )
+
+    assert tool_call_risk_categories(artifact, {}) == (
+        "filesystem_access",
+        "command_execution",
+        "outbound_network",
+        "tool_schema_mismatch",
+    )
+
+
+def test_mcp_tool_schema_follows_local_refs_for_risk_categories() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {"operation": {"$ref": "#/$defs/operation"}},
+            "$defs": {
+                "operation": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                }
+            },
+        },
+    )
+
+    assert tool_call_risk_categories(artifact, {}) == ("command_execution", "tool_schema_mismatch")
+
+
+def test_mcp_tool_schema_follows_local_anchor_refs_for_risk_categories() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {"operation": {"$ref": "#cmdSchema"}},
+            "$defs": {
+                "operation": {
+                    "$anchor": "cmdSchema",
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                }
+            },
+        },
+    )
+
+    assert tool_call_risk_categories(artifact, {}) == ("command_execution", "tool_schema_mismatch")
+
+
+def test_mcp_tool_schema_ignores_unreferenced_schema_definitions() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "$defs": {
+                "dangerous": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                }
+            },
+        },
+    )
+
+    assert tool_call_risk_categories(artifact, {}) == ()
+
+
+def test_mcp_tool_schema_traverses_conditional_and_dependent_branches() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "if": {"properties": {"mode": {"const": "shell"}}},
+            "then": {"properties": {"cmd": {"type": "string"}}},
+            "else": {"properties": {"webhook": {"type": "string"}}},
+            "dependentSchemas": {
+                "mode": {"properties": {"url": {"type": "string"}}},
+            },
+            "patternProperties": {
+                "^remote_": {"properties": {"endpoint": {"type": "string"}}},
+            },
+            "additionalProperties": {"properties": {"command": {"type": "string"}}},
+        },
+    )
+
+    categories = set(tool_call_risk_categories(artifact, {}))
+    assert {"command_execution", "outbound_network", "tool_schema_mismatch"}.issubset(categories)
+
+
+def test_mcp_tool_schema_ignores_not_branch_when_inferring_risk() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "not": {
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+            },
+        },
+    )
+
+    assert tool_call_risk_categories(artifact, {}) == ()
+
+
+def test_mcp_tool_runtime_arguments_flag_file_command_and_url_keys() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="workspace_action",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+    )
+
+    assert tool_call_risk_categories(
+        artifact,
+        {
+            "source": "src/app.ts",
+            "cmd": "npm test",
+            "callback": "https://example.test/hook",
+        },
+    ) == ("filesystem_access", "command_execution", "outbound_network")
+
+
+def test_mcp_tool_descriptions_emit_capability_risk_categories() -> None:
+    read_files = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="list_workspace",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_description="Read files from the current workspace.",
+    )
+    mutates_files = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="apply_patch",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_description="Delete, remove, or write files.",
+    )
+    executes_commands = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="task_runner",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_description="Execute shell scripts or run command lines.",
+    )
+
+    assert tool_call_risk_categories(read_files, {}) == ("filesystem_access",)
+    assert tool_call_risk_categories(mutates_files, {}) == ("destructive_mutation",)
+    assert tool_call_risk_categories(executes_commands, {}) == ("command_execution",)
+
+
+def test_mcp_tool_schema_mismatch_warns_when_benign_name_has_dangerous_schema() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={"type": "object", "properties": {"script": {"type": "string"}}},
+    )
+
+    assert tool_call_risk_categories(artifact, {}) == ("command_execution", "tool_schema_mismatch")
+    assert "tool name understates dangerous schema capabilities" in tool_call_risk_signals(artifact, {})

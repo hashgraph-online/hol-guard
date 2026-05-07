@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import PurePath
@@ -65,6 +66,10 @@ def build_tool_call_artifact(
         description=tool_description,
     )
     metadata["mcp_tool_identity"] = mcp_tool_identity_metadata(tool_identity)
+    if tool_schema is not None:
+        metadata["tool_schema"] = tool_schema
+    if isinstance(tool_description, str) and tool_description.strip():
+        metadata["tool_description"] = tool_description.strip()
     return GuardArtifact(
         artifact_id=f"{harness}:runtime:{source_scope}:{server_name}:{tool_name}",
         name=f"{server_name}:{tool_name}",
@@ -90,7 +95,7 @@ def build_tool_call_hash(artifact: GuardArtifact, arguments: object) -> str:
         },
         sort_keys=True,
     )
-    return sha256(payload.encode("utf-8")).hexdigest()
+    return sha256(payload.encode()).hexdigest()
 
 
 def evaluate_tool_call(
@@ -149,11 +154,13 @@ def evaluate_tool_call(
 
 def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
     signals_by_category = {
+        "filesystem_access": "call shape implies filesystem path access",
         "destructive_mutation": "tool name implies destructive file or system changes",
         "command_execution": "tool name implies shell or command execution",
         "outbound_network": "call arguments imply outbound network activity",
         "secret_access": "call arguments mention sensitive local files or secrets",
         "privileged_system_mutation": "call arguments imply privileged system mutation",
+        "tool_schema_mismatch": "tool name understates dangerous schema capabilities",
     }
     return tuple(signals_by_category[category] for category in tool_call_risk_categories(artifact, arguments))
 
@@ -163,11 +170,13 @@ def tool_call_risk_categories(artifact: GuardArtifact, arguments: object) -> tup
 
     categories = _tool_call_risk_category_set(artifact, arguments)
     order = (
+        "filesystem_access",
         "command_execution",
         "destructive_mutation",
         "outbound_network",
         "privileged_system_mutation",
         "secret_access",
+        "tool_schema_mismatch",
     )
     return tuple(category for category in order if category in categories)
 
@@ -178,6 +187,9 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
     combined = _risk_match_text(f"{artifact.name} {serialized_arguments}")
     tool_name_tokens = set(_tool_name_tokens(tool_name))
     categories: set[str] = set()
+    argument_categories = _argument_key_risk_categories(arguments)
+    schema_categories = _schema_risk_categories(artifact.metadata.get("tool_schema"))
+    description_categories = _description_risk_categories(artifact.metadata.get("tool_description"))
 
     if len(tool_name_tokens.intersection({"delete", "remove", "rm", "destroy", "erase"})) > 0:
         categories.add("destructive_mutation")
@@ -206,6 +218,11 @@ def _tool_call_risk_category_set(artifact: GuardArtifact, arguments: object) -> 
         (_token_pattern("sudo", "chmod", "chown", "launchctl", "systemctl"),),
     ):
         categories.add("privileged_system_mutation")
+    categories.update(argument_categories)
+    categories.update(schema_categories)
+    categories.update(description_categories)
+    if _tool_schema_understates_name(tool_name_tokens, schema_categories):
+        categories.add("tool_schema_mismatch")
     return categories
 
 
@@ -225,6 +242,260 @@ def _matches_any(value: str, patterns: tuple[str, ...]) -> bool:
 def _token_pattern(*tokens: str) -> str:
     alternatives = "|".join(re.escape(token) for token in tokens)
     return rf"(?<![a-z0-9])({alternatives})(?![a-z0-9])"
+
+
+def _argument_key_risk_categories(arguments: object) -> set[str]:
+    if not isinstance(arguments, Mapping):
+        return set()
+    categories: set[str] = set()
+    keys = _argument_key_names(arguments)
+    if keys.intersection(
+        {
+            "file",
+            "filepath",
+            "filepaths",
+            "files",
+            "path",
+            "paths",
+            "source",
+            "sourcepath",
+            "sourcepaths",
+            "sources",
+            "target",
+            "targetpath",
+            "targetpaths",
+            "targets",
+        }
+    ):
+        categories.add("filesystem_access")
+    if keys.intersection({"command", "cmd", "script", "shell"}):
+        categories.add("command_execution")
+    if keys.intersection({"callback", "endpoint", "uri", "url", "urls", "webhook"}):
+        categories.add("outbound_network")
+    return categories
+
+
+def _argument_key_names(value: object) -> set[str]:
+    if isinstance(value, Mapping):
+        names: set[str] = set()
+        for key, item in value.items():
+            names.add(_normalized_argument_key(str(key)))
+            names.update(_argument_key_names(item))
+        return names
+    if isinstance(value, list | tuple):
+        names: set[str] = set()
+        for item in value:
+            names.update(_argument_key_names(item))
+        return names
+    return set()
+
+
+def _schema_risk_categories(schema: object) -> set[str]:
+    keys = _schema_property_key_names(schema)
+    categories: set[str] = set()
+    if keys.intersection(
+        {
+            "file",
+            "filepath",
+            "filepaths",
+            "files",
+            "path",
+            "paths",
+            "source",
+            "sourcepath",
+            "sourcepaths",
+            "sources",
+            "target",
+            "targetpath",
+            "targetpaths",
+            "targets",
+        }
+    ):
+        categories.add("filesystem_access")
+    if keys.intersection({"command", "cmd", "script", "shell"}):
+        categories.add("command_execution")
+    if keys.intersection({"callback", "endpoint", "uri", "url", "urls", "webhook"}):
+        categories.add("outbound_network")
+    return categories
+
+
+def _schema_property_key_names(
+    value: object,
+    *,
+    _root_schema: Mapping[str, object] | None = None,
+    _visited_refs: set[str] | None = None,
+) -> set[str]:
+    names: set[str] = set()
+    if isinstance(value, Mapping):
+        root_schema = value if _root_schema is None else _root_schema
+        visited_refs = set() if _visited_refs is None else _visited_refs
+        ref_value = value.get("$ref")
+        if isinstance(ref_value, str) and ref_value not in visited_refs:
+            visited_refs.add(ref_value)
+            resolved = _resolve_local_schema_ref(root_schema, ref_value)
+            if resolved is not None:
+                names.update(
+                    _schema_property_key_names(
+                        resolved,
+                        _root_schema=root_schema,
+                        _visited_refs=visited_refs,
+                    )
+                )
+        properties = value.get("properties")
+        if isinstance(properties, Mapping):
+            for key, item in properties.items():
+                names.add(_normalized_argument_key(str(key)))
+                names.update(
+                    _schema_property_key_names(
+                        item,
+                        _root_schema=root_schema,
+                        _visited_refs=visited_refs,
+                    )
+                )
+        for collection_key in (
+            "additionalProperties",
+            "allOf",
+            "anyOf",
+            "contains",
+            "else",
+            "if",
+            "items",
+            "oneOf",
+            "prefixItems",
+            "propertyNames",
+            "then",
+            "unevaluatedItems",
+            "unevaluatedProperties",
+        ):
+            child = value.get(collection_key)
+            names.update(
+                _schema_property_key_names(
+                    child,
+                    _root_schema=root_schema,
+                    _visited_refs=visited_refs,
+                )
+            )
+        dependent_schemas = value.get("dependentSchemas")
+        if isinstance(dependent_schemas, Mapping):
+            for child in dependent_schemas.values():
+                names.update(
+                    _schema_property_key_names(
+                        child,
+                        _root_schema=root_schema,
+                        _visited_refs=visited_refs,
+                    )
+                )
+        pattern_properties = value.get("patternProperties")
+        if isinstance(pattern_properties, Mapping):
+            for child in pattern_properties.values():
+                names.update(
+                    _schema_property_key_names(
+                        child,
+                        _root_schema=root_schema,
+                        _visited_refs=visited_refs,
+                    )
+                )
+        return names
+    if isinstance(value, list | tuple):
+        root_schema = _root_schema
+        visited_refs = set() if _visited_refs is None else _visited_refs
+        for item in value:
+            names.update(
+                _schema_property_key_names(
+                    item,
+                    _root_schema=root_schema,
+                    _visited_refs=visited_refs,
+                )
+            )
+    return names
+
+
+def _resolve_local_schema_ref(root_schema: Mapping[str, object], reference: str) -> object | None:
+    if reference.startswith("#/"):
+        current: object = root_schema
+        for part in reference[2:].split("/"):
+            token = part.replace("~1", "/").replace("~0", "~")
+            if not isinstance(current, Mapping):
+                return None
+            if token not in current:
+                return None
+            current = current[token]
+        return current
+    if not reference.startswith("#"):
+        return None
+    anchor_name = reference[1:]
+    if not anchor_name:
+        return root_schema
+    return _resolve_local_schema_anchor(root_schema, anchor_name)
+
+
+def _resolve_local_schema_anchor(root_schema: object, anchor_name: str) -> object | None:
+    pending: list[object] = [root_schema]
+    visited_ids: set[int] = set()
+    while pending:
+        current = pending.pop()
+        current_id = id(current)
+        if current_id in visited_ids:
+            continue
+        visited_ids.add(current_id)
+        if not isinstance(current, Mapping):
+            if isinstance(current, list | tuple):
+                pending.extend(item for item in current if isinstance(item, (Mapping, list, tuple)))
+            continue
+        anchor = current.get("$anchor")
+        dynamic_anchor = current.get("$dynamicAnchor")
+        if anchor == anchor_name or dynamic_anchor == anchor_name:
+            return current
+        pending.extend(item for item in current.values() if isinstance(item, (Mapping, list, tuple)))
+    return None
+
+
+def _description_risk_categories(description: object) -> set[str]:
+    if not isinstance(description, str):
+        return set()
+    normalized = _risk_match_text(description)
+    categories: set[str] = set()
+    if _matches_any(normalized, (r"\bread files?\b", r"\bopen files?\b", r"\bview files?\b")):
+        categories.add("filesystem_access")
+    if _matches_any(normalized, (_token_pattern("delete", "remove", "write"),)):
+        categories.add("destructive_mutation")
+    if _matches_any(normalized, (r"\brun command", _token_pattern("execute", "shell"))):
+        categories.add("command_execution")
+    return categories
+
+
+def _tool_schema_understates_name(tool_name_tokens: set[str], schema_categories: set[str]) -> bool:
+    dangerous_categories = {"command_execution", "destructive_mutation", "outbound_network"}
+    if len(schema_categories.intersection(dangerous_categories)) == 0:
+        return False
+    name_sounds_dangerous = (
+        len(
+            tool_name_tokens.intersection(
+                {
+                    "bash",
+                    "cmd",
+                    "command",
+                    "delete",
+                    "destroy",
+                    "exec",
+                    "execute",
+                    "patch",
+                    "remove",
+                    "rm",
+                    "run",
+                    "script",
+                    "shell",
+                    "write",
+                }
+            )
+        )
+        > 0
+    )
+    return not name_sounds_dangerous
+
+
+def _normalized_argument_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", _risk_match_text(value))
 
 
 def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
