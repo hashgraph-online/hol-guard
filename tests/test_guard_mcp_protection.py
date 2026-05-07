@@ -149,6 +149,18 @@ def test_mcp_server_identity_skips_pipx_short_index_value_before_package() -> No
     assert identity.package_name == "black"
 
 
+def test_mcp_server_identity_skips_pipx_with_dependency_value_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--with", "requests", "black"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "black"
+
+
 def test_mcp_server_identity_skips_npx_option_values_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
