@@ -412,6 +412,12 @@ def _build_cloud_sync_health(store: GuardStore, sync_configured: bool, cloud_sta
         state = "disabled"
     elif isinstance(event_summary, dict) and event_summary.get("status") == "failed":
         state = "failed"
+    elif (
+        isinstance(event_summary, dict)
+        and event_summary.get("sync_skipped") is True
+        and event_summary.get("sync_reason") == "guard_events_endpoint_unavailable"
+    ):
+        state = "degraded"
     elif last_synced_at is not None and _timestamp_is_stale(last_synced_at):
         state = "stale"
     elif pending_events > 0 or cloud_state == "paired_waiting":
@@ -463,6 +469,7 @@ def _cloud_sync_health_label(state: str) -> str:
         "healthy": "Cloud sync healthy",
         "pending": "Cloud sync pending",
         "failed": "Cloud sync needs attention",
+        "degraded": "Cloud sync degraded",
         "disabled": "Cloud sync disabled",
         "stale": "Cloud sync stale",
     }
@@ -474,6 +481,8 @@ def _cloud_sync_health_detail(state: str, *, pending_events: int) -> str:
         return "Guard Cloud has the latest local proof from this machine."
     if state == "failed":
         return "The latest Cloud upload failed. HOL Guard kept local protection active and will retry."
+    if state == "degraded":
+        return "Cloud accepted legacy sync, but v1 Guard event ingest is unavailable. Local protection stayed active."
     if state == "disabled":
         return "Local protection is active. Connect Cloud when you want shared team proof."
     if state == "stale":

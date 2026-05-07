@@ -268,6 +268,35 @@ def test_runtime_snapshot_treats_naive_sync_timestamps_as_utc(tmp_path: Path) ->
     assert snapshot["cloud_sync_health"]["last_synced_at"] == "2000-01-01T00:00:00"
 
 
+def test_runtime_snapshot_reports_endpoint_unavailable_sync_as_degraded(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.set_sync_credentials(
+        "https://hol.org/api/guard/receipts/sync",
+        "token-one",
+        "2026-04-24T00:00:00+00:00",
+        workspace_id="workspace-alpha",
+    )
+    store.set_sync_payload(
+        "sync_summary",
+        {"synced_at": datetime.now(timezone.utc).isoformat()},
+        datetime.now(timezone.utc).isoformat(),
+    )
+    store.set_sync_payload(
+        "guard_events_v1_summary",
+        {
+            "synced_at": datetime.now(timezone.utc).isoformat(),
+            "sync_skipped": True,
+            "sync_reason": "guard_events_endpoint_unavailable",
+        },
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert snapshot["cloud_sync_health"]["state"] == "degraded"
+    assert snapshot["cloud_sync_health"]["label"] == "Cloud sync degraded"
+
+
 def test_runtime_session_sync_skips_v1_event_when_ingest_was_recently_unavailable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

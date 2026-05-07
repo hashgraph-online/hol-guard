@@ -36,6 +36,7 @@ const expectedSyncHealthLabels = {
   healthy: "Cloud sync healthy",
   pending: "Cloud sync pending",
   failed: "Cloud sync needs attention",
+  degraded: "Cloud sync degraded",
   disabled: "Cloud sync disabled",
   stale: "Cloud sync stale"
 };

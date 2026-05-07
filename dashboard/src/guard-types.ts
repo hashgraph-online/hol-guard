@@ -154,7 +154,7 @@ export type GuardCloudPairingState = {
 };
 
 export type GuardCloudSyncHealth = {
-  state: "healthy" | "pending" | "failed" | "disabled" | "stale";
+  state: "healthy" | "pending" | "failed" | "degraded" | "disabled" | "stale";
   label: string;
   detail: string;
   pending_events: number;
