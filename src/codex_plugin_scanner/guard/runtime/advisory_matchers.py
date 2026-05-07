@@ -37,8 +37,9 @@ def match_osv(advisory: ThreatAdvisory, target: dict[str, object]) -> bool:
     pkg_name = target.get("package_name")
     ecosystem = target.get("ecosystem")
     advisory_pkg = advisory.matcher.split(":", 1)[-1] if ":" in advisory.matcher else advisory.matcher
-    advisory_eco = advisory.source.split("/", 1)[0] if "/" in advisory.source else advisory.source
-    eco_match = not ecosystem or _norm(advisory_eco) in (_norm(str(ecosystem)), "osv", "*")
+    parts = advisory.source.split("/", 1)
+    advisory_eco = parts[1] if len(parts) > 1 else parts[0]
+    eco_match = not ecosystem or _norm(advisory_eco) in (_norm(str(ecosystem)), "*")
     return eco_match and _package_matches(advisory_pkg, str(pkg_name or ""))
 
 
@@ -86,12 +87,11 @@ def match_github_action(advisory: ThreatAdvisory, target: dict[str, object]) -> 
 
 
 def match_mcp_server(advisory: ThreatAdvisory, target: dict[str, object]) -> bool:
-    """Match an MCP server advisory by server name or URL fragment."""
+    """Match an MCP server advisory by exact server name."""
     server_name = target.get("mcp_server")
     if not isinstance(server_name, str):
         return False
-    matcher_norm = _norm(advisory.matcher)
-    return matcher_norm in _norm(server_name) or _norm(server_name) == matcher_norm
+    return _norm(server_name) == _norm(advisory.matcher)
 
 
 def match_skill_hash(advisory: ThreatAdvisory, target: dict[str, object]) -> bool:
@@ -103,12 +103,17 @@ def match_skill_hash(advisory: ThreatAdvisory, target: dict[str, object]) -> boo
 
 
 def match_malicious_domain(advisory: ThreatAdvisory, target: dict[str, object]) -> bool:
-    """Match a network destination against a known-malicious domain."""
+    """Match a network destination against a known-malicious domain.
+
+    Uses exact match or subdomain boundary match to avoid false positives.
+    e.g. advisory matcher ``evil.com`` matches ``evil.com`` and ``sub.evil.com``
+    but not ``not-evil.com``.
+    """
     hosts: object = target.get("network_hosts")
     if not isinstance(hosts, list):
         hosts = [target.get("network_host")] if target.get("network_host") else []
     matcher_norm = _norm(advisory.matcher)
-    return any(matcher_norm in _norm(str(h)) for h in hosts if h)
+    return any(_norm(str(h)) == matcher_norm or _norm(str(h)).endswith("." + matcher_norm) for h in hosts if h)
 
 
 def match_malicious_package_hash(advisory: ThreatAdvisory, target: dict[str, object]) -> bool:

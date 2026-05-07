@@ -446,9 +446,9 @@ class TestAdvisoryMatchers:
         adv = _make_advisory(matcher="evil-mcp")
         assert match_mcp_server(adv, {"mcp_server": "evil-mcp"})
 
-    def test_mcp_server_substring_match(self) -> None:
+    def test_mcp_server_no_substring_false_positive(self) -> None:
         adv = _make_advisory(matcher="evil-mcp")
-        assert match_mcp_server(adv, {"mcp_server": "some-evil-mcp-server"})
+        assert not match_mcp_server(adv, {"mcp_server": "some-evil-mcp-server"})
 
     def test_skill_hash_match(self) -> None:
         adv = _make_advisory(matcher="abc123def456")

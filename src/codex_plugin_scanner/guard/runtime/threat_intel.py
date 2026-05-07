@@ -7,6 +7,7 @@ cloud advisory client subsystem.
 
 from __future__ import annotations
 
+import base64
 import json
 import time
 from dataclasses import dataclass
@@ -128,13 +129,21 @@ class ThreatIntelBundle:
         if not isinstance(raw_advisories, list):
             raise BundleMalformedError("ThreatIntelBundle 'advisories' must be a list")
 
+        parsed_advisories: list[ThreatAdvisory] = []
+        for idx, item in enumerate(raw_advisories):
+            if not isinstance(item, dict):
+                raise BundleMalformedError(
+                    f"ThreatIntelBundle advisory at index {idx} must be an object, got {type(item).__name__}"
+                )
+            parsed_advisories.append(ThreatAdvisory.from_dict(item))
+
         return ThreatIntelBundle(
             version=_int("version"),
             generated_at=_float("generated_at"),
             expires_at=_float("expires_at"),
             source=_str("source"),
             signature=_str("signature"),
-            advisories=tuple(ThreatAdvisory.from_dict(a) for a in raw_advisories),
+            advisories=tuple(parsed_advisories),
         )
 
 
@@ -142,11 +151,13 @@ def _canonical_payload(bundle: ThreatIntelBundle) -> bytes:
     """Deterministic JSON payload used for signature computation.
 
     Signs only the stable fields — excludes `signature` itself.
+    Timestamps are serialized as integers to avoid float precision
+    differences across JSON implementations.
     """
     payload = {
         "version": bundle.version,
-        "generated_at": bundle.generated_at,
-        "expires_at": bundle.expires_at,
+        "generated_at": int(bundle.generated_at),
+        "expires_at": int(bundle.expires_at),
         "source": bundle.source,
         "advisories": [a.to_dict() for a in bundle.advisories],
     }
@@ -165,8 +176,6 @@ def verify_bundle_signature(bundle: ThreatIntelBundle, public_key_pem: bytes) ->
 
     if not isinstance(loaded_key, RSAPublicKey):
         raise BundleSignatureError("Public key must be RSA")
-
-    import base64
 
     try:
         sig_bytes = base64.b64decode(bundle.signature)
