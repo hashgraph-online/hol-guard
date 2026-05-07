@@ -127,9 +127,6 @@ def stable_mcp_server_identifier(server: ManagedMcpServer) -> str:
     harness = server.harness.strip().lower()
     source_scope = server.source_scope.strip().lower()
     server_name = _stable_server_name(server.name)
-    if server.identity is not None:
-        digest = server.identity.identity_hash[:20]
-        return f"mcp_server:{harness}:{source_scope}:{server_name}:{digest}"
     payload = {
         "harness": harness,
         "source_scope": source_scope,
