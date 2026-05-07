@@ -576,13 +576,14 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
     skill_scan = _coerce_dict_list(payload.get("skill_scan"))
     supply_chain_risks = _coerce_dict_list(payload.get("supply_chain_risks"))
     safe_decode_risks = _coerce_dict_list(payload.get("safe_decode_risks"))
+    sandbox_analysis = _coerce_dict_list(payload.get("sandbox_analysis"))
     managed_install = payload.get("managed_install")
     if isinstance(managed_install, dict):
         _render_single_managed_install(console, managed_install)
     else:
         managed_installs = _coerce_dict_list(payload.get("managed_installs"))
         if not managed_installs:
-            if not skill_scan and not supply_chain_risks and not safe_decode_risks:
+            if not skill_scan and not supply_chain_risks and not safe_decode_risks and not sandbox_analysis:
                 _render_fallback(console, payload)
                 return
         else:
@@ -603,6 +604,8 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
         _render_supply_chain_risk_results(console, supply_chain_risks)
     if safe_decode_risks:
         _render_safe_decode_results(console, safe_decode_risks)
+    if sandbox_analysis:
+        _render_sandbox_results(console, sandbox_analysis)
 
 
 def _render_supply_chain_risk_results(console: Console, supply_chain_risks: list[dict[str, object]]) -> None:
@@ -649,6 +652,39 @@ def _render_safe_decode_results(console: Console, safe_decode_risks: list[dict[s
         Panel(
             table,
             title=f"[bold magenta]Encoded payload risks — {len(safe_decode_risks)} signal(s)[/bold magenta]",
+            border_style="magenta",
+        )
+    )
+
+
+def _render_sandbox_results(console: Console, sandbox_analysis: list[dict[str, object]]) -> None:
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True, expand=True)
+    table.add_column("Signal", overflow="fold")
+    table.add_column("Writes", justify="right", no_wrap=True)
+    table.add_column("Network", justify="right", no_wrap=True)
+    table.add_column("Processes", justify="right", no_wrap=True)
+    table.add_column("Timed out", no_wrap=True)
+    table.add_column("Exit code", no_wrap=True)
+    for entry in sandbox_analysis:
+        signals = _coerce_string_list(entry.get("signals_detected"))
+        signal_text = ", ".join(signals) if signals else "—"
+        writes = _coerce_string_list(entry.get("writes"))
+        network = _coerce_string_list(entry.get("network_attempts"))
+        processes = _coerce_string_list(entry.get("process_attempts"))
+        timed_out = bool(entry.get("timed_out"))
+        exit_code = entry.get("exit_code")
+        table.add_row(
+            signal_text,
+            str(len(writes)),
+            str(len(network)),
+            str(len(processes)),
+            "[red]yes[/red]" if timed_out else "no",
+            str(exit_code) if exit_code is not None else "—",
+        )
+    console.print(
+        Panel(
+            table,
+            title=f"[bold magenta]Sandbox analysis — {len(sandbox_analysis)} result(s)[/bold magenta]",
             border_style="magenta",
         )
     )

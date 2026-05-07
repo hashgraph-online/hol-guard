@@ -184,6 +184,7 @@ class GuardConfig:
     runtime_detector_timeout_ms: int = 50
     runtime_detector_debug_trace: bool = False
     runtime_detector_disabled_ids: tuple[str, ...] = ()
+    sandbox_analysis: str = "off"
     risk_actions: dict[str, GuardAction] | None = None
     harness_risk_actions: dict[str, dict[str, GuardAction]] | None = None
     harness_actions: dict[str, GuardAction] | None = None
@@ -264,6 +265,7 @@ def load_guard_config(guard_home: Path, workspace: Path | None = None) -> GuardC
         runtime_detector_timeout_ms=_coerce_loaded_positive_int(merged.get("runtime_detector_timeout_ms", 50), 50),
         runtime_detector_debug_trace=_coerce_loaded_bool(merged.get("runtime_detector_debug_trace", False)),
         runtime_detector_disabled_ids=_coerce_loaded_string_tuple(merged.get("runtime_detector_disabled_ids")),
+        sandbox_analysis=_coerce_sandbox_analysis(merged.get("sandbox_analysis", "off")),
         harness_actions=_coerce_action_map(merged.get("harnesses")),
         publisher_actions=_coerce_action_map(merged.get("publishers")),
         artifact_actions=_coerce_action_map(merged.get("artifacts")),
@@ -372,6 +374,15 @@ def _coerce_loaded_string_tuple(value: object) -> tuple[str, ...]:
     if not isinstance(value, list):
         return ()
     return tuple(item for item in value if isinstance(item, str) and item.strip())
+
+
+_VALID_SANDBOX_MODES = {"off", "suspicious", "strict"}
+
+
+def _coerce_sandbox_analysis(value: object) -> str:
+    if isinstance(value, str) and value in _VALID_SANDBOX_MODES:
+        return value
+    return "off"
 
 
 def _coerce_risk_action_payload(value: object) -> dict[str, GuardAction]:
