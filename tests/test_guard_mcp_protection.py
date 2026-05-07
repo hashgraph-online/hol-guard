@@ -301,6 +301,44 @@ def test_mcp_server_identity_does_not_parse_yarn_run_subcommand_as_package() -> 
     assert identity.package_name is None
 
 
+def test_mcp_server_identity_reads_npm_exec_package_selector() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("exec", "--", "@modelcontextprotocol/server-filesystem@1.2.3"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@modelcontextprotocol/server-filesystem"
+    assert identity.package_version == "1.2.3"
+
+
+def test_mcp_server_identity_reads_npm_x_package_selector() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("x", "@scope/package@2.4.0"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/package"
+    assert identity.package_version == "2.4.0"
+
+
+def test_mcp_server_identity_does_not_parse_npm_run_subcommand_as_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("run", "lint"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name is None
+
+
 def test_mcp_tool_identity_normalizes_set_and_path_schema_values() -> None:
     first = build_mcp_tool_identity(
         server_hash="server",
