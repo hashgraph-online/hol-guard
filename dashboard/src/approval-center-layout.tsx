@@ -38,8 +38,18 @@ import {
   harnessDisplayName,
   resolveDecisionV2Title,
   resolveDecisionV2Detail,
-  resolveStoppedCommandText
+  resolveStoppedCommandText,
+  displayArtifactName,
+  resolveTerminalLabel,
+  scopeLabel
 } from "./approval-center-utils";
+import {
+  WhyThisPaused,
+  ApproveConsequence,
+  BlockConsequence,
+  KeyboardHints,
+  ConfirmModal
+} from "./approval-center-review-cards";
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
@@ -94,6 +104,7 @@ type LayoutProps = {
     workspace?: string;
     reason: string;
   }) => void;
+  onBulkApprove?: (ids: string[]) => void;
 };
 
 const scopeOptions: Array<{ value: DecisionScope; label: string; description: string }> = [
@@ -105,6 +116,7 @@ const scopeOptions: Array<{ value: DecisionScope; label: string; description: st
 ];
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
+const broadScopeValues = new Set<DecisionScope>(["publisher", "harness", "global"]);
 const queuePageSize = 8;
 export function ApprovalCenterLayout(props: LayoutProps) {
   const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
@@ -143,6 +155,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
                 onOpenRequest={props.onOpenRequest}
                 onGoHome={props.onGoHome}
                 onResolve={props.onResolve}
+                onBulkApprove={props.onBulkApprove}
               />
             )}
           </div>
@@ -182,6 +195,7 @@ function QueueWorkspace(props: {
   onOpenRequest: (requestId: string) => void;
   onGoHome: () => void;
   onResolve: LayoutProps["onResolve"];
+  onBulkApprove?: (ids: string[]) => void;
 }) {
   if (props.requests.kind === "loading") {
     return (
@@ -225,6 +239,7 @@ function QueueWorkspace(props: {
         activeRequestId={props.activeRequestId}
         items={props.requests.items}
         onOpenRequest={props.onOpenRequest}
+        onBulkApprove={props.onBulkApprove}
       />
     </div>
   );
@@ -244,7 +259,7 @@ function QueueHeader(props: {
           Review Queue
         </h1>
         <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-          HOL Guard paused the action below before it ran. Review the command or tool, then approve it once or keep it blocked.
+          HOL Guard paused this before it ran. Review what was stopped, then approve or block it.
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -260,6 +275,7 @@ function QueueBrowser(props: {
   activeRequestId: string | null;
   items: GuardApprovalRequest[];
   onOpenRequest: (requestId: string) => void;
+  onBulkApprove?: (ids: string[]) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [harnessFilter, setHarnessFilter] = useState("all");
@@ -311,8 +327,37 @@ function QueueBrowser(props: {
     setPage((value) => Math.min(totalPages, value + 1));
   }, [totalPages]);
 
+  const isReadOnlyItem = useCallback((item: GuardApprovalRequest) =>
+    item.policy_action !== "block" &&
+    (item.action_envelope_json?.action_type === "file_read" || item.artifact_type === "file_read_request"),
+  []);
+
+  const bulkReadOnlyItems = useMemo(
+    () => filteredItems.filter(isReadOnlyItem),
+    [filteredItems, isReadOnlyItem]
+  );
+  const showBulkApprove =
+    props.onBulkApprove !== undefined &&
+    filteredItems.length > 0 &&
+    bulkReadOnlyItems.length === filteredItems.length;
+
+  const handleBulkApprove = useCallback(() => {
+    props.onBulkApprove?.(filteredItems.map((item) => item.request_id));
+  }, [props.onBulkApprove, filteredItems]);
+
   return (
     <section className="border-t border-slate-200/70 pt-6">
+      {showBulkApprove && (
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={handleBulkApprove}
+            className="rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue shadow-sm transition-colors hover:bg-brand-blue/5"
+          >
+            Approve all read-only actions ({filteredItems.length})
+          </button>
+        </div>
+      )}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <SectionLabel>Other waiting actions</SectionLabel>
@@ -424,6 +469,7 @@ function DecisionWorkspace(props: {
   const [reason, setReason] = useState("approved in local approval center");
   const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [confirmPending, setConfirmPending] = useState<"allow" | "block" | null>(null);
 
   useEffect(() => {
     if (props.detail.kind === "ready") {
@@ -456,6 +502,57 @@ function DecisionWorkspace(props: {
     [props.onResolve, readyRequestId, readyWorkspace, reason, scope]
   );
 
+  const handleRequestResolve = useCallback(
+    (action: "allow" | "block") => {
+      if (broadScopeValues.has(scope)) {
+        setConfirmPending(action);
+      } else {
+        void handleResolve(action);
+      }
+    },
+    [scope, handleResolve]
+  );
+
+  const handleConfirmResolve = useCallback(() => {
+    if (confirmPending !== null) {
+      void handleResolve(confirmPending);
+      setConfirmPending(null);
+    }
+  }, [confirmPending, handleResolve]);
+
+  const handleCancelConfirm = useCallback(() => {
+    setConfirmPending(null);
+  }, []);
+
+  useEffect(() => {
+    if (props.detail.kind !== "ready") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (submitting !== null) return;
+      if (confirmPending !== null) {
+        if (event.key === "Enter") {
+          handleConfirmResolve();
+          return;
+        }
+        if (event.key === "Escape") {
+          handleCancelConfirm();
+          return;
+        }
+        return;
+      }
+      const target = event.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+      ) return;
+      if (event.key === "a" || event.key === "A") handleRequestResolve("allow");
+      else if (event.key === "b" || event.key === "B") handleRequestResolve("block");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [props.detail.kind, submitting, handleRequestResolve, confirmPending, handleConfirmResolve, handleCancelConfirm]);
+
   if (props.detail.kind === "loading") {
     return (
       <div className="space-y-4">
@@ -481,6 +578,14 @@ function DecisionWorkspace(props: {
   const broadScopeOpts = scopeOptions.filter((option) => !commonScopeValues.has(option.value));
   return (
     <div className="guard-surface-in space-y-4">
+      {confirmPending !== null && (
+        <ConfirmModal
+          action={confirmPending}
+          scopeLabel={scopeLabel(scope)}
+          onConfirm={handleConfirmResolve}
+          onCancel={handleCancelConfirm}
+        />
+      )}
       <RuleBuilder
         item={item}
         scope={scope}
@@ -491,7 +596,7 @@ function DecisionWorkspace(props: {
         broadScopeOptions={broadScopeOpts}
         onScopeChange={setScope}
         onReasonChange={setReason}
-        onResolve={handleResolve}
+        onResolve={handleRequestResolve}
       />
       <WhatChanged item={item} diff={diff} receipt={receipt} policy={policy} />
     </div>
@@ -547,11 +652,9 @@ function WhatChanged(props: { item: GuardApprovalRequest; diff: GuardArtifactDif
       <summary className="flex cursor-pointer select-none items-center justify-between gap-3 text-sm font-medium text-brand-dark [&::-webkit-details-marker]:hidden">
         <span className="flex items-center gap-2">
           <span className="text-brand-blue transition-transform duration-200 group-open:rotate-90">›</span>
-          Review technical evidence
+          Technical details
         </span>
-        <span className="hidden rounded-full bg-surface-1 px-3 py-1 font-mono text-[11px] text-muted-foreground sm:inline">
-            saved details
-        </span>
+        <Badge tone="warning">{artifactTypeLabel(item.artifact_type)}</Badge>
       </summary>
       <div className="mt-4 space-y-3 border-l-2 border-brand-blue/10 pl-4">
         <p className="text-sm leading-relaxed text-brand-dark/70">{buildStoppedReason(item, receipt)}</p>
@@ -591,37 +694,45 @@ function RuleBuilder(props: {
 }) {
   const previewText = getRulePreviewText(props.item, props.scope);
   const allowLabel = props.scope === "artifact" ? "Approve once" : "Approve and remember";
+  const retryInstruction = props.item.decision_v2_json?.retry_instruction ?? null;
+
+  const handleAllow = useCallback(() => props.onResolve("allow"), [props.onResolve]);
+  const handleBlock = useCallback(() => props.onResolve("block"), [props.onResolve]);
+
   return (
     <section className="guard-surface-in relative overflow-hidden rounded-[2rem] border border-brand-blue/15 bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.08)_100%)] p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7">
       <div className="pointer-events-none absolute right-8 top-8 h-24 w-24 rounded-full bg-brand-green/20 blur-3xl" />
-      <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px] lg:items-start">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Tag tone="blue">HOL Guard</Tag>
-            <Tag tone="slate">{harnessDisplayName(props.item.harness)}</Tag>
-            <PolicyBadge action={props.item.policy_action} />
-          </div>
-          <div className="mt-4 max-w-3xl">
-            <SectionLabel>Needs your decision</SectionLabel>
-            <h3 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl">
-              {buildDecisionTitle(props.item)}
-            </h3>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/70">
-              {buildPauseLine(props.item)}
-            </p>
-          </div>
+      <div className="relative">
+        <div className="flex flex-wrap items-center gap-2">
+          <Tag tone="blue">HOL Guard</Tag>
+          <Tag tone="slate">{harnessDisplayName(props.item.harness)}</Tag>
+          <PolicyBadge action={props.item.policy_action} />
         </div>
+        <div className="mt-4 max-w-3xl">
+          <SectionLabel>Needs your decision</SectionLabel>
+          <h3 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl">
+            {buildDecisionTitle(props.item)}
+          </h3>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/70">
+            {buildPauseLine(props.item)}
+          </p>
+        </div>
+      </div>
+
+      <div className="relative mt-5">
         <DecisionActionPanel
           allowLabel={allowLabel}
           previewText={previewText}
           submitting={props.submitting}
           isBlocked={props.item.policy_action === "block"}
-          onAllow={() => props.onResolve("allow")}
-          onBlock={() => props.onResolve("block")}
+          retryInstruction={retryInstruction}
+          onAllow={handleAllow}
+          onBlock={handleBlock}
         />
       </div>
 
       <DecisionSteps activeStep={props.submitting === null ? 1 : 3} />
+      <KeyboardHints />
 
       <div className="relative mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)] xl:items-start">
         <BlockedActionCard item={props.item} />
@@ -699,6 +810,7 @@ function DecisionActionPanel(props: {
   previewText: string;
   submitting: "allow" | "block" | null;
   isBlocked: boolean;
+  retryInstruction: string | null;
   onAllow: () => void;
   onBlock: () => void;
 }) {
@@ -708,6 +820,10 @@ function DecisionActionPanel(props: {
       <p className="mt-2 text-sm leading-6 text-brand-dark/70">
         {props.previewText}
       </p>
+      <div className="mt-3 grid gap-1.5">
+        <ApproveConsequence retryInstruction={props.retryInstruction} />
+        <BlockConsequence />
+      </div>
       <div className="mt-4 grid gap-2">
         <ActionButton variant="success" onClick={props.onAllow} disabled={props.submitting !== null}>
           {props.submitting === "allow" ? "Saving…" : (props.isBlocked ? "Allow — override block" : props.allowLabel)}
@@ -817,7 +933,6 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
       <div className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <SectionLabel>What was stopped</SectionLabel>
-          <Badge tone="warning">{artifactTypeLabel(props.item.artifact_type)}</Badge>
         </div>
         <h4 className="mt-2 text-xl font-semibold tracking-tight text-brand-dark">
           {actionDisplayTitle(props.item)}
@@ -836,7 +951,7 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
             <span className="h-2.5 w-2.5 rounded-full bg-brand-blue" />
             <span className="h-2.5 w-2.5 rounded-full bg-brand-green" />
             <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45">
-              Stopped command
+              {resolveTerminalLabel(props.item)}
             </span>
             <span className="ml-auto">
               <CopyCommandButton command={launchText} />
@@ -846,6 +961,7 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
             {launchText}
           </pre>
         </div>
+        <WhyThisPaused item={props.item} />
         {isBlocked && (
           <div className="mt-3 rounded-[1rem] border border-brand-purple/20 bg-brand-purple/[0.05] px-3 py-2.5">
             <p className="text-sm leading-6 text-brand-purple">
@@ -935,10 +1051,6 @@ function PolicyBadge(props: { action: string }) {
     props.action === "allow" ? "success" as const :
     "warning" as const;
   return <Badge tone={tone}>{policyActionLabel(props.action)}</Badge>;
-}
-
-function displayArtifactName(item: GuardApprovalRequest): string {
-  return item.artifact_name || item.artifact_id || "this action";
 }
 
 function simplifyRiskHeadline(headline: string, harness: string): string {
