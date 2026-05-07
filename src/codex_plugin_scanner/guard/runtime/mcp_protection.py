@@ -236,7 +236,7 @@ def _value_options_for_command(command_name: str) -> set[str]:
         "npx": {"-c", "-w", "--workspace"},
         "pipx": {"--index-url", "--pip-args", "--suffix"},
         "pnpm": {"-c", "-C", "--dir", "--filter"},
-        "uvx": {"--extra-index-url", "--find-links", "--index-url", "--project"},
+        "uvx": {"-f", "-i", "--extra-index-url", "--find-links", "--index-url", "--project"},
         "yarn": {"--cwd", "--use-yarnrc"},
     }
     return common | command_specific.get(command_name, set())
