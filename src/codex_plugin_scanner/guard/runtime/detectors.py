@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.runtime.signals import (
     confidence_label_from_score,
     severity_label_from_score,
 )
+from codex_plugin_scanner.guard.runtime.skill_protection import detect_skill_content_risk
 from codex_plugin_scanner.guard.types import PromptRequest
 
 DETECTOR_CATEGORY_TAGS: tuple[RiskSignalCategory, ...] = (
@@ -168,8 +169,30 @@ class PromptInjectionDetector:
         return tuple(_prompt_request_signal(request) for request in requests)
 
 
+class SkillRiskDetector:
+    detector_id = "skill.content"
+    categories: tuple[RiskSignalCategory, ...] = (
+        "skill",
+        "secret",
+        "network",
+        "execution",
+        "persistence",
+        "bypass",
+        "encoded",
+    )
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        if action.action_type != "prompt" or action.prompt_excerpt is None:
+            return ()
+        excerpt = action.prompt_excerpt
+        if "SKILL.md" not in excerpt and "skill" not in excerpt.lower():
+            return ()
+        return detect_skill_content_risk(excerpt)
+
+
 def register_default_detectors() -> tuple[GuardDetector, ...]:
-    return (DataFlowExfiltrationDetector(), PromptInjectionDetector(), SecretPathDetector())
+    return (DataFlowExfiltrationDetector(), PromptInjectionDetector(), SecretPathDetector(), SkillRiskDetector())
 
 
 def _prompt_request_signal(request: PromptRequest) -> RiskSignalV2:
