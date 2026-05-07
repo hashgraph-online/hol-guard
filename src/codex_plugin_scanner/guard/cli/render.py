@@ -286,6 +286,27 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         )
         adapters = _coerce_dict_list(payload.get("adapters"))
         console.print(_build_harness_table(adapters))
+    elif "harnesses" in payload and all("install_aliases" in h for h in _coerce_dict_list(payload.get("harnesses"))):
+        contracts = _coerce_dict_list(payload.get("harnesses"))
+        table = Table(title="HOL Guard supported harnesses", box=box.SIMPLE_HEAD, show_lines=False)
+        table.add_column("Harness", style="bold cyan", no_wrap=True)
+        table.add_column("Install alias", style="dim")
+        table.add_column("Events")
+        table.add_column("Native approval")
+        table.add_column("Known blind spots")
+        for contract in contracts:
+            aliases = ", ".join(str(a) for a in (contract.get("install_aliases") or []))
+            events = ", ".join(str(e) for e in (contract.get("event_surfaces") or []))
+            native = "\u2713" if bool(contract.get("native_approval")) else "-"
+            blind_spots = str(contract.get("known_blind_spots") or "")
+            table.add_row(
+                str(contract.get("harness", "")),
+                aliases,
+                events,
+                native,
+                textwrap.shorten(blind_spots, width=60),
+            )
+        console.print(table)
     else:
         warnings = _coerce_string_list(payload.get("warnings"))
         summary = Table.grid(padding=(0, 1))
