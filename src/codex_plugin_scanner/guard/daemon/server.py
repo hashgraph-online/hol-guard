@@ -119,7 +119,36 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
         if parsed.path == "/v1/inventory":
-            self._write_json({"items": store.list_inventory()})
+            from ..adapters.contracts import HARNESS_CONTRACTS
+
+            inventory_items = store.list_inventory()
+            installed_harnesses = {str(item.get("harness", "")) for item in inventory_items}
+            contracts_index = {
+                c.harness: {
+                    "install_aliases": list(c.install_aliases),
+                    "event_surfaces": list(c.event_surfaces),
+                    "native_approval": c.native_approval,
+                    "browser_fallback": c.browser_fallback,
+                    "resume_support": c.resume_support,
+                    "known_blind_spots": c.known_blind_spots,
+                }
+                for c in HARNESS_CONTRACTS
+            }
+            enriched: list[dict[str, object]] = []
+            for item in inventory_items:
+                harness_name = str(item.get("harness", ""))
+                contract = contracts_index.get(harness_name, {})
+                enriched.append({**item, "contract": contract})
+            uninstalled = [
+                {
+                    "harness": c.harness,
+                    "status": "unknown",
+                    "contract": contracts_index[c.harness],
+                }
+                for c in HARNESS_CONTRACTS
+                if c.harness not in installed_harnesses
+            ]
+            self._write_json({"items": enriched, "available": uninstalled})
             return
         if parsed.path == "/v1/settings":
             config = load_guard_config(store.guard_home)

@@ -93,3 +93,20 @@ Explicit non-support:
 - Guard does not add `guard run vscode-copilot`.
 - Guard treats `~/.copilot/*` as read-only detection input and does not auto-write user-level Copilot config.
 - Guard does not add Cisco AIBOM runtime or policy integration in this pass. If revisited later, AIBOM belongs on evidence or export surfaces.
+
+## Protection Contract Summary
+
+Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
+
+| Harness | Install Aliases | Native Approval | Browser Fallback | Resume | Event Surfaces |
+|---------|-----------------|-----------------|------------------|--------|----------------|
+| `codex` | `codex`, `codex-cli` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read |
+| `codex-app` | `codex-app` | ❌ | ✅ | ❌ | shell, prompt |
+| `claude-code` | `claude-code`, `claude` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read |
+| `opencode` | `opencode` | ❌ | ✅ | ❌ | shell, mcp_tool |
+| `copilot` | `copilot`, `copilot-cli`, `gh-copilot` | ✅ | ✅ | ✅ | shell, prompt |
+| `copilot-ide` | `copilot-ide`, `vscode-copilot` | ❌ | ✅ | ❌ | prompt |
+| `cursor` | `cursor` | ❌ | ✅ | ❌ | mcp_tool |
+| `gemini` | `gemini`, `gemini-cli` | ❌ | ✅ | ❌ | shell, mcp_tool |
+| `hermes` | `hermes` | ❌ | ✅ | ❌ | shell, mcp_tool, prompt |
+| `openclaw` | `openclaw` | ❌ | ✅ | ❌ | mcp_tool |
