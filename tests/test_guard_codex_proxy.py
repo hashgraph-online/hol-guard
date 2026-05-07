@@ -1266,6 +1266,57 @@ def test_codex_guard_proxy_invalidates_catalog_on_list_changed_notification(tmp_
     assert proxy._tool_catalog_pending is None
 
 
+def test_codex_guard_proxy_ignores_stale_tools_list_after_catalog_invalidation(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ]
+            }
+        },
+        request_generation=proxy._tool_catalog_generation,
+    )
+    stale_generation = proxy._tool_catalog_generation
+
+    proxy._invalidate_tools_catalog()
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "dangerous_delete",
+                        "description": "Dangerous delete",
+                        "inputSchema": {"type": "object", "properties": {"target": {"type": "string"}}},
+                    }
+                ]
+            }
+        },
+        request_generation=stale_generation,
+    )
+
+    assert proxy._tool_catalog_generation == stale_generation + 1
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
+
+
 def test_codex_guard_proxy_invalidates_catalog_on_server_list_changed_notification(tmp_path):
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)

@@ -70,6 +70,7 @@ class RuntimeMcpGuardProxy:
         self._buffered_client_responses: dict[str, list[dict[str, Any]]] = {}
         self._tool_catalog: dict[str, dict[str, object]] = {}
         self._tool_catalog_pending: dict[str, dict[str, object]] | None = None
+        self._tool_catalog_generation = 0
 
     def run_session(
         self,
@@ -194,7 +195,12 @@ class RuntimeMcpGuardProxy:
             )
             if method == "tools/list":
                 list_cursor = params.get("cursor") if isinstance(params, dict) else None
-                self._capture_tools_catalog(response, request_cursor=list_cursor)
+                list_generation = self._tool_catalog_generation
+                self._capture_tools_catalog(
+                    response,
+                    request_cursor=list_cursor,
+                    request_generation=list_generation,
+                )
             return response, event
 
         tool_name = str(params.get("name") or "unknown")
@@ -588,7 +594,15 @@ class RuntimeMcpGuardProxy:
             "redacted_params": _redact_json(params),
         }
 
-    def _capture_tools_catalog(self, response: dict[str, Any], *, request_cursor: object | None = None) -> None:
+    def _capture_tools_catalog(
+        self,
+        response: dict[str, Any],
+        *,
+        request_cursor: object | None = None,
+        request_generation: int | None = None,
+    ) -> None:
+        if request_generation is not None and request_generation != self._tool_catalog_generation:
+            return
         result = response.get("result")
         if not isinstance(result, dict):
             return
@@ -631,6 +645,7 @@ class RuntimeMcpGuardProxy:
     def _invalidate_tools_catalog(self) -> None:
         self._tool_catalog = {}
         self._tool_catalog_pending = None
+        self._tool_catalog_generation += 1
 
     @staticmethod
     def _launch_target(tool_name: str, arguments: object) -> str:
