@@ -81,3 +81,29 @@ Nightly release-bar coverage should include:
 - Claude Code or Cursor on a self-hosted macOS runner
 - Gemini or OpenCode on a self-hosted Windows runner
 - a release gate that only passes when those harness families stay green
+
+## Red-Team Fixture Suite (T646)
+
+Run the red-team corpus to validate fixture safety and manifest integrity:
+
+```bash
+pytest tests/test_guard_red_team.py tests/test_guard_canary_fixtures.py -q
+```
+
+This verifies:
+- All malicious fixtures use only `hol-fake-*` sentinel values and route to the canary domain
+- All benign fixtures contain no exfil patterns or real key prefixes
+- Every fixture listed in `expected-decisions.json` exists on disk
+- No local usernames, real paths, or real tokens appear in any fixture
+
+To run only the red-team manifest and safety tests:
+
+```bash
+pytest tests/test_guard_red_team.py -q
+```
+
+To run the full test suite including red-team:
+
+```bash
+pytest -q
+```
