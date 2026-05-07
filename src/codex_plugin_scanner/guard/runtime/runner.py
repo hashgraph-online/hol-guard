@@ -38,6 +38,12 @@ _APPROVAL_METADATA_KEYS = (
     "approval_wait",
     "review_hint",
 )
+
+
+def _get_default_detector_registry() -> DetectorRegistry:
+    return DetectorRegistry(register_default_detectors())
+
+
 _PAIN_SIGNAL_EVENTS = frozenset(
     {
         "changed_artifact_caught",
@@ -364,7 +370,7 @@ def _evaluation_with_detector_registry(
         threat_intel={},
         redaction_settings={},
     )
-    result = DetectorRegistry(register_default_detectors()).run(
+    result = _get_default_detector_registry().run(
         action_envelope,
         detector_context,
         timeout_ms=config.runtime_detector_timeout_ms,
