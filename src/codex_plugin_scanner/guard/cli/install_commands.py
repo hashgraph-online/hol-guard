@@ -65,7 +65,7 @@ def scan_workspace_skills(
             except OSError:
                 continue
             identity = build_skill_identity(content, skill_path=str(skill_path))
-            artifact_id = f"skill:{identity.skill_hash[:16]}"
+            artifact_id = f"skill-path:{skill_path}"
             stored = store.get_snapshot("skill_scan", artifact_id)
             stored_hash = stored.get("identity_hash") if stored else None
             if stored_hash == identity.identity_hash:

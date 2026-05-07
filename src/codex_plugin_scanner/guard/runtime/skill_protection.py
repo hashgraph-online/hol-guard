@@ -157,19 +157,20 @@ def has_skill_structure(content: str) -> bool:
 
 
 def _check_shell_in_frontmatter(content: str, signals: list[RiskSignalV2]) -> None:
-    frontmatter = _FRONTMATTER_COMMAND_PATTERN.search(content)
-    if frontmatter and _SHELL_COMMAND_PATTERN.search(frontmatter.group(0)):
-        signals.append(
-            _skill_signal(
-                "skill.shell-in-frontmatter",
-                "execution",
-                "high",
-                "strong",
-                "Skill YAML frontmatter contains shell code blocks",
-                "This skill embeds shell commands inside its YAML frontmatter section.",
-                "shell code block found in frontmatter",
+    for block in _FRONTMATTER_COMMAND_PATTERN.findall(content):
+        if _SHELL_COMMAND_PATTERN.search(block):
+            signals.append(
+                _skill_signal(
+                    "skill.shell-in-frontmatter",
+                    "execution",
+                    "high",
+                    "strong",
+                    "Skill YAML frontmatter contains shell code blocks",
+                    "This skill embeds shell commands inside its YAML frontmatter section.",
+                    "shell code block found in frontmatter",
+                )
             )
-        )
+            break
 
 
 def _check_secret_read(content: str, signals: list[RiskSignalV2]) -> None:

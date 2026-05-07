@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.runtime.signals import (
     severity_label_from_score,
 )
 from codex_plugin_scanner.guard.runtime.skill_protection import detect_skill_content_risk, has_skill_structure
+from codex_plugin_scanner.guard.runtime.supply_chain import detect_supply_chain_risk
 from codex_plugin_scanner.guard.types import PromptRequest
 
 DETECTOR_CATEGORY_TAGS: tuple[RiskSignalCategory, ...] = (
@@ -190,8 +191,31 @@ class SkillRiskDetector:
         return detect_skill_content_risk(action.prompt_text)
 
 
+class SupplyChainDetector:
+    detector_id = "supply-chain.content"
+    categories: tuple[RiskSignalCategory, ...] = (
+        "supply_chain",
+        "persistence",
+        "secret",
+        "execution",
+        "network",
+    )
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        if action.prompt_text is None:
+            return ()
+        return detect_supply_chain_risk(action.prompt_text)
+
+
 def register_default_detectors() -> tuple[GuardDetector, ...]:
-    return (DataFlowExfiltrationDetector(), PromptInjectionDetector(), SecretPathDetector(), SkillRiskDetector())
+    return (
+        DataFlowExfiltrationDetector(),
+        PromptInjectionDetector(),
+        SecretPathDetector(),
+        SkillRiskDetector(),
+        SupplyChainDetector(),
+    )
 
 
 def _prompt_request_signal(request: PromptRequest) -> RiskSignalV2:
