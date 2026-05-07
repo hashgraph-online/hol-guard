@@ -45,9 +45,45 @@
       }
     },
     {
+      "id": "T591",
+      "name": "codex-app-manual-smoke",
+      "description": "Codex iOS/macOS App manual smoke: read .npmrc shows native approval prompt",
+      "harness": "codex-app",
+      "result": "pass|fail|skip",
+      "evidence": {
+        "screenshot_path": null,
+        "guard_log_excerpt": null,
+        "notes": ""
+      }
+    },
+    {
       "id": "T592",
       "name": "claude-code-env-read-branding",
       "description": "Read(.env) shows HOL Guard branding",
+      "harness": "claude-code",
+      "result": "pass|fail|skip",
+      "evidence": {
+        "screenshot_path": null,
+        "guard_log_excerpt": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "T593",
+      "name": "claude-code-approved-no-reprompt",
+      "description": "Subsequent Read .env calls do not re-prompt after approval",
+      "harness": "claude-code",
+      "result": "pass|fail|skip",
+      "evidence": {
+        "screenshot_path": null,
+        "guard_log_excerpt": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "T594",
+      "name": "claude-code-deny-persists",
+      "description": "Deny is stored; next attempt is blocked without re-prompting",
       "harness": "claude-code",
       "result": "pass|fail|skip",
       "evidence": {
@@ -69,6 +105,18 @@
       }
     },
     {
+      "id": "T596",
+      "name": "opencode-bash-denial-persists",
+      "description": "Denial carries over; Bash-invoked call is also blocked",
+      "harness": "opencode",
+      "result": "pass|fail|skip",
+      "evidence": {
+        "screenshot_path": null,
+        "guard_log_excerpt": null,
+        "notes": ""
+      }
+    },
+    {
       "id": "T597",
       "name": "copilot-canary-exfil-pauses",
       "description": "Canary exfil script pauses on Copilot CLI Autopilot",
@@ -81,10 +129,70 @@
       }
     },
     {
+      "id": "T598",
+      "name": "copilot-permissive-still-pauses-exfil",
+      "description": "Guard still pauses critical exfil patterns with permissive policy",
+      "harness": "copilot",
+      "result": "pass|fail|skip",
+      "evidence": {
+        "screenshot_path": null,
+        "guard_log_excerpt": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "T599",
+      "name": "copilot-ide-terminal-canary",
+      "description": "VS Code integrated terminal canary script pauses before network request",
+      "harness": "copilot-ide",
+      "result": "pass|fail|skip",
+      "evidence": {
+        "screenshot_path": null,
+        "guard_log_excerpt": null,
+        "notes": ""
+      }
+    },
+    {
       "id": "T600",
       "name": "gemini-prompt-injection-detected",
       "description": "HOL Guard detects prompt injection on Gemini",
       "harness": "gemini",
+      "result": "pass|fail|skip",
+      "evidence": {
+        "screenshot_path": null,
+        "guard_log_excerpt": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "T601",
+      "name": "cursor-env-read-pauses",
+      "description": "Cursor .env read pauses or shows Guard attribution in UI",
+      "harness": "cursor",
+      "result": "pass|fail|skip",
+      "evidence": {
+        "screenshot_path": null,
+        "guard_log_excerpt": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "T602",
+      "name": "hermes-mcp-config-write-pauses",
+      "description": "Hermes MCP config write shows HOL Guard confirmation prompt",
+      "harness": "hermes",
+      "result": "pass|fail|skip",
+      "evidence": {
+        "screenshot_path": null,
+        "guard_log_excerpt": null,
+        "notes": ""
+      }
+    },
+    {
+      "id": "T603",
+      "name": "openclaw-config-overlay-blocked",
+      "description": "OpenClaw fake MCP config overlay blocked before disk write",
+      "harness": "openclaw",
       "result": "pass|fail|skip",
       "evidence": {
         "screenshot_path": null,

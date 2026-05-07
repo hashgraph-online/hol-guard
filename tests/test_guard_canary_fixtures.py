@@ -83,20 +83,21 @@ class TestEncodedCanaryFixture:
         )
 
     def test_only_canary_endpoint_in_decoded_payload(self) -> None:
-        import base64
-
         source = _load_source(ENCODED_CANARY_SCRIPT)
         tree = ast.parse(source)
+        raw_bytes_found = False
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, bytes):
+                raw_bytes_found = True
                 try:
-                    decoded = base64.b64decode(node.value).decode("utf-8", errors="replace")
-                    for real_endpoint in _REAL_ENDPOINT_PATTERNS:
-                        assert real_endpoint not in decoded, (
-                            f"Decoded payload references real endpoint '{real_endpoint}'"
-                        )
-                except Exception:
-                    pass
+                    decoded = node.value.decode("utf-8")
+                except UnicodeDecodeError:
+                    continue
+                for real_endpoint in _REAL_ENDPOINT_PATTERNS:
+                    assert real_endpoint not in decoded, (
+                        f"Encoded payload bytes reference real endpoint '{real_endpoint}'"
+                    )
+        assert raw_bytes_found, "Encoded canary script must contain inline bytes payload to verify"
 
     def test_encoded_canary_script_is_valid_python(self) -> None:
         source = _load_source(ENCODED_CANARY_SCRIPT)
