@@ -21,6 +21,8 @@ from codex_plugin_scanner.guard.runtime.signals import (
     confidence_label_from_score,
     severity_label_from_score,
 )
+from codex_plugin_scanner.guard.runtime.skill_protection import detect_skill_content_risk, has_skill_structure
+from codex_plugin_scanner.guard.runtime.supply_chain import detect_supply_chain_risk
 from codex_plugin_scanner.guard.types import PromptRequest
 
 DETECTOR_CATEGORY_TAGS: tuple[RiskSignalCategory, ...] = (
@@ -168,8 +170,52 @@ class PromptInjectionDetector:
         return tuple(_prompt_request_signal(request) for request in requests)
 
 
+class SkillRiskDetector:
+    detector_id = "skill.content"
+    categories: tuple[RiskSignalCategory, ...] = (
+        "skill",
+        "secret",
+        "network",
+        "execution",
+        "persistence",
+        "bypass",
+        "encoded",
+    )
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        if action.action_type != "prompt" or action.prompt_text is None:
+            return ()
+        if not has_skill_structure(action.prompt_text):
+            return ()
+        return detect_skill_content_risk(action.prompt_text)
+
+
+class SupplyChainDetector:
+    detector_id = "supply-chain.content"
+    categories: tuple[RiskSignalCategory, ...] = (
+        "supply_chain",
+        "persistence",
+        "secret",
+        "execution",
+        "network",
+    )
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        if action.prompt_text is None:
+            return ()
+        return detect_supply_chain_risk(action.prompt_text)
+
+
 def register_default_detectors() -> tuple[GuardDetector, ...]:
-    return (DataFlowExfiltrationDetector(), PromptInjectionDetector(), SecretPathDetector())
+    return (
+        DataFlowExfiltrationDetector(),
+        PromptInjectionDetector(),
+        SecretPathDetector(),
+        SkillRiskDetector(),
+        SupplyChainDetector(),
+    )
 
 
 def _prompt_request_signal(request: PromptRequest) -> RiskSignalV2:

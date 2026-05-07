@@ -156,6 +156,7 @@ def _shell_action(command: str) -> GuardActionEnvelope:
         tool_name="bash",
         command=command,
         prompt_excerpt=None,
+        prompt_text=None,
         target_paths=(),
         network_hosts=(),
         mcp_server=None,

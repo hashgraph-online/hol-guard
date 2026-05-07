@@ -641,3 +641,24 @@ def test_emit_guard_payload_preserves_policy_literals_for_risk_action_keys(capsy
 
     output = capsys.readouterr().out
     assert '"local_secret_read": "allow"' in output
+
+
+def test_emit_guard_payload_renders_supply_chain_risks_table(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+    emit_guard_payload(
+        "install",
+        {
+            "supply_chain_risks": [
+                {
+                    "signal_id": "supply-chain.curl-pipe-exec",
+                    "severity": "critical",
+                    "confidence": "strong",
+                    "plain_reason": "Shell executes a remote script via curl pipe.",
+                }
+            ]
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "Supply chain risks" in output
+    assert "1 signal(s)" in output
