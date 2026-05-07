@@ -281,7 +281,7 @@ def _launcher_subcommands(command_name: str) -> set[str]:
 
 def _launcher_non_package_subcommands(command_name: str) -> set[str]:
     command_specific: dict[str, set[str]] = {
-        "npm": {"run"},
+        "npm": {"ci", "install", "run", "start", "stop", "restart", "test"},
         "pnpm": {"exec", "run"},
         "yarn": {"exec", "run"},
     }

@@ -641,6 +641,21 @@ def test_mcp_server_identity_does_not_parse_npm_run_subcommand_as_package() -> N
     assert identity.package_name is None
 
 
+def test_mcp_server_identity_does_not_parse_other_npm_script_subcommands_as_packages() -> None:
+    subcommands = ("ci", "install", "start", "test")
+    for subcommand in subcommands:
+        identity = build_mcp_server_identity(
+            config_path=".mcp.json",
+            command="npm",
+            args=(subcommand, "lint"),
+            transport="stdio",
+            env={},
+        )
+
+        assert identity.package_name is None
+        assert identity.package_version is None
+
+
 def test_mcp_server_identity_redacts_vcs_url_spec_userinfo() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
