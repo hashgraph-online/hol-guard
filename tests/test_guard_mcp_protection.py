@@ -395,6 +395,18 @@ def test_mcp_server_identity_skips_uvx_keyring_provider_option_values_before_pac
     assert identity.package_name == "ruff"
 
 
+def test_mcp_server_identity_skips_uvx_overrides_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--overrides", "overrides.txt", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
 def test_mcp_server_identity_skips_uvx_build_constraints_values_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
@@ -429,6 +441,19 @@ def test_mcp_server_identity_does_not_parse_pnpm_run_subcommand_as_package() -> 
     )
 
     assert identity.package_name is None
+
+
+def test_mcp_server_identity_skips_pnpm_allow_build_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("dlx", "--allow-build", "esbuild", "@scope/pkg"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/pkg"
+    assert identity.package_version is None
 
 
 def test_mcp_server_identity_does_not_parse_yarn_run_subcommand_as_package() -> None:

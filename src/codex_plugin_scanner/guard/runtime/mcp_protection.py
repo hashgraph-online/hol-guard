@@ -281,7 +281,7 @@ def _value_options_for_command(command_name: str) -> set[str]:
         "npm": {"-c", "-w", "--workspace"},
         "npx": {"-c", "-w", "--workspace"},
         "pipx": {"-i", "--index-url", "--pip-args", "--suffix", "--with"},
-        "pnpm": {"-c", "-C", "--dir", "--filter"},
+        "pnpm": {"-c", "-C", "--allow-build", "--dir", "--filter"},
         "uvx": {
             "-b",
             "-c",
@@ -299,6 +299,7 @@ def _value_options_for_command(command_name: str) -> set[str]:
             "--index",
             "--index-url",
             "--keyring-provider",
+            "--overrides",
             "--project",
             "--with",
             "--with-editable",
