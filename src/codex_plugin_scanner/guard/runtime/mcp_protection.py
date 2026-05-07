@@ -182,6 +182,8 @@ def _split_package_token(value: str) -> tuple[str | None, str | None]:
         if not at_sign or not name:
             return value, None
         return f"{scope}/{name}", version or None
+    if _url_authority_contains_userinfo(value):
+        return value, None
     name, at_sign, version = value.rpartition("@")
     if not at_sign or not name:
         return value, None
@@ -193,6 +195,16 @@ def _command_name(value: str) -> str:
     if command_name.endswith((".cmd", ".exe", ".bat", ".ps1")):
         command_name = PurePath(command_name).stem
     return command_name
+
+
+def _url_authority_contains_userinfo(value: str) -> bool:
+    scheme_index = value.find("://")
+    if scheme_index < 0:
+        return False
+    authority_start = scheme_index + 3
+    authority_end = value.find("/", authority_start)
+    authority = value[authority_start:] if authority_end < 0 else value[authority_start:authority_end]
+    return "@" in authority
 
 
 def _option_takes_value(*, command_name: str, option: str) -> bool:
@@ -249,7 +261,19 @@ def _value_options_for_command(command_name: str) -> set[str]:
         "npx": {"-c", "-w", "--workspace"},
         "pipx": {"--index-url", "--pip-args", "--suffix"},
         "pnpm": {"-c", "-C", "--dir", "--filter"},
-        "uvx": {"-f", "-i", "-p", "--extra-index-url", "--find-links", "--index-url", "--project"},
+        "uvx": {
+            "-f",
+            "-i",
+            "-p",
+            "-w",
+            "--extra-index-url",
+            "--find-links",
+            "--index-url",
+            "--project",
+            "--with",
+            "--with-editable",
+            "--with-requirements",
+        },
         "yarn": {"--cwd", "--use-yarnrc"},
     }
     return common | command_specific.get(command_name, set())
