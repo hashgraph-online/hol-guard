@@ -203,6 +203,19 @@ def test_mcp_server_identity_keeps_pnpm_package_named_x() -> None:
     assert identity.package_name == "x"
 
 
+def test_mcp_server_identity_reads_pnpm_package_selector_flag() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("dlx", "--package=@pnpm/meta-updater", "meta-updater"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@pnpm/meta-updater"
+    assert identity.package_version is None
+
+
 def test_mcp_server_identity_does_not_parse_pnpm_exec_command_as_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
@@ -424,6 +437,19 @@ def test_mcp_server_identity_preserves_vcs_url_spec_with_userinfo() -> None:
 
     assert identity.package_name == "git+ssh://git@github.com/psf/black"
     assert identity.package_version is None
+
+
+def test_mcp_server_identity_splits_pip_style_specifier_versions() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "mypackage==2.0.0", "my-app"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "mypackage"
+    assert identity.package_version == "2.0.0"
 
 
 def test_mcp_tool_identity_normalizes_set_and_path_schema_values() -> None:
