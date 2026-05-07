@@ -41,7 +41,8 @@ class TestApprovalCenterLocator:
         guard_home.mkdir()
         locator = self._make_locator(guard_home)
         write_approval_center_locator(guard_home, locator)
-        result = read_approval_center_locator(guard_home)
+        with patch.object(manager_mod, "_guard_daemon_pid_matches_command", return_value=True):
+            result = read_approval_center_locator(guard_home)
         assert result is not None
         assert result.daemon_url == "http://127.0.0.1:6174"
         assert result.pid == os.getpid()
@@ -75,6 +76,24 @@ class TestApprovalCenterLocator:
         result = read_approval_center_locator(guard_home)
         assert result is None, "Dead PID locator must be ignored"
 
+    def test_pid_reused_by_non_guard_process_ignored(self, tmp_path: Path) -> None:
+        """Regression: PID alive but not a guard daemon → locator must be silently ignored."""
+        guard_home = tmp_path / "guard"
+        guard_home.mkdir()
+        alive_pid = os.getpid()
+        locator = ApprovalCenterLocator(
+            guard_home=guard_home,
+            daemon_url="http://127.0.0.1:6174",
+            approval_url_base="http://127.0.0.1:6174",
+            pid=alive_pid,
+            started_at="2026-01-01T00:00:00Z",
+            state_path=guard_home / "daemon-state.json",
+        )
+        write_approval_center_locator(guard_home, locator)
+        with patch.object(manager_mod, "_guard_daemon_pid_matches_command", return_value=False):
+            result = read_approval_center_locator(guard_home)
+        assert result is None, "PID reused by non-guard process must be treated as stale"
+
     def test_moved_daemon_port_updates_locator(self, tmp_path: Path) -> None:
         """T680: Writing a new locator with a different port replaces the old one."""
         guard_home = tmp_path / "guard"
@@ -88,7 +107,8 @@ class TestApprovalCenterLocator:
             approval_url_base="http://127.0.0.1:7777",
         )
         write_approval_center_locator(guard_home, updated)
-        result = read_approval_center_locator(guard_home)
+        with patch.object(manager_mod, "_guard_daemon_pid_matches_command", return_value=True):
+            result = read_approval_center_locator(guard_home)
         assert result is not None
         assert result.daemon_url == "http://127.0.0.1:7777"
 
@@ -118,7 +138,10 @@ class TestEnsureApprovalCenter:
             state_path=guard_home / "daemon-state.json",
         )
         write_approval_center_locator(guard_home, locator)
-        with patch.object(manager_mod, "ensure_guard_daemon") as mock_start:
+        with (
+            patch.object(manager_mod, "_guard_daemon_pid_matches_command", return_value=True),
+            patch.object(manager_mod, "ensure_guard_daemon") as mock_start,
+        ):
             result = ensure_approval_center(guard_home)
         mock_start.assert_not_called()
         assert result.daemon_url == "http://127.0.0.1:6174"
@@ -330,3 +353,62 @@ class TestApprovalTableFallbackCli:
         ]
         output = self._render_approval_table(items)
         assert "hol-guard approvals" in output
+
+
+class TestFallbackCliCommandRewrite:
+    """Regression: fallback_cli_command must be rewritten to new request_id on UPDATE (reuse path)."""
+
+    def test_reused_request_id_rewrites_fallback_cli_command(self, tmp_path: Path) -> None:
+        """Regression: When a pending row is reused, fallback_cli_command gets the new request_id."""
+        import datetime
+        import sqlite3 as _sqlite3
+
+        from codex_plugin_scanner.guard.models import GuardApprovalRequest
+        from codex_plugin_scanner.guard.store import GuardStore
+        from codex_plugin_scanner.guard.store_approvals import (
+            add_approval_request,
+            get_approval_request,
+        )
+
+        guard_home = tmp_path / "guard"
+        store = GuardStore(guard_home)
+
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        initial = GuardApprovalRequest(
+            request_id="req-original-id",
+            harness="codex",
+            artifact_id="art-001",
+            artifact_name="test-tool",
+            artifact_hash="abc123",
+            policy_action="block",
+            recommended_scope="exact",
+            changed_fields=(),
+            source_scope="local",
+            config_path="/tmp/config",
+            review_command="hol-guard approvals req-original-id",
+            approval_url="http://127.0.0.1:6174/#/approve/req-original-id",
+            fallback_cli_command="hol-guard approvals approve req-original-id",
+        )
+
+        conn = _sqlite3.connect(str(store.path))
+        conn.row_factory = _sqlite3.Row
+        row_id1 = add_approval_request(conn, initial, now)
+
+        updated = dataclasses.replace(
+            initial,
+            request_id="req-new-id",
+            review_command="hol-guard approvals req-new-id",
+            approval_url="http://127.0.0.1:6174/#/approve/req-new-id",
+            fallback_cli_command="hol-guard approvals approve req-new-id",
+        )
+        row_id2 = add_approval_request(conn, updated, now)
+        assert row_id2 == row_id1, "Must reuse existing pending row"
+
+        row = get_approval_request(conn, row_id1)
+        assert row is not None
+        assert row["fallback_cli_command"] is not None
+        assert row_id1 in row["fallback_cli_command"], (
+            "fallback_cli_command must be rewritten to contain the original (stored) request_id"
+        )
+        conn.close()

@@ -220,6 +220,8 @@ def read_approval_center_locator(guard_home: Path) -> ApprovalCenterLocator | No
         return None
     if not _guard_daemon_pid_is_running(pid):
         return None
+    if not _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
+        return None
     daemon_url = payload.get("daemon_url")
     approval_url_base = payload.get("approval_url_base")
     started_at = payload.get("started_at")

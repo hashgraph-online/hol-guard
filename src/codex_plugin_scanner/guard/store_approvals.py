@@ -98,7 +98,11 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
                 request.risk_headline,
                 json.dumps(request.action_envelope_json) if request.action_envelope_json is not None else None,
                 json.dumps(request.decision_v2_json) if request.decision_v2_json is not None else None,
-                request.fallback_cli_command,
+                (
+                    _rewrite_review_command(request.fallback_cli_command, request_id)
+                    if request.fallback_cli_command
+                    else None
+                ),
                 review_command,
                 approval_url,
                 now,
