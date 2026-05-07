@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "test": "tsx src/guard-api.test.ts"
+    "test": "tsx src/guard-api.test.ts && tsx src/runtime-overview.test.ts && tsx src/receipts-workspace.test.ts && tsx src/settings-workspace.test.ts"
   },
   "dependencies": {
     "react": "^19.2.0",
