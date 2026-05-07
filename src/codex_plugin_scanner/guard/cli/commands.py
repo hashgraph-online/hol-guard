@@ -41,6 +41,7 @@ from ..bridge import (
     WebhookBackend,
 )
 from ..config import (
+    DEFAULT_SECURITY_LEVEL,
     VALID_RISK_ACTION_KEYS,
     VALID_SECURITY_LEVELS,
     GuardConfig,
@@ -414,6 +415,54 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     settings_risk_parser.add_argument("--harness")
     _add_guard_common_args(settings_risk_parser)
     settings_risk_parser.add_argument("--json", action="store_true")
+    settings_preset_parser = settings_set_subparsers.add_parser("preset", help="Apply a named security preset")
+    settings_preset_parser.add_argument("preset", choices=tuple(sorted(VALID_SECURITY_LEVELS)))
+    _add_guard_common_args(settings_preset_parser)
+    settings_preset_parser.add_argument("--json", action="store_true")
+    settings_secret_files_parser = settings_set_subparsers.add_parser(
+        "secret-files", help="Set action for local secret file reads"
+    )
+    settings_secret_files_parser.add_argument("action", choices=("ask", "warn", "allow"))
+    _add_guard_common_args(settings_secret_files_parser)
+    settings_secret_files_parser.add_argument("--json", action="store_true")
+    settings_network_parser = settings_set_subparsers.add_parser(
+        "network", help="Set action for outbound network calls"
+    )
+    settings_network_parser.add_argument("action", choices=("warn", "ask", "block"))
+    _add_guard_common_args(settings_network_parser)
+    settings_network_parser.add_argument("--json", action="store_true")
+    settings_mcp_parser = settings_set_subparsers.add_parser("mcp", help="Set MCP tool call approval policy")
+    settings_mcp_parser.add_argument("policy", choices=("allow-known", "ask-new", "ask-dangerous", "ask-all"))
+    _add_guard_common_args(settings_mcp_parser)
+    settings_mcp_parser.add_argument("--json", action="store_true")
+    settings_skills_parser = settings_set_subparsers.add_parser("skills", help="Set skill install approval policy")
+    settings_skills_parser.add_argument("policy", choices=("allow-known", "ask-new", "ask-dangerous", "ask-all"))
+    _add_guard_common_args(settings_skills_parser)
+    settings_skills_parser.add_argument("--json", action="store_true")
+    settings_packages_parser = settings_set_subparsers.add_parser(
+        "packages", help="Set package install approval policy"
+    )
+    settings_packages_parser.add_argument("policy", choices=("warn", "ask-lifecycle", "ask-all"))
+    _add_guard_common_args(settings_packages_parser)
+    settings_packages_parser.add_argument("--json", action="store_true")
+    settings_encoded_parser = settings_set_subparsers.add_parser(
+        "encoded-payloads", help="Set encoded payload detection action"
+    )
+    settings_encoded_parser.add_argument("action", choices=("warn", "ask", "block"))
+    _add_guard_common_args(settings_encoded_parser)
+    settings_encoded_parser.add_argument("--json", action="store_true")
+    settings_output_parser = settings_set_subparsers.add_parser("output-scanning", help="Set output scanning policy")
+    settings_output_parser.add_argument("policy", choices=("off", "warn", "ask"))
+    _add_guard_common_args(settings_output_parser)
+    settings_output_parser.add_argument("--json", action="store_true")
+    settings_explain_parser = settings_subparsers.add_parser(
+        "explain", help="Explain current Guard settings in plain language"
+    )
+    _add_guard_common_args(settings_explain_parser)
+    settings_explain_parser.add_argument("--json", action="store_true")
+    settings_doctor_parser = settings_subparsers.add_parser("doctor", help="Diagnose Guard settings for common issues")
+    _add_guard_common_args(settings_doctor_parser)
+    settings_doctor_parser.add_argument("--json", action="store_true")
 
     exceptions_parser = guard_subparsers.add_parser("exceptions", help="List active Guard exceptions with expiry")
     exceptions_parser.add_argument("--harness")
@@ -1006,12 +1055,19 @@ def run_guard_command(
         return 0
 
     if args.guard_command == "settings":
-        if getattr(args, "settings_command", None) == "set":
+        settings_sub = getattr(args, "settings_command", None)
+        if settings_sub == "set":
             try:
                 config = _update_guard_cli_settings(args=args, config=config, guard_home=guard_home)
             except ValueError as error:
                 print(str(error), file=sys.stderr)
                 return 2
+        elif settings_sub == "explain":
+            _emit("settings.explain", _guard_settings_explain_payload(config), getattr(args, "json", False))
+            return 0
+        elif settings_sub == "doctor":
+            _emit("settings.doctor", _guard_settings_doctor_payload(config), getattr(args, "json", False))
+            return 0
         _emit("settings", _guard_cli_settings_payload(config), getattr(args, "json", False))
         return 0
 
@@ -3164,6 +3220,73 @@ def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
     }
 
 
+_PRESET_DESCRIPTIONS: dict[str, str] = {
+    "gentle": (
+        "Warn-only mode. All risky actions surface as warnings so you stay informed "
+        "without blocking any agent workflows."
+    ),
+    "balanced": (
+        "Default preset. High-severity actions (secret reads, exfiltration) require "
+        "re-approval; network egress is warned."
+    ),
+    "strict": (
+        "Elevated protection. Data-flow exfiltration is blocked; all other high-risk "
+        "actions require explicit re-approval."
+    ),
+    "paranoid": (
+        "Maximum protection. Every risk class is blocked outright. "
+        "Recommended for high-security or air-gapped environments."
+    ),
+    "custom": "Fully custom action map. Each risk class uses the action you configured explicitly.",
+}
+
+
+def _guard_settings_explain_payload(config: GuardConfig) -> dict[str, object]:
+    preset = config.security_level
+    description = _PRESET_DESCRIPTIONS.get(preset, f"Unknown preset '{preset}'.")
+    effective = editable_guard_settings(config).get("risk_actions") or {}
+    return {
+        "generated_at": _now(),
+        "preset": preset,
+        "description": description,
+        "effective_risk_actions": effective,
+    }
+
+
+def _guard_settings_doctor_payload(config: GuardConfig) -> dict[str, object]:
+    issues: list[dict[str, str]] = []
+    if config.mode == "observe":
+        issues.append(
+            {
+                "severity": "warning",
+                "message": "Guard is in observe mode. No actions will be blocked or reviewed.",
+            }
+        )
+    if config.security_level not in VALID_SECURITY_LEVELS:
+        fallback = DEFAULT_SECURITY_LEVEL
+        issues.append(
+            {
+                "severity": "error",
+                "message": f"Unknown security level '{config.security_level}'. Falling back to '{fallback}'.",
+            }
+        )
+    if config.approval_wait_timeout_seconds < 10:
+        issues.append(
+            {
+                "severity": "warning",
+                "message": (
+                    f"approval_wait_timeout_seconds={config.approval_wait_timeout_seconds} is very low. "
+                    "Approvals may time out before you can respond."
+                ),
+            }
+        )
+    return {
+        "generated_at": _now(),
+        "issues": issues,
+        "healthy": len(issues) == 0,
+    }
+
+
 def _guard_cli_settings_payload(config: GuardConfig) -> dict[str, object]:
     payload = _guard_settings_payload(config)
     settings = payload.get("settings")
@@ -3190,12 +3313,42 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
     settings_command = getattr(args, "settings_set_command", None)
     if settings_command == "security-level":
         payload: dict[str, object] = {"security_level": args.security_level}
-        if args.security_level in {"balanced", "strict"}:
+        if args.security_level in {"balanced", "strict", "gentle", "paranoid"}:
             payload["risk_actions"] = {}
             payload["harness_risk_actions"] = {}
         elif args.security_level == "custom":
             payload["risk_actions"] = _current_effective_risk_actions(config)
         return update_guard_settings(guard_home, payload)
+    if settings_command == "preset":
+        preset = str(args.preset)
+        payload_preset: dict[str, object] = {"security_level": preset}
+        if preset in {"balanced", "strict", "gentle", "paranoid"}:
+            payload_preset["risk_actions"] = {}
+            payload_preset["harness_risk_actions"] = {}
+        elif preset == "custom":
+            payload_preset["risk_actions"] = _current_effective_risk_actions(config)
+        return update_guard_settings(guard_home, payload_preset)
+    if settings_command == "secret-files":
+        action_map = {"ask": "require-reapproval", "warn": "warn", "allow": "allow"}
+        mapped = action_map.get(str(args.action), "warn")
+        risk_actions = dict(config.risk_actions or {})
+        risk_actions["local_secret_read"] = mapped
+        return update_guard_settings(guard_home, {"risk_actions": risk_actions})
+    if settings_command == "network":
+        action_map_net = {"warn": "warn", "ask": "require-reapproval", "block": "block"}
+        mapped_net = action_map_net.get(str(args.action), "warn")
+        risk_actions_net = dict(config.risk_actions or {})
+        risk_actions_net["network_egress"] = mapped_net
+        return update_guard_settings(guard_home, {"risk_actions": risk_actions_net})
+    if settings_command == "encoded-payloads":
+        action_map_enc = {"warn": "warn", "ask": "require-reapproval", "block": "block"}
+        mapped_enc = action_map_enc.get(str(args.action), "warn")
+        risk_actions_enc = dict(config.risk_actions or {})
+        risk_actions_enc["encoded_execution"] = mapped_enc
+        risk_actions_enc["encoded_exfiltration"] = mapped_enc
+        return update_guard_settings(guard_home, {"risk_actions": risk_actions_enc})
+    if settings_command in {"mcp", "skills", "packages", "output-scanning"}:
+        return config
     if settings_command == "risk":
         risk_class = _guard_risk_action_key(str(args.risk_class))
         action = str(args.action)
