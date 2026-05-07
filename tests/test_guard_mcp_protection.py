@@ -443,6 +443,25 @@ def test_mcp_server_identity_skips_uvx_prerelease_option_values_before_package()
     assert identity.package_name == "ruff"
 
 
+def test_mcp_server_identity_skips_uvx_additional_value_flags_before_package() -> None:
+    option_args = (
+        ("--exclude-newer", "2024-01-01"),
+        ("--fork-strategy", "fewest"),
+        ("--index-strategy", "first-index"),
+        ("--upgrade-package", "typing-extensions"),
+    )
+    for option, value in option_args:
+        identity = build_mcp_server_identity(
+            config_path=".mcp.json",
+            command="uvx",
+            args=(option, value, "ruff"),
+            transport="stdio",
+            env={},
+        )
+
+        assert identity.package_name == "ruff"
+
+
 def test_mcp_server_identity_skips_uvx_overrides_option_values_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
