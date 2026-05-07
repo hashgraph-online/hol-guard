@@ -662,3 +662,25 @@ def test_emit_guard_payload_renders_supply_chain_risks_table(capsys, monkeypatch
     output = capsys.readouterr().out
     assert "Supply chain risks" in output
     assert "1 signal(s)" in output
+
+
+def test_emit_guard_payload_renders_safe_decode_risks_table(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+    emit_guard_payload(
+        "install",
+        {
+            "safe_decode_risks": [
+                {
+                    "signal_id": "encoded.code-execution",
+                    "severity": "high",
+                    "confidence": "strong",
+                    "plain_reason": "Decoded base64 layer contains eval() call.",
+                    "technical_detail": "Layers: ['base64']; eval=1 exec=0 marshal=0",
+                }
+            ]
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "Encoded payload risks" in output
+    assert "1 signal(s)" in output
