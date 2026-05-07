@@ -323,6 +323,7 @@ def _value_options_for_command(command_name: str) -> set[str]:
             "--find-links",
             "--index",
             "--index-url",
+            "--keyring-provider",
             "--project",
             "--with",
             "--with-editable",
