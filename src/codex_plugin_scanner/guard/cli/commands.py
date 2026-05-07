@@ -1131,7 +1131,7 @@ def run_guard_command(
 
     if args.guard_command == "doctor":
         if getattr(args, "harnesses", False):
-            from .adapters.contracts import HARNESS_CONTRACTS
+            from ..adapters.contracts import HARNESS_CONTRACTS
 
             contracts_payload = [
                 {

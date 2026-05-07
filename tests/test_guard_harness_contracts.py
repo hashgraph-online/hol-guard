@@ -81,6 +81,16 @@ class TestHarnessRegistry:
         for c in HARNESS_CONTRACTS:
             assert len(c.install_aliases) > 0, f"{c.harness} must have at least one install alias"
 
+    def test_all_aliases_are_unique(self) -> None:
+        from collections import Counter
+
+        all_aliases: list[str] = []
+        for c in HARNESS_CONTRACTS:
+            all_aliases.extend(c.install_aliases)
+        counts = Counter(all_aliases)
+        duplicates = {alias: count for alias, count in counts.items() if count > 1}
+        assert not duplicates, f"Found duplicate aliases: {duplicates}"
+
 
 class TestContractFor:
     def test_exact_match(self) -> None:
@@ -101,7 +111,7 @@ class TestContractFor:
     def test_claude_code_alias(self) -> None:
         c = contract_for("claude-code")
         assert c is not None
-        assert "claude" in c.install_aliases or "claude-code" in c.install_aliases
+        assert "claude" in c.install_aliases and "claude-code" in c.install_aliases
 
     def test_opencode_alias(self) -> None:
         c = contract_for("opencode")
@@ -124,7 +134,7 @@ class TestInstallAliases:
     def test_install_claude_code(self) -> None:
         c = contract_for("claude-code")
         assert c is not None
-        assert any(a in c.install_aliases for a in ("claude-code", "claude"))
+        assert "claude-code" in c.install_aliases and "claude" in c.install_aliases
 
     def test_install_opencode(self) -> None:
         c = contract_for("opencode")
