@@ -562,6 +562,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     codex_proxy_parser.add_argument("--transport", default="stdio")
     codex_proxy_parser.add_argument("--command", dest="server_command", required=True)
     codex_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+    codex_proxy_parser.add_argument("--server-env-key", dest="server_env_keys", action="append", default=[])
 
     opencode_proxy_parser = guard_subparsers.add_parser("opencode-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(opencode_proxy_parser)
@@ -572,6 +573,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     opencode_proxy_parser.add_argument("--transport", default="local")
     opencode_proxy_parser.add_argument("--command", dest="server_command", required=True)
     opencode_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+    opencode_proxy_parser.add_argument("--server-env-key", dest="server_env_keys", action="append", default=[])
 
     copilot_proxy_parser = guard_subparsers.add_parser("copilot-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(copilot_proxy_parser)
@@ -582,6 +584,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     copilot_proxy_parser.add_argument("--transport", default="stdio")
     copilot_proxy_parser.add_argument("--command", dest="server_command", required=True)
     copilot_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+    copilot_proxy_parser.add_argument("--server-env-key", dest="server_env_keys", action="append", default=[])
 
     hermes_mcp_proxy_parser = guard_subparsers.add_parser("hermes-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(hermes_mcp_proxy_parser)
@@ -828,6 +831,7 @@ def run_guard_command(
             config_path=args.config_path,
             transport=args.transport,
             server_id=args.server_id,
+            server_env_keys=tuple(args.server_env_keys),
         )
         return proxy.serve()
 
@@ -842,6 +846,7 @@ def run_guard_command(
             config_path=args.config_path,
             transport=args.transport,
             server_id=args.server_id,
+            server_env_keys=tuple(args.server_env_keys),
         )
         return proxy.serve()
 
@@ -856,6 +861,7 @@ def run_guard_command(
             config_path=args.config_path,
             transport=args.transport,
             server_id=args.server_id,
+            server_env_keys=tuple(args.server_env_keys),
         )
         return proxy.serve()
 

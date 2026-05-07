@@ -124,17 +124,20 @@ def _package_identity(command: str, args: tuple[str, ...]) -> tuple[str | None, 
     command_name = _command_name(command)
     if command_name not in {"bunx", "npx", "pnpm", "uvx", "yarn", "pipx"}:
         return None, None
-    package_token = _package_token(args)
+    package_token = _package_token(command_name=command_name, args=args)
     if package_token is None:
         return None, None
     return _split_package_token(package_token)
 
 
-def _package_token(args: tuple[str, ...]) -> str | None:
+def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
     index = 0
     while index < len(args):
         value = args[index].strip()
         if not value:
+            index += 1
+            continue
+        if command_name == "pipx" and value == "run":
             index += 1
             continue
         if value in {"dlx", "exec", "x"}:
@@ -196,10 +199,14 @@ def _normalize_json_value(value: object) -> object:
         return value
     if isinstance(value, tuple | list):
         return [_normalize_json_value(item) for item in value]
+    if isinstance(value, set | frozenset):
+        return [_normalize_json_value(item) for item in sorted(value, key=str)]
     if isinstance(value, dict):
         return {
             str(key): _normalize_json_value(item) for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
         }
+    if isinstance(value, PurePath):
+        return str(value)
     return repr(value)
 
 

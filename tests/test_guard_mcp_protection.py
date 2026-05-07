@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import PurePosixPath
+
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
-from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
+from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity, build_mcp_tool_identity
 
 
 def test_mcp_server_identity_hashes_args_and_sorts_env_keys() -> None:
@@ -85,3 +87,32 @@ def test_tool_call_artifact_emits_tool_identity_metadata() -> None:
     assert tool_identity["tool_name"] == "read_file"
     assert len(tool_identity["schema_hash"]) == 64
     assert len(tool_identity["description_hash"]) == 64
+
+
+def test_mcp_server_identity_extracts_package_name_for_pipx_run() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "black", "--version"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "black"
+
+
+def test_mcp_tool_identity_normalizes_set_and_path_schema_values() -> None:
+    first = build_mcp_tool_identity(
+        server_hash="server",
+        tool_name="summarize",
+        schema={"paths": {"beta", "alpha"}, "location": PurePosixPath("/tmp/workspace")},
+        description=None,
+    )
+    second = build_mcp_tool_identity(
+        server_hash="server",
+        tool_name="summarize",
+        schema={"paths": {"alpha", "beta"}, "location": PurePosixPath("/tmp/workspace")},
+        description=None,
+    )
+
+    assert first.schema_hash == second.schema_hash

@@ -1071,3 +1071,43 @@ def test_codex_guard_proxy_treats_non_blocking_policy_actions_as_pass_through(mo
     assert json.loads(marker_path.read_text(encoding="utf-8"))["name"] == "dangerous_delete"
     assert store.count_approval_requests() == 0
     assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
+
+
+def test_codex_guard_proxy_reuses_server_identity_with_env_keys(monkeypatch, tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+        server_env_keys=("TOKEN",),
+    )
+    captured: dict[str, object] = {}
+
+    def _fake_evaluate_tool_call(**kwargs):
+        captured["artifact"] = kwargs["artifact"]
+        return ToolCallDecision(
+            action="allow",
+            source="heuristic",
+            signals=(),
+            summary="No high-risk signal was detected in this tool call.",
+        )
+
+    monkeypatch.setattr(runtime_mcp_module, "evaluate_tool_call", _fake_evaluate_tool_call)
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "safe_echo", "arguments": {}}},
+        ]
+    )
+    artifact = captured["artifact"]
+
+    assert result["responses"][1]["result"]["content"][0]["text"] == "safe_echo"
+    assert hasattr(artifact, "metadata")
+    assert artifact.metadata["mcp_server_identity"]["env_keys"] == ["TOKEN"]

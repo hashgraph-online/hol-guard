@@ -115,6 +115,9 @@ def proxy_cli_args(
         args.extend(["--workspace", workspace])
     for value in server.args:
         args.append(f"--arg={value}")
+    for key in sorted(server.env):
+        if key.strip():
+            args.append(f"--server-env-key={key.strip()}")
     return args
 
 
