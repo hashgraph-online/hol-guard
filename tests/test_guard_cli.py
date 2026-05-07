@@ -203,6 +203,137 @@ def test_guard_settings_set_global_risk_action_preserves_preset_defaults(tmp_pat
     assert resolve_risk_action(loaded, "network_egress", harness="codex") == "require-reapproval"
 
 
+def test_guard_settings_set_security_level_gentle(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    _write_text(home_dir / "config.toml", 'security_level = "balanced"\n')
+
+    rc = main(["guard", "settings", "set", "security-level", "gentle", "--home", str(home_dir), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    loaded = load_guard_config(home_dir)
+
+    assert rc == 0
+    assert payload["settings"]["security_level"] == "gentle"
+    assert loaded.security_level == "gentle"
+    assert loaded.risk_actions == {}
+    assert resolve_risk_action(loaded, "network_egress", harness="codex") == "allow"
+    assert resolve_risk_action(loaded, "local_secret_read", harness="codex") == "warn"
+
+
+def test_guard_settings_set_security_level_paranoid(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    _write_text(home_dir / "config.toml", 'security_level = "balanced"\n')
+
+    rc = main(["guard", "settings", "set", "security-level", "paranoid", "--home", str(home_dir), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    loaded = load_guard_config(home_dir)
+
+    assert rc == 0
+    assert payload["settings"]["security_level"] == "paranoid"
+    assert loaded.security_level == "paranoid"
+    assert loaded.risk_actions == {}
+    assert resolve_risk_action(loaded, "network_egress", harness="codex") == "block"
+    assert resolve_risk_action(loaded, "local_secret_read", harness="codex") == "block"
+
+
+def test_guard_settings_set_preset_command(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    _write_text(home_dir / "config.toml", 'security_level = "custom"\n')
+
+    rc = main(["guard", "settings", "set", "preset", "strict", "--home", str(home_dir), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    loaded = load_guard_config(home_dir)
+
+    assert rc == 0
+    assert payload["settings"]["security_level"] == "strict"
+    assert loaded.security_level == "strict"
+    assert resolve_risk_action(loaded, "data_flow_exfiltration", harness="codex") == "block"
+
+
+def test_guard_settings_set_secret_files(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+
+    rc = main(["guard", "settings", "set", "secret-files", "allow", "--home", str(home_dir), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    loaded = load_guard_config(home_dir)
+
+    assert rc == 0
+    assert loaded.risk_actions is not None
+    assert loaded.risk_actions.get("local_secret_read") == "allow"
+    _ = payload
+
+
+def test_guard_settings_set_network(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+
+    rc = main(["guard", "settings", "set", "network", "block", "--home", str(home_dir), "--json"])
+    json.loads(capsys.readouterr().out)
+    loaded = load_guard_config(home_dir)
+
+    assert rc == 0
+    assert loaded.risk_actions is not None
+    assert loaded.risk_actions.get("network_egress") == "block"
+
+
+def test_guard_settings_set_encoded_payloads(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+
+    rc = main(["guard", "settings", "set", "encoded-payloads", "block", "--home", str(home_dir), "--json"])
+    json.loads(capsys.readouterr().out)
+    loaded = load_guard_config(home_dir)
+
+    assert rc == 0
+    assert loaded.risk_actions is not None
+    assert loaded.risk_actions.get("encoded_execution") == "block"
+    assert loaded.risk_actions.get("encoded_exfiltration") == "block"
+
+
+def test_guard_config_migration_old_config_lacking_new_risk_keys(tmp_path):
+    home_dir = tmp_path / "home"
+    _write_text(
+        home_dir / "config.toml",
+        "\n".join(
+            [
+                'security_level = "balanced"',
+                "",
+                "[risk_actions]",
+                'local_secret_read = "allow"',
+                'network_egress = "warn"',
+            ]
+        )
+        + "\n",
+    )
+
+    loaded = load_guard_config(home_dir)
+
+    assert loaded.security_level == "balanced"
+    assert resolve_risk_action(loaded, "local_secret_read", harness="codex") == "allow"
+    assert resolve_risk_action(loaded, "network_egress", harness="codex") == "warn"
+    assert resolve_risk_action(loaded, "prompt_injection", harness="codex") == "require-reapproval"
+    assert resolve_risk_action(loaded, "guard_bypass", harness="codex") == "block"
+
+
+def test_guard_config_validation_rejects_unknown_preset(tmp_path):
+    home_dir = tmp_path / "home"
+    _write_text(home_dir / "config.toml", 'security_level = "ultra-strict"\n')
+
+    loaded = load_guard_config(home_dir)
+
+    assert loaded.security_level == "balanced"
+
+
+def test_guard_settings_new_risk_keys_in_paranoid_preset(tmp_path):
+    home_dir = tmp_path / "home"
+    _write_text(home_dir / "config.toml", 'security_level = "paranoid"\n')
+
+    loaded = load_guard_config(home_dir)
+
+    assert resolve_risk_action(loaded, "prompt_injection", harness="codex") == "block"
+    assert resolve_risk_action(loaded, "mcp_dangerous_tool", harness="codex") == "block"
+    assert resolve_risk_action(loaded, "malicious_skill", harness="codex") == "block"
+    assert resolve_risk_action(loaded, "guard_bypass", harness="codex") == "block"
+    assert resolve_risk_action(loaded, "encoded_exfiltration", harness="codex") == "block"
+
+
 def _build_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:
     _write_text(
         home_dir / ".codex" / "config.toml",
