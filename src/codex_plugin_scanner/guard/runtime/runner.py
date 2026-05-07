@@ -889,11 +889,7 @@ def _mark_all_guard_events_v1_uploaded(store: GuardStore, uploaded_at: str) -> i
         pending_events = store.list_guard_events_v1(uploaded=False, limit=200)
         if not pending_events:
             break
-        event_ids = [
-            str(event["event_id"])
-            for event in pending_events
-            if isinstance(event.get("event_id"), str)
-        ]
+        event_ids = [str(event["event_id"]) for event in pending_events if isinstance(event.get("event_id"), str)]
         if not event_ids:
             break
         marked = store.mark_guard_events_v1_uploaded(event_ids, uploaded_at)
@@ -940,9 +936,7 @@ def _guard_events_endpoint_unavailable_recently(store: GuardStore) -> bool:
     parsed = _parse_iso_timestamp(synced_at)
     if parsed is None:
         return True
-    return datetime.now(timezone.utc) - parsed < timedelta(
-        hours=_GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_HOURS
-    )
+    return datetime.now(timezone.utc) - parsed < timedelta(hours=_GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_HOURS)
 
 
 def sync_runtime_session(

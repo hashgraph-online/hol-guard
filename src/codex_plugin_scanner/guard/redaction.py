@@ -67,9 +67,7 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
     (
         "connection-env",
-        re.compile(
-            r"(?im)^([ \t]*)([A-Z0-9_]*(?:URL|URI|DSN))=([A-Za-z][A-Za-z0-9+.-]*://.+)$"
-        ),
+        re.compile(r"(?im)^([ \t]*)([A-Z0-9_]*(?:URL|URI|DSN))=([A-Za-z][A-Za-z0-9+.-]*://.+)$"),
         r"\1\2=*****",
     ),
     (
@@ -82,9 +80,7 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
 )
 
-_SENSITIVE_TEXT_PATTERN = re.compile(
-    r"(?i)(sk-[a-z0-9_-]+|(?:token|secret|api[_-]?key)(?:\s*[:=]\s*|\s+)[^\s,;]+)"
-)
+_SENSITIVE_TEXT_PATTERN = re.compile(r"(?i)(sk-[a-z0-9_-]+|(?:token|secret|api[_-]?key)(?:\s*[:=]\s*|\s+)[^\s,;]+)")
 
 
 def redact_text(value: str) -> RedactedText:
