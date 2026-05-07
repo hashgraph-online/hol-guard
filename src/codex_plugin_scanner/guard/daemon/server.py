@@ -208,10 +208,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     limit=limit_v,
                 )
                 total = count_evidence(conn)
-            self._write_json({
-                "items": [vars(r) for r in records],
-                "total": total,
-            })
+            self._write_json(
+                {
+                    "items": [vars(r) for r in records],
+                    "total": total,
+                }
+            )
             return
         if parsed.path == "/v1/evidence/export":
             with store._connect() as conn:

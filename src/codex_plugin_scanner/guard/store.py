@@ -75,6 +75,11 @@ from .store_evidence import (
     evidence_index_statements,
     evidence_schema_statement,
 )
+from .store_threat_intel import (
+    threat_intel_bundle_schema_statement,
+    threat_intel_index_statements,
+    threat_intel_matches_schema_statement,
+)
 from .types import CapabilitySet
 
 _SYNC_TOKEN_REF = "guard-cloud-token"
@@ -651,11 +656,15 @@ class GuardStore:
             connect_state_schema_statement(),
             approval_schema_statement(),
             evidence_schema_statement(),
+            threat_intel_bundle_schema_statement(),
+            threat_intel_matches_schema_statement(),
         )
         with self._connect() as connection:
             for statement in statements:
                 connection.execute(statement)
             for idx_stmt in evidence_index_statements():
+                connection.execute(idx_stmt)
+            for idx_stmt in threat_intel_index_statements():
                 connection.execute(idx_stmt)
             self._ensure_policy_column(connection, "publisher", "text")
             self._ensure_policy_column(connection, "artifact_hash", "text")
