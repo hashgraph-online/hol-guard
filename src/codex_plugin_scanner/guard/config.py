@@ -33,7 +33,7 @@ GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 VALID_GUARD_ACTIONS = {"allow", "warn", "review", "block", "sandbox-required", "require-reapproval"}
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
-VALID_SECURITY_LEVELS = {"balanced", "strict", "custom"}
+VALID_SECURITY_LEVELS = {"gentle", "balanced", "strict", "paranoid", "custom"}
 VALID_RISK_ACTION_KEYS = {
     "local_secret_read",
     "credential_exfiltration",
@@ -41,9 +41,33 @@ VALID_RISK_ACTION_KEYS = {
     "destructive_shell",
     "encoded_execution",
     "network_egress",
+    "prompt_injection",
+    "mcp_dangerous_tool",
+    "malicious_skill",
+    "package_script",
+    "persistence",
+    "guard_bypass",
+    "cloud_advisory",
+    "encoded_exfiltration",
 }
 DEFAULT_SECURITY_LEVEL = "balanced"
 SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
+    "gentle": {
+        "local_secret_read": "warn",
+        "credential_exfiltration": "warn",
+        "data_flow_exfiltration": "warn",
+        "destructive_shell": "warn",
+        "encoded_execution": "warn",
+        "network_egress": "allow",
+        "prompt_injection": "warn",
+        "mcp_dangerous_tool": "warn",
+        "malicious_skill": "warn",
+        "package_script": "warn",
+        "persistence": "warn",
+        "guard_bypass": "warn",
+        "cloud_advisory": "allow",
+        "encoded_exfiltration": "warn",
+    },
     "balanced": {
         "local_secret_read": "require-reapproval",
         "credential_exfiltration": "require-reapproval",
@@ -51,6 +75,14 @@ SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
         "destructive_shell": "require-reapproval",
         "encoded_execution": "require-reapproval",
         "network_egress": "warn",
+        "prompt_injection": "require-reapproval",
+        "mcp_dangerous_tool": "require-reapproval",
+        "malicious_skill": "require-reapproval",
+        "package_script": "warn",
+        "persistence": "require-reapproval",
+        "guard_bypass": "block",
+        "cloud_advisory": "warn",
+        "encoded_exfiltration": "require-reapproval",
     },
     "strict": {
         "local_secret_read": "require-reapproval",
@@ -59,6 +91,30 @@ SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
         "destructive_shell": "require-reapproval",
         "encoded_execution": "require-reapproval",
         "network_egress": "require-reapproval",
+        "prompt_injection": "block",
+        "mcp_dangerous_tool": "block",
+        "malicious_skill": "block",
+        "package_script": "require-reapproval",
+        "persistence": "block",
+        "guard_bypass": "block",
+        "cloud_advisory": "require-reapproval",
+        "encoded_exfiltration": "block",
+    },
+    "paranoid": {
+        "local_secret_read": "block",
+        "credential_exfiltration": "block",
+        "data_flow_exfiltration": "block",
+        "destructive_shell": "block",
+        "encoded_execution": "block",
+        "network_egress": "block",
+        "prompt_injection": "block",
+        "mcp_dangerous_tool": "block",
+        "malicious_skill": "block",
+        "package_script": "block",
+        "persistence": "block",
+        "guard_bypass": "block",
+        "cloud_advisory": "block",
+        "encoded_exfiltration": "block",
     },
     "custom": {
         "local_secret_read": "require-reapproval",
@@ -67,6 +123,14 @@ SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
         "destructive_shell": "require-reapproval",
         "encoded_execution": "require-reapproval",
         "network_egress": "warn",
+        "prompt_injection": "require-reapproval",
+        "mcp_dangerous_tool": "require-reapproval",
+        "malicious_skill": "require-reapproval",
+        "package_script": "warn",
+        "persistence": "require-reapproval",
+        "guard_bypass": "block",
+        "cloud_advisory": "warn",
+        "encoded_exfiltration": "require-reapproval",
     },
 }
 EDITABLE_GUARD_SETTING_KEYS = frozenset(
