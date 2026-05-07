@@ -2,7 +2,8 @@ import type {
   GuardActionEnvelope,
   GuardApprovalRequest,
   GuardArtifactDiff,
-  GuardReceipt
+  GuardReceipt,
+  RiskSignalV2
 } from "./guard-types";
 
 export type DataFlowEvidenceSummary = {
@@ -294,4 +295,19 @@ export function harnessDisplayName(harness: string): string {
     default:
       return capitalizeHarness(harness);
   }
+}
+
+export function displayArtifactName(item: GuardApprovalRequest): string {
+  return item.artifact_name || item.artifact_id || "this action";
+}
+
+export function resolveTerminalLabel(item: GuardApprovalRequest): string {
+  const actionType = item.action_envelope_json?.action_type;
+  if (actionType === "shell_command") return "Command";
+  if (actionType === "prompt") return "Prompt excerpt";
+  if (actionType === "file_read" || actionType === "file_write") return "File path";
+  if (actionType === "mcp_tool") return "MCP server / tool";
+  if (actionType === "package_script") return "Package";
+  if (actionType === "network_request") return "Network destination";
+  return "Stopped command";
 }
