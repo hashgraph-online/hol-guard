@@ -180,6 +180,24 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
+    fetchInventory()
+      .then((items) => {
+        if (!cancelled) {
+          setInventory({ kind: "ready", items });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setInventory({ kind: "ready", items: [] });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     Promise.allSettled([fetchReceipts(), fetchPolicies()])
       .then(([receiptsResult, policiesResult]) => {
         if (cancelled) {
@@ -259,6 +277,7 @@ export function App() {
       detail={detail}
       receipts={receipts}
       runtime={runtime}
+      inventory={inventory.kind === "ready" ? inventory.items : []}
       activeRequestId={activeRequestId}
       resolutionMessage={resolutionMessage}
       homeContent={

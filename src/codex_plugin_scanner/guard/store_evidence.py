@@ -203,6 +203,12 @@ def export_evidence_json(
     )
 
 
+def clear_evidence(conn: sqlite3.Connection) -> int:
+    cursor = conn.execute("delete from guard_evidence")
+    conn.commit()
+    return cursor.rowcount
+
+
 def compact_evidence(conn: sqlite3.Connection, *, retain_days: int = 90) -> int:
     cutoff = (
         (datetime.now(timezone.utc) - timedelta(days=retain_days))
