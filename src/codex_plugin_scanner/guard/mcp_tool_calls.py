@@ -360,7 +360,6 @@ def _schema_property_key_names(
             "else",
             "if",
             "items",
-            "not",
             "oneOf",
             "prefixItems",
             "propertyNames",

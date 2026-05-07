@@ -399,6 +399,18 @@ def test_mcp_server_identity_skips_uvx_keyring_provider_option_values_before_pac
     assert identity.package_name == "ruff"
 
 
+def test_mcp_server_identity_skips_uvx_overrides_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--overrides", "overrides.txt", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
 def test_mcp_server_identity_skips_uvx_build_constraints_values_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
@@ -433,6 +445,19 @@ def test_mcp_server_identity_does_not_parse_pnpm_run_subcommand_as_package() -> 
     )
 
     assert identity.package_name is None
+
+
+def test_mcp_server_identity_skips_pnpm_allow_build_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("dlx", "--allow-build", "esbuild", "@scope/pkg"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/pkg"
+    assert identity.package_version is None
 
 
 def test_mcp_server_identity_does_not_parse_yarn_run_subcommand_as_package() -> None:
@@ -668,7 +693,6 @@ def test_mcp_tool_schema_traverses_conditional_and_dependent_branches() -> None:
             "if": {"properties": {"mode": {"const": "shell"}}},
             "then": {"properties": {"cmd": {"type": "string"}}},
             "else": {"properties": {"webhook": {"type": "string"}}},
-            "not": {"properties": {"script": {"type": "string"}}},
             "dependentSchemas": {
                 "mode": {"properties": {"url": {"type": "string"}}},
             },
@@ -681,6 +705,27 @@ def test_mcp_tool_schema_traverses_conditional_and_dependent_branches() -> None:
 
     categories = set(tool_call_risk_categories(artifact, {}))
     assert {"command_execution", "outbound_network", "tool_schema_mismatch"}.issubset(categories)
+
+
+def test_mcp_tool_schema_ignores_not_branch_when_inferring_risk() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "not": {
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+            },
+        },
+    )
+
+    assert tool_call_risk_categories(artifact, {}) == ()
 
 
 def test_mcp_tool_runtime_arguments_flag_file_command_and_url_keys() -> None:
