@@ -198,6 +198,12 @@ def _scan_writes(workspace: Path, before: set[str], before_mtimes: dict[str, flo
 
 
 def _audit_combined_output(stdout: str, stderr: str) -> tuple[list[str], list[str]]:
+    """Scan combined stdout+stderr for suspicious literal patterns.
+
+    This is best-effort heuristic detection of plaintext patterns. It does not
+    decode base64, escaped strings, or other obfuscated forms — those are
+    handled upstream by the safe-decode layer before the command reaches the sandbox.
+    """
     combined = stdout + "\n" + stderr
     network_attempts = _detect_network_attempts(combined)
     process_attempts: list[str] = []
