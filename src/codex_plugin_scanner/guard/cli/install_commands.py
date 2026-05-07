@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..consumer import detect_all
+from ..runtime.skill_protection import build_skill_identity, detect_skill_content_risk
 from ..store import GuardStore
 
 
@@ -34,7 +37,58 @@ def apply_managed_install(
     }
     if len(managed_installs) == 1:
         payload["managed_install"] = managed_installs[0]
+    if active and context.workspace_dir is not None:
+        skill_scan = scan_workspace_skills(context.workspace_dir, store, now)
+        if skill_scan:
+            payload["skill_scan"] = skill_scan
     return payload
+
+
+def scan_workspace_skills(
+    workspace_dir: Path,
+    store: GuardStore,
+    now: str,
+) -> list[dict[str, object]]:
+    """Scan SKILL.md files in workspace and return risk summaries for any findings."""
+    results: list[dict[str, object]] = []
+    skills_dirs = [
+        workspace_dir / ".codex" / "skills",
+        workspace_dir / ".agents" / "skills",
+        workspace_dir / "skills",
+    ]
+    for skills_dir in skills_dirs:
+        if not skills_dir.is_dir():
+            continue
+        for skill_path in sorted(skills_dir.rglob("SKILL.md")):
+            try:
+                content = skill_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            identity = build_skill_identity(content, skill_path=str(skill_path))
+            artifact_id = f"skill-path:{skill_path}"
+            stored = store.get_snapshot("skill_scan", artifact_id)
+            stored_hash = stored.get("identity_hash") if stored else None
+            if stored_hash == identity.identity_hash:
+                continue
+            signals = detect_skill_content_risk(content, skill_path=str(skill_path))
+            store.save_snapshot(
+                "skill_scan",
+                artifact_id,
+                {"identity_hash": identity.identity_hash, "skill_path": str(skill_path)},
+                identity.identity_hash,
+                now,
+            )
+            if signals:
+                results.append(
+                    {
+                        "skill_path": str(skill_path.relative_to(workspace_dir)),
+                        "identity_hash": identity.identity_hash,
+                        "risk_count": len(signals),
+                        "severities": sorted({s.severity for s in signals}),
+                        "signal_ids": [s.signal_id for s in signals],
+                    }
+                )
+    return results
 
 
 def _resolve_targets(
@@ -74,4 +128,4 @@ def _resolve_targets(
     )
 
 
-__all__ = ["apply_managed_install"]
+__all__ = ["apply_managed_install", "scan_workspace_skills"]

