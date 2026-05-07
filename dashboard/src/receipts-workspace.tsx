@@ -37,6 +37,7 @@ export function filterReceiptItems(
   const now = Date.now();
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
+  const todayStartMs = todayStart.getTime();
   const last7Start = now - 7 * 24 * 60 * 60 * 1000;
   return items.filter((receipt) => {
     const matchesHarness = harnessFilter === "all" || receipt.harness === harnessFilter;
@@ -44,14 +45,11 @@ export function filterReceiptItems(
     if (!matchesHarness || !matchesDecision) {
       return false;
     }
-    if (dateRange === "today") {
+    if (dateRange === "today" || dateRange === "last7") {
       const ts = new Date(receipt.timestamp).getTime();
-      if (ts < todayStart.getTime()) {
+      if (dateRange === "today" && ts < todayStartMs) {
         return false;
-      }
-    } else if (dateRange === "last7") {
-      const ts = new Date(receipt.timestamp).getTime();
-      if (ts < last7Start) {
+      } else if (dateRange === "last7" && ts < last7Start) {
         return false;
       }
     }

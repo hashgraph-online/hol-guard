@@ -189,8 +189,7 @@ function formatRelativeTime(timestamp: string): string {
 
 export function RuntimeOverview(props: RuntimeOverviewProps) {
   const { snapshot } = props;
-  const runtimeSettings = snapshot.runtime_state as (GuardRuntimeSnapshot["runtime_state"] & { settings?: { security_level?: "balanced" | "strict" | "custom" } }) | null;
-  const securityLevel = runtimeSettings?.settings?.security_level;
+  const securityLevel = snapshot.security_level;
   const latestReceipt = snapshot.latest_receipts[0];
   const daemonHealthLabel = snapshot.runtime_state !== null ? "running" : "offline";
 
