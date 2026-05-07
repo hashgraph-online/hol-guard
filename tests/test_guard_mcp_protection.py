@@ -335,6 +335,30 @@ def test_mcp_server_identity_skips_uvx_constraints_values_before_package() -> No
     assert identity.package_name == "ruff"
 
 
+def test_mcp_server_identity_skips_uvx_config_setting_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("-C", "index-url=https://pypi.org/simple", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_config_file_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--config-file", "uv.toml", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
 def test_mcp_server_identity_skips_uvx_index_option_values_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
@@ -453,6 +477,32 @@ def test_mcp_server_identity_skips_pnpm_allow_build_option_values_before_package
     )
 
     assert identity.package_name == "@scope/pkg"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_keeps_pnpm_shell_mode_flag_without_value() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("dlx", "-c", "cowsay", "hello"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "cowsay"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_skips_pnpm_reporter_value_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("dlx", "--reporter", "ndjson", "cowsay"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "cowsay"
     assert identity.package_version is None
 
 
