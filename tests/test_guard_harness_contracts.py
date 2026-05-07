@@ -138,6 +138,11 @@ class TestInstallAliases:
         assert c is not None
         assert "copilot" in c.install_aliases
 
+    def test_install_antigravity(self) -> None:
+        c = contract_for("antigravity")
+        assert c is not None
+        assert "antigravity" in c.install_aliases
+
 
 class TestHarnessContractsTable:
     def test_returns_markdown(self) -> None:

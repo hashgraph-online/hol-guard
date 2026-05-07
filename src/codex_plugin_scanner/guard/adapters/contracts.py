@@ -151,6 +151,24 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
         ),
         smoke_command="hol-guard install openclaw --dry-run",
     ),
+    HarnessProtectionContract(
+        harness="antigravity",
+        install_aliases=("antigravity",),
+        config_paths=(
+            "~/.config/antigravity/user/settings.json",
+            "~/.gemini/antigravity/mcp_config.json",
+            "~/.antigravity/extensions/extensions.json",
+        ),
+        event_surfaces=("mcp_tool", "prompt"),
+        native_approval=False,
+        browser_fallback=True,
+        resume_support=False,
+        known_blind_spots=(
+            "Shell commands are not currently observable through the Antigravity hook surface. "
+            "Guard intercepts extensions and MCP registrations via scan at launch time."
+        ),
+        smoke_command="hol-guard install antigravity --dry-run",
+    ),
 )
 
 _CONTRACT_BY_ALIAS: dict[str, HarnessProtectionContract] = {}
