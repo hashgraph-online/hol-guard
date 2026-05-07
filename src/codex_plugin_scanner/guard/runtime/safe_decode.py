@@ -66,8 +66,8 @@ class DecodeResult:
     marshal_signals: list[str] = field(default_factory=list)
 
 
-_B64_CANDIDATE = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
-_B64_URLSAFE_CANDIDATE = re.compile(r"[A-Za-z0-9\-_]{16,}={0,2}")
+_B64_CANDIDATE = re.compile(r"(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)")
+_B64_URLSAFE_CANDIDATE = re.compile(r"(?:[A-Za-z0-9\-_]{4})+(?:[A-Za-z0-9\-_]{2}==|[A-Za-z0-9\-_]{3}=)")
 _B32_CANDIDATE = re.compile(r"[A-Z2-7]{16,}={0,6}")
 _HEX_CANDIDATE = re.compile(r"(?:0x)?[0-9a-fA-F]{16,}")
 _URL_PERCENT = re.compile(r"(?:%[0-9a-fA-F]{2}){3,}")
@@ -207,11 +207,21 @@ def _decode_zip_listing(data: str) -> list[str] | None:
         return None
 
 
+def _try_base64_utf16le(data: str) -> str | None:
+    """Decode base64 bytes as UTF-16LE — the PowerShell -EncodedCommand convention."""
+    padded = data + "=" * ((4 - len(data) % 4) % 4)
+    try:
+        raw = base64.b64decode(padded, validate=False)
+        return raw.decode("utf-16-le", errors="replace")
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        return None
+
+
 def _extract_powershell_encoded(text: str) -> str | None:
     m = _POWERSHELL_ENCODED.search(text)
     if not m:
         return None
-    return _try_base64(m.group(1)) or _try_base64_urlsafe(m.group(1))
+    return _try_base64_utf16le(m.group(1)) or _try_base64(m.group(1))
 
 
 def _extract_heredoc(text: str) -> str | None:
@@ -325,7 +335,7 @@ def decode_layers(
         elif encoding_type == "unicode-escape":
             decoded = _try_unicode_escape(candidate_data)
         elif encoding_type == "powershell-encoded":
-            decoded = _try_base64(candidate_data) or _try_base64_urlsafe(candidate_data)
+            decoded = _try_base64_utf16le(candidate_data) or _try_base64(candidate_data)
         elif encoding_type == "shell-heredoc":
             decoded = candidate_data
         elif encoding_type == "js-atob":

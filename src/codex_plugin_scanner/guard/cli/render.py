@@ -638,7 +638,7 @@ def _render_safe_decode_results(console: Console, safe_decode_risks: list[dict[s
     for entry in safe_decode_risks:
         severity = str(entry.get("severity", "medium"))
         severity_color = {"critical": "red", "high": "yellow", "medium": "cyan", "low": "dim"}.get(severity, "white")
-        layers = str(entry.get("technical_detail", ""))
+        layers = entry.get("technical_detail") or ""
         table.add_row(
             str(entry.get("signal_id", "?")),
             layers[:60] if layers else "-",
