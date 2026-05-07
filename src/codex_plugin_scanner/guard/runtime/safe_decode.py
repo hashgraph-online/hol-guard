@@ -74,7 +74,7 @@ _B64_CANDIDATE = re.compile(
     r")"
 )
 _B64_URLSAFE_CANDIDATE = re.compile(
-    r"(?=[A-Za-z0-9\-_]*[\-_])(?=[A-Za-z0-9\-_]*[0-9])"
+    r"(?=[A-Za-z0-9\-_]*[\-_])"
     r"(?:[A-Za-z0-9\-_]{4}){5,}(?:[A-Za-z0-9\-_]{2}==|[A-Za-z0-9\-_]{3}=)?"
 )
 _B32_CANDIDATE = re.compile(r"(?=[A-Za-z2-7]*(?:[A-Z]|[2-7]))[A-Za-z2-7]{16,}={0,6}")

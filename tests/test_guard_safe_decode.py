@@ -325,10 +325,21 @@ def test_urlsafe_base64_not_misclassified_as_standard_base64() -> None:
     raw = b"\xfb\xf8\xfb" * 8
     encoded = base64.urlsafe_b64encode(raw).decode()
     assert "-" in encoded or "_" in encoded, "Test fixture must contain urlsafe chars"
-    assert any(c.isdigit() for c in encoded), "Test fixture must contain digit to satisfy urlsafe regex"
     result = decode_layers(encoded)
     assert any(layer.encoding == "base64-urlsafe" for layer in result.layers), (
         "URL-safe token must produce a base64-urlsafe layer, not a standard-base64 layer"
+    )
+
+
+def test_urlsafe_base64_without_digits_is_detected() -> None:
+    """URL-safe b64 tokens with no digits must also be detected (digit not required)."""
+    raw = b"\xfb\xef\xbe" * 10
+    encoded = base64.urlsafe_b64encode(raw).decode()
+    assert "-" in encoded or "_" in encoded, "Test fixture must contain urlsafe chars"
+    assert not any(c.isdigit() for c in encoded), "Test fixture must be digit-free to exercise this path"
+    result = decode_layers(encoded)
+    assert any(layer.encoding == "base64-urlsafe" for layer in result.layers), (
+        "Digit-free URL-safe token must still be detected as base64-urlsafe"
     )
 
 
