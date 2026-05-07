@@ -182,6 +182,23 @@ def test_plain_alphanumeric_word_not_decoded_as_base64() -> None:
     assert result.layers == [], "Plain alphabetic string must not be decoded as base64"
 
 
+def test_no_digit_base64_payload_decoded() -> None:
+    inner = "test-payload-data"
+    encoded = base64.b64encode(inner.encode()).decode()
+    result = decode_layers(encoded)
+    assert len(result.layers) >= 1, f"Base64 without digits must still be decoded: {encoded}"
+    assert inner in result.final_text
+
+
+def test_urlsafe_base64_decoded_as_separate_encoding() -> None:
+    payload = b"exec-payload\xfb\xfc\xfd" * 2 + b"ABCDE"
+    encoded = base64.urlsafe_b64encode(payload).decode()
+    assert "-" in encoded or "_" in encoded, "URL-safe b64 fixture must contain - or _"
+    assert any(c.isdigit() for c in encoded), "URL-safe b64 fixture must contain digit"
+    result = decode_layers(encoded)
+    assert len(result.layers) >= 1, "URL-safe base64 payload must be decoded"
+
+
 def test_unpadded_base64_decoded_when_length_divisible_by_four() -> None:
     inner = "exec_payload"
     encoded = base64.b64encode(inner.encode()).decode()

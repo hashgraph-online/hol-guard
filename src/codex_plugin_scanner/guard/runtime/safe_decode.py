@@ -67,12 +67,15 @@ class DecodeResult:
 
 
 _B64_CANDIDATE = re.compile(
-    r"(?=[A-Za-z0-9+/]*[A-Z])(?=[A-Za-z0-9+/]*[0-9])"
-    r"(?:[A-Za-z0-9+/]{4}){4,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?"
+    r"(?=[A-Za-z0-9+/]*(?:[+/]|(?=[A-Za-z0-9+/]*[A-Z])[A-Za-z0-9+/]*[a-z]))"
+    r"(?:"
+    r"(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)"
+    r"|(?:[A-Za-z0-9+/]{4}){4,}"
+    r")"
 )
 _B64_URLSAFE_CANDIDATE = re.compile(
-    r"(?=[A-Za-z0-9\-_]*[A-Z])(?=[A-Za-z0-9\-_]*[0-9])"
-    r"(?:[A-Za-z0-9\-_]{4}){4,}(?:[A-Za-z0-9\-_]{2}==|[A-Za-z0-9\-_]{3}=)?"
+    r"(?=[A-Za-z0-9\-_]*[\-_])(?=[A-Za-z0-9\-_]*[0-9])"
+    r"(?:[A-Za-z0-9\-_]{4}){5,}(?:[A-Za-z0-9\-_]{2}==|[A-Za-z0-9\-_]{3}=)?"
 )
 _B32_CANDIDATE = re.compile(r"[A-Z2-7]{16,}={0,6}")
 _HEX_CANDIDATE = re.compile(r"(?:0x)?[0-9a-fA-F]{16,}")
@@ -280,6 +283,10 @@ def _find_encoded_candidate(text: str) -> tuple[EncodingType, str] | None:
     m = _B64_CANDIDATE.search(text)
     if m:
         return ("base64", m.group(0))
+
+    m = _B64_URLSAFE_CANDIDATE.search(text)
+    if m:
+        return ("base64-urlsafe", m.group(0))
 
     m = _B32_CANDIDATE.search(text)
     if m:
