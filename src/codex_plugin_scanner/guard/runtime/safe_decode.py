@@ -66,8 +66,14 @@ class DecodeResult:
     marshal_signals: list[str] = field(default_factory=list)
 
 
-_B64_CANDIDATE = re.compile(r"(?:[A-Za-z0-9+/]{4})+(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)")
-_B64_URLSAFE_CANDIDATE = re.compile(r"(?:[A-Za-z0-9\-_]{4})+(?:[A-Za-z0-9\-_]{2}==|[A-Za-z0-9\-_]{3}=)")
+_B64_CANDIDATE = re.compile(
+    r"(?=[A-Za-z0-9+/]*[A-Z])(?=[A-Za-z0-9+/]*[0-9])"
+    r"(?:[A-Za-z0-9+/]{4}){4,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?"
+)
+_B64_URLSAFE_CANDIDATE = re.compile(
+    r"(?=[A-Za-z0-9\-_]*[A-Z])(?=[A-Za-z0-9\-_]*[0-9])"
+    r"(?:[A-Za-z0-9\-_]{4}){4,}(?:[A-Za-z0-9\-_]{2}==|[A-Za-z0-9\-_]{3}=)?"
+)
 _B32_CANDIDATE = re.compile(r"[A-Z2-7]{16,}={0,6}")
 _HEX_CANDIDATE = re.compile(r"(?:0x)?[0-9a-fA-F]{16,}")
 _URL_PERCENT = re.compile(r"(?:%[0-9a-fA-F]{2}){3,}")
@@ -368,6 +374,9 @@ def decode_layers(
 
     if depth == max_depth - 1 and not result.timed_out:
         result.depth_exceeded = True
+        result.eval_signals.extend(_detect_eval_signals(current))
+        result.exec_signals.extend(_detect_exec_signals(current))
+        result.marshal_signals.extend(_detect_marshal_signals(current))
 
     result.final_text = current
     return result

@@ -182,6 +182,29 @@ def test_plain_alphanumeric_word_not_decoded_as_base64() -> None:
     assert result.layers == [], "Plain alphabetic string must not be decoded as base64"
 
 
+def test_unpadded_base64_decoded_when_length_divisible_by_four() -> None:
+    inner = "exec_payload"
+    encoded = base64.b64encode(inner.encode()).decode()
+    assert "=" not in encoded, "Fixture must produce unpadded base64"
+    assert len(encoded) % 4 == 0, "Unpadded fixture must have 4n length"
+    result = decode_layers(encoded)
+    assert len(result.layers) >= 1, "Unpadded 4n-length base64 must be decoded"
+    assert inner in result.final_text
+
+
+def test_depth_limit_final_layer_signals_scanned() -> None:
+    innermost = "exec('rm -rf /')"
+    layer3 = base64.b64encode(innermost.encode()).decode()
+    layer2 = base64.b64encode(layer3.encode()).decode()
+    layer1 = base64.b64encode(layer2.encode()).decode()
+    result = decode_layers(layer1, max_depth=3)
+    assert result.depth_exceeded, "3-layer payload must set depth_exceeded"
+    exec_signals = result.exec_signals
+    assert any("exec" in s for s in exec_signals), (
+        "exec signal must be found even when discovered in final decoded layer at depth limit"
+    )
+
+
 def test_powershell_encoded_command_uses_utf16le() -> None:
     inner = "Invoke-Expression 'evil'"
     encoded = base64.b64encode(inner.encode("utf-16-le")).decode()
