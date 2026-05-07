@@ -77,7 +77,7 @@ _B64_URLSAFE_CANDIDATE = re.compile(
     r"(?=[A-Za-z0-9\-_]*[\-_])(?=[A-Za-z0-9\-_]*[0-9])"
     r"(?:[A-Za-z0-9\-_]{4}){5,}(?:[A-Za-z0-9\-_]{2}==|[A-Za-z0-9\-_]{3}=)?"
 )
-_B32_CANDIDATE = re.compile(r"[A-Z2-7]{16,}={0,6}")
+_B32_CANDIDATE = re.compile(r"(?=[A-Za-z2-7]*(?:[A-Z]|[2-7]))[A-Za-z2-7]{16,}={0,6}")
 _HEX_CANDIDATE = re.compile(r"(?:0x)?[0-9a-fA-F]{16,}")
 _URL_PERCENT = re.compile(r"(?:%[0-9a-fA-F]{2}){3,}")
 _UNICODE_ESCAPE = re.compile(r"(?:\\u[0-9a-fA-F]{4}){3,}")
@@ -106,11 +106,24 @@ def _hash_preview(text: str) -> tuple[str, str]:
     return digest, preview
 
 
+def _bytes_to_text(raw: bytes) -> str:
+    """Convert decoded bytes to text, transparently decompressing gzip/zlib output first."""
+    import contextlib
+
+    if raw[:2] == b"\x1f\x8b":
+        with contextlib.suppress(zlib.error):
+            raw = zlib.decompress(raw, wbits=16 + zlib.MAX_WBITS)
+    elif raw[:1] == b"\x78":
+        with contextlib.suppress(zlib.error):
+            raw = zlib.decompress(raw)
+    return raw.decode("utf-8", errors="replace")
+
+
 def _try_base64(data: str) -> str | None:
     padded = data + "=" * ((4 - len(data) % 4) % 4)
     try:
         decoded = base64.b64decode(padded, validate=False)
-        return decoded.decode("utf-8", errors="replace")
+        return _bytes_to_text(decoded)
     except (binascii.Error, ValueError):
         return None
 
@@ -119,7 +132,7 @@ def _try_base64_urlsafe(data: str) -> str | None:
     padded = data + "=" * ((4 - len(data) % 4) % 4)
     try:
         decoded = base64.urlsafe_b64decode(padded)
-        return decoded.decode("utf-8", errors="replace")
+        return _bytes_to_text(decoded)
     except (binascii.Error, ValueError):
         return None
 
@@ -318,6 +331,7 @@ def decode_layers(
 
     current = content
 
+    depth = -1
     for depth in range(max_depth):
         elapsed_ms = (time.monotonic() - start) * 1000.0
         if elapsed_ms > max_time_ms:
@@ -379,7 +393,7 @@ def decode_layers(
         if result.size_exceeded:
             break
 
-    if depth == max_depth - 1 and not result.timed_out:
+    if depth >= 0 and depth == max_depth - 1 and not result.timed_out:
         result.depth_exceeded = True
         result.eval_signals.extend(_detect_eval_signals(current))
         result.exec_signals.extend(_detect_exec_signals(current))

@@ -229,3 +229,33 @@ def test_powershell_encoded_command_uses_utf16le() -> None:
     result = decode_layers(ps_command)
     assert any(layer.encoding == "powershell-encoded" for layer in result.layers)
     assert "Invoke-Expression" in result.final_text, "PowerShell payload must be decoded as UTF-16LE"
+
+
+def test_base64_of_gzip_decompressed_across_layers() -> None:
+    import gzip as _gzip
+    import io
+
+    inner = "exec('payload')"
+    buf = io.BytesIO()
+    with _gzip.GzipFile(fileobj=buf, mode="wb") as gz:
+        gz.write(inner.encode())
+    encoded = base64.b64encode(buf.getvalue()).decode()
+    result = decode_layers(encoded)
+    assert len(result.layers) >= 1, "base64(gzip(...)) must produce at least one layer"
+    assert inner in result.final_text, "gzip-compressed inner payload must be visible after decode"
+
+
+def test_lowercase_base32_decoded() -> None:
+    inner = "exec_payload_value"
+    encoded_upper = base64.b32encode(inner.encode()).decode()
+    encoded_lower = encoded_upper.lower()
+    result = decode_layers(encoded_lower)
+    assert len(result.layers) >= 1, "Lowercase base32 must be detected and decoded"
+    assert inner in result.final_text
+
+
+def test_decode_layers_with_max_depth_zero_does_not_raise() -> None:
+    result = decode_layers("eval(decode('test'))", max_depth=0)
+    assert isinstance(result.layers, list)
+    assert len(result.layers) == 0
+    assert not result.depth_exceeded
