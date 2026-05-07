@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import os
@@ -33,11 +34,24 @@ _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_MAX_STATES = 512
 _GUARD_DAEMON_PRIVATE_FILE_MODE = 0o600
 _GUARD_DAEMON_PRIVATE_DIR_MODE = 0o700
+_APPROVAL_CENTER_LOCATOR_FILE = "approval-center-locator.json"
 
 _START_LOCKS: dict[str, threading.Lock] = {}
 _START_LOCKS_GUARD = threading.Lock()
 _LAST_EPHEMERAL_REAP_AT = 0.0
 _RUNTIME_FINGERPRINT_CACHE: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ApprovalCenterLocator:
+    """Structured snapshot of where the Guard approval-center daemon is running."""
+
+    guard_home: Path
+    daemon_url: str
+    approval_url_base: str
+    pid: int
+    started_at: str
+    state_path: Path
 
 
 def _daemon_launcher_env() -> dict[str, str]:
@@ -171,6 +185,78 @@ def clear_guard_daemon_state(guard_home: Path) -> None:
     state_path = _state_path(guard_home)
     _ensure_private_directory(state_path.parent)
     _write_private_text(state_path, "{}")
+
+
+def _locator_path(guard_home: Path) -> Path:
+    return guard_home / _APPROVAL_CENTER_LOCATOR_FILE
+
+
+def write_approval_center_locator(guard_home: Path, locator: ApprovalCenterLocator) -> None:
+    locator_path = _locator_path(guard_home)
+    _ensure_private_directory(locator_path.parent)
+    payload = {
+        "guard_home": str(locator.guard_home),
+        "daemon_url": locator.daemon_url,
+        "approval_url_base": locator.approval_url_base,
+        "pid": locator.pid,
+        "started_at": locator.started_at,
+        "state_path": str(locator.state_path),
+    }
+    _write_private_text(locator_path, json.dumps(payload, indent=2))
+
+
+def read_approval_center_locator(guard_home: Path) -> ApprovalCenterLocator | None:
+    locator_path = _locator_path(guard_home)
+    if not locator_path.is_file():
+        return None
+    try:
+        payload = json.loads(locator_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    pid = payload.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    if not _guard_daemon_pid_is_running(pid):
+        return None
+    daemon_url = payload.get("daemon_url")
+    approval_url_base = payload.get("approval_url_base")
+    started_at = payload.get("started_at")
+    state_path_str = payload.get("state_path")
+    guard_home_str = payload.get("guard_home")
+    if not all(isinstance(v, str) for v in (daemon_url, approval_url_base, started_at, state_path_str, guard_home_str)):
+        return None
+    return ApprovalCenterLocator(
+        guard_home=Path(guard_home_str),
+        daemon_url=daemon_url,
+        approval_url_base=approval_url_base,
+        pid=pid,
+        started_at=started_at,
+        state_path=Path(state_path_str),
+    )
+
+
+def ensure_approval_center(guard_home: Path) -> ApprovalCenterLocator:
+    existing = read_approval_center_locator(guard_home)
+    if existing is not None:
+        return existing
+    daemon_url = ensure_guard_daemon(guard_home)
+    now = datetime.now(tz=timezone.utc).isoformat()
+    state = _load_state(guard_home)
+    pid = state.get("pid") if isinstance(state, dict) else None
+    if not isinstance(pid, int) or pid <= 0:
+        pid = os.getpid()
+    locator = ApprovalCenterLocator(
+        guard_home=guard_home,
+        daemon_url=daemon_url,
+        approval_url_base=daemon_url,
+        pid=pid,
+        started_at=now,
+        state_path=_state_path(guard_home),
+    )
+    write_approval_center_locator(guard_home, locator)
+    return locator
 
 
 def _load_state(guard_home: Path) -> dict[str, object] | None:
