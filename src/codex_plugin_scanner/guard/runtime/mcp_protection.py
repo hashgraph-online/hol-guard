@@ -136,6 +136,7 @@ def _package_identity(command: str, args: tuple[str, ...]) -> tuple[str | None, 
 def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
     index = 0
     positional_index = 0
+    package_selector_flags = _package_selector_flags(command_name)
     while index < len(args):
         value = args[index].strip()
         if not value:
@@ -147,9 +148,9 @@ def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
             index += 1
             positional_index += 1
             continue
-        if value in {"--package", "-p"} and index + 1 < len(args):
+        if value in package_selector_flags and index + 1 < len(args):
             return args[index + 1].strip() or None
-        if value.startswith("--package="):
+        if "--package" in package_selector_flags and value.startswith("--package="):
             package = value.partition("=")[2].strip()
             return package or None
         if value in {"--spec", "--from"} and index + 1 < len(args):
@@ -214,8 +215,16 @@ def _launcher_subcommands(command_name: str) -> set[str]:
 
 def _launcher_non_package_subcommands(command_name: str) -> set[str]:
     command_specific: dict[str, set[str]] = {
-        "pnpm": {"exec"},
-        "yarn": {"exec"},
+        "pnpm": {"exec", "run"},
+        "yarn": {"exec", "run"},
+    }
+    return command_specific.get(command_name, set())
+
+
+def _package_selector_flags(command_name: str) -> set[str]:
+    command_specific: dict[str, set[str]] = {
+        "bunx": {"--package", "-p"},
+        "npx": {"--package", "-p"},
     }
     return command_specific.get(command_name, set())
 
@@ -236,7 +245,7 @@ def _value_options_for_command(command_name: str) -> set[str]:
         "npx": {"-c", "-w", "--workspace"},
         "pipx": {"--index-url", "--pip-args", "--suffix"},
         "pnpm": {"-c", "-C", "--dir", "--filter"},
-        "uvx": {"-f", "-i", "--extra-index-url", "--find-links", "--index-url", "--project"},
+        "uvx": {"-f", "-i", "-p", "--extra-index-url", "--find-links", "--index-url", "--project"},
         "yarn": {"--cwd", "--use-yarnrc"},
     }
     return common | command_specific.get(command_name, set())
