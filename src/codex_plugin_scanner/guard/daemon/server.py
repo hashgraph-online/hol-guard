@@ -23,6 +23,11 @@ from ..config import editable_guard_settings, load_guard_config, update_guard_se
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
+from ..store_evidence import (
+    count_evidence,
+    export_evidence_json,
+    list_evidence,
+)
 from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     clear_guard_daemon_state,
@@ -181,6 +186,40 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(
                 {"items": store.list_policy_decisions(harness=harness if isinstance(harness, str) else None)}
             )
+            return
+        if parsed.path == "/v1/evidence":
+            query = parse_qs(parsed.query)
+            harness_q = query.get("harness", [None])[-1]
+            category_q = query.get("category", [None])[-1]
+            severity_q = query.get("severity", [None])[-1]
+            before_q = query.get("before", [None])[-1]
+            limit_q = query.get("limit", ["100"])[-1]
+            try:
+                limit_v = min(int(limit_q), 500)
+            except (ValueError, TypeError):
+                limit_v = 100
+            with store._connect() as conn:
+                records = list_evidence(
+                    conn,
+                    harness=harness_q if isinstance(harness_q, str) else None,
+                    category=category_q if isinstance(category_q, str) else None,
+                    severity=severity_q if isinstance(severity_q, str) else None,
+                    before_cursor=before_q if isinstance(before_q, str) else None,
+                    limit=limit_v,
+                )
+                total = count_evidence(conn)
+            self._write_json({
+                "items": [vars(r) for r in records],
+                "total": total,
+            })
+            return
+        if parsed.path == "/v1/evidence/export":
+            with store._connect() as conn:
+                payload = export_evidence_json(conn, limit=10_000)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(payload.encode("utf-8"))
             return
         if len(path_parts) == 4 and path_parts[:3] == ["v1", "artifacts", path_parts[2]] and path_parts[3] == "diff":
             query = parse_qs(parsed.query)
