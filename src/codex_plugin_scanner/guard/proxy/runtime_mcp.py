@@ -22,6 +22,7 @@ from ..mcp_tool_calls import (
     tool_call_risk_summary,
 )
 from ..models import HarnessDetection
+from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..store import GuardStore
 from .stdio import _blocked_tool_response, _redact_json
 
@@ -42,6 +43,8 @@ class RuntimeMcpGuardProxy:
         config_path: str,
         transport: str = "stdio",
         server_id: str | None = None,
+        server_env_keys: tuple[str, ...] = (),
+        server_identity: McpServerIdentity | None = None,
     ) -> None:
         self.harness = harness
         self.server_name = server_name
@@ -53,10 +56,21 @@ class RuntimeMcpGuardProxy:
         self.config_path = config_path
         self.transport = transport
         self.server_id = server_id
+        self.server_env_keys = tuple(dict.fromkeys(key.strip() for key in server_env_keys if key.strip()))
+        self.server_identity = server_identity or build_mcp_server_identity(
+            config_path=self.config_path,
+            command=self.command[0] if self.command else "",
+            args=tuple(self.command[1:]),
+            transport=self.transport,
+            env_keys=self.server_env_keys,
+        )
         self._inline_prompt_available = False
         self._inline_prompt_counter = 0
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}
         self._buffered_client_responses: dict[str, list[dict[str, Any]]] = {}
+        self._tool_catalog: dict[str, dict[str, object]] = {}
+        self._tool_catalog_pending: dict[str, dict[str, object]] | None = None
+        self._tool_catalog_generation = 0
 
     def run_session(
         self,
@@ -161,6 +175,8 @@ class RuntimeMcpGuardProxy:
             "decision": "forward",
             "redacted_params": _redact_json(params),
         }
+        if method in {"notifications/tools/list_changed", "tools/list_changed"}:
+            self._invalidate_tools_catalog()
         if _is_notification(message):
             self._forward_notification(message, child_stdin)
             event["decision"] = "forward-notification"
@@ -177,10 +193,19 @@ class RuntimeMcpGuardProxy:
                 client_input=client_input,
                 server_output=server_output,
             )
+            if method == "tools/list":
+                list_cursor = params.get("cursor") if isinstance(params, dict) else None
+                list_generation = self._tool_catalog_generation
+                self._capture_tools_catalog(
+                    response,
+                    request_cursor=list_cursor,
+                    request_generation=list_generation,
+                )
             return response, event
 
         tool_name = str(params.get("name") or "unknown")
         arguments = params.get("arguments")
+        tool_definition = self._tool_catalog.get(tool_name, {})
         artifact = build_tool_call_artifact(
             harness=self.harness,
             server_name=self.server_name,
@@ -193,6 +218,9 @@ class RuntimeMcpGuardProxy:
                 "command": self.command,
                 "transport": self.transport,
             },
+            server_identity=self.server_identity,
+            tool_schema=tool_definition.get("input_schema"),
+            tool_description=tool_definition.get("description"),
         )
         artifact_hash = build_tool_call_hash(artifact, arguments)
         decision = evaluate_tool_call(
@@ -364,6 +392,8 @@ class RuntimeMcpGuardProxy:
             if "id" in payload:
                 self._buffer_child_response(payload)
                 continue
+            if str(payload.get("method", "")) in {"notifications/tools/list_changed", "tools/list_changed"}:
+                self._invalidate_tools_catalog()
             if server_output is not None:
                 server_output.write(json.dumps(payload) + "\n")
                 server_output.flush()
@@ -563,6 +593,59 @@ class RuntimeMcpGuardProxy:
             "decision": "queue-approval",
             "redacted_params": _redact_json(params),
         }
+
+    def _capture_tools_catalog(
+        self,
+        response: dict[str, Any],
+        *,
+        request_cursor: object | None = None,
+        request_generation: int | None = None,
+    ) -> None:
+        if request_generation is not None and request_generation != self._tool_catalog_generation:
+            return
+        result = response.get("result")
+        if not isinstance(result, dict):
+            return
+        tools = result.get("tools")
+        if not isinstance(tools, list):
+            return
+        if request_cursor is None:
+            self._tool_catalog_pending = None
+        next_cursor = result.get("nextCursor")
+        has_more_pages = next_cursor is not None
+        catalog: dict[str, dict[str, object]] = {}
+        for item in tools:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            entry: dict[str, object] = {}
+            description = item.get("description")
+            if isinstance(description, str) and description.strip():
+                entry["description"] = description.strip()
+            input_schema = item.get("inputSchema")
+            if input_schema is not None:
+                entry["input_schema"] = input_schema
+            catalog[name.strip()] = entry
+        if has_more_pages:
+            pending_snapshot = {} if self._tool_catalog_pending is None else dict(self._tool_catalog_pending)
+            pending_snapshot.update(catalog)
+            self._tool_catalog_pending = pending_snapshot
+            self._tool_catalog = dict(self._tool_catalog_pending)
+            return
+        if self._tool_catalog_pending is not None:
+            merged_snapshot = dict(self._tool_catalog_pending)
+            merged_snapshot.update(catalog)
+            self._tool_catalog = merged_snapshot
+            self._tool_catalog_pending = None
+            return
+        self._tool_catalog = catalog
+
+    def _invalidate_tools_catalog(self) -> None:
+        self._tool_catalog = {}
+        self._tool_catalog_pending = None
+        self._tool_catalog_generation += 1
 
     @staticmethod
     def _launch_target(tool_name: str, arguments: object) -> str:

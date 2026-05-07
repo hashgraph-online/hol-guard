@@ -23,7 +23,7 @@ def test_stable_mcp_server_identifier_survives_config_path_changes() -> None:
         command="npx",
         args=("-y", "@modelcontextprotocol/server-filesystem", "/workspace"),
         transport="stdio",
-        env={},
+        env={"TOKEN": "redacted"},
         enabled=True,
     )
     second = ManagedMcpServer(
@@ -47,6 +47,7 @@ def test_stable_mcp_server_identifier_survives_config_path_changes() -> None:
         server=first,
     )
     assert cli_args[cli_args.index("--server-id") + 1] == stable_mcp_server_identifier(first)
+    assert "--server-env-key=TOKEN" in cli_args
 
 
 def test_stable_mcp_server_identifier_canonicalizes_names_and_path_args() -> None:
