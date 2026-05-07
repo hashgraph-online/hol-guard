@@ -183,7 +183,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "requests"]:
             approval = store.get_approval_request(path_parts[2])
             if approval is None:
-                self._write_json({"error": "not_found"}, status=404)
+                self._write_json(
+                    {
+                        "error": "not_found",
+                        "recovery": {
+                            "code": "request_unknown",
+                            "title": "This request is no longer waiting.",
+                            "body": "The request was either already resolved or expired. You can close this tab.",
+                        },
+                    },
+                    status=404,
+                )
                 return
             self._write_json(approval)
             return
@@ -313,11 +323,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid():
-            self._write_json(
-                {"error": "unauthorized"},
-                status=401,
-                extra_headers=self._cors_headers_for_request(),
-            )
+            if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
+                host = self.server.server_address[0]  # type: ignore[attr-defined]
+                port = self.server.server_address[1]  # type: ignore[attr-defined]
+                reconnect_url = f"http://{host}:{port}/#/reconnect"
+                self._write_json(
+                    {
+                        "error": "unauthorized",
+                        "recovery": {
+                            "code": "session_stale",
+                            "title": "Your session with the local Guard daemon has expired.",
+                            "body": "Click the link below to reconnect, then retry your approval.",
+                            "reconnect_url": reconnect_url,
+                        },
+                    },
+                    status=401,
+                    extra_headers=self._cors_headers_for_request(),
+                )
+            else:
+                self._write_json(
+                    {"error": "unauthorized"},
+                    status=401,
+                    extra_headers=self._cors_headers_for_request(),
+                )
             return
         payload, body_error = self._load_request_body()
         if body_error is not None:
@@ -390,7 +418,38 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 reason=self._optional_string(payload.get("reason")),
             )
         except ValueError as error:
-            self._write_json({"resolved": False, "error": str(error)}, status=400)
+            error_message = str(error)
+            if "Unknown approval request" in error_message:
+                self._write_json(
+                    {
+                        "resolved": False,
+                        "error": "not_found",
+                        "recovery": {
+                            "code": "request_unknown",
+                            "title": "This request is no longer waiting.",
+                            "body": "The request was either already resolved or expired. You can close this tab.",
+                        },
+                    },
+                    status=404,
+                )
+            elif "already resolved" in error_message:
+                self._write_json(
+                    {
+                        "resolved": False,
+                        "error": "already_resolved",
+                        "recovery": {
+                            "code": "request_resolved",
+                            "title": "This request has already been resolved.",
+                            "body": (
+                                "If the action is blocked and you believe it should be allowed, "
+                                "you can re-submit from your AI assistant."
+                            ),
+                        },
+                    },
+                    status=409,
+                )
+            else:
+                self._write_json({"resolved": False, "error": error_message}, status=400)
             return
         self._write_json({"resolved": True, "item": updated})
 
