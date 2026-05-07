@@ -125,7 +125,7 @@ def mcp_tool_identity_metadata(identity: McpToolIdentity) -> dict[str, object]:
 
 def _package_identity(command: str, args: tuple[str, ...]) -> tuple[str | None, str | None]:
     command_name = _command_name(command)
-    if command_name not in {"bunx", "npx", "pnpm", "uvx", "yarn", "pipx"}:
+    if command_name not in {"bunx", "npm", "npx", "pnpm", "uvx", "yarn", "pipx"}:
         return None, None
     package_token = _package_token(command_name=command_name, args=args)
     if package_token is None:
@@ -206,6 +206,7 @@ def _option_takes_value(*, command_name: str, option: str) -> bool:
 
 def _launcher_subcommands(command_name: str) -> set[str]:
     command_specific: dict[str, set[str]] = {
+        "npm": {"exec", "x"},
         "pipx": {"run"},
         "pnpm": {"dlx"},
         "yarn": {"dlx"},
@@ -215,6 +216,7 @@ def _launcher_subcommands(command_name: str) -> set[str]:
 
 def _launcher_non_package_subcommands(command_name: str) -> set[str]:
     command_specific: dict[str, set[str]] = {
+        "npm": {"run"},
         "pnpm": {"exec", "run"},
         "yarn": {"exec", "run"},
     }
