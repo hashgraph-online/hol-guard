@@ -1,5 +1,5 @@
 import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag } from "./approval-center-primitives";
-import type { GuardRuntimeSnapshot } from "./guard-types";
+import type { GuardCloudSyncHealth, GuardRuntimeSnapshot } from "./guard-types";
 
 type RuntimeOverviewProps = {
   snapshot: GuardRuntimeSnapshot;
@@ -32,6 +32,35 @@ function remediationLine(snapshot: GuardRuntimeSnapshot): string {
     return "Stay local for now or connect this machine when you want shared queue memory and cross-device proof.";
   }
   return "Open Guard Cloud for shared proof, Watched Apps for local coverage, or the review queue when something needs your choice.";
+}
+
+export function resolveCloudSyncHealthCopy(health: GuardCloudSyncHealth): { label: string; detail: string } {
+  return {
+    label: health.label,
+    detail: health.detail
+  };
+}
+
+function cloudSyncHealthTone(state: GuardCloudSyncHealth["state"]): "blue" | "slate" {
+  if (state === "disabled" || state === "failed" || state === "stale") {
+    return "slate";
+  }
+  return "blue";
+}
+
+function CloudSyncHealthCard(props: { health: GuardCloudSyncHealth }) {
+  const copy = resolveCloudSyncHealthCopy(props.health);
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
+          Cloud sync health
+        </p>
+        <Tag tone={cloudSyncHealthTone(props.health.state)}>{copy.label}</Tag>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
+    </div>
+  );
 }
 
 export function RuntimeOverview(props: RuntimeOverviewProps) {
@@ -71,6 +100,8 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
             ]}
           />
         </div>
+
+        <CloudSyncHealthCard health={snapshot.cloud_sync_health} />
 
         <div className="rounded-xl border border-border bg-white px-5 py-4">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">

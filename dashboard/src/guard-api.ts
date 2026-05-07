@@ -411,6 +411,14 @@ export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
       fleet_url: fleetUrl,
       connect_url: connectUrl
     },
+    cloud_sync_health: {
+      state: "pending",
+      label: "Cloud sync pending",
+      detail: "Waiting for the first shared Cloud proof from this machine.",
+      pending_events: 1,
+      last_synced_at: null,
+      next_retry_after: null
+    },
     dashboard_url: dashboardUrl,
     inbox_url: inboxUrl,
     fleet_url: fleetUrl,
