@@ -213,6 +213,30 @@ def test_mcp_server_identity_does_not_parse_yarn_exec_command_as_package() -> No
     assert identity.package_version is None
 
 
+def test_mcp_server_identity_reads_pipx_spec_package_selector() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "esptool", "esp_rfc2217_server.py"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "esptool"
+
+
+def test_mcp_server_identity_reads_uvx_from_package_selector() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--from", "httpie", "http"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "httpie"
+
+
 def test_mcp_tool_identity_normalizes_set_and_path_schema_values() -> None:
     first = build_mcp_tool_identity(
         server_hash="server",
