@@ -186,8 +186,6 @@ class SkillRiskDetector:
         if action.action_type != "prompt" or action.prompt_excerpt is None:
             return ()
         excerpt = action.prompt_excerpt
-        if "SKILL.md" not in excerpt and "skill" not in excerpt.lower():
-            return ()
         return detect_skill_content_risk(excerpt)
 
 

@@ -70,7 +70,7 @@ _HIDE_ACTIONS_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bdo\s+this\s+(?:silently|without\s+notif)", re.IGNORECASE),
 )
 _BASE64_CANDIDATE = re.compile(r"\b(?:[A-Za-z0-9+/]{40,}={0,2})\b")
-_HEX_CANDIDATE = re.compile(r"\b[0-9a-fA-F]{60,}\b")
+_HEX_CANDIDATE = re.compile(r"\b(?:[0-9a-fA-F]{2}){30,}\b")
 _UNICODE_CONTROL_PATTERN = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]")
 
 
@@ -126,6 +126,7 @@ def detect_skill_content_risk(
 ) -> tuple[RiskSignalV2, ...]:
     """Classify malicious patterns in SKILL.md content and return typed risk signals."""
     signals: list[RiskSignalV2] = []
+    _check_shell_in_frontmatter(content, signals)
     _check_secret_read(content, signals)
     _check_exfil_sinks(content, signals)
     _check_remote_fetch_exec(content, signals)
@@ -138,6 +139,22 @@ def detect_skill_content_risk(
     _check_encoded_payloads(content, signals)
     _check_unicode_controls(content, signals)
     return tuple(signals)
+
+
+def _check_shell_in_frontmatter(content: str, signals: list[RiskSignalV2]) -> None:
+    frontmatter = _FRONTMATTER_COMMAND_PATTERN.match(content)
+    if frontmatter and _SHELL_COMMAND_PATTERN.search(frontmatter.group(0)):
+        signals.append(
+            _skill_signal(
+                "skill.shell-in-frontmatter",
+                "execution",
+                "high",
+                "strong",
+                "Skill YAML frontmatter contains shell code blocks",
+                "This skill embeds shell commands inside its YAML frontmatter section.",
+                "shell code block found in frontmatter",
+            )
+        )
 
 
 def _check_secret_read(content: str, signals: list[RiskSignalV2]) -> None:
@@ -298,8 +315,9 @@ def _check_encoded_payloads(content: str, signals: list[RiskSignalV2]) -> None:
     for match in _BASE64_CANDIDATE.finditer(content):
         candidate = match.group(0)
         try:
-            decoded = base64.b64decode(candidate + "==").decode("utf-8", errors="strict")
-            if any(pattern.search(decoded) for pattern in (*_SECRET_READ_PATTERNS, *_EXFIL_SINK_PATTERNS)):
+            decoded = base64.b64decode(candidate + "=" * (-len(candidate) % 4)).decode("utf-8", errors="strict")
+            _all_patterns = (*_SECRET_READ_PATTERNS, *_EXFIL_SINK_PATTERNS, *_REMOTE_FETCH_EXEC_PATTERNS)
+            if any(pattern.search(decoded) for pattern in _all_patterns):
                 signals.append(
                     _skill_signal(
                         "skill.encoded-payload",
@@ -318,7 +336,8 @@ def _check_encoded_payloads(content: str, signals: list[RiskSignalV2]) -> None:
         candidate = match.group(0)
         try:
             decoded = bytes.fromhex(candidate).decode("utf-8", errors="strict")
-            if any(pattern.search(decoded) for pattern in (*_SECRET_READ_PATTERNS, *_EXFIL_SINK_PATTERNS)):
+            _all_patterns = (*_SECRET_READ_PATTERNS, *_EXFIL_SINK_PATTERNS, *_REMOTE_FETCH_EXEC_PATTERNS)
+            if any(pattern.search(decoded) for pattern in _all_patterns):
                 signals.append(
                     _skill_signal(
                         "skill.encoded-payload",
