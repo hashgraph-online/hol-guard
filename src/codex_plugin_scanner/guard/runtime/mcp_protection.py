@@ -141,11 +141,9 @@ def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
         if not value:
             index += 1
             continue
-        if command_name == "pipx" and positional_index == 0 and value == "run":
-            index += 1
-            positional_index += 1
-            continue
-        if positional_index == 0 and value in {"dlx", "exec", "x"}:
+        if positional_index == 0 and value in _launcher_non_package_subcommands(command_name):
+            return None
+        if positional_index == 0 and value in _launcher_subcommands(command_name):
             index += 1
             positional_index += 1
             continue
@@ -197,6 +195,23 @@ def _option_takes_value(*, command_name: str, option: str) -> bool:
     if option_name.startswith("--") and "=" in option_name:
         return False
     return option_name in _value_options_for_command(command_name)
+
+
+def _launcher_subcommands(command_name: str) -> set[str]:
+    command_specific: dict[str, set[str]] = {
+        "pipx": {"run"},
+        "pnpm": {"dlx"},
+        "yarn": {"dlx"},
+    }
+    return command_specific.get(command_name, set())
+
+
+def _launcher_non_package_subcommands(command_name: str) -> set[str]:
+    command_specific: dict[str, set[str]] = {
+        "pnpm": {"exec"},
+        "yarn": {"exec"},
+    }
+    return command_specific.get(command_name, set())
 
 
 def _value_options_for_command(command_name: str) -> set[str]:

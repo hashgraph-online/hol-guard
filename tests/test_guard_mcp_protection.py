@@ -187,6 +187,32 @@ def test_mcp_server_identity_keeps_pnpm_package_named_x() -> None:
     assert identity.package_name == "x"
 
 
+def test_mcp_server_identity_does_not_parse_pnpm_exec_command_as_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("exec", "jest", "--version"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name is None
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_does_not_parse_yarn_exec_command_as_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="yarn",
+        args=("exec", "node", "--version"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name is None
+    assert identity.package_version is None
+
+
 def test_mcp_tool_identity_normalizes_set_and_path_schema_values() -> None:
     first = build_mcp_tool_identity(
         server_hash="server",
