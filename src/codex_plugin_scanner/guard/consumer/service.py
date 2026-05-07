@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ...models import ScanOptions
+from ..access_graph_events import queue_access_graph_snapshot
 from ..adapters import get_adapter, list_adapters
 from ..adapters.base import HarnessContext
 from ..capabilities import compute_capability_delta, normalize_artifact_capabilities, severity_from_deltas
@@ -657,6 +658,13 @@ def evaluate_detection(
                 "blocked": blocked,
             },
             now,
+        )
+    if persist:
+        queue_access_graph_snapshot(
+            store=store,
+            detection=detection,
+            artifacts=results,
+            now=now,
         )
     return {
         "harness": detection.harness,

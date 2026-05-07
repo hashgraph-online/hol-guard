@@ -4,6 +4,7 @@ import {
   parseActionEnvelope,
   parseDecisionV2
 } from "./guard-api";
+import { resolveCloudSyncHealthCopy } from "./runtime-overview";
 import {
   resolveDecisionV2Detail,
   resolveDecisionV2Title,
@@ -29,6 +30,29 @@ assert(snapshot.cloud_pairing_state.dashboard_url === snapshot.dashboard_url, "d
 assert(snapshot.cloud_pairing_state.inbox_url === snapshot.inbox_url, "demo inbox URL is preserved");
 assert(snapshot.cloud_pairing_state.fleet_url === snapshot.fleet_url, "demo fleet URL is preserved");
 assert(snapshot.cloud_pairing_state.connect_url === snapshot.connect_url, "demo connect URL is preserved");
+assert(snapshot.cloud_sync_health.state === "pending", "demo snapshot exposes pending Cloud sync health");
+
+const expectedSyncHealthLabels = {
+  healthy: "Cloud sync healthy",
+  pending: "Cloud sync pending",
+  failed: "Cloud sync needs attention",
+  degraded: "Cloud sync degraded",
+  disabled: "Cloud sync disabled",
+  stale: "Cloud sync stale"
+};
+
+for (const [state, label] of Object.entries(expectedSyncHealthLabels)) {
+  const copy = resolveCloudSyncHealthCopy({
+    state: state as keyof typeof expectedSyncHealthLabels,
+    label,
+    detail: `${label} detail`,
+    pending_events: state === "pending" ? 2 : 0,
+    last_synced_at: state === "disabled" ? null : "2026-04-24T00:00:00+00:00",
+    next_retry_after: state === "failed" ? "2026-04-24T00:02:00+00:00" : null
+  });
+  assert(copy.label === label, `T370: ${state} sync health label is preserved`);
+  assert(copy.detail.includes("detail"), `T370: ${state} sync health detail is preserved`);
+}
 
 const BASE_ENVELOPE: GuardActionEnvelope = {
   schema_version: 1,
