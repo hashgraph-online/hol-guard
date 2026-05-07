@@ -1105,11 +1105,7 @@ def run_guard_command(
             all_advs = store.list_cached_advisories()
             target_id = getattr(args, "advisory_id", None)
             match = next(
-                (
-                    a
-                    for a in all_advs
-                    if a.get("advisory_id") == target_id or a.get("id") == target_id
-                ),
+                (a for a in all_advs if a.get("advisory_id") == target_id or a.get("id") == target_id),
                 None,
             )
             if match:
