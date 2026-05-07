@@ -69,6 +69,7 @@ class RuntimeMcpGuardProxy:
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}
         self._buffered_client_responses: dict[str, list[dict[str, Any]]] = {}
         self._tool_catalog: dict[str, dict[str, object]] = {}
+        self._tool_catalog_pending: dict[str, dict[str, object]] | None = None
 
     def run_session(
         self,
@@ -589,9 +590,8 @@ class RuntimeMcpGuardProxy:
         tools = result.get("tools")
         if not isinstance(tools, list):
             return
-        if len(tools) == 0:
-            self._tool_catalog = {}
-            return
+        next_cursor = result.get("nextCursor")
+        has_more_pages = isinstance(next_cursor, str) and len(next_cursor.strip()) > 0
         catalog: dict[str, dict[str, object]] = {}
         for item in tools:
             if not isinstance(item, dict):
@@ -607,10 +607,18 @@ class RuntimeMcpGuardProxy:
             if input_schema is not None:
                 entry["input_schema"] = input_schema
             catalog[name.strip()] = entry
-        if len(catalog) > 0:
-            merged_catalog = dict(self._tool_catalog)
-            merged_catalog.update(catalog)
-            self._tool_catalog = merged_catalog
+        if has_more_pages:
+            if self._tool_catalog_pending is None:
+                self._tool_catalog_pending = {}
+            self._tool_catalog_pending.update(catalog)
+            return
+        if self._tool_catalog_pending is not None:
+            merged_snapshot = dict(self._tool_catalog_pending)
+            merged_snapshot.update(catalog)
+            self._tool_catalog = merged_snapshot
+            self._tool_catalog_pending = None
+            return
+        self._tool_catalog = catalog
 
     @staticmethod
     def _launch_target(tool_name: str, arguments: object) -> str:

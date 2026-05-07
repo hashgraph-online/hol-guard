@@ -1178,7 +1178,8 @@ def test_codex_guard_proxy_merges_paginated_tools_catalog_and_clears_stale_entri
                         "description": "Safe echo",
                         "inputSchema": {"type": "object", "properties": {}},
                     }
-                ]
+                ],
+                "nextCursor": "page-2",
             }
         }
     )
@@ -1197,6 +1198,22 @@ def test_codex_guard_proxy_merges_paginated_tools_catalog_and_clears_stale_entri
     )
 
     assert set(proxy._tool_catalog) == {"safe_echo", "dangerous_delete"}
+
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo only",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ]
+            }
+        }
+    )
+
+    assert set(proxy._tool_catalog) == {"safe_echo"}
 
     proxy._capture_tools_catalog({"result": {"tools": []}})
 

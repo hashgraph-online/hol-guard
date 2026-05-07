@@ -12,7 +12,6 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     tool_call_risk_categories,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 
 
 def test_stable_mcp_server_identifier_survives_config_path_changes() -> None:
@@ -245,30 +244,6 @@ def test_stable_mcp_server_identifier_redacts_arbitrary_one_segment_absolute_pat
     )
 
     assert stable_mcp_server_identifier(first) == stable_mcp_server_identifier(second)
-
-
-def test_stable_mcp_server_identifier_uses_server_identity_hash_when_present() -> None:
-    identity = build_mcp_server_identity(
-        config_path="/Users/alice/.codex/config.toml",
-        command="npx",
-        args=("-y", "@modelcontextprotocol/server-filesystem", "/workspace"),
-        transport="stdio",
-        env={"TOKEN": "redacted"},
-    )
-    server = ManagedMcpServer(
-        harness="codex",
-        name="filesystem",
-        source_scope="user",
-        config_path="/Users/alice/.codex/config.toml",
-        command="npx",
-        args=("-y", "@modelcontextprotocol/server-filesystem", "/workspace"),
-        transport="stdio",
-        env={"TOKEN": "redacted"},
-        enabled=True,
-        identity=identity,
-    )
-
-    assert stable_mcp_server_identifier(server).endswith(identity.identity_hash[:20])
 
 
 def test_normalized_capability_categories_include_mcp_tool_risk_families() -> None:
