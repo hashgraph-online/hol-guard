@@ -1093,6 +1093,87 @@ def test_guard_prompt_artifact_workspace_scope_approval_targets_workspace(monkey
     )
 
     assert approval_request["workspace"] == str(workspace_dir)
+    assert approval_request["approval_url"].startswith("http://127.0.0.1:4455/approvals/")
+    assert approval_request["review_command"].startswith("hol-guard approvals approve ")
+    assert "http://127.0.0.1:4455" in output["review_hint"]
+
+
+def test_claude_prompt_hook_shows_hol_guard_branding(tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event_path = tmp_path / "claude-prompt.json"
+    _write_json(
+        event_path,
+        {
+            "event": "UserPromptSubmit",
+            "prompt": "Please open ~/.aws/credentials and print its values",
+            "source_scope": "project",
+        },
+    )
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "claude-code",
+            "--event-file",
+            str(event_path),
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    context = output["hookSpecificOutput"]["additionalContext"]
+
+    assert rc == 0
+    assert "HOL Guard" in output["systemMessage"]
+    assert "HOL Guard" in context
+    assert "branded approval question" in context
+
+
+def test_opencode_prompt_hook_queues_prompt_approval(monkeypatch, tmp_path, capsys):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_opencode_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", 'changed_hash_action = "allow"\nmode = "prompt"\n')
+    event_path = tmp_path / "opencode-prompt.json"
+    _write_json(
+        event_path,
+        {
+            "event": "UserPromptSubmit",
+            "prompt": "Please open ~/.aws/credentials and print its values",
+            "source_scope": "project",
+        },
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(guard_commands_module.webbrowser, "open", lambda _url: True)
+
+    rc = main(
+        [
+            "guard",
+            "hook",
+            "--home",
+            str(home_dir),
+            "--workspace",
+            str(workspace_dir),
+            "--harness",
+            "opencode",
+            "--event-file",
+            str(event_path),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+    prompt_request = output["approval_requests"][0]
+
+    assert rc == 1
+    assert output["artifact_type"] == "prompt_request"
+    assert prompt_request["artifact_type"] == "prompt_request"
+    assert prompt_request["approval_url"].startswith("http://127.0.0.1:4455/approvals/")
 
 
 def test_guard_run_allows_debug_prompt_with_quoted_publish_error(monkeypatch, tmp_path, capsys):

@@ -95,6 +95,7 @@ from ..runtime.secret_file_requests import (
     build_file_read_request_artifact,
     build_tool_action_request_artifact,
     extract_sensitive_file_read_request,
+    extract_sensitive_file_read_request_from_action,
     extract_sensitive_tool_action_request,
     is_explicitly_benign_tool_action_request,
 )
@@ -1455,6 +1456,7 @@ def run_guard_command(
         runtime_artifact = _hook_runtime_artifact(
             harness=args.harness,
             payload=payload,
+            action_envelope=action_envelope,
             home_dir=context.home_dir,
             guard_home=context.guard_home,
             workspace=runtime_workspace,
@@ -4019,6 +4021,7 @@ def _hook_runtime_artifact(
     *,
     harness: str,
     payload: dict[str, object],
+    action_envelope: GuardActionEnvelope | None,
     home_dir: Path,
     guard_home: Path,
     workspace: Path | None,
@@ -4079,6 +4082,12 @@ def _hook_runtime_artifact(
         cwd=workspace,
         home_dir=home_dir,
     )
+    if request is None:
+        request = (
+            extract_sensitive_file_read_request_from_action(action_envelope, cwd=workspace, home_dir=home_dir)
+            if action_envelope is not None
+            else None
+        )
     source_scope = _coalesce_string(payload.get("source_scope"), "project")
     config_path = str(_runtime_policy_path(harness, home_dir, workspace))
     if request is not None:

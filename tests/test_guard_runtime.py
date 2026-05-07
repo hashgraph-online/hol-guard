@@ -7570,6 +7570,38 @@ def test_guard_hook_claude_alias_reuses_native_approval_policy_with_canonical_ha
     assert any(receipt["harness"] == "claude-code" for receipt in receipts)
 
 
+def test_hook_runtime_artifact_prefers_raw_file_read_path_over_redacted_action_path(tmp_path):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    outside_secret = tmp_path / "outside-a" / ".env"
+    payload = {
+        "event": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": str(outside_secret)},
+        "source_scope": "project",
+    }
+    action = guard_commands_module._hook_action_envelope(
+        harness="claude-code",
+        payload=payload,
+        home_dir=home_dir,
+        workspace=workspace_dir,
+    )
+
+    artifact = guard_commands_module._hook_runtime_artifact(
+        harness="claude-code",
+        payload=payload,
+        action_envelope=action,
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+    )
+
+    assert action is not None
+    assert action.target_paths == (".../.env",)
+    assert artifact is not None
+    assert artifact.metadata["normalized_path"] == str(outside_secret)
+
+
 def test_guard_hook_claude_alias_reuses_legacy_alias_policy_keys(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -7584,6 +7616,7 @@ def test_guard_hook_claude_alias_reuses_legacy_alias_policy_keys(tmp_path, capsy
     canonical_artifact = guard_commands_module._hook_runtime_artifact(
         harness="claude",
         payload=event,
+        action_envelope=None,
         home_dir=home_dir,
         guard_home=home_dir,
         workspace=workspace_dir,
