@@ -591,7 +591,7 @@ class RuntimeMcpGuardProxy:
         if not isinstance(tools, list):
             return
         next_cursor = result.get("nextCursor")
-        has_more_pages = isinstance(next_cursor, str) and len(next_cursor.strip()) > 0
+        has_more_pages = next_cursor is not None
         catalog: dict[str, dict[str, object]] = {}
         for item in tools:
             if not isinstance(item, dict):
@@ -611,6 +611,7 @@ class RuntimeMcpGuardProxy:
             if self._tool_catalog_pending is None:
                 self._tool_catalog_pending = {}
             self._tool_catalog_pending.update(catalog)
+            self._tool_catalog = dict(self._tool_catalog_pending)
             return
         if self._tool_catalog_pending is not None:
             merged_snapshot = dict(self._tool_catalog_pending)

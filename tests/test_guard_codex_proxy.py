@@ -1179,10 +1179,11 @@ def test_codex_guard_proxy_merges_paginated_tools_catalog_and_clears_stale_entri
                         "inputSchema": {"type": "object", "properties": {}},
                     }
                 ],
-                "nextCursor": "page-2",
+                "nextCursor": "",
             }
         }
     )
+    assert set(proxy._tool_catalog) == {"safe_echo"}
     proxy._capture_tools_catalog(
         {
             "result": {
