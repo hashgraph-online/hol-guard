@@ -152,6 +152,12 @@ def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
         if value.startswith("--package="):
             package = value.partition("=")[2].strip()
             return package or None
+        if value in {"--spec", "--from"} and index + 1 < len(args):
+            package = args[index + 1].strip()
+            return package or None
+        if value.startswith("--spec=") or value.startswith("--from="):
+            package = value.partition("=")[2].strip()
+            return package or None
         if _option_takes_value(command_name=command_name, option=value):
             index += 2
             continue
@@ -228,9 +234,9 @@ def _value_options_for_command(command_name: str) -> set[str]:
     command_specific: dict[str, set[str]] = {
         "bunx": {"-c", "--config", "--package"},
         "npx": {"-c"},
-        "pipx": {"--index-url", "--pip-args", "--spec", "--suffix"},
+        "pipx": {"--index-url", "--pip-args", "--suffix"},
         "pnpm": {"-c", "-C", "--dir", "--filter"},
-        "uvx": {"--extra-index-url", "--find-links", "--from", "--index-url", "--project"},
+        "uvx": {"--extra-index-url", "--find-links", "--index-url", "--project"},
         "yarn": {"--cwd", "--use-yarnrc"},
     }
     return common | command_specific.get(command_name, set())
