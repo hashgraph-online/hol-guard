@@ -605,6 +605,19 @@ def test_mcp_server_identity_reads_npm_exec_package_flag_selector() -> None:
     assert identity.package_version == "1.9.0"
 
 
+def test_mcp_server_identity_uses_last_npm_package_selector_when_repeated() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("exec", "--package", "typescript", "--package", "ts-node@10.9.1", "--", "ts-node", "--help"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ts-node"
+    assert identity.package_version == "10.9.1"
+
+
 def test_mcp_server_identity_skips_npm_workspace_option_values_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
