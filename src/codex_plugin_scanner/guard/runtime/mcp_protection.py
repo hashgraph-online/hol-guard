@@ -203,7 +203,7 @@ def _command_name(value: str) -> str:
 def _split_pip_style_specifier(value: str) -> tuple[str | None, str | None]:
     if "://" in value:
         return None, None
-    for separator in ("===", "==", "~=", "!=", "<=", ">=", "<", ">"):
+    for separator in ("===", "==", "=", "~=", "!=", "<=", ">=", "<", ">"):
         name, matched, version = value.partition(separator)
         if not matched:
             continue
@@ -211,7 +211,7 @@ def _split_pip_style_specifier(value: str) -> tuple[str | None, str | None]:
         normalized_version = version.strip()
         if not normalized_name or not normalized_version:
             continue
-        if separator in {"==", "==="}:
+        if separator in {"=", "==", "==="}:
             return normalized_name, normalized_version
         return normalized_name, f"{separator}{normalized_version}"
     return None, None
