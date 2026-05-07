@@ -174,6 +174,8 @@ class RuntimeMcpGuardProxy:
             "decision": "forward",
             "redacted_params": _redact_json(params),
         }
+        if method in {"notifications/tools/list_changed", "tools/list_changed"}:
+            self._invalidate_tools_catalog()
         if _is_notification(message):
             self._forward_notification(message, child_stdin)
             event["decision"] = "forward-notification"
@@ -623,6 +625,10 @@ class RuntimeMcpGuardProxy:
             self._tool_catalog_pending = None
             return
         self._tool_catalog = catalog
+
+    def _invalidate_tools_catalog(self) -> None:
+        self._tool_catalog = {}
+        self._tool_catalog_pending = None
 
     @staticmethod
     def _launch_target(tool_name: str, arguments: object) -> str:

@@ -1220,3 +1220,47 @@ def test_codex_guard_proxy_merges_paginated_tools_catalog_and_clears_stale_entri
     proxy._capture_tools_catalog({"result": {"tools": []}})
 
     assert proxy._tool_catalog == {}
+
+
+def test_codex_guard_proxy_invalidates_catalog_on_list_changed_notification(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ],
+                "nextCursor": "cursor-2",
+            }
+        }
+    )
+
+    response, event = proxy._handle_message(
+        message={"jsonrpc": "2.0", "method": "notifications/tools/list_changed", "params": {}},
+        child_stdin=StringIO(),
+        child_stdout=StringIO(),
+        client_input=None,
+        server_output=None,
+        approval_callback=None,
+    )
+
+    assert response is None
+    assert event["decision"] == "forward-notification"
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
