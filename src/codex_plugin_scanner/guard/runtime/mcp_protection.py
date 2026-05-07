@@ -226,6 +226,7 @@ def _launcher_non_package_subcommands(command_name: str) -> set[str]:
 def _package_selector_flags(command_name: str) -> set[str]:
     command_specific: dict[str, set[str]] = {
         "bunx": {"--package", "-p"},
+        "npm": {"--package"},
         "npx": {"--package", "-p"},
     }
     return command_specific.get(command_name, set())
@@ -244,6 +245,7 @@ def _value_options_for_command(command_name: str) -> set[str]:
     }
     command_specific: dict[str, set[str]] = {
         "bunx": {"-c", "--config", "--package"},
+        "npm": {"-c", "-w", "--workspace"},
         "npx": {"-c", "-w", "--workspace"},
         "pipx": {"--index-url", "--pip-args", "--suffix"},
         "pnpm": {"-c", "-C", "--dir", "--filter"},

@@ -310,6 +310,44 @@ def test_mcp_server_identity_reads_npm_exec_package_selector() -> None:
     assert identity.package_version == "1.2.3"
 
 
+def test_mcp_server_identity_reads_npm_exec_package_flag_selector() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("exec", "--package=@scope/package@1.9.0", "--", "node", "--version"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/package"
+    assert identity.package_version == "1.9.0"
+
+
+def test_mcp_server_identity_skips_npm_workspace_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("exec", "-w", "packages/a", "@scope/package@2.4.0"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "@scope/package"
+    assert identity.package_version == "2.4.0"
+
+
+def test_mcp_server_identity_skips_npm_call_short_option_value_without_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npm",
+        args=("exec", "-c", "echo hi"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name is None
+
+
 def test_mcp_server_identity_reads_npm_x_package_selector() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
