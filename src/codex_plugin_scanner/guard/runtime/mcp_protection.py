@@ -137,6 +137,7 @@ def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
     index = 0
     positional_index = 0
     package_selector_flags = _package_selector_flags(command_name)
+    selected_package: str | None = None
     while index < len(args):
         value = args[index].strip()
         if not value:
@@ -149,16 +150,24 @@ def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
             positional_index += 1
             continue
         if value in package_selector_flags and index + 1 < len(args):
-            return args[index + 1].strip() or None
+            selected_package = args[index + 1].strip() or selected_package
+            index += 2
+            continue
         if "--package" in package_selector_flags and value.startswith("--package="):
             package = value.partition("=")[2].strip()
-            return package or None
+            selected_package = package or selected_package
+            index += 1
+            continue
         if value in {"--spec", "--from"} and index + 1 < len(args):
             package = args[index + 1].strip()
-            return package or None
+            selected_package = package or selected_package
+            index += 2
+            continue
         if value.startswith("--spec=") or value.startswith("--from="):
             package = value.partition("=")[2].strip()
-            return package or None
+            selected_package = package or selected_package
+            index += 1
+            continue
         if _option_takes_value(command_name=command_name, option=value):
             index += 2
             continue
@@ -169,8 +178,12 @@ def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
             index += 1
             positional_index += 1
             continue
+        if selected_package is not None:
+            index += 1
+            positional_index += 1
+            continue
         return value
-    return None
+    return selected_package
 
 
 def _split_package_token(value: str) -> tuple[str | None, str | None]:
