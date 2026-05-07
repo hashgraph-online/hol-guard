@@ -150,6 +150,18 @@ def test_mcp_server_identity_skips_npx_option_values_before_package() -> None:
     assert identity.package_version == "1.2.3"
 
 
+def test_mcp_server_identity_skips_npx_workspace_value_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("-w", "packages/a", "create-react-app"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "create-react-app"
+
+
 def test_mcp_server_identity_normalizes_windows_launcher_suffixes() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",

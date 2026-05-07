@@ -233,7 +233,7 @@ def _value_options_for_command(command_name: str) -> set[str]:
     }
     command_specific: dict[str, set[str]] = {
         "bunx": {"-c", "--config", "--package"},
-        "npx": {"-c"},
+        "npx": {"-c", "-w", "--workspace"},
         "pipx": {"--index-url", "--pip-args", "--suffix"},
         "pnpm": {"-c", "-C", "--dir", "--filter"},
         "uvx": {"--extra-index-url", "--find-links", "--index-url", "--project"},
