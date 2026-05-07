@@ -13,12 +13,24 @@ import sqlite3
 import time
 
 import pytest
-
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key
-from cryptography.hazmat.backends import default_backend
 
+from codex_plugin_scanner.guard.runtime.advisory_matchers import (
+    match_all_advisories,
+    match_github_action,
+    match_github_advisory,
+    match_malicious_domain,
+    match_malicious_package_hash,
+    match_mcp_server,
+    match_npm_advisory,
+    match_nvd_cve,
+    match_osv,
+    match_pypi_advisory,
+    match_skill_hash,
+)
 from codex_plugin_scanner.guard.runtime.threat_intel import (
     BundleExpiredError,
     BundleMalformedError,
@@ -33,21 +45,7 @@ from codex_plugin_scanner.guard.runtime.threat_intel import (
     load_bundle_from_json,
     verify_bundle_signature,
 )
-from codex_plugin_scanner.guard.runtime.advisory_matchers import (
-    match_all_advisories,
-    match_github_action,
-    match_github_advisory,
-    match_malicious_domain,
-    match_malicious_package_hash,
-    match_mcp_server,
-    match_npm_advisory,
-    match_nvd_cve,
-    match_osv,
-    match_pypi_advisory,
-    match_skill_hash,
-)
 from codex_plugin_scanner.guard.store_threat_intel import (
-    CachedBundle,
     ThreatIntelMatch,
     insert_match,
     latest_cached_bundle,

@@ -93,7 +93,7 @@ class ThreatIntelMatch:
     target_json: str
 
 
-def upsert_bundle(conn: sqlite3.Connection, bundle: "ThreatIntelBundle", bundle_id: str) -> None:
+def upsert_bundle(conn: sqlite3.Connection, bundle: ThreatIntelBundle, bundle_id: str) -> None:
     """Insert or replace a bundle row in the local cache."""
     conn.execute(
         """

@@ -12,10 +12,10 @@ import time
 from dataclasses import dataclass
 from typing import Final
 
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-from cryptography.exceptions import InvalidSignature
 
 _BUNDLE_MAX_AGE_SECONDS: Final[int] = 86_400 * 7
 _BUNDLE_CLOCK_SKEW_SECONDS: Final[int] = 300
@@ -65,7 +65,7 @@ class ThreatAdvisory:
         }
 
     @staticmethod
-    def from_dict(data: dict[str, object]) -> "ThreatAdvisory":
+    def from_dict(data: dict[str, object]) -> ThreatAdvisory:
         def _str(key: str) -> str:
             val = data.get(key)
             if not isinstance(val, str) or not val.strip():
@@ -105,7 +105,7 @@ class ThreatIntelBundle:
         }
 
     @staticmethod
-    def from_dict(data: dict[str, object]) -> "ThreatIntelBundle":
+    def from_dict(data: dict[str, object]) -> ThreatIntelBundle:
         def _int(key: str) -> int:
             val = data.get(key)
             if not isinstance(val, int):
@@ -192,9 +192,7 @@ def check_bundle_freshness(bundle: ThreatIntelBundle, now: float | None = None) 
     """
     ts = now if now is not None else time.time()
     if ts > bundle.expires_at + _BUNDLE_CLOCK_SKEW_SECONDS:
-        raise BundleExpiredError(
-            f"Bundle expired at {bundle.expires_at:.0f}, current time is {ts:.0f}"
-        )
+        raise BundleExpiredError(f"Bundle expired at {bundle.expires_at:.0f}, current time is {ts:.0f}")
     if ts < bundle.generated_at - _BUNDLE_CLOCK_SKEW_SECONDS:
         raise BundleExpiredError(
             f"Bundle generated_at {bundle.generated_at:.0f} is in the future (current time {ts:.0f})"
@@ -207,9 +205,7 @@ def check_bundle_rollback(bundle: ThreatIntelBundle, cached_version: int) -> Non
     Protects against a server serving an older bundle to downgrade protections.
     """
     if bundle.version < cached_version:
-        raise BundleRollbackError(
-            f"Bundle version {bundle.version} is older than cached version {cached_version}"
-        )
+        raise BundleRollbackError(f"Bundle version {bundle.version} is older than cached version {cached_version}")
 
 
 def load_bundle_from_json(raw_json: str) -> ThreatIntelBundle:
