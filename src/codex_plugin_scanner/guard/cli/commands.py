@@ -3390,9 +3390,8 @@ def _runtime_detector_perf_payload(config: GuardConfig) -> list[dict[str, object
     from ..runtime.detectors import (
         _SLOW_DETECTOR_THRESHOLD_MS,
         DetectorContext,
-        DetectorRegistry,
-        register_default_detectors,
     )
+    from ..runtime.runner import _get_default_detector_registry
 
     probe_action = GuardActionEnvelope(
         schema_version=1,
@@ -3422,7 +3421,7 @@ def _runtime_detector_perf_payload(config: GuardConfig) -> list[dict[str, object
         threat_intel={},
         redaction_settings={},
     )
-    result = DetectorRegistry(register_default_detectors()).run(
+    result = _get_default_detector_registry().run(
         probe_action,
         probe_context,
         timeout_ms=config.runtime_detector_timeout_ms,

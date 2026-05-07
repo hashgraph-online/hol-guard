@@ -160,7 +160,7 @@ class GuardSurfaceDaemonClient:
             method="GET",
         )
         try:
-            with urllib.request.urlopen(request, timeout=_DEFAULT_REQUEST_TIMEOUT_S) as response:
+            with urllib.request.urlopen(request, timeout=_STATUS_REQUEST_TIMEOUT_S) as response:
                 payload = self._decode_json_response(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             try:
