@@ -92,6 +92,52 @@ See [docs/guard/get-started.md](docs/guard/get-started.md) for the full local fl
 
 </details>
 
+## Guard: Protection Levels
+
+HOL Guard is antivirus for AI harnesses. It intercepts every tool action before your files change or your network is contacted, then decides in milliseconds whether to allow or block.
+
+Choose a protection level with `hol-guard settings set security-level <level>`:
+
+| Level | Who it's for | What it blocks |
+| :--- | :--- | :--- |
+| **Gentle** | Teams who want minimal friction; experienced users | High-confidence secrets and clear exfil only |
+| **Balanced** | Most users (default) | Secrets, shell exfil, prompt injections, supply-chain hooks |
+| **Strict** | Security-conscious teams | Everything above plus low-confidence signals and untrusted prompts |
+| **Paranoid** | High-security environments | All the above plus any unrecognized MCP server action |
+
+If you are unsure, start with **Balanced**. You can promote to **Strict** after reviewing your first week of receipts.
+
+## Guard: Troubleshooting
+
+### Why was my command paused?
+
+Guard paused a command because one or more detectors fired. To see exactly what triggered:
+
+```bash
+hol-guard receipts          # review recent decisions
+hol-guard doctor            # run a probe and see which detectors are active
+hol-guard doctor --perf     # include per-detector timing
+```
+
+If the block looks like a false positive, you can approve it from the receipts view or from the dashboard at `http://localhost:6174`.
+
+### How do I clear approvals?
+
+From the terminal:
+
+```bash
+hol-guard approvals         # list pending approvals
+hol-guard approvals clear   # clear all pending approvals (prompts for confirmation)
+```
+
+From the dashboard: open `http://localhost:6174`, go to the **Approval Center**, and use the **Clear all** button. You will be asked to confirm before any approvals are removed.
+
+## Guard: Advisory Sync Privacy
+
+Guard's advisory database updates are optional and pull-only. When you run `hol-guard advisories sync`, Guard fetches a signed advisory list from `advisories.hol.org`. No local file paths, harness configs, receipt data, or workspace identifiers are sent to any server during sync.
+
+Advisory sync requires a HOL Guard Cloud account. If you have not signed in, sync is skipped and Guard continues using the locally bundled advisory database. Run `hol-guard login` to connect a free account.
+
 ## Scanner Quickstart
 
 ```bash
