@@ -419,6 +419,30 @@ def test_mcp_server_identity_skips_uvx_keyring_provider_option_values_before_pac
     assert identity.package_name == "ruff"
 
 
+def test_mcp_server_identity_skips_uvx_resolution_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--resolution", "highest", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_prerelease_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--prerelease", "allow", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
 def test_mcp_server_identity_skips_uvx_overrides_option_values_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
