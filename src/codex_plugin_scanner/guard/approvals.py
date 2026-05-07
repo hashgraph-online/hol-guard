@@ -6,7 +6,7 @@ import time
 import uuid
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -374,11 +374,13 @@ def _build_runtime_cloud_context(store: GuardStore) -> dict[str, object]:
         remote_payload_active=remote_payload_active,
     )
     dashboard_url, inbox_url, fleet_url, connect_url = _resolve_guard_urls(sync_url)
+    sync_health = _build_cloud_sync_health(store, credentials is not None, cloud_state)
     return {
         "sync_configured": credentials is not None,
         "cloud_state": cloud_state,
         "cloud_state_label": _runtime_cloud_state_label(cloud_state),
         "cloud_state_detail": _runtime_cloud_state_detail(cloud_state),
+        "cloud_sync_health": sync_health,
         "cloud_pairing_state": {
             "state": cloud_state,
             "label": _runtime_cloud_state_label(cloud_state),
@@ -394,6 +396,102 @@ def _build_runtime_cloud_context(store: GuardStore) -> dict[str, object]:
         "fleet_url": fleet_url,
         "connect_url": connect_url,
     }
+
+
+def _build_cloud_sync_health(store: GuardStore, sync_configured: bool, cloud_state: str) -> dict[str, object]:
+    pending_events = store.count_guard_events_v1(uploaded=False)
+    event_summary = store.get_sync_payload("guard_events_v1_summary") or {}
+    sync_summary = store.get_sync_payload("sync_summary") or {}
+    runtime_summary = store.get_sync_payload("runtime_session_summary") or {}
+    last_synced_at = _latest_sync_timestamp(
+        event_summary.get("synced_at"),
+        sync_summary.get("synced_at"),
+        runtime_summary.get("synced_at"),
+    )
+    if not sync_configured:
+        state = "disabled"
+    elif isinstance(event_summary, dict) and event_summary.get("status") == "failed":
+        state = "failed"
+    elif (
+        isinstance(event_summary, dict)
+        and event_summary.get("sync_skipped") is True
+        and event_summary.get("sync_reason") == "guard_events_endpoint_unavailable"
+    ):
+        state = "degraded"
+    elif last_synced_at is not None and _timestamp_is_stale(last_synced_at):
+        state = "stale"
+    elif pending_events > 0 or cloud_state == "paired_waiting":
+        state = "pending"
+    else:
+        state = "healthy"
+    return {
+        "state": state,
+        "label": _cloud_sync_health_label(state),
+        "detail": _cloud_sync_health_detail(state, pending_events=pending_events),
+        "pending_events": pending_events,
+        "last_synced_at": last_synced_at,
+        "next_retry_after": event_summary.get("next_retry_after") if isinstance(event_summary, dict) else None,
+    }
+
+
+def _latest_sync_timestamp(*values: object) -> str | None:
+    parsed_values: list[tuple[datetime, str]] = []
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        parsed = _parse_timestamp(value)
+        if parsed is not None:
+            parsed_values.append((parsed, value))
+    if not parsed_values:
+        return None
+    return max(parsed_values, key=lambda item: item[0])[1]
+
+
+def _parse_timestamp(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _timestamp_is_stale(value: str) -> bool:
+    parsed = _parse_timestamp(value)
+    if parsed is None:
+        return False
+    return datetime.now(timezone.utc) - parsed > timedelta(hours=24)
+
+
+def _cloud_sync_health_label(state: str) -> str:
+    labels = {
+        "healthy": "Cloud sync healthy",
+        "pending": "Cloud sync pending",
+        "failed": "Cloud sync needs attention",
+        "degraded": "Cloud sync degraded",
+        "disabled": "Cloud sync disabled",
+        "stale": "Cloud sync stale",
+    }
+    return labels.get(state, "Cloud sync pending")
+
+
+def _cloud_sync_health_detail(state: str, *, pending_events: int) -> str:
+    if state == "healthy":
+        return "Guard Cloud has the latest local proof from this machine."
+    if state == "failed":
+        return "The latest Cloud upload failed. HOL Guard kept local protection active and will retry."
+    if state == "degraded":
+        return "Cloud accepted legacy sync, but v1 Guard event ingest is unavailable. Local protection stayed active."
+    if state == "disabled":
+        return "Local protection is active. Connect Cloud when you want shared team proof."
+    if state == "stale":
+        return "Cloud has not seen fresh local proof recently. Keep this runtime open or run sync again."
+    if pending_events == 1:
+        return "One local proof event is queued for the next Cloud sync."
+    if pending_events > 1:
+        return f"{pending_events} local proof events are queued for the next Cloud sync."
+    return "Waiting for the first shared Cloud proof from this machine."
 
 
 def _resolve_runtime_cloud_state(*, sync_configured: bool, sync_completed: bool, remote_payload_active: bool) -> str:

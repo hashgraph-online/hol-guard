@@ -31,6 +31,11 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
         r"\1 *****",
     ),
     (
+        "openai-token",
+        re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b", re.IGNORECASE),
+        "sk-*****",
+    ),
+    (
         "github-token",
         re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{8,}\b"),
         "gh*****",
@@ -67,10 +72,15 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     ),
     (
         "connection-string",
-        re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s\"',}]+", re.IGNORECASE),
+        re.compile(
+            r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s\"',}]+",
+            re.IGNORECASE,
+        ),
         "*****",
     ),
 )
+
+_SENSITIVE_TEXT_PATTERN = re.compile(r"(?i)(sk-[a-z0-9_-]+|(?:token|secret|api[_-]?key)(?:\s*[:=]\s*|\s+)[^\s,;]+)")
 
 
 def redact_text(value: str) -> RedactedText:
@@ -91,3 +101,7 @@ def redact_text(value: str) -> RedactedText:
         classifiers=tuple(dict.fromkeys(classifiers)),
         original_sha256=hashlib.sha256(value.encode("utf-8")).hexdigest(),
     )
+
+
+def redact_sensitive_text(value: str) -> str:
+    return _SENSITIVE_TEXT_PATTERN.sub("[redacted]", value)

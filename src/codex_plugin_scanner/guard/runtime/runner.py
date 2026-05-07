@@ -13,7 +13,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +22,9 @@ from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..config import GuardConfig
 from ..consumer import detect_harness, evaluate_detection
+from ..edge_events import build_runtime_session_event
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
+from ..redaction import redact_sensitive_text
 from ..store import GuardStore
 from ..types import PromptRequest, RemediationAction
 from .actions import GuardActionEnvelope, redacted_workspace_label
@@ -157,6 +159,7 @@ _RUNTIME_SYNC_TIMEOUT_SECONDS = 10
 _RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS = 90
 _PAIN_SIGNAL_TIMEOUT_SECONDS = 10
 _PAIN_SIGNAL_RETRY_TIMEOUT_SECONDS = 90
+_GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_HOURS = 24
 
 
 class GuardSyncNotConfiguredError(RuntimeError):
@@ -801,12 +804,20 @@ def sync_guard_events(store: GuardStore) -> dict[str, object]:
     if credentials is None:
         raise GuardSyncNotConfiguredError("Guard is not logged in.")
     sync_url = _guard_events_sync_url(str(credentials["sync_url"]))
+    previous_summary = store.get_sync_payload("guard_events_v1_summary")
     total_events = 0
     total_accepted = 0
     synced_at = _now()
     while True:
         pending_events = store.list_guard_events_v1(uploaded=False, limit=200)
         if not pending_events:
+            if (
+                total_events == 0
+                and isinstance(previous_summary, dict)
+                and previous_summary.get("sync_reason") == "guard_events_endpoint_unavailable"
+                and _guard_events_endpoint_unavailable_recently(store)
+            ):
+                return previous_summary
             break
         body = json.dumps({"events": [event["payload"] for event in pending_events]}).encode("utf-8")
         request = urllib.request.Request(
@@ -823,10 +834,12 @@ def sync_guard_events(store: GuardStore) -> dict[str, object]:
             )
         except urllib.error.HTTPError as error:
             if error.code == 404:
+                skipped_count = _mark_all_guard_events_v1_uploaded(store, synced_at)
                 summary = {
                     "synced_at": synced_at,
-                    "events": total_events,
+                    "events": total_events + skipped_count,
                     "accepted": total_accepted,
+                    "skipped": skipped_count,
                     "sync_skipped": True,
                     "sync_reason": "guard_events_endpoint_unavailable",
                 }
@@ -836,10 +849,36 @@ def sync_guard_events(store: GuardStore) -> dict[str, object]:
                 is_plan, message = _check_plan_restriction_403(error)
                 if is_plan:
                     raise GuardSyncNotAvailableError(message) from error
+                _record_guard_events_sync_failure(
+                    store,
+                    total_events=total_events,
+                    total_accepted=total_accepted,
+                    pending_count=len(pending_events),
+                    error_type=type(error).__name__,
+                    message=message,
+                )
                 raise RuntimeError(message) from error
-            raise RuntimeError(_sync_http_error_message(error)) from error
+            message = _sync_http_error_message(error)
+            _record_guard_events_sync_failure(
+                store,
+                total_events=total_events,
+                total_accepted=total_accepted,
+                pending_count=len(pending_events),
+                error_type=type(error).__name__,
+                message=message,
+            )
+            raise RuntimeError(_redact_sync_text(message)) from error
         except OSError as error:
-            raise RuntimeError(_sync_url_error_message(error)) from error
+            message = _sync_url_error_message(error)
+            _record_guard_events_sync_failure(
+                store,
+                total_events=total_events,
+                total_accepted=total_accepted,
+                pending_count=len(pending_events),
+                error_type=type(error).__name__,
+                message=message,
+            )
+            raise RuntimeError(_redact_sync_text(message)) from error
         completed_ids = _completed_guard_event_ids(payload)
         synced_at = _sync_timestamp(payload)
         uploaded = store.mark_guard_events_v1_uploaded(completed_ids, synced_at)
@@ -850,6 +889,62 @@ def sync_guard_events(store: GuardStore) -> dict[str, object]:
     summary = {"synced_at": synced_at, "events": total_events, "accepted": total_accepted}
     store.set_sync_payload("guard_events_v1_summary", summary, synced_at)
     return summary
+
+
+def _mark_all_guard_events_v1_uploaded(store: GuardStore, uploaded_at: str) -> int:
+    total_marked = 0
+    while True:
+        pending_events = store.list_guard_events_v1(uploaded=False, limit=200)
+        if not pending_events:
+            break
+        event_ids = [str(event["event_id"]) for event in pending_events if isinstance(event.get("event_id"), str)]
+        if not event_ids:
+            break
+        marked = store.mark_guard_events_v1_uploaded(event_ids, uploaded_at)
+        total_marked += marked
+        if marked == 0:
+            break
+    return total_marked
+
+
+def _record_guard_events_sync_failure(
+    store: GuardStore,
+    *,
+    total_events: int,
+    total_accepted: int,
+    pending_count: int,
+    error_type: str,
+    message: str,
+) -> None:
+    recorded_at = _now()
+    next_retry_after = (datetime.now(timezone.utc) + timedelta(seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS)).isoformat()
+    summary = {
+        "synced_at": None,
+        "status": "failed",
+        "events": total_events,
+        "accepted": total_accepted,
+        "pending_events": pending_count,
+        "error_type": error_type,
+        "message": _redact_sync_text(message),
+        "retry_after_seconds": _SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
+        "next_retry_after": next_retry_after,
+    }
+    store.set_sync_payload("guard_events_v1_summary", summary, recorded_at)
+
+
+def _guard_events_endpoint_unavailable_recently(store: GuardStore) -> bool:
+    summary = store.get_sync_payload("guard_events_v1_summary")
+    if not isinstance(summary, dict):
+        return False
+    if summary.get("sync_reason") != "guard_events_endpoint_unavailable":
+        return False
+    synced_at = summary.get("synced_at")
+    if not isinstance(synced_at, str):
+        return True
+    parsed = _parse_iso_timestamp(synced_at)
+    if parsed is None:
+        return True
+    return datetime.now(timezone.utc) - parsed < timedelta(hours=_GUARD_EVENTS_ENDPOINT_UNAVAILABLE_RETRY_HOURS)
 
 
 def sync_runtime_session(
@@ -903,6 +998,18 @@ def sync_runtime_session(
         "runtime_sessions_visible": len(payload.get("items", [])) if isinstance(payload.get("items"), list) else 0,
     }
     store.set_sync_payload("runtime_session_summary", summary, synced_at)
+    workspace_id = store.get_cloud_workspace_id()
+    device_id = store.get_or_create_installation_id()
+    if not _guard_events_endpoint_unavailable_recently(store):
+        store.add_guard_event_v1(
+            build_runtime_session_event(
+                session_id=str(session_payload["sessionId"]),
+                occurred_at=synced_at,
+                payload=session_payload,
+                workspace_id=workspace_id,
+                device_id=device_id,
+            )
+        )
     return summary
 
 
@@ -1054,6 +1161,10 @@ def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
     if normalized_body:
         return normalized_body
     return f"HTTP Error {error.code}: {error.reason}"
+
+
+def _redact_sync_text(value: str) -> str:
+    return redact_sensitive_text(value)
 
 
 _PLAN_403_KEYWORDS: frozenset[str] = frozenset(
