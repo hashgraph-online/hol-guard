@@ -640,3 +640,34 @@ def test_run_bridge_uses_resolved_guard_home_by_default(tmp_path, monkeypatch):
     bridge_module.run_bridge(dry_run=True)
 
     assert captured["guard_home"] == expected_guard_home
+
+
+def test_sandbox_analysis_default_is_off(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    config = load_guard_config(guard_home)
+    assert config.sandbox_analysis == "off"
+
+
+def test_sandbox_analysis_suspicious_loaded(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text('sandbox_analysis = "suspicious"\n', encoding="utf-8")
+    config = load_guard_config(guard_home)
+    assert config.sandbox_analysis == "suspicious"
+
+
+def test_sandbox_analysis_strict_loaded(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
+    config = load_guard_config(guard_home)
+    assert config.sandbox_analysis == "strict"
+
+
+def test_sandbox_analysis_invalid_falls_back_to_off(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "config.toml").write_text('sandbox_analysis = "dangerous_unknown_value"\n', encoding="utf-8")
+    config = load_guard_config(guard_home)
+    assert config.sandbox_analysis == "off"
