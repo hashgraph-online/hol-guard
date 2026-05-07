@@ -185,8 +185,8 @@ def _split_package_token(value: str) -> tuple[str | None, str | None]:
         if not at_sign or not name:
             return value, None
         return f"{scope}/{name}", version or None
-    if _url_authority_contains_userinfo(value):
-        return value, None
+    if "://" in value:
+        return _sanitize_package_url(value), None
     name, at_sign, version = value.rpartition("@")
     if not at_sign or not name:
         return value, None
@@ -218,13 +218,46 @@ def _split_pip_style_specifier(value: str) -> tuple[str | None, str | None]:
 
 
 def _url_authority_contains_userinfo(value: str) -> bool:
+    authority_bounds = _url_authority_bounds(value)
+    if authority_bounds is None:
+        return False
+    authority_start, authority_end = authority_bounds
+    authority = value[authority_start:authority_end]
+    return "@" in authority
+
+
+def _sanitize_package_url(value: str) -> str:
+    without_fragment = value.split("#", 1)[0]
+    without_query = without_fragment.split("?", 1)[0]
+    if _url_authority_contains_userinfo(without_query):
+        return _redact_url_userinfo(without_query)
+    return without_query
+
+
+def _redact_url_userinfo(value: str) -> str:
+    authority_bounds = _url_authority_bounds(value)
+    if authority_bounds is None:
+        return value
+    authority_start, authority_end = authority_bounds
+    authority = value[authority_start:authority_end]
+    at_index = authority.rfind("@")
+    if at_index < 0:
+        return value
+    redacted_authority = authority[at_index + 1 :]
+    return f"{value[:authority_start]}{redacted_authority}{value[authority_end:]}"
+
+
+def _url_authority_bounds(value: str) -> tuple[int, int] | None:
     scheme_index = value.find("://")
     if scheme_index < 0:
-        return False
+        return None
     authority_start = scheme_index + 3
-    authority_end = value.find("/", authority_start)
-    authority = value[authority_start:] if authority_end < 0 else value[authority_start:authority_end]
-    return "@" in authority
+    authority_end = len(value)
+    for delimiter in ("/", "?", "#"):
+        delimiter_index = value.find(delimiter, authority_start)
+        if delimiter_index >= 0:
+            authority_end = min(authority_end, delimiter_index)
+    return authority_start, authority_end
 
 
 def _option_takes_value(*, command_name: str, option: str) -> bool:

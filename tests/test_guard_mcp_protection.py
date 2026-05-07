@@ -618,7 +618,7 @@ def test_mcp_server_identity_does_not_parse_npm_run_subcommand_as_package() -> N
     assert identity.package_name is None
 
 
-def test_mcp_server_identity_preserves_vcs_url_spec_with_userinfo() -> None:
+def test_mcp_server_identity_redacts_vcs_url_spec_userinfo() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
         command="pipx",
@@ -627,7 +627,33 @@ def test_mcp_server_identity_preserves_vcs_url_spec_with_userinfo() -> None:
         env={},
     )
 
-    assert identity.package_name == "git+ssh://git@github.com/psf/black"
+    assert identity.package_name == "git+ssh://github.com/psf/black"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_redacts_http_url_spec_credentials() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "https://user:token@example.com/simple/black", "black"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "https://example.com/simple/black"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_redacts_http_url_spec_query_secrets() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "https://example.com/simple/black?token=abc123", "black"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "https://example.com/simple/black"
     assert identity.package_version is None
 
 
