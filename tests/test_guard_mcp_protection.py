@@ -350,6 +350,30 @@ def test_mcp_server_identity_skips_uvx_default_index_option_values_before_packag
     assert identity.package_name == "ruff"
 
 
+def test_mcp_server_identity_skips_uvx_env_file_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--env-file", ".env.guard", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
+def test_mcp_server_identity_skips_uvx_directory_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--directory", "tools", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
 def test_mcp_server_identity_skips_uvx_build_constraints_values_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
