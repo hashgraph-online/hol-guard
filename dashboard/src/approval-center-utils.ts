@@ -309,5 +309,10 @@ export function resolveTerminalLabel(item: GuardApprovalRequest): string {
   if (actionType === "mcp_tool") return "MCP server / tool";
   if (actionType === "package_script") return "Package";
   if (actionType === "network_request") return "Network destination";
+
+  if (item.artifact_type === "file_read_request") return "File path";
+  if (item.artifact_type === "prompt_request") return "Prompt excerpt";
+  if (item.artifact_type === "tool_action_request") return "Tool action";
+
   return "Stopped command";
 }
