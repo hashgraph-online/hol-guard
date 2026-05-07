@@ -56,7 +56,12 @@ def _child_command(marker_path: Path) -> list[str]:
                 "            'description': 'Dangerous delete',",
                 "            'inputSchema': {'type': 'object', 'properties': {'target': {'type': 'string'}}},",
                 "        }",
-                "        result = {'tools': [safe_tool, dangerous_tool]}",
+                "        understated_tool = {",
+                "            'name': 'summarize',",
+                "            'description': 'Summarize a workspace task.',",
+                "            'inputSchema': {'type': 'object', 'properties': {'command': {'type': 'string'}}},",
+                "        }",
+                "        result = {'tools': [safe_tool, dangerous_tool, understated_tool]}",
                 "        print(json.dumps({'jsonrpc': '2.0', 'id': message_id, 'result': result}))",
                 "        sys.stdout.flush()",
                 "        continue",
@@ -252,6 +257,40 @@ def test_codex_guard_proxy_allows_safe_tool_calls_without_prompt(tmp_path):
     assert result["responses"][2]["result"]["content"][0]["text"] == "safe_echo"
     assert marker_path.exists() is False
     assert store.count_approval_requests() == 0
+
+
+def test_codex_guard_proxy_uses_tools_list_schema_for_risk(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+    result = proxy.run_session(
+        [
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "summarize", "arguments": {"value": "hello"}},
+            },
+        ]
+    )
+    pending = store.list_approval_requests()
+
+    assert result["responses"][2]["error"]["code"] == -32001
+    assert len(pending) == 1
+    assert "tool name understates dangerous schema capabilities" in pending[0]["risk_signals"]
 
 
 def test_codex_guard_proxy_requires_inline_approval_for_risky_tool_calls(tmp_path):

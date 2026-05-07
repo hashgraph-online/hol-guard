@@ -313,6 +313,7 @@ def test_tool_call_risk_categories_are_emitted_from_runtime_arguments() -> None:
     )
 
     assert categories == (
+        "filesystem_access",
         "command_execution",
         "destructive_mutation",
         "outbound_network",
@@ -333,7 +334,7 @@ def test_tool_call_risk_categories_tolerate_non_json_arguments() -> None:
 
     categories = tool_call_risk_categories(artifact, {"paths": {".env"}})
 
-    assert categories == ("secret_access",)
+    assert categories == ("filesystem_access", "secret_access")
 
 
 def test_tool_call_risk_categories_avoid_broad_substring_matches() -> None:
