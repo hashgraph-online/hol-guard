@@ -338,7 +338,9 @@ def _looks_like_runtime_path(value: str) -> bool:
     if normalized.startswith(("./", "../", "~/", "/")):
         return True
     suffix = PurePath(normalized).suffix.lower()
-    return suffix in {".cjs", ".js", ".json", ".mjs", ".py", ".ts"}
+    if suffix not in {".cjs", ".js", ".json", ".mjs", ".py", ".ts"}:
+        return False
+    return "/" in normalized and not normalized.startswith("@")
 
 
 def _stable_digest(value: object) -> str:

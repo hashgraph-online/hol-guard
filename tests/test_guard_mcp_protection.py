@@ -178,6 +178,19 @@ def test_mcp_server_identity_skips_npx_option_values_before_package() -> None:
     assert identity.package_version == "1.2.3"
 
 
+def test_mcp_server_identity_keeps_npx_package_names_with_dot_suffixes() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="npx",
+        args=("highlight.js",),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "highlight.js"
+    assert identity.package_version is None
+
+
 def test_mcp_server_identity_skips_npx_workspace_value_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
