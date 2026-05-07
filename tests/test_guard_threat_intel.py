@@ -550,3 +550,32 @@ class TestAdvisoriesSubcommandArgParsing:
         add_guard_root_parser(parser)
         args = parser.parse_args(["advisories", "--home", str(tmp_path), "explain", "ADV-001"])
         assert str(args.home) == str(tmp_path)
+
+    def test_explain_searches_all_advisories_not_just_first_100(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """advisories explain must call list_cached_advisories with limit=None."""
+        import codex_plugin_scanner.guard.store as store_mod
+        from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
+
+        limit_captured: list[int | None] = []
+
+        def spy(self: object, limit: int | None = 100) -> list[dict[str, object]]:
+            limit_captured.append(limit)
+            return [{"advisory_id": "ADV-999", "title": "Old advisory", "severity": "low"}]
+
+        monkeypatch.setattr(store_mod.GuardStore, "list_cached_advisories", spy)
+
+        parser = argparse.ArgumentParser()
+        add_guard_root_parser(parser)
+        args = parser.parse_args(["advisories", "--home", str(tmp_path), "explain", "ADV-999"])
+
+        try:
+            run_guard_command(args)
+        except SystemExit:
+            pass
+        except Exception:
+            pass
+
+        explain_calls = [lim for lim in limit_captured if lim is None]
+        assert explain_calls, f"explain did not call list_cached_advisories(limit=None), got: {limit_captured}"

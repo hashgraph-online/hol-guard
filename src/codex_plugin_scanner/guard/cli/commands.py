@@ -1113,8 +1113,8 @@ def run_guard_command(
                     getattr(args, "json", False),
                 )
         elif adv_sub == "explain":
-            all_advs = store.list_cached_advisories()
             target_id = getattr(args, "advisory_id", None)
+            all_advs = store.list_cached_advisories(limit=None)
             match = next(
                 (a for a in all_advs if a.get("advisory_id") == target_id or a.get("id") == target_id),
                 None,
