@@ -183,10 +183,9 @@ class SkillRiskDetector:
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
         del context
-        if action.action_type != "prompt" or action.prompt_excerpt is None:
+        if action.action_type != "prompt" or action.prompt_text is None:
             return ()
-        excerpt = action.prompt_excerpt
-        return detect_skill_content_risk(excerpt)
+        return detect_skill_content_risk(action.prompt_text)
 
 
 def register_default_detectors() -> tuple[GuardDetector, ...]:

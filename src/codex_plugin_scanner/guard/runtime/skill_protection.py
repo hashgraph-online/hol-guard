@@ -16,11 +16,11 @@ from codex_plugin_scanner.guard.runtime.signals import (
 )
 
 _FRONTMATTER_COMMAND_PATTERN = re.compile(
-    r"^---\s*\n.*?^---\s*\n",
-    re.MULTILINE | re.DOTALL,
+    r"---\s.*?---",
+    re.DOTALL,
 )
 _SHELL_COMMAND_PATTERN = re.compile(
-    r"(?:^|\n)\s*```(?:bash|sh|shell|zsh)\s*\n(.*?)```",
+    r"```(?:bash|sh|shell|zsh)\s(.*?)```",
     re.DOTALL,
 )
 _SECRET_READ_PATTERNS: tuple[re.Pattern[str], ...] = (

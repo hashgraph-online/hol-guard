@@ -316,6 +316,7 @@ def _guard_run_action_envelope(
         tool_name=None,
         command=None,
         prompt_excerpt=None,
+        prompt_text=None,
         target_paths=(),
         network_hosts=(),
         mcp_server=None,
