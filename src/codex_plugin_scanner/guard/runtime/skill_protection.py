@@ -142,7 +142,7 @@ def detect_skill_content_risk(
     return tuple(signals)
 
 
-_SKILL_FRONTMATTER_GATE = re.compile(r"---\s+\w", re.DOTALL)
+_SKILL_FRONTMATTER_GATE = re.compile(r"---[\r\n ]+\w+\s*:.*?---", re.DOTALL)
 _SKILL_HEADING_GATE = re.compile(r"^#+\s+\S", re.MULTILINE)
 _SKILL_NAME_FIELD_GATE = re.compile(r"^name\s*:", re.MULTILINE | re.IGNORECASE)
 
@@ -157,7 +157,7 @@ def has_skill_structure(content: str) -> bool:
 
 
 def _check_shell_in_frontmatter(content: str, signals: list[RiskSignalV2]) -> None:
-    frontmatter = _FRONTMATTER_COMMAND_PATTERN.match(content)
+    frontmatter = _FRONTMATTER_COMMAND_PATTERN.search(content)
     if frontmatter and _SHELL_COMMAND_PATTERN.search(frontmatter.group(0)):
         signals.append(
             _skill_signal(
@@ -423,3 +423,16 @@ def _extract_templates(content: str) -> list[str]:
 
 def _extract_shell_blocks(content: str) -> list[str]:
     return _SHELL_COMMAND_PATTERN.findall(content)
+
+
+def check_skill_hash_drift(
+    skill_path: str,
+    current_content: str,
+    stored_identity_hash: str | None,
+) -> tuple[SkillIdentity, tuple[RiskSignalV2, ...]] | None:
+    """Return (identity, signals) if the skill file hash differs from the stored hash, else None."""
+    identity = build_skill_identity(current_content, skill_path=skill_path)
+    if identity.identity_hash == stored_identity_hash:
+        return None
+    signals = detect_skill_content_risk(current_content, skill_path=skill_path)
+    return identity, signals

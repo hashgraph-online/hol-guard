@@ -576,22 +576,45 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
     managed_install = payload.get("managed_install")
     if isinstance(managed_install, dict):
         _render_single_managed_install(console, managed_install)
-        return
-    managed_installs = _coerce_dict_list(payload.get("managed_installs"))
-    if not managed_installs:
-        _render_fallback(console, payload)
-        return
+    else:
+        managed_installs = _coerce_dict_list(payload.get("managed_installs"))
+        if not managed_installs:
+            _render_fallback(console, payload)
+            return
+        console.print(
+            Panel(
+                _managed_install_batch_summary(payload, managed_installs),
+                title="Guard managed harnesses",
+                border_style="cyan",
+            )
+        )
+        console.print(_managed_install_batch_table(managed_installs))
+        notes = _managed_install_batch_notes(managed_installs)
+        if notes:
+            console.print(_notes_panel(notes))
+    skill_scan = _coerce_dict_list(payload.get("skill_scan"))
+    if skill_scan:
+        _render_skill_scan_results(console, skill_scan)
+
+
+def _render_skill_scan_results(console: Console, skill_scan: list[dict[str, object]]) -> None:
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True, expand=True)
+    table.add_column("Skill file", overflow="fold")
+    table.add_column("Risks", justify="right", no_wrap=True)
+    table.add_column("Severities", no_wrap=True)
+    table.add_column("Signals", overflow="fold")
+    for entry in skill_scan:
+        severity_text = ", ".join(_coerce_string_list(entry.get("severities")))
+        signal_text = " ".join(_coerce_string_list(entry.get("signal_ids")))
+        risk_count = str(entry.get("risk_count", 0))
+        table.add_row(str(entry.get("skill_path", "?")), risk_count, severity_text, signal_text)
     console.print(
         Panel(
-            _managed_install_batch_summary(payload, managed_installs),
-            title="Guard managed harnesses",
-            border_style="cyan",
+            table,
+            title=f"[bold red]Skill security scan — {len(skill_scan)} file(s) with risks[/bold red]",
+            border_style="red",
         )
     )
-    console.print(_managed_install_batch_table(managed_installs))
-    notes = _managed_install_batch_notes(managed_installs)
-    if notes:
-        console.print(_notes_panel(notes))
 
 
 def _render_single_managed_install(console: Console, managed_install: dict[str, object]) -> None:
