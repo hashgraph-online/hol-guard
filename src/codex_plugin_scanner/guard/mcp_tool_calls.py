@@ -361,17 +361,6 @@ def _schema_property_key_names(
                     _visited_refs=visited_refs,
                 )
             )
-        for definitions_key in ("definitions", "$defs"):
-            definitions = value.get(definitions_key)
-            if isinstance(definitions, Mapping):
-                for definition in definitions.values():
-                    names.update(
-                        _schema_property_key_names(
-                            definition,
-                            _root_schema=root_schema,
-                            _visited_refs=visited_refs,
-                        )
-                    )
         return names
     if isinstance(value, list | tuple):
         root_schema = _root_schema
