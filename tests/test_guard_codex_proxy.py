@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision, build_tool_call_artifact, build_tool_call_hash
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
+from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_tool_identity
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -1103,11 +1104,21 @@ def test_codex_guard_proxy_reuses_server_identity_with_env_keys(monkeypatch, tmp
     result = proxy.run_session(
         [
             {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
-            {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "safe_echo", "arguments": {}}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "safe_echo", "arguments": {}}},
         ]
     )
     artifact = captured["artifact"]
+    tool_identity = artifact.metadata["mcp_tool_identity"]
+    expected = build_mcp_tool_identity(
+        server_hash=tool_identity["server_hash"],
+        tool_name="safe_echo",
+        schema={"type": "object", "properties": {}},
+        description="Safe echo",
+    )
 
-    assert result["responses"][1]["result"]["content"][0]["text"] == "safe_echo"
+    assert result["responses"][2]["result"]["content"][0]["text"] == "safe_echo"
     assert hasattr(artifact, "metadata")
     assert artifact.metadata["mcp_server_identity"]["env_keys"] == ["TOKEN"]
+    assert tool_identity["schema_hash"] == expected.schema_hash
+    assert tool_identity["description_hash"] == expected.description_hash

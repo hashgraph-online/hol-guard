@@ -39,15 +39,18 @@ def build_mcp_server_identity(
     command: str,
     args: tuple[str, ...],
     transport: str,
-    env: dict[str, str],
+    env: dict[str, str] | None = None,
+    env_keys: tuple[str, ...] = (),
 ) -> McpServerIdentity:
-    """Build a stable server identity without retaining secret env values."""
+    """Build a stable server identity using env key names only."""
 
     package_name, package_version = _package_identity(command, args)
-    env_keys = tuple(sorted(key for key in env if key.strip()))
+    env_key_set = {key.strip() for key in env_keys if key.strip()}
+    if env is not None:
+        env_key_set.update(key.strip() for key in env if key.strip())
+    env_keys = tuple(sorted(env_key_set))
     args_hash = _stable_digest(list(args))
     payload = {
-        "config_path": config_path,
         "command": _command_name(command),
         "args_hash": args_hash,
         "package_name": package_name,

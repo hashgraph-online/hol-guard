@@ -52,6 +52,9 @@ def build_tool_call_artifact(
         metadata["server_fingerprint"] = server_fingerprint
     if server_identity is not None:
         metadata["mcp_server_identity"] = mcp_server_identity_metadata(server_identity)
+    if server_id is not None:
+        server_hash = server_id
+    elif server_identity is not None:
         server_hash = server_identity.identity_hash
     else:
         server_hash = server_id or sha256(f"{harness}:{source_scope}:{server_name}".encode()).hexdigest()

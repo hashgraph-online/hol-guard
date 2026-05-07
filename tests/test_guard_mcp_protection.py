@@ -89,6 +89,29 @@ def test_tool_call_artifact_emits_tool_identity_metadata() -> None:
     assert len(tool_identity["description_hash"]) == 64
 
 
+def test_tool_call_artifact_prefers_stable_server_id_for_tool_identity() -> None:
+    server_identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="python",
+        args=("server.py",),
+        transport="stdio",
+        env={},
+    )
+
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="filesystem",
+        tool_name="read_file",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        server_id="mcp_server:codex:project:filesystem:abc123",
+        server_identity=server_identity,
+    )
+
+    assert artifact.metadata["mcp_tool_identity"]["server_hash"] == "mcp_server:codex:project:filesystem:abc123"
+
+
 def test_mcp_server_identity_extracts_package_name_for_pipx_run() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",

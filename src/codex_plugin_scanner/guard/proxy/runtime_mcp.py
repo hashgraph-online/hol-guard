@@ -62,12 +62,13 @@ class RuntimeMcpGuardProxy:
             command=self.command[0] if self.command else "",
             args=tuple(self.command[1:]),
             transport=self.transport,
-            env={key: "" for key in self.server_env_keys},
+            env_keys=self.server_env_keys,
         )
         self._inline_prompt_available = False
         self._inline_prompt_counter = 0
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}
         self._buffered_client_responses: dict[str, list[dict[str, Any]]] = {}
+        self._tool_catalog: dict[str, dict[str, object]] = {}
 
     def run_session(
         self,
@@ -188,10 +189,13 @@ class RuntimeMcpGuardProxy:
                 client_input=client_input,
                 server_output=server_output,
             )
+            if method == "tools/list":
+                self._capture_tools_catalog(response)
             return response, event
 
         tool_name = str(params.get("name") or "unknown")
         arguments = params.get("arguments")
+        tool_definition = self._tool_catalog.get(tool_name, {})
         artifact = build_tool_call_artifact(
             harness=self.harness,
             server_name=self.server_name,
@@ -205,6 +209,8 @@ class RuntimeMcpGuardProxy:
                 "transport": self.transport,
             },
             server_identity=self.server_identity,
+            tool_schema=tool_definition.get("input_schema"),
+            tool_description=tool_definition.get("description"),
         )
         artifact_hash = build_tool_call_hash(artifact, arguments)
         decision = evaluate_tool_call(
@@ -575,6 +581,31 @@ class RuntimeMcpGuardProxy:
             "decision": "queue-approval",
             "redacted_params": _redact_json(params),
         }
+
+    def _capture_tools_catalog(self, response: dict[str, Any]) -> None:
+        result = response.get("result")
+        if not isinstance(result, dict):
+            return
+        tools = result.get("tools")
+        if not isinstance(tools, list):
+            return
+        catalog: dict[str, dict[str, object]] = {}
+        for item in tools:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            entry: dict[str, object] = {}
+            description = item.get("description")
+            if isinstance(description, str) and description.strip():
+                entry["description"] = description.strip()
+            input_schema = item.get("inputSchema")
+            if input_schema is not None:
+                entry["input_schema"] = input_schema
+            catalog[name.strip()] = entry
+        if len(catalog) > 0:
+            self._tool_catalog = catalog
 
     @staticmethod
     def _launch_target(tool_name: str, arguments: object) -> str:
