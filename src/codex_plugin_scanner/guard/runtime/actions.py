@@ -134,6 +134,7 @@ class GuardActionEnvelope:
     tool_name: str | None
     command: str | None
     prompt_excerpt: str | None
+    prompt_text: str | None
     target_paths: tuple[str, ...]
     network_hosts: tuple[str, ...]
     mcp_server: str | None
@@ -190,6 +191,7 @@ class GuardActionEnvelope:
             tool_name=_string_value(payload.get("tool_name")),
             command=_string_value(payload.get("command")),
             prompt_excerpt=_string_value(payload.get("prompt_excerpt")),
+            prompt_text=_string_value(payload.get("prompt_text")),
             target_paths=_string_tuple(payload.get("target_paths")),
             network_hosts=_string_tuple(payload.get("network_hosts")),
             mcp_server=_string_value(payload.get("mcp_server")),
@@ -405,6 +407,7 @@ def _normalize_action_payload(
         tool_name=tool_name,
         command=command,
         prompt_excerpt=prompt_excerpt,
+        prompt_text=prompt_text,
         target_paths=target_paths,
         network_hosts=network_hosts,
         mcp_server=mcp_server,

