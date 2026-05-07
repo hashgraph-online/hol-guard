@@ -71,6 +71,10 @@ from .store_connect import (
 from .store_connect import (
     mark_connect_result as persist_connect_result,
 )
+from .store_evidence import (
+    evidence_index_statements,
+    evidence_schema_statement,
+)
 from .types import CapabilitySet
 
 _SYNC_TOKEN_REF = "guard-cloud-token"
@@ -646,10 +650,13 @@ class GuardStore:
             connect_request_schema_statement(),
             connect_state_schema_statement(),
             approval_schema_statement(),
+            evidence_schema_statement(),
         )
         with self._connect() as connection:
             for statement in statements:
                 connection.execute(statement)
+            for idx_stmt in evidence_index_statements():
+                connection.execute(idx_stmt)
             self._ensure_policy_column(connection, "publisher", "text")
             self._ensure_policy_column(connection, "artifact_hash", "text")
             self._ensure_policy_column(connection, "owner", "text")

@@ -189,6 +189,7 @@ class GuardConfig:
     harness_actions: dict[str, GuardAction] | None = None
     publisher_actions: dict[str, GuardAction] | None = None
     artifact_actions: dict[str, GuardAction] | None = None
+    evidence_retain_days: int = 90
 
     def resolve_action_override(
         self,
