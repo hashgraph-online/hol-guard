@@ -175,6 +175,10 @@ def list_approval_requests(
     status: str | None = "pending",
     harness: str | None = None,
     limit: int | None = 50,
+    before_cursor: str | None = None,
+    search: str | None = None,
+    created_after: str | None = None,
+    created_before: str | None = None,
 ) -> list[dict[str, object]]:
     clauses = []
     params: list[object] = []
@@ -184,6 +188,24 @@ def list_approval_requests(
     if harness is not None:
         clauses.append("harness = ?")
         params.append(harness)
+    if before_cursor is not None:
+        clauses.append("created_at < ?")
+        params.append(before_cursor)
+    if created_after is not None:
+        clauses.append("created_at > ?")
+        params.append(created_after)
+    if created_before is not None:
+        clauses.append("created_at < ?")
+        params.append(created_before)
+    if search is not None:
+        search_clause = (
+            "(lower(artifact_name) like lower(?)"
+            " or lower(artifact_id) like lower(?)"
+            " or lower(coalesce(risk_summary, '')) like lower(?))"
+        )
+        clauses.append(search_clause)
+        pattern = f"%{search}%"
+        params.extend([pattern, pattern, pattern])
     where_clause = f"where {' and '.join(clauses)}" if clauses else ""
     query = f"""
         select request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
@@ -243,14 +265,22 @@ def resolve_approval_request(
     )
 
 
-def count_approval_requests(connection: sqlite3.Connection, *, status: str | None = "pending") -> int:
-    if status is None:
-        row = connection.execute("select count(*) as total from approval_requests").fetchone()
-    else:
-        row = connection.execute(
-            "select count(*) as total from approval_requests where status = ?",
-            (status,),
-        ).fetchone()
+def count_approval_requests(
+    connection: sqlite3.Connection,
+    *,
+    status: str | None = "pending",
+    harness: str | None = None,
+) -> int:
+    clauses = []
+    params: list[object] = []
+    if status is not None:
+        clauses.append("status = ?")
+        params.append(status)
+    if harness is not None:
+        clauses.append("harness = ?")
+        params.append(harness)
+    where_clause = f"where {' and '.join(clauses)}" if clauses else ""
+    row = connection.execute(f"select count(*) as total from approval_requests {where_clause}", params).fetchone()
     return int(row["total"]) if row is not None else 0
 
 
@@ -265,14 +295,14 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "publisher": row["publisher"],
         "policy_action": str(row["policy_action"]),
         "recommended_scope": str(row["recommended_scope"]),
-        "changed_fields": json.loads(str(row["changed_fields_json"])),
+        "changed_fields": _safe_json_list(row["changed_fields_json"]),
         "source_scope": str(row["source_scope"]),
         "config_path": str(row["config_path"]),
         "workspace": row["workspace"],
         "launch_target": row["launch_target"],
         "transport": row["transport"],
         "risk_summary": row["risk_summary"],
-        "risk_signals": json.loads(str(row["risk_signals_json"])),
+        "risk_signals": _safe_json_list(row["risk_signals_json"]),
         "artifact_label": row["artifact_label"],
         "source_label": row["source_label"],
         "trigger_summary": row["trigger_summary"],
@@ -290,6 +320,111 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "created_at": str(row["created_at"]),
         "resolved_at": row["resolved_at"],
     }
+
+
+def _safe_json_list(value: object) -> list[object]:
+    if value is None:
+        return []
+    try:
+        parsed = json.loads(str(value))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return []
+    return list(parsed) if isinstance(parsed, list) else []
+
+
+def approval_index_statements() -> list[str]:
+    return [
+        "create index if not exists idx_approval_status_created on approval_requests(status, created_at desc)",
+        "create index if not exists idx_approval_harness_status on approval_requests(harness, status)",
+        "create index if not exists idx_approval_artifact_hash on approval_requests(artifact_hash)",
+        "create index if not exists idx_approval_workspace_status on approval_requests(workspace, status)",
+        "create index if not exists idx_approval_policy_action on approval_requests(policy_action)",
+        "create index if not exists idx_approval_resolution on approval_requests(resolution_action, resolved_at)",
+    ]
+
+
+def bulk_resolve_approval_requests(
+    connection: sqlite3.Connection,
+    request_ids: list[str],
+    *,
+    resolution_action: str,
+    resolution_scope: str,
+    reason: str | None,
+    resolved_at: str,
+) -> None:
+    if not request_ids:
+        return
+    placeholders = ",".join("?" for _ in request_ids)
+    connection.execute(
+        f"""
+        update approval_requests
+        set status = 'resolved',
+            resolution_action = ?,
+            resolution_scope = ?,
+            reason = ?,
+            resolved_at = ?
+        where request_id in ({placeholders})
+          and status = 'pending'
+        """,
+        [resolution_action, resolution_scope, reason, resolved_at, *request_ids],
+    )
+
+
+def clear_approval_requests_by_harness(connection: sqlite3.Connection, harness: str) -> int:
+    cursor = connection.execute(
+        "delete from approval_requests where harness = ? and status = 'resolved'",
+        (harness,),
+    )
+    return cursor.rowcount
+
+
+def clear_approval_requests_by_workspace(connection: sqlite3.Connection, workspace: str) -> int:
+    cursor = connection.execute(
+        "delete from approval_requests where workspace = ? and status = 'resolved'",
+        (workspace,),
+    )
+    return cursor.rowcount
+
+
+def clear_approval_requests_by_scope(connection: sqlite3.Connection, source_scope: str) -> int:
+    cursor = connection.execute(
+        "delete from approval_requests where source_scope = ? and status = 'resolved'",
+        (source_scope,),
+    )
+    return cursor.rowcount
+
+
+def clear_resolved_approval_requests_before(connection: sqlite3.Connection, before_timestamp: str) -> int:
+    cursor = connection.execute(
+        "delete from approval_requests where status = 'resolved' and resolved_at < ?",
+        (before_timestamp,),
+    )
+    return cursor.rowcount
+
+
+def compact_approval_requests(connection: sqlite3.Connection) -> int:
+    rows = connection.execute(
+        """
+        select artifact_id, max(created_at) as latest_created
+        from approval_requests
+        where status = 'resolved'
+        group by artifact_id
+        having count(*) > 1
+        """
+    ).fetchall()
+    total_removed = 0
+    for row in rows:
+        cursor = connection.execute(
+            """
+            delete from approval_requests
+            where artifact_id = ?
+              and status = 'resolved'
+              and created_at < ?
+            """,
+            (row["artifact_id"], row["latest_created"]),
+        )
+        total_removed += cursor.rowcount
+    return total_removed
 
 
 def _optional_json_object(value: object) -> dict[str, object] | None:
