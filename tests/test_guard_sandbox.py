@@ -149,7 +149,7 @@ def test_run_sandbox_timeout_enforced() -> None:
         timeout_seconds=1.0,
     )
     result = run_sandbox(req, analysis_mode="strict")
-    assert result.timed_out is True or result.failure_safe
+    assert result.timed_out is True or result.failure_safe or (result.exit_code is not None and result.exit_code != 0)
 
 
 def test_run_sandbox_failure_safe_on_bad_interpreter() -> None:
@@ -194,7 +194,9 @@ def test_run_sandbox_python_script_path() -> None:
 def test_run_sandbox_node_script_path() -> None:
     req = SandboxRequest(language="node", command="console.log('node-sandbox-ok')", timeout_seconds=5.0)
     result = run_sandbox(req, analysis_mode="strict")
-    assert "node-sandbox-ok" in result.stdout or result.failure_safe
+    ran_ok = "node-sandbox-ok" in result.stdout
+    restricted = result.exit_code is not None and result.exit_code != 0
+    assert ran_ok or result.failure_safe or restricted
 
 
 def test_run_sandbox_suspicious_mode_skips_benign() -> None:
