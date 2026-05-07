@@ -447,6 +447,25 @@ def test_mcp_server_identity_skips_uvx_prerelease_option_values_before_package()
     assert identity.package_name == "ruff"
 
 
+def test_mcp_server_identity_skips_uvx_additional_value_flags_before_package() -> None:
+    option_args = (
+        ("--exclude-newer", "2024-01-01"),
+        ("--fork-strategy", "fewest"),
+        ("--index-strategy", "first-index"),
+        ("--upgrade-package", "typing-extensions"),
+    )
+    for option, value in option_args:
+        identity = build_mcp_server_identity(
+            config_path=".mcp.json",
+            command="uvx",
+            args=(option, value, "ruff"),
+            transport="stdio",
+            env={},
+        )
+
+        assert identity.package_name == "ruff"
+
+
 def test_mcp_server_identity_skips_uvx_overrides_option_values_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
@@ -743,6 +762,32 @@ def test_mcp_tool_schema_follows_local_refs_for_risk_categories() -> None:
             "properties": {"operation": {"$ref": "#/$defs/operation"}},
             "$defs": {
                 "operation": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                }
+            },
+        },
+    )
+
+    assert tool_call_risk_categories(artifact, {}) == ("command_execution", "tool_schema_mismatch")
+
+
+def test_mcp_tool_schema_follows_local_anchor_refs_for_risk_categories() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {"operation": {"$ref": "#cmdSchema"}},
+            "$defs": {
+                "operation": {
+                    "$anchor": "cmdSchema",
                     "type": "object",
                     "properties": {
                         "command": {"type": "string"},

@@ -411,17 +411,43 @@ def _schema_property_key_names(
 
 
 def _resolve_local_schema_ref(root_schema: Mapping[str, object], reference: str) -> object | None:
-    if not reference.startswith("#/"):
+    if reference.startswith("#/"):
+        current: object = root_schema
+        for part in reference[2:].split("/"):
+            token = part.replace("~1", "/").replace("~0", "~")
+            if not isinstance(current, Mapping):
+                return None
+            if token not in current:
+                return None
+            current = current[token]
+        return current
+    if not reference.startswith("#"):
         return None
-    current: object = root_schema
-    for part in reference[2:].split("/"):
-        token = part.replace("~1", "/").replace("~0", "~")
+    anchor_name = reference[1:]
+    if not anchor_name:
+        return root_schema
+    return _resolve_local_schema_anchor(root_schema, anchor_name)
+
+
+def _resolve_local_schema_anchor(root_schema: object, anchor_name: str) -> object | None:
+    pending: list[object] = [root_schema]
+    visited_ids: set[int] = set()
+    while pending:
+        current = pending.pop()
+        current_id = id(current)
+        if current_id in visited_ids:
+            continue
+        visited_ids.add(current_id)
         if not isinstance(current, Mapping):
-            return None
-        if token not in current:
-            return None
-        current = current[token]
-    return current
+            if isinstance(current, list | tuple):
+                pending.extend(item for item in current if isinstance(item, (Mapping, list, tuple)))
+            continue
+        anchor = current.get("$anchor")
+        dynamic_anchor = current.get("$dynamicAnchor")
+        if anchor == anchor_name or dynamic_anchor == anchor_name:
+            return current
+        pending.extend(item for item in current.values() if isinstance(item, (Mapping, list, tuple)))
+    return None
 
 
 def _description_risk_categories(description: object) -> set[str]:
