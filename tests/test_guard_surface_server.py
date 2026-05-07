@@ -250,6 +250,87 @@ class TestGuardSurfaceServer:
         assert "approval_wait_timeout_seconds = 45" in config_text
         assert "telemetry = true" in config_text
 
+    def test_guard_daemon_settings_accepts_gentle_preset(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            update_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/settings",
+                data=json.dumps({"settings": {"security_level": "gentle"}}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(update_request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert payload["settings"]["security_level"] == "gentle"
+
+    def test_guard_daemon_settings_accepts_paranoid_preset(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            update_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/settings",
+                data=json.dumps({"settings": {"security_level": "paranoid"}}).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(update_request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        assert payload["settings"]["security_level"] == "paranoid"
+
+    def test_guard_daemon_settings_accepts_new_risk_keys(self, tmp_path) -> None:
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            update_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/settings",
+                data=json.dumps(
+                    {
+                        "settings": {
+                            "risk_actions": {
+                                "prompt_injection": "block",
+                                "mcp_dangerous_tool": "block",
+                                "guard_bypass": "block",
+                                "encoded_exfiltration": "require-reapproval",
+                            }
+                        }
+                    }
+                ).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Guard-Token": daemon._server.auth_token,
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(update_request, timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        finally:
+            daemon.stop()
+
+        risk = payload["settings"].get("risk_actions", {})
+        assert risk.get("prompt_injection") == "block"
+        assert risk.get("mcp_dangerous_tool") == "block"
+        assert risk.get("guard_bypass") == "block"
+        assert risk.get("encoded_exfiltration") == "require-reapproval"
+
     def test_guard_daemon_claude_hook_endpoint_returns_native_pretooluse_response(self, tmp_path) -> None:
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

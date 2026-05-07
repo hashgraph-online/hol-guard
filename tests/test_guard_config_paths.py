@@ -211,6 +211,14 @@ def test_dashboard_settings_switch_to_custom_carries_forward_effective_risk_map(
         "destructive_shell": "require-reapproval",
         "encoded_execution": "require-reapproval",
         "network_egress": "require-reapproval",
+        "prompt_injection": "block",
+        "mcp_dangerous_tool": "block",
+        "malicious_skill": "block",
+        "package_script": "require-reapproval",
+        "persistence": "block",
+        "guard_bypass": "block",
+        "cloud_advisory": "require-reapproval",
+        "encoded_exfiltration": "block",
     }
     assert resolve_risk_action(loaded, "network_egress", harness="codex") == "require-reapproval"
 
