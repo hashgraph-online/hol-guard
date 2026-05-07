@@ -24,6 +24,10 @@ class GuardDaemonTransportError(GuardDaemonRequestError):
     """Raised when the Guard daemon request fails due to transport issues."""
 
 
+_DEFAULT_REQUEST_TIMEOUT_S: float = 5.0
+_STATUS_REQUEST_TIMEOUT_S: float = 0.25
+
+
 class GuardSurfaceDaemonClient:
     """Small authenticated client for the local Guard daemon."""
 
@@ -156,7 +160,7 @@ class GuardSurfaceDaemonClient:
             method="GET",
         )
         try:
-            with urllib.request.urlopen(request, timeout=5) as response:
+            with urllib.request.urlopen(request, timeout=_STATUS_REQUEST_TIMEOUT_S) as response:
                 payload = self._decode_json_response(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             try:
@@ -196,7 +200,13 @@ class GuardSurfaceDaemonClient:
             return state
         return response
 
-    def _post(self, path: str, payload: dict[str, object]) -> dict[str, object]:
+    def _post(
+        self,
+        path: str,
+        payload: dict[str, object],
+        *,
+        timeout: float = _DEFAULT_REQUEST_TIMEOUT_S,
+    ) -> dict[str, object]:
         request = urllib.request.Request(
             f"{self.daemon_url}{path}",
             data=json.dumps(payload).encode("utf-8"),
@@ -207,7 +217,7 @@ class GuardSurfaceDaemonClient:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=5) as response:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 return self._decode_json_response(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             try:
