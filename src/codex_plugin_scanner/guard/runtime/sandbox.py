@@ -13,22 +13,26 @@ from __future__ import annotations
 import contextlib
 import os
 import re
-import resource
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+_RESOURCE_AVAILABLE = sys.platform != "win32"
+if _RESOURCE_AVAILABLE:
+    import resource
+
 SandboxLanguage = Literal["shell", "node", "python", "package", "mcp_smoke"]
 EnvPolicy = Literal["clean", "passthrough", "minimal"]
 SandboxAnalysisMode = Literal["off", "suspicious", "strict"]
 
 _DEFAULT_CPU_SECONDS: float = 5.0
-_DEFAULT_MEMORY_BYTES: int = 128 * 1024 * 1024
-_DEFAULT_MAX_PROCESSES: int = 8
+_DEFAULT_MEMORY_BYTES: int = 512 * 1024 * 1024
+_DEFAULT_MAX_PROCESSES: int = 32
 _DEFAULT_TIMEOUT_SECONDS: float = 10.0
 
 _SECRET_PATH_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -123,7 +127,7 @@ def _build_env(policy: EnvPolicy) -> dict[str, str]:
                 minimal[key] = val
         return minimal
     return {
-        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"),
         "HOME": "/tmp",
         "TMPDIR": "/tmp",
     }
@@ -138,21 +142,26 @@ def _redact_env(env: dict[str, str]) -> dict[str, str]:
 
 
 def _apply_resource_limits(cpu_seconds: float, memory_bytes: int, max_processes: int) -> None:
+    if not _RESOURCE_AVAILABLE:
+        return
     with contextlib.suppress(OSError, ValueError):
         cpu_int = max(1, int(cpu_seconds))
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_int, cpu_int))
     with contextlib.suppress(OSError, ValueError):
-        resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+        resource.setrlimit(resource.RLIMIT_DATA, (memory_bytes, memory_bytes))
     with contextlib.suppress(OSError, ValueError):
         resource.setrlimit(resource.RLIMIT_NPROC, (max_processes, max_processes))
 
 
 def _write_sandbox_files(workspace: Path, files: dict[str, str]) -> None:
+    resolved_workspace = workspace.resolve()
     for rel_path, content in files.items():
         if _is_secret_path(rel_path):
             continue
-        target = workspace / rel_path
-        if not str(target.resolve()).startswith(str(workspace.resolve())):
+        target = (workspace / rel_path).resolve()
+        try:
+            target.relative_to(resolved_workspace)
+        except ValueError:
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
@@ -225,6 +234,13 @@ def run_sandbox(request: SandboxRequest, *, analysis_mode: SandboxAnalysisMode =
         env = _build_env(request.env_policy)
         argv = _language_argv(request.language, request.command, workspace)
 
+        cpu_s = request.cpu_seconds
+        mem_b = request.memory_bytes
+        max_p = request.max_processes
+
+        def _preexec() -> None:
+            _apply_resource_limits(cpu_s, mem_b, max_p)
+
         start = time.monotonic()
         try:
             proc = subprocess.Popen(
@@ -233,9 +249,8 @@ def run_sandbox(request: SandboxRequest, *, analysis_mode: SandboxAnalysisMode =
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                preexec_fn=lambda: _apply_resource_limits(
-                    request.cpu_seconds, request.memory_bytes, request.max_processes
-                ),
+                preexec_fn=_preexec,
+                start_new_session=True,
                 close_fds=True,
             )
             try:
@@ -243,7 +258,8 @@ def run_sandbox(request: SandboxRequest, *, analysis_mode: SandboxAnalysisMode =
                 timed_out = False
                 exit_code: int | None = proc.returncode
             except subprocess.TimeoutExpired:
-                proc.send_signal(signal.SIGKILL)
+                with contextlib.suppress(OSError):
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
                 raw_out, raw_err = proc.communicate()
                 timed_out = True
                 exit_code = None
