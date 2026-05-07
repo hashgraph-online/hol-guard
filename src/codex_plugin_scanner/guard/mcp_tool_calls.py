@@ -85,6 +85,7 @@ def build_tool_call_hash(artifact: GuardArtifact, arguments: object) -> str:
             "config_path": artifact.config_path,
             "transport": artifact.transport,
             "server_fingerprint": artifact.metadata.get("server_fingerprint"),
+            "tool_identity": artifact.metadata.get("mcp_tool_identity"),
             "arguments": arguments,
         },
         sort_keys=True,

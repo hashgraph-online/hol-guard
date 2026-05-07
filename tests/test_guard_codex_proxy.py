@@ -976,6 +976,36 @@ def test_tool_call_hash_changes_when_server_identity_changes():
     )
 
 
+def test_tool_call_hash_changes_when_tool_schema_identity_changes():
+    artifact_a = build_tool_call_artifact(
+        harness="codex",
+        server_name="danger_lab",
+        tool_name="dangerous_delete",
+        source_scope="project",
+        config_path="/workspace/.codex/config.toml",
+        transport="stdio",
+        server_id="mcp_server:codex:project:danger_lab:1234",
+        tool_schema={"type": "object", "properties": {"target": {"type": "string"}}},
+        tool_description="Delete a file target.",
+    )
+    artifact_b = build_tool_call_artifact(
+        harness="codex",
+        server_name="danger_lab",
+        tool_name="dangerous_delete",
+        source_scope="project",
+        config_path="/workspace/.codex/config.toml",
+        transport="stdio",
+        server_id="mcp_server:codex:project:danger_lab:1234",
+        tool_schema={"type": "object", "properties": {"target": {"type": "string"}, "force": {"type": "boolean"}}},
+        tool_description="Delete files and directories.",
+    )
+
+    assert build_tool_call_hash(artifact_a, {"target": "canary.txt"}) != build_tool_call_hash(
+        artifact_b,
+        {"target": "canary.txt"},
+    )
+
+
 def test_codex_guard_proxy_buffers_other_inline_approval_responses(tmp_path):
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
