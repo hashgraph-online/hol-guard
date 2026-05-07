@@ -292,6 +292,8 @@ def _value_options_for_command(command_name: str) -> set[str]:
             "--default-index",
             "--build-constraints",
             "--constraints",
+            "--directory",
+            "--env-file",
             "--extra-index-url",
             "--find-links",
             "--index",
