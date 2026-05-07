@@ -298,13 +298,13 @@ def _find_encoded_candidate(text: str) -> tuple[EncodingType, str] | None:
     if m:
         return ("unicode-escape", text)
 
-    m = _B64_CANDIDATE.search(text)
-    if m:
-        return ("base64", m.group(0))
-
     m = _B64_URLSAFE_CANDIDATE.search(text)
     if m:
         return ("base64-urlsafe", m.group(0))
+
+    m = _B64_CANDIDATE.search(text)
+    if m:
+        return ("base64", m.group(0))
 
     m = _B32_CANDIDATE.search(text)
     if m:
@@ -337,6 +337,7 @@ def decode_layers(
     current = content
 
     depth = -1
+    _depth_limited = False
     for depth in range(max_depth):
         elapsed_ms = (time.monotonic() - start) * 1000.0
         if elapsed_ms > max_time_ms:
@@ -398,7 +399,10 @@ def decode_layers(
         if result.size_exceeded:
             break
 
-    if depth >= 0 and depth == max_depth - 1 and not result.timed_out:
+        if depth == max_depth - 1:
+            _depth_limited = True
+
+    if _depth_limited and not result.timed_out:
         result.depth_exceeded = True
         result.eval_signals.extend(_detect_eval_signals(current))
         result.exec_signals.extend(_detect_exec_signals(current))

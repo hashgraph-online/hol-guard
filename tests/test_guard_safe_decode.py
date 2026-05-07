@@ -318,3 +318,37 @@ def test_safe_decode_detector_emits_medium_severity_for_obfuscated_content() -> 
         assert obfuscated_signals[0].severity == "medium", (
             f"encoded.obfuscated-content must be severity='medium', got {obfuscated_signals[0].severity!r}"
         )
+
+
+def test_urlsafe_base64_not_misclassified_as_standard_base64() -> None:
+    """URL-safe b64 tokens (containing - or _) must be decoded with urlsafe decoder, not standard."""
+    raw = b"\xfb\xf8\xfb" * 8
+    encoded = base64.urlsafe_b64encode(raw).decode()
+    assert "-" in encoded or "_" in encoded, "Test fixture must contain urlsafe chars"
+    assert any(c.isdigit() for c in encoded), "Test fixture must contain digit to satisfy urlsafe regex"
+    result = decode_layers(encoded)
+    assert any(layer.encoding == "base64-urlsafe" for layer in result.layers), (
+        "URL-safe token must produce a base64-urlsafe layer, not a standard-base64 layer"
+    )
+
+
+def test_depth_exceeded_false_for_two_layer_payload_under_limit() -> None:
+    """A 2-layer payload with max_depth=3 must NOT set depth_exceeded."""
+    inner = "harmless"
+    layer1 = base64.b64encode(inner.encode()).decode()
+    layer2 = base64.b64encode(layer1.encode()).decode()
+    result = decode_layers(layer2, max_depth=3)
+    assert len(result.layers) == 2, f"Expected 2 layers, got {len(result.layers)}"
+    assert not result.depth_exceeded, (
+        "depth_exceeded must be False when decode exhausted candidates before hitting max_depth"
+    )
+
+
+def test_depth_exceeded_true_only_when_limit_actually_hit() -> None:
+    """depth_exceeded must be True only when the depth limit cuts off a decode that could continue."""
+    inner = "eval('deep')"
+    layer1 = base64.b64encode(inner.encode()).decode()
+    layer2 = base64.b64encode(layer1.encode()).decode()
+    layer3 = base64.b64encode(layer2.encode()).decode()
+    result = decode_layers(layer3, max_depth=2)
+    assert result.depth_exceeded, "depth_exceeded must be True when 3-layer payload is cut off at max_depth=2"
