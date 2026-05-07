@@ -589,6 +589,9 @@ class RuntimeMcpGuardProxy:
         tools = result.get("tools")
         if not isinstance(tools, list):
             return
+        if len(tools) == 0:
+            self._tool_catalog = {}
+            return
         catalog: dict[str, dict[str, object]] = {}
         for item in tools:
             if not isinstance(item, dict):
@@ -605,7 +608,9 @@ class RuntimeMcpGuardProxy:
                 entry["input_schema"] = input_schema
             catalog[name.strip()] = entry
         if len(catalog) > 0:
-            self._tool_catalog = catalog
+            merged_catalog = dict(self._tool_catalog)
+            merged_catalog.update(catalog)
+            self._tool_catalog = merged_catalog
 
     @staticmethod
     def _launch_target(tool_name: str, arguments: object) -> str:

@@ -1161,3 +1161,52 @@ def test_codex_guard_proxy_reuses_server_identity_with_env_keys(monkeypatch, tmp
     assert artifact.metadata["mcp_server_identity"]["env_keys"] == ["TOKEN"]
     assert tool_identity["schema_hash"] == expected.schema_hash
     assert tool_identity["description_hash"] == expected.description_hash
+
+
+def test_codex_guard_proxy_merges_paginated_tools_catalog_and_clears_stale_entries(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ]
+            }
+        }
+    )
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "dangerous_delete",
+                        "description": "Dangerous delete",
+                        "inputSchema": {"type": "object", "properties": {"target": {"type": "string"}}},
+                    }
+                ]
+            }
+        }
+    )
+
+    assert set(proxy._tool_catalog) == {"safe_echo", "dangerous_delete"}
+
+    proxy._capture_tools_catalog({"result": {"tools": []}})
+
+    assert proxy._tool_catalog == {}
