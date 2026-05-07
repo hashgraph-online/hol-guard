@@ -322,12 +322,18 @@ export function App() {
         }
       }}
       onBulkApprove={async (ids) => {
-        await Promise.allSettled(
+        const results = await Promise.allSettled(
           ids.map((id) =>
-            resolveRequest({ request_id: id, decision: "allow", scope: "once" })
+            resolveRequest({ requestId: id, action: "allow", scope: "once", reason: "" })
           )
         );
-        setResolutionMessage(`${ids.length} item${ids.length !== 1 ? "s" : ""} approved.`);
+        const succeeded = results.filter((r) => r.status === "fulfilled").length;
+        const failed = results.length - succeeded;
+        const label =
+          failed === 0
+            ? `${succeeded} item${succeeded !== 1 ? "s" : ""} approved.`
+            : `${succeeded} approved, ${failed} failed. Retry the failed items manually.`;
+        setResolutionMessage(label);
         navigate("/");
         const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchReceipts(), fetchPolicies()]);
         if (snapshotResult.status === "fulfilled") {
