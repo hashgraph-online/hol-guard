@@ -18,7 +18,57 @@ type ReceiptsState =
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardReceipt[] };
 
-const receiptPageSize = 8;
+type DateRange = "today" | "last7" | "all";
+
+const receiptPageSize = 50;
+
+function sanitizeReceiptValue(value: string): string {
+  return value.replace(/\/Users\/[^/\s]+/g, "~");
+}
+
+export function filterReceiptItems(
+  items: GuardReceipt[],
+  searchTerm: string,
+  harnessFilter: string,
+  decisionFilter: string,
+  dateRange: DateRange
+): GuardReceipt[] {
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const now = Date.now();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayStartMs = todayStart.getTime();
+  const last7Start = now - 7 * 24 * 60 * 60 * 1000;
+  return items.filter((receipt) => {
+    const matchesHarness = harnessFilter === "all" || receipt.harness === harnessFilter;
+    const matchesDecision = decisionFilter === "all" || receipt.policy_decision === decisionFilter;
+    if (!matchesHarness || !matchesDecision) {
+      return false;
+    }
+    if (dateRange === "today" || dateRange === "last7") {
+      const ts = new Date(receipt.timestamp).getTime();
+      if (dateRange === "today" && ts < todayStartMs) {
+        return false;
+      } else if (dateRange === "last7" && ts < last7Start) {
+        return false;
+      }
+    }
+    if (normalizedSearchTerm.length === 0) {
+      return true;
+    }
+    const searchable = [
+      receipt.artifact_name ?? "",
+      receipt.artifact_id,
+      receipt.artifact_hash,
+      receipt.harness,
+      receipt.policy_decision,
+      receipt.capabilities_summary,
+      sanitizeReceiptValue(receipt.provenance_summary),
+      receipt.changed_capabilities.join(" ")
+    ].join(" ").toLowerCase();
+    return searchable.includes(normalizedSearchTerm);
+  });
+}
 
 export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
   if (props.receipts.kind === "loading") {
@@ -43,6 +93,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [harnessFilter, setHarnessFilter] = useState("all");
   const [decisionFilter, setDecisionFilter] = useState("all");
+  const [dateRange, setDateRange] = useState<DateRange>("all");
   const [page, setPage] = useState(1);
   const receiptCount = props.receiptItems.length;
 
@@ -58,13 +109,17 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
     setDecisionFilter(event.target.value);
   }, []);
 
+  const handleDateRangeChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    setDateRange(event.target.value as DateRange);
+  }, []);
+
   const handlePreviousPage = useCallback(() => {
     setPage((value) => Math.max(1, value - 1));
   }, []);
 
   useEffect(() => {
     setPage(1);
-  }, [decisionFilter, harnessFilter, searchTerm, receiptCount]);
+  }, [decisionFilter, harnessFilter, searchTerm, dateRange, receiptCount]);
 
   const receiptItems = props.receiptItems;
 
@@ -78,30 +133,10 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
     [receiptItems],
   );
 
-  const filteredReceipts = useMemo(() => {
-    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
-    return receiptItems.filter((receipt) => {
-      const matchesHarness = harnessFilter === "all" || receipt.harness === harnessFilter;
-      const matchesDecision = decisionFilter === "all" || receipt.policy_decision === decisionFilter;
-      if (!matchesHarness || !matchesDecision) {
-        return false;
-      }
-      if (normalizedSearchTerm.length === 0) {
-        return true;
-      }
-      const searchable = [
-        receipt.artifact_name ?? "",
-        receipt.artifact_id,
-        receipt.artifact_hash,
-        receipt.harness,
-        receipt.policy_decision,
-        receipt.capabilities_summary,
-        sanitizeReceiptValue(receipt.provenance_summary),
-        receipt.changed_capabilities.join(" ")
-      ].join(" ").toLowerCase();
-      return searchable.includes(normalizedSearchTerm);
-    });
-  }, [decisionFilter, harnessFilter, receiptItems, searchTerm]);
+  const filteredReceipts = useMemo(
+    () => filterReceiptItems(receiptItems, searchTerm, harnessFilter, decisionFilter, dateRange),
+    [decisionFilter, harnessFilter, receiptItems, searchTerm, dateRange],
+  );
 
   const totalPages = Math.max(1, Math.ceil(filteredReceipts.length / receiptPageSize));
   const currentPage = Math.min(page, totalPages);
@@ -111,7 +146,6 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   const handleNextPage = useCallback(() => {
     setPage((value) => Math.min(totalPages, value + 1));
   }, [totalPages]);
-
 
   if (receiptItems.length === 0) {
     return (
@@ -128,7 +162,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-1">
             <h1 className="mt-2 text-3xl font-semibold tracking-[-0.02em] text-brand-dark">
-            History
+              History
             </h1>
             <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               Search local choices by action, app, decision, or reason.
@@ -143,7 +177,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
 
       <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
         <SectionLabel>Find history</SectionLabel>
-        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
           <ListControls
             searchLabel="Search history"
             searchValue={searchTerm}
@@ -156,7 +190,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
             onFilterChange={handleHarnessFilterChange}
           />
           <label className="block">
-            <span className="sr-only">Filter evidence by decision</span>
+            <span className="sr-only">Filter history by decision</span>
             <select
               value={decisionFilter}
               onChange={handleDecisionFilterChange}
@@ -166,6 +200,18 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
               {decisions.map((decision) => (
                 <option key={decision} value={decision}>{decision}</option>
               ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="sr-only">Filter history by date</span>
+            <select
+              value={dateRange}
+              onChange={handleDateRangeChange}
+              className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            >
+              <option value="all">All time</option>
+              <option value="today">Today</option>
+              <option value="last7">Last 7 days</option>
             </select>
           </label>
         </div>
@@ -248,8 +294,4 @@ function HistoryRow(props: { receipt: GuardReceipt }) {
       </details>
     </article>
   );
-}
-
-function sanitizeReceiptValue(value: string): string {
-  return value.replace(/\/Users\/[^/\s]+/g, "~");
 }

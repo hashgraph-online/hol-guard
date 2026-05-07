@@ -1,5 +1,10 @@
 import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag } from "./approval-center-primitives";
-import type { GuardCloudSyncHealth, GuardRuntimeSnapshot } from "./guard-types";
+import { harnessDisplayName } from "./approval-center-utils";
+import type { GuardCloudSyncHealth, GuardInventoryItem, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+
+const WATCHED_HARNESSES = ["codex", "claude", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw"] as const;
+
+type WatchedHarnessName = (typeof WATCHED_HARNESSES)[number];
 
 type RuntimeOverviewProps = {
   snapshot: GuardRuntimeSnapshot;
@@ -41,6 +46,26 @@ export function resolveCloudSyncHealthCopy(health: GuardCloudSyncHealth): { labe
   };
 }
 
+export function resolveProtectionLevelCopy(level: "balanced" | "strict" | "custom"): string {
+  if (level === "balanced") {
+    return "Asks before secrets and destructive commands";
+  }
+  if (level === "strict") {
+    return "Asks more often, including new network";
+  }
+  return "Custom rules active";
+}
+
+export function resolveCloudIntelCopy(state: "local_only" | "paired_waiting" | "paired_active"): { label: string; detail: string } {
+  if (state === "local_only") {
+    return { label: "Offline, free", detail: "Running locally with no cloud sync. Your choices stay on this machine." };
+  }
+  if (state === "paired_waiting") {
+    return { label: "Pairing…", detail: "Connected to Guard Cloud, waiting for the first shared proof to land." };
+  }
+  return { label: "Synced, pro", detail: "Guard Cloud is active and syncing choices across your devices." };
+}
+
 function cloudSyncHealthTone(state: GuardCloudSyncHealth["state"]): "blue" | "slate" {
   if (state === "disabled" || state === "failed" || state === "stale") {
     return "slate";
@@ -63,8 +88,110 @@ function CloudSyncHealthCard(props: { health: GuardCloudSyncHealth }) {
   );
 }
 
+function WatchedAppsCard(props: { inventory: GuardInventoryItem[] | undefined }) {
+  const inventory = props.inventory ?? [];
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Watched apps</p>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {WATCHED_HARNESSES.map((harness) => {
+          const found = inventory.some((item) => item.harness === harness);
+          return (
+            <WatchedHarnessChip key={harness} harness={harness} installed={found} />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function WatchedHarnessChip(props: { harness: WatchedHarnessName; installed: boolean }) {
+  return (
+    <div className={"flex items-center justify-between gap-2 rounded-lg border px-3 py-2 " + (props.installed ? "border-green-200 bg-green-50" : "border-slate-200 bg-slate-50")}>
+      <span className="text-xs font-semibold text-brand-dark">{harnessDisplayName(props.harness)}</span>
+      <Tag tone={props.installed ? "green" : "slate"}>{props.installed ? "seen" : "—"}</Tag>
+    </div>
+  );
+}
+
+function ProtectionLevelCard(props: { securityLevel: "balanced" | "strict" | "custom" | undefined }) {
+  const level = props.securityLevel ?? "balanced";
+  const copy = resolveProtectionLevelCopy(level);
+  const toneClass = level === "strict" ? "text-brand-purple" : level === "balanced" ? "text-brand-blue" : "text-slate-500";
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Protection level</p>
+      <p className={"mt-2 text-base font-semibold capitalize " + toneClass}>{level}</p>
+      <p className="mt-1 text-sm leading-relaxed text-brand-dark/80">{copy}</p>
+    </div>
+  );
+}
+
+function RecentProtectionCard(props: { receipt: GuardReceipt | undefined }) {
+  if (!props.receipt) {
+    return (
+      <div className="rounded-xl border border-border bg-white px-5 py-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Recent protection</p>
+        <p className="mt-2 text-sm leading-relaxed text-brand-dark/60">No recent activity yet.</p>
+      </div>
+    );
+  }
+  const { receipt } = props;
+  const name = receipt.artifact_name ?? receipt.artifact_id;
+  const decisionTone = receipt.policy_decision === "allow" ? "green" : receipt.policy_decision === "block" ? "purple" : "blue";
+  const relativeTime = formatRelativeTime(receipt.timestamp);
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Recent protection</p>
+        <Tag tone={decisionTone}>{receipt.policy_decision}</Tag>
+      </div>
+      <p className="mt-2 truncate text-sm font-semibold text-brand-dark">{name}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{relativeTime}</p>
+    </div>
+  );
+}
+
+function CloudIntelCard(props: { cloudState: "local_only" | "paired_waiting" | "paired_active"; connectUrl: string }) {
+  const copy = resolveCloudIntelCopy(props.cloudState);
+  const tone = props.cloudState === "paired_active" ? "green" : props.cloudState === "paired_waiting" ? "blue" : "slate";
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Cloud intel</p>
+        <Tag tone={tone}>{copy.label}</Tag>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
+      {props.cloudState === "local_only" ? (
+        <div className="mt-3">
+          <ActionButton href={props.connectUrl} variant="secondary">Connect this machine</ActionButton>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function formatRelativeTime(timestamp: string): string {
+  const diffMs = Date.now() - new Date(timestamp).getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) {
+    return "just now";
+  }
+  if (diffMin < 60) {
+    return diffMin + "m ago";
+  }
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) {
+    return diffH + "h ago";
+  }
+  return Math.floor(diffH / 24) + "d ago";
+}
+
 export function RuntimeOverview(props: RuntimeOverviewProps) {
   const { snapshot } = props;
+  const securityLevel = snapshot.security_level;
+  const latestReceipt = snapshot.latest_receipts[0];
+  const daemonHealthLabel = snapshot.runtime_state !== null ? "running" : "offline";
 
   return (
     <Surface className="mb-6" tone="accent">
@@ -76,6 +203,9 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
               <Badge tone={headlineTone(snapshot.headline_state)}>{snapshot.headline_label}</Badge>
               <Tag tone={snapshot.cloud_state === "local_only" ? "slate" : "blue"}>
                 {snapshot.cloud_state_label}
+              </Tag>
+              <Tag tone={snapshot.runtime_state !== null ? "green" : "slate"}>
+                daemon {daemonHealthLabel}
               </Tag>
             </div>
             <div className="space-y-2">
@@ -93,12 +223,19 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
           <KeyValueGrid
             columns={2}
             items={[
-              ["Review queue", `${snapshot.pending_count} waiting`],
-              ["Saved choices", `${snapshot.receipt_count} stored`],
+              ["Review queue", snapshot.pending_count + " waiting"],
+              ["Saved choices", snapshot.receipt_count + " stored"],
+              ["Watched apps", (snapshot.inventory ?? []).length + " seen"],
               ["Session", snapshot.runtime_state?.session_id.slice(0, 8) ?? "offline"],
-              ["Approval center", snapshot.approval_center_url ?? "offline"],
             ]}
           />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <WatchedAppsCard inventory={snapshot.inventory} />
+          <ProtectionLevelCard securityLevel={securityLevel} />
+          <RecentProtectionCard receipt={latestReceipt} />
+          <CloudIntelCard cloudState={snapshot.cloud_state} connectUrl={snapshot.connect_url} />
         </div>
 
         <CloudSyncHealthCard health={snapshot.cloud_sync_health} />
