@@ -337,6 +337,22 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         artifacts = _coerce_dict_list(payload.get("artifacts"))
         if artifacts:
             console.print(_build_artifact_table(artifacts))
+    perf_items = payload.get("detector_perf")
+    if isinstance(perf_items, list) and perf_items:
+        perf_table = Table(title="Detector performance", box=box.SIMPLE_HEAVY, show_header=True)
+        perf_table.add_column("Detector", style="bold")
+        perf_table.add_column("Status")
+        perf_table.add_column("ms", justify="right")
+        perf_table.add_column("Slow?")
+        for item in perf_items:
+            slow = bool(item.get("slow"))
+            perf_table.add_row(
+                str(item.get("detector_id", "")),
+                str(item.get("status", "")),
+                str(item.get("elapsed_ms", 0)),
+                "[red]yes[/red]" if slow else "no",
+            )
+        console.print(perf_table)
     console.print(_build_diagnostic_command_panel())
 
 

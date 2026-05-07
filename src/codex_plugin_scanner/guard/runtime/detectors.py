@@ -41,6 +41,7 @@ DETECTOR_CATEGORY_TAGS: tuple[RiskSignalCategory, ...] = (
     "execution",
 )
 DetectorRunStatus = Literal["ok", "disabled", "filtered", "timeout", "error"]
+_SLOW_DETECTOR_THRESHOLD_MS: int = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +91,10 @@ class DetectorRunResult:
 
     signals: tuple[RiskSignalV2, ...]
     telemetry: tuple[DetectorTelemetry, ...]
+
+    def slow_detectors(self, threshold_ms: int = _SLOW_DETECTOR_THRESHOLD_MS) -> tuple[DetectorTelemetry, ...]:
+        """Return telemetry entries that exceeded *threshold_ms*."""
+        return tuple(t for t in self.telemetry if t.elapsed_ms >= threshold_ms)
 
 
 class DetectorRegistry:

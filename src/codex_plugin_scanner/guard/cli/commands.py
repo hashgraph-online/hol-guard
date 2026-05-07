@@ -503,6 +503,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="List all supported harnesses with their protection contract",
     )
+    doctor_parser.add_argument("--perf", action="store_true", help="Include detector performance timings")
 
     login_parser = guard_subparsers.add_parser(
         "login",
@@ -1208,6 +1209,8 @@ def run_guard_command(
                 "adapters": [detection.to_dict() for detection in detect_all(context)],
                 "runtime_detector_registry": _runtime_detector_registry_payload(config),
             }
+        if getattr(args, "perf", False):
+            payload["detector_perf"] = _runtime_detector_perf_payload(config)
         _emit("doctor", payload, getattr(args, "json", False))
         return 0
 
@@ -3380,6 +3383,57 @@ def _runtime_detector_registry_payload(config: GuardConfig) -> dict[str, object]
         "timeout_ms": config.runtime_detector_timeout_ms,
         "disabled_detector_ids": list(config.runtime_detector_disabled_ids),
     }
+
+
+def _runtime_detector_perf_payload(config: GuardConfig) -> list[dict[str, object]]:
+    from ..runtime.actions import GuardActionEnvelope
+    from ..runtime.detectors import (
+        _SLOW_DETECTOR_THRESHOLD_MS,
+        DetectorContext,
+    )
+    from ..runtime.runner import _get_default_detector_registry
+
+    probe_action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="perf-probe",
+        harness="doctor",
+        event_name="HarnessStart",
+        action_type="harness_start",
+        workspace=None,
+        workspace_hash=None,
+        tool_name=None,
+        command=None,
+        prompt_excerpt=None,
+        prompt_text=None,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+    probe_context = DetectorContext(
+        config=config,
+        workspace=None,
+        prior_decisions={},
+        threat_intel={},
+        redaction_settings={},
+    )
+    result = _get_default_detector_registry().run(
+        probe_action,
+        probe_context,
+        timeout_ms=config.runtime_detector_timeout_ms,
+        disabled_detector_ids=config.runtime_detector_disabled_ids,
+    )
+    return [
+        {
+            **t.to_dict(),
+            "slow": t.elapsed_ms >= _SLOW_DETECTOR_THRESHOLD_MS,
+        }
+        for t in result.telemetry
+    ]
 
 
 def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig, guard_home: Path) -> GuardConfig:
