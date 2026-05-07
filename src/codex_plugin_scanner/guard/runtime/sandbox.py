@@ -151,8 +151,9 @@ def _apply_resource_limits(cpu_seconds: float, memory_bytes: int, max_processes:
         resource.setrlimit(resource.RLIMIT_DATA, (memory_bytes, memory_bytes))
     with contextlib.suppress(OSError, ValueError):
         soft, hard = resource.getrlimit(resource.RLIMIT_NPROC)
-        effective = max(max_processes, soft) if soft > 0 else max_processes
-        resource.setrlimit(resource.RLIMIT_NPROC, (effective, max(effective, hard) if hard > 0 else hard))
+        effective = min(max_processes, soft) if soft > 0 else max_processes
+        new_hard = hard if hard <= 0 else max(effective, hard)
+        resource.setrlimit(resource.RLIMIT_NPROC, (effective, new_hard))
 
 
 def _write_sandbox_files(workspace: Path, files: dict[str, str]) -> None:
@@ -251,11 +252,12 @@ def run_sandbox(request: SandboxRequest, *, analysis_mode: SandboxAnalysisMode =
         def _preexec() -> None:
             _apply_resource_limits(cpu_s, mem_b, max_p)
 
+        effective_cwd = str(Path(request.cwd).resolve()) if request.cwd else str(workspace)
         start = time.monotonic()
         try:
             proc = subprocess.Popen(
                 argv,
-                cwd=str(workspace),
+                cwd=effective_cwd,
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
