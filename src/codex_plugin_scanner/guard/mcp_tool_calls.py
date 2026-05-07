@@ -352,7 +352,22 @@ def _schema_property_key_names(
                         _visited_refs=visited_refs,
                     )
                 )
-        for collection_key in ("items", "oneOf", "anyOf", "allOf"):
+        for collection_key in (
+            "additionalProperties",
+            "allOf",
+            "anyOf",
+            "contains",
+            "else",
+            "if",
+            "items",
+            "not",
+            "oneOf",
+            "prefixItems",
+            "propertyNames",
+            "then",
+            "unevaluatedItems",
+            "unevaluatedProperties",
+        ):
             child = value.get(collection_key)
             names.update(
                 _schema_property_key_names(
@@ -361,6 +376,26 @@ def _schema_property_key_names(
                     _visited_refs=visited_refs,
                 )
             )
+        dependent_schemas = value.get("dependentSchemas")
+        if isinstance(dependent_schemas, Mapping):
+            for child in dependent_schemas.values():
+                names.update(
+                    _schema_property_key_names(
+                        child,
+                        _root_schema=root_schema,
+                        _visited_refs=visited_refs,
+                    )
+                )
+        pattern_properties = value.get("patternProperties")
+        if isinstance(pattern_properties, Mapping):
+            for child in pattern_properties.values():
+                names.update(
+                    _schema_property_key_names(
+                        child,
+                        _root_schema=root_schema,
+                        _visited_refs=visited_refs,
+                    )
+                )
         return names
     if isinstance(value, list | tuple):
         root_schema = _root_schema

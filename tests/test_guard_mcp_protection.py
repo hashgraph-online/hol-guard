@@ -474,7 +474,7 @@ def test_mcp_server_identity_does_not_parse_npm_run_subcommand_as_package() -> N
     assert identity.package_name is None
 
 
-def test_mcp_server_identity_preserves_vcs_url_spec_with_userinfo() -> None:
+def test_mcp_server_identity_redacts_vcs_url_spec_userinfo() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
         command="pipx",
@@ -483,7 +483,20 @@ def test_mcp_server_identity_preserves_vcs_url_spec_with_userinfo() -> None:
         env={},
     )
 
-    assert identity.package_name == "git+ssh://git@github.com/psf/black"
+    assert identity.package_name == "git+ssh://github.com/psf/black"
+    assert identity.package_version is None
+
+
+def test_mcp_server_identity_redacts_http_url_spec_credentials() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "https://user:token@example.com/simple/black", "black"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "https://example.com/simple/black"
     assert identity.package_version is None
 
 
@@ -591,6 +604,34 @@ def test_mcp_tool_schema_ignores_unreferenced_schema_definitions() -> None:
     )
 
     assert tool_call_risk_categories(artifact, {}) == ()
+
+
+def test_mcp_tool_schema_traverses_conditional_and_dependent_branches() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "if": {"properties": {"mode": {"const": "shell"}}},
+            "then": {"properties": {"cmd": {"type": "string"}}},
+            "else": {"properties": {"webhook": {"type": "string"}}},
+            "not": {"properties": {"script": {"type": "string"}}},
+            "dependentSchemas": {
+                "mode": {"properties": {"url": {"type": "string"}}},
+            },
+            "patternProperties": {
+                "^remote_": {"properties": {"endpoint": {"type": "string"}}},
+            },
+            "additionalProperties": {"properties": {"command": {"type": "string"}}},
+        },
+    )
+
+    categories = set(tool_call_risk_categories(artifact, {}))
+    assert {"command_execution", "outbound_network", "tool_schema_mismatch"}.issubset(categories)
 
 
 def test_mcp_tool_runtime_arguments_flag_file_command_and_url_keys() -> None:
