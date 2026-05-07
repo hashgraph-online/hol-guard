@@ -162,7 +162,6 @@ class GuardActionEnvelope:
             "tool_name": self.tool_name,
             "command": self.command,
             "prompt_excerpt": self.prompt_excerpt,
-            "prompt_text": self.prompt_text,
             "target_paths": list(self.target_paths),
             "network_hosts": list(self.network_hosts),
             "mcp_server": self.mcp_server,

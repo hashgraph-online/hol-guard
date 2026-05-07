@@ -51,7 +51,6 @@ def test_guard_action_envelope_round_trips_to_dict() -> None:
         "tool_name": "Bash",
         "command": "printf ok",
         "prompt_excerpt": None,
-        "prompt_text": None,
         "target_paths": ["package.json"],
         "network_hosts": ["example.com"],
         "mcp_server": None,

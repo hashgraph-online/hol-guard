@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -139,6 +140,20 @@ def detect_skill_content_risk(
     _check_encoded_payloads(content, signals)
     _check_unicode_controls(content, signals)
     return tuple(signals)
+
+
+_SKILL_FRONTMATTER_GATE = re.compile(r"---\s+\w", re.DOTALL)
+_SKILL_HEADING_GATE = re.compile(r"^#+\s+\S", re.MULTILINE)
+_SKILL_NAME_FIELD_GATE = re.compile(r"^name\s*:", re.MULTILINE | re.IGNORECASE)
+
+
+def has_skill_structure(content: str) -> bool:
+    """Return True if content has structural markers consistent with a SKILL.md file."""
+    if "SKILL.md" in content or "skill:" in content.lower():
+        return True
+    if _SKILL_FRONTMATTER_GATE.search(content):
+        return True
+    return bool(_SKILL_NAME_FIELD_GATE.search(content) and _SKILL_HEADING_GATE.search(content))
 
 
 def _check_shell_in_frontmatter(content: str, signals: list[RiskSignalV2]) -> None:
@@ -330,7 +345,7 @@ def _check_encoded_payloads(content: str, signals: list[RiskSignalV2]) -> None:
                     )
                 )
                 return
-        except Exception:
+        except (ValueError, UnicodeDecodeError, binascii.Error):
             pass
     for match in _HEX_CANDIDATE.finditer(content):
         candidate = match.group(0)
@@ -350,7 +365,7 @@ def _check_encoded_payloads(content: str, signals: list[RiskSignalV2]) -> None:
                     )
                 )
                 return
-        except Exception:
+        except (ValueError, UnicodeDecodeError):
             pass
 
 

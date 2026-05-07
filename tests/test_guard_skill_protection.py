@@ -7,6 +7,7 @@ import base64
 from codex_plugin_scanner.guard.runtime.skill_protection import (
     build_skill_identity,
     detect_skill_content_risk,
+    has_skill_structure,
 )
 
 _BENIGN_DOCS_SKILL = """\
@@ -281,3 +282,37 @@ def test_empty_skill_has_no_risk() -> None:
 def test_plain_text_skill_has_no_risk() -> None:
     content = "This skill helps you write better commit messages. No tools needed."
     assert detect_skill_content_risk(content) == ()
+
+
+def test_has_skill_structure_detects_frontmatter() -> None:
+    content = "---\nname: my-skill\ndescription: Does things.\n---\n\n# My Skill"
+    assert has_skill_structure(content) is True
+
+
+def test_has_skill_structure_detects_skill_md_mention() -> None:
+    assert has_skill_structure("This is a SKILL.md file that does something.") is True
+
+
+def test_has_skill_structure_detects_skill_colon_keyword() -> None:
+    assert has_skill_structure("skill: docs-generator\nversion: 1.0") is True
+
+
+def test_has_skill_structure_rejects_plain_chat() -> None:
+    content = "How do I add something to my ~/.bashrc file? Can you show me crontab -e?"
+    assert has_skill_structure(content) is False
+
+
+def test_has_skill_structure_rejects_empty() -> None:
+    assert has_skill_structure("") is False
+
+
+def test_specific_exception_types_for_base64_decode() -> None:
+    content = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    result = detect_skill_content_risk(content)
+    assert isinstance(result, tuple)
+
+
+def test_benign_chat_no_structural_markers_has_no_risk() -> None:
+    content = "This is a plain commit message helper with no dangerous operations."
+    result = detect_skill_content_risk(content)
+    assert result == ()

@@ -21,7 +21,7 @@ from codex_plugin_scanner.guard.runtime.signals import (
     confidence_label_from_score,
     severity_label_from_score,
 )
-from codex_plugin_scanner.guard.runtime.skill_protection import detect_skill_content_risk
+from codex_plugin_scanner.guard.runtime.skill_protection import detect_skill_content_risk, has_skill_structure
 from codex_plugin_scanner.guard.types import PromptRequest
 
 DETECTOR_CATEGORY_TAGS: tuple[RiskSignalCategory, ...] = (
@@ -184,6 +184,8 @@ class SkillRiskDetector:
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
         del context
         if action.action_type != "prompt" or action.prompt_text is None:
+            return ()
+        if not has_skill_structure(action.prompt_text):
             return ()
         return detect_skill_content_risk(action.prompt_text)
 

@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.runtime.detectors import (
     DetectorRegistry,
     PromptInjectionDetector,
     SecretPathDetector,
+    SkillRiskDetector,
     register_default_detectors,
 )
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalCategory, RiskSignalV2
@@ -282,6 +283,25 @@ def test_register_default_detectors_includes_secret_path_detector():
         "execution",
     }
     assert planned_categories.issubset(set(DETECTOR_CATEGORY_TAGS))
+
+
+def test_skill_risk_detector_gates_on_non_skill_prompt(tmp_path) -> None:
+    chat = "Please echo something to my profile and also run crontab -e"
+    result = DetectorRegistry((SkillRiskDetector(),), clock=StepClock([0.0, 0.001])).run(
+        _prompt_action(chat),
+        _context(tmp_path),
+    )
+    assert result.signals == ()
+
+
+def test_skill_risk_detector_fires_on_skill_structured_content(tmp_path) -> None:
+    skill_content = "---\nname: evil-skill\ndescription: Does bad things.\n---\ncrontab -e malicious"
+    result = DetectorRegistry((SkillRiskDetector(),), clock=StepClock([0.0, 0.001])).run(
+        _prompt_action(skill_content),
+        _context(tmp_path),
+    )
+    assert len(result.signals) >= 1
+    assert all(s.category == "persistence" or s.signal_id.startswith("skill.") for s in result.signals)
 
 
 def test_default_prompt_injection_detector_flags_user_prompt_action(tmp_path):
