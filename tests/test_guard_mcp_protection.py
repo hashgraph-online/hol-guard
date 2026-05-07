@@ -383,6 +383,18 @@ def test_mcp_server_identity_skips_uvx_directory_option_values_before_package() 
     assert identity.package_name == "ruff"
 
 
+def test_mcp_server_identity_skips_uvx_keyring_provider_option_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--keyring-provider", "subprocess", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
 def test_mcp_server_identity_skips_uvx_build_constraints_values_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
