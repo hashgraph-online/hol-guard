@@ -1264,3 +1264,53 @@ def test_codex_guard_proxy_invalidates_catalog_on_list_changed_notification(tmp_
     assert event["decision"] == "forward-notification"
     assert proxy._tool_catalog == {}
     assert proxy._tool_catalog_pending is None
+
+
+def test_codex_guard_proxy_invalidates_catalog_on_server_list_changed_notification(tmp_path):
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    config = GuardConfig(guard_home=context.guard_home, workspace=context.workspace_dir)
+    marker_path = tmp_path / "dangerous-call.json"
+    proxy = CodexMcpGuardProxy(
+        server_name="workspace_skill",
+        command=_child_command(marker_path),
+        context=context,
+        store=store,
+        config=config,
+        source_scope="project",
+        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    )
+    proxy._capture_tools_catalog(
+        {
+            "result": {
+                "tools": [
+                    {
+                        "name": "safe_echo",
+                        "description": "Safe echo",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ]
+            }
+        }
+    )
+
+    child_stdout = StringIO(
+        "\n".join(
+            [
+                json.dumps({"jsonrpc": "2.0", "method": "notifications/tools/list_changed", "params": {}}),
+                json.dumps({"jsonrpc": "2.0", "id": 7, "result": {"tools": []}}),
+            ]
+        )
+        + "\n"
+    )
+    response = proxy._forward_message(
+        {"jsonrpc": "2.0", "id": 7, "method": "tools/list", "params": {}},
+        child_stdin=StringIO(),
+        child_stdout=child_stdout,
+        client_input=None,
+        server_output=StringIO(),
+    )
+
+    assert response["id"] == 7
+    assert proxy._tool_catalog == {}
+    assert proxy._tool_catalog_pending is None
