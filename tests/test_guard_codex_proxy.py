@@ -1195,7 +1195,8 @@ def test_codex_guard_proxy_merges_paginated_tools_catalog_and_clears_stale_entri
                     }
                 ]
             }
-        }
+        },
+        request_cursor="page-2",
     )
 
     assert set(proxy._tool_catalog) == {"safe_echo", "dangerous_delete"}
