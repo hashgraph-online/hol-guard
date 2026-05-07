@@ -265,6 +265,18 @@ def test_mcp_server_identity_skips_uvx_short_option_values_before_package() -> N
     assert identity.package_name == "httpie"
 
 
+def test_mcp_server_identity_skips_uvx_with_dependency_values_before_package() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="uvx",
+        args=("--with", "rich", "ruff"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "ruff"
+
+
 def test_mcp_server_identity_skips_uvx_python_short_option_value_before_package() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",
@@ -375,6 +387,19 @@ def test_mcp_server_identity_does_not_parse_npm_run_subcommand_as_package() -> N
     )
 
     assert identity.package_name is None
+
+
+def test_mcp_server_identity_preserves_vcs_url_spec_with_userinfo() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "git+ssh://git@github.com/psf/black", "black"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "git+ssh://git@github.com/psf/black"
+    assert identity.package_version is None
 
 
 def test_mcp_tool_identity_normalizes_set_and_path_schema_values() -> None:
