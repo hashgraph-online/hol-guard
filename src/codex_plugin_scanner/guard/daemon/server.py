@@ -24,6 +24,7 @@ from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from ..store_evidence import (
+    clear_evidence,
     count_evidence,
     export_evidence_json,
     list_evidence,
@@ -71,7 +72,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_empty(status=400)
             return
         headers = self._cors_headers_for_request(
-            allow_methods="GET, POST, OPTIONS",
+            allow_methods="GET, POST, DELETE, OPTIONS",
             allow_headers="Content-Type, X-Guard-Token",
         )
         if headers is None:
@@ -111,12 +112,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"items": store.list_guard_sessions(limit=200)})
             return
         if parsed.path == "/v1/runtime":
-            self._write_json(
-                build_runtime_snapshot(
-                    store=store,
-                    approval_center_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
-                )
+            config = load_guard_config(store.guard_home)
+            snapshot = build_runtime_snapshot(
+                store=store,
+                approval_center_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
             )
+            self._write_json({**snapshot, "security_level": config.security_level})
             return
         if parsed.path == "/v1/inventory":
             from ..adapters.contracts import HARNESS_CONTRACTS
@@ -281,6 +282,28 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         self.send_response(404)
         self.end_headers()
+
+    def do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        self._touch_runtime_heartbeat(parsed.path)
+        path_parts = [part for part in parsed.path.split("/") if part]
+        if not self._origin_is_allowed_for_request(parsed.path, path_parts):
+            self._write_json({"error": "forbidden_origin"}, status=403)
+            return
+        if not self._header_token_is_valid():
+            self._write_json(
+                {"error": "unauthorized"},
+                status=401,
+                extra_headers=self._cors_headers_for_request(),
+            )
+            return
+        store = self.server.store  # type: ignore[attr-defined]
+        if parsed.path == "/v1/evidence":
+            with store._connect() as conn:
+                deleted = clear_evidence(conn)
+            self._write_json({"deleted": deleted})
+            return
+        self._write_json({"error": "not_found"}, status=404)
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
@@ -901,6 +924,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if path in {
             "/v1/inventory",
             "/v1/connect/state",
+            "/v1/evidence",
+            "/v1/evidence/export",
             "/v1/policy",
             "/v1/policy/clear",
             "/v1/receipts",

@@ -610,3 +610,24 @@ export async function resolveRequest(input: {
     })
   });
 }
+
+export async function clearEvidence(): Promise<void> {
+  if (isGuardDemoMode()) {
+    return;
+  }
+  const response = await fetch(guardApiInput("/v1/evidence"), withGuardAuth({ method: "DELETE" }));
+  if (!response.ok) {
+    throw new Error(`Clear evidence failed with ${response.status}`);
+  }
+}
+
+export async function exportDiagnostics(): Promise<Blob> {
+  if (isGuardDemoMode()) {
+    return new Blob([JSON.stringify({ demo: true, generated_at: new Date().toISOString() })], { type: "application/json" });
+  }
+  const response = await fetch(guardApiInput("/v1/evidence/export"), withGuardAuth());
+  if (!response.ok) {
+    throw new Error(`Export diagnostics failed with ${response.status}`);
+  }
+  return response.blob();
+}
