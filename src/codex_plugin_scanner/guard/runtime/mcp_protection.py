@@ -280,7 +280,7 @@ def _value_options_for_command(command_name: str) -> set[str]:
         "bunx": {"-c", "--config", "--package"},
         "npm": {"-c", "-w", "--workspace"},
         "npx": {"-c", "-w", "--workspace"},
-        "pipx": {"-i", "--index-url", "--pip-args", "--suffix"},
+        "pipx": {"-i", "--index-url", "--pip-args", "--suffix", "--with"},
         "pnpm": {"-c", "-C", "--dir", "--filter"},
         "uvx": {
             "-b",
