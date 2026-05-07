@@ -132,16 +132,19 @@ def _package_identity(command: str, args: tuple[str, ...]) -> tuple[str | None, 
 
 def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
     index = 0
+    positional_index = 0
     while index < len(args):
         value = args[index].strip()
         if not value:
             index += 1
             continue
-        if command_name == "pipx" and value == "run":
+        if command_name == "pipx" and positional_index == 0 and value == "run":
             index += 1
+            positional_index += 1
             continue
-        if value in {"dlx", "exec", "x"}:
+        if positional_index == 0 and value in {"dlx", "exec", "x"}:
             index += 1
+            positional_index += 1
             continue
         if value in {"--package", "-p"} and index + 1 < len(args):
             return args[index + 1].strip() or None
@@ -156,6 +159,7 @@ def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
             continue
         if _looks_like_runtime_path(value):
             index += 1
+            positional_index += 1
             continue
         return value
     return None

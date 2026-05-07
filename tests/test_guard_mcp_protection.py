@@ -140,6 +140,30 @@ def test_mcp_server_identity_normalizes_windows_launcher_suffixes() -> None:
     assert identity.package_version == "1.2.3"
 
 
+def test_mcp_server_identity_keeps_pipx_package_named_run() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "run"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "run"
+
+
+def test_mcp_server_identity_keeps_pnpm_package_named_x() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pnpm",
+        args=("dlx", "x"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "x"
+
+
 def test_mcp_tool_identity_normalizes_set_and_path_schema_values() -> None:
     first = build_mcp_tool_identity(
         server_hash="server",
