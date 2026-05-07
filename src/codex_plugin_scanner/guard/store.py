@@ -347,11 +347,12 @@ def _build_secret_store(guard_home: Path) -> SecretStore:
 class GuardStore:
     """Local SQLite store for Guard state."""
 
-    def __init__(self, guard_home: Path) -> None:
+    def __init__(self, guard_home: Path, *, guard_event_queue_limit: int = 1000) -> None:
         self.guard_home = guard_home
         self.guard_home.mkdir(parents=True, exist_ok=True)
         self._secret_store = _build_secret_store(self.guard_home)
         self._sync_token_ref = self._build_sync_token_ref()
+        self._guard_event_queue_limit = max(1, guard_event_queue_limit)
         self.path = self.guard_home / "guard.db"
         self._initialize()
 
@@ -1097,6 +1098,10 @@ class GuardStore:
             "device_label": str(row["device_label"]),
         }
 
+    def get_cloud_workspace_id(self) -> str | None:
+        with self._connect() as connection:
+            return self._cloud_workspace_id_from_connection(connection)
+
     def upsert_policy(self, decision: PolicyDecision, now: str) -> None:
         artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
         with self._connect() as connection:
@@ -1269,11 +1274,13 @@ class GuardStore:
                 (_DEVICE_ROW_KEY,),
             ).fetchone()
             device_id = str(row["installation_id"]) if row is not None else None
+            workspace_id = self._cloud_workspace_id_from_connection(connection)
             self._add_guard_event_v1(
                 connection,
                 build_receipt_event(
                     receipt,
                     device_id=device_id,
+                    workspace_id=workspace_id,
                 ),
             )
 
@@ -1756,9 +1763,9 @@ class GuardStore:
             )
         return items
 
-    def set_sync_credentials(self, sync_url: str, token: str, now: str) -> None:
+    def set_sync_credentials(self, sync_url: str, token: str, now: str, workspace_id: str | None = None) -> None:
         with self._connect() as connection:
-            self._set_sync_credentials_in_connection(connection, sync_url, token, now)
+            self._set_sync_credentials_in_connection(connection, sync_url, token, now, workspace_id=workspace_id)
 
     def set_sync_payload(self, state_key: str, payload: dict[str, object] | list[object], now: str) -> None:
         with self._connect() as connection:
@@ -1808,9 +1815,48 @@ class GuardStore:
         with self._connect() as connection:
             self._add_guard_event_v1(connection, event)
 
-    @staticmethod
-    def _add_guard_event_v1(connection: sqlite3.Connection, event: GuardEventV1) -> None:
+    def _add_guard_event_v1(self, connection: sqlite3.Connection, event: GuardEventV1) -> None:
         payload = event.to_dict()
+        existing = connection.execute(
+            "select event_id from guard_cloud_events where idempotency_key = ?",
+            (event.idempotency_key,),
+        ).fetchone()
+        if existing is None:
+            pending_count = self._count_guard_events_v1_in_connection(connection, uploaded=False)
+            if pending_count >= self._guard_event_queue_limit:
+                drop_count = pending_count - self._guard_event_queue_limit + 1
+                cursor = connection.execute(
+                    """
+                    delete from guard_cloud_events
+                    where event_id in (
+                        select event_id
+                        from guard_cloud_events
+                        where uploaded_at is null
+                        order by occurred_at asc, event_id asc
+                        limit ?
+                    )
+                    """,
+                    (drop_count,),
+                )
+                dropped_count = int(cursor.rowcount) if cursor.rowcount is not None and cursor.rowcount > 0 else 0
+                if dropped_count > 0:
+                    connection.execute(
+                        """
+                        insert into guard_events (event_name, payload_json, occurred_at)
+                        values (?, ?, ?)
+                        """,
+                        (
+                            "cloud_event_queue_overflow",
+                            json.dumps(
+                                {
+                                    "dropped_count": dropped_count,
+                                    "queue_limit": self._guard_event_queue_limit,
+                                    "incoming_event_type": event.event_type,
+                                }
+                            ),
+                            _now(),
+                        ),
+                    )
         connection.execute(
             """
             insert or ignore into guard_cloud_events (
@@ -1857,6 +1903,20 @@ class GuardStore:
                 }
             )
         return events
+
+    def count_guard_events_v1(self, *, uploaded: bool | None = None) -> int:
+        with self._connect() as connection:
+            return self._count_guard_events_v1_in_connection(connection, uploaded=uploaded)
+
+    @staticmethod
+    def _count_guard_events_v1_in_connection(connection: sqlite3.Connection, *, uploaded: bool | None = None) -> int:
+        query = "select count(*) as count from guard_cloud_events"
+        if uploaded is True:
+            query += " where uploaded_at is not null"
+        elif uploaded is False:
+            query += " where uploaded_at is null"
+        row = connection.execute(query).fetchone()
+        return int(row["count"]) if row is not None else 0
 
     def mark_guard_events_v1_uploaded(self, event_ids: list[str], uploaded_at: str) -> int:
         clean_ids = [event_id for event_id in event_ids if event_id.strip()]
@@ -1955,6 +2015,8 @@ class GuardStore:
         sync_url = payload.get("sync_url")
         if not isinstance(sync_url, str):
             return None
+        workspace_id = payload.get("workspace_id")
+        normalized_workspace_id = workspace_id if isinstance(workspace_id, str) and workspace_id.strip() else None
         token_reference = payload.get("token_ref")
         if isinstance(token_reference, str) and token_reference:
             expected_hash = payload.get(_SYNC_TOKEN_HASH_KEY)
@@ -1971,7 +2033,13 @@ class GuardStore:
                     if token_reference != self._sync_token_ref:
                         now = _now()
                         with self._connect() as connection:
-                            self._set_sync_credentials_in_connection(connection, sync_url, token, now)
+                            self._set_sync_credentials_in_connection(
+                                connection,
+                                sync_url,
+                                token,
+                                now,
+                                workspace_id=normalized_workspace_id,
+                            )
                     else:
                         self._promote_secret_to_primary(secret_ref, token)
                     return {"sync_url": sync_url, "token": token}
@@ -1980,7 +2048,13 @@ class GuardStore:
         if isinstance(legacy_token, str) and legacy_token:
             now = _now()
             with self._connect() as connection:
-                self._set_sync_credentials_in_connection(connection, sync_url, legacy_token, now)
+                self._set_sync_credentials_in_connection(
+                    connection,
+                    sync_url,
+                    legacy_token,
+                    now,
+                    workspace_id=normalized_workspace_id,
+                )
             return {"sync_url": sync_url, "token": legacy_token}
         return None
 
@@ -2132,30 +2206,50 @@ class GuardStore:
         sync_url: str,
         token: str,
         now: str,
+        *,
+        workspace_id: str | None = None,
     ) -> None:
-        self._secret_store.set_secret(self._sync_token_ref, token)
-        payload = {
-            "sync_url": sync_url,
-            "token_ref": self._sync_token_ref,
-            _SYNC_TOKEN_HASH_KEY: _token_sha256(token),
-        }
+        token_hash = _token_sha256(token)
+        normalized_workspace_id = (
+            workspace_id.strip() if isinstance(workspace_id, str) and workspace_id.strip() else None
+        )
+        previous_payload: dict[str, object] | None = None
         previous_row = connection.execute(
             "select payload_json from sync_state where state_key = 'credentials'"
         ).fetchone()
-        if previous_row is None:
+        if previous_row is not None:
+            previous_payload_candidate = json.loads(str(previous_row["payload_json"]))
+            if isinstance(previous_payload_candidate, dict):
+                previous_payload = previous_payload_candidate
+        previous_sync_url = previous_payload.get("sync_url") if previous_payload is not None else None
+        previous_token_hash = (
+            self._credential_payload_token_hash(previous_payload) if previous_payload is not None else None
+        )
+        previous_workspace_id = previous_payload.get("workspace_id") if previous_payload is not None else None
+        effective_workspace_id = normalized_workspace_id
+        can_preserve_workspace = (
+            previous_sync_url == sync_url
+            and previous_token_hash is not None
+            and previous_token_hash == token_hash
+            and isinstance(previous_workspace_id, str)
+            and previous_workspace_id.strip()
+        )
+        if effective_workspace_id is None and can_preserve_workspace:
+            effective_workspace_id = previous_workspace_id.strip()
+        payload = {
+            "sync_url": sync_url,
+            "token_ref": self._sync_token_ref,
+            _SYNC_TOKEN_HASH_KEY: token_hash,
+        }
+        if effective_workspace_id is not None:
+            payload["workspace_id"] = effective_workspace_id
+        if previous_row is None or previous_payload is None:
             credentials_changed = True
         else:
-            previous_payload = json.loads(str(previous_row["payload_json"]))
-            if not isinstance(previous_payload, dict):
-                credentials_changed = True
-            else:
-                previous_sync_url = previous_payload.get("sync_url")
-                previous_token_hash = self._credential_payload_token_hash(previous_payload)
-                credentials_changed = (
-                    previous_sync_url != sync_url
-                    or previous_token_hash is None
-                    or previous_token_hash != payload[_SYNC_TOKEN_HASH_KEY]
-                )
+            credentials_changed = (
+                previous_sync_url != sync_url or previous_token_hash is None or previous_token_hash != token_hash
+            )
+        self._secret_store.set_secret(self._sync_token_ref, token)
         connection.execute(
             """
             insert into sync_state (state_key, payload_json, updated_at)
@@ -2170,6 +2264,19 @@ class GuardStore:
             connection.execute("delete from sync_state where state_key != 'credentials'")
             connection.execute("delete from publisher_cache")
             connection.execute("delete from policy_decisions where source in ('cloud-sync', 'team-policy')")
+
+    @staticmethod
+    def _cloud_workspace_id_from_connection(connection: sqlite3.Connection) -> str | None:
+        row = connection.execute("select payload_json from sync_state where state_key = 'credentials'").fetchone()
+        if row is None:
+            return None
+        payload = json.loads(str(row["payload_json"]))
+        if not isinstance(payload, dict):
+            return None
+        workspace_id = payload.get("workspace_id")
+        if isinstance(workspace_id, str) and workspace_id.strip():
+            return workspace_id
+        return None
 
     def upsert_guard_session(
         self,

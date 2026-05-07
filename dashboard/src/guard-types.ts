@@ -153,6 +153,15 @@ export type GuardCloudPairingState = {
   connect_url: string;
 };
 
+export type GuardCloudSyncHealth = {
+  state: "healthy" | "pending" | "failed" | "degraded" | "disabled" | "stale";
+  label: string;
+  detail: string;
+  pending_events: number;
+  last_synced_at: string | null;
+  next_retry_after: string | null;
+};
+
 export type GuardRuntimeSnapshot = {
   generated_at: string;
   approval_center_url: string | null;
@@ -167,6 +176,7 @@ export type GuardRuntimeSnapshot = {
   cloud_state_label: string;
   cloud_state_detail: string;
   cloud_pairing_state: GuardCloudPairingState;
+  cloud_sync_health: GuardCloudSyncHealth;
   dashboard_url: string;
   inbox_url: string;
   fleet_url: string;

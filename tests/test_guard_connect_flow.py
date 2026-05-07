@@ -804,8 +804,12 @@ def test_guard_connect_registers_runtime_session_before_first_sync(
     assert [path for path, _payload in observed_requests] == [
         "/api/guard/runtime/sessions/sync",
         "/api/guard/receipts/sync",
+        "/api/v1/guard/events",
     ]
     runtime_session = observed_requests[0][1]["session"]
     assert isinstance(runtime_session, dict)
     assert runtime_session["clientName"] == "hol-guard"
     assert runtime_session["surface"] == "cli"
+    guard_event = observed_requests[2][1]["events"][0]
+    assert guard_event["eventType"] == "runtime.session"
+    assert guard_event["payload"]["sessionId"] == runtime_session["sessionId"]

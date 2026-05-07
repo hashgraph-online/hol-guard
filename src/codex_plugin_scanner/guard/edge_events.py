@@ -84,5 +84,98 @@ def build_policy_event(
     )
 
 
+def build_runtime_session_event(
+    *,
+    session_id: str,
+    occurred_at: str,
+    payload: dict[str, object],
+    device_id: str | None = None,
+    workspace_id: str | None = None,
+) -> GuardEventV1:
+    return _build_edge_event(
+        event_type="runtime.session",
+        subject_id=session_id,
+        occurred_at=occurred_at,
+        payload=payload,
+        device_id=device_id,
+        workspace_id=workspace_id,
+    )
+
+
+def build_access_graph_snapshot_event(
+    *,
+    snapshot_id: str,
+    occurred_at: str,
+    payload: dict[str, object],
+    device_id: str | None = None,
+    workspace_id: str | None = None,
+) -> GuardEventV1:
+    return _build_edge_event(
+        event_type="access_graph.snapshot",
+        subject_id=snapshot_id,
+        occurred_at=occurred_at,
+        payload=payload,
+        device_id=device_id,
+        workspace_id=workspace_id,
+    )
+
+
+def build_agent_handshake_event(
+    *,
+    handshake_id: str,
+    occurred_at: str,
+    payload: dict[str, object],
+    device_id: str | None = None,
+    workspace_id: str | None = None,
+) -> GuardEventV1:
+    return _build_edge_event(
+        event_type="agent.handshake",
+        subject_id=handshake_id,
+        occurred_at=occurred_at,
+        payload=payload,
+        device_id=device_id,
+        workspace_id=workspace_id,
+    )
+
+
+def build_notification_delivery_event(
+    *,
+    delivery_id: str,
+    occurred_at: str,
+    payload: dict[str, object],
+    device_id: str | None = None,
+    workspace_id: str | None = None,
+) -> GuardEventV1:
+    return _build_edge_event(
+        event_type="notification.delivery",
+        subject_id=delivery_id,
+        occurred_at=occurred_at,
+        payload=payload,
+        device_id=device_id,
+        workspace_id=workspace_id,
+    )
+
+
+def _build_edge_event(
+    *,
+    event_type: GuardEventType,
+    subject_id: str,
+    occurred_at: str,
+    payload: dict[str, object],
+    device_id: str | None,
+    workspace_id: str | None,
+) -> GuardEventV1:
+    return GuardEventV1(
+        event_id=f"guard-event-{_fingerprint(event_type, subject_id, occurred_at)[:32]}",
+        idempotency_key=f"{event_type}:{subject_id}:{occurred_at}",
+        event_type=event_type,
+        source="edge",
+        occurred_at=occurred_at,
+        workspace_id=workspace_id,
+        device_id=device_id,
+        payload=payload,
+    )
+
+
 def _fingerprint(*parts: str) -> str:
     return hashlib.sha256(":".join(parts).encode()).hexdigest()
