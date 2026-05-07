@@ -284,6 +284,31 @@ def test_mcp_tool_schema_flags_file_command_and_url_arguments() -> None:
     )
 
 
+def test_mcp_tool_schema_follows_local_refs_for_risk_categories() -> None:
+    artifact = build_tool_call_artifact(
+        harness="codex",
+        server_name="workspace",
+        tool_name="summarize",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        tool_schema={
+            "type": "object",
+            "properties": {"operation": {"$ref": "#/$defs/operation"}},
+            "$defs": {
+                "operation": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                    },
+                }
+            },
+        },
+    )
+
+    assert tool_call_risk_categories(artifact, {}) == ("command_execution", "tool_schema_mismatch")
+
+
 def test_mcp_tool_runtime_arguments_flag_file_command_and_url_keys() -> None:
     artifact = build_tool_call_artifact(
         harness="codex",

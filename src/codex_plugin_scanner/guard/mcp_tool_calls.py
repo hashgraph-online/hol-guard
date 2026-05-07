@@ -319,22 +319,86 @@ def _schema_risk_categories(schema: object) -> set[str]:
     return categories
 
 
-def _schema_property_key_names(value: object) -> set[str]:
+def _schema_property_key_names(
+    value: object,
+    *,
+    _root_schema: Mapping[str, object] | None = None,
+    _visited_refs: set[str] | None = None,
+) -> set[str]:
     names: set[str] = set()
     if isinstance(value, Mapping):
+        root_schema = value if _root_schema is None else _root_schema
+        visited_refs = set() if _visited_refs is None else _visited_refs
+        ref_value = value.get("$ref")
+        if isinstance(ref_value, str) and ref_value not in visited_refs:
+            visited_refs.add(ref_value)
+            resolved = _resolve_local_schema_ref(root_schema, ref_value)
+            if resolved is not None:
+                names.update(
+                    _schema_property_key_names(
+                        resolved,
+                        _root_schema=root_schema,
+                        _visited_refs=visited_refs,
+                    )
+                )
         properties = value.get("properties")
         if isinstance(properties, Mapping):
             for key, item in properties.items():
                 names.add(_normalized_argument_key(str(key)))
-                names.update(_schema_property_key_names(item))
+                names.update(
+                    _schema_property_key_names(
+                        item,
+                        _root_schema=root_schema,
+                        _visited_refs=visited_refs,
+                    )
+                )
         for collection_key in ("items", "oneOf", "anyOf", "allOf"):
             child = value.get(collection_key)
-            names.update(_schema_property_key_names(child))
+            names.update(
+                _schema_property_key_names(
+                    child,
+                    _root_schema=root_schema,
+                    _visited_refs=visited_refs,
+                )
+            )
+        for definitions_key in ("definitions", "$defs"):
+            definitions = value.get(definitions_key)
+            if isinstance(definitions, Mapping):
+                for definition in definitions.values():
+                    names.update(
+                        _schema_property_key_names(
+                            definition,
+                            _root_schema=root_schema,
+                            _visited_refs=visited_refs,
+                        )
+                    )
         return names
     if isinstance(value, list | tuple):
+        root_schema = _root_schema
+        visited_refs = set() if _visited_refs is None else _visited_refs
         for item in value:
-            names.update(_schema_property_key_names(item))
+            names.update(
+                _schema_property_key_names(
+                    item,
+                    _root_schema=root_schema,
+                    _visited_refs=visited_refs,
+                )
+            )
     return names
+
+
+def _resolve_local_schema_ref(root_schema: Mapping[str, object], reference: str) -> object | None:
+    if not reference.startswith("#/"):
+        return None
+    current: object = root_schema
+    for part in reference[2:].split("/"):
+        token = part.replace("~1", "/").replace("~0", "~")
+        if not isinstance(current, Mapping):
+            return None
+        if token not in current:
+            return None
+        current = current[token]
+    return current
 
 
 def _description_risk_categories(description: object) -> set[str]:

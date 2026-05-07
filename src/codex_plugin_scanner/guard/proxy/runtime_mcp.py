@@ -191,7 +191,8 @@ class RuntimeMcpGuardProxy:
                 server_output=server_output,
             )
             if method == "tools/list":
-                self._capture_tools_catalog(response)
+                list_cursor = params.get("cursor") if isinstance(params, dict) else None
+                self._capture_tools_catalog(response, request_cursor=list_cursor)
             return response, event
 
         tool_name = str(params.get("name") or "unknown")
@@ -583,13 +584,15 @@ class RuntimeMcpGuardProxy:
             "redacted_params": _redact_json(params),
         }
 
-    def _capture_tools_catalog(self, response: dict[str, Any]) -> None:
+    def _capture_tools_catalog(self, response: dict[str, Any], *, request_cursor: object | None = None) -> None:
         result = response.get("result")
         if not isinstance(result, dict):
             return
         tools = result.get("tools")
         if not isinstance(tools, list):
             return
+        if request_cursor is None:
+            self._tool_catalog_pending = None
         next_cursor = result.get("nextCursor")
         has_more_pages = next_cursor is not None
         catalog: dict[str, dict[str, object]] = {}
@@ -608,9 +611,9 @@ class RuntimeMcpGuardProxy:
                 entry["input_schema"] = input_schema
             catalog[name.strip()] = entry
         if has_more_pages:
-            if self._tool_catalog_pending is None:
-                self._tool_catalog_pending = {}
-            self._tool_catalog_pending.update(catalog)
+            pending_snapshot = {} if self._tool_catalog_pending is None else dict(self._tool_catalog_pending)
+            pending_snapshot.update(catalog)
+            self._tool_catalog_pending = pending_snapshot
             self._tool_catalog = dict(self._tool_catalog_pending)
             return
         if self._tool_catalog_pending is not None:
