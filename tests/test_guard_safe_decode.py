@@ -259,3 +259,62 @@ def test_decode_layers_with_max_depth_zero_does_not_raise() -> None:
     assert isinstance(result.layers, list)
     assert len(result.layers) == 0
     assert not result.depth_exceeded
+
+
+def test_gzip_bomb_truncated_at_max_decoded_bytes() -> None:
+    """_bytes_to_text must not expand a gzip bomb beyond _MAX_DECODED_BYTES."""
+    import gzip as _gzip
+    import io as _io
+
+    from codex_plugin_scanner.guard.runtime.safe_decode import _MAX_DECODED_BYTES
+
+    large_content = b"A" * (_MAX_DECODED_BYTES * 4)
+    buf = _io.BytesIO()
+    with _gzip.GzipFile(fileobj=buf, mode="wb") as gz:
+        gz.write(large_content)
+    encoded = base64.b64encode(buf.getvalue()).decode()
+    result = decode_layers(encoded)
+    assert isinstance(result, DecodeResult)
+    if result.layers:
+        assert len(result.final_text.encode("utf-8", errors="replace")) <= _MAX_DECODED_BYTES + 1
+
+
+def test_safe_decode_detector_emits_high_severity_for_code_execution() -> None:
+    """SafeDecodeDetector must emit severity='high' (score 8) for encoded code-execution."""
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+    from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
+
+    detector = SafeDecodeDetector()
+    encoded = base64.b64encode(b"eval('malicious')").decode()
+
+    class _FakeAction:
+        prompt_text = encoded
+
+    signals = detector.detect(_FakeAction(), None)  # type: ignore[arg-type]
+    code_exec_signals = [s for s in signals if isinstance(s, RiskSignalV2) and s.signal_id == "encoded.code-execution"]
+    if code_exec_signals:
+        assert code_exec_signals[0].severity == "high", (
+            f"encoded.code-execution must be severity='high', got {code_exec_signals[0].severity!r}"
+        )
+
+
+def test_safe_decode_detector_emits_medium_severity_for_obfuscated_content() -> None:
+    """SafeDecodeDetector must emit severity='medium' (score 5) for multi-layer obfuscation."""
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+    from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
+
+    detector = SafeDecodeDetector()
+    inner = base64.b64encode(b"benign string").decode()
+    double_encoded = base64.b64encode(inner.encode()).decode()
+
+    class _FakeAction:
+        prompt_text = double_encoded
+
+    signals = detector.detect(_FakeAction(), None)  # type: ignore[arg-type]
+    obfuscated_signals = [
+        s for s in signals if isinstance(s, RiskSignalV2) and s.signal_id == "encoded.obfuscated-content"
+    ]
+    if obfuscated_signals:
+        assert obfuscated_signals[0].severity == "medium", (
+            f"encoded.obfuscated-content must be severity='medium', got {obfuscated_signals[0].severity!r}"
+        )

@@ -239,7 +239,7 @@ class SafeDecodeDetector:
                 RiskSignalV2(
                     signal_id="encoded.code-execution",
                     category="execution",
-                    severity=severity_label_from_score(0.85),
+                    severity=severity_label_from_score(8),
                     confidence=confidence_label_from_score(0.80),
                     detector=self.detector_id,
                     title="Encoded code-execution payload detected",
@@ -261,7 +261,7 @@ class SafeDecodeDetector:
                 RiskSignalV2(
                     signal_id="encoded.obfuscated-content",
                     category="execution",
-                    severity=severity_label_from_score(0.50),
+                    severity=severity_label_from_score(5),
                     confidence=confidence_label_from_score(0.60),
                     detector=self.detector_id,
                     title="Multi-layer encoded content detected",

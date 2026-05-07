@@ -107,15 +107,20 @@ def _hash_preview(text: str) -> tuple[str, str]:
 
 
 def _bytes_to_text(raw: bytes) -> str:
-    """Convert decoded bytes to text, transparently decompressing gzip/zlib output first."""
+    """Convert decoded bytes to text, transparently decompressing gzip/zlib output first.
+
+    Decompression is bounded by _MAX_DECODED_BYTES to prevent gzip-bomb expansion.
+    """
     import contextlib
+    import gzip
 
     if raw[:2] == b"\x1f\x8b":
-        with contextlib.suppress(zlib.error):
-            raw = zlib.decompress(raw, wbits=16 + zlib.MAX_WBITS)
+        with contextlib.suppress(zlib.error, OSError), gzip.GzipFile(fileobj=io.BytesIO(raw)) as gz:
+            raw = gz.read(_MAX_DECODED_BYTES + 1)
     elif raw[:1] == b"\x78":
         with contextlib.suppress(zlib.error):
-            raw = zlib.decompress(raw)
+            decompressor = zlib.decompressobj()
+            raw = decompressor.decompress(raw, max_length=_MAX_DECODED_BYTES + 1)
     return raw.decode("utf-8", errors="replace")
 
 
