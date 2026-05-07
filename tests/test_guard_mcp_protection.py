@@ -6,6 +6,9 @@ from pathlib import PurePosixPath
 
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.mcp_tool_calls import (
+    _argument_key_names,
+    _resolve_local_schema_ref,
+    _schema_property_key_names,
     build_tool_call_artifact,
     tool_call_risk_categories,
     tool_call_risk_signals,
@@ -982,3 +985,34 @@ def test_mcp_tool_schema_mismatch_warns_when_benign_name_has_dangerous_schema() 
 
     assert tool_call_risk_categories(artifact, {}) == ("command_execution", "tool_schema_mismatch")
     assert "tool name understates dangerous schema capabilities" in tool_call_risk_signals(artifact, {})
+
+
+def test_resolve_local_schema_ref_handles_array_index_segment() -> None:
+    schema = {"$defs": {"ops": [{"properties": {"secret": {"type": "string"}}}]}}
+    resolved = _resolve_local_schema_ref(schema, "#/$defs/ops/0")
+    assert resolved == {"properties": {"secret": {"type": "string"}}}
+
+
+def test_resolve_local_schema_ref_returns_none_for_out_of_bounds_array_index() -> None:
+    schema = {"$defs": {"ops": [{"type": "string"}]}}
+    assert _resolve_local_schema_ref(schema, "#/$defs/ops/5") is None
+
+
+def test_resolve_local_schema_ref_returns_none_for_non_digit_on_list() -> None:
+    schema = {"$defs": {"ops": [{"type": "string"}]}}
+    assert _resolve_local_schema_ref(schema, "#/$defs/ops/missing") is None
+
+
+def test_argument_key_names_handles_cyclic_structure() -> None:
+    outer: dict[str, object] = {"path": "a"}
+    outer["nested"] = outer
+    names = _argument_key_names(outer)
+    assert "path" in names
+    assert "nested" in names
+
+
+def test_schema_property_key_names_handles_cyclic_mapping() -> None:
+    inner: dict[str, object] = {"properties": {"file": {"type": "string"}}}
+    inner["circular"] = inner
+    names = _schema_property_key_names(inner)
+    assert "file" in names

@@ -276,18 +276,26 @@ def _argument_key_risk_categories(arguments: object) -> set[str]:
 
 
 def _argument_key_names(value: object) -> set[str]:
-    if isinstance(value, Mapping):
-        names: set[str] = set()
-        for key, item in value.items():
-            names.add(_normalized_argument_key(str(key)))
-            names.update(_argument_key_names(item))
-        return names
-    if isinstance(value, list | tuple):
-        names: set[str] = set()
-        for item in value:
-            names.update(_argument_key_names(item))
-        return names
-    return set()
+    names: set[str] = set()
+    pending: list[object] = [value]
+    visited_ids: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if isinstance(current, Mapping):
+            current_id = id(current)
+            if current_id in visited_ids:
+                continue
+            visited_ids.add(current_id)
+            for key, item in current.items():
+                names.add(_normalized_argument_key(str(key)))
+                pending.append(item)
+        elif isinstance(current, list | tuple):
+            current_id = id(current)
+            if current_id in visited_ids:
+                continue
+            visited_ids.add(current_id)
+            pending.extend(current)
+    return names
 
 
 def _schema_risk_categories(schema: object) -> set[str]:
@@ -324,11 +332,17 @@ def _schema_property_key_names(
     *,
     _root_schema: Mapping[str, object] | None = None,
     _visited_refs: set[str] | None = None,
+    _visited_ids: set[int] | None = None,
 ) -> set[str]:
     names: set[str] = set()
     if isinstance(value, Mapping):
         root_schema = value if _root_schema is None else _root_schema
         visited_refs = set() if _visited_refs is None else _visited_refs
+        visited_ids = set() if _visited_ids is None else _visited_ids
+        val_id = id(value)
+        if val_id in visited_ids:
+            return names
+        visited_ids.add(val_id)
         ref_value = value.get("$ref")
         if isinstance(ref_value, str) and ref_value not in visited_refs:
             visited_refs.add(ref_value)
@@ -339,6 +353,7 @@ def _schema_property_key_names(
                         resolved,
                         _root_schema=root_schema,
                         _visited_refs=visited_refs,
+                        _visited_ids=visited_ids,
                     )
                 )
         properties = value.get("properties")
@@ -350,6 +365,7 @@ def _schema_property_key_names(
                         item,
                         _root_schema=root_schema,
                         _visited_refs=visited_refs,
+                        _visited_ids=visited_ids,
                     )
                 )
         for collection_key in (
@@ -373,6 +389,7 @@ def _schema_property_key_names(
                     child,
                     _root_schema=root_schema,
                     _visited_refs=visited_refs,
+                    _visited_ids=visited_ids,
                 )
             )
         dependent_schemas = value.get("dependentSchemas")
@@ -383,6 +400,7 @@ def _schema_property_key_names(
                         child,
                         _root_schema=root_schema,
                         _visited_refs=visited_refs,
+                        _visited_ids=visited_ids,
                     )
                 )
         pattern_properties = value.get("patternProperties")
@@ -393,18 +411,21 @@ def _schema_property_key_names(
                         child,
                         _root_schema=root_schema,
                         _visited_refs=visited_refs,
+                        _visited_ids=visited_ids,
                     )
                 )
         return names
     if isinstance(value, list | tuple):
         root_schema = _root_schema
         visited_refs = set() if _visited_refs is None else _visited_refs
+        visited_ids = set() if _visited_ids is None else _visited_ids
         for item in value:
             names.update(
                 _schema_property_key_names(
                     item,
                     _root_schema=root_schema,
                     _visited_refs=visited_refs,
+                    _visited_ids=visited_ids,
                 )
             )
     return names
@@ -415,11 +436,19 @@ def _resolve_local_schema_ref(root_schema: Mapping[str, object], reference: str)
         current: object = root_schema
         for part in reference[2:].split("/"):
             token = part.replace("~1", "/").replace("~0", "~")
-            if not isinstance(current, Mapping):
+            if isinstance(current, Mapping):
+                if token not in current:
+                    return None
+                current = current[token]
+            elif isinstance(current, list | tuple):
+                if not token.isdigit():
+                    return None
+                index = int(token)
+                if index >= len(current):
+                    return None
+                current = current[index]
+            else:
                 return None
-            if token not in current:
-                return None
-            current = current[token]
         return current
     if not reference.startswith("#"):
         return None
