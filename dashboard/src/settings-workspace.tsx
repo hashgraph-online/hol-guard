@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   HiMiniShieldCheck,
   HiMiniLockClosed,
@@ -13,7 +13,8 @@ import {
   SectionLabel,
   Tag
 } from "./approval-center-primitives";
-import { fetchSettings, updateSettings } from "./guard-api";
+import { clearEvidence, exportDiagnostics, fetchSettings, updateSettings, clearPolicy } from "./guard-api";
+import { resolveProtectionLevelCopy } from "./runtime-overview";
 import type { GuardSettings, GuardSettingsPayload } from "./guard-types";
 
 type SettingsState =
@@ -147,11 +148,23 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
   };
 }
 
+export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
+
+export function buildClearPolicyPayload(all: boolean): { harness?: string; all?: boolean } {
+  return { all };
+}
+
 export function SettingsWorkspace() {
   const [state, setState] = useState<SettingsState>({ kind: "loading" });
   const [draft, setDraft] = useState<GuardSettings | null>(null);
   const [saving, setSaving] = useState(false);
-  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [clearingApprovals, setClearingApprovals] = useState(false);
+  const [clearingEvidence, setClearingEvidence] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -176,10 +189,18 @@ export function SettingsWorkspace() {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (saveSuccessTimerRef.current !== null) {
+        clearTimeout(saveSuccessTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleStringChange = useCallback(
     (key: keyof GuardSettings) => (event: ChangeEvent<HTMLSelectElement>) => {
       setDraft((value) => value === null ? value : { ...value, [key]: event.target.value });
-      setSavedMessage(null);
+      setSaveError(null);
     },
     []
   );
@@ -198,7 +219,7 @@ export function SettingsWorkspace() {
         harness_risk_actions: {}
       };
     });
-    setSavedMessage(null);
+    setSaveError(null);
   }, []);
 
   const handleRiskActionChange = useCallback(
@@ -218,7 +239,7 @@ export function SettingsWorkspace() {
           }
         };
       });
-      setSavedMessage(null);
+      setSaveError(null);
     },
     []
   );
@@ -238,24 +259,24 @@ export function SettingsWorkspace() {
         }
       };
     });
-    setSavedMessage(null);
+    setSaveError(null);
   }, []);
 
   const handleTimeoutChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = Number.parseInt(event.target.value, 10);
     setDraft((value) => value === null ? value : { ...value, approval_wait_timeout_seconds: Number.isNaN(nextValue) ? 0 : nextValue });
-    setSavedMessage(null);
+    setSaveError(null);
   }, []);
 
   const handleModeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setDraft((value) => value === null ? value : { ...value, mode: event.target.value as GuardSettings["mode"] });
-    setSavedMessage(null);
+    setSaveError(null);
   }, []);
 
   const handleBooleanChange = useCallback(
     (key: keyof GuardSettings) => (event: ChangeEvent<HTMLInputElement>) => {
       setDraft((value) => value === null ? value : { ...value, [key]: event.target.checked });
-      setSavedMessage(null);
+      setSaveError(null);
     },
     []
   );
@@ -263,7 +284,8 @@ export function SettingsWorkspace() {
   const handleSave = useCallback(async () => {
     if (draft === null) return;
     setSaving(true);
-    setSavedMessage(null);
+    setSaveError(null);
+    setSaveSuccess(false);
     try {
       const payload = await updateSettings({
         ...draft,
@@ -272,13 +294,70 @@ export function SettingsWorkspace() {
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
       setDraft(normalizedPayload.settings);
-      setSavedMessage("Settings saved. New Guard checks use these values immediately.");
+      setSaveSuccess(true);
+      if (saveSuccessTimerRef.current !== null) {
+        clearTimeout(saveSuccessTimerRef.current);
+      }
+      saveSuccessTimerRef.current = setTimeout(() => {
+        setSaveSuccess(false);
+      }, 2000);
     } catch (error) {
-      setSavedMessage(error instanceof Error ? error.message : "Unable to save settings.");
+      setSaveError(error instanceof Error ? error.message : "Unable to save settings.");
     } finally {
       setSaving(false);
     }
   }, [draft]);
+
+  const handleClearApprovals = useCallback(async () => {
+    if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) {
+      return;
+    }
+    setClearingApprovals(true);
+    setActionMessage(null);
+    try {
+      await clearPolicy({ all: true });
+      setActionMessage("All saved approvals cleared.");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to clear approvals.");
+    } finally {
+      setClearingApprovals(false);
+    }
+  }, []);
+
+  const handleClearEvidence = useCallback(async () => {
+    if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) {
+      return;
+    }
+    setClearingEvidence(true);
+    setActionMessage(null);
+    try {
+      await clearEvidence();
+      setActionMessage("Evidence log cleared.");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to clear evidence.");
+    } finally {
+      setClearingEvidence(false);
+    }
+  }, []);
+
+  const handleExportDiagnostics = useCallback(async () => {
+    setExporting(true);
+    setActionMessage(null);
+    try {
+      const blob = await exportDiagnostics();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `guard-diagnostics-${Date.now()}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setActionMessage("Diagnostics exported.");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to export diagnostics.");
+    } finally {
+      setExporting(false);
+    }
+  }, []);
 
   if (state.kind === "loading") {
     return (
@@ -437,6 +516,14 @@ export function SettingsWorkspace() {
                   <div>
                     <p className="text-sm font-semibold text-brand-dark">{risk.label}</p>
                     <p className="mt-1 text-sm leading-6 text-muted-foreground">{risk.description}</p>
+                    <details className="group mt-1">
+                      <summary className="cursor-pointer text-xs font-semibold text-brand-blue [&::-webkit-details-marker]:hidden">
+                        What this means ›
+                      </summary>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        {risk.description} Choosing <strong>Ask again</strong> means Guard will prompt your AI agent each time it tries this action until you approve it for the current session or workspace.
+                      </p>
+                    </details>
                   </div>
                   <SettingSelect
                     label="Guard should"
@@ -506,12 +593,55 @@ export function SettingsWorkspace() {
               <SettingToggle label="Billing features" checked={draft.billing} onChange={handleBooleanChange("billing")} />
             </div>
           </div>
+          <div className="rounded-[1.75rem] border border-red-100 bg-red-50/50 p-5 shadow-sm">
+            <SectionLabel>Data management</SectionLabel>
+            <div className="mt-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-brand-dark">Clear saved approvals</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Removes all stored allow/block decisions. Guard will ask again for previously approved actions.
+                </p>
+                <div className="mt-2">
+                  <ActionButton onClick={handleClearApprovals} disabled={clearingApprovals} variant="danger">
+                    {clearingApprovals ? "Clearing…" : "Clear all approvals"}
+                  </ActionButton>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-brand-dark">Clear evidence log</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Permanently removes all recorded evidence. This cannot be undone.
+                </p>
+                <div className="mt-2">
+                  <ActionButton onClick={handleClearEvidence} disabled={clearingEvidence} variant="danger">
+                    {clearingEvidence ? "Clearing…" : "Clear evidence log"}
+                  </ActionButton>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-brand-dark">Export diagnostics</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Downloads a JSON file with local Guard evidence for debugging or support.
+                </p>
+                <div className="mt-2">
+                  <ActionButton onClick={handleExportDiagnostics} disabled={exporting} variant="secondary">
+                    {exporting ? "Exporting…" : "Export diagnostics"}
+                  </ActionButton>
+                </div>
+              </div>
+              {actionMessage ? (
+                <p className="guard-fade-in text-sm leading-6 text-brand-dark/70">{actionMessage}</p>
+              ) : null}
+            </div>
+          </div>
           <div className="sticky top-24 rounded-[1.75rem] border border-white/80 bg-white/90 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur">
             <ActionButton onClick={handleSave} disabled={saving}>
               {saving ? "Saving…" : "Save settings"}
             </ActionButton>
-            {savedMessage ? (
-              <p className="guard-fade-in mt-3 text-sm leading-6 text-brand-dark/70">{savedMessage}</p>
+            {saveSuccess ? (
+              <p className="guard-fade-in mt-3 text-sm font-semibold leading-6 text-green-700">Settings saved</p>
+            ) : saveError ? (
+              <p className="guard-fade-in mt-3 text-sm leading-6 text-red-600">{saveError}</p>
             ) : (
               <p className="mt-3 text-xs leading-5 text-muted-foreground">
                 Use this for local tuning. Team policy from Guard Cloud may still override some decisions.

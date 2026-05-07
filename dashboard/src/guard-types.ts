@@ -185,6 +185,7 @@ export type GuardRuntimeSnapshot = {
   latest_receipts: GuardReceipt[];
   managed_installs?: GuardManagedInstall[];
   inventory?: GuardInventoryItem[];
+  security_level?: "balanced" | "strict" | "custom";
 };
 
 export type GuardReceipt = {
