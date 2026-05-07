@@ -648,6 +648,19 @@ def test_mcp_server_identity_redacts_http_url_spec_credentials() -> None:
     assert identity.package_version is None
 
 
+def test_mcp_server_identity_redacts_http_url_spec_query_secrets() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "https://example.com/simple/black?token=abc123", "black"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "https://example.com/simple/black"
+    assert identity.package_version is None
+
+
 def test_mcp_server_identity_splits_pip_style_specifier_versions() -> None:
     identity = build_mcp_server_identity(
         config_path=".mcp.json",

@@ -185,8 +185,8 @@ def _split_package_token(value: str) -> tuple[str | None, str | None]:
         if not at_sign or not name:
             return value, None
         return f"{scope}/{name}", version or None
-    if _url_authority_contains_userinfo(value):
-        return _redact_url_userinfo(value), None
+    if "://" in value:
+        return _sanitize_package_url(value), None
     name, at_sign, version = value.rpartition("@")
     if not at_sign or not name:
         return value, None
@@ -224,6 +224,14 @@ def _url_authority_contains_userinfo(value: str) -> bool:
     authority_start, authority_end = authority_bounds
     authority = value[authority_start:authority_end]
     return "@" in authority
+
+
+def _sanitize_package_url(value: str) -> str:
+    without_fragment = value.split("#", 1)[0]
+    without_query = without_fragment.split("?", 1)[0]
+    if _url_authority_contains_userinfo(without_query):
+        return _redact_url_userinfo(without_query)
+    return without_query
 
 
 def _redact_url_userinfo(value: str) -> str:
