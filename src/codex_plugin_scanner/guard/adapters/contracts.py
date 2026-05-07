@@ -47,7 +47,7 @@ class HarnessProtectionContract:
 HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
     HarnessProtectionContract(
         harness="codex",
-        install_aliases=("codex", "codex-cli"),
+        install_aliases=("codex",),
         config_paths=("~/.codex/config.toml",),
         event_surfaces=("shell", "prompt", "mcp_tool", "file_read"),
         native_approval=True,
@@ -57,20 +57,6 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
             "Inline file edits applied directly by the model without a tool call are not visible to Guard."
         ),
         smoke_command="hol-guard install codex --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="codex-app",
-        install_aliases=("codex-app",),
-        config_paths=("~/.codex/config.toml",),
-        event_surfaces=("shell", "prompt"),
-        native_approval=False,
-        browser_fallback=True,
-        resume_support=False,
-        known_blind_spots=(
-            "Codex App does not expose MCP tool hooks; all tool calls bypass Guard. "
-            "File read/write events are not observable."
-        ),
-        smoke_command="hol-guard install codex-app --dry-run",
     ),
     HarnessProtectionContract(
         harness="claude-code",
@@ -100,7 +86,7 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
     ),
     HarnessProtectionContract(
         harness="copilot",
-        install_aliases=("copilot", "copilot-cli", "gh-copilot"),
+        install_aliases=("copilot",),
         config_paths=("~/.config/gh/hosts.yml",),
         event_surfaces=("shell", "prompt"),
         native_approval=True,
@@ -110,20 +96,6 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
             "MCP tool calls routed through the VS Code extension are not visible to the CLI-level Guard hook."
         ),
         smoke_command="hol-guard install copilot --dry-run",
-    ),
-    HarnessProtectionContract(
-        harness="copilot-ide",
-        install_aliases=("copilot-ide", "vscode-copilot"),
-        config_paths=("~/.vscode/extensions/",),
-        event_surfaces=("prompt",),
-        native_approval=False,
-        browser_fallback=True,
-        resume_support=False,
-        known_blind_spots=(
-            "Shell and MCP tool actions executed by the IDE extension are not "
-            "observable without a proxy layer. Guard only intercepts prompt-level events."
-        ),
-        smoke_command="hol-guard install copilot-ide --dry-run",
     ),
     HarnessProtectionContract(
         harness="cursor",
@@ -140,7 +112,7 @@ HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
     ),
     HarnessProtectionContract(
         harness="gemini",
-        install_aliases=("gemini", "gemini-cli"),
+        install_aliases=("gemini",),
         config_paths=("~/.gemini/settings.json",),
         event_surfaces=("shell", "mcp_tool"),
         native_approval=False,

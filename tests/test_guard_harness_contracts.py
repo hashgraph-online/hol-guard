@@ -57,14 +57,6 @@ class TestHarnessRegistry:
         assert "hermes" in names
         assert "openclaw" in names
 
-    def test_codex_app_present(self) -> None:
-        names = {c.harness for c in HARNESS_CONTRACTS}
-        assert "codex-app" in names
-
-    def test_copilot_ide_present(self) -> None:
-        names = {c.harness for c in HARNESS_CONTRACTS}
-        assert "copilot-ide" in names
-
     def test_every_contract_has_smoke_command(self) -> None:
         for c in HARNESS_CONTRACTS:
             assert c.smoke_command.strip(), f"{c.harness} missing smoke_command"
@@ -164,3 +156,19 @@ class TestHarnessContractsTable:
         assert "Native Approval" in table
         assert "Browser Fallback" in table
         assert "Resume" in table
+
+
+class TestContractAliasesMatchAdapter:
+    """All install_aliases in every contract must be accepted by get_adapter()."""
+
+    def test_all_install_aliases_are_resolvable(self) -> None:
+        from codex_plugin_scanner.guard.adapters import get_adapter
+
+        for contract in HARNESS_CONTRACTS:
+            for alias in contract.install_aliases:
+                try:
+                    get_adapter(alias)
+                except ValueError:
+                    pytest.fail(
+                        f"Contract '{contract.harness}' lists alias '{alias}' but get_adapter() does not recognize it"
+                    )
