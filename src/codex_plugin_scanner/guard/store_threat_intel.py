@@ -121,7 +121,7 @@ def latest_cached_bundle(conn: sqlite3.Connection) -> CachedBundle | None:
         SELECT bundle_id, version, source, generated_at, expires_at,
                signature, advisories_json, cached_at
         FROM guard_threat_intel_bundles
-        ORDER BY version DESC
+        ORDER BY version DESC, rowid DESC
         LIMIT 1
         """
     ).fetchone()

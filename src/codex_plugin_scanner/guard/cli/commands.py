@@ -475,7 +475,6 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     advisories_sub = advisories_parser.add_subparsers(dest="advisories_subcommand")
 
     _adv_list = advisories_sub.add_parser("list", help="List cached advisories")
-    _add_guard_common_args(_adv_list)
     _adv_list.add_argument("--json", action="store_true")
     _adv_list.add_argument(
         "--severity",
@@ -484,11 +483,9 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     )
 
     _adv_sync = advisories_sub.add_parser("sync", help="Sync advisories from Guard Cloud")
-    _add_guard_common_args(_adv_sync)
     _adv_sync.add_argument("--json", action="store_true")
 
     _adv_explain = advisories_sub.add_parser("explain", help="Explain a specific advisory by ID")
-    _add_guard_common_args(_adv_explain)
     _adv_explain.add_argument("--json", action="store_true")
     _adv_explain.add_argument("advisory_id", help="Advisory ID to explain")
 

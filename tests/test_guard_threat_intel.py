@@ -7,10 +7,12 @@ T543-T545 cloud sync client stubs and fallbacks.
 
 from __future__ import annotations
 
+import argparse
 import base64
 import json
 import sqlite3
 import time
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.backends import default_backend
@@ -342,8 +344,15 @@ class TestUpsertAndFetchBundle:
         assert cached is not None
         assert cached.is_fresh(now=now) is False
 
+    def test_latest_returns_newest_row_on_version_tie(self) -> None:
+        conn = _in_memory_db()
+        upsert_bundle(conn, _make_bundle(version=5), bundle_id="b5-old")
+        upsert_bundle(conn, _make_bundle(version=5), bundle_id="b5-new")
+        cached = latest_cached_bundle(conn)
+        assert cached is not None
+        assert cached.version == 5
+        assert cached.bundle_id == "b5-new"
 
-class TestMatchStorage:
     """T542 — match rows can be inserted and filtered."""
 
     def _make_match(self, **overrides: object) -> ThreatIntelMatch:
@@ -521,3 +530,23 @@ class TestSeverityRank:
 
     def test_unknown_treated_as_info(self) -> None:
         assert advisory_severity_rank("banana") == advisory_severity_rank("info")
+
+
+class TestAdvisoriesSubcommandArgParsing:
+    """Regression — advisory subcommands must not overwrite parent --home value."""
+
+    def test_home_flag_preserved_on_list_subcommand(self, tmp_path: Path) -> None:
+        from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser
+
+        parser = argparse.ArgumentParser()
+        add_guard_root_parser(parser)
+        args = parser.parse_args(["advisories", "--home", str(tmp_path), "list"])
+        assert str(args.home) == str(tmp_path)
+
+    def test_home_flag_preserved_on_explain_subcommand(self, tmp_path: Path) -> None:
+        from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser
+
+        parser = argparse.ArgumentParser()
+        add_guard_root_parser(parser)
+        args = parser.parse_args(["advisories", "--home", str(tmp_path), "explain", "ADV-001"])
+        assert str(args.home) == str(tmp_path)
