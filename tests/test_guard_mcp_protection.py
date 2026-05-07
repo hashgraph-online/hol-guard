@@ -445,9 +445,23 @@ def test_mcp_server_identity_skips_uvx_prerelease_option_values_before_package()
 
 def test_mcp_server_identity_skips_uvx_additional_value_flags_before_package() -> None:
     option_args = (
+        ("--allow-insecure-host", "example.test"),
+        ("--cache-dir", ".uv-cache"),
+        ("--color", "never"),
+        ("--config-settings-package", "ruff:build=1"),
         ("--exclude-newer", "2024-01-01"),
+        ("--exclude-newer-package", "ruff=2024-01-01"),
         ("--fork-strategy", "fewest"),
         ("--index-strategy", "first-index"),
+        ("--link-mode", "copy"),
+        ("--no-binary-package", "ruff"),
+        ("--no-build-isolation-package", "ruff"),
+        ("--no-build-package", "ruff"),
+        ("--no-sources-package", "ruff"),
+        ("--python-platform", "linux"),
+        ("--refresh-package", "ruff"),
+        ("--reinstall-package", "ruff"),
+        ("--torch-backend", "cpu"),
         ("--upgrade-package", "typing-extensions"),
     )
     for option, value in option_args:
