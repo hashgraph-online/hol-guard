@@ -174,6 +174,9 @@ def _package_token(*, command_name: str, args: tuple[str, ...]) -> str | None:
 
 
 def _split_package_token(value: str) -> tuple[str | None, str | None]:
+    pip_style_name, pip_style_version = _split_pip_style_specifier(value)
+    if pip_style_name is not None:
+        return pip_style_name, pip_style_version
     if value.startswith("@"):
         scope, slash, remainder = value.partition("/")
         if not slash or not remainder:
@@ -195,6 +198,23 @@ def _command_name(value: str) -> str:
     if command_name.endswith((".cmd", ".exe", ".bat", ".ps1")):
         command_name = PurePath(command_name).stem
     return command_name
+
+
+def _split_pip_style_specifier(value: str) -> tuple[str | None, str | None]:
+    if "://" in value:
+        return None, None
+    for separator in ("===", "==", "~=", "!=", "<=", ">=", "<", ">"):
+        name, matched, version = value.partition(separator)
+        if not matched:
+            continue
+        normalized_name = name.strip()
+        normalized_version = version.strip()
+        if not normalized_name or not normalized_version:
+            continue
+        if separator in {"==", "==="}:
+            return normalized_name, normalized_version
+        return normalized_name, f"{separator}{normalized_version}"
+    return None, None
 
 
 def _url_authority_contains_userinfo(value: str) -> bool:
@@ -240,6 +260,7 @@ def _package_selector_flags(command_name: str) -> set[str]:
         "bunx": {"--package", "-p"},
         "npm": {"--package"},
         "npx": {"--package", "-p"},
+        "pnpm": {"--package"},
     }
     return command_specific.get(command_name, set())
 
