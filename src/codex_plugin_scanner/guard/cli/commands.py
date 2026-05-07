@@ -472,6 +472,22 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     advisories_parser = guard_subparsers.add_parser("advisories", help="List cached Guard advisories and verdicts")
     _add_guard_common_args(advisories_parser)
     advisories_parser.add_argument("--json", action="store_true")
+    advisories_sub = advisories_parser.add_subparsers(dest="advisories_subcommand")
+
+    _adv_list = advisories_sub.add_parser("list", help="List cached advisories")
+    _adv_list.add_argument("--json", action="store_true")
+    _adv_list.add_argument(
+        "--severity",
+        choices=["low", "medium", "high", "critical"],
+        help="Filter by minimum severity",
+    )
+
+    _adv_sync = advisories_sub.add_parser("sync", help="Sync advisories from Guard Cloud")
+    _adv_sync.add_argument("--json", action="store_true")
+
+    _adv_explain = advisories_sub.add_parser("explain", help="Explain a specific advisory by ID")
+    _adv_explain.add_argument("--json", action="store_true")
+    _adv_explain.add_argument("advisory_id", help="Advisory ID to explain")
 
     events_parser = guard_subparsers.add_parser("events", help="List local Guard lifecycle events")
     _add_guard_common_args(events_parser)
@@ -1081,11 +1097,44 @@ def run_guard_command(
         return 0
 
     if args.guard_command == "advisories":
-        _emit(
-            "advisories",
-            {"generated_at": _now(), "items": store.list_cached_advisories()},
-            getattr(args, "json", False),
-        )
+        adv_sub = getattr(args, "advisories_subcommand", None)
+        if adv_sub == "sync":
+            credentials = store.get_sync_credentials()
+            if credentials is None:
+                _emit(
+                    "advisories_sync",
+                    {"generated_at": _now(), "status": "no_cloud_sync_configured"},
+                    getattr(args, "json", False),
+                )
+            else:
+                _emit(
+                    "advisories_sync",
+                    {"generated_at": _now(), "status": "advisory_sync_not_available", "synced": False},
+                    getattr(args, "json", False),
+                )
+        elif adv_sub == "explain":
+            target_id = getattr(args, "advisory_id", None)
+            all_advs = store.list_cached_advisories(limit=None)
+            match = next(
+                (a for a in all_advs if a.get("advisory_id") == target_id or a.get("id") == target_id),
+                None,
+            )
+            if match:
+                _emit("advisory_explain", match, getattr(args, "json", False))
+            else:
+                _emit("advisory_explain", {"error": f"advisory {target_id!r} not found"}, getattr(args, "json", False))
+        else:
+            all_advs = store.list_cached_advisories()
+            sev_filter = getattr(args, "severity", None)
+            _sev_rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+            if sev_filter and sev_filter in _sev_rank:
+                min_rank = _sev_rank[sev_filter]
+                all_advs = [a for a in all_advs if _sev_rank.get(str(a.get("severity", "")).lower(), -1) >= min_rank]
+            _emit(
+                "advisories",
+                {"generated_at": _now(), "items": all_advs},
+                getattr(args, "json", False),
+            )
         return 0
 
     if args.guard_command == "events":
