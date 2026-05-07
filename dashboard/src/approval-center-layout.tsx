@@ -528,18 +528,30 @@ function DecisionWorkspace(props: {
     if (props.detail.kind !== "ready") return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (submitting !== null) return;
+      if (confirmPending !== null) {
+        if (event.key === "Enter") {
+          handleConfirmResolve();
+          return;
+        }
+        if (event.key === "Escape") {
+          handleCancelConfirm();
+          return;
+        }
+        return;
+      }
       const target = event.target as HTMLElement;
       if (
         target.tagName === "INPUT" ||
         target.tagName === "TEXTAREA" ||
-        target.tagName === "SELECT"
+        target.tagName === "SELECT" ||
+        target.isContentEditable
       ) return;
       if (event.key === "a" || event.key === "A") handleRequestResolve("allow");
       else if (event.key === "b" || event.key === "B") handleRequestResolve("block");
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [props.detail.kind, submitting, handleRequestResolve]);
+  }, [props.detail.kind, submitting, handleRequestResolve, confirmPending, handleConfirmResolve, handleCancelConfirm]);
 
   if (props.detail.kind === "loading") {
     return (

@@ -321,6 +321,36 @@ export function App() {
           });
         }
       }}
+      onBulkApprove={async (ids) => {
+        await Promise.allSettled(
+          ids.map((id) =>
+            resolveRequest({ request_id: id, decision: "allow", scope: "once" })
+          )
+        );
+        setResolutionMessage(`${ids.length} item${ids.length !== 1 ? "s" : ""} approved.`);
+        navigate("/");
+        const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchReceipts(), fetchPolicies()]);
+        if (snapshotResult.status === "fulfilled") {
+          setRuntime({ kind: "ready", snapshot: snapshotResult.value });
+          setRequests({ kind: "ready", items: snapshotResult.value.items });
+        }
+        if (receiptsResult.status === "fulfilled") {
+          setReceipts({ kind: "ready", items: receiptsResult.value });
+        } else {
+          setReceipts({
+            kind: "error",
+            message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history."
+          });
+        }
+        if (policiesResult.status === "fulfilled") {
+          setPolicies({ kind: "ready", items: policiesResult.value });
+        } else {
+          setPolicies({
+            kind: "error",
+            message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load saved approvals."
+          });
+        }
+      }}
       fleetContent={
         runtime.kind === "ready" ? (
           <FleetWorkspace

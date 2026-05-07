@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { HiMiniCheck, HiMiniXMark } from "react-icons/hi2";
 import type { GuardApprovalRequest } from "./guard-types";
 
@@ -95,11 +96,28 @@ type ConfirmModalProps = {
 };
 
 export function ConfirmModal(props: ConfirmModalProps) {
+  const handleBackdropClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (e.target === e.currentTarget) props.onCancel();
+    },
+    [props.onCancel]
+  );
+
+  const isAllow = props.action === "allow";
+  const titleText = isAllow ? "Broad approval — are you sure?" : "Broad block — are you sure?";
+  const confirmText = isAllow ? "Confirm approval" : "Confirm block";
+  const confirmClass = isAllow
+    ? "rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90"
+    : "rounded-full bg-brand-purple px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-purple/90";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm"
+      onClick={handleBackdropClick}
+    >
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
         <h2 className="text-lg font-semibold tracking-tight text-brand-dark">
-          Broad approval — are you sure?
+          {titleText}
         </h2>
         <p className="mt-3 text-sm leading-6 text-brand-dark/70">
           This will remember your choice for {props.scopeLabel}. This is harder to undo.
@@ -115,9 +133,9 @@ export function ConfirmModal(props: ConfirmModalProps) {
           <button
             type="button"
             onClick={props.onConfirm}
-            className="rounded-full bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90"
+            className={confirmClass}
           >
-            Confirm {props.scopeLabel}
+            {confirmText}
           </button>
         </div>
       </div>
