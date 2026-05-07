@@ -587,6 +587,19 @@ def test_mcp_server_identity_splits_pip_style_specifier_versions() -> None:
     assert identity.package_version == "2.0.0"
 
 
+def test_mcp_server_identity_splits_pip_style_single_equals_versions() -> None:
+    identity = build_mcp_server_identity(
+        config_path=".mcp.json",
+        command="pipx",
+        args=("run", "--spec", "mypackage=2.0.0", "my-app"),
+        transport="stdio",
+        env={},
+    )
+
+    assert identity.package_name == "mypackage"
+    assert identity.package_version == "2.0.0"
+
+
 def test_mcp_tool_identity_normalizes_set_and_path_schema_values() -> None:
     first = build_mcp_tool_identity(
         server_hash="server",
