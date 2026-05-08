@@ -131,6 +131,55 @@ export type GuardApprovalRequest = {
   resolved_at: string | null;
   action_envelope_json?: GuardActionEnvelope | null;
   decision_v2_json?: GuardDecisionV2 | null;
+  action_identity?: string | null;
+  queue_group_id?: string | null;
+  dedupe_count?: number;
+  last_seen_at?: string | null;
+  display_status?: string;
+};
+
+export type GuardApprovalPageStatus = "pending" | "resolved" | "all";
+
+export type GuardApprovalPageFilters = {
+  status?: GuardApprovalPageStatus;
+  harness?: string;
+  search?: string;
+  cursor?: string;
+  limit?: number;
+};
+
+export type GuardApprovalPage = {
+  items: GuardApprovalRequest[];
+  next_cursor: string | null;
+  total_pending_count: number;
+  total_count: number;
+  status: GuardApprovalPageStatus;
+};
+
+export type GuardQueueSummary = {
+  active_request_id: string | null;
+  next_request_id: string | null;
+  remaining_pending_count: number;
+  next_selectable_request_id: string | null;
+};
+
+export type GuardQueueResolutionCopy = {
+  title: string;
+  body: string;
+};
+
+export type GuardQueueResolutionResult = {
+  resolved: boolean;
+  item: GuardApprovalRequest | null;
+  resolved_request: GuardApprovalRequest | null;
+  remaining_pending_count: number;
+  next_selectable_request_id: string | null;
+  remaining_pending_summaries: GuardApprovalRequest[];
+  resolved_duplicate_ids: string[];
+  resolved_scope_ids?: string[];
+  resolution_summary: string;
+  retry_hint: string | null;
+  copy: GuardQueueResolutionCopy | null;
 };
 
 export type GuardRuntimeState = {
@@ -183,6 +232,7 @@ export type GuardRuntimeSnapshot = {
   fleet_url: string;
   connect_url: string;
   items: GuardApprovalRequest[];
+  queue_summary?: GuardQueueSummary;
   latest_receipts: GuardReceipt[];
   managed_installs?: GuardManagedInstall[];
   inventory?: GuardInventoryItem[];

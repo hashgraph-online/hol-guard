@@ -9,11 +9,17 @@ import {
 import type {
   GuardActionEnvelope,
   GuardActionType,
+  GuardApprovalPage,
+  GuardApprovalPageFilters,
+  GuardApprovalPageStatus,
   GuardApprovalRequest,
   GuardArtifactDiff,
   GuardDecisionV2,
   GuardInventoryItem,
   GuardPolicyDecision,
+  GuardQueueResolutionCopy,
+  GuardQueueResolutionResult,
+  GuardQueueSummary,
   GuardReceipt,
   GuardRuntimeSnapshot,
   GuardSettingsPayload,
@@ -42,10 +48,27 @@ type RawGuardApprovalRequest = Omit<GuardApprovalRequest, "action_envelope_json"
 
 type ApprovalRequestListPayload = {
   items?: RawGuardApprovalRequest[] | null;
+  next_cursor?: unknown;
+  total_pending_count?: unknown;
+  total_count?: unknown;
+  status?: unknown;
 };
 
 type RuntimeSnapshotPayload = Omit<GuardRuntimeSnapshot, "items"> & {
   items?: RawGuardApprovalRequest[] | null;
+  queue_summary?: unknown;
+};
+
+type QueueResolutionPayload = Omit<
+  GuardQueueResolutionResult,
+  "item" | "resolved_request" | "remaining_pending_summaries" | "resolved_duplicate_ids" | "resolved_scope_ids" | "copy"
+> & {
+  item?: RawGuardApprovalRequest | null;
+  resolved_request?: RawGuardApprovalRequest | null;
+  remaining_pending_summaries?: RawGuardApprovalRequest[] | null;
+  resolved_duplicate_ids?: unknown;
+  resolved_scope_ids?: unknown;
+  copy?: unknown;
 };
 
 async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -171,8 +194,16 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item): item is string => typeof item === "string");
 }
 
+function isNonNegativeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isApprovalPageStatus(value: unknown): value is GuardApprovalPageStatus {
+  return value === "pending" || value === "resolved" || value === "all";
 }
 
 export function parseActionEnvelope(raw: unknown): GuardActionEnvelope | null {
@@ -350,12 +381,117 @@ function normalizeApprovalRequests(items: RawGuardApprovalRequest[] | null | und
   return items.map(normalizeApprovalRequest);
 }
 
+function normalizeOptionalApprovalRequest(item: RawGuardApprovalRequest | null | undefined): GuardApprovalRequest | null {
+  return isRecord(item) ? normalizeApprovalRequest(item) : null;
+}
+
+function normalizeApprovalPage(
+  payload: ApprovalRequestListPayload,
+  statusFallback: GuardApprovalPageStatus = "pending"
+): GuardApprovalPage {
+  return {
+    items: normalizeApprovalRequests(payload.items),
+    next_cursor: isStringOrNull(payload.next_cursor) ? payload.next_cursor : null,
+    total_pending_count: isNonNegativeNumber(payload.total_pending_count) ? payload.total_pending_count : 0,
+    total_count: isNonNegativeNumber(payload.total_count) ? payload.total_count : 0,
+    status: isApprovalPageStatus(payload.status) ? payload.status : statusFallback
+  };
+}
+
+function normalizeQueueSummary(raw: unknown, pendingCount: number): GuardQueueSummary {
+  if (!isRecord(raw)) {
+    return {
+      active_request_id: null,
+      next_request_id: null,
+      remaining_pending_count: pendingCount,
+      next_selectable_request_id: null
+    };
+  }
+  const remainingPendingCount = raw["remaining_pending_count"];
+  return {
+    active_request_id: isStringOrNull(raw["active_request_id"]) ? raw["active_request_id"] : null,
+    next_request_id: isStringOrNull(raw["next_request_id"]) ? raw["next_request_id"] : null,
+    remaining_pending_count: isNonNegativeNumber(remainingPendingCount) ? remainingPendingCount : pendingCount,
+    next_selectable_request_id: isStringOrNull(raw["next_selectable_request_id"]) ? raw["next_selectable_request_id"] : null
+  };
+}
+
+function normalizeQueueCopy(raw: unknown): GuardQueueResolutionCopy | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const title = raw["title"];
+  const body = raw["body"];
+  if (typeof title !== "string" || typeof body !== "string") {
+    return null;
+  }
+  return { title, body };
+}
+
+function normalizeQueueResolution(payload: QueueResolutionPayload): GuardQueueResolutionResult {
+  return {
+    resolved: payload.resolved === true,
+    item: normalizeOptionalApprovalRequest(payload.item),
+    resolved_request: normalizeOptionalApprovalRequest(payload.resolved_request),
+    remaining_pending_count: isNonNegativeNumber(payload.remaining_pending_count) ? payload.remaining_pending_count : 0,
+    next_selectable_request_id: isStringOrNull(payload.next_selectable_request_id)
+      ? payload.next_selectable_request_id
+      : null,
+    remaining_pending_summaries: normalizeApprovalRequests(payload.remaining_pending_summaries),
+    resolved_duplicate_ids: isStringArray(payload.resolved_duplicate_ids) ? payload.resolved_duplicate_ids : [],
+    resolved_scope_ids: isStringArray(payload.resolved_scope_ids) ? payload.resolved_scope_ids : undefined,
+    resolution_summary: typeof payload.resolution_summary === "string" ? payload.resolution_summary : "",
+    retry_hint: isStringOrNull(payload.retry_hint) ? payload.retry_hint : null,
+    copy: normalizeQueueCopy(payload.copy)
+  };
+}
+
+function queueSearchParams(input: GuardApprovalPageFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (input.status) {
+    params.set("status", input.status);
+  }
+  if (input.harness) {
+    params.set("harness", input.harness);
+  }
+  if (input.search) {
+    params.set("search", input.search);
+  }
+  if (input.cursor) {
+    params.set("cursor", input.cursor);
+  }
+  if (typeof input.limit === "number") {
+    params.set("limit", String(input.limit));
+  }
+  return params;
+}
+
+function queuePath(basePath: string, params: URLSearchParams): string {
+  const query = params.toString();
+  return query ? `${basePath}?${query}` : basePath;
+}
+
 export async function fetchRequests(): Promise<GuardApprovalRequest[]> {
   if (isGuardDemoMode()) {
     return getDemoRequests();
   }
-  const payload = await readJson<ApprovalRequestListPayload>("/v1/requests");
-  return normalizeApprovalRequests(payload.items);
+  const page = await fetchApprovalPage();
+  return page.items;
+}
+
+export async function fetchApprovalPage(input: GuardApprovalPageFilters = {}): Promise<GuardApprovalPage> {
+  if (isGuardDemoMode()) {
+    const items = getDemoRequests();
+    return {
+      items,
+      next_cursor: null,
+      total_pending_count: items.filter((item) => item.status === "pending").length,
+      total_count: items.length,
+      status: input.status ?? "pending"
+    };
+  }
+  const payload = await readJson<ApprovalRequestListPayload>(queuePath("/v1/requests", queueSearchParams(input)));
+  return normalizeApprovalPage(payload, input.status ?? "pending");
 }
 
 export async function fetchRuntimeSnapshot(): Promise<GuardRuntimeSnapshot> {
@@ -363,7 +499,23 @@ export async function fetchRuntimeSnapshot(): Promise<GuardRuntimeSnapshot> {
     return buildDemoRuntimeSnapshot();
   }
   const snapshot = await readJson<RuntimeSnapshotPayload>("/v1/runtime");
-  return { ...snapshot, items: normalizeApprovalRequests(snapshot.items) };
+  return {
+    ...snapshot,
+    items: normalizeApprovalRequests(snapshot.items),
+    queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count)
+  };
+}
+
+export async function fetchQueueSummary(input: { activeRequestId?: string } = {}): Promise<GuardQueueSummary> {
+  if (isGuardDemoMode()) {
+    return buildDemoRuntimeSnapshot().queue_summary ?? normalizeQueueSummary(null, getDemoRequests().length);
+  }
+  const params = new URLSearchParams();
+  if (input.activeRequestId) {
+    params.set("active_request_id", input.activeRequestId);
+  }
+  const snapshot = await readJson<RuntimeSnapshotPayload>(queuePath("/v1/runtime", params));
+  return normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count);
 }
 
 export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
@@ -424,6 +576,12 @@ export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
     fleet_url: fleetUrl,
     connect_url: connectUrl,
     items: demoRequests,
+    queue_summary: {
+      active_request_id: null,
+      next_request_id: demoRequests[0]?.request_id ?? null,
+      remaining_pending_count: demoRequests.length,
+      next_selectable_request_id: demoRequests[0]?.request_id ?? null
+    },
     latest_receipts: demoReceipts.slice(0, 10)
   };
 }
@@ -592,11 +750,32 @@ export async function resolveRequest(input: {
   workspace?: string;
   reason: string;
 }): Promise<void> {
+  await resolveRequestWithQueueResult(input);
+}
+
+export async function resolveRequestWithQueueResult(input: {
+  requestId: string;
+  action: "allow" | "block";
+  scope: string;
+  workspace?: string;
+  reason: string;
+}): Promise<GuardQueueResolutionResult> {
   if (isGuardDemoMode()) {
-    return;
+    return {
+      resolved: true,
+      item: null,
+      resolved_request: null,
+      remaining_pending_count: 0,
+      next_selectable_request_id: null,
+      remaining_pending_summaries: [],
+      resolved_duplicate_ids: [],
+      resolution_summary: "Decision saved.",
+      retry_hint: null,
+      copy: null
+    };
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
-  await readJson(`/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`, {
+  const payload = await readJson<QueueResolutionPayload>(`/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -609,6 +788,7 @@ export async function resolveRequest(input: {
       reason: input.reason || undefined
     })
   });
+  return normalizeQueueResolution(payload);
 }
 
 export async function clearEvidence(): Promise<void> {
@@ -642,4 +822,3 @@ export async function repairApprovalCenter(): Promise<{ repaired: boolean; clear
   }
   return response.json() as Promise<{ repaired: boolean; cleared: string[] }>;
 }
-
