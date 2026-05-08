@@ -120,6 +120,8 @@ def apply_approval_resolution(
     workspace: str | None,
     reason: str | None,
     now: str | None = None,
+    return_queue_result: bool = False,
+    resolve_scope_matches: bool = True,
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     if request is None:
@@ -143,19 +145,56 @@ def apply_approval_resolution(
     store.upsert_policy(decision, now or _now())
     resolved_at = now or _now()
     resolution_harness = None if scope == "global" else str(request["harness"])
-    resolved_ids = store.resolve_matching_approval_requests(
-        harness=resolution_harness,
-        scope=scope,
-        artifact_id=str(request["artifact_id"]) if scope == "artifact" else None,
-        workspace=workspace if scope == "workspace" else None,
-        publisher=(
-            str(request["publisher"]) if scope == "publisher" and isinstance(request.get("publisher"), str) else None
-        ),
-        resolution_action=action,
-        resolution_scope=scope,
-        reason=reason,
-        resolved_at=resolved_at,
-    )
+    if return_queue_result:
+        result = store.resolve_request_with_queue_result(
+            request_id,
+            resolution_action=action,
+            resolution_scope=scope,
+            reason=reason,
+            resolved_at=resolved_at,
+        )
+        if result.get("resolved") is not True:
+            error = result.get("error")
+            if error == "already_resolved":
+                raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
+            if error == "not_found":
+                raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
+        if resolve_scope_matches:
+            resolved_scope_ids = store.resolve_matching_approval_requests(
+                harness=resolution_harness,
+                scope=scope,
+                artifact_id=str(request["artifact_id"]) if scope == "artifact" else None,
+                workspace=workspace if scope == "workspace" else None,
+                publisher=(
+                    str(request["publisher"])
+                    if scope == "publisher" and isinstance(request.get("publisher"), str)
+                    else None
+                ),
+                resolution_action=action,
+                resolution_scope=scope,
+                reason=reason,
+                resolved_at=resolved_at,
+            )
+            if resolved_scope_ids:
+                _refresh_queue_result(store, result, resolved_scope_ids)
+        return result
+    resolved_ids: list[str] = []
+    if resolve_scope_matches:
+        resolved_ids = store.resolve_matching_approval_requests(
+            harness=resolution_harness,
+            scope=scope,
+            artifact_id=str(request["artifact_id"]) if scope == "artifact" else None,
+            workspace=workspace if scope == "workspace" else None,
+            publisher=(
+                str(request["publisher"])
+                if scope == "publisher" and isinstance(request.get("publisher"), str)
+                else None
+            ),
+            resolution_action=action,
+            resolution_scope=scope,
+            reason=reason,
+            resolved_at=resolved_at,
+        )
     if request_id not in resolved_ids:
         store.resolve_approval_request(
             request_id,
@@ -168,6 +207,26 @@ def apply_approval_resolution(
     if updated is None:
         raise ValueError(f"Approval request disappeared: {request_id}")
     return updated
+
+
+def _refresh_queue_result(
+    store: GuardStore,
+    result: dict[str, object],
+    resolved_scope_ids: list[str],
+) -> None:
+    page = store.list_pending_approval_summaries(limit=10)
+    next_request = store.get_next_pending_request()
+    remaining_count = int(page["total_pending_count"])
+    result["remaining_pending_count"] = remaining_count
+    result["next_selectable_request_id"] = next_request["request_id"] if next_request is not None else None
+    result["remaining_pending_summaries"] = page["items"]
+    result["resolved_scope_ids"] = resolved_scope_ids
+    if remaining_count == 0:
+        result["resolution_summary"] = "Decision saved. No blocked actions remain."
+    elif remaining_count == 1:
+        result["resolution_summary"] = "Decision saved. 1 blocked action remains."
+    else:
+        result["resolution_summary"] = f"Decision saved. {remaining_count} blocked actions remain."
 
 
 def approval_center_hint(
@@ -198,8 +257,15 @@ def build_runtime_snapshot(
     now: str | None = None,
     request_limit: int = 200,
     receipt_limit: int = 25,
+    active_request_id: str | None = None,
 ) -> dict[str, object]:
     pending_requests = store.list_approval_requests(limit=request_limit)
+    queue_page = store.list_pending_approval_summaries(limit=1)
+    queue_items = queue_page["items"] if isinstance(queue_page["items"], list) else []
+    active_request = store.get_approval_request(active_request_id) if active_request_id else None
+    active_is_pending = active_request is not None and active_request.get("status") == "pending"
+    first_request_id = str(queue_items[0]["request_id"]) if queue_items else None
+    next_request_id = active_request_id if active_is_pending else first_request_id
     latest_receipts = store.list_receipts(limit=receipt_limit)
     cloud_context = _build_runtime_cloud_context(store)
     headline_state = _resolve_runtime_headline_state(
@@ -212,6 +278,13 @@ def build_runtime_snapshot(
         "approval_center_url": approval_center_url,
         "runtime_state": store.get_runtime_state(),
         "pending_count": store.count_approval_requests(),
+        "queue_summary": {
+            "active_request_id": active_request_id if active_is_pending else None,
+            "next_request_id": next_request_id,
+            "remaining_pending_count": int(queue_page["total_pending_count"]),
+            "next_selectable_request_id": next_request_id,
+        },
+        "next_request_id": next_request_id,
         "receipt_count": store.count_receipts(),
         "headline_state": headline_state,
         "headline_label": _runtime_headline_label(headline_state),

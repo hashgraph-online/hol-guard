@@ -139,7 +139,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
           <div className="mx-auto max-w-6xl">
             {props.view === "home" ? (
               <>
-                <RuntimeBanner runtime={props.runtime} />
+                <RuntimeBanner runtime={props.runtime} inventory={props.inventory} />
                 {props.homeContent}
               </>
             ) : props.view === "evidence" ? (
@@ -168,7 +168,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
   );
 }
 
-function RuntimeBanner(props: { runtime: RuntimeState }) {
+function RuntimeBanner(props: { runtime: RuntimeState; inventory: GuardInventoryItem[] }) {
   if (props.runtime.kind === "loading") {
     return <div className="mb-6 guard-skeleton h-20 w-full" />;
   }

@@ -1,8 +1,11 @@
 import {
   buildDemoRuntimeSnapshot,
+  fetchApprovalPage,
+  fetchQueueSummary,
   normalizeApprovalRequest,
   parseActionEnvelope,
-  parseDecisionV2
+  parseDecisionV2,
+  resolveRequestWithQueueResult
 } from "./guard-api";
 import { resolveCloudSyncHealthCopy } from "./runtime-overview";
 import {
@@ -403,3 +406,175 @@ const requestWithMixedSignals: GuardApprovalRequest = {
 };
 const mixedEvidence = deriveDataFlowEvidence(requestWithMixedSignals);
 assert(mixedEvidence !== null && mixedEvidence.count === 2, "T094: count reflects only data-flow signals, not unrelated ones");
+
+type RecordedFetch = {
+  url: string;
+  init?: RequestInit;
+};
+
+type StorageShape = {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+  clear(): void;
+  key(index: number): string | null;
+  readonly length: number;
+};
+
+function installGuardWindow(search: string): void {
+  const storage = new Map<string, string>();
+  const sessionStorage: StorageShape = {
+    getItem(key: string): string | null {
+      return storage.get(key) ?? null;
+    },
+    setItem(key: string, value: string): void {
+      storage.set(key, value);
+    },
+    removeItem(key: string): void {
+      storage.delete(key);
+    },
+    clear(): void {
+      storage.clear();
+    },
+    key(index: number): string | null {
+      return Array.from(storage.keys())[index] ?? null;
+    },
+    get length(): number {
+      return storage.size;
+    }
+  };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      location: {
+        origin: "http://127.0.0.1:4174",
+        pathname: "/",
+        search,
+        hash: ""
+      },
+      sessionStorage
+    }
+  });
+}
+
+function installFetchStub(payloads: Record<string, object>): RecordedFetch[] {
+  const calls: RecordedFetch[] = [];
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const url = input instanceof Request ? input.url : String(input);
+    calls.push({ url, init });
+    const parsed = new URL(url, "http://127.0.0.1:4174");
+    const payload = payloads[parsed.pathname] ?? payloads[`${parsed.pathname}${parsed.search}`];
+    if (!payload) {
+      return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+    }
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  };
+  return calls;
+}
+
+function headerValue(init: RequestInit | undefined, key: string): string | null {
+  return new Headers(init?.headers).get(key);
+}
+
+const pageItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-page",
+  harness: "copilot",
+  action_envelope_json: BASE_ENVELOPE,
+  decision_v2_json: BASE_DECISION_V2
+};
+
+installGuardWindow("?guard-token=token-queue&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const fetchApprovalCalls = installFetchStub({
+  "/v1/requests": {
+    items: [pageItem],
+    next_cursor: "cursor-two",
+    total_pending_count: 3,
+    total_count: 7,
+    status: "all"
+  }
+});
+
+const approvalPage = await fetchApprovalPage({
+  status: "all",
+  harness: "copilot",
+  search: "plugin secret",
+  cursor: "cursor-one",
+  limit: 25
+});
+const approvalUrl = new URL(fetchApprovalCalls[0].url);
+
+assert(approvalUrl.origin === "http://127.0.0.1:4781", "L078: fetchApprovalPage targets local Guard daemon origin");
+assert(approvalUrl.searchParams.get("status") === "all", "L078: fetchApprovalPage forwards status filter");
+assert(approvalUrl.searchParams.get("harness") === "copilot", "L078: fetchApprovalPage forwards harness filter");
+assert(approvalUrl.searchParams.get("search") === "plugin secret", "L078: fetchApprovalPage forwards search filter");
+assert(approvalUrl.searchParams.get("cursor") === "cursor-one", "L078: fetchApprovalPage forwards cursor");
+assert(approvalUrl.searchParams.get("limit") === "25", "L078: fetchApprovalPage forwards limit");
+assert(headerValue(fetchApprovalCalls[0].init, "X-Guard-Token") === "token-queue", "L078: fetchApprovalPage sends Guard token");
+assert(approvalPage.items[0].action_envelope_json?.action_id === "act-abc123", "L078: fetchApprovalPage normalizes action envelope");
+assert(approvalPage.items[0].decision_v2_json?.user_title === "Wants to read a credential file", "L078: fetchApprovalPage normalizes decision v2");
+assert(approvalPage.next_cursor === "cursor-two", "L078: fetchApprovalPage returns next cursor");
+assert(approvalPage.total_pending_count === 3, "L078: fetchApprovalPage returns pending total");
+assert(approvalPage.total_count === 7, "L078: fetchApprovalPage returns filtered total");
+
+installGuardWindow("?guard-token=token-runtime&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const fetchQueueCalls = installFetchStub({
+  "/v1/runtime": {
+    ...snapshot,
+    queue_summary: {
+      active_request_id: "req-active",
+      next_request_id: "req-next",
+      remaining_pending_count: 2,
+      next_selectable_request_id: "req-next"
+    }
+  }
+});
+
+const queueSummary = await fetchQueueSummary({ activeRequestId: "req-active" });
+const runtimeUrl = new URL(fetchQueueCalls[0].url);
+
+assert(runtimeUrl.searchParams.get("active_request_id") === "req-active", "L079: fetchQueueSummary forwards active request id");
+assert(queueSummary.remaining_pending_count === 2, "L079: fetchQueueSummary returns queue count");
+assert(queueSummary.next_selectable_request_id === "req-next", "L079: fetchQueueSummary returns next selectable id");
+
+installGuardWindow("?guard-token=token-resolve&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const fetchResolveCalls = installFetchStub({
+  "/v1/requests/req-active/approve": {
+    resolved: true,
+    item: { ...pageItem, request_id: "req-active", status: "resolved" },
+    resolved_request: { ...pageItem, request_id: "req-active", status: "resolved" },
+    remaining_pending_count: 1,
+    next_selectable_request_id: "req-next",
+    remaining_pending_summaries: [{ ...pageItem, request_id: "req-next" }],
+    resolved_duplicate_ids: ["req-dupe"],
+    resolution_summary: "Decision saved. 1 blocked action remains.",
+    retry_hint: "Retry the action in your AI assistant if you approved it.",
+    copy: {
+      title: "Approved. Retry in chat.",
+      body: "Return to Copilot and retry."
+    }
+  }
+});
+
+const resolution = await resolveRequestWithQueueResult({
+  requestId: "req-active",
+  action: "allow",
+  scope: "artifact",
+  workspace: "/workspace",
+  reason: "reviewed"
+});
+const resolveBody = JSON.parse(String(fetchResolveCalls[0].init?.body)) as Record<string, unknown>;
+
+assert(fetchResolveCalls[0].url === "http://127.0.0.1:4781/v1/requests/req-active/approve", "L077: resolveRequestWithQueueResult posts to approve route");
+assert(headerValue(fetchResolveCalls[0].init, "X-Guard-Token") === "token-resolve", "L077: resolveRequestWithQueueResult sends Guard token");
+assert(resolveBody["scope"] === "artifact", "L077: resolveRequestWithQueueResult sends scope");
+assert(resolveBody["workspace"] === "/workspace", "L077: resolveRequestWithQueueResult sends workspace");
+assert(resolveBody["reason"] === "reviewed", "L077: resolveRequestWithQueueResult sends reason");
+assert(resolution.remaining_pending_count === 1, "L077: resolveRequestWithQueueResult returns remaining count");
+assert(resolution.next_selectable_request_id === "req-next", "L077: resolveRequestWithQueueResult returns next selectable id");
+assert(resolution.remaining_pending_summaries[0].request_id === "req-next", "L077: resolveRequestWithQueueResult normalizes remaining summaries");
+assert(resolution.resolved_request?.status === "resolved", "L077: resolveRequestWithQueueResult normalizes resolved request");
+assert(resolution.resolved_duplicate_ids[0] === "req-dupe", "L077: resolveRequestWithQueueResult returns duplicate ids");

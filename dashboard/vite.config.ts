@@ -24,6 +24,7 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
       manifest: false,
       sourcemap: false,
+      minify: false,
       rollupOptions: {
         output: {
           entryFileNames: "assets/guard-dashboard.js",

@@ -66,3 +66,85 @@ The next scanner-side UX upgrades should focus on:
 - richer approval-center presentation
 - live update transport
 - cleaner pause or resume semantics for harnesses that cannot prompt inline
+
+## Queue API contract
+
+`GET /v1/requests` returns a paginated queue page:
+
+```json
+{
+  "items": [
+    {
+      "request_id": "req_123",
+      "harness": "codex",
+      "artifact_id": "codex:project:tool",
+      "artifact_name": "tool",
+      "artifact_type": "mcp_server",
+      "policy_action": "require-reapproval",
+      "source_scope": "project",
+      "config_path": "/workspace/.codex/config.toml",
+      "workspace": "/workspace",
+      "launch_target": "cat ~/.npmrc",
+      "risk_summary": "Shell command can read a local secret file.",
+      "risk_headline": "Secret file access",
+      "action_identity": "{\"version\":\"v1\"}",
+      "queue_group_id": "approval-group:v1:...",
+      "dedupe_count": 1,
+      "created_at": "2026-05-08T10:00:00+00:00",
+      "last_seen_at": "2026-05-08T10:00:00+00:00",
+      "display_status": "pending"
+    }
+  ],
+  "next_cursor": null,
+  "total_pending_count": 1,
+  "total_count": 1,
+  "status": "pending"
+}
+```
+
+Supported query parameters:
+
+- `status`: `pending`, `resolved`, or `all`
+- `harness`: exact harness name
+- `search`: command, prompt excerpt, MCP server/tool, path, or evidence text
+- `cursor`: cursor returned by the previous page
+- `limit`: page size, capped at 200
+
+`POST /v1/requests/<request_id>/approve` and `POST /v1/requests/<request_id>/block` return a queue-aware resolution envelope:
+
+```json
+{
+  "resolved": true,
+  "item": {
+    "request_id": "req_123",
+    "status": "resolved",
+    "resolution_action": "allow",
+    "resolution_scope": "artifact"
+  },
+  "resolved_request": {
+    "request_id": "req_123",
+    "status": "resolved"
+  },
+  "remaining_pending_count": 2,
+  "next_selectable_request_id": "req_456",
+  "remaining_pending_summaries": [],
+  "resolved_duplicate_ids": [],
+  "resolution_summary": "Decision saved. 2 blocked actions remain.",
+  "retry_hint": "Retry the action in your AI assistant if you approved it.",
+  "copy": {
+    "title": "Approved. Retry in chat.",
+    "body": "Return to Codex and retry"
+  }
+}
+```
+
+`GET /v1/runtime` includes `queue_summary` with:
+
+```json
+{
+  "active_request_id": "req_123",
+  "next_request_id": "req_123",
+  "remaining_pending_count": 3,
+  "next_selectable_request_id": "req_123"
+}
+```
