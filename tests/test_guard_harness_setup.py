@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import HarnessSetupContract
 from codex_plugin_scanner.guard.cli.commands import run_guard_command
+from codex_plugin_scanner.guard.cli.install_commands import list_harness_setup_items
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -219,6 +220,24 @@ def test_apps_test_alias_uses_safe_verification(tmp_path: Path, capsys: pytest.C
     assert payload["harness"] == "codex"
     assert payload["safe"] is True
     assert payload["verification"]["writes_config"] is False
+
+
+def test_apps_inventory_uses_adapter_command_resolution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    adapter = get_adapter("claude-code")
+
+    def resolved_executable(_context: HarnessContext) -> str | None:
+        return str(tmp_path / "home" / ".claude" / "local" / "claude")
+
+    monkeypatch.setattr(adapter, "resolved_executable", resolved_executable)
+
+    items = list_harness_setup_items(context, GuardStore(tmp_path / "guard-home"))
+
+    claude = next(item for item in items if item["harness"] == "claude-code")
+    assert claude["command_available"] is True
 
 
 def test_apps_disconnect_confirmation_phrase_is_visible(

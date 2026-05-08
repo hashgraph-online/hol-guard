@@ -549,11 +549,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _harness_context(self, payload: dict[str, object]) -> HarnessContext:
-        home = self._optional_string(payload.get("home"))
-        workspace = self._optional_string(payload.get("workspace"))
+        del payload
         return HarnessContext(
-            home_dir=Path(home).expanduser().resolve() if home is not None else Path.home().resolve(),
-            workspace_dir=Path(workspace).expanduser().resolve() if workspace is not None else None,
+            home_dir=Path.home().resolve(),
+            workspace_dir=None,
             guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
         )
 

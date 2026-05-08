@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 from ...path_support import resolves_within_root
@@ -119,11 +120,15 @@ class HarnessAdapter:
             **shim_manifest,
         }
 
-    def setup_contract(self) -> HarnessSetupContract:
+    @cached_property
+    def _setup_contract(self) -> HarnessSetupContract:
         contract = setup_contract_for(self.harness)
         if contract is None:
             raise ValueError(f"Unsupported harness setup contract: {self.harness}")
         return contract
+
+    def setup_contract(self) -> HarnessSetupContract:
+        return self._setup_contract
 
     def setup_steps(self) -> tuple[HarnessSetupStep, ...]:
         return self.setup_contract().setup_steps
