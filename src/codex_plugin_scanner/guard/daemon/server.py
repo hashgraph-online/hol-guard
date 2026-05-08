@@ -993,6 +993,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if path in {
             "/v1/inventory",
             "/v1/connect/state",
+            "/v1/daemon/repair",
             "/v1/evidence",
             "/v1/evidence/export",
             "/v1/policy",

@@ -298,10 +298,11 @@ hol-guard approvals retry-hint <request-id>
 ### Approval link says API error
 
 If the approval center URL in a block message returns an API error, the local approval center locator may be stale.
-Use the **Repair approval center** action in the Guard dashboard Settings tab, or call the repair endpoint directly when the daemon is running:
+Use the **Repair approval center** action in the Guard dashboard Settings tab, or call the repair endpoint directly when the daemon is running. The port shown in Guard's status output or the dashboard URL is your daemon port:
 
 ```bash
-curl -s -X POST http://127.0.0.1:5474/v1/daemon/repair \
+GUARD_PORT=$(hol-guard status --json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('daemon_port',4781))" 2>/dev/null || echo 4781)
+curl -s -X POST "http://127.0.0.1:${GUARD_PORT}/v1/daemon/repair" \
   -H "X-Guard-Token: $(cat ~/.hol-guard/daemon-auth-token)"
 ```
 
