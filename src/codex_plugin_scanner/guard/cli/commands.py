@@ -83,6 +83,12 @@ from ..proxy import (
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_signals_v2, artifact_risk_summary
 from ..runtime.actions import GuardActionEnvelope, normalize_harness_payload
+from ..runtime.cisco_preflight import (
+    build_cisco_deep_scan_payload,
+    cisco_risk_signal_v3_to_v2,
+    policy_action_for_cisco_signals,
+    scan_action_for_cisco_evidence,
+)
 from ..runtime.data_flow_rules import detect_data_flow_exfiltration
 from ..runtime.runner import (
     GuardSyncNotConfiguredError,
@@ -359,6 +365,8 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     scan_parser.add_argument("target", nargs="?", default=".")
     scan_parser.add_argument("--consumer-mode", action="store_true")
     scan_parser.add_argument("--json", action="store_true")
+    scan_parser.add_argument("--deep", action="store_true", help="Run first-class local Cisco scanner evidence.")
+    _add_guard_common_args(scan_parser)
     _add_guard_cisco_mode_arg(scan_parser)
 
     diff_parser = guard_subparsers.add_parser("diff", help="Compare current harness artifacts to stored snapshots")
@@ -840,6 +848,24 @@ def run_guard_command(
     """Execute a Guard subcommand."""
 
     if args.guard_command == "scan":
+        if getattr(args, "deep", False):
+            scan_type = str(args.target)
+            if scan_type not in {"skills", "mcp"}:
+                print("guard scan --deep supports 'skills' or 'mcp'.", file=sys.stderr)
+                return 2
+            home_override = getattr(args, "home", None)
+            guard_home = resolve_guard_home(getattr(args, "guard_home", None) or home_override)
+            workspace = Path(args.workspace).resolve() if getattr(args, "workspace", None) else Path.cwd().resolve()
+            config = load_guard_config(guard_home, workspace=workspace)
+            payload = build_cisco_deep_scan_payload(
+                scan_type=scan_type,
+                target=workspace,
+                mode=args.cisco_mode,
+                config=config,
+            )
+            payload["generated_at"] = _now()
+            _emit("deep-scan", payload, getattr(args, "json", False))
+            return 0
         payload = _run_consumer_scan_with_mode(Path(args.target).resolve(), cisco_mode=args.cisco_mode)
         _emit("scan", payload, args.json or args.consumer_mode)
         return 0
@@ -1850,6 +1876,12 @@ def run_guard_command(
                 return 0
             changed_capabilities = [runtime_artifact.artifact_type]
             data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
+            scanner_evidence = (
+                scan_action_for_cisco_evidence(action_envelope, workspace=runtime_workspace)
+                if action_envelope is not None
+                else ()
+            )
+            scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
             if data_flow_signals and requested_policy_action not in VALID_GUARD_ACTIONS:
                 data_flow_action = resolve_risk_action(
                     config,
@@ -1858,17 +1890,32 @@ def run_guard_command(
                 )
                 if _guard_action_severity(data_flow_action) > _guard_action_severity(policy_action):
                     policy_action = data_flow_action
-            decision_signals = data_flow_signals or artifact_risk_signals_v2(runtime_artifact)
-            risk_signals = (
-                [signal.plain_reason for signal in data_flow_signals]
-                if data_flow_signals
-                else list(artifact_risk_signals(runtime_artifact))
+            _pre_scanner_policy_action = policy_action
+            if scanner_evidence and requested_policy_action not in VALID_GUARD_ACTIONS:
+                scanner_action = policy_action_for_cisco_signals(
+                    scanner_evidence,
+                    config=config,
+                    harness=policy_harness,
+                )
+                if _guard_action_severity(scanner_action) > _guard_action_severity(policy_action):
+                    policy_action = scanner_action
+            scanner_raised_to_block = (
+                policy_action == "block" and _pre_scanner_policy_action != "block" and bool(scanner_evidence)
             )
-            risk_summary = (
-                _runtime_data_flow_summary(data_flow_signals)
-                if data_flow_signals
-                else artifact_risk_summary(runtime_artifact)
-            )
+            base_decision_signals = data_flow_signals or artifact_risk_signals_v2(runtime_artifact)
+            scanner_decision_signals = tuple(cisco_risk_signal_v3_to_v2(signal) for signal in scanner_evidence)
+            decision_signals = (*base_decision_signals, *scanner_decision_signals)
+            scanner_risk_signals = [signal.plain_language_summary for signal in scanner_evidence]
+            if data_flow_signals:
+                risk_signals = [signal.plain_reason for signal in data_flow_signals]
+                risk_summary = _runtime_data_flow_summary(data_flow_signals)
+            else:
+                risk_signals = list(artifact_risk_signals(runtime_artifact))
+                risk_summary = artifact_risk_summary(runtime_artifact)
+            if scanner_risk_signals:
+                risk_signals.extend(scanner_risk_signals)
+                if scanner_raised_to_block:
+                    risk_summary = scanner_risk_signals[0]
             decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
             incident = build_incident_context(
                 harness=args.harness,
@@ -1894,6 +1941,7 @@ def run_guard_command(
                 artifact_name=artifact_name,
                 source_scope=runtime_artifact.source_scope,
                 user_override=_optional_string(payload.get("user_override")),
+                scanner_evidence=scanner_evidence_payload,
             )
             store.add_receipt(receipt)
             response_payload = {
@@ -1905,6 +1953,7 @@ def run_guard_command(
                 "policy_action": policy_action,
                 "risk_signals": risk_signals,
                 "risk_summary": risk_summary,
+                "scanner_evidence": scanner_evidence_payload,
                 "decision_v2_json": decision_v2.to_dict(),
                 "artifact_label": incident["artifact_label"],
                 "source_label": incident["source_label"],
@@ -1991,6 +2040,7 @@ def run_guard_command(
                                 "launch_target": _runtime_request_summary(runtime_artifact),
                                 "action_envelope_json": _action_envelope_json(action_envelope),
                                 "decision_v2_json": decision_v2.to_dict(),
+                                "scanner_evidence": scanner_evidence_payload,
                             }
                         ]
                     }
