@@ -6,7 +6,7 @@ import json
 import sqlite3
 import time
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 from codex_plugin_scanner.guard.runtime.cisco_evidence import (
     cisco_finding_to_risk_signal,
@@ -175,6 +175,54 @@ def test_skill_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, 
 
     assert summary.status is CiscoIntegrationStatus.TIMED_OUT
     assert "timed out" in summary.message
+
+
+def test_skill_scanner_timeout_path_drains_worker_result_before_terminating(monkeypatch, tmp_path: Path) -> None:
+    class FakeQueue:
+        def __init__(self) -> None:
+            self.process: FakeProcess | None = None
+
+        def get(self, timeout: float) -> tuple[str, dict[str, object]]:
+            if self.process is not None:
+                self.process.alive = False
+            return ("ok", {"summary": {"total_skills_scanned": 0}, "results": []})
+
+    class FakeProcess:
+        def __init__(self, queue: FakeQueue) -> None:
+            self.queue = queue
+            self.alive = True
+            self.exitcode = 0
+            self.terminated = False
+            self.killed = False
+
+        def start(self) -> None:
+            self.queue.process = self
+
+        def join(self, timeout: float | None = None) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return self.alive
+
+        def terminate(self) -> None:
+            self.terminated = True
+
+        def kill(self) -> None:
+            self.killed = True
+
+    queue = FakeQueue()
+    process = FakeProcess(queue)
+    context = SimpleNamespace(
+        Queue=lambda maxsize: queue,
+        Process=lambda target, args: process,
+    )
+    monkeypatch.setattr(cisco_skill_scanner, "get_context", lambda method: context)
+
+    payload = cisco_skill_scanner._scan_directory_with_timeout(tmp_path, "balanced", 0.1)
+
+    assert payload == {"summary": {"total_skills_scanned": 0}, "results": []}
+    assert process.terminated is False
+    assert process.killed is False
 
 
 def test_mcp_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, tmp_path: Path) -> None:
