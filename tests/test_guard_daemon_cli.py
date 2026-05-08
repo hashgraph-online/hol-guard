@@ -8,10 +8,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 from pathlib import Path
-
-import pytest
 
 
 def _run(args: list[str], guard_home: Path) -> tuple[int, dict]:
@@ -81,7 +78,7 @@ class TestDaemonRepairCommand:
         locator_path.write_text('{"port": 0, "pid": 99999999}')
         assert locator_path.exists()
 
-        code, payload = _run(["daemon", "repair"], tmp_path)
+        code, _payload = _run(["daemon", "repair"], tmp_path)
         assert code == 0
         assert not locator_path.exists(), "stale locator should be removed"
 
@@ -114,7 +111,7 @@ class TestDaemonStopCommand:
 
         write_guard_daemon_state(tmp_path, port=0, auth_token="x")
 
-        code, payload = _run(["daemon", "stop"], tmp_path)
+        code, _payload = _run(["daemon", "stop"], tmp_path)
         assert code == 0
 
     def test_stop_json_has_stopped_key(self, tmp_path: Path) -> None:
