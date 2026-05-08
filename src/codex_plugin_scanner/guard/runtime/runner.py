@@ -29,6 +29,7 @@ from ..redaction import redact_sensitive_text
 from ..store import GuardStore
 from ..types import PromptRequest, RemediationAction
 from .actions import GuardActionEnvelope, redacted_workspace_label
+from .composition_rules import compose_action_from_signals
 from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
 from .prompt_injection import detect_prompt_injection_requests
 
@@ -402,6 +403,14 @@ def _evaluation_with_detector_registry(
         **evaluation,
         "runtime_detector_signals_v2": [signal.to_dict() for signal in result.signals],
         "runtime_detector_telemetry": [item.to_dict() for item in result.telemetry],
+    }
+    base_action: str = "block" if evaluation.get("blocked") else "allow"
+    composition = compose_action_from_signals(result.signals, base_action)  # type: ignore[arg-type]
+    next_evaluation["runtime_detector_composition"] = {
+        "action": composition.action,
+        "reason": composition.reason,
+        "downgraded": composition.downgraded,
+        "upgraded": composition.upgraded,
     }
     if trace_error is not None:
         next_evaluation["runtime_detector_trace_error"] = trace_error
