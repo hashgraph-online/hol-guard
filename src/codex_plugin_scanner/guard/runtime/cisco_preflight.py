@@ -57,6 +57,11 @@ class CiscoMcpPreflightDetector:
         return tuple(cisco_risk_signal_v3_to_v2(signal) for signal in signals)
 
 
+def _is_redacted_path(path_str: str) -> bool:
+    """Return True when a target path is a redacted placeholder (starts with .../)."""
+    return path_str.startswith(".../")
+
+
 def scan_action_for_cisco_evidence(
     action: GuardActionEnvelope,
     *,
@@ -74,33 +79,58 @@ def scan_action_for_cisco_evidence(
     signals: list[GuardRiskSignalV3] = []
     scanned_skill_roots: set[Path] = set()
     scanned_mcp_roots: set[Path] = set()
-    for target_path in _resolve_target_paths(action, workspace_path):
+    skill_via_path = False
+    mcp_via_path = False
+    for target_str, target_path in zip(action.target_paths, _resolve_target_paths(action, workspace_path), strict=True):
         if "skill" in requested_sources and _is_skill_file(target_path):
-            skill_root = _skill_scan_root_for_file(target_path, workspace_path)
-            if skill_root not in scanned_skill_roots:
-                scanned_skill_roots.add(skill_root)
-                signals.extend(
-                    _skill_findings_to_signals(
-                        cisco_skill_scanner.run_cisco_skill_scan(
-                            skill_root,
-                            mode=mode,
-                            timeout_seconds=timeout_seconds,
+            if _is_redacted_path(target_str):
+                skill_via_path = True
+            else:
+                skill_via_path = True
+                skill_root = _skill_scan_root_for_file(target_path, workspace_path)
+                if skill_root not in scanned_skill_roots:
+                    scanned_skill_roots.add(skill_root)
+                    signals.extend(
+                        _skill_findings_to_signals(
+                            cisco_skill_scanner.run_cisco_skill_scan(
+                                skill_root,
+                                mode=mode,
+                                timeout_seconds=timeout_seconds,
+                            )
                         )
                     )
-                )
         if "mcp" in requested_sources and target_path.name == ".mcp.json":
-            mcp_root = target_path.parent
-            if mcp_root not in scanned_mcp_roots:
-                scanned_mcp_roots.add(mcp_root)
-                signals.extend(
-                    _mcp_findings_to_signals(
-                        cisco_mcp_scanner.run_cisco_mcp_scan(
-                            mcp_root,
-                            mode=mode,
-                            timeout_seconds=timeout_seconds,
+            if _is_redacted_path(target_str):
+                mcp_via_path = True
+            else:
+                mcp_via_path = True
+                mcp_root = target_path.parent
+                if mcp_root not in scanned_mcp_roots:
+                    scanned_mcp_roots.add(mcp_root)
+                    signals.extend(
+                        _mcp_findings_to_signals(
+                            cisco_mcp_scanner.run_cisco_mcp_scan(
+                                mcp_root,
+                                mode=mode,
+                                timeout_seconds=timeout_seconds,
+                            )
                         )
                     )
-                )
+    if "skill" in requested_sources and skill_via_path and not scanned_skill_roots:
+        skill_root = _skill_scan_root_for_workspace(workspace_path)
+        scanned_skill_roots.add(skill_root)
+        signals.extend(
+            _skill_findings_to_signals(
+                cisco_skill_scanner.run_cisco_skill_scan(skill_root, mode=mode, timeout_seconds=timeout_seconds)
+            )
+        )
+    if "mcp" in requested_sources and mcp_via_path and not scanned_mcp_roots:
+        scanned_mcp_roots.add(workspace_path)
+        signals.extend(
+            _mcp_findings_to_signals(
+                cisco_mcp_scanner.run_cisco_mcp_scan(workspace_path, mode=mode, timeout_seconds=timeout_seconds)
+            )
+        )
     return tuple(signals)
 
 
