@@ -40,8 +40,21 @@ _APPROVAL_METADATA_KEYS = (
 )
 
 
+_DEFAULT_DETECTOR_REGISTRY: tuple[object, DetectorRegistry] | None = None
+_DEFAULT_DETECTOR_REGISTRY_LOCK = __import__("threading").Lock()
+
+
 def _get_default_detector_registry() -> DetectorRegistry:
-    return DetectorRegistry(register_default_detectors())
+    global _DEFAULT_DETECTOR_REGISTRY
+    factory = register_default_detectors
+    cached = _DEFAULT_DETECTOR_REGISTRY
+    if cached is not None and cached[0] is factory:
+        return cached[1]
+    with _DEFAULT_DETECTOR_REGISTRY_LOCK:
+        cached = _DEFAULT_DETECTOR_REGISTRY
+        if cached is None or cached[0] is not factory:
+            _DEFAULT_DETECTOR_REGISTRY = (factory, DetectorRegistry(factory()))
+    return _DEFAULT_DETECTOR_REGISTRY[1]
 
 
 _PAIN_SIGNAL_EVENTS = frozenset(

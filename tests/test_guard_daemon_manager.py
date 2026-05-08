@@ -585,3 +585,78 @@ def test_guard_daemon_pid_matches_command_validates_guard_home_on_windows(tmp_pa
         12345,
         expected_guard_home=tmp_path / "other-home",
     )
+
+
+def test_guard_daemon_start_lock_prevents_concurrent_starts(tmp_path):
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True)
+
+    events: list[str] = []
+    errors: list[Exception] = []
+    release_event = threading.Event()
+
+    def holder() -> None:
+        try:
+            with daemon_manager_module._guard_daemon_start_lock(guard_home):
+                events.append("t1-entered")
+                release_event.wait(timeout=5)
+                events.append("t1-exited")
+        except Exception as exc:
+            errors.append(exc)
+
+    def waiter() -> None:
+        release_event.wait(timeout=1)
+        try:
+            with daemon_manager_module._guard_daemon_start_lock(guard_home):
+                events.append("t2-entered")
+        except Exception as exc:
+            errors.append(exc)
+
+    t1 = threading.Thread(target=holder)
+    t2 = threading.Thread(target=waiter)
+    t1.start()
+    import time
+    time.sleep(0.1)
+    t2.start()
+    time.sleep(0.05)
+    release_event.set()
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+
+    assert not errors, f"Lock worker raised: {errors}"
+    assert events.index("t1-exited") < events.index("t2-entered"), (
+        "Second thread entered before first released the lock"
+    )
+
+
+def test_guard_daemon_start_lock_file_created_and_released(tmp_path):
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True)
+    lock_path = guard_home / "daemon-start.lock"
+
+    assert not lock_path.exists()
+
+    with daemon_manager_module._guard_daemon_start_lock(guard_home):
+        assert lock_path.exists()
+
+    assert lock_path.exists()
+
+
+def test_guard_daemon_start_lock_recovers_after_exception(tmp_path):
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(parents=True)
+
+    raised = False
+    try:
+        with daemon_manager_module._guard_daemon_start_lock(guard_home):
+            raised = True
+            raise RuntimeError("simulated crash")
+    except RuntimeError:
+        pass
+
+    assert raised
+
+    acquired = False
+    with daemon_manager_module._guard_daemon_start_lock(guard_home):
+        acquired = True
+    assert acquired, "Lock was not released after exception; stale lock not recoverable"
