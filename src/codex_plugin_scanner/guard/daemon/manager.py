@@ -249,9 +249,21 @@ def _approval_center_daemon_is_healthy(daemon_url: str) -> bool:
         return False
 
 
+def _daemon_state_pid_matches_locator(guard_home: Path, locator_pid: int) -> bool:
+    state = _load_state(guard_home)
+    if not isinstance(state, dict):
+        return False
+    state_pid = state.get("pid")
+    return isinstance(state_pid, int) and state_pid == locator_pid
+
+
 def ensure_approval_center(guard_home: Path) -> ApprovalCenterLocator:
     existing = read_approval_center_locator(guard_home)
-    if existing is not None and _approval_center_daemon_is_healthy(existing.daemon_url):
+    if (
+        existing is not None
+        and _approval_center_daemon_is_healthy(existing.daemon_url)
+        and _daemon_state_pid_matches_locator(guard_home, existing.pid)
+    ):
         return existing
     daemon_url = ensure_guard_daemon(guard_home)
     now = datetime.now(tz=timezone.utc).isoformat()
