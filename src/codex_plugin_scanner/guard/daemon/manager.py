@@ -187,6 +187,25 @@ def clear_guard_daemon_state(guard_home: Path) -> None:
     _write_private_text(state_path, "{}")
 
 
+def repair_approval_center_locator(guard_home: Path) -> dict[str, object]:
+    """Remove a stale approval center locator and daemon state without touching pending approvals.
+
+    Safe to call while the database is live.  Returns a dict describing what was cleared.
+    """
+    cleared: list[str] = []
+    locator = _locator_path(guard_home)
+    if locator.is_file():
+        with suppress(OSError):
+            locator.unlink()
+            cleared.append("locator")
+    state = _state_path(guard_home)
+    if state.is_file():
+        with suppress(OSError):
+            _write_private_text(state, "{}")
+            cleared.append("daemon_state")
+    return {"repaired": True, "cleared": cleared}
+
+
 def _locator_path(guard_home: Path) -> Path:
     return guard_home / _APPROVAL_CENTER_LOCATOR_FILE
 

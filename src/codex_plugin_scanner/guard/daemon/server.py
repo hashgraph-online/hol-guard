@@ -38,6 +38,7 @@ from .manager import (
     GUARD_DAEMON_COMPATIBILITY_VERSION,
     clear_guard_daemon_state,
     load_guard_daemon_auth_token,
+    repair_approval_center_locator,
     write_guard_daemon_state,
 )
 
@@ -400,6 +401,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/settings":
             self._handle_settings_update(payload)
+            return
+        if parsed.path == "/v1/daemon/repair":
+            result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]
+            self._write_json(result)
             return
         request_id, action, matched = self._resolve_request_action(path_parts, payload)
         if not matched:
@@ -1159,6 +1164,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/policy/decisions",
             "/v1/policy/clear",
             "/v1/settings",
+            "/v1/daemon/repair",
         }:
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] in {"items", "status"}:
