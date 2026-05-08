@@ -107,7 +107,8 @@ export function DecodedLayerCard(props: DecodedLayerCardProps) {
   const encodedSignals = deriveEncodedLayerSignals(props.item);
   if (encodedSignals.length === 0) return null;
   const primary = encodedSignals[0];
-  const extraCount = encodedSignals.length - 1;
+  const layerCount = _parseLayerCountFromReason(primary.plain_reason);
+  const extraCount = layerCount !== null ? Math.max(0, layerCount - 1) : encodedSignals.length - 1;
   return (
     <div
       className="rounded-xl border border-rose-200/60 bg-rose-50/60 p-4"
@@ -130,4 +131,11 @@ export function DecodedLayerCard(props: DecodedLayerCardProps) {
       ) : null}
     </div>
   );
+}
+
+function _parseLayerCountFromReason(reason: string): number | null {
+  const match = /(\d+)\s+encoding\s+layer/i.exec(reason);
+  if (match === null) return null;
+  const count = parseInt(match[1], 10);
+  return Number.isFinite(count) && count > 0 ? count : null;
 }
