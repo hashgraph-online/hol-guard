@@ -59,6 +59,7 @@ class _GuardDaemonHttpServer(ThreadingHTTPServer):
     auth_token: str
     idle_timeout_seconds: float | None
     last_activity_monotonic: float
+    start_monotonic: float
     active_stream_clients: int
     active_stream_clients_lock: threading.Lock
 
@@ -113,11 +114,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "unauthorized"}, status=401)
             return
         if parsed.path == "/healthz":
+            uptime = round(time.monotonic() - self.server.start_monotonic, 1)  # type: ignore[attr-defined]
             self._write_json(
                 {
                     "ok": True,
                     "receipts": len(store.list_receipts(limit=500)),
                     "approvals": store.count_approval_requests(),
+                    "pending_approvals": store.count_approval_requests(),
+                    "uptime_seconds": uptime,
                     "tables": store.list_table_names(),
                     "compatibility_version": GUARD_DAEMON_COMPATIBILITY_VERSION,
                     "package_version": __version__,
@@ -1473,6 +1477,7 @@ class GuardDaemonServer:
             idle_timeout_seconds=idle_timeout_seconds,
         )
         self._server.last_activity_monotonic = time.monotonic()
+        self._server.start_monotonic = time.monotonic()
         self._server.active_stream_clients = 0
         self._server.active_stream_clients_lock = threading.Lock()
         self.port = int(self._server.server_address[1])
