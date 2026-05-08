@@ -53,7 +53,10 @@ type SupplyChainRiskCardProps = {
 
 export function SupplyChainRiskCard(props: SupplyChainRiskCardProps) {
   const scSignals = deriveSupplyChainRiskSignals(props.item);
-  const isSupplyChainArtifact = props.item.artifact_type === "supply_chain";
+  const isSupplyChainArtifact =
+    props.item.artifact_type === "supply_chain" ||
+    props.item.artifact_type === "package_request" ||
+    props.item.artifact_type.endsWith("_package");
   if (scSignals.length === 0 && !isSupplyChainArtifact) return null;
   return (
     <div
