@@ -205,7 +205,12 @@ def repair_approval_center_locator(guard_home: Path) -> dict[str, object]:
     if state.is_file():
         state_payload = _load_state(guard_home)
         pid = state_payload.get("pid") if isinstance(state_payload, dict) else None
-        daemon_is_live = isinstance(pid, int) and pid > 0 and _guard_daemon_pid_is_running(pid)
+        daemon_is_live = (
+            isinstance(pid, int)
+            and pid > 0
+            and _guard_daemon_pid_is_running(pid)
+            and _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
+        )
         if not daemon_is_live:
             _write_private_text(state, "{}")
             cleared.append("daemon_state")

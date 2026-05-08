@@ -100,3 +100,7 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "RUF"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+addopts = "-m 'not slow'"
+markers = [
+  "slow: marks tests as slow (deselected by default; run with -m slow to include)",
+]
