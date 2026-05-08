@@ -18,7 +18,12 @@ from typing import Any
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
-from ..approvals import apply_approval_resolution, build_runtime_snapshot
+from ..approvals import (
+    ApprovalRequestAlreadyResolvedError,
+    ApprovalRequestNotFoundError,
+    apply_approval_resolution,
+    build_runtime_snapshot,
+)
 from ..config import editable_guard_settings, load_guard_config, update_guard_settings
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from ..runtime.surface_server import GuardSurfaceRuntime
@@ -183,7 +188,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "requests"]:
             approval = store.get_approval_request(path_parts[2])
             if approval is None:
-                self._write_json({"error": "not_found"}, status=404)
+                self._write_json(
+                    {
+                        "error": "not_found",
+                        "recovery": {
+                            "code": "request_unknown",
+                            "title": "This request is no longer waiting.",
+                            "body": "The request was either already resolved or expired. You can close this tab.",
+                        },
+                    },
+                    status=404,
+                )
                 return
             self._write_json(approval)
             return
@@ -313,11 +328,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid():
-            self._write_json(
-                {"error": "unauthorized"},
-                status=401,
-                extra_headers=self._cors_headers_for_request(),
-            )
+            if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
+                host = self.server.server_address[0]  # type: ignore[attr-defined]
+                port = self.server.server_address[1]  # type: ignore[attr-defined]
+                reconnect_url = _build_local_url(host, port, "/#/reconnect")
+                self._write_json(
+                    {
+                        "error": "unauthorized",
+                        "recovery": {
+                            "code": "session_stale",
+                            "title": "Your session with the local Guard daemon has expired.",
+                            "body": "Click the link below to reconnect, then retry your approval.",
+                            "reconnect_url": reconnect_url,
+                        },
+                    },
+                    status=401,
+                    extra_headers=self._cors_headers_for_request(),
+                )
+            else:
+                self._write_json(
+                    {"error": "unauthorized"},
+                    status=401,
+                    extra_headers=self._cors_headers_for_request(),
+                )
             return
         payload, body_error = self._load_request_body()
         if body_error is not None:
@@ -389,6 +422,37 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 workspace=self._optional_string(payload.get("workspace")),
                 reason=self._optional_string(payload.get("reason")),
             )
+        except ApprovalRequestNotFoundError:
+            self._write_json(
+                {
+                    "resolved": False,
+                    "error": "not_found",
+                    "recovery": {
+                        "code": "request_unknown",
+                        "title": "This request is no longer waiting.",
+                        "body": "The request was either already resolved or expired. You can close this tab.",
+                    },
+                },
+                status=404,
+            )
+            return
+        except ApprovalRequestAlreadyResolvedError:
+            self._write_json(
+                {
+                    "resolved": False,
+                    "error": "already_resolved",
+                    "recovery": {
+                        "code": "request_resolved",
+                        "title": "This request has already been resolved.",
+                        "body": (
+                            "If the action is blocked and you believe it should be allowed, "
+                            "you can re-submit from your AI assistant."
+                        ),
+                    },
+                },
+                status=409,
+            )
+            return
         except ValueError as error:
             self._write_json({"resolved": False, "error": str(error)}, status=400)
             return
@@ -1317,6 +1381,11 @@ def _approval_center_browser_url(approval_center_url: str, auth_token: str) -> s
     ]
     fragment_pairs.append(("guard-token", auth_token))
     return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
+
+
+def _build_local_url(host: str, port: int, path: str) -> str:
+    host_part = f"[{host}]" if ":" in host else host
+    return f"http://{host_part}:{port}{path}"
 
 
 def _now() -> str:

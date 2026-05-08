@@ -24,6 +24,14 @@ GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/fleet"
 GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
 
 
+class ApprovalRequestNotFoundError(ValueError):
+    """Raised when an approval request ID does not exist."""
+
+
+class ApprovalRequestAlreadyResolvedError(ValueError):
+    """Raised when an approval request was already resolved."""
+
+
 def queue_blocked_approvals(
     *,
     detection: HarnessDetection,
@@ -114,9 +122,9 @@ def apply_approval_resolution(
 ) -> dict[str, object]:
     request = store.get_approval_request(request_id)
     if request is None:
-        raise ValueError(f"Unknown approval request: {request_id}")
+        raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
     if request["status"] != "pending":
-        raise ValueError(f"Approval request already resolved: {request_id}")
+        raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
     if scope == "workspace" and not workspace:
         raise ValueError(f"Approval request {request_id} requires --workspace for workspace scope.")
     if scope == "publisher" and not isinstance(request.get("publisher"), str):
