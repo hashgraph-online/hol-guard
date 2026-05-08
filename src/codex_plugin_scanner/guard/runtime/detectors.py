@@ -219,9 +219,10 @@ class SupplyChainDetector:
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
         del context
-        if action.prompt_text is None:
+        content = action.prompt_text or action.command
+        if content is None:
             return ()
-        return detect_supply_chain_risk(action.prompt_text)
+        return detect_supply_chain_risk(content)
 
 
 class SafeDecodeDetector:
@@ -551,6 +552,106 @@ class GuardBypassDetector:
         return tuple(signals)
 
 
+_MCP_RISKY_TOOL_PATTERN = re.compile(
+    r"(?:exec(?:ute)?|run|shell|spawn|eval|invoke|dispatch|launch)"
+    r"|(?:write|send|upload|post|exfil|steal|dump|leak).*(?:cred|secret|token|key|password)"
+    r"|(?:arbitrary|remote|unsafe|untruste[d])",
+    re.IGNORECASE,
+)
+
+
+class McpToolSchemaRiskDetector:
+    """Detects MCP tool names that suggest dangerous execution or exfiltration capability."""
+
+    detector_id = "mcp.schema-risk"
+    categories: tuple[RiskSignalCategory, ...] = ("mcp",)
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        if action.action_type != "mcp_tool_call" or action.mcp_tool is None:
+            return ()
+        tool_name = action.mcp_tool
+        if not _MCP_RISKY_TOOL_PATTERN.search(tool_name):
+            return ()
+        return (
+            RiskSignalV2(
+                signal_id=f"mcp:schema-risk:{tool_name[:40]}",
+                category="mcp",
+                severity="high",
+                confidence="moderate",
+                detector=self.detector_id,
+                title="MCP tool name suggests dangerous capability",
+                plain_reason=(
+                    f"The MCP tool '{tool_name}' has a name that suggests it can execute code,"
+                    " run shell commands, or exfiltrate credentials. Review the tool's actual"
+                    " implementation before approving."
+                ),
+                technical_detail=f"tool name matched risky-capability pattern: {tool_name!r}",
+                evidence_ref="mcp_tool",
+                redaction_level="summary",
+                false_positive_hint=(
+                    "Allow if this tool is from a trusted server and its implementation"
+                    " is audited and does not perform unauthorized actions."
+                ),
+                advisory_id=None,
+            ),
+        )
+
+
+_MCP_INJECTION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instruction", re.IGNORECASE),
+    re.compile(r"you\s+(?:are\s+now|have\s+no\s+restriction|must\s+obey)", re.IGNORECASE),
+    re.compile(r"(?:disregard|forget|override)\s+(?:your\s+)?(?:instruction|system\s+prompt|training)", re.IGNORECASE),
+    re.compile(r"(?:send|post|upload|exfil(?:trate)?)\s+.*\bto\s+https?://(?!localhost|127\.0\.0\.1)", re.IGNORECASE),
+    re.compile(
+        r"when\s+you\s+(?:read|access|open|process)\s+.{0,60}(?:also|then|and)\s+(?:send|post|upload)",
+        re.IGNORECASE,
+    ),
+)
+
+
+class McpDescriptionDeceptionDetector:
+    """Detects prompt injection and deception patterns in MCP tool descriptions or prompts."""
+
+    detector_id = "mcp.description-deception"
+    categories: tuple[RiskSignalCategory, ...] = ("prompt",)
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        if action.prompt_excerpt is None:
+            return ()
+        excerpt = action.prompt_excerpt
+        signals: list[RiskSignalV2] = []
+        for i, pattern in enumerate(_MCP_INJECTION_PATTERNS):
+            m = pattern.search(excerpt)
+            if m:
+                signals.append(
+                    RiskSignalV2(
+                        signal_id=f"mcp:desc-deception:p{i}",
+                        category="prompt",
+                        severity="critical",
+                        confidence="strong",
+                        detector=self.detector_id,
+                        title="MCP description contains prompt injection or jailbreak attempt",
+                        plain_reason=(
+                            "The tool description or prompt contains language designed to override"
+                            " your AI assistant's instructions or cause it to exfiltrate data."
+                            " This is a common technique used by malicious MCP servers."
+                        ),
+                        technical_detail=f"matched deception pattern {i}: {m.group(0)[:60]!r}",
+                        evidence_ref="prompt_excerpt",
+                        redaction_level="summary",
+                        false_positive_hint=(
+                            "Allow only if you authored this tool description yourself"
+                            " and verified it does not cause unintended behavior."
+                        ),
+                        advisory_id=None,
+                    )
+                )
+                break
+        return tuple(signals)
+
+
 def register_default_detectors() -> tuple[GuardDetector, ...]:
     """Return the default ordered detector list.
 
@@ -569,6 +670,8 @@ def register_default_detectors() -> tuple[GuardDetector, ...]:
         FalsePositiveSuppressorDetector(),
         DataFlowExfiltrationDetector(),
         GuardBypassDetector(),
+        McpDescriptionDeceptionDetector(),
+        McpToolSchemaRiskDetector(),
         PersistenceDetector(),
         PromptInjectionDetector(),
         SafeDecodeDetector(),
