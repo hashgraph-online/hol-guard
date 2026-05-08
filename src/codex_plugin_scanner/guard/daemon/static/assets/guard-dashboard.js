@@ -13311,8 +13311,17 @@ function IconBase(props) {
   };
   return IconContext !== void 0 ? /* @__PURE__ */ React.createElement(IconContext.Consumer, null, (conf) => elem(conf)) : elem(DefaultContext);
 }
+function HiBars3(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniXMark(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" }, "child": [] }] })(props);
+}
+function HiMiniXCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniWrenchScrewdriver(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M14.5 10a4.5 4.5 0 0 0 4.284-5.882c-.105-.324-.51-.391-.752-.15L15.34 6.66a.454.454 0 0 1-.493.11 3.01 3.01 0 0 1-1.618-1.616.455.455 0 0 1 .11-.494l2.694-2.692c.24-.241.174-.647-.15-.752a4.5 4.5 0 0 0-5.873 4.575c.055.873-.128 1.808-.8 2.368l-7.23 6.024a2.724 2.724 0 1 0 3.837 3.837l6.024-7.23c.56-.672 1.495-.855 2.368-.8.096.007.193.01.291.01ZM5 16a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "M14.5 11.5c.173 0 .345-.007.514-.022l3.754 3.754a2.5 2.5 0 0 1-3.536 3.536l-4.41-4.41 2.172-2.607c.052-.063.147-.138.342-.196.202-.06.469-.087.777-.067.128.008.257.012.387.012ZM6 4.586l2.33 2.33a.452.452 0 0 1-.08.09L6.8 8.214 4.586 6H3.309a.5.5 0 0 1-.447-.276l-1.7-3.402a.5.5 0 0 1 .093-.577l.49-.49a.5.5 0 0 1 .577-.094l3.402 1.7A.5.5 0 0 1 6 3.31v1.277Z" }, "child": [] }] })(props);
 }
 function HiMiniShieldCheck(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.661 2.237a.531.531 0 0 1 .678 0 11.947 11.947 0 0 0 7.078 2.749.5.5 0 0 1 .479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 0 1-.332 0C5.26 16.564 2 12.163 2 7c0-.538.035-1.069.104-1.589a.5.5 0 0 1 .48-.425 11.947 11.947 0 0 0 7.077-2.75Zm4.196 5.954a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -13320,11 +13329,20 @@ function HiMiniShieldCheck(props) {
 function HiMiniServerStack(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M4.464 3.162A2 2 0 0 1 6.28 2h7.44a2 2 0 0 1 1.816 1.162l1.154 2.5c.067.145.115.291.145.438A3.508 3.508 0 0 0 16 6H4c-.288 0-.568.035-.835.1.03-.147.078-.293.145-.438l1.154-2.5Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 9.5a2 2 0 0 1 2-2h12a2 2 0 1 1 0 4H4a2 2 0 0 1-2-2Zm13.24 0a.75.75 0 0 1 .75-.75H16a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75h-.01a.75.75 0 0 1-.75-.75V9.5Zm-2.25-.75a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75H13a.75.75 0 0 0 .75-.75V9.5a.75.75 0 0 0-.75-.75h-.01ZM2 15a2 2 0 0 1 2-2h12a2 2 0 1 1 0 4H4a2 2 0 0 1-2-2Zm13.24 0a.75.75 0 0 1 .75-.75H16a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75h-.01a.75.75 0 0 1-.75-.75V15Zm-2.25-.75a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75H13a.75.75 0 0 0 .75-.75V15a.75.75 0 0 0-.75-.75h-.01Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniQuestionMarkCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.94 6.94a.75.75 0 1 1-1.061-1.061 3 3 0 1 1 2.871 5.026v.345a.75.75 0 0 1-1.5 0v-.5c0-.72.57-1.172 1.081-1.287A1.5 1.5 0 1 0 8.94 6.94ZM10 15a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniNoSymbol(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "m5.965 4.904 9.131 9.131a6.5 6.5 0 0 0-9.131-9.131Zm8.07 10.192L4.904 5.965a6.5 6.5 0 0 0 9.131 9.131ZM4.343 4.343a8 8 0 1 1 11.314 11.314A8 8 0 0 1 4.343 4.343Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniMinusCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM6.75 9.25a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniLockClosed(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniInformationCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniInbox(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M1 11.27c0-.246.033-.492.099-.73l1.523-5.521A2.75 2.75 0 0 1 5.273 3h9.454a2.75 2.75 0 0 1 2.651 2.019l1.523 5.52c.066.239.099.485.099.732V15a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2v-3.73Zm3.068-5.852A1.25 1.25 0 0 1 5.273 4.5h9.454a1.25 1.25 0 0 1 1.205.918l1.523 5.52c.006.02.01.041.015.062H14a1 1 0 0 0-.86.49l-.606 1.02a1 1 0 0 1-.86.49H8.236a1 1 0 0 1-.894-.553l-.448-.894A1 1 0 0 0 6 11H2.53l.015-.062 1.523-5.52Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -13334,6 +13352,9 @@ function HiMiniHome(props) {
 }
 function HiMiniExclamationTriangle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniExclamationCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniDocumentText(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -13399,7 +13420,20 @@ function ShellHeader(props) {
             children: sidebarLinks.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: item.href, children: item.label }, item.href))
           }
         ) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
+        props.onOpenMobileQueue && props.view === "inbox" && props.queuedCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: props.onOpenMobileQueue,
+            "aria-label": "Open queue list",
+            className: "inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiBars3, { className: "h-4 w-4", "aria-hidden": "true" }),
+              props.queuedCount > 99 ? "99+" : props.queuedCount
+            ]
+          }
+        ),
+        (!props.onOpenMobileQueue || props.view !== "inbox" || props.queuedCount === 0) && /* @__PURE__ */ jsxRuntimeExports.jsx(
           "a",
           {
             href: guardAwareHref("/inbox"),
@@ -13648,8 +13682,8 @@ function WelcomeState(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-surface-in flex flex-col items-center justify-center py-16 text-center sm:py-24", children: [
     props.resolutionMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-10 w-full max-w-xl flex justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Surface, { tone: "success", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: props.resolutionMessage }) }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-brand-green-bg/50 ring-1 ring-brand-green/20", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-10 w-10 text-brand-green", "aria-hidden": "true" }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl", children: "Your environment is secure" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground", children: "HOL Guard is watching connected apps on this machine. Connect Cloud when you want shared decisions across the team." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl", children: "No blocked actions" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground", children: "Guard is still watching your apps. You'll be notified here if something needs your approval." }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-12 text-left w-full max-w-3xl", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-border bg-card p-6 shadow-[0_4px_20px_rgba(85,153,254,0.04)]", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue mb-4", children: "Sync decisions" }),
@@ -14283,6 +14317,74 @@ function HistoryRow(props) {
     ] })
   ] });
 }
+function ChipButton(props) {
+  const handleClick = reactExports.useCallback(() => {
+    props.onClick(props.value);
+  }, [props.onClick, props.value]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      type: "button",
+      onClick: handleClick,
+      "aria-pressed": props.active,
+      className: `rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 ${props.active ? "border-brand-blue bg-brand-blue/10 text-brand-blue" : "border-slate-200 bg-white text-slate-600 hover:border-brand-blue/30 hover:text-brand-dark"}`,
+      children: props.label
+    }
+  );
+}
+function QueueChipFilter(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1.5", role: "group", "aria-label": "Filter by app", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ChipButton,
+      {
+        label: "All",
+        active: props.activeFilter === "all",
+        value: "all",
+        onClick: props.onFilterChange
+      }
+    ),
+    props.harnesses.map((harness) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ChipButton,
+      {
+        label: harnessDisplayName(harness),
+        active: props.activeFilter === harness,
+        value: harness,
+        onClick: props.onFilterChange
+      },
+      harness
+    ))
+  ] });
+}
+function ScannerEvidenceBadge(props) {
+  const isScannerCategory = props.signal.category === "skill" || props.signal.category === "mcp";
+  if (!isScannerCategory) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700", children: "🔍 Scanner" });
+}
+function ScannerSignalRow(props) {
+  const { signal } = props;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "space-y-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: signal.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceBadge, { signal })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/70", children: signal.plain_reason }),
+    signal.technical_detail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] text-muted-foreground break-all", children: signal.technical_detail }) : null,
+    signal.false_positive_hint !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-amber-700/80", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Might be safe if: " }),
+      signal.false_positive_hint
+    ] }) : null
+  ] });
+}
+function ScannerEvidenceSection(props) {
+  const scannerSignals = props.signals.filter(
+    (s) => s.category === "skill" || s.category === "mcp"
+  );
+  if (scannerSignals.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-amber-200/60 bg-amber-50/60 p-4", "aria-label": "Scanner evidence", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Scanner evidence" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scannerSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerSignalRow, { signal }, signal.signal_id)) })
+  ] });
+}
 function WhyThisPaused(props) {
   const signals = props.item.decision_v2_json?.signals ?? [];
   const plainReasons = signals.filter((s) => s.plain_reason.trim().length > 0).map((s) => s.plain_reason);
@@ -14514,8 +14616,11 @@ const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
 const broadScopeValues = /* @__PURE__ */ new Set(["publisher", "harness", "global"]);
 const queuePageSize = 8;
 function ApprovalCenterLayout(props) {
+  const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
   const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
   const activeHarness = props.detail.kind === "ready" ? props.detail.item.harness : queuedItems[0]?.harness ?? null;
+  const handleOpenMobileQueue = reactExports.useCallback(() => setMobileQueueOpen(true), []);
+  const handleCloseMobileQueue = reactExports.useCallback(() => setMobileQueueOpen(false), []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-screen bg-white text-brand-dark", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ShellHeader,
@@ -14523,10 +14628,21 @@ function ApprovalCenterLayout(props) {
         queuedCount: queuedItems.length,
         activeHarness,
         view: props.view,
-        onNavigate: props.onNavigate
+        onNavigate: props.onNavigate,
+        onOpenMobileQueue: handleOpenMobileQueue
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(ShellSidebar, { queuedCount: queuedItems.length, activeHarness, view: props.view }),
+    mobileQueueOpen && props.view === "inbox" && props.requests.kind === "ready" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      MobileQueueDrawer,
+      {
+        requests: props.requests.items,
+        activeRequestId: props.activeRequestId,
+        onClose: handleCloseMobileQueue,
+        onOpenRequest: props.onOpenRequest,
+        onBulkApprove: props.onBulkApprove
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col lg:pl-64", children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { className: "flex-1 p-6 lg:p-10", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts }) : props.view === "fleet" ? props.fleetContent : props.view === "settings" ? props.settingsContent : /* @__PURE__ */ jsxRuntimeExports.jsx(
       QueueWorkspace,
       {
@@ -14538,10 +14654,57 @@ function ApprovalCenterLayout(props) {
         onOpenRequest: props.onOpenRequest,
         onGoHome: props.onGoHome,
         onResolve: props.onResolve,
-        onBulkApprove: props.onBulkApprove
+        onBulkApprove: props.onBulkApprove,
+        onRetry: props.onRetry
       }
     ) }) }) })
   ] });
+}
+function MobileQueueDrawer(props) {
+  const handleBackdropClick = reactExports.useCallback(
+    (e) => {
+      if (e.target === e.currentTarget) props.onClose();
+    },
+    [props.onClose]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "fixed inset-0 z-50 flex lg:hidden",
+      onClick: handleBackdropClick,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute inset-0 bg-black/30 backdrop-blur-sm" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative ml-0 flex w-full max-w-sm flex-col overflow-hidden bg-white shadow-2xl", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between border-b border-slate-200 px-4 py-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm font-semibold text-brand-dark", children: [
+              "Review Queue (",
+              props.requests.length,
+              ")"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: props.onClose,
+                "aria-label": "Close queue",
+                className: "rounded-full p-1.5 text-slate-500 hover:bg-slate-100",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5" })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 overflow-y-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            QueueBrowser,
+            {
+              activeRequestId: props.activeRequestId,
+              items: props.requests,
+              onOpenRequest: props.onOpenRequest,
+              onBulkApprove: props.onBulkApprove
+            }
+          ) })
+        ] })
+      ]
+    }
+  );
 }
 function QueueWorkspace(props) {
   if (props.requests.kind === "loading") {
@@ -14551,7 +14714,14 @@ function QueueWorkspace(props) {
     ] });
   }
   if (props.requests.kind === "error") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(Surface, { tone: "danger", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-purple", children: props.requests.message }) });
+    const approvalUrl = props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null;
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-purple", children: props.requests.message }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
+        props.onRetry && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRetry, children: "Retry" }),
+        approvalUrl && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: approvalUrl, variant: "outline", children: "Open Guard dashboard" })
+      ] })
+    ] }) });
   }
   if (props.requests.items.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -14574,6 +14744,10 @@ function QueueWorkspace(props) {
     props.requests.items.length
   );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+    props.resolutionMessage && props.requests.items.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: props.resolutionMessage })
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       QueueHeader,
       {
@@ -14667,14 +14841,18 @@ function QueueBrowser(props) {
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * queuePageSize;
   const visibleGroups = groups.slice(pageStart, pageStart + queuePageSize);
+  const allGroups = reactExports.useMemo(() => groupDuplicates(props.items), [props.items]);
+  const nextUpItem = reactExports.useMemo(() => {
+    if (allGroups.length < 2 || props.activeRequestId === null) return null;
+    const activeIdx = allGroups.findIndex((g) => g.primary.request_id === props.activeRequestId);
+    if (activeIdx < 0 || activeIdx >= allGroups.length - 1) return null;
+    return allGroups[activeIdx + 1]?.primary ?? null;
+  }, [allGroups, props.activeRequestId]);
   reactExports.useEffect(() => {
     setPage(1);
   }, [harnessFilter, searchTerm, sortDirection, props.items.length]);
   const handleSearchChange = reactExports.useCallback((event) => {
     setSearchTerm(event.target.value);
-  }, []);
-  const handleHarnessFilterChange = reactExports.useCallback((event) => {
-    setHarnessFilter(event.target.value);
   }, []);
   const handleSortChange = reactExports.useCallback((event) => {
     setSortDirection(event.target.value);
@@ -14716,19 +14894,26 @@ function QueueBrowser(props) {
         ]
       }
     ) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 grid gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ListControls,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 space-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search waiting actions" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "search",
+            value: searchTerm,
+            onChange: handleSearchChange,
+            placeholder: "Command, file, MCP, host…",
+            className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          }
+        )
+      ] }),
+      harnesses.length > 1 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        QueueChipFilter,
         {
-          searchLabel: "Search waiting actions",
-          searchValue: searchTerm,
-          searchPlaceholder: "Command, file, MCP, host…",
-          filterLabel: "Filter by app",
-          filterValue: harnessFilter,
-          filterOptions: harnesses,
-          allLabel: "All apps",
-          onSearchChange: handleSearchChange,
-          onFilterChange: handleHarnessFilterChange
+          harnesses,
+          activeFilter: harnessFilter,
+          onFilterChange: setHarnessFilter
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
@@ -14752,6 +14937,7 @@ function QueueBrowser(props) {
       {
         group,
         activeRequestId: props.activeRequestId,
+        nextUpItem: nextUpItem !== null && group.primary.request_id === props.activeRequestId ? nextUpItem : null,
         onOpenRequest: props.onOpenRequest
       },
       group.primary.request_id
@@ -14774,15 +14960,22 @@ function QueueCardRow(props) {
   const handleClick = reactExports.useCallback(() => {
     props.onOpenRequest(props.group.primary.request_id);
   }, [props.onOpenRequest, props.group.primary.request_id]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    QueueCard,
-    {
-      item: props.group.primary,
-      duplicateCount: props.group.duplicateCount,
-      active: props.group.primary.request_id === props.activeRequestId,
-      onClick: handleClick
-    }
-  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      QueueCard,
+      {
+        item: props.group.primary,
+        duplicateCount: props.group.duplicateCount,
+        active: props.group.primary.request_id === props.activeRequestId,
+        onClick: handleClick
+      }
+    ),
+    props.nextUpItem !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 bg-slate-50/60 px-4 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Next up:" }),
+      " ",
+      displayArtifactName(props.nextUpItem)
+    ] }) })
+  ] });
 }
 function QueueCard(props) {
   const summary = buildQueueSummary(props.item);
@@ -14934,7 +15127,17 @@ function DecisionWorkspace(props) {
   const { item, diff, receipt, policy } = props.detail;
   const commonScopeOpts = scopeOptions.filter((option) => commonScopeValues.has(option.value));
   const broadScopeOpts = scopeOptions.filter((option) => !commonScopeValues.has(option.value));
+  const isAlreadyDecided = item.resolution_action !== null;
+  const decidedLabel = item.resolution_action === "allow" ? "allow" : item.resolution_action === "block" ? "block" : item.resolution_action ?? "decided";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-surface-in space-y-4", children: [
+    isAlreadyDecided && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-slate-200/60 bg-slate-50 px-4 py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-muted-foreground", children: [
+        "This action was already decided — ",
+        decidedLabel,
+        ". No further action needed."
+      ] })
+    ] }),
     confirmPending !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ConfirmModal,
       {
@@ -14959,14 +15162,19 @@ function DecisionWorkspace(props) {
         onResolve: handleRequestResolve
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSection, { item }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSectionFull, { item }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(WhatChanged, { item, diff, receipt, policy })
   ] });
 }
-function ScannerEvidenceSection(props) {
+function InlineScannerSection(props) {
+  const allSignals = props.item.decision_v2_json?.signals ?? [];
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSection, { signals: allSignals });
+}
+function ScannerEvidenceSectionFull(props) {
   const hasSignals = (props.item.risk_signals ?? []).length > 0 || !!props.item.risk_summary || !!props.item.why_now;
   if (!hasSignals) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(InlineScannerSection, { item: props.item }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(WhyGuardCares, { item: props.item }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(DataFlowEvidenceCard, { item: props.item }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SkillRiskCard, { item: props.item }),
@@ -15061,7 +15269,7 @@ function RuleBuilder(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-brand-dark/70", children: buildPauseLine(props.item) })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "relative mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "relative mt-5 sticky top-4 z-10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
       DecisionActionPanel,
       {
         allowLabel,
@@ -15217,6 +15425,10 @@ function BlockedActionCard(props) {
   const bannerLabel = isBlocked ? "Blocked" : "Paused for review";
   const bannerIcon = isBlocked ? HiMiniNoSymbol : HiMiniExclamationTriangle;
   const BannerIcon = bannerIcon;
+  const envelope = props.item.action_envelope_json;
+  const isMcpTool = envelope?.action_type === "mcp_tool";
+  const mcpServer = isMcpTool ? envelope?.mcp_server ?? null : null;
+  const mcpTool = isMcpTool ? envelope?.mcp_tool ?? null : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-[1.65rem] border border-brand-blue/15 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex items-center gap-2 px-4 py-2.5 ${bannerBg}`, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(BannerIcon, { className: "h-3.5 w-3.5 shrink-0 text-white", "aria-hidden": "true" }),
@@ -15236,6 +15448,14 @@ function BlockedActionCard(props) {
       ) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4", children: [
+      isMcpTool && mcpServer !== null && mcpTool !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 flex items-center gap-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.15em] text-brand-blue", children: "MCP" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-sm font-medium text-brand-dark", children: [
+          mcpServer,
+          " → ",
+          mcpTool
+        ] })
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center justify-between gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What was stopped" }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "mt-2 text-xl font-semibold tracking-tight text-brand-dark", children: actionDisplayTitle(props.item) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm leading-6 text-brand-dark/70", children: [
@@ -15355,6 +15575,104 @@ function simplifyRiskHeadline(headline, harness) {
   }
   return headline;
 }
+function resolveAppStatus(install, hasInventory, hasReceipts) {
+  if (install !== void 0) {
+    if (install.active) return "protected";
+    return "needs_repair";
+  }
+  if (!hasInventory && !hasReceipts) return "not_found";
+  return "found_unprotected";
+}
+function StatusIcon(props) {
+  if (props.status === "protected") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-5 w-5 text-brand-green", "aria-hidden": "true" });
+  }
+  if (props.status === "found_unprotected") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationCircle, { className: "h-5 w-5 text-amber-500", "aria-hidden": "true" });
+  }
+  if (props.status === "needs_repair") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-5 w-5 text-brand-purple", "aria-hidden": "true" });
+  }
+  if (props.status === "not_found") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-5 w-5 text-slate-400", "aria-hidden": "true" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniQuestionMarkCircle, { className: "h-5 w-5 text-slate-400", "aria-hidden": "true" });
+}
+function StatusBadge(props) {
+  if (props.status === "protected") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Protected" });
+  }
+  if (props.status === "found_unprotected") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "warning", children: "Found" });
+  }
+  if (props.status === "needs_repair") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "destructive", children: "Needs repair" });
+  }
+  if (props.status === "not_found") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Not found" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Unsupported" });
+}
+function CardAction(props) {
+  const handleConnect = reactExports.useCallback(() => {
+    props.onConnect(props.harness);
+  }, [props.onConnect, props.harness]);
+  const handleTest = reactExports.useCallback(() => {
+    props.onTest(props.harness);
+  }, [props.onTest, props.harness]);
+  const handleRepair = reactExports.useCallback(() => {
+    props.onRepair(props.harness);
+  }, [props.onRepair, props.harness]);
+  if (props.status === "protected") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleTest, children: "Test protection" });
+  }
+  if (props.status === "found_unprotected") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleConnect, children: "Connect" });
+  }
+  if (props.status === "needs_repair") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "danger", onClick: handleRepair, children: "Repair" });
+  }
+  if (props.status === "not_found") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "https://hol.org/guard/docs/install", variant: "outline", children: "How to install" });
+  }
+  return null;
+}
+function WatchedAppCard(props) {
+  const hasInventory = props.harnessInventory.length > 0;
+  const status = resolveAppStatus(props.install, hasInventory, props.hasReceipts);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(StatusIcon, { status }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: harnessDisplayName(props.harness) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 font-mono text-[11px] text-muted-foreground", children: props.harness })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatusBadge, { status })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-200/70 px-4 py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What Guard can see" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-muted-foreground", children: [
+        props.harnessInventory.length,
+        " actions seen · ",
+        props.harnessPolicies.length,
+        " saved decisions"
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-200/70 px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CardAction,
+      {
+        harness: props.harness,
+        status,
+        fleetUrl: props.fleetUrl,
+        onConnect: props.onConnect,
+        onTest: props.onTest,
+        onRepair: props.onRepair
+      }
+    ) })
+  ] });
+}
 function collectHarnesses(snapshot) {
   const harnesses = /* @__PURE__ */ new Set();
   for (const item of snapshot.items) {
@@ -15383,6 +15701,16 @@ function FleetWorkspace(props) {
     ])
   ).sort((left, right) => left.localeCompare(right));
   const runtimeState = props.runtime.runtime_state;
+  const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness));
+  const handleConnect = reactExports.useCallback((harness) => {
+    props.onConnectHarness?.(harness);
+  }, [props.onConnectHarness]);
+  const handleTest = reactExports.useCallback((harness) => {
+    props.onTestHarness?.(harness);
+  }, [props.onTestHarness]);
+  const handleRepair = reactExports.useCallback((harness) => {
+    props.onRepairHarness?.(harness);
+  }, [props.onRepairHarness]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "guard-surface-in relative overflow-hidden rounded-[2rem] border border-brand-blue/15 bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_62%,rgba(72,223,123,0.10)_100%)] p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
@@ -15405,23 +15733,26 @@ function FleetWorkspace(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "App coverage" }),
-        visibleHarnesses.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 overflow-hidden rounded-[1.5rem] border border-slate-200/70 bg-white/75", children: visibleHarnesses.map((harness) => {
+        visibleHarnesses.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 grid gap-3 sm:grid-cols-2", children: visibleHarnesses.map((harness) => {
           const install = managedInstalls.find((item) => item.harness === harness);
           const harnessInventory = inventory.filter((item) => item.harness === harness && item.present);
           const harnessPolicies = props.policies.filter((item) => item.harness === harness);
-          const statusLabel = install === void 0 ? "Observed" : install.active ? "Protected" : "Disabled";
-          return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-b border-slate-200/70 px-4 py-3 last:border-b-0", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: harnessDisplayName(harness) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-muted-foreground", children: [
-                harnessInventory.length,
-                " actions seen · ",
-                harnessPolicies.length,
-                " saved approvals"
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: install === void 0 || install.active ? "success" : "destructive", children: statusLabel })
-          ] }) }, harness);
+          const hasReceipts = receiptHarnesses.has(harness);
+          return /* @__PURE__ */ jsxRuntimeExports.jsx(
+            WatchedAppCard,
+            {
+              harness,
+              install,
+              harnessInventory,
+              harnessPolicies,
+              hasReceipts,
+              fleetUrl: props.runtime.fleet_url,
+              onConnect: handleConnect,
+              onTest: handleTest,
+              onRepair: handleRepair
+            },
+            harness
+          );
         }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           EmptyState,
           {
@@ -16032,6 +16363,14 @@ function SettingsWorkspace() {
             actionMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-fade-in text-sm leading-6 text-brand-dark/70", children: actionMessage }) : null
           ] })
         ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Deep scanner" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-[1.25rem] border border-slate-200/70 bg-white/80 px-5 py-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Enhanced scanning" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Install the Cisco scanner extension to enable skill and MCP evidence enrichment." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark", children: "pip install holguard[cisco]" })
+          ] })
+        ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sticky top-24 rounded-[1.75rem] border border-white/80 bg-white/90 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleSave, disabled: saving, children: saving ? "Saving…" : "Save settings" }),
           saveSuccess ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-fade-in mt-3 text-sm font-semibold leading-6 text-green-700", children: "Settings saved" }) : saveError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-fade-in mt-3 text-sm leading-6 text-red-600", children: saveError }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs leading-5 text-muted-foreground", children: "Use this for local tuning. Team policy from Guard Cloud may still override some decisions." })
@@ -16146,6 +16485,9 @@ function HomeWorkspace(props) {
         syncConfigured: snapshot.sync_configured,
         cloudState: snapshot.cloud_state,
         connectUrl: snapshot.connect_url,
+        fleetUrl: snapshot.fleet_url,
+        activeInstallsCount: activeInstalls.length,
+        latestReceiptsCount: snapshot.latest_receipts.length,
         onOpenInbox: props.onOpenInbox,
         onOpenFleet: props.onOpenFleet
       }
@@ -16160,6 +16502,14 @@ function HomeWorkspace(props) {
         onOpenSettings: props.onOpenSettings
       }
     ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      AppsProtectedSection,
+      {
+        managedInstalls,
+        observedHarnesses
+      }
+    ),
+    snapshot.latest_receipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(RecentProtectionSection, { receipts: snapshot.latest_receipts }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "flex cursor-pointer select-none items-center justify-between gap-3 text-sm font-semibold text-brand-dark [&::-webkit-details-marker]:hidden", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Reset remembered decisions" }),
@@ -16189,10 +16539,12 @@ function ProtectionHero(props) {
     }
   }, [props.status, props.onOpenInbox, props.onOpenFleet]);
   const heroBg = heroBackgroundClass(props.status);
-  const statusBadge = props.status === "needs_decision" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "warning", children: [
+  const statusBadge = props.status === "needs_decision" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "default", children: [
     props.queuedCount,
     " waiting"
   ] }) : props.status === "setup_needed" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Setup needed" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Protected" });
+  const showConnectCta = props.cloudState === "local_only" && !props.syncConfigured;
+  const showTestProtection = props.activeInstallsCount > 0 && props.latestReceiptsCount === 0;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "section",
     {
@@ -16208,7 +16560,8 @@ function ProtectionHero(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold tracking-tight text-brand-dark", children: props.copy }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-3", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handlePrimaryCta, children: props.ctaLabel }),
-            props.cloudState === "local_only" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.connectUrl, variant: "secondary", children: "Connect this machine" })
+            showTestProtection && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.fleetUrl, variant: "secondary", children: "Test protection" }),
+            showConnectCta && props.status !== "needs_decision" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.connectUrl, variant: "secondary", children: "Connect this machine" })
           ] })
         ] })
       ]
@@ -16238,6 +16591,100 @@ function HomeStatChip(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.25rem] border border-white/80 bg-white/80 px-4 py-3 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: props.label }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-2xl font-semibold tracking-tight text-brand-dark", children: props.value })
+  ] });
+}
+function AppStatusIcon(props) {
+  if (props.install?.active === true) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" });
+  }
+  if (props.install !== void 0 && !props.install.active) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationCircle, { className: "h-4 w-4 shrink-0 text-amber-500", "aria-hidden": "true" });
+  }
+  if (props.isObserved) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMinusCircle, { className: "h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMinusCircle, { className: "h-4 w-4 shrink-0 text-slate-300", "aria-hidden": "true" });
+}
+function AppStatusBadge(props) {
+  if (props.install?.active === true) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Active" });
+  }
+  if (props.install !== void 0 && !props.install.active) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Needs setup" });
+  }
+  if (props.isObserved) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Observed" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Unknown" });
+}
+function AppRow(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3 border-b border-slate-200/70 px-4 py-3 last:border-b-0", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2.5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AppStatusIcon, { install: props.install, isObserved: props.isObserved }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: harnessDisplayName(props.harness) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(AppStatusBadge, { install: props.install, isObserved: props.isObserved })
+  ] });
+}
+function AppsProtectedSection(props) {
+  const allHarnesses = Array.from(
+    /* @__PURE__ */ new Set([
+      ...props.managedInstalls.map((i) => i.harness),
+      ...props.observedHarnesses
+    ])
+  ).sort();
+  if (allHarnesses.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Apps protected" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 overflow-hidden rounded-[1.25rem] border border-slate-200/70", children: allHarnesses.map((harness) => {
+      const install = props.managedInstalls.find((i) => i.harness === harness);
+      const isObserved = props.observedHarnesses.includes(harness);
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        AppRow,
+        {
+          harness,
+          install,
+          isObserved
+        },
+        harness
+      );
+    }) })
+  ] });
+}
+function formatReceiptTimestamp(timestamp) {
+  try {
+    const date = new Date(timestamp);
+    const now2 = /* @__PURE__ */ new Date();
+    const diffMs = now2.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 6e4);
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${Math.floor(diffHours / 24)}d ago`;
+  } catch {
+    return timestamp;
+  }
+}
+function RecentReceiptRow(props) {
+  const { receipt } = props;
+  const decisionLabel = receipt.policy_decision === "allow" ? "allowed" : "blocked";
+  const name = receipt.artifact_name ?? receipt.artifact_id;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3 border-b border-slate-200/70 px-4 py-3 last:border-b-0", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-w-0", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: harnessDisplayName(receipt.harness) }),
+      " ",
+      decisionLabel,
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-xs", children: name })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-[11px] text-muted-foreground", children: formatReceiptTimestamp(receipt.timestamp) })
+  ] });
+}
+function RecentProtectionSection(props) {
+  const recent = props.receipts.slice(0, 3);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent protection" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 overflow-hidden rounded-[1.25rem] border border-slate-200/70", children: recent.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx(RecentReceiptRow, { receipt }, receipt.receipt_id)) })
   ] });
 }
 function usePathname() {
@@ -16304,17 +16751,18 @@ function App() {
   const [policies, setPolicies] = reactExports.useState({ kind: "loading" });
   const [inventory, setInventory] = reactExports.useState({ kind: "idle" });
   const [resolutionMessage, setResolutionMessage] = reactExports.useState(null);
+  const resolutionInFlight = reactExports.useRef(false);
   reactExports.useEffect(() => {
     let cancelled = false;
     let pollId;
     const loadRuntimeSnapshot = () => {
       fetchRuntimeSnapshot().then((snapshot) => {
-        if (!cancelled) {
+        if (!cancelled && !resolutionInFlight.current) {
           setRuntime({ kind: "ready", snapshot });
           setRequests({ kind: "ready", items: snapshot.items });
         }
       }).catch((error) => {
-        if (!cancelled) {
+        if (!cancelled && !resolutionInFlight.current) {
           const message = error instanceof Error ? error.message : "Unable to load the local approval queue.";
           setRuntime({ kind: "error", message });
           setRequests({ kind: "error", message });
@@ -16468,6 +16916,7 @@ function App() {
     }
   }, [setRuntime, setRequests, setPolicies]);
   const handleResolve = reactExports.useCallback(async (payload) => {
+    resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
     const result = await resolveRequestWithQueueResult(payload);
     const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
@@ -16479,6 +16928,7 @@ function App() {
       navigate("/inbox");
     }
     await refreshStateAfterAction();
+    resolutionInFlight.current = false;
   }, [requests, refreshStateAfterAction, setResolutionMessage]);
   const handleBulkApprove = reactExports.useCallback(async (ids) => {
     const results = await Promise.allSettled(
@@ -16493,6 +16943,24 @@ function App() {
     navigate("/inbox");
     await refreshStateAfterAction();
   }, [refreshStateAfterAction, setResolutionMessage]);
+  const handleRetry = reactExports.useCallback(() => {
+    setRuntime({ kind: "loading" });
+    setRequests({ kind: "loading" });
+    fetchRuntimeSnapshot().then((snapshot) => {
+      setRuntime({ kind: "ready", snapshot });
+      setRequests({ kind: "ready", items: snapshot.items });
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : "Unable to load the local approval queue.";
+      setRuntime({ kind: "error", message });
+      setRequests({ kind: "error", message });
+    });
+  }, []);
+  const handleConnectHarness = reactExports.useCallback((_harness) => {
+  }, []);
+  const handleTestHarness = reactExports.useCallback((_harness) => {
+  }, []);
+  const handleRepairHarness = reactExports.useCallback((_harness) => {
+  }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     ApprovalCenterLayout,
     {
@@ -16522,12 +16990,16 @@ function App() {
       onOpenRequest: handleOpenRequest,
       onResolve: handleResolve,
       onBulkApprove: handleBulkApprove,
+      onRetry: handleRetry,
       fleetContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         FleetWorkspace,
         {
           runtime: runtime.snapshot,
           policies: policies.kind === "ready" ? policies.items : [],
-          inventory
+          inventory,
+          onConnectHarness: handleConnectHarness,
+          onTestHarness: handleTestHarness,
+          onRepairHarness: handleRepairHarness
         }
       ) : null,
       settingsContent: /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsWorkspace, {})
