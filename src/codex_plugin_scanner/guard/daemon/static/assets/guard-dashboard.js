@@ -15961,7 +15961,6 @@ function SettingsWorkspace() {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-red-100 bg-red-50/50 p-5 shadow-sm", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Data management" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-3", children: [
-            "              ",
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Clear saved approvals" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Removes all stored allow/block decisions. Guard will ask again for previously approved actions." }),
@@ -15995,7 +15994,7 @@ function SettingsWorkspace() {
 }
 function DiagnosticsPerfCard(props) {
   const { snapshot } = props;
-  const threadCount = snapshot.thread_count ?? void 0;
+  const threadCount = snapshot.thread_count;
   const daemonPort = snapshot.runtime_state?.daemon_port ?? null;
   const startedAt = snapshot.runtime_state?.started_at ?? null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [

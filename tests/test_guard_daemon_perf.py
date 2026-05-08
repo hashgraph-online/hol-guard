@@ -272,6 +272,21 @@ class TestSlowSQLiteTelemetry:
         slow_warnings = [r for r in caplog.records if "slow transaction" in r.getMessage().lower()]
         assert len(slow_warnings) == 0, "Fast transaction must not emit slow transaction warning"
 
+    def test_slow_transaction_emits_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import logging
+
+        import codex_plugin_scanner.guard.store as store_module
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        monkeypatch.setattr(store_module, "_SLOW_QUERY_THRESHOLD_MS", 0)
+        store = GuardStore(guard_home=tmp_path / "guard-home")
+        with caplog.at_level(logging.WARNING, logger="codex_plugin_scanner.guard.store"):
+            _ = store.list_approval_requests()
+        slow_warnings = [r for r in caplog.records if "slow transaction" in r.getMessage().lower()]
+        assert len(slow_warnings) > 0, "Slow transaction (threshold=0ms) must emit a slow transaction warning"
+
     def test_store_has_slow_query_threshold_constant(self) -> None:
         from codex_plugin_scanner.guard.store import _SLOW_QUERY_THRESHOLD_MS
 
