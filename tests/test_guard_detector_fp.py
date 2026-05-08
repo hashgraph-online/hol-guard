@@ -401,3 +401,27 @@ class TestSystemdAbsolutePathRegressions:
         cmd = "cp evil.service /etc/systemd/system/evil.service"
         matches = detect_persistence_mechanisms(cmd)
         assert any(m.mechanism == "systemd_unit_write" for m in matches)
+
+
+class TestSedWriteFlagRegressions:
+    """Regression: sed -i.bak and sed -ni must not be classified as benign source search."""
+
+    def test_sed_inplace_with_suffix_not_benign(self) -> None:
+        result = classify_source_search_command("sed -i.bak 's/foo/bar/g' file.txt")
+        assert not result.is_source_search
+
+    def test_sed_inplace_empty_suffix_not_benign(self) -> None:
+        result = classify_source_search_command("sed -i '' 's/foo/bar/g' file.txt")
+        assert not result.is_source_search
+
+    def test_sed_clustered_ni_not_benign(self) -> None:
+        result = classify_source_search_command("sed -ni 's/pattern/replacement/p' file.txt")
+        assert not result.is_source_search
+
+    def test_sed_readonly_is_benign(self) -> None:
+        result = classify_source_search_command("sed -n 's/foo/bar/p' file.txt")
+        assert result.is_source_search
+
+    def test_sed_print_only_is_benign(self) -> None:
+        result = classify_source_search_command("sed 's/ERROR/FOUND/' logfile.txt")
+        assert result.is_source_search

@@ -211,6 +211,16 @@ def _strip_path_prefix(token: str) -> str:
 
 
 def _has_no_write_flags(parts: list[str]) -> bool:
-    """Return True if awk/sed/jq are used read-only (no in-place or write flags)."""
-    write_flags = {"-i", "--in-place", "-w", "--write"}
-    return not any(p.split("=")[0] in write_flags for p in parts[1:])
+    """Return True if awk/sed/jq are used read-only (no in-place or write flags).
+
+    Handles suffixed in-place forms (``-i.bak``, ``-i ''``) and clustered
+    short options that include ``i`` (e.g. ``-ni``).
+    """
+    write_flags = {"--in-place", "-w", "--write"}
+    for p in parts[1:]:
+        tok = p.split("=")[0]
+        if tok in write_flags:
+            return False
+        if len(tok) >= 2 and tok[0] == "-" and tok[1] != "-" and "i" in tok[1:]:
+            return False
+    return True

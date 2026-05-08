@@ -54,11 +54,6 @@ _REGISTRY_WRITE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-_AT_JOB_PATTERN = re.compile(
-    r"(?:^|[\s;&|])at\b[^\r\n;&|]{0,200}",
-    re.IGNORECASE,
-)
-
 _AT_JOB_WRITE_PATTERN = re.compile(
     r"(?:^|[\s;&|])"
     r"(?:"
