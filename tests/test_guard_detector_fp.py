@@ -359,3 +359,45 @@ class TestFindMutatingFlags:
     def test_find_name_only_is_benign(self) -> None:
         result = classify_source_search_command("find . -name '*.ts' -type f")
         assert result.is_source_search
+
+
+class TestCrontabUserFlagRegressions:
+    """Regression: crontab -u <user> -l must not be flagged as cron_write."""
+
+    def test_crontab_user_list_not_flagged(self) -> None:
+        assert detect_persistence_mechanisms("crontab -u root -l") == ()
+
+    def test_crontab_user_alice_list_not_flagged(self) -> None:
+        assert detect_persistence_mechanisms("crontab -u alice -l") == ()
+
+    def test_crontab_user_edit_is_flagged(self) -> None:
+        matches = detect_persistence_mechanisms("crontab -u alice -e")
+        assert any(m.mechanism == "cron_write" for m in matches)
+
+    def test_crontab_stdin_write_is_flagged(self) -> None:
+        matches = detect_persistence_mechanisms("echo '0 * * * * evil' | crontab -")
+        assert any(m.mechanism == "cron_write" for m in matches)
+
+
+class TestSystemdAbsolutePathRegressions:
+    """Regression: absolute home paths for user systemd units must be detected."""
+
+    def test_absolute_home_systemd_user_service(self) -> None:
+        cmd = "cp evil.service /home/alice/.config/systemd/user/evil.service"
+        matches = detect_persistence_mechanisms(cmd)
+        assert any(m.mechanism == "systemd_unit_write" for m in matches)
+
+    def test_dollar_home_systemd_user_service(self) -> None:
+        cmd = "cp evil.service $HOME/.config/systemd/user/evil.service"
+        matches = detect_persistence_mechanisms(cmd)
+        assert any(m.mechanism == "systemd_unit_write" for m in matches)
+
+    def test_tilde_systemd_user_service_still_flagged(self) -> None:
+        cmd = "cp evil.service ~/.config/systemd/user/evil.service"
+        matches = detect_persistence_mechanisms(cmd)
+        assert any(m.mechanism == "systemd_unit_write" for m in matches)
+
+    def test_system_systemd_still_flagged(self) -> None:
+        cmd = "cp evil.service /etc/systemd/system/evil.service"
+        matches = detect_persistence_mechanisms(cmd)
+        assert any(m.mechanism == "systemd_unit_write" for m in matches)

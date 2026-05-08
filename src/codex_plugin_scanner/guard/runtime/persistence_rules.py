@@ -16,9 +16,8 @@ _GIT_HOOK_PATHS = re.compile(
 _CRON_WRITE_PATTERN = re.compile(
     r"(?:^|[\s;&|])"
     r"(?:"
-    r"crontab\s+(?:-u\s+\S+\s+)?-(?!l\b)[a-z]*\b|"
-    r"crontab\s+(?:-u\s+\S+\s+)?-\s*$|"
-    r"crontab\s+[^-\r\n\s][^\r\n;&|]{0,100}|"
+    r"crontab\s+(?:-u\s+\S+\s+)?(?:-e\b|-\s*$|[^-\r\n\s][^\r\n;&|]{0,100})|"
+    r"crontab\s*<\s*\S+|"
     r"(?:echo|printf|cat|tee)\b[^\r\n;&|]{0,200}(?:>|\|\s*tee)\s*/(?:var/spool/cron|etc/cron[^'\"]*?)"
     r")",
     re.IGNORECASE,
@@ -36,7 +35,8 @@ _LAUNCH_AGENT_PATHS = re.compile(
 _SYSTEMD_WRITE_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_.-])"
     r"(?:/etc/systemd/system/|/usr/lib/systemd/system/|/run/systemd/system/|"
-    r"~?/\.config/systemd/user/)"
+    r"~?/\.config/systemd/user/|"
+    r"(?:/home/[^/\s]+|\$HOME)/\.config/systemd/user/)"
     r"[^'\"\s\\]{3,}\.(?:service|timer|socket|path|mount|target)"
     r"(?![A-Za-z0-9_.-])",
     re.IGNORECASE,
