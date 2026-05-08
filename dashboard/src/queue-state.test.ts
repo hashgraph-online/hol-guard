@@ -7,6 +7,9 @@ import {
   searchQueue,
   resolveStaleRequestRecovery,
   buildHomePrimaryState,
+  isReadOnlyQueueGroup,
+  bulkApproveActionCount,
+  bulkApprovePrimaryIds,
 } from "./queue-state";
 
 function assert(condition: boolean, message: string): void {
@@ -283,4 +286,121 @@ const singlePending = buildHomePrimaryState(1, 1);
 assert(
   singlePending.copy.includes("1 action paused"),
   "T-QS-36: buildHomePrimaryState uses singular 'action' when exactly one pending"
+);
+
+const fileReadEnvelope: GuardActionEnvelope = {
+  schema_version: 1,
+  action_id: "act-read",
+  harness: "codex",
+  event_name: "tool_call",
+  action_type: "file_read",
+  command: null,
+  workspace: null,
+  workspace_hash: null,
+  tool_name: null,
+  prompt_excerpt: null,
+  target_paths: [],
+  network_hosts: [],
+  mcp_server: null,
+  mcp_tool: null,
+  package_manager: null,
+  package_name: null,
+  script_name: null,
+  raw_payload_redacted: {},
+};
+
+const readOnlySingle: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-ro-single",
+  policy_action: "require-reapproval",
+  artifact_type: "command",
+  action_envelope_json: fileReadEnvelope,
+};
+
+const readOnlyWithDup1: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-ro-dup1",
+  queue_group_id: "grp-ro",
+  policy_action: "require-reapproval",
+  artifact_type: "command",
+  action_envelope_json: fileReadEnvelope,
+};
+
+const readOnlyWithDup2: GuardApprovalRequest = {
+  ...readOnlyWithDup1,
+  request_id: "req-ro-dup2",
+};
+
+const blockedItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-blocked",
+  policy_action: "block",
+  action_envelope_json: fileReadEnvelope,
+};
+
+const fileReadTypeItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-frt",
+  policy_action: "require-reapproval",
+  artifact_type: "file_read_request",
+  action_envelope_json: null,
+};
+
+const singleReadOnlyGroup = groupDuplicates([readOnlySingle])[0];
+assert(
+  isReadOnlyQueueGroup(singleReadOnlyGroup),
+  "T-QS-37: isReadOnlyQueueGroup returns true for a distinct read-only group with no duplicates"
+);
+
+const roGroupWithDup = groupDuplicates([readOnlyWithDup1, readOnlyWithDup2])[0];
+assert(
+  isReadOnlyQueueGroup(roGroupWithDup),
+  "T-QS-38: isReadOnlyQueueGroup returns true for a duplicate group with file_read action type"
+);
+
+const blockedGroup = groupDuplicates([blockedItem])[0];
+assert(
+  !isReadOnlyQueueGroup(blockedGroup),
+  "T-QS-39: isReadOnlyQueueGroup returns false for a blocked group"
+);
+
+const fileReadTypeGroup = groupDuplicates([fileReadTypeItem])[0];
+assert(
+  isReadOnlyQueueGroup(fileReadTypeGroup),
+  "T-QS-40: isReadOnlyQueueGroup returns true for artifact_type file_read_request even without action_envelope"
+);
+
+const mixedGroups = groupDuplicates([readOnlySingle, readOnlyWithDup1, readOnlyWithDup2]);
+assert(
+  bulkApproveActionCount(mixedGroups) === 3,
+  "T-QS-41: bulkApproveActionCount counts primary + duplicates across all groups"
+);
+
+const singleGroup = groupDuplicates([readOnlySingle]);
+assert(
+  bulkApproveActionCount(singleGroup) === 1,
+  "T-QS-42: bulkApproveActionCount counts 1 for a single group with no duplicates"
+);
+
+assert(
+  bulkApproveActionCount([]) === 0,
+  "T-QS-43: bulkApproveActionCount returns 0 for empty groups"
+);
+
+const primaryIds = bulkApprovePrimaryIds(mixedGroups);
+assert(
+  primaryIds.length === 2,
+  "T-QS-44: bulkApprovePrimaryIds returns one ID per group (not per action)"
+);
+assert(
+  primaryIds[0] === "req-ro-single",
+  "T-QS-45: bulkApprovePrimaryIds returns primary request IDs only"
+);
+assert(
+  primaryIds[1] === "req-ro-dup1",
+  "T-QS-46: bulkApprovePrimaryIds returns primary ID for collapsed duplicate group"
+);
+assert(
+  !primaryIds.includes("req-ro-dup2"),
+  "T-QS-47: bulkApprovePrimaryIds excludes duplicate IDs from collapsed groups"
 );

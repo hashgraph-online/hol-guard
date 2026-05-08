@@ -16,6 +16,22 @@ export type HomePrimaryState = {
   ctaLabel: string;
 };
 
+export function isReadOnlyQueueGroup(group: QueueGroup): boolean {
+  return (
+    group.primary.policy_action !== "block" &&
+    (group.primary.action_envelope_json?.action_type === "file_read" ||
+      group.primary.artifact_type === "file_read_request")
+  );
+}
+
+export function bulkApproveActionCount(groups: QueueGroup[]): number {
+  return groups.reduce((sum, g) => sum + 1 + g.duplicateCount, 0);
+}
+
+export function bulkApprovePrimaryIds(groups: QueueGroup[]): string[] {
+  return groups.map((g) => g.primary.request_id);
+}
+
 export function buildProgressCopy(activeIndex: number, total: number): string {
   if (total === 0) {
     return "";
