@@ -709,3 +709,34 @@ def test_emit_guard_payload_renders_sandbox_analysis_table(capsys, monkeypatch) 
     output = capsys.readouterr().out
     assert "Sandbox analysis" in output
     assert "1 result(s)" in output
+
+
+def test_approvals_open_render_shows_url(capsys) -> None:
+    emit_guard_payload(
+        "approvals",
+        {"request_id": "req-render-01", "approval_url": "http://127.0.0.1:5474/approvals/req-render-01"},
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "http://127.0.0.1:5474/approvals/req-render-01" in output
+
+
+def test_approvals_retry_hint_render_shows_title_and_body(capsys) -> None:
+    emit_guard_payload(
+        "approvals",
+        {"title": "Approved. Retry in chat.", "body": "Return to Codex and retry"},
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "Approved. Retry in chat." in output
+    assert "Return to Codex and retry" in output
+
+
+def test_approvals_render_error_shows_panel(capsys) -> None:
+    emit_guard_payload(
+        "approvals",
+        {"error": "not_found", "request_id": "req-missing"},
+        False,
+    )
+    output = capsys.readouterr().out
+    assert "not_found" in output

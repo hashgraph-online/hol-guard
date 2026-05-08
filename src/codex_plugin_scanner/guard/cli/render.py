@@ -566,6 +566,24 @@ def _render_events(console: Console, payload: dict[str, object]) -> None:
 
 
 def _render_approvals(console: Console, payload: dict[str, object]) -> None:
+    approval_url = payload.get("approval_url")
+    if isinstance(approval_url, str) and approval_url:
+        body = Table.grid(padding=(0, 1))
+        body.add_row("Request", str(payload.get("request_id", "")))
+        body.add_row("URL", f"[bold]{approval_url}[/bold]")
+        console.print(Panel(body, title="Open approval", border_style="cyan"))
+        return
+    if "title" in payload and "body" in payload:
+        body = Table.grid(padding=(0, 1))
+        body.add_row("Status", str(payload["title"]))
+        body.add_row("Next step", str(payload["body"]))
+        console.print(Panel(body, title="Approval resolved", border_style="green"))
+        return
+    if payload.get("error"):
+        console.print(
+            Panel(str(payload.get("error")), title="Approval error", border_style="red")
+        )
+        return
     if "history_cleared" in payload or "cleared_policies" in payload:
         error = payload.get("error")
         body = Table.grid(padding=(0, 1))
