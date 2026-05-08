@@ -8,6 +8,7 @@ import os
 import re
 import socket
 import subprocess
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -40,8 +41,22 @@ _APPROVAL_METADATA_KEYS = (
 )
 
 
+_DEFAULT_DETECTOR_REGISTRY: tuple[Callable[[], tuple[Any, ...]], DetectorRegistry] | None = None
+_DEFAULT_DETECTOR_REGISTRY_LOCK = threading.Lock()
+
+
 def _get_default_detector_registry() -> DetectorRegistry:
-    return DetectorRegistry(register_default_detectors())
+    global _DEFAULT_DETECTOR_REGISTRY
+    factory = register_default_detectors
+    cached = _DEFAULT_DETECTOR_REGISTRY
+    if cached is not None and cached[0] is factory:
+        return cached[1]
+    with _DEFAULT_DETECTOR_REGISTRY_LOCK:
+        cached = _DEFAULT_DETECTOR_REGISTRY
+        if cached is None or cached[0] is not factory:
+            cached = (factory, DetectorRegistry(factory()))
+            _DEFAULT_DETECTOR_REGISTRY = cached
+    return cached[1]
 
 
 _PAIN_SIGNAL_EVENTS = frozenset(
