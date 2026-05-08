@@ -1142,12 +1142,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
             return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "harnesses"] and path_parts[3] in {
-            "install",
-            "verify",
-            "repair",
-            "uninstall",
-        }:
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["v1", "harnesses"]
+            and path_parts[3]
+            in {
+                "install",
+                "verify",
+                "repair",
+                "uninstall",
+            }
+        ):
             return True
         return len(path_parts) == 4 and path_parts[:2] == ["v1", "artifacts"] and path_parts[3] == "diff"
 
@@ -1332,12 +1337,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
             return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "harnesses"] and path_parts[3] in {
-            "install",
-            "verify",
-            "repair",
-            "uninstall",
-        }:
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["v1", "harnesses"]
+            and path_parts[3]
+            in {
+                "install",
+                "verify",
+                "repair",
+                "uninstall",
+            }
+        ):
             return True
         return len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision"
 

@@ -274,8 +274,8 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     ):
         app_parser = apps_subparsers.add_parser(app_command, help=help_text)
         app_parser.add_argument("harness")
-        _add_guard_common_args(app_parser)
-        app_parser.add_argument("--json", action="store_true")
+        _add_guard_common_args(app_parser, suppress_defaults=True)
+        app_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
         if app_command in {"connect", "repair"}:
             app_parser.add_argument("--dry-run", action="store_true")
         if app_command == "disconnect":
@@ -706,10 +706,15 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     ]
 
 
-def _add_guard_common_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--home")
-    parser.add_argument("--guard-home")
-    parser.add_argument("--workspace")
+def _add_guard_common_args(
+    parser: argparse.ArgumentParser,
+    *,
+    suppress_defaults: bool = False,
+) -> None:
+    default = argparse.SUPPRESS if suppress_defaults else None
+    parser.add_argument("--home", default=default)
+    parser.add_argument("--guard-home", default=default)
+    parser.add_argument("--workspace", default=default)
 
 
 def _add_guard_cisco_mode_arg(parser: argparse.ArgumentParser) -> None:
