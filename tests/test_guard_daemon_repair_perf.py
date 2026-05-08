@@ -207,4 +207,3 @@ class TestApproveOnceNoSecondPrompt:
 
         result = store.resolve_policy("codex", artifact_id, "hash-canary-v2-changed", workspace=None)
         assert result is None, f"Changed hash must not inherit prior approval, got {result!r}"
-
