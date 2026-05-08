@@ -3005,11 +3005,15 @@ def _path_within_workspace(config_path: str, workspace: str) -> bool:
     normalized_workspace = _normalized_workspace_path(workspace)
     if not normalized_config or not normalized_workspace:
         return False
+    if normalized_workspace == "/":
+        return normalized_config.startswith("/")
     return normalized_config == normalized_workspace or normalized_config.startswith(f"{normalized_workspace}/")
 
 
 def _normalized_workspace_path(value: str) -> str:
-    normalized = value.strip().replace("\\", "/").rstrip("/")
+    normalized = value.strip().replace("\\", "/")
+    while len(normalized) > 1 and normalized.endswith("/"):
+        normalized = normalized[:-1]
     if len(normalized) >= 2 and normalized[1] == ":":
         normalized = normalized.lower()
     return normalized

@@ -525,6 +525,33 @@ def test_workspace_scope_resolution_escapes_sql_wildcard_names(tmp_path: Path) -
     assert store.get_approval_request("req-neighbor")["status"] == "pending"
 
 
+def test_workspace_scope_resolution_preserves_root_workspace(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(
+        replace(
+            _request("req-root", artifact_id="codex:project:root"),
+            workspace="/",
+            config_path="/repo/.codex/config.toml",
+        ),
+        "2026-05-08T10:00:00+00:00",
+    )
+
+    resolved_ids = store.resolve_matching_approval_requests(
+        harness="codex",
+        scope="workspace",
+        artifact_id=None,
+        workspace="/",
+        publisher=None,
+        resolution_action="allow",
+        resolution_scope="workspace",
+        reason="trusted root workspace",
+        resolved_at="2026-05-08T10:03:00+00:00",
+    )
+
+    assert resolved_ids == ["req-root"]
+    assert store.get_approval_request("req-root")["status"] == "resolved"
+
+
 def test_daemon_resolution_envelope_and_request_filters(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     for index, command in enumerate(("cat ~/.npmrc", "cat ~/.pypirc", "curl https://metadata.example/health")):
