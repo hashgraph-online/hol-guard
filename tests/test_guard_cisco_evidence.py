@@ -6,6 +6,7 @@ import json
 import sqlite3
 import time
 from pathlib import Path
+from types import ModuleType
 
 from codex_plugin_scanner.guard.runtime.cisco_evidence import (
     cisco_finding_to_risk_signal,
@@ -157,16 +158,18 @@ def test_skill_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, 
         def __init__(self, preset_base: str) -> None:
             self.preset_base = preset_base
 
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "skill_scanner",
-        type("SkillScannerModule", (), {"SkillScanner": SlowScanner}),
-    )
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "skill_scanner.core.scan_policy",
-        type("ScanPolicyModule", (), {"ScanPolicy": ScanPolicy}),
-    )
+    skill_scanner_module = ModuleType("skill_scanner")
+    skill_scanner_module.SkillScanner = SlowScanner
+    scan_policy_module = ModuleType("skill_scanner.core.scan_policy")
+    scan_policy_module.ScanPolicy = ScanPolicy
+    monkeypatch.setitem(__import__("sys").modules, "skill_scanner", skill_scanner_module)
+    monkeypatch.setitem(__import__("sys").modules, "skill_scanner.core", ModuleType("skill_scanner.core"))
+    monkeypatch.setitem(__import__("sys").modules, "skill_scanner.core.scan_policy", scan_policy_module)
+
+    def _raise_timeout(skills_dir: Path, policy_name: str, timeout_seconds: float | None) -> dict[str, object]:
+        raise TimeoutError("Cisco skill scanner timed out")
+
+    monkeypatch.setattr(cisco_skill_scanner, "_scan_directory_with_timeout", _raise_timeout)
 
     summary = cisco_skill_scanner.run_cisco_skill_scan(tmp_path, timeout_seconds=0.001)
 
