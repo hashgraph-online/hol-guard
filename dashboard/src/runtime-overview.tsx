@@ -40,6 +40,44 @@ function remediationLine(snapshot: GuardRuntimeSnapshot): string {
   return "Open Guard Cloud for shared proof, Watched Apps for local coverage, or the review queue when something needs your choice.";
 }
 
+export type ApprovalCenterHealthState = "ready" | "starting" | "stale" | "repair_needed";
+
+export type ApprovalCenterHealthCopy = {
+  state: ApprovalCenterHealthState;
+  label: string;
+  detail: string;
+};
+
+export function resolveApprovalCenterHealth(snapshot: GuardRuntimeSnapshot): ApprovalCenterHealthCopy {
+  if (snapshot.runtime_state === null) {
+    if (snapshot.headline_state === "setup") {
+      return {
+        state: "starting",
+        label: "Approval center starting",
+        detail: "Guard is setting up the local approval center. This takes a few seconds.",
+      };
+    }
+    return {
+      state: "stale",
+      label: "Approval center offline",
+      detail: "The local approval center is not running. Start Guard to restore the approval link.",
+    };
+  }
+  if (snapshot.approval_center_url === null) {
+    return {
+      state: "repair_needed",
+      label: "Approval center unreachable",
+      detail: "The approval center URL is missing. Use the repair action in Settings to restore it.",
+    };
+  }
+  return {
+    state: "ready",
+    label: "Approval center ready",
+    detail: `The approval center is running and accepting requests at ${snapshot.approval_center_url}.`,
+  };
+}
+
+
 export function resolveCloudSyncHealthCopy(health: GuardCloudSyncHealth): { label: string; detail: string } {
   return {
     label: health.label,
@@ -89,6 +127,28 @@ function CloudSyncHealthCard(props: { health: GuardCloudSyncHealth }) {
           Cloud sync health
         </p>
         <Tag tone={cloudSyncHealthTone(props.health.state)}>{copy.label}</Tag>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
+    </div>
+  );
+}
+
+function approvalHealthTone(state: ApprovalCenterHealthState): "green" | "blue" | "slate" | "red" {
+  if (state === "ready") return "green";
+  if (state === "starting") return "blue";
+  if (state === "repair_needed") return "red";
+  return "slate";
+}
+
+function ApprovalCenterHealthCard(props: { snapshot: GuardRuntimeSnapshot }) {
+  const copy = resolveApprovalCenterHealth(props.snapshot);
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
+          Approval center health
+        </p>
+        <Tag tone={approvalHealthTone(copy.state)}>{copy.label}</Tag>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
     </div>
@@ -247,6 +307,7 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
         </div>
 
         <CloudSyncHealthCard health={snapshot.cloud_sync_health} />
+        <ApprovalCenterHealthCard snapshot={snapshot} />
 
         <div className="rounded-xl border border-border bg-white px-5 py-4">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">

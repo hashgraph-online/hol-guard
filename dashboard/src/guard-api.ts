@@ -631,3 +631,15 @@ export async function exportDiagnostics(): Promise<Blob> {
   }
   return response.blob();
 }
+
+export async function repairApprovalCenter(): Promise<{ repaired: boolean; cleared: string[] }> {
+  if (isGuardDemoMode()) {
+    return { repaired: true, cleared: ["locator", "daemon_state"] };
+  }
+  const response = await fetch(guardApiInput("/v1/daemon/repair"), withGuardAuth({ method: "POST" }));
+  if (!response.ok) {
+    throw new Error(`Repair failed with ${response.status}`);
+  }
+  return response.json() as Promise<{ repaired: boolean; cleared: string[] }>;
+}
+
