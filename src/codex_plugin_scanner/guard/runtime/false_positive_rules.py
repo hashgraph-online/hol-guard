@@ -33,6 +33,12 @@ _PIPE_TO_EXFIL = re.compile(
     re.IGNORECASE,
 )
 
+_FIND_MUTATING_FLAGS = re.compile(
+    r"(?:^|[\s])-(?:delete|exec\s+rm|exec\s+unlink|exec\s+shred|execdir\s+rm)\b"
+    r"|(?:^|[\s])-exec\s+\S+[^\r\n;&|]{0,100}\{.*\}\s*(?:\\;|;|\+)",
+    re.IGNORECASE,
+)
+
 _OUTPUT_REDIRECT_TO_EXFIL = re.compile(
     r">\s*(?:/proc/\S+|/dev/tcp/|/dev/udp/)",
     re.IGNORECASE,
@@ -142,6 +148,13 @@ def classify_source_search_command(command: str) -> SourceSearchClassification:
         return SourceSearchClassification(
             is_source_search=False,
             reason="targets secret file",
+            tool=tool,
+        )
+
+    if tool == "find" and _FIND_MUTATING_FLAGS.search(command):
+        return SourceSearchClassification(
+            is_source_search=False,
+            reason="find with mutating action flag",
             tool=tool,
         )
 

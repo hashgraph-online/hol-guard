@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.cisco_preflight import CiscoMcpPreflightDetector, CiscoSkillPreflightDetector
 from codex_plugin_scanner.guard.runtime.data_flow_rules import detect_data_flow_exfiltration
 from codex_plugin_scanner.guard.runtime.false_positive_rules import (
+    classify_docs_example_source,
     classify_health_endpoint_fetch,
     classify_package_metadata_access,
     classify_source_search_command,
@@ -393,6 +394,29 @@ class FalsePositiveSuppressorDetector:
                         advisory_id=None,
                     )
                 )
+
+            for path in action.target_paths:
+                if classify_docs_example_source(path):
+                    signals.append(
+                        RiskSignalV2(
+                            signal_id=f"fp:docs-example-source:{path[:40]}",
+                            category="false_positive",
+                            severity="info",
+                            confidence="strong",
+                            detector=self.detector_id,
+                            title="Access to docs or example file",
+                            plain_reason=(
+                                "The file path points to documentation, examples, or fixture data,"
+                                " which rarely contains real credentials or sensitive content."
+                            ),
+                            technical_detail=f"matched docs/example path: {path}",
+                            evidence_ref="target_paths",
+                            redaction_level="none",
+                            false_positive_hint=None,
+                            advisory_id=None,
+                        )
+                    )
+                    break
 
         return tuple(signals)
 

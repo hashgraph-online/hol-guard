@@ -5,16 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-_SHELL_PROFILE_FILES = re.compile(
-    r"(?<![A-Za-z0-9_.-])"
-    r"(?:\.bashrc|\.bash_profile|\.bash_login|\.profile|\.zshrc|\.zprofile|\.zlogin|"
-    r"\.zshenv|\.kshrc|\.cshrc|\.tcshrc|/etc/profile(?:\.d/[^'\"]+)?|"
-    r"/etc/bash\.bashrc|/etc/environment|"
-    r"\.config/fish/config\.fish|\.config/fish/functions/[^'\"]+)"
-    r"(?![A-Za-z0-9_.-])",
-    re.IGNORECASE,
-)
-
 _GIT_HOOK_PATHS = re.compile(
     r"(?<![A-Za-z0-9_.-])"
     r"\.git/hooks/(?:pre-commit|post-commit|pre-push|post-merge|post-checkout|"
@@ -25,8 +15,12 @@ _GIT_HOOK_PATHS = re.compile(
 
 _CRON_WRITE_PATTERN = re.compile(
     r"(?:^|[\s;&|])"
-    r"(?:crontab\s+-[lr]*[^-]*|"
-    r"(?:echo|printf|cat|tee)\b[^\r\n;&|]{0,200}(?:>|\|\s*tee)\s*/(?:var/spool/cron|etc/cron[^'\"]*?))",
+    r"(?:"
+    r"crontab\s+(?:-u\s+\S+\s+)?-(?!l\b)[a-z]*\b|"
+    r"crontab\s+(?:-u\s+\S+\s+)?-\s*$|"
+    r"crontab\s+[^-\r\n\s][^\r\n;&|]{0,100}|"
+    r"(?:echo|printf|cat|tee)\b[^\r\n;&|]{0,200}(?:>|\|\s*tee)\s*/(?:var/spool/cron|etc/cron[^'\"]*?)"
+    r")",
     re.IGNORECASE,
 )
 
@@ -34,7 +28,7 @@ _LAUNCH_AGENT_PATHS = re.compile(
     r"(?<![A-Za-z0-9_.-])"
     r"(?:~/Library/LaunchAgents/|/Library/LaunchAgents/|/Library/LaunchDaemons/|"
     r"/System/Library/LaunchAgents/|/System/Library/LaunchDaemons/)"
-    r"[^'\"\\s]{3,}\.plist"
+    r"[^'\"\s\\]{3,}\.plist"
     r"(?![A-Za-z0-9_.-])",
     re.IGNORECASE,
 )
@@ -43,7 +37,7 @@ _SYSTEMD_WRITE_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_.-])"
     r"(?:/etc/systemd/system/|/usr/lib/systemd/system/|/run/systemd/system/|"
     r"~?/\.config/systemd/user/)"
-    r"[^'\"\\s]{3,}\.(?:service|timer|socket|path|mount|target)"
+    r"[^'\"\s\\]{3,}\.(?:service|timer|socket|path|mount|target)"
     r"(?![A-Za-z0-9_.-])",
     re.IGNORECASE,
 )
@@ -62,6 +56,15 @@ _REGISTRY_WRITE_PATTERN = re.compile(
 
 _AT_JOB_PATTERN = re.compile(
     r"(?:^|[\s;&|])at\b[^\r\n;&|]{0,200}",
+    re.IGNORECASE,
+)
+
+_AT_JOB_WRITE_PATTERN = re.compile(
+    r"(?:^|[\s;&|])"
+    r"(?:"
+    r"at\s+(?:-f\s+\S+\s+)?(?:now|midnight|noon|tomorrow|\d+(?::\d+)?(?:am|pm)?)\b|"
+    r"(?:echo|printf)\b[^\r\n;&|]{0,200}\|\s*at\b"
+    r")",
     re.IGNORECASE,
 )
 
@@ -149,6 +152,18 @@ def detect_persistence_mechanisms(command: str) -> tuple[PersistenceMatch, ...]:
                     "Command writes to the Windows Registry, which can configure autostart or persistent settings."
                 ),
                 false_positive_hint="Allow if this is a known legitimate software installer or configuration step.",
+            )
+        )
+
+    if _AT_JOB_WRITE_PATTERN.search(command):
+        matches.append(
+            PersistenceMatch(
+                mechanism="at_job_schedule",
+                plain_reason=(
+                    "Command schedules a one-time deferred job via `at`,"
+                    " which runs automatically at the specified time."
+                ),
+                false_positive_hint="Allow if this is scheduling a legitimate maintenance or notification task.",
             )
         )
 

