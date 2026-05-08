@@ -472,7 +472,7 @@ class GuardBypassDetector:
     _CONFIG_DESTROY_PATTERN = re.compile(
         r"(?:^|[\s;&|])"
         r"(?:rm|rmdir)\b[^\r\n;&|]{0,100}"
-        r"(?:~?/?\.hol[_-]guard|guard[_-]home|guard\.db|guard\.lock)",
+        r"(?:~?/?\.hol[_-]guard|guard[_-]home|(?<![a-zA-Z0-9_])guard\.db(?![a-zA-Z0-9_])|(?<![a-zA-Z0-9_])guard\.lock(?![a-zA-Z0-9_]))",
         re.IGNORECASE,
     )
 
@@ -480,8 +480,8 @@ class GuardBypassDetector:
         r"(?:^|[\s;&|])"
         r"(?:"
         r"kill\b[^\r\n;&|]{0,80}hol[_-]guard|"
-        r"pkill\b[^\r\n;&|]{0,40}guard|"
-        r"launchctl\s+(?:unload|disable)\b[^\r\n;&|]{0,80}(?:hol[_-]guard|guard)"
+        r"pkill\b[^\r\n;&|]{0,40}(?<![a-zA-Z0-9_])hol[_-]guard(?![a-zA-Z0-9_])|"
+        r"launchctl\s+(?:unload|disable)\b[^\r\n;&|]{0,80}(?:hol[_-]guard|com\.hol\.guard)"
         r")",
         re.IGNORECASE,
     )

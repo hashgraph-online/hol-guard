@@ -107,9 +107,21 @@ class TestGuardBypassDetector:
         signals = self._detect("kill -9 $(pgrep hol-guard)", tmp_path)
         assert any(s.signal_id == "bypass:guard-daemon-kill" for s in signals)
 
-    def test_pkill_guard(self, tmp_path: Path) -> None:
-        signals = self._detect("pkill -f guard", tmp_path)
+    def test_pkill_hol_guard(self, tmp_path: Path) -> None:
+        signals = self._detect("pkill -f hol-guard", tmp_path)
         assert any(s.signal_id == "bypass:guard-daemon-kill" for s in signals)
+
+    def test_pkill_wireguard_is_not_bypass(self, tmp_path: Path) -> None:
+        signals = self._detect("pkill -f wireguard", tmp_path)
+        assert not any(s.signal_id == "bypass:guard-daemon-kill" for s in signals)
+
+    def test_rm_myguard_db_backup_is_not_bypass(self, tmp_path: Path) -> None:
+        signals = self._detect("rm ./myguard.db.backup", tmp_path)
+        assert not any(s.signal_id == "bypass:guard-config-destroy" for s in signals)
+
+    def test_pkill_safeguard_worker_is_not_bypass(self, tmp_path: Path) -> None:
+        signals = self._detect("pkill -f safeguard-worker", tmp_path)
+        assert not any(s.signal_id == "bypass:guard-daemon-kill" for s in signals)
 
     def test_launchctl_unload_guard(self, tmp_path: Path) -> None:
         signals = self._detect("launchctl unload ~/Library/LaunchAgents/hol-guard.plist", tmp_path)
