@@ -24,6 +24,7 @@ import type {
   GuardRuntimeSnapshot,
   GuardSettingsPayload,
   GuardSettings,
+  DecisionScope,
   RiskSignalV2,
   RiskSignalV2Category,
   RiskSignalV2RedactionLevel,
@@ -746,7 +747,7 @@ function fetchGuardApi(input: RequestInfo, init?: RequestInit): Promise<Response
 export async function resolveRequest(input: {
   requestId: string;
   action: "allow" | "block";
-  scope: string;
+  scope: DecisionScope;
   workspace?: string;
   reason: string;
 }): Promise<void> {
@@ -756,7 +757,7 @@ export async function resolveRequest(input: {
 export async function resolveRequestWithQueueResult(input: {
   requestId: string;
   action: "allow" | "block";
-  scope: string;
+  scope: DecisionScope;
   workspace?: string;
   reason: string;
 }): Promise<GuardQueueResolutionResult> {
