@@ -98,6 +98,7 @@ def queue_blocked_approvals(
             risk_headline=incident["risk_headline"],
             action_envelope_json=_item_action_envelope_json(item),
             decision_v2_json=_item_decision_v2_json(item),
+            scanner_evidence=_item_scanner_evidence(item),
         )
         persisted_request_id = store.add_approval_request(request, timestamp)
         if persisted_request_id != request.request_id:
@@ -431,6 +432,13 @@ def _item_decision_v2_json(item: dict[str, object]) -> dict[str, object] | None:
     if not isinstance(value, Mapping):
         return None
     return {str(key): item_value for key, item_value in value.items() if isinstance(key, str)}
+
+
+def _item_scanner_evidence(item: dict[str, object]) -> tuple[dict[str, object], ...]:
+    value = item.get("scanner_evidence")
+    if not isinstance(value, list | tuple):
+        return ()
+    return tuple(dict(entry) for entry in value if isinstance(entry, Mapping))
 
 
 def _string_list(value: object) -> list[str]:

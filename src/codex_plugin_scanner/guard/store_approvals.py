@@ -116,27 +116,28 @@ def approval_schema_statement() -> str:
           changed_fields_json text not null,
           source_scope text not null,
           config_path text not null,
-           workspace text,
-           launch_target text,
-           normalized_identity_key text,
-           action_identity text,
-           queue_group_id text,
-           dedupe_count integer not null default 1,
-           last_seen_at text,
-           transport text,
-           risk_summary text,
+          workspace text,
+          launch_target text,
+          normalized_identity_key text,
+          action_identity text,
+          queue_group_id text,
+          dedupe_count integer not null default 1,
+          last_seen_at text,
+          transport text,
+          risk_summary text,
           risk_signals_json text not null default '[]',
           artifact_label text,
           source_label text,
-           trigger_summary text,
-           why_now text,
-           launch_summary text,
-           risk_headline text,
-            action_envelope_json text,
-            decision_v2_json text,
-            fallback_cli_command text,
-            review_command text not null,
-           approval_url text not null,
+          trigger_summary text,
+          why_now text,
+          launch_summary text,
+          risk_headline text,
+          action_envelope_json text,
+          decision_v2_json text,
+          fallback_cli_command text,
+          scanner_evidence_json text not null default '[]',
+          review_command text not null,
+          approval_url text not null,
           status text not null,
           resolution_action text,
           resolution_scope text,
@@ -209,7 +210,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
                 transport = ?, risk_summary = ?, risk_signals_json = ?,
                 artifact_label = ?, source_label = ?, trigger_summary = ?, why_now = ?, launch_summary = ?,
                 risk_headline = ?, action_envelope_json = ?, decision_v2_json = ?, fallback_cli_command = ?,
-                review_command = ?, approval_url = ?
+                scanner_evidence_json = ?, review_command = ?, approval_url = ?
             where request_id = ?
             """,
             (
@@ -244,6 +245,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
                     if request.fallback_cli_command
                     else None
                 ),
+                json.dumps(list(request.scanner_evidence), sort_keys=True),
                 review_command,
                 approval_url,
                 request_id,
@@ -254,16 +256,16 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
         """
         insert into approval_requests (
           request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
-           recommended_scope, changed_fields_json, source_scope, config_path, workspace,
-            launch_target, normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at,
-            transport, risk_summary,
-            risk_signals_json, artifact_label, source_label, trigger_summary, why_now, launch_summary, risk_headline,
-             action_envelope_json, decision_v2_json, fallback_cli_command, review_command,
-             approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
-           )
-           values (
-                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          recommended_scope, changed_fields_json, source_scope, config_path, workspace,
+          launch_target, normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at,
+          transport, risk_summary,
+          risk_signals_json, artifact_label, source_label, trigger_summary, why_now, launch_summary, risk_headline,
+          action_envelope_json, decision_v2_json, fallback_cli_command, scanner_evidence_json,
+          review_command, approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
+        )
+        values (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
         """,
         (
@@ -298,6 +300,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
             json.dumps(request.action_envelope_json) if request.action_envelope_json is not None else None,
             json.dumps(request.decision_v2_json) if request.decision_v2_json is not None else None,
             request.fallback_cli_command,
+            json.dumps(list(request.scanner_evidence), sort_keys=True),
             request.review_command,
             request.approval_url,
             "pending",
@@ -381,7 +384,7 @@ def list_approval_requests(
                 normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at, transport,
                 risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
                 launch_summary, risk_headline, action_envelope_json, decision_v2_json,
-                fallback_cli_command, review_command,
+                fallback_cli_command, scanner_evidence_json, review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
         from approval_requests
         {where_clause}
@@ -408,7 +411,8 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
                 transport,
                 risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
                 launch_summary, risk_headline, action_envelope_json, decision_v2_json,
-                {_column_expr(columns, "fallback_cli_command", "NULL")}, review_command,
+                {_column_expr(columns, "fallback_cli_command", "NULL")},
+                {_column_expr(columns, "scanner_evidence_json", "'[]'")}, review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
         from approval_requests
         where request_id = ?
@@ -522,6 +526,7 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "action_envelope_json": _optional_json_object(row["action_envelope_json"]),
         "decision_v2_json": _optional_json_object(row["decision_v2_json"]),
         "fallback_cli_command": row["fallback_cli_command"],
+        "scanner_evidence": _safe_json_object_list(row["scanner_evidence_json"]),
         "review_command": str(row["review_command"]),
         "approval_url": str(row["approval_url"]),
         "status": str(row["status"]),
@@ -541,6 +546,18 @@ def _safe_json_list(value: object) -> list[object]:
     except (json.JSONDecodeError, TypeError, ValueError):
         return []
     return list(parsed) if isinstance(parsed, list) else []
+
+
+def _safe_json_object_list(value: object) -> list[dict[str, object]]:
+    if value is None:
+        return []
+    try:
+        parsed = json.loads(str(value))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [dict(item) for item in parsed if isinstance(item, dict)]
 
 
 def approval_index_statements() -> list[str]:

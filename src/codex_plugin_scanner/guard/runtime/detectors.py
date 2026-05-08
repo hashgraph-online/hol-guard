@@ -10,6 +10,7 @@ from typing import Literal, Protocol
 
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
+from codex_plugin_scanner.guard.runtime.cisco_preflight import CiscoMcpPreflightDetector, CiscoSkillPreflightDetector
 from codex_plugin_scanner.guard.runtime.data_flow_rules import detect_data_flow_exfiltration
 from codex_plugin_scanner.guard.runtime.prompt_injection import detect_prompt_injection_requests
 from codex_plugin_scanner.guard.runtime.safe_decode import decode_layers
@@ -287,6 +288,8 @@ class SafeDecodeDetector:
 
 def register_default_detectors() -> tuple[GuardDetector, ...]:
     return (
+        CiscoMcpPreflightDetector(),
+        CiscoSkillPreflightDetector(),
         DataFlowExfiltrationDetector(),
         PromptInjectionDetector(),
         SafeDecodeDetector(),
