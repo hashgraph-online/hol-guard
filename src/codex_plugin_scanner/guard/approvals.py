@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 from collections.abc import Mapping
@@ -215,6 +216,7 @@ def build_runtime_snapshot(
         "headline_state": headline_state,
         "headline_label": _runtime_headline_label(headline_state),
         "headline_detail": _runtime_headline_detail(headline_state),
+        "thread_count": threading.active_count(),
         "items": pending_requests,
         "latest_receipts": latest_receipts,
         "managed_installs": store.list_managed_installs(),

@@ -13,9 +13,9 @@ import {
   SectionLabel,
   Tag
 } from "./approval-center-primitives";
-import { clearEvidence, exportDiagnostics, fetchSettings, updateSettings, clearPolicy, repairApprovalCenter } from "./guard-api";
+import { clearEvidence, exportDiagnostics, fetchRuntimeSnapshot, fetchSettings, updateSettings, clearPolicy, repairApprovalCenter } from "./guard-api";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
-import type { GuardSettings, GuardSettingsPayload } from "./guard-types";
+import type { GuardRuntimeSnapshot, GuardSettings, GuardSettingsPayload } from "./guard-types";
 
 type SettingsState =
   | { kind: "loading" }
@@ -165,6 +165,7 @@ export function SettingsWorkspace() {
   const [exporting, setExporting] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [perfSnapshot, setPerfSnapshot] = useState<GuardRuntimeSnapshot | null>(null);
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -185,6 +186,18 @@ export function SettingsWorkspace() {
           });
         }
       });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchRuntimeSnapshot()
+      .then((snapshot) => {
+        if (!cancelled) setPerfSnapshot(snapshot);
+      })
+      .catch(() => { /* perf data is best-effort */ });
     return () => {
       cancelled = true;
     };
@@ -646,6 +659,7 @@ export function SettingsWorkspace() {
                   </ActionButton>
                 </div>
               </div>
+<<<<<<< HEAD
               <div>
                 <p className="text-sm font-semibold text-brand-dark">Repair local approval center</p>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
@@ -657,6 +671,11 @@ export function SettingsWorkspace() {
                   </ActionButton>
                 </div>
               </div>
+=======
+              {perfSnapshot !== null ? (
+                <DiagnosticsPerfCard snapshot={perfSnapshot} />
+              ) : null}
+>>>>>>> b10d535 (feat(guard-perf): dashboard diagnostics performance section (T625))
               {actionMessage ? (
                 <p className="guard-fade-in text-sm leading-6 text-brand-dark/70">{actionMessage}</p>
               ) : null}
@@ -678,6 +697,41 @@ export function SettingsWorkspace() {
           </div>
         </aside>
       </section>
+    </div>
+  );
+}
+
+function DiagnosticsPerfCard(props: { snapshot: GuardRuntimeSnapshot }) {
+  const { snapshot } = props;
+  const threadCount = snapshot.thread_count ?? null;
+  const daemonPort = snapshot.runtime_state?.daemon_port ?? null;
+  const startedAt = snapshot.runtime_state?.started_at ?? null;
+  return (
+    <div>
+      <p className="text-sm font-semibold text-brand-dark">Runtime performance</p>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+        Live process metrics for this Guard daemon session.
+      </p>
+      <dl className="mt-3 grid grid-cols-2 gap-2">
+        {threadCount !== null ? (
+          <PerfMetric label="Active threads" value={String(threadCount)} />
+        ) : null}
+        {daemonPort !== null ? (
+          <PerfMetric label="Daemon port" value={String(daemonPort)} />
+        ) : null}
+        {startedAt !== null ? (
+          <PerfMetric label="Started" value={new Date(startedAt).toLocaleTimeString()} />
+        ) : null}
+      </dl>
+    </div>
+  );
+}
+
+function PerfMetric(props: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-surface-1 px-3 py-2">
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{props.label}</dt>
+      <dd className="mt-0.5 font-mono text-sm font-semibold text-brand-dark">{props.value}</dd>
     </div>
   );
 }
