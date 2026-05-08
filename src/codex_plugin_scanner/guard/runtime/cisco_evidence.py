@@ -132,7 +132,7 @@ def _severity_label(severity: Severity) -> RiskSeverityLabel:
 def _confidence_label(severity: Severity) -> RiskConfidenceLabel:
     if severity in {Severity.CRITICAL, Severity.HIGH}:
         return "strong"
-    if severity is Severity.MEDIUM:
+    if severity == Severity.MEDIUM:
         return "likely"
     return "weak"
 
