@@ -239,9 +239,17 @@ def read_approval_center_locator(guard_home: Path) -> ApprovalCenterLocator | No
     )
 
 
+def _approval_center_daemon_is_healthy(daemon_url: str) -> bool:
+    try:
+        with urllib.request.urlopen(f"{daemon_url}/healthz", timeout=1) as response:
+            return response.status == 200
+    except (OSError, ValueError, urllib.error.URLError):
+        return False
+
+
 def ensure_approval_center(guard_home: Path) -> ApprovalCenterLocator:
     existing = read_approval_center_locator(guard_home)
-    if existing is not None:
+    if existing is not None and _approval_center_daemon_is_healthy(existing.daemon_url):
         return existing
     daemon_url = ensure_guard_daemon(guard_home)
     now = datetime.now(tz=timezone.utc).isoformat()
