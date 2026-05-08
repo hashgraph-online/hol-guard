@@ -352,7 +352,11 @@ async def _scan_targets(
     return tuple(findings), targets_scanned
 
 
-def run_cisco_mcp_scan(plugin_dir: Path, mode: str = "auto") -> CiscoMcpScanSummary:
+def run_cisco_mcp_scan(
+    plugin_dir: Path,
+    mode: str = "auto",
+    timeout_seconds: float | None = None,
+) -> CiscoMcpScanSummary:
     """Run Cisco MCP scanner static analysis when available."""
 
     config_path = plugin_dir / ".mcp.json"
@@ -396,7 +400,15 @@ def run_cisco_mcp_scan(plugin_dir: Path, mode: str = "auto") -> CiscoMcpScanSumm
         analyzer_class = components["YaraAnalyzer"]
         analyzer = analyzer_class()
         targets = _collect_static_targets(plugin_dir)
-        findings, targets_scanned = _run_awaitable(_scan_targets(plugin_dir, targets, analyzer))
+        scan_awaitable: Awaitable[tuple[tuple[Finding, ...], int]] = _scan_targets(plugin_dir, targets, analyzer)
+        if timeout_seconds is not None:
+            scan_awaitable = asyncio.wait_for(scan_awaitable, timeout=timeout_seconds)
+        findings, targets_scanned = _run_awaitable(scan_awaitable)
+    except TimeoutError:
+        return _build_summary(
+            status=CiscoIntegrationStatus.TIMED_OUT,
+            message="Cisco MCP scanner timed out before it could finish.",
+        )
     except Exception as exc:
         return _build_summary(
             status=CiscoIntegrationStatus.FAILED,

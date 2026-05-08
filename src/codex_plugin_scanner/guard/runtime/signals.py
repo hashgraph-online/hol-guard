@@ -28,6 +28,8 @@ RiskSignalCategory = Literal[
 RiskSeverityLabel = Literal["info", "low", "medium", "high", "critical"]
 RiskConfidenceLabel = Literal["weak", "likely", "strong"]
 RiskRedactionLevel = Literal["none", "summary", "redacted"]
+RiskSignalSource = Literal["native", "cisco_mcp", "cisco_skill", "threat_intel", "runtime_detector"]
+ScannerStatusLabel = Literal["enabled", "skipped", "unavailable", "failed", "timed_out"]
 
 _FAMILY_CATEGORY: dict[str, RiskSignalCategory] = {
     "network": "network",
@@ -109,6 +111,78 @@ class RiskSignalV2:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class GuardRiskSignalV3:
+    """Scanner-aware risk signal with durable local evidence references."""
+
+    signal_id: str
+    source: RiskSignalSource
+    source_version: str
+    category: RiskSignalCategory
+    severity: RiskSeverityLabel
+    confidence: RiskConfidenceLabel
+    title: str
+    plain_language_summary: str
+    technical_detail: str | None
+    evidence_ref: str | None
+    scanner_name: str | None
+    scanner_status: ScannerStatusLabel
+    scanner_rule_id: str | None
+    redaction_level: RiskRedactionLevel
+    source_path: str | None
+    source_line: int | None
+    data_source: str | None
+    data_sink: str | None
+    recommended_action: str | None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "signal_id": self.signal_id,
+            "source": self.source,
+            "source_version": self.source_version,
+            "category": self.category,
+            "severity": self.severity,
+            "confidence": self.confidence,
+            "title": self.title,
+            "plain_language_summary": self.plain_language_summary,
+            "technical_detail": self.technical_detail,
+            "evidence_ref": self.evidence_ref,
+            "scanner_name": self.scanner_name,
+            "scanner_status": self.scanner_status,
+            "scanner_rule_id": self.scanner_rule_id,
+            "redaction_level": self.redaction_level,
+            "source_path": self.source_path,
+            "source_line": self.source_line,
+            "data_source": self.data_source,
+            "data_sink": self.data_sink,
+            "recommended_action": self.recommended_action,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> GuardRiskSignalV3:
+        return cls(
+            signal_id=_required_string(payload, "signal_id"),
+            source=_parse_source(payload.get("source")),
+            source_version=_required_string(payload, "source_version"),
+            category=_parse_category(payload.get("category")),
+            severity=_parse_severity(payload.get("severity")),
+            confidence=_parse_confidence(payload.get("confidence")),
+            title=_required_string(payload, "title"),
+            plain_language_summary=_required_string(payload, "plain_language_summary"),
+            technical_detail=_optional_string(payload, "technical_detail"),
+            evidence_ref=_optional_string(payload, "evidence_ref"),
+            scanner_name=_optional_string(payload, "scanner_name"),
+            scanner_status=_parse_scanner_status(payload.get("scanner_status")),
+            scanner_rule_id=_optional_string(payload, "scanner_rule_id"),
+            redaction_level=_parse_redaction_level(payload.get("redaction_level")),
+            source_path=_optional_string(payload, "source_path"),
+            source_line=_optional_int(payload, "source_line"),
+            data_source=_optional_string(payload, "data_source"),
+            data_sink=_optional_string(payload, "data_sink"),
+            recommended_action=_optional_string(payload, "recommended_action"),
+        )
+
+
 def severity_label_from_score(score: int | float) -> RiskSeverityLabel:
     if score >= 9:
         return "critical"
@@ -165,6 +239,31 @@ def _optional_string(payload: Mapping[str, object], key: str) -> str | None:
     if not isinstance(value, str):
         raise ValueError(f"{key} must be a string or null")
     return value
+
+
+def _optional_int(payload: Mapping[str, object], key: str) -> int | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, int):
+        raise ValueError(f"{key} must be an integer or null")
+    return value
+
+
+def _parse_source(value: object) -> RiskSignalSource:
+    match value:
+        case "native":
+            return "native"
+        case "cisco_mcp":
+            return "cisco_mcp"
+        case "cisco_skill":
+            return "cisco_skill"
+        case "threat_intel":
+            return "threat_intel"
+        case "runtime_detector":
+            return "runtime_detector"
+        case _:
+            raise ValueError("source must be a known risk signal source")
 
 
 def _parse_category(value: object) -> RiskSignalCategory:
@@ -241,3 +340,19 @@ def _parse_redaction_level(value: object) -> RiskRedactionLevel:
             return "redacted"
         case _:
             raise ValueError("redaction_level must be a known redaction level")
+
+
+def _parse_scanner_status(value: object) -> ScannerStatusLabel:
+    match value:
+        case "enabled":
+            return "enabled"
+        case "skipped":
+            return "skipped"
+        case "unavailable":
+            return "unavailable"
+        case "failed":
+            return "failed"
+        case "timed_out":
+            return "timed_out"
+        case _:
+            raise ValueError("scanner_status must be a known scanner status")
