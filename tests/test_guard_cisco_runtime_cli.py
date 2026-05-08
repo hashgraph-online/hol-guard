@@ -144,6 +144,8 @@ def test_guard_scan_skills_deep_uses_cisco_skill_scanner(
             "--deep",
             "--workspace",
             str(tmp_path),
+            "--guard-home",
+            str(tmp_path / "guard-home"),
             "--cisco-mode",
             "on",
             "--json",
@@ -157,7 +159,7 @@ def test_guard_scan_skills_deep_uses_cisco_skill_scanner(
     assert payload["scan_type"] == "skills"
     assert payload["status"] == "enabled"
     assert payload["scanner_evidence"][0]["source"] == "cisco_skill"
-    assert payload["policy_action"] == "block"
+    assert payload["policy_action"] == "require-reapproval"
 
 
 def test_guard_scan_mcp_deep_uses_cisco_mcp_scanner(
@@ -176,7 +178,21 @@ def test_guard_scan_mcp_deep_uses_cisco_mcp_scanner(
 
     monkeypatch.setattr(cisco_mcp_scanner, "run_cisco_mcp_scan", fake_scan)
 
-    rc = main(["guard", "scan", "mcp", "--deep", "--workspace", str(tmp_path), "--cisco-mode", "on", "--json"])
+    rc = main(
+        [
+            "guard",
+            "scan",
+            "mcp",
+            "--deep",
+            "--workspace",
+            str(tmp_path),
+            "--guard-home",
+            str(tmp_path / "guard-home"),
+            "--cisco-mode",
+            "on",
+            "--json",
+        ]
+    )
     payload = json.loads(capsys.readouterr().out)
 
     assert rc == 0
@@ -185,7 +201,7 @@ def test_guard_scan_mcp_deep_uses_cisco_mcp_scanner(
     assert payload["scan_type"] == "mcp"
     assert payload["status"] == "enabled"
     assert payload["scanner_evidence"][0]["source"] == "cisco_mcp"
-    assert payload["policy_action"] == "block"
+    assert payload["policy_action"] == "require-reapproval"
 
 
 def test_cisco_preflight_changed_skill_file_produces_normalized_signal(
