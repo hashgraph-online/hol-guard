@@ -13914,7 +13914,7 @@ function SkillSignalRow(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "space-y-1", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: signal.title }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/70", children: signal.plain_reason }),
-    signal.technical_detail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] text-muted-foreground", children: signal.technical_detail }) : null,
+    signal.technical_detail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] text-muted-foreground break-all", children: signal.technical_detail }) : null,
     signal.false_positive_hint !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-amber-700/80", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Might be safe if: " }),
       signal.false_positive_hint
@@ -13953,8 +13953,7 @@ function DecodedLayerCard(props) {
   const encodedSignals = deriveEncodedLayerSignals(props.item);
   if (encodedSignals.length === 0) return null;
   const primary = encodedSignals[0];
-  const layerCount = _parseLayerCountFromReason(primary.plain_reason);
-  const extraCount = layerCount !== null ? Math.max(0, layerCount - 1) : encodedSignals.length - 1;
+  const extraCount = Math.max(0, encodedSignals.length - 1);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
@@ -13964,17 +13963,11 @@ function DecodedLayerCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Encoded payload detected" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: primary.plain_reason }),
         primary.technical_detail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-mono text-[11px] text-muted-foreground break-all", children: primary.technical_detail }) : null,
-        primary.evidence_ref !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 font-mono text-[11px] text-rose-700/70", children: primary.evidence_ref }) : null,
+        primary.evidence_ref !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 font-mono text-[11px] text-rose-700/70 break-all", children: primary.evidence_ref }) : null,
         extraCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: `and ${extraCount} more encoded ${extraCount === 1 ? "layer" : "layers"}` }) : null
       ]
     }
   );
-}
-function _parseLayerCountFromReason(reason) {
-  const match = /(\d+)\s+encoding\s+layer/i.exec(reason);
-  if (match === null) return null;
-  const count = parseInt(match[1], 10);
-  return Number.isFinite(count) && count > 0 ? count : null;
 }
 const receiptPageSize = 50;
 function sanitizeReceiptValue(value) {

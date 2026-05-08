@@ -35,7 +35,7 @@ function SkillSignalRow(props: SkillSignalRowProps) {
       <p className="text-sm font-semibold text-brand-dark">{signal.title}</p>
       <p className="text-sm leading-relaxed text-brand-dark/70">{signal.plain_reason}</p>
       {signal.technical_detail !== null ? (
-        <p className="font-mono text-[11px] text-muted-foreground">{signal.technical_detail}</p>
+        <p className="font-mono text-[11px] text-muted-foreground break-all">{signal.technical_detail}</p>
       ) : null}
       {signal.false_positive_hint !== null ? (
         <p className="text-xs leading-5 text-amber-700/80">
@@ -110,8 +110,7 @@ export function DecodedLayerCard(props: DecodedLayerCardProps) {
   const encodedSignals = deriveEncodedLayerSignals(props.item);
   if (encodedSignals.length === 0) return null;
   const primary = encodedSignals[0];
-  const layerCount = _parseLayerCountFromReason(primary.plain_reason);
-  const extraCount = layerCount !== null ? Math.max(0, layerCount - 1) : encodedSignals.length - 1;
+  const extraCount = Math.max(0, encodedSignals.length - 1);
   return (
     <div
       className="rounded-xl border border-rose-200/60 bg-rose-50/60 p-4"
@@ -125,7 +124,7 @@ export function DecodedLayerCard(props: DecodedLayerCardProps) {
         </p>
       ) : null}
       {primary.evidence_ref !== null ? (
-        <p className="mt-2 font-mono text-[11px] text-rose-700/70">{primary.evidence_ref}</p>
+        <p className="mt-2 font-mono text-[11px] text-rose-700/70 break-all">{primary.evidence_ref}</p>
       ) : null}
       {extraCount > 0 ? (
         <p className="mt-1 text-xs text-muted-foreground">
@@ -134,11 +133,4 @@ export function DecodedLayerCard(props: DecodedLayerCardProps) {
       ) : null}
     </div>
   );
-}
-
-function _parseLayerCountFromReason(reason: string): number | null {
-  const match = /(\d+)\s+encoding\s+layer/i.exec(reason);
-  if (match === null) return null;
-  const count = parseInt(match[1], 10);
-  return Number.isFinite(count) && count > 0 ? count : null;
 }
