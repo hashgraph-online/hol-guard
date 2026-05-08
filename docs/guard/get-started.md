@@ -270,3 +270,36 @@ That means the user should never get a silent pass-through on a risky Codex acti
 - native Bash deny plus HOL Guard approval-center recovery for sensitive shell actions
 - same-chat approve or deny when Codex can render the inline MCP prompt
 - explicit approval-center recovery when the session cannot
+
+## Seamless approvals
+
+When Guard blocks a launch, it opens a persistent approval link in the terminal rather than pausing the session. You can resolve requests without leaving your harness:
+
+1. Guard returns the approval URL in the block output and queues the request locally.
+2. Open the approval center at the URL or in your browser.
+3. Approve or deny the request from the approval center UI or the CLI:
+
+   ```bash
+   hol-guard approvals approve <request-id>
+   hol-guard approvals deny <request-id>
+   ```
+
+4. After you resolve the request, Guard emits copy telling you to return to your AI assistant and retry. No page reload or session restart is needed.
+
+To inspect a pending request's details or get the approval URL, pass the request-id to the `approve` command with `--dry-run`, or visit the approval center URL shown in the block message directly.
+
+## Troubleshooting
+
+### Approval link says API error
+
+If the approval center URL in a block message returns an API error, the local approval center locator may be stale.
+Use the **Repair approval center** action in the Guard dashboard Settings tab, or call the repair endpoint directly when the daemon is running. The port shown in Guard's status output or the dashboard URL is your daemon port:
+
+```bash
+GUARD_PORT=$(hol-guard status --json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print((d.get('runtime_state') or {}).get('daemon_port', d.get('daemon_port', 4781)))" 2>/dev/null || echo 4781)
+curl -s -X POST "http://127.0.0.1:${GUARD_PORT}/v1/daemon/repair" \
+  -H "X-Guard-Token: $(cat ~/.hol-guard/daemon-auth-token)"
+```
+
+After repair, restart Guard, then retry the block message URL or relaunch your harness through Guard. Pending approval requests are preserved across repairs.
+

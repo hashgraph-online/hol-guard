@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from .manager import ensure_guard_daemon, guard_daemon_url_for_home, load_guard_daemon_auth_token, load_guard_daemon_url
+from .manager import (
+    ensure_guard_daemon,
+    guard_daemon_url_for_home,
+    load_guard_daemon_auth_token,
+    load_guard_daemon_url,
+    repair_approval_center_locator,
+)
 
 __all__ = [
     "GuardDaemonServer",
@@ -12,6 +18,7 @@ __all__ = [
     "load_guard_daemon_auth_token",
     "load_guard_daemon_url",
     "load_guard_surface_daemon_client",
+    "repair_approval_center_locator",
 ]
 
 
