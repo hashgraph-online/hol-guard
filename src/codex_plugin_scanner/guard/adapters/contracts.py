@@ -322,12 +322,11 @@ def setup_contract_for(harness: str) -> HarnessSetupContract | None:
 def all_setup_contracts() -> tuple[HarnessSetupContract, ...]:
     """Return guided setup metadata for all supported harnesses."""
 
-    contracts: list[HarnessSetupContract] = []
-    for contract in HARNESS_CONTRACTS:
-        setup_contract = setup_contract_for(contract.harness)
-        if setup_contract is not None:
-            contracts.append(setup_contract)
-    return tuple(contracts)
+    return tuple(
+        setup_contract
+        for contract in HARNESS_CONTRACTS
+        if (setup_contract := setup_contract_for(contract.harness)) is not None
+    )
 
 
 def harness_contracts_table() -> str:
