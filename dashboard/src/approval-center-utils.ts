@@ -306,6 +306,14 @@ export function harnessDisplayName(harness: string): string {
       return "Codex";
     case "opencode":
       return "OpenCode";
+    case "gemini":
+      return "Gemini";
+    case "cursor":
+      return "Cursor";
+    case "hermes":
+      return "Hermes";
+    case "openclaw":
+      return "OpenClaw";
     default:
       return capitalizeHarness(harness);
   }
