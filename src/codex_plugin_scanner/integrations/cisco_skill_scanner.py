@@ -113,7 +113,7 @@ def _scan_directory_with_timeout(
         raise TimeoutError("Cisco skill scanner timed out")
 
     try:
-        status, payload, *details = result_queue.get_nowait()
+        status, payload, *details = result_queue.get(timeout=1)
     except Empty as exc:
         raise RuntimeError(f"Cisco skill scanner exited with code {process.exitcode}") from exc
     if status == "error":
