@@ -79,12 +79,13 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
             where harness = ?
               and artifact_id = ?
               and workspace IS ?
+              and launch_target = ?
               and normalized_identity_key IS NULL
               and status = 'pending'
             order by created_at desc
             limit 1
             """,
-            (request.harness, request.artifact_id, request.workspace),
+            (request.harness, request.artifact_id, request.workspace, request.launch_target),
         ).fetchone()
     request_id = str(existing["request_id"]) if existing is not None else request.request_id
     if existing is not None:

@@ -180,3 +180,21 @@ class TestLegacyNullIdentityKeyUpgradePath:
         assert first_id == second_id, "Legacy row with NULL identity key must be reused, not duplicated"
         total = count_approval_requests(conn, status="pending")
         assert total == 1, f"Expected 1 pending row after deduping legacy null row, got {total}"
+
+    def test_legacy_null_row_different_command_not_collapsed(self) -> None:
+        """Legacy NULL rows for different commands must NOT be collapsed even during upgrade path."""
+        conn = _make_conn()
+        artifact_id = "codex:project:tool-multi"
+        req_a = _make_request(artifact_id=artifact_id, workspace="ws-a", launch_target="run cmd-a")
+        id_a = add_approval_request(conn, req_a, "2026-01-01T00:00:00Z")
+        conn.execute(
+            "update approval_requests set normalized_identity_key = NULL where request_id = ?",
+            (id_a,),
+        )
+
+        req_b = _make_request(artifact_id=artifact_id, workspace="ws-a", launch_target="run cmd-b")
+        id_b = add_approval_request(conn, req_b, "2026-01-01T00:01:00Z")
+
+        assert id_a != id_b, "Different commands must each get their own pending row even when legacy row is NULL"
+        total = count_approval_requests(conn, status="pending")
+        assert total == 2, f"Expected 2 pending rows for different commands, got {total}"
