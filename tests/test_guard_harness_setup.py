@@ -13,7 +13,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import HarnessSetupContract
-from codex_plugin_scanner.guard.cli.commands import run_guard_command
+from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
 from codex_plugin_scanner.guard.cli.install_commands import list_harness_setup_items
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
@@ -220,6 +220,32 @@ def test_apps_test_alias_uses_safe_verification(tmp_path: Path, capsys: pytest.C
     assert payload["harness"] == "codex"
     assert payload["safe"] is True
     assert payload["verification"]["writes_config"] is False
+
+
+def test_apps_subcommand_preserves_parent_flags(tmp_path: Path) -> None:
+    parser = argparse.ArgumentParser()
+    add_guard_root_parser(parser)
+
+    args = parser.parse_args(
+        [
+            "apps",
+            "--home",
+            str(tmp_path / "home"),
+            "--guard-home",
+            str(tmp_path / "guard-home"),
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--json",
+            "connect",
+            "codex",
+        ]
+    )
+
+    assert args.home == str(tmp_path / "home")
+    assert args.guard_home == str(tmp_path / "guard-home")
+    assert args.workspace == str(tmp_path / "workspace")
+    assert args.json is True
+    assert args.apps_command == "connect"
 
 
 def test_apps_inventory_uses_adapter_command_resolution(
