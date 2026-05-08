@@ -35,3 +35,22 @@ profile. Custom overrides survive a preset switch unless explicitly cleared.
 
 The approval center and evidence log now paginate at 50 items per page. Large workspaces
 with thousands of receipts will no longer cause the dashboard to stall on load.
+
+---
+
+## Release checklist (T608)
+
+Before tagging a release, complete the following items for every harness integration
+path that was touched in this release cycle.
+
+1. Run `pytest -m "not slow" -q` — all non-`slow` tests must pass.
+2. Run `ruff check src/ tests/` — zero violations.
+3. Run `cd dashboard && pnpm test && pnpm build` — dashboard bundle updated.
+4. Build wheel: `uv build` — wheel must build without errors.
+5. Install in temp venv: `pip install dist/*.whl && hol-guard doctor` — doctor shows no fatal errors.
+6. Fill in `tests/fixtures/guard-red-team/smoke-evidence-template.json` for each harness
+   integration touched. Mark each test entry `pass`, `fail`, or `skip` with notes.
+7. Confirm no `.env` file was read during the release build.
+8. Confirm no real secrets appear in committed fixtures or tests.
+9. Confirm no full local paths appear in any committed file.
+10. Merge only after all PR review threads are resolved.
