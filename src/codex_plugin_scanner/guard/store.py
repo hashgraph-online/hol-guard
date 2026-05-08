@@ -24,12 +24,13 @@ from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRunt
 from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
 from .store_approvals import (
-    add_approval_request as persist_approval_request,
-)
-from .store_approvals import (
+    _json_object_list,
     approval_index_statements,
     approval_schema_statement,
     backfill_approval_queue_columns,
+)
+from .store_approvals import (
+    add_approval_request as persist_approval_request,
 )
 from .store_approvals import (
     count_approval_requests as count_pending_approval_requests,
@@ -555,6 +556,7 @@ class GuardStore:
               user_override text,
               artifact_name text,
               source_scope text,
+              scanner_evidence_json text not null default '[]',
               timestamp text not null
             )
             """,
@@ -724,6 +726,7 @@ class GuardStore:
             self._ensure_policy_column(connection, "source", "text not null default 'local'")
             self._ensure_policy_column(connection, "expires_at", "text")
             self._ensure_runtime_receipts_column(connection, "capabilities_summary", "text not null default ''")
+            self._ensure_runtime_receipts_column(connection, "scanner_evidence_json", "text not null default '[]'")
             self._ensure_approval_column(connection, "artifact_type", "text not null default 'artifact'")
             self._ensure_approval_column(connection, "launch_target", "text")
             self._ensure_approval_column(connection, "transport", "text")
@@ -744,6 +747,7 @@ class GuardStore:
             self._ensure_approval_column(connection, "dedupe_count", "integer not null default 1")
             self._ensure_approval_column(connection, "last_seen_at", "text")
             self._ensure_approval_column(connection, "fallback_cli_command", "text")
+            self._ensure_approval_column(connection, "scanner_evidence_json", "text not null default '[]'")
             if not self._schema_version_applied(connection, version=3):
                 backfill_approval_queue_columns(connection)
                 self._record_schema_version(connection, version=3)
@@ -1402,9 +1406,9 @@ class GuardStore:
                 insert into runtime_receipts (
                   receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
                   changed_capabilities_json,
-                  provenance_summary, user_override, artifact_name, source_scope, timestamp
+                  provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json, timestamp
                 )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     receipt.receipt_id,
@@ -1418,6 +1422,7 @@ class GuardStore:
                     receipt.user_override,
                     receipt.artifact_name,
                     receipt.source_scope,
+                    json.dumps(list(receipt.scanner_evidence), sort_keys=True),
                     receipt.timestamp,
                 ),
             )
@@ -1442,8 +1447,8 @@ class GuardStore:
             rows = connection.execute(
                 """
                 select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
-                       changed_capabilities_json,
-                       provenance_summary, user_override, artifact_name, source_scope, timestamp
+                        changed_capabilities_json,
+                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json, timestamp
                 from runtime_receipts
                 order by timestamp desc
                 limit ?
@@ -1463,6 +1468,7 @@ class GuardStore:
                 "user_override": row["user_override"],
                 "artifact_name": row["artifact_name"],
                 "source_scope": row["source_scope"],
+                "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
                 "timestamp": str(row["timestamp"]),
             }
             for row in rows
@@ -1473,8 +1479,8 @@ class GuardStore:
             row = connection.execute(
                 """
                 select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
-                       changed_capabilities_json,
-                       provenance_summary, user_override, artifact_name, source_scope, timestamp
+                        changed_capabilities_json,
+                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json, timestamp
                 from runtime_receipts
                 where receipt_id = ?
                 """,
@@ -1494,6 +1500,7 @@ class GuardStore:
             "user_override": row["user_override"],
             "artifact_name": row["artifact_name"],
             "source_scope": row["source_scope"],
+            "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
             "timestamp": str(row["timestamp"]),
         }
 
@@ -1502,8 +1509,8 @@ class GuardStore:
             row = connection.execute(
                 """
                 select receipt_id, harness, artifact_id, artifact_hash, policy_decision, capabilities_summary,
-                       changed_capabilities_json,
-                       provenance_summary, user_override, artifact_name, source_scope, timestamp
+                        changed_capabilities_json,
+                       provenance_summary, user_override, artifact_name, source_scope, scanner_evidence_json, timestamp
                 from runtime_receipts
                 where harness = ? and artifact_id = ?
                 order by timestamp desc
@@ -1525,6 +1532,7 @@ class GuardStore:
             "user_override": row["user_override"],
             "artifact_name": row["artifact_name"],
             "source_scope": row["source_scope"],
+            "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
             "timestamp": str(row["timestamp"]),
         }
 
