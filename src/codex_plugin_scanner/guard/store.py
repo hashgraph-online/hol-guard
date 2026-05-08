@@ -21,6 +21,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from .edge_events import build_receipt_event
 from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRuntimeState, PolicyDecision
+from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
 from .store_approvals import (
     add_approval_request as persist_approval_request,
@@ -619,6 +620,22 @@ class GuardStore:
             )
             """,
             """
+            create table if not exists scanner_cache (
+              scanner_name text not null,
+              target_id text not null,
+              cache_key text not null,
+              input_content_hash text not null,
+              scanner_version text not null,
+              payload_json text not null,
+              updated_at text not null,
+              primary key (scanner_name, target_id)
+            )
+            """,
+            """
+            create index if not exists idx_scanner_cache_key
+            on scanner_cache (cache_key)
+            """,
+            """
             create table if not exists managed_installs (
               harness text primary key,
               active integer not null,
@@ -808,6 +825,72 @@ class GuardStore:
         with self._connect() as connection:
             rows = connection.execute("select name from sqlite_master where type = 'table'").fetchall()
         return sorted(str(row["name"]) for row in rows)
+
+    def save_scanner_cache(
+        self,
+        *,
+        scanner_name: str,
+        target_id: str,
+        input_content_hash: str,
+        scanner_version: str,
+        payload: dict[str, object],
+        now: str,
+    ) -> None:
+        cache_key = scanner_cache_key(
+            scanner_name=scanner_name,
+            input_content_hash=input_content_hash,
+            scanner_version=scanner_version,
+        )
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into scanner_cache (
+                  scanner_name, target_id, cache_key, input_content_hash, scanner_version, payload_json, updated_at
+                )
+                values (?, ?, ?, ?, ?, ?, ?)
+                on conflict(scanner_name, target_id) do update set
+                  cache_key = excluded.cache_key,
+                  input_content_hash = excluded.input_content_hash,
+                  scanner_version = excluded.scanner_version,
+                  payload_json = excluded.payload_json,
+                  updated_at = excluded.updated_at
+                """,
+                (
+                    scanner_name,
+                    target_id,
+                    cache_key,
+                    input_content_hash,
+                    scanner_version,
+                    json.dumps(payload, sort_keys=True),
+                    now,
+                ),
+            )
+
+    def get_scanner_cache(
+        self,
+        *,
+        scanner_name: str,
+        target_id: str,
+        input_content_hash: str,
+        scanner_version: str,
+    ) -> dict[str, object] | None:
+        cache_key = scanner_cache_key(
+            scanner_name=scanner_name,
+            input_content_hash=input_content_hash,
+            scanner_version=scanner_version,
+        )
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                select payload_json from scanner_cache
+                where scanner_name = ? and target_id = ? and cache_key = ?
+                """,
+                (scanner_name, target_id, cache_key),
+            ).fetchone()
+        if row is None:
+            return None
+        payload = json.loads(str(row["payload_json"]))
+        return payload if isinstance(payload, dict) else None
 
     def save_snapshot(
         self,

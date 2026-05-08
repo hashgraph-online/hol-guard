@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from queue import Queue
+from threading import Thread
 
 from ..models import Finding, Severity, severity_from_value
 
@@ -16,6 +18,7 @@ class CiscoIntegrationStatus(str, Enum):
     SKIPPED = "skipped"
     UNAVAILABLE = "unavailable"
     FAILED = "failed"
+    TIMED_OUT = "timed_out"
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +70,33 @@ def _build_unavailable_summary(message: str, *, status: CiscoIntegrationStatus) 
         total_findings=0,
         findings_by_severity=_empty_counts(),
     )
+
+
+def _scan_directory_with_timeout(scanner: object, skills_dir: Path, timeout_seconds: float | None) -> dict[str, object]:
+    if timeout_seconds is None:
+        report = scanner.scan_directory(skills_dir)
+        payload = report.to_dict()
+        return payload if isinstance(payload, dict) else {}
+
+    results: Queue[dict[str, object] | BaseException] = Queue(maxsize=1)
+
+    def _runner() -> None:
+        try:
+            report = scanner.scan_directory(skills_dir)
+            payload = report.to_dict()
+            results.put(payload if isinstance(payload, dict) else {})
+        except BaseException as exc:
+            results.put(exc)
+
+    thread = Thread(target=_runner, daemon=True)
+    thread.start()
+    thread.join(timeout_seconds)
+    if thread.is_alive():
+        raise TimeoutError("Cisco skill scanner timed out")
+    result = results.get()
+    if isinstance(result, BaseException):
+        raise result
+    return result
 
 
 def _to_local_finding(plugin_dir: Path, skill_result: dict[str, object], finding: dict[str, object]) -> Finding:
@@ -131,7 +161,12 @@ def _extract_skipped_skills(summary: object, results: object) -> tuple[str, ...]
     return tuple(dict.fromkeys(skipped))
 
 
-def run_cisco_skill_scan(skills_dir: Path, mode: str = "auto", policy_name: str = "balanced") -> CiscoSkillScanSummary:
+def run_cisco_skill_scan(
+    skills_dir: Path,
+    mode: str = "auto",
+    policy_name: str = "balanced",
+    timeout_seconds: float | None = None,
+) -> CiscoSkillScanSummary:
     """Run Cisco skill-scanner against a skills directory when available."""
 
     if mode == "off":
@@ -156,8 +191,12 @@ def run_cisco_skill_scan(skills_dir: Path, mode: str = "auto", policy_name: str 
 
     try:
         scanner = SkillScanner(policy=ScanPolicy(preset_base=policy_name))
-        report = scanner.scan_directory(skills_dir.resolve())
-        payload = report.to_dict()
+        payload = _scan_directory_with_timeout(scanner, skills_dir.resolve(), timeout_seconds)
+    except TimeoutError:
+        return _build_unavailable_summary(
+            "Cisco skill scanner timed out before it could finish.",
+            status=CiscoIntegrationStatus.TIMED_OUT,
+        )
     except Exception as exc:  # pragma: no cover - defensive around third-party code
         return _build_unavailable_summary(
             f"Cisco skill scanner failed: {exc}",
