@@ -15,7 +15,6 @@ from codex_plugin_scanner.guard.store_approvals import (
     add_approval_request,
     approval_index_statements,
     approval_schema_statement,
-    get_approval_request,
 )
 
 
@@ -94,10 +93,13 @@ class TestNormalizedIdentityLookupPerformance:
 
     @pytest.mark.slow
     def test_lookup_by_identity_key_under_50ms_with_100k_rows(self) -> None:
+        from codex_plugin_scanner.guard.store_approvals import _normalized_identity_key  # type: ignore[attr-defined]
+
         conn = _make_conn()
         harness = "codex"
         artifact_id = "codex:project:perf-tool"
         workspace = "ws-perf"
+        launch_target = "run perf-tool"
         now = "2026-01-01T00:00:00Z"
 
         for _ in range(100_000):
@@ -108,15 +110,30 @@ class TestNormalizedIdentityLookupPerformance:
             )
             add_approval_request(conn, req, now)
 
-        target = _make_request(harness=harness, artifact_id=artifact_id, workspace=workspace, launch_target="run tool")
+        target = _make_request(
+            harness=harness, artifact_id=artifact_id, workspace=workspace, launch_target=launch_target
+        )
         add_approval_request(conn, target, now)
+        identity_key = _normalized_identity_key(launch_target)
 
         start = time.monotonic()
-        result = get_approval_request(conn, target.request_id)
+        result = conn.execute(
+            """
+            select request_id from approval_requests
+            where harness = ?
+              and artifact_id = ?
+              and workspace IS ?
+              and normalized_identity_key = ?
+              and status = 'pending'
+            order by created_at desc
+            limit 1
+            """,
+            (harness, artifact_id, workspace, identity_key),
+        ).fetchone()
         elapsed_ms = (time.monotonic() - start) * 1000
 
-        assert result is not None, "Target row must be found"
-        assert elapsed_ms < 50, f"Lookup took {elapsed_ms:.1f}ms, expected < 50ms"
+        assert result is not None, "Target row must be found by identity key"
+        assert elapsed_ms < 50, f"Identity-key lookup took {elapsed_ms:.1f}ms, expected < 50ms"
 
 
 class TestDuplicatePendingCollapsePerformance:

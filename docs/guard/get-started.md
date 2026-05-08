@@ -298,17 +298,12 @@ hol-guard approvals retry-hint <request-id>
 ### Approval link says API error
 
 If the approval center URL in a block message returns an API error, the local approval center locator may be stale.
-Run the repair command to reset the locator file without touching the approval store or pending requests:
-
-```bash
-hol-guard daemon repair
-```
-
-Or call the repair endpoint directly when the daemon is running:
+Use the **Repair approval center** action in the Guard dashboard Settings tab, or call the repair endpoint directly when the daemon is running:
 
 ```bash
 curl -s -X POST http://127.0.0.1:5474/v1/daemon/repair \
   -H "X-Guard-Token: $(cat ~/.hol-guard/daemon-auth-token)"
 ```
 
-After repair, retry the block message URL or relaunch your harness through Guard. Pending approval requests are preserved across repairs.
+After repair, restart Guard, then retry the block message URL or relaunch your harness through Guard. Pending approval requests are preserved across repairs.
+
