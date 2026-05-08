@@ -335,12 +335,13 @@ class TestSmokeEvidenceTemplate:
             Path(__file__).resolve().parents[1] / "docs" / "guard" / "release-checklist.md",
             Path(__file__).resolve().parents[1] / "RELEASE_CHECKLIST.md",
         ]
-        checklist_path = next((p for p in checklist_candidates if p.exists()), None)
-        assert checklist_path is not None, (
+        existing = [p for p in checklist_candidates if p.exists()]
+        assert existing, (
             "A release checklist or release-notes.md must exist under docs/guard/ "
             "or at repo root. Update smoke evidence before each harness release."
         )
-        content = checklist_path.read_text(encoding="utf-8")
-        assert "smoke" in content.lower() or "smoke-evidence" in content, (
-            f"{checklist_path.name} must reference smoke evidence steps"
-        )
+        for checklist_path in existing:
+            content = checklist_path.read_text(encoding="utf-8")
+            assert "smoke" in content.lower() or "smoke-evidence" in content, (
+                f"{checklist_path.name} must reference smoke evidence steps"
+            )
