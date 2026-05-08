@@ -18,11 +18,20 @@ from typing import Any
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
+from ..adapters import get_adapter
+from ..adapters.base import HarnessContext
 from ..approvals import (
     ApprovalRequestAlreadyResolvedError,
     ApprovalRequestNotFoundError,
     apply_approval_resolution,
     build_runtime_snapshot,
+)
+from ..cli.install_commands import (
+    apply_managed_install,
+    build_harness_setup_plan,
+    build_harness_verification,
+    list_harness_setup_items,
+    uninstall_confirmation_token,
 )
 from ..config import editable_guard_settings, load_guard_config, update_guard_settings
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
@@ -126,6 +135,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 active_request_id=self._query_string(parsed.query, "active_request_id"),
             )
             self._write_json({**snapshot, "security_level": config.security_level})
+            return
+        if parsed.path == "/v1/harnesses":
+            context = self._harness_context({})
+            self._write_json({"items": list_harness_setup_items(context, self.server.store)})  # type: ignore[attr-defined]
             return
         if parsed.path == "/v1/inventory":
             from ..adapters.contracts import HARNESS_CONTRACTS
@@ -408,6 +421,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             result = repair_approval_center_locator(self.server.store.guard_home)  # type: ignore[attr-defined]
             self._write_json(result)
             return
+        if len(path_parts) == 4 and path_parts[:2] == ["v1", "harnesses"]:
+            self._handle_harness_action(path_parts[2], path_parts[3], payload)
+            return
         request_id, action, matched = self._resolve_request_action(path_parts, payload)
         if not matched:
             self.send_response(404)
@@ -531,6 +547,72 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "source": source,
             }
         )
+
+    def _harness_context(self, payload: dict[str, object]) -> HarnessContext:
+        del payload
+        return HarnessContext(
+            home_dir=Path.home().resolve(),
+            workspace_dir=None,
+            guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
+        )
+
+    def _handle_harness_action(self, harness: str, action: str, payload: dict[str, object]) -> None:
+        if action not in {"install", "verify", "repair", "uninstall"}:
+            self._write_json({"error": "not_found"}, status=404)
+            return
+        context = self._harness_context(payload)
+        if action == "verify":
+            try:
+                self._write_json(build_harness_verification(harness, context, self.server.store))  # type: ignore[attr-defined]
+            except ValueError as error:
+                self._write_json({"error": str(error)}, status=404)
+            return
+        try:
+            dry_run = self._optional_bool(payload.get("dry_run"), default=True)
+        except ValueError:
+            self._write_json({"error": "invalid_dry_run"}, status=400)
+            return
+        try:
+            adapter = get_adapter(harness)
+        except ValueError as error:
+            self._write_json({"error": str(error)}, status=404)
+            return
+        if action == "uninstall":
+            expected_confirmation = uninstall_confirmation_token(adapter.harness)
+            confirmation = self._optional_string(payload.get("confirmation_phrase")) or self._optional_string(
+                payload.get("confirmation_token")
+            )
+            if confirmation != expected_confirmation:
+                self._write_json(
+                    {
+                        "error": "confirmation_required",
+                        "harness": adapter.harness,
+                        "confirmation_phrase": expected_confirmation,
+                        "confirm_command": (
+                            f"hol-guard apps disconnect {adapter.harness} --confirm {expected_confirmation}"
+                        ),
+                    },
+                    status=400,
+                )
+                return
+        if dry_run:
+            self._write_json(build_harness_setup_plan(action, adapter.harness, context, dry_run=True))
+            return
+        install_command = "uninstall" if action == "uninstall" else "install"
+        try:
+            result = apply_managed_install(
+                install_command,
+                adapter.harness,
+                False,
+                context,
+                self.server.store,  # type: ignore[attr-defined]
+                str(context.workspace_dir) if context.workspace_dir is not None else None,
+                _now(),
+            )
+        except ValueError as error:
+            self._write_json({"error": str(error)}, status=400)
+            return
+        self._write_json({"harness": adapter.harness, "action": action, "dry_run": False, **result})
 
     def _handle_requests_list(self, query_string: str) -> None:
         limit = self._query_limit(query_string, default=200, maximum=200)
@@ -1046,6 +1128,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "/v1/daemon/repair",
             "/v1/evidence",
             "/v1/evidence/export",
+            "/v1/harnesses",
             "/v1/policy",
             "/v1/policy/clear",
             "/v1/receipts",
@@ -1058,6 +1141,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) == 3 and path_parts[:2] in (["v1", "requests"], ["v1", "receipts"]):
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
+            return True
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["v1", "harnesses"]
+            and path_parts[3]
+            in {
+                "install",
+                "verify",
+                "repair",
+                "uninstall",
+            }
+        ):
             return True
         return len(path_parts) == 4 and path_parts[:2] == ["v1", "artifacts"] and path_parts[3] == "diff"
 
@@ -1241,6 +1336,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] in {"items", "status"}:
             return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
+            return True
+        if (
+            len(path_parts) == 4
+            and path_parts[:2] == ["v1", "harnesses"]
+            and path_parts[3]
+            in {
+                "install",
+                "verify",
+                "repair",
+                "uninstall",
+            }
+        ):
             return True
         return len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision"
 

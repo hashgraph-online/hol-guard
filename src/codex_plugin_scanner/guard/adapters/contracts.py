@@ -44,6 +44,85 @@ class HarnessProtectionContract:
     smoke_command: str
 
 
+@dataclass(frozen=True, slots=True)
+class HarnessSetupStep:
+    """Plain-language action for connecting or checking one harness."""
+
+    step_id: str
+    title: str
+    body: str
+    command: tuple[str, ...] = ()
+    writes_config: bool = False
+    requires_confirmation: bool = False
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "step_id": self.step_id,
+            "title": self.title,
+            "body": self.body,
+            "command": list(self.command),
+            "writes_config": self.writes_config,
+            "requires_confirmation": self.requires_confirmation,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class HarnessCoverageSummary:
+    """Summary of what Guard can and cannot observe for one harness."""
+
+    native_hooks: bool
+    browser_fallback: bool
+    mcp_proxy: bool
+    prompt_hooks: bool
+    blind_spots: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "native_hooks": self.native_hooks,
+            "browser_fallback": self.browser_fallback,
+            "mcp_proxy": self.mcp_proxy,
+            "prompt_hooks": self.prompt_hooks,
+            "blind_spots": list(self.blind_spots),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class HarnessSetupContract:
+    """Dashboard and CLI setup contract for one supported harness."""
+
+    harness: str
+    display_name: str
+    install_aliases: tuple[str, ...]
+    setup_steps: tuple[HarnessSetupStep, ...]
+    verify_steps: tuple[HarnessSetupStep, ...]
+    repair_steps: tuple[HarnessSetupStep, ...]
+    coverage: HarnessCoverageSummary
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "harness": self.harness,
+            "display_name": self.display_name,
+            "install_aliases": list(self.install_aliases),
+            "setup_steps": [step.to_dict() for step in self.setup_steps],
+            "verify_steps": [step.to_dict() for step in self.verify_steps],
+            "repair_steps": [step.to_dict() for step in self.repair_steps],
+            "coverage": self.coverage.to_dict(),
+        }
+
+
+_DISPLAY_NAMES = {
+    "codex": "Codex",
+    "claude-code": "Claude Code",
+    "opencode": "OpenCode",
+    "copilot": "Copilot",
+    "cursor": "Cursor",
+    "gemini": "Gemini",
+    "hermes": "Hermes",
+    "openclaw": "OpenClaw",
+    "antigravity": "Antigravity",
+}
+
+
 HARNESS_CONTRACTS: tuple[HarnessProtectionContract, ...] = (
     HarnessProtectionContract(
         harness="codex",
@@ -181,6 +260,73 @@ for _c in HARNESS_CONTRACTS:
 def contract_for(harness: str) -> HarnessProtectionContract | None:
     """Return the contract for a harness name or install alias, or None."""
     return _CONTRACT_BY_ALIAS.get(harness)
+
+
+def setup_contract_for(harness: str) -> HarnessSetupContract | None:
+    """Return guided setup metadata for a harness name or install alias."""
+
+    contract = contract_for(harness)
+    if contract is None:
+        return None
+    alias = contract.install_aliases[0] if contract.install_aliases else contract.harness
+    display_name = _DISPLAY_NAMES.get(contract.harness, contract.harness)
+    coverage = HarnessCoverageSummary(
+        native_hooks=contract.native_approval,
+        browser_fallback=contract.browser_fallback,
+        mcp_proxy="mcp_tool" in contract.event_surfaces,
+        prompt_hooks="prompt" in contract.event_surfaces,
+        blind_spots=(contract.known_blind_spots,),
+    )
+    setup_steps = (
+        HarnessSetupStep(
+            step_id="connect",
+            title=f"Connect {display_name}",
+            body=f"Add Guard's local protection hooks for {display_name}.",
+            command=("hol-guard", "apps", "connect", alias),
+            writes_config=True,
+        ),
+        HarnessSetupStep(
+            step_id="review-coverage",
+            title="Review what Guard can see",
+            body="Check covered events and known blind spots before relying on this app.",
+        ),
+    )
+    verify_steps = (
+        HarnessSetupStep(
+            step_id="safe-test",
+            title="Run a safe protection test",
+            body="Confirm Guard can detect the app without reading secrets or changing app config.",
+            command=("hol-guard", "apps", "test", alias),
+        ),
+    )
+    repair_steps = (
+        HarnessSetupStep(
+            step_id="repair",
+            title=f"Repair {display_name} protection",
+            body="Re-apply Guard managed config if hooks were removed or changed.",
+            command=("hol-guard", "apps", "repair", alias),
+            writes_config=True,
+        ),
+    )
+    return HarnessSetupContract(
+        harness=contract.harness,
+        display_name=display_name,
+        install_aliases=contract.install_aliases,
+        setup_steps=setup_steps,
+        verify_steps=verify_steps,
+        repair_steps=repair_steps,
+        coverage=coverage,
+    )
+
+
+def all_setup_contracts() -> tuple[HarnessSetupContract, ...]:
+    """Return guided setup metadata for all supported harnesses."""
+
+    return tuple(
+        setup_contract
+        for contract in HARNESS_CONTRACTS
+        if (setup_contract := setup_contract_for(contract.harness)) is not None
+    )
 
 
 def harness_contracts_table() -> str:
