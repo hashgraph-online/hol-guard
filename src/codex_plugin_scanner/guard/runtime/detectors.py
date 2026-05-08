@@ -12,6 +12,13 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.cisco_preflight import CiscoMcpPreflightDetector, CiscoSkillPreflightDetector
 from codex_plugin_scanner.guard.runtime.data_flow_rules import detect_data_flow_exfiltration
+from codex_plugin_scanner.guard.runtime.false_positive_rules import (
+    classify_health_endpoint_fetch,
+    classify_package_metadata_access,
+    classify_source_search_command,
+    classify_version_file_access,
+)
+from codex_plugin_scanner.guard.runtime.persistence_rules import detect_persistence_mechanisms
 from codex_plugin_scanner.guard.runtime.prompt_injection import detect_prompt_injection_requests
 from codex_plugin_scanner.guard.runtime.safe_decode import decode_layers
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import SecretPathMatch, classify_secret_path
@@ -286,6 +293,140 @@ class SafeDecodeDetector:
         return tuple(signals)
 
 
+class FalsePositiveSuppressorDetector:
+    """Detects patterns that are commonly benign, emitting advisory false_positive signals.
+
+    These signals do not directly change policy action but provide hints that
+    policy composition rules and operators can use to reduce unnecessary blocks.
+    """
+
+    detector_id = "false_positive.suppressor"
+    categories: tuple[RiskSignalCategory, ...] = ("false_positive",)
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        signals: list[RiskSignalV2] = []
+
+        if action.action_type == "shell_command" and action.command is not None:
+            classification = classify_source_search_command(action.command)
+            if classification.is_source_search:
+                signals.append(
+                    RiskSignalV2(
+                        signal_id=f"fp:source-search:{classification.tool}",
+                        category="false_positive",
+                        severity="info",
+                        confidence="strong",
+                        detector=self.detector_id,
+                        title="Read-only code or filesystem search",
+                        plain_reason=(
+                            f"This command uses '{classification.tool}' to search code or the filesystem "
+                            "and does not access secret files or pipe output to the network."
+                        ),
+                        technical_detail=classification.reason,
+                        evidence_ref="command",
+                        redaction_level="none",
+                        false_positive_hint=None,
+                        advisory_id=None,
+                    )
+                )
+
+            if classify_health_endpoint_fetch(action.command):
+                signals.append(
+                    RiskSignalV2(
+                        signal_id="fp:health-endpoint-fetch",
+                        category="false_positive",
+                        severity="info",
+                        confidence="strong",
+                        detector=self.detector_id,
+                        title="Localhost health or readiness check",
+                        plain_reason=(
+                            "This command fetches a localhost health or readiness endpoint,"
+                            " which is a normal development pattern."
+                        ),
+                        technical_detail="matched localhost health endpoint pattern",
+                        evidence_ref="command",
+                        redaction_level="none",
+                        false_positive_hint=None,
+                        advisory_id=None,
+                    )
+                )
+
+        if action.action_type == "file_read" and action.target_paths:
+            if classify_version_file_access(list(action.target_paths)):
+                signals.append(
+                    RiskSignalV2(
+                        signal_id="fp:version-file-access",
+                        category="false_positive",
+                        severity="info",
+                        confidence="strong",
+                        detector=self.detector_id,
+                        title="Version pin file access",
+                        plain_reason=(
+                            "Reading a version pin file (.nvmrc, .python-version, etc.) is a normal"
+                            " toolchain operation with no sensitive data."
+                        ),
+                        technical_detail="matched version pin file pattern",
+                        evidence_ref="target_paths",
+                        redaction_level="none",
+                        false_positive_hint=None,
+                        advisory_id=None,
+                    )
+                )
+
+            if classify_package_metadata_access(list(action.target_paths)):
+                signals.append(
+                    RiskSignalV2(
+                        signal_id="fp:package-metadata-access",
+                        category="false_positive",
+                        severity="info",
+                        confidence="strong",
+                        detector=self.detector_id,
+                        title="Package manifest or lock file access",
+                        plain_reason=(
+                            "Reading package.json, requirements.txt, or similar manifests is a normal"
+                            " dependency management operation."
+                        ),
+                        technical_detail="matched package metadata file pattern",
+                        evidence_ref="target_paths",
+                        redaction_level="none",
+                        false_positive_hint=None,
+                        advisory_id=None,
+                    )
+                )
+
+        return tuple(signals)
+
+
+class PersistenceDetector:
+    """Detects commands that install persistence mechanisms on the host system."""
+
+    detector_id = "persistence.mechanism"
+    categories: tuple[RiskSignalCategory, ...] = ("persistence",)
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        if action.action_type != "shell_command" or action.command is None:
+            return ()
+        matches = detect_persistence_mechanisms(action.command)
+        return tuple(
+            RiskSignalV2(
+                signal_id=f"persistence:{match.mechanism}",
+                category="persistence",
+                severity="high",
+                confidence="moderate",
+                detector=self.detector_id,
+                title=f"Persistence via {match.mechanism.replace('_', ' ')}",
+                plain_reason=match.plain_reason,
+                technical_detail=f"mechanism: {match.mechanism}",
+                evidence_ref="command",
+                redaction_level="summary",
+                false_positive_hint=match.false_positive_hint,
+                advisory_id=None,
+            )
+            for match in matches
+        )
+
+
 def register_default_detectors() -> tuple[GuardDetector, ...]:
     """Return the default ordered detector list.
 
@@ -293,11 +434,17 @@ def register_default_detectors() -> tuple[GuardDetector, ...]:
     before native data-flow and prompt detectors evaluate the same action.
     This ordering is intentional: scanner evidence can influence policy before
     runtime detectors produce additional signals.
+
+    FalsePositiveSuppressorDetector runs early to annotate benign patterns
+    before risk detectors evaluate the same action, so policy resolution can
+    factor in FP signals when composing the final action.
     """
     return (
         CiscoMcpPreflightDetector(),
         CiscoSkillPreflightDetector(),
+        FalsePositiveSuppressorDetector(),
         DataFlowExfiltrationDetector(),
+        PersistenceDetector(),
         PromptInjectionDetector(),
         SafeDecodeDetector(),
         SecretPathDetector(),
