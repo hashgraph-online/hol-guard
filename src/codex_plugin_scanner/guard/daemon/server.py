@@ -456,7 +456,15 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"resolved": False, "error": str(error)}, status=400)
             return
-        self._write_json({"resolved": True, "item": updated})
+        normalized_scope = scope.strip()
+        harness_str = str(updated.get("harness", ""))
+        self.server.store.add_event(  # type: ignore[attr-defined]
+            "approval_resolved",
+            {"request_id": request_id, "action": action, "scope": normalized_scope, "harness": harness_str},
+            _now(),
+        )
+        harness = str(updated.get("harness", ""))
+        self._write_json({"resolved": True, "item": updated, "copy": _build_resolution_copy(action, harness)})
 
     def log_message(self, fmt: str, *args: Any) -> None:
         return
@@ -1386,6 +1394,20 @@ def _approval_center_browser_url(approval_center_url: str, auth_token: str) -> s
 def _build_local_url(host: str, port: int, path: str) -> str:
     host_part = f"[{host}]" if ":" in host else host
     return f"http://{host_part}:{port}{path}"
+
+
+_HARNESS_RETRY_COPY: dict[str, str] = {
+    "codex": "Return to Codex and retry",
+    "claude-code": "Return to Claude and retry",
+    "opencode": "Return to OpenCode and retry",
+    "copilot": "Return to Copilot and retry",
+}
+_DEFAULT_RETRY_COPY = "Return to your AI assistant and retry"
+
+
+def _build_resolution_copy(action: str, harness: str) -> dict[str, str]:
+    title = "Approved. Retry in chat." if action == "allow" else "Blocked. Guard will remember this decision."
+    return {"title": title, "body": _HARNESS_RETRY_COPY.get(harness, _DEFAULT_RETRY_COPY)}
 
 
 def _now() -> str:
