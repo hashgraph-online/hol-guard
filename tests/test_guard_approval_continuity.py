@@ -170,6 +170,29 @@ class TestEnsureApprovalCenter:
         mock_start.assert_called_once_with(guard_home)
         assert result.daemon_url == "http://127.0.0.1:7777"
 
+    def test_incompatible_daemon_version_triggers_restart(self, tmp_path: Path) -> None:
+        """Regression: daemon returning 200 /healthz with stale compatibility_version must restart."""
+        guard_home = tmp_path / "guard"
+        guard_home.mkdir()
+        alive_pid = os.getpid()
+        stale_locator = ApprovalCenterLocator(
+            guard_home=guard_home,
+            daemon_url="http://127.0.0.1:6174",
+            approval_url_base="http://127.0.0.1:6174",
+            pid=alive_pid,
+            started_at="2026-01-01T00:00:00Z",
+            state_path=guard_home / "daemon-state.json",
+        )
+        write_approval_center_locator(guard_home, stale_locator)
+        with (
+            patch.object(manager_mod, "_guard_daemon_pid_matches_command", return_value=True),
+            patch.object(manager_mod, "_approval_center_daemon_is_healthy", return_value=False),
+            patch.object(manager_mod, "ensure_guard_daemon", return_value="http://127.0.0.1:8888") as mock_start,
+        ):
+            result = ensure_approval_center(guard_home)
+        mock_start.assert_called_once_with(guard_home)
+        assert result.daemon_url == "http://127.0.0.1:8888"
+
 
 class TestFallbackCliCommand:
     def test_guard_approval_request_has_fallback_cli_command_field(self) -> None:

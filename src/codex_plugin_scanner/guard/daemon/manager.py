@@ -242,7 +242,9 @@ def read_approval_center_locator(guard_home: Path) -> ApprovalCenterLocator | No
 def _approval_center_daemon_is_healthy(daemon_url: str) -> bool:
     try:
         with urllib.request.urlopen(f"{daemon_url}/healthz", timeout=1) as response:
-            return response.status == 200
+            if response.status != 200:
+                return False
+            return _healthz_payload_is_current(response.read().decode("utf-8"))
     except (OSError, ValueError, urllib.error.URLError):
         return False
 
