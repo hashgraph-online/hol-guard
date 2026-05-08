@@ -28,6 +28,7 @@ from ..config import editable_guard_settings, load_guard_config, update_guard_se
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
+from ..store_approvals import InvalidApprovalCursorError
 from ..store_evidence import (
     clear_evidence,
     count_evidence,
@@ -122,6 +123,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             snapshot = build_runtime_snapshot(
                 store=store,
                 approval_center_url=f"http://{self.server.server_address[0]}:{self.server.server_address[1]}",
+                active_request_id=self._query_string(parsed.query, "active_request_id"),
             )
             self._write_json({**snapshot, "security_level": config.security_level})
             return
@@ -181,7 +183,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"items": store.list_events_after(_int_query_value(parsed.query, "cursor"), limit=200)})
             return
         if parsed.path == "/v1/requests":
-            self._write_json({"items": store.list_approval_requests(limit=200)})
+            self._handle_requests_list(parsed.query)
             return
         if parsed.path == "/v1/connect/state":
             self._handle_connect_state_read(parsed.query)
@@ -426,6 +428,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 scope=scope.strip(),
                 workspace=self._optional_string(payload.get("workspace")),
                 reason=self._optional_string(payload.get("reason")),
+                return_queue_result=True,
+                resolve_scope_matches=True,
             )
         except ApprovalRequestNotFoundError:
             self._write_json(
@@ -462,14 +466,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json({"resolved": False, "error": str(error)}, status=400)
             return
         normalized_scope = scope.strip()
-        harness_str = str(updated.get("harness", ""))
+        item = updated.get("item")
+        harness_str = str(item.get("harness", "")) if isinstance(item, dict) else ""
         self.server.store.add_event(  # type: ignore[attr-defined]
             "approval_resolved",
             {"request_id": request_id, "action": action, "scope": normalized_scope, "harness": harness_str},
             _now(),
         )
         harness = str(updated.get("harness", ""))
-        self._write_json({"resolved": True, "item": updated, "copy": _build_resolution_copy(action, harness)})
+        updated["copy"] = _build_resolution_copy(action, harness_str or harness)
+        self._write_json(updated)
 
     def log_message(self, fmt: str, *args: Any) -> None:
         return
@@ -525,6 +531,42 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "source": source,
             }
         )
+
+    def _handle_requests_list(self, query_string: str) -> None:
+        limit = self._query_limit(query_string, default=200, maximum=200)
+        if limit is None:
+            self._write_json({"error": "invalid_limit"}, status=400)
+            return
+        status = self._query_string(query_string, "status") or "pending"
+        if status == "all":
+            status_filter = None
+        elif status in {"pending", "resolved"}:
+            status_filter = status
+        else:
+            self._write_json({"error": "invalid_status"}, status=400)
+            return
+        try:
+            page = self.server.store.list_approval_request_page(  # type: ignore[attr-defined]
+                status=status_filter,
+                limit=limit,
+                cursor=self._query_string(query_string, "cursor"),
+                harness=self._query_string(query_string, "harness"),
+                search=self._query_string(query_string, "search"),
+            )
+        except InvalidApprovalCursorError:
+            self._write_json(
+                {
+                    "error": "invalid_cursor",
+                    "recovery": {
+                        "code": "refresh_queue",
+                        "title": "Refresh the blocked action list.",
+                        "body": "The queue position expired. Refresh the Review Queue to continue.",
+                    },
+                },
+                status=400,
+            )
+            return
+        self._write_json(page)
 
     @staticmethod
     def _optional_bool(value: object, *, default: bool) -> bool:
@@ -1128,6 +1170,26 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if isinstance(value, str) and value.strip():
             return value.strip()
         return None
+
+    @staticmethod
+    def _query_string(query_string: str, key: str) -> str | None:
+        value = parse_qs(query_string).get(key, [None])[-1]
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return None
+
+    @staticmethod
+    def _query_limit(query_string: str, *, default: int, maximum: int) -> int | None:
+        raw_value = parse_qs(query_string).get("limit", [None])[-1]
+        if raw_value is None:
+            return default
+        try:
+            value = int(raw_value)
+        except (TypeError, ValueError):
+            return None
+        if value < 1:
+            return None
+        return min(value, maximum)
 
     @staticmethod
     def _scope_target_is_valid(

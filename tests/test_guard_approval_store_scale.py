@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import sqlite3
+import time
 import uuid
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -20,7 +21,9 @@ from codex_plugin_scanner.guard.store_approvals import (
     count_approval_requests,
     get_approval_request,
     list_approval_requests,
+    list_pending_approval_summaries,
     resolve_approval_request,
+    resolve_request_with_queue_result,
 )
 
 
@@ -79,6 +82,72 @@ def _insert(conn: sqlite3.Connection, req: GuardApprovalRequest, now: str = "202
     return add_approval_request(conn, req, now)
 
 
+def _bulk_insert_pending(conn: sqlite3.Connection, total: int) -> None:
+    rows = []
+    for index in range(total):
+        timestamp = f"2026-01-01T00:00:00.{index:06d}Z"
+        rows.append(
+            (
+                f"req-{index:06d}",
+                "codex",
+                f"codex:project:tool-{index:06d}",
+                f"tool-{index:06d}",
+                "mcp_server",
+                f"hash-{index:06d}",
+                None,
+                "require-reapproval",
+                "session",
+                '["args"]',
+                "project",
+                "/tmp/config.toml",
+                "ws-a",
+                f"run tool {index:06d}",
+                f"run tool {index:06d}",
+                f"identity-{index:06d}",
+                f"approval-group:v1:{index:064d}",
+                1,
+                timestamp,
+                "stdio",
+                "risk",
+                "[]",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                f'{{"command":"run tool {index:06d}"}}',
+                None,
+                None,
+                f"hol-guard review req-{index:06d}",
+                f"http://localhost:4455/approve/req-{index:06d}",
+                "pending",
+                None,
+                None,
+                None,
+                timestamp,
+                None,
+            )
+        )
+    conn.executemany(
+        """
+        insert into approval_requests (
+          request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
+          recommended_scope, changed_fields_json, source_scope, config_path, workspace,
+          launch_target, normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at,
+          transport, risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
+          launch_summary, risk_headline, action_envelope_json, decision_v2_json, fallback_cli_command,
+          review_command, approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
+        )
+        values (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        """,
+        rows,
+    )
+
+
 class TestApprovalIndexStatements:
     def test_index_statements_returns_nonempty_list(self) -> None:
         stmts = approval_index_statements()
@@ -129,6 +198,40 @@ class TestCursorPagination:
         cursor = page1[-1]["created_at"]
         page2 = list_approval_requests(conn, status="pending", limit=3, before_cursor=cursor)
         assert page2 == []
+
+
+class TestQueueScaleTargets:
+    def test_listing_first_queue_page_with_100k_rows_stays_under_100ms(self) -> None:
+        conn = _make_conn()
+        _bulk_insert_pending(conn, 100_000)
+
+        started = time.perf_counter()
+        page = list_pending_approval_summaries(conn, limit=25)
+        elapsed = time.perf_counter() - started
+
+        assert len(page["items"]) == 25
+        assert page["total_pending_count"] == 100_000
+        assert elapsed < 0.1
+
+    def test_resolving_one_request_with_100k_rows_stays_under_100ms(self) -> None:
+        conn = _make_conn()
+        _bulk_insert_pending(conn, 100_000)
+
+        started = time.perf_counter()
+        result = resolve_request_with_queue_result(
+            conn,
+            "req-099999",
+            resolution_action="allow",
+            resolution_scope="artifact",
+            reason="reviewed",
+            resolved_at="2026-01-02T00:00:00Z",
+        )
+        elapsed = time.perf_counter() - started
+
+        assert result["resolved"] is True
+        assert result["remaining_pending_count"] == 99_999
+        assert result["next_selectable_request_id"] == "req-099998"
+        assert elapsed < 0.1
 
 
 class TestSearchFilter:

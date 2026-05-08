@@ -181,6 +181,10 @@ class GuardApprovalRequest:
     action_envelope_json: dict[str, object] | None = None
     decision_v2_json: dict[str, object] | None = None
     fallback_cli_command: str | None = None
+    action_identity: str | None = None
+    queue_group_id: str | None = None
+    dedupe_count: int = 1
+    last_seen_at: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
