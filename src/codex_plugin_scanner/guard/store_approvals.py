@@ -6,6 +6,11 @@ import json
 import sqlite3
 
 from .models import GuardApprovalRequest
+from .runtime.action_identity import normalize_command_identity
+
+
+def _normalized_identity_key(launch_target: str | None) -> str:
+    return normalize_command_identity(launch_target or "")
 
 
 def approval_schema_statement() -> str:
@@ -25,6 +30,7 @@ def approval_schema_statement() -> str:
           config_path text not null,
           workspace text,
           launch_target text,
+          normalized_identity_key text,
           transport text,
           risk_summary text,
           risk_signals_json text not null default '[]',
@@ -50,16 +56,37 @@ def approval_schema_statement() -> str:
 
 
 def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalRequest, now: str) -> str:
+    identity_key = _normalized_identity_key(request.launch_target)
     existing = connection.execute(
         """
         select request_id
         from approval_requests
-        where harness = ? and artifact_id = ? and status = 'pending'
+        where harness = ?
+          and artifact_id = ?
+          and workspace IS ?
+          and normalized_identity_key = ?
+          and status = 'pending'
         order by created_at desc
         limit 1
         """,
-        (request.harness, request.artifact_id),
+        (request.harness, request.artifact_id, request.workspace, identity_key),
     ).fetchone()
+    if existing is None:
+        existing = connection.execute(
+            """
+            select request_id
+            from approval_requests
+            where harness = ?
+              and artifact_id = ?
+              and workspace IS ?
+              and launch_target IS ?
+              and normalized_identity_key IS NULL
+              and status = 'pending'
+            order by created_at desc
+            limit 1
+            """,
+            (request.harness, request.artifact_id, request.workspace, request.launch_target),
+        ).fetchone()
     request_id = str(existing["request_id"]) if existing is not None else request.request_id
     if existing is not None:
         review_command = _rewrite_review_command(request.review_command, request_id)
@@ -69,7 +96,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
             update approval_requests
             set artifact_name = ?, artifact_type = ?, artifact_hash = ?, publisher = ?, policy_action = ?,
                 recommended_scope = ?, changed_fields_json = ?, source_scope = ?, config_path = ?, workspace = ?,
-                launch_target = ?, transport = ?, risk_summary = ?, risk_signals_json = ?,
+                launch_target = ?, normalized_identity_key = ?, transport = ?, risk_summary = ?, risk_signals_json = ?,
                 artifact_label = ?, source_label = ?, trigger_summary = ?, why_now = ?, launch_summary = ?,
                 risk_headline = ?, action_envelope_json = ?, decision_v2_json = ?, fallback_cli_command = ?,
                 review_command = ?, approval_url = ?, created_at = ?
@@ -87,6 +114,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
                 request.config_path,
                 request.workspace,
                 request.launch_target,
+                _normalized_identity_key(request.launch_target),
                 request.transport,
                 request.risk_summary,
                 json.dumps(list(request.risk_signals)),
@@ -115,12 +143,14 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
         insert into approval_requests (
           request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
           recommended_scope, changed_fields_json, source_scope, config_path, workspace,
-           launch_target, transport, risk_summary,
+           launch_target, normalized_identity_key, transport, risk_summary,
            risk_signals_json, artifact_label, source_label, trigger_summary, why_now, launch_summary, risk_headline,
             action_envelope_json, decision_v2_json, fallback_cli_command, review_command,
             approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
           )
-          values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          values (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          )
         """,
         (
             request.request_id,
@@ -137,6 +167,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
             request.config_path,
             request.workspace,
             request.launch_target,
+            _normalized_identity_key(request.launch_target),
             request.transport,
             request.risk_summary,
             json.dumps(list(request.risk_signals)),
