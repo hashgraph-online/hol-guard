@@ -133,6 +133,28 @@ function CloudSyncHealthCard(props: { health: GuardCloudSyncHealth }) {
   );
 }
 
+function approvalHealthTone(state: ApprovalCenterHealthState): "green" | "blue" | "slate" | "red" {
+  if (state === "ready") return "green";
+  if (state === "starting") return "blue";
+  if (state === "repair_needed") return "red";
+  return "slate";
+}
+
+function ApprovalCenterHealthCard(props: { snapshot: GuardRuntimeSnapshot }) {
+  const copy = resolveApprovalCenterHealth(props.snapshot);
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
+          Approval center health
+        </p>
+        <Tag tone={approvalHealthTone(copy.state)}>{copy.label}</Tag>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
+    </div>
+  );
+}
+
 function WatchedAppsCard(props: { inventory: GuardInventoryItem[] | undefined }) {
   const inventory = props.inventory ?? [];
   return (
@@ -285,6 +307,7 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
         </div>
 
         <CloudSyncHealthCard health={snapshot.cloud_sync_health} />
+        <ApprovalCenterHealthCard snapshot={snapshot} />
 
         <div className="rounded-xl border border-border bg-white px-5 py-4">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
