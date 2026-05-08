@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from multiprocessing import get_context
+from multiprocessing.process import BaseProcess
 from pathlib import Path
+from queue import Empty
 
 from ..models import Finding, Severity, severity_from_value
 
@@ -16,6 +19,7 @@ class CiscoIntegrationStatus(str, Enum):
     SKIPPED = "skipped"
     UNAVAILABLE = "unavailable"
     FAILED = "failed"
+    TIMED_OUT = "timed_out"
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +71,69 @@ def _build_unavailable_summary(message: str, *, status: CiscoIntegrationStatus) 
         total_findings=0,
         findings_by_severity=_empty_counts(),
     )
+
+
+def _scan_directory_payload(skills_dir: Path, policy_name: str) -> dict[str, object]:
+    from skill_scanner import SkillScanner
+    from skill_scanner.core.scan_policy import ScanPolicy
+
+    scanner = SkillScanner(policy=ScanPolicy(preset_base=policy_name))
+    report = scanner.scan_directory(skills_dir)
+    payload = report.to_dict()
+    return payload if isinstance(payload, dict) else {}
+
+
+def _scan_directory_worker(skills_dir: str, policy_name: str, result_queue: object) -> None:
+    try:
+        payload = _scan_directory_payload(Path(skills_dir), policy_name)
+        result_queue.put(("ok", payload))
+    except BaseException as exc:
+        result_queue.put(("error", type(exc).__name__, str(exc)))
+
+
+def _terminate_scan_process(process: BaseProcess) -> None:
+    process.terminate()
+    process.join(1)
+    if process.is_alive():
+        process.kill()
+        process.join()
+
+
+def _scan_directory_with_timeout(
+    skills_dir: Path, policy_name: str, timeout_seconds: float | None
+) -> dict[str, object]:
+    if timeout_seconds is None:
+        return _scan_directory_payload(skills_dir, policy_name)
+
+    context = get_context("spawn")
+    result_queue = context.Queue(maxsize=1)
+    process = context.Process(
+        target=_scan_directory_worker,
+        args=(str(skills_dir), policy_name, result_queue),
+    )
+    process.start()
+
+    try:
+        status, payload, *details = result_queue.get(timeout=timeout_seconds)
+    except Empty as exc:
+        process.join(0)
+        if process.is_alive():
+            _terminate_scan_process(process)
+            raise TimeoutError("Cisco skill scanner timed out") from exc
+        try:
+            status, payload, *details = result_queue.get(timeout=1)
+        except Empty as empty_exc:
+            raise RuntimeError(f"Cisco skill scanner exited with code {process.exitcode}") from empty_exc
+    else:
+        process.join(1)
+        if process.is_alive():
+            _terminate_scan_process(process)
+
+    if status == "error":
+        error_type = str(payload)
+        error_message = str(details[0]) if details else "unknown error"
+        raise RuntimeError(f"{error_type}: {error_message}")
+    return payload if isinstance(payload, dict) else {}
 
 
 def _to_local_finding(plugin_dir: Path, skill_result: dict[str, object], finding: dict[str, object]) -> Finding:
@@ -131,7 +198,12 @@ def _extract_skipped_skills(summary: object, results: object) -> tuple[str, ...]
     return tuple(dict.fromkeys(skipped))
 
 
-def run_cisco_skill_scan(skills_dir: Path, mode: str = "auto", policy_name: str = "balanced") -> CiscoSkillScanSummary:
+def run_cisco_skill_scan(
+    skills_dir: Path,
+    mode: str = "auto",
+    policy_name: str = "balanced",
+    timeout_seconds: float | None = None,
+) -> CiscoSkillScanSummary:
     """Run Cisco skill-scanner against a skills directory when available."""
 
     if mode == "off":
@@ -141,8 +213,8 @@ def run_cisco_skill_scan(skills_dir: Path, mode: str = "auto", policy_name: str 
         )
 
     try:
-        from skill_scanner import SkillScanner
-        from skill_scanner.core.scan_policy import ScanPolicy
+        __import__("skill_scanner")
+        __import__("skill_scanner.core.scan_policy")
     except ImportError:
         if mode == "on":
             return _build_unavailable_summary(
@@ -155,9 +227,12 @@ def run_cisco_skill_scan(skills_dir: Path, mode: str = "auto", policy_name: str 
         )
 
     try:
-        scanner = SkillScanner(policy=ScanPolicy(preset_base=policy_name))
-        report = scanner.scan_directory(skills_dir.resolve())
-        payload = report.to_dict()
+        payload = _scan_directory_with_timeout(skills_dir.resolve(), policy_name, timeout_seconds)
+    except TimeoutError:
+        return _build_unavailable_summary(
+            "Cisco skill scanner timed out before it could finish.",
+            status=CiscoIntegrationStatus.TIMED_OUT,
+        )
     except Exception as exc:  # pragma: no cover - defensive around third-party code
         return _build_unavailable_summary(
             f"Cisco skill scanner failed: {exc}",
