@@ -60,8 +60,18 @@ from ..consumer import (
     record_policy,
     run_consumer_scan,
 )
-from ..daemon import GuardDaemonServer, ensure_guard_daemon, load_guard_surface_daemon_client
-from ..daemon.manager import load_guard_daemon_auth_token
+from ..daemon import (
+    GuardDaemonServer,
+    ensure_guard_daemon,
+    load_guard_surface_daemon_client,
+    repair_approval_center_locator,
+)
+from ..daemon.manager import (
+    _guard_daemon_pid_is_running,
+    _guard_daemon_pid_matches_command,
+    load_guard_daemon_auth_token,
+    load_guard_daemon_url,
+)
 from ..incident import build_incident_context
 from ..mcp_tool_calls import (
     allow_tool_call,
@@ -661,7 +671,16 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     _add_guard_common_args(daemon_parser)
     daemon_parser.add_argument("--serve", action="store_true")
     daemon_parser.add_argument("--port", type=int)
-    daemon_parser.add_argument("--json", action="store_true")
+    daemon_subparsers = daemon_parser.add_subparsers(dest="daemon_command")
+    status_p = daemon_subparsers.add_parser("status", help="Show local Guard daemon status")
+    _add_guard_common_args(status_p)
+    status_p.add_argument("--json", action="store_true")
+    repair_p = daemon_subparsers.add_parser("repair", help="Repair stale Guard daemon state")
+    _add_guard_common_args(repair_p)
+    repair_p.add_argument("--json", action="store_true")
+    stop_p = daemon_subparsers.add_parser("stop", help="Stop a running Guard daemon")
+    _add_guard_common_args(stop_p)
+    stop_p.add_argument("--json", action="store_true")
 
     codex_proxy_parser = guard_subparsers.add_parser("codex-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(codex_proxy_parser)
@@ -1502,6 +1521,13 @@ def run_guard_command(
         return 2
 
     if args.guard_command == "daemon":
+        daemon_command = getattr(args, "daemon_command", None)
+        if daemon_command == "status":
+            return _handle_daemon_status(guard_home, getattr(args, "json", False))
+        if daemon_command == "repair":
+            return _handle_daemon_repair(guard_home, getattr(args, "json", False))
+        if daemon_command == "stop":
+            return _handle_daemon_stop(guard_home, getattr(args, "json", False))
         daemon = GuardDaemonServer(store, port=args.port or 0)
         if args.serve:
             daemon.serve()
@@ -6531,3 +6557,81 @@ def _matching_advisories(store: GuardStore, publisher: object) -> list[dict[str,
     if not isinstance(publisher, str) or not publisher.strip():
         return []
     return [item for item in store.list_cached_advisories() if item.get("publisher") == publisher]
+
+
+def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
+    from codex_plugin_scanner.version import __version__
+
+    url = load_guard_daemon_url(guard_home)
+    running = False
+    port: int | None = None
+    pid: int | None = None
+    state_path = guard_home / "daemon-state.json"
+    if state_path.is_file():
+        import json as _json
+
+        try:
+            state = _json.loads(state_path.read_text())
+            pid = state.get("pid") if isinstance(state, dict) else None
+            port = state.get("port") if isinstance(state, dict) else None
+            if (
+                isinstance(pid, int)
+                and pid > 0
+                and _guard_daemon_pid_is_running(pid)
+                and _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
+            ):
+                running = True
+        except Exception:
+            pass
+    payload: dict[str, object] = {
+        "running": running,
+        "guard_home": str(guard_home),
+        "version": __version__,
+    }
+    if port is not None:
+        payload["port"] = port
+    if pid is not None:
+        payload["pid"] = pid
+    if url is not None:
+        payload["url"] = url
+    _emit("daemon", payload, as_json)
+    return 0
+
+
+def _handle_daemon_repair(guard_home: Path, as_json: bool) -> int:
+    result = repair_approval_center_locator(guard_home)
+    _emit("daemon", result, as_json)
+    return 0
+
+
+def _handle_daemon_stop(guard_home: Path, as_json: bool) -> int:
+    import json as _json
+    import os
+    import signal as _signal
+
+    state_path = guard_home / "daemon-state.json"
+    stopped = False
+    pid: int | None = None
+    if state_path.is_file():
+        try:
+            state = _json.loads(state_path.read_text())
+            pid = state.get("pid") if isinstance(state, dict) else None
+            if (
+                isinstance(pid, int)
+                and pid > 0
+                and _guard_daemon_pid_is_running(pid)
+                and _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
+            ):
+                os.kill(pid, _signal.SIGTERM)
+                stopped = True
+        except (ProcessLookupError, PermissionError, OSError, _json.JSONDecodeError, ValueError):
+            pass
+    from codex_plugin_scanner.guard.daemon.manager import clear_guard_daemon_state
+
+    with suppress(OSError):
+        clear_guard_daemon_state(guard_home)
+    payload: dict[str, object] = {"stopped": stopped, "running": False}
+    if pid is not None:
+        payload["pid"] = pid
+    _emit("daemon", payload, as_json)
+    return 0
