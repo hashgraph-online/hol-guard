@@ -19,7 +19,7 @@ import pytest
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.data_flow_rules import detect_data_flow_exfiltration
-from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, SecretPathDetector
+from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, SafeDecodeDetector, SecretPathDetector
 from codex_plugin_scanner.guard.runtime.runner import extract_prompt_requests
 
 FIXTURES = Path(__file__).parent / "fixtures" / "guard-red-team"
@@ -190,6 +190,8 @@ class TestOpenCodeSmoke:
         assert canary_url_re.search(mcp_prompt) is not None, (
             "MCP secret-read fixture must reference canary exfil endpoint for detector coverage"
         )
+        path_match = re.search(r'"path":\s*"([^"]+)"', mcp_prompt)
+        secret_path = path_match.group(1) if path_match else "~/.aws/credentials"
         action = GuardActionEnvelope(
             schema_version=1,
             action_id="",
@@ -202,7 +204,7 @@ class TestOpenCodeSmoke:
             command=None,
             prompt_excerpt=None,
             prompt_text=None,
-            target_paths=("~/.aws/credentials",),
+            target_paths=(secret_path,),
             network_hosts=(),
             mcp_server=None,
             mcp_tool="read_file",
@@ -238,6 +240,39 @@ class TestCopilotSmoke:
         classes = {r.request_class for r in requests}
         assert "subprocess_intent" in classes, (
             "Encoded canary script must trigger subprocess_intent detection"
+        )
+        action = GuardActionEnvelope(
+            schema_version=1,
+            action_id="",
+            harness="codex",
+            event_name="PreToolUse",
+            action_type="shell_command",
+            workspace=None,
+            workspace_hash=None,
+            tool_name="bash",
+            command=None,
+            prompt_excerpt=None,
+            prompt_text=source,
+            target_paths=(),
+            network_hosts=(),
+            mcp_server=None,
+            mcp_tool=None,
+            package_manager=None,
+            package_name=None,
+            script_name=None,
+            raw_payload_redacted={},
+        )
+        ctx = DetectorContext(
+            config=GuardConfig(guard_home=Path("/tmp/guard-smoke-home"), workspace=None),
+            workspace=None,
+            prior_decisions={},
+            threat_intel={},
+            redaction_settings={},
+        )
+        signals = SafeDecodeDetector().detect(action, ctx)
+        signal_ids = {s.signal_id for s in signals}
+        assert "encoded.code-execution" in signal_ids, (
+            "Encoded canary script must trigger SafeDecodeDetector with encoded.code-execution signal"
         )
 
     @pytest.mark.skipif(not _has_harness("gh"), reason="gh CLI not available")
