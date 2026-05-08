@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from multiprocessing import get_context
+from multiprocessing.process import BaseProcess
 from pathlib import Path
 from queue import Empty
 
@@ -90,6 +91,14 @@ def _scan_directory_worker(skills_dir: str, policy_name: str, result_queue: obje
         result_queue.put(("error", type(exc).__name__, str(exc)))
 
 
+def _terminate_scan_process(process: BaseProcess) -> None:
+    process.terminate()
+    process.join(1)
+    if process.is_alive():
+        process.kill()
+        process.join()
+
+
 def _scan_directory_with_timeout(
     skills_dir: Path, policy_name: str, timeout_seconds: float | None
 ) -> dict[str, object]:
@@ -103,19 +112,23 @@ def _scan_directory_with_timeout(
         args=(str(skills_dir), policy_name, result_queue),
     )
     process.start()
-    process.join(timeout_seconds)
-    if process.is_alive():
-        process.terminate()
-        process.join(1)
-        if process.is_alive():
-            process.kill()
-            process.join()
-        raise TimeoutError("Cisco skill scanner timed out")
 
     try:
-        status, payload, *details = result_queue.get(timeout=1)
+        status, payload, *details = result_queue.get(timeout=timeout_seconds)
     except Empty as exc:
-        raise RuntimeError(f"Cisco skill scanner exited with code {process.exitcode}") from exc
+        process.join(0)
+        if process.is_alive():
+            _terminate_scan_process(process)
+            raise TimeoutError("Cisco skill scanner timed out") from exc
+        try:
+            status, payload, *details = result_queue.get(timeout=1)
+        except Empty as empty_exc:
+            raise RuntimeError(f"Cisco skill scanner exited with code {process.exitcode}") from empty_exc
+    else:
+        process.join(1)
+        if process.is_alive():
+            _terminate_scan_process(process)
+
     if status == "error":
         error_type = str(payload)
         error_message = str(details[0]) if details else "unknown error"
