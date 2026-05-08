@@ -222,14 +222,28 @@ class TestMemoryBenchmark:
     """T621 — Guard module import stays under 50 MB RSS budget."""
 
     def test_guard_config_import_does_not_import_heavy_deps(self) -> None:
+        import subprocess
         import sys
 
-        imported = set(sys.modules.keys())
-        assert "codex_plugin_scanner.guard.config" in imported, (
-            "Guard config must be importable (already loaded by test session)"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import codex_plugin_scanner.guard.config as _c;"
+                    " import sys;"
+                    " heavy = {'matplotlib', 'numpy', 'pandas', 'scipy', 'torch', 'tensorflow'};"
+                    " leaked = heavy & set(sys.modules);"
+                    " print(repr(leaked))"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
-        heavy = {"matplotlib", "numpy", "pandas", "scipy", "torch", "tensorflow"}
-        leaked = heavy & imported
+        assert result.returncode == 0, f"Subprocess failed: {result.stderr}"
+        import ast
+        leaked = ast.literal_eval(result.stdout.strip())
         assert not leaked, f"Guard import leaked heavy dependencies: {leaked}"
 
 
