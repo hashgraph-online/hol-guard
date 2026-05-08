@@ -11,6 +11,7 @@ import {
   fetchRequest,
   fetchRuntimeSnapshot,
   guardAwareHref,
+  repairApprovalCenter,
   resolveRequestWithQueueResult,
 } from "./guard-api";
 import { ApprovalCenterLayout } from "./approval-center-layout";
@@ -37,6 +38,7 @@ type DetailState =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "error"; message: string }
+  | { kind: "stale" }
   | {
       kind: "ready";
       item: GuardApprovalRequest;
@@ -124,9 +126,13 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
     ]);
     return { kind: "ready", item, diff, receipt, policy };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("404")) {
+      return { kind: "stale" };
+    }
     return {
       kind: "error",
-      message: error instanceof Error ? error.message : "Unable to load the approval request."
+      message: message.length > 0 ? message : "Unable to load the approval request."
     };
   }
 }
@@ -382,6 +388,22 @@ export function App() {
       });
   }, []);
 
+  const handleRepair = useCallback(async () => {
+    await repairApprovalCenter();
+    await new Promise<void>((resolve) => setTimeout(resolve, 1200));
+    fetchRuntimeSnapshot()
+      .then((snapshot) => {
+        setRuntime({ kind: "ready", snapshot });
+        setRequests({ kind: "ready", items: snapshot.items });
+      })
+      .catch((error: unknown) => {
+        const message =
+          error instanceof Error ? error.message : "Unable to reconnect to Guard daemon.";
+        setRuntime({ kind: "error", message });
+        setRequests({ kind: "error", message });
+      });
+  }, []);
+
   const handleConnectHarness = useCallback((_harness: string) => {
     navigate("/settings");
   }, []);
@@ -422,6 +444,7 @@ export function App() {
       onResolve={handleResolve}
       onBulkApprove={handleBulkApprove}
       onRetry={handleRetry}
+      onRepair={handleRepair}
       fleetContent={
         runtime.kind === "ready" ? (
           <FleetWorkspace
