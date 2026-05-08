@@ -124,7 +124,7 @@ class TestGuardInsightModel:
             source="bash",
             sink=None,
             app="codex",
-            scanner_evidence=["supply-chain.url-exec"],
+            scanner_evidence=("supply-chain.url-exec",),
             recommendation="Review the full curl target before allowing.",
             severity="critical",
         )
@@ -146,7 +146,7 @@ class TestGuardInsightModel:
             source=None,
             sink=None,
             app="codex",
-            scanner_evidence=[],
+            scanner_evidence=(),
             recommendation="Z",
             severity="low",
         )
@@ -155,6 +155,32 @@ class TestGuardInsightModel:
             raise AssertionError("should have raised FrozenInstanceError")
         except (AttributeError, TypeError):
             pass
+
+    def test_scanner_evidence_is_tuple(self) -> None:
+        """Regression: scanner_evidence must be a tuple so GuardInsight stays immutable."""
+        insight = GuardInsight(
+            insight_id="ins-2",
+            action_id="act-2",
+            action_type="shell_command",
+            harness="codex",
+            what_happened="X",
+            why_risky="Y",
+            source=None,
+            sink=None,
+            app="codex",
+            scanner_evidence=("det-1", "det-2"),
+            recommendation="Z",
+            severity="high",
+        )
+        assert isinstance(insight.scanner_evidence, tuple)
+
+    def test_max_severity_info_only_signals(self) -> None:
+        """Regression: when all signals are info, severity must be 'info', not 'low'."""
+        action = _prompt_action("hello world")
+        signals = (_signal("check.info", "prompt", "info", "Informational signal", "check.info"),)
+        insight = insight_from_prompt_block(action, signals)
+        assert insight is not None
+        assert insight.severity == "info"
 
 
 class TestPromptInsight:

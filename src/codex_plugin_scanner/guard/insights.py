@@ -16,15 +16,15 @@ def _now_iso() -> str:
 
 def _max_severity(signals: tuple[RiskSignalV2, ...]) -> str:
     order = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
-    best = "low"
+    best = "info"
     for sig in signals:
         if order.get(sig.severity, 0) > order.get(best, 0):
             best = sig.severity
     return best
 
 
-def _detector_ids(signals: tuple[RiskSignalV2, ...]) -> list[str]:
-    return [sig.detector for sig in signals if sig.detector]
+def _detector_ids(signals: tuple[RiskSignalV2, ...]) -> tuple[str, ...]:
+    return tuple(sig.detector for sig in signals if sig.detector)
 
 
 def _first_reason(signals: tuple[RiskSignalV2, ...]) -> str:
@@ -51,7 +51,7 @@ class GuardInsight:
     source: str | None
     sink: str | None
     app: str
-    scanner_evidence: list[str] = field(default_factory=list)
+    scanner_evidence: tuple[str, ...] = field(default_factory=tuple)
     recommendation: str = ""
     severity: str = "low"
     created_at: str = field(default_factory=_now_iso)
