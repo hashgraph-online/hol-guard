@@ -33,6 +33,9 @@ _SOURCE_RISK_CLASS: dict[str, str] = {
 }
 
 
+_CISCO_DETECTOR_MIN_BUDGET_SECONDS = 0.5
+
+
 class CiscoSkillPreflightDetector:
     """Detector wrapper for changed local skill files."""
 
@@ -41,7 +44,14 @@ class CiscoSkillPreflightDetector:
 
     def detect(self, action: GuardActionEnvelope, context: object) -> tuple[RiskSignalV2, ...]:
         workspace = getattr(context, "workspace", None)
-        signals = scan_action_for_cisco_evidence(action, workspace=workspace, sources=("skill",))
+        config = getattr(context, "config", None)
+        timeout_ms: int = getattr(config, "runtime_detector_timeout_ms", 5000) if config is not None else 5000
+        budget_seconds = timeout_ms / 1000.0
+        if budget_seconds < _CISCO_DETECTOR_MIN_BUDGET_SECONDS:
+            return ()
+        signals = scan_action_for_cisco_evidence(
+            action, workspace=workspace, sources=("skill",), timeout_seconds=budget_seconds
+        )
         return tuple(cisco_risk_signal_v3_to_v2(signal) for signal in signals)
 
 
@@ -53,7 +63,14 @@ class CiscoMcpPreflightDetector:
 
     def detect(self, action: GuardActionEnvelope, context: object) -> tuple[RiskSignalV2, ...]:
         workspace = getattr(context, "workspace", None)
-        signals = scan_action_for_cisco_evidence(action, workspace=workspace, sources=("mcp",))
+        config = getattr(context, "config", None)
+        timeout_ms: int = getattr(config, "runtime_detector_timeout_ms", 5000) if config is not None else 5000
+        budget_seconds = timeout_ms / 1000.0
+        if budget_seconds < _CISCO_DETECTOR_MIN_BUDGET_SECONDS:
+            return ()
+        signals = scan_action_for_cisco_evidence(
+            action, workspace=workspace, sources=("mcp",), timeout_seconds=budget_seconds
+        )
         return tuple(cisco_risk_signal_v3_to_v2(signal) for signal in signals)
 
 
