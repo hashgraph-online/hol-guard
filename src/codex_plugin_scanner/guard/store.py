@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import sqlite3
 import subprocess
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -353,6 +355,10 @@ def _build_secret_store(guard_home: Path) -> SecretStore:
     return fallback_store
 
 
+_SLOW_QUERY_THRESHOLD_MS: int = 200
+_store_logger = logging.getLogger(__name__)
+
+
 class GuardStore:
     """Local SQLite store for Guard state."""
 
@@ -403,11 +409,18 @@ class GuardStore:
     def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
+        start = time.monotonic()
         try:
             yield connection
             connection.commit()
         finally:
             connection.close()
+            elapsed_ms = (time.monotonic() - start) * 1000
+            if elapsed_ms >= _SLOW_QUERY_THRESHOLD_MS:
+                _store_logger.warning(
+                    "Guard store slow transaction (%.0fms); consider indexing hot query paths.",
+                    elapsed_ms,
+                )
 
     def _initialize(self) -> None:
         statements = (
