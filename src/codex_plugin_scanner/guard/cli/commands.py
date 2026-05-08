@@ -121,7 +121,13 @@ from .connect_flow import (
     DEFAULT_GUARD_SYNC_URL,
     run_guard_connect_command,
 )
-from .install_commands import apply_managed_install
+from .install_commands import (
+    apply_managed_install,
+    build_harness_setup_plan,
+    build_harness_verification,
+    list_harness_setup_items,
+    uninstall_confirmation_token,
+)
 from .product import build_guard_start_payload, build_guard_status_payload
 from .update_commands import run_guard_update
 
@@ -134,6 +140,7 @@ _GUARD_HELP_GROUPS = (
     "  start        First-run setup and the Guard operating loop\n"
     "  status       Current local protection state and next actions\n"
     "  dashboard    Open the local Guard dashboard in your browser\n"
+    "  apps         Connect, test, repair, or disconnect protected apps\n"
     "  run          Enforce Guard before a harness launch\n"
     "  approvals    Resolve the current request queue\n"
     "  receipts     Review recent local decisions\n"
@@ -235,7 +242,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         required=True,
         parser_class=FriendlyArgumentParser,
         metavar=(
-            "{start,status,dashboard,bootstrap,detect,install,update,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
+            "{start,status,dashboard,apps,bootstrap,detect,install,update,uninstall,run,protect,preflight,scan,diff,receipts,inventory,abom,"
             "approvals,explain,allow,deny,policies,exceptions,advisories,events,doctor,connect,login,sync,device,bridge}"
         ),
     )
@@ -254,6 +261,25 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     )
     _add_guard_common_args(dashboard_parser)
     dashboard_parser.add_argument("--json", action="store_true")
+
+    apps_parser = guard_subparsers.add_parser("apps", help="Connect, test, repair, or disconnect protected apps")
+    _add_guard_common_args(apps_parser)
+    apps_parser.add_argument("--json", action="store_true")
+    apps_subparsers = apps_parser.add_subparsers(dest="apps_command", parser_class=FriendlyArgumentParser)
+    for app_command, help_text in (
+        ("connect", "Connect an app to local Guard protection"),
+        ("test", "Run a safe local Guard protection check"),
+        ("repair", "Repair Guard-managed app config"),
+        ("disconnect", "Remove Guard-managed app config"),
+    ):
+        app_parser = apps_subparsers.add_parser(app_command, help=help_text)
+        app_parser.add_argument("harness")
+        _add_guard_common_args(app_parser, suppress_defaults=True)
+        app_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+        if app_command in {"connect", "repair"}:
+            app_parser.add_argument("--dry-run", action="store_true")
+        if app_command == "disconnect":
+            app_parser.add_argument("--confirm")
 
     admin_parser = guard_subparsers.add_parser("admin", help=argparse.SUPPRESS)
     _add_guard_common_args(admin_parser)
@@ -680,10 +706,15 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     ]
 
 
-def _add_guard_common_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--home")
-    parser.add_argument("--guard-home")
-    parser.add_argument("--workspace")
+def _add_guard_common_args(
+    parser: argparse.ArgumentParser,
+    *,
+    suppress_defaults: bool = False,
+) -> None:
+    default = argparse.SUPPRESS if suppress_defaults else None
+    parser.add_argument("--home", default=default)
+    parser.add_argument("--guard-home", default=default)
+    parser.add_argument("--workspace", default=default)
 
 
 def _add_guard_cisco_mode_arg(parser: argparse.ArgumentParser) -> None:
@@ -700,6 +731,82 @@ def _guard_http_url(value: str) -> str:
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise argparse.ArgumentTypeError("Guard URLs must be absolute http(s) URLs.")
     return value
+
+
+def _run_apps_command(
+    args: argparse.Namespace,
+    context: HarnessContext,
+    store: GuardStore,
+    workspace: str | None,
+) -> int:
+    apps_command = getattr(args, "apps_command", None)
+    if apps_command is None:
+        _emit(
+            "apps",
+            {
+                "generated_at": _now(),
+                "items": list_harness_setup_items(context, store),
+            },
+            getattr(args, "json", False),
+        )
+        return 0
+
+    harness = str(getattr(args, "harness", "")).strip()
+    if not harness:
+        print("guard apps requires a harness.", file=sys.stderr)
+        return 2
+    if apps_command == "test":
+        try:
+            payload = build_harness_verification(harness, context, store)
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        _emit("apps", payload, getattr(args, "json", False))
+        return 0
+
+    if apps_command in {"connect", "repair"} and bool(getattr(args, "dry_run", False)):
+        try:
+            payload = build_harness_setup_plan(apps_command, harness, context, dry_run=True)
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        _emit("apps", payload, getattr(args, "json", False))
+        return 0
+
+    if apps_command == "disconnect":
+        try:
+            canonical_harness = get_adapter(harness).harness
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+        expected_confirmation = uninstall_confirmation_token(canonical_harness)
+        if getattr(args, "confirm", None) != expected_confirmation:
+            payload = {
+                "error": "confirmation_required",
+                "harness": canonical_harness,
+                "confirmation_phrase": expected_confirmation,
+                "confirm_command": f"hol-guard apps disconnect {canonical_harness} --confirm {expected_confirmation}",
+            }
+            _emit("apps", payload, getattr(args, "json", False))
+            return 2
+
+    install_command = "uninstall" if apps_command == "disconnect" else "install"
+    try:
+        payload = apply_managed_install(
+            install_command,
+            harness,
+            False,
+            context,
+            store,
+            workspace,
+            _now(),
+        )
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    payload["action"] = apps_command
+    _emit("apps", payload, getattr(args, "json", False))
+    return 0
 
 
 def _build_cisco_scan_options(mode: str) -> ScanOptions:
@@ -878,6 +985,9 @@ def run_guard_command(
         }
         _emit("detect", payload, getattr(args, "json", False))
         return 0
+
+    if args.guard_command == "apps":
+        return _run_apps_command(args, context, store, str(workspace) if workspace else None)
 
     if args.guard_command == "install":
         try:

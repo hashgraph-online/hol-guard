@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import glob as globlib
 from pathlib import Path
 
-from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
+from ..adapters import get_adapter, list_adapters
+from ..adapters.base import HarnessAdapter, HarnessContext
+from ..adapters.contracts import contract_for
 from ..consumer import detect_all
 from ..runtime.skill_protection import build_skill_identity, detect_skill_content_risk
 from ..store import GuardStore
@@ -42,6 +44,139 @@ def apply_managed_install(
         if skill_scan:
             payload["skill_scan"] = skill_scan
     return payload
+
+
+def list_harness_setup_items(context: HarnessContext, store: GuardStore | None = None) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    for adapter in list_adapters():
+        detection = _safe_setup_detection(adapter, context, store)
+        detected = detection["installed"] or detection["command_available"] or bool(detection["config_paths"])
+        if detection["installed"]:
+            status = "protected"
+        elif detected:
+            status = "found"
+        else:
+            status = "not_found"
+        items.append(
+            {
+                "harness": adapter.harness,
+                "status": status,
+                "installed": detection["installed"],
+                "command_available": detection["command_available"],
+                "config_paths": detection["config_paths"],
+                "artifact_count": 0,
+                **adapter.setup_contract().to_dict(),
+            }
+        )
+    return items
+
+
+def build_harness_setup_plan(
+    action: str,
+    requested_harness: str,
+    context: HarnessContext,
+    *,
+    dry_run: bool,
+) -> dict[str, object]:
+    adapter = get_adapter(requested_harness)
+    contract = adapter.setup_contract()
+    if action == "repair":
+        steps = adapter.repair_steps()
+    elif action == "uninstall":
+        steps = ()
+    else:
+        steps = adapter.setup_steps()
+    payload: dict[str, object] = {
+        "harness": adapter.harness,
+        "action": action,
+        "dry_run": dry_run,
+        "contract": contract.to_dict(),
+        "steps": [step.to_dict() for step in steps],
+        "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
+    }
+    if action == "uninstall":
+        confirmation_phrase = uninstall_confirmation_token(adapter.harness)
+        payload["confirmation_phrase"] = confirmation_phrase
+        payload["confirm_command"] = f"hol-guard apps disconnect {adapter.harness} --confirm {confirmation_phrase}"
+        payload["steps"] = [
+            {
+                "step_id": "disconnect",
+                "title": f"Disconnect {contract.display_name}",
+                "body": "Remove Guard managed config for this app.",
+                "command": ["hol-guard", "apps", "disconnect", adapter.harness],
+                "writes_config": True,
+                "requires_confirmation": True,
+            }
+        ]
+    return payload
+
+
+def build_harness_verification(
+    requested_harness: str,
+    context: HarnessContext,
+    store: GuardStore | None = None,
+) -> dict[str, object]:
+    adapter = get_adapter(requested_harness)
+    detection = _safe_setup_detection(adapter, context, store)
+    return {
+        "harness": adapter.harness,
+        "safe": True,
+        "contract": adapter.setup_contract().to_dict(),
+        "verification": {
+            "checked": True,
+            "writes_config": False,
+            "installed": detection["installed"],
+            "command_available": detection["command_available"],
+            "config_paths": detection["config_paths"],
+            "artifact_count": 0,
+            "warnings": [],
+            "steps": [step.to_dict() for step in adapter.verify_steps()],
+        },
+    }
+
+
+def uninstall_confirmation_token(harness: str) -> str:
+    return f"disconnect-{harness}"
+
+
+def _safe_setup_detection(
+    adapter: HarnessAdapter,
+    context: HarnessContext,
+    store: GuardStore | None,
+) -> dict[str, object]:
+    managed = store.get_managed_install(adapter.harness) if store is not None else None
+    protection_contract = contract_for(adapter.harness)
+    config_paths = protection_contract.config_paths if protection_contract is not None else ()
+    return {
+        "installed": bool(managed and managed.get("active")),
+        "command_available": adapter.resolved_executable(context) is not None,
+        "config_paths": _existing_contract_config_paths(config_paths, context),
+    }
+
+
+def _existing_contract_config_paths(config_paths: tuple[str, ...], context: HarnessContext) -> list[str]:
+    existing: list[str] = []
+    for config_path in config_paths:
+        for candidate in _contract_config_path_candidates(config_path, context):
+            if candidate.exists():
+                existing.append(str(candidate))
+    return sorted(dict.fromkeys(existing))
+
+
+def _contract_config_path_candidates(config_path: str, context: HarnessContext) -> tuple[Path, ...]:
+    expanded_path = _expand_contract_config_path(config_path, context)
+    if globlib.has_magic(str(expanded_path)):
+        return tuple(sorted(Path(path) for path in globlib.glob(str(expanded_path))))
+    return (expanded_path,)
+
+
+def _expand_contract_config_path(config_path: str, context: HarnessContext) -> Path:
+    path = Path(config_path)
+    if path.parts and path.parts[0] == "~":
+        return context.home_dir.joinpath(*path.parts[1:])
+    if path.is_absolute():
+        return path
+    return context.home_dir / path
 
 
 def scan_workspace_skills(
@@ -128,4 +263,11 @@ def _resolve_targets(
     )
 
 
-__all__ = ["apply_managed_install", "scan_workspace_skills"]
+__all__ = [
+    "apply_managed_install",
+    "build_harness_setup_plan",
+    "build_harness_verification",
+    "list_harness_setup_items",
+    "scan_workspace_skills",
+    "uninstall_confirmation_token",
+]
