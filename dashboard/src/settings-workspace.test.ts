@@ -1,4 +1,5 @@
 import { resolveSecurityLevelDescription, buildClearPolicyPayload } from "./settings-workspace";
+import { repairApprovalCenter } from "./guard-api";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -25,3 +26,6 @@ assert(!("harness" in clearAllPayload) || clearAllPayload.harness === undefined,
 
 const clearNonePayload = buildClearPolicyPayload(false);
 assert(clearNonePayload.all === false, "T530: clearPolicy payload with all=false should have all=false");
+
+assert(typeof repairApprovalCenter === "function", "T739: repairApprovalCenter should be exported as a function");
+

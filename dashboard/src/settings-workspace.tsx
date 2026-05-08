@@ -13,7 +13,7 @@ import {
   SectionLabel,
   Tag
 } from "./approval-center-primitives";
-import { clearEvidence, exportDiagnostics, fetchSettings, updateSettings, clearPolicy } from "./guard-api";
+import { clearEvidence, exportDiagnostics, fetchSettings, updateSettings, clearPolicy, repairApprovalCenter } from "./guard-api";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
 import type { GuardSettings, GuardSettingsPayload } from "./guard-types";
 
@@ -163,6 +163,7 @@ export function SettingsWorkspace() {
   const [clearingApprovals, setClearingApprovals] = useState(false);
   const [clearingEvidence, setClearingEvidence] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [repairing, setRepairing] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -356,6 +357,22 @@ export function SettingsWorkspace() {
       setActionMessage(error instanceof Error ? error.message : "Unable to export diagnostics.");
     } finally {
       setExporting(false);
+    }
+  }, []);
+
+  const handleRepairApprovalCenter = useCallback(async () => {
+    if (!window.confirm("Reset the approval center locator? The daemon will be reachable again after Guard restarts. Pending approvals are preserved.")) {
+      return;
+    }
+    setRepairing(true);
+    setActionMessage(null);
+    try {
+      await repairApprovalCenter();
+      setActionMessage("Approval center repaired. Restart Guard to reconnect.");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to repair approval center.");
+    } finally {
+      setRepairing(false);
     }
   }, []);
 
@@ -626,6 +643,17 @@ export function SettingsWorkspace() {
                 <div className="mt-2">
                   <ActionButton onClick={handleExportDiagnostics} disabled={exporting} variant="secondary">
                     {exporting ? "Exporting…" : "Export diagnostics"}
+                  </ActionButton>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-brand-dark">Repair local approval center</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Resets the approval center locator when the approval link returns an API error. Pending approvals are preserved.
+                </p>
+                <div className="mt-2">
+                  <ActionButton onClick={handleRepairApprovalCenter} disabled={repairing} variant="secondary">
+                    {repairing ? "Repairing…" : "Repair approval center"}
                   </ActionButton>
                 </div>
               </div>
