@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
+    InvalidApprovalCursorError,
     add_approval_request,
     approval_index_statements,
     approval_schema_statement,
@@ -321,6 +322,30 @@ def test_pending_summary_pagination_uses_stable_cursor() -> None:
     assert [item["request_id"] for item in first_page["items"]] == ["req-2", "req-1"]
     assert [item["request_id"] for item in second_page["items"]] == ["req-0"]
     assert second_page["next_cursor"] is None
+
+
+def test_pending_summary_rejects_invalid_cursor() -> None:
+    connection = _connection()
+    add_approval_request(connection, _request("req-only"), "2026-05-08T10:00:00+00:00")
+
+    with pytest.raises(InvalidApprovalCursorError):
+        list_pending_approval_summaries(connection, limit=2, cursor="not-a-valid-cursor")
+
+
+def test_before_cursor_uses_last_seen_sort_order() -> None:
+    connection = _connection()
+    add_approval_request(connection, _request("req-old", command="cat ~/.npmrc"), "2026-05-08T10:00:00+00:00")
+    add_approval_request(connection, _request("req-middle", command="cat ~/.pypirc"), "2026-05-08T10:01:00+00:00")
+    add_approval_request(
+        connection,
+        _request("req-new", command="cat ~/.ssh/id_rsa", target_paths=("~/.ssh/id_rsa",)),
+        "2026-05-08T10:02:00+00:00",
+    )
+    add_approval_request(connection, _request("req-old-again", command="cat ~/.npmrc"), "2026-05-08T10:05:00+00:00")
+
+    rows = list_approval_requests(connection, limit=None, before_cursor="2026-05-08T10:02:00+00:00")
+
+    assert [row["request_id"] for row in rows] == ["req-middle"]
 
 
 def test_guard_store_migrates_database_missing_queue_columns(tmp_path: Path) -> None:

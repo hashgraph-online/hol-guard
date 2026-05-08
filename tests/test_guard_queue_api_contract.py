@@ -383,3 +383,25 @@ def test_request_list_limit_cursor_search_and_harness_filters(tmp_path: Path) ->
     assert {item["request_id"] for item in mcp_match["items"]} == {"req-codex-mcp"}
     assert {item["request_id"] for item in harness_match["items"]} == {"req-copilot"}
     assert bad_limit_status == 400
+
+
+def test_request_list_invalid_cursor_returns_recovery_error(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _populate(store, [_request("req-only")])
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        try:
+            _get_json(daemon.port, "/v1/requests?cursor=not-a-valid-cursor")
+        except urllib.error.HTTPError as error:
+            status = error.code
+            payload = json.loads(error.read().decode("utf-8"))
+        else:
+            raise AssertionError("expected HTTPError")
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "invalid_cursor"
+    assert payload["recovery"]["code"] == "refresh_queue"

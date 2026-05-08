@@ -28,6 +28,7 @@ from ..config import editable_guard_settings, load_guard_config, update_guard_se
 from ..models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
+from ..store_approvals import InvalidApprovalCursorError
 from ..store_evidence import (
     clear_evidence,
     count_evidence,
@@ -544,13 +545,27 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         else:
             self._write_json({"error": "invalid_status"}, status=400)
             return
-        page = self.server.store.list_approval_request_page(  # type: ignore[attr-defined]
-            status=status_filter,
-            limit=limit,
-            cursor=self._query_string(query_string, "cursor"),
-            harness=self._query_string(query_string, "harness"),
-            search=self._query_string(query_string, "search"),
-        )
+        try:
+            page = self.server.store.list_approval_request_page(  # type: ignore[attr-defined]
+                status=status_filter,
+                limit=limit,
+                cursor=self._query_string(query_string, "cursor"),
+                harness=self._query_string(query_string, "harness"),
+                search=self._query_string(query_string, "search"),
+            )
+        except InvalidApprovalCursorError:
+            self._write_json(
+                {
+                    "error": "invalid_cursor",
+                    "recovery": {
+                        "code": "refresh_queue",
+                        "title": "Refresh the blocked action list.",
+                        "body": "The queue position expired. Refresh the Review Queue to continue.",
+                    },
+                },
+                status=400,
+            )
+            return
         self._write_json(page)
 
     @staticmethod

@@ -15,6 +15,10 @@ APPROVAL_QUEUE_BACKFILL_BATCH_SIZE = 500
 _QUEUE_IDENTITY_VERSION = "v1"
 
 
+class InvalidApprovalCursorError(ValueError):
+    pass
+
+
 def _normalized_identity_key(launch_target: str | None) -> str:
     return normalize_command_identity(launch_target or "")
 
@@ -342,13 +346,14 @@ def list_approval_requests(
         clauses.append("harness = ?")
         params.append(harness)
     if before_cursor is not None:
-        clauses.append("created_at < ?")
+        clauses.append("last_seen_at < ?")
         params.append(before_cursor)
     if cursor is not None:
         marker = _decode_page_cursor(cursor)
-        if marker is not None:
-            clauses.append("(last_seen_at < ? or (last_seen_at = ? and request_id < ?))")
-            params.extend([marker["last_seen_at"], marker["last_seen_at"], marker["request_id"]])
+        if marker is None:
+            raise InvalidApprovalCursorError("invalid approval queue cursor")
+        clauses.append("(last_seen_at < ? or (last_seen_at = ? and request_id < ?))")
+        params.extend([marker["last_seen_at"], marker["last_seen_at"], marker["request_id"]])
     if created_after is not None:
         clauses.append("created_at > ?")
         params.append(created_after)
