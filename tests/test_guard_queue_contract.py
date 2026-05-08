@@ -8,6 +8,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import pytest
+
+from codex_plugin_scanner.guard import store as store_module
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -273,6 +276,35 @@ def test_resolve_queue_result_reports_duplicate_ids_without_unrelated_items() ->
     )
 
 
+def test_resolve_queue_result_reports_every_resolved_duplicate_id() -> None:
+    connection = _connection()
+    add_approval_request(connection, _request("req-active"), "2026-05-08T10:00:00+00:00")
+    for index in range(205):
+        _force_duplicate_row(connection, f"req-duplicate-{index:03d}", "req-active")
+
+    result = resolve_request_with_queue_result(
+        connection,
+        "req-active",
+        resolution_action="allow",
+        resolution_scope="artifact",
+        reason="reviewed",
+        resolved_at="2026-05-08T10:03:00+00:00",
+    )
+    pending_duplicates = connection.execute(
+        """
+        select count(*) as count
+        from approval_requests
+        where queue_group_id = (
+          select queue_group_id from approval_requests where request_id = 'req-active'
+        )
+          and status = 'pending'
+        """
+    ).fetchone()
+
+    assert len(result["resolved_duplicate_ids"]) == 205
+    assert pending_duplicates["count"] == 0
+
+
 def test_pending_summary_pagination_uses_stable_cursor() -> None:
     connection = _connection()
     for index in range(3):
@@ -401,6 +433,23 @@ def test_guard_store_migrates_database_missing_queue_columns(tmp_path: Path) -> 
     assert migrated["last_seen_at"] == "2026-05-08T10:00:00+00:00"
     assert isinstance(migrated["action_identity"], str)
     assert str(migrated["queue_group_id"]).startswith("approval-group:v1:")
+
+
+def test_queue_backfill_runs_once_per_schema_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    original = store_module.backfill_approval_queue_columns
+
+    def recording_backfill(connection: sqlite3.Connection) -> None:
+        calls.append("backfill")
+        original(connection)
+
+    monkeypatch.setattr(store_module, "backfill_approval_queue_columns", recording_backfill)
+
+    guard_home = tmp_path / "guard-home"
+    GuardStore(guard_home)
+    GuardStore(guard_home)
+
+    assert calls == ["backfill"]
 
 
 def test_daemon_resolution_envelope_and_request_filters(tmp_path: Path) -> None:

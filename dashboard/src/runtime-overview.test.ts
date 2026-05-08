@@ -74,7 +74,16 @@ const baseSnapshot: GuardRuntimeSnapshot = {
   cloud_state: "local_only",
   cloud_state_label: "Offline",
   cloud_state_detail: "Running locally.",
-  cloud_pairing_state: { state: "local_only", label: "Offline", detail: "No cloud." },
+  cloud_pairing_state: {
+    state: "local_only",
+    label: "Offline",
+    detail: "No cloud.",
+    sync_configured: false,
+    dashboard_url: "http://localhost:7392",
+    inbox_url: "http://localhost:7392/inbox",
+    fleet_url: "http://localhost:7392/fleet",
+    connect_url: "http://localhost:7392/connect",
+  },
   cloud_sync_health: healthDisabled,
   dashboard_url: "http://localhost:7392",
   inbox_url: "http://localhost:7392/inbox",
@@ -104,4 +113,3 @@ const repairApproval = resolveApprovalCenterHealth(noUrlSnapshot);
 assert(repairApproval.state === "repair_needed", "T738: null approval_center_url should need repair");
 assert(repairApproval.label.toLowerCase().includes("unreachable"), "T738: repair label should mention unreachable");
 assert(repairApproval.detail.toLowerCase().includes("repair"), "T738: repair detail should suggest repair action");
-

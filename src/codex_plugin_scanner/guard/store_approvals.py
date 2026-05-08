@@ -11,7 +11,7 @@ from .models import GuardApprovalRequest
 from .runtime.action_identity import normalize_command_identity
 
 MAX_APPROVAL_PAGE_LIMIT = 200
-MAX_RESOLVED_DUPLICATE_IDS = 200
+APPROVAL_QUEUE_BACKFILL_BATCH_SIZE = 500
 _QUEUE_IDENTITY_VERSION = "v1"
 
 
@@ -660,6 +660,7 @@ def resolve_request_with_queue_result(
     reason: str | None,
     resolved_at: str,
 ) -> dict[str, object]:
+    _begin_immediate(connection)
     request = get_approval_request(connection, request_id)
     if request is None:
         return _unresolved_queue_result(connection, error="not_found")
@@ -703,46 +704,52 @@ def resolve_request_with_queue_result(
 
 
 def backfill_approval_queue_columns(connection: sqlite3.Connection) -> None:
-    rows = connection.execute(
-        """
-        select request_id, harness, artifact_id, workspace, launch_target, action_envelope_json,
-               action_identity, queue_group_id, dedupe_count, last_seen_at, created_at
-        from approval_requests
-        where action_identity is null
-           or queue_group_id is null
-           or last_seen_at is null
-           or dedupe_count is null
-           or dedupe_count < 1
-        """
-    ).fetchall()
-    for row in rows:
-        action_identity = row["action_identity"] or _build_action_identity(
-            launch_target=row["launch_target"],
-            action_envelope=_optional_json_object(row["action_envelope_json"]),
-        )
-        queue_group_id = row["queue_group_id"] or _build_queue_group_id(
-            harness=str(row["harness"]),
-            workspace=row["workspace"],
-            artifact_id=str(row["artifact_id"]),
-            action_identity=str(action_identity),
-        )
-        connection.execute(
+    while True:
+        rows = connection.execute(
             """
-            update approval_requests
-            set action_identity = ?,
-                queue_group_id = ?,
-                dedupe_count = ?,
-                last_seen_at = ?
-            where request_id = ?
+            select request_id, harness, artifact_id, workspace, launch_target, action_envelope_json,
+                   action_identity, queue_group_id, dedupe_count, last_seen_at, created_at
+            from approval_requests
+            where action_identity is null
+               or queue_group_id is null
+               or last_seen_at is null
+               or dedupe_count is null
+               or dedupe_count < 1
+            order by created_at asc, request_id asc
+            limit ?
             """,
-            (
-                action_identity,
-                queue_group_id,
-                max(1, int(row["dedupe_count"] or 1)),
-                row["last_seen_at"] or row["created_at"],
-                row["request_id"],
-            ),
-        )
+            (APPROVAL_QUEUE_BACKFILL_BATCH_SIZE,),
+        ).fetchall()
+        if not rows:
+            return
+        for row in rows:
+            action_identity = row["action_identity"] or _build_action_identity(
+                launch_target=row["launch_target"],
+                action_envelope=_optional_json_object(row["action_envelope_json"]),
+            )
+            queue_group_id = row["queue_group_id"] or _build_queue_group_id(
+                harness=str(row["harness"]),
+                workspace=row["workspace"],
+                artifact_id=str(row["artifact_id"]),
+                action_identity=str(action_identity),
+            )
+            connection.execute(
+                """
+                update approval_requests
+                set action_identity = ?,
+                    queue_group_id = ?,
+                    dedupe_count = ?,
+                    last_seen_at = ?
+                where request_id = ?
+                """,
+                (
+                    action_identity,
+                    queue_group_id,
+                    max(1, int(row["dedupe_count"] or 1)),
+                    row["last_seen_at"] or row["created_at"],
+                    row["request_id"],
+                ),
+            )
 
 
 def resolve_matching_duplicate_requests(
@@ -757,6 +764,7 @@ def resolve_matching_duplicate_requests(
 ) -> list[str]:
     if queue_group_id is None:
         return []
+    _begin_immediate(connection)
     rows = connection.execute(
         """
         select request_id
@@ -765,9 +773,8 @@ def resolve_matching_duplicate_requests(
           and request_id != ?
           and status = 'pending'
         order by last_seen_at desc, request_id desc
-        limit ?
         """,
-        (queue_group_id, request_id, MAX_RESOLVED_DUPLICATE_IDS),
+        (queue_group_id, request_id),
     ).fetchall()
     connection.execute(
         """

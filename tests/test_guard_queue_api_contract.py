@@ -19,6 +19,7 @@ def _request(
     *,
     harness: str = "codex",
     command: str = "cat ~/.npmrc",
+    artifact_id: str | None = None,
     prompt_excerpt: str | None = None,
     mcp_server: str | None = None,
     mcp_tool: str | None = None,
@@ -37,7 +38,7 @@ def _request(
     return GuardApprovalRequest(
         request_id=request_id,
         harness=harness,
-        artifact_id=f"{harness}:project:{request_id}",
+        artifact_id=artifact_id or f"{harness}:project:{request_id}",
         artifact_name=request_id,
         artifact_hash=f"hash-{request_id}",
         policy_action="require-reapproval",
@@ -212,6 +213,35 @@ def test_broad_scope_resolution_refreshes_queue_envelope(tmp_path: Path) -> None
 
     assert payload["remaining_pending_count"] == 0
     assert payload["next_selectable_request_id"] is None
+    assert payload["resolved_scope_ids"] == ["req-covered"]
+
+
+def test_artifact_scope_resolution_refreshes_queue_envelope(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    shared_artifact = "codex:project:shared-tool"
+    _populate(
+        store,
+        [
+            _request("req-active", command="cat ~/.npmrc", artifact_id=shared_artifact),
+            _request("req-covered", command="cat ~/.pypirc", artifact_id=shared_artifact),
+            _request("req-unrelated", command="cat ~/.ssh/id_rsa", artifact_id="codex:project:other-tool"),
+        ],
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+
+    try:
+        payload = _post_json(
+            daemon.port,
+            daemon._server.auth_token,
+            "/v1/requests/req-active/approve",
+            {"scope": "artifact", "reason": "trust this artifact"},
+        )
+    finally:
+        daemon.stop()
+
+    assert payload["remaining_pending_count"] == 1
+    assert payload["next_selectable_request_id"] == "req-unrelated"
     assert payload["resolved_scope_ids"] == ["req-covered"]
 
 

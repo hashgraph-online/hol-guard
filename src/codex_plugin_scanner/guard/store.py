@@ -726,7 +726,9 @@ class GuardStore:
             self._ensure_approval_column(connection, "dedupe_count", "integer not null default 1")
             self._ensure_approval_column(connection, "last_seen_at", "text")
             self._ensure_approval_column(connection, "fallback_cli_command", "text")
-            backfill_approval_queue_columns(connection)
+            if not self._schema_version_applied(connection, version=3):
+                backfill_approval_queue_columns(connection)
+                self._record_schema_version(connection, version=3)
             for idx_stmt in approval_index_statements():
                 connection.execute(idx_stmt)
             self._ensure_attachment_column(connection, "lease_id", "text not null default ''")
@@ -775,6 +777,14 @@ class GuardStore:
             """,
             (version, _now()),
         )
+
+    @staticmethod
+    def _schema_version_applied(connection: sqlite3.Connection, *, version: int) -> bool:
+        row = connection.execute(
+            "select 1 from schema_migrations where version = ?",
+            (version,),
+        ).fetchone()
+        return row is not None
 
     @staticmethod
     def _ensure_local_device(connection: sqlite3.Connection) -> None:

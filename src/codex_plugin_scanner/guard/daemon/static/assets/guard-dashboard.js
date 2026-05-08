@@ -12782,9 +12782,11 @@ const demoDiff = {
   recorded_at: now
 };
 function isGuardDemoMode() {
-  {
+  const meta = import.meta;
+  if (meta.env?.DEV !== true) {
     return false;
   }
+  return new URLSearchParams(window.location.search).get("demo") === "1";
 }
 function getDemoRequests() {
   return demoRequests;
@@ -12917,6 +12919,9 @@ function isStringOrNull(value) {
 function isStringArray(value) {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
+function isNonNegativeNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -13044,12 +13049,62 @@ function normalizeApprovalRequests(items) {
   }
   return items.map(normalizeApprovalRequest);
 }
+function normalizeOptionalApprovalRequest(item) {
+  return isRecord(item) ? normalizeApprovalRequest(item) : null;
+}
+function normalizeQueueSummary(raw, pendingCount) {
+  if (!isRecord(raw)) {
+    return {
+      active_request_id: null,
+      next_request_id: null,
+      remaining_pending_count: pendingCount,
+      next_selectable_request_id: null
+    };
+  }
+  const remainingPendingCount = raw["remaining_pending_count"];
+  return {
+    active_request_id: isStringOrNull(raw["active_request_id"]) ? raw["active_request_id"] : null,
+    next_request_id: isStringOrNull(raw["next_request_id"]) ? raw["next_request_id"] : null,
+    remaining_pending_count: isNonNegativeNumber(remainingPendingCount) ? remainingPendingCount : pendingCount,
+    next_selectable_request_id: isStringOrNull(raw["next_selectable_request_id"]) ? raw["next_selectable_request_id"] : null
+  };
+}
+function normalizeQueueCopy(raw) {
+  if (!isRecord(raw)) {
+    return null;
+  }
+  const title = raw["title"];
+  const body = raw["body"];
+  if (typeof title !== "string" || typeof body !== "string") {
+    return null;
+  }
+  return { title, body };
+}
+function normalizeQueueResolution(payload) {
+  return {
+    resolved: payload.resolved === true,
+    item: normalizeOptionalApprovalRequest(payload.item),
+    resolved_request: normalizeOptionalApprovalRequest(payload.resolved_request),
+    remaining_pending_count: isNonNegativeNumber(payload.remaining_pending_count) ? payload.remaining_pending_count : 0,
+    next_selectable_request_id: isStringOrNull(payload.next_selectable_request_id) ? payload.next_selectable_request_id : null,
+    remaining_pending_summaries: normalizeApprovalRequests(payload.remaining_pending_summaries),
+    resolved_duplicate_ids: isStringArray(payload.resolved_duplicate_ids) ? payload.resolved_duplicate_ids : [],
+    resolved_scope_ids: isStringArray(payload.resolved_scope_ids) ? payload.resolved_scope_ids : void 0,
+    resolution_summary: typeof payload.resolution_summary === "string" ? payload.resolution_summary : "",
+    retry_hint: isStringOrNull(payload.retry_hint) ? payload.retry_hint : null,
+    copy: normalizeQueueCopy(payload.copy)
+  };
+}
 async function fetchRuntimeSnapshot() {
   if (isGuardDemoMode()) {
     return buildDemoRuntimeSnapshot();
   }
   const snapshot = await readJson("/v1/runtime");
-  return { ...snapshot, items: normalizeApprovalRequests(snapshot.items) };
+  return {
+    ...snapshot,
+    items: normalizeApprovalRequests(snapshot.items),
+    queue_summary: normalizeQueueSummary(snapshot.queue_summary, snapshot.pending_count)
+  };
 }
 function buildDemoRuntimeSnapshot() {
   const demoRequests2 = getDemoRequests();
@@ -13105,6 +13160,12 @@ function buildDemoRuntimeSnapshot() {
     fleet_url: fleetUrl,
     connect_url: connectUrl,
     items: demoRequests2,
+    queue_summary: {
+      active_request_id: null,
+      next_request_id: demoRequests2[0]?.request_id ?? null,
+      remaining_pending_count: demoRequests2.length,
+      next_selectable_request_id: demoRequests2[0]?.request_id ?? null
+    },
     latest_receipts: demoReceipts.slice(0, 10)
   };
 }
@@ -13245,11 +13306,25 @@ function fetchGuardApi(input, init) {
   return fetch(guardApiInput(input), withGuardAuth(init));
 }
 async function resolveRequest(input) {
+  await resolveRequestWithQueueResult(input);
+}
+async function resolveRequestWithQueueResult(input) {
   if (isGuardDemoMode()) {
-    return;
+    return {
+      resolved: true,
+      item: null,
+      resolved_request: null,
+      remaining_pending_count: 0,
+      next_selectable_request_id: null,
+      remaining_pending_summaries: [],
+      resolved_duplicate_ids: [],
+      resolution_summary: "Decision saved.",
+      retry_hint: null,
+      copy: null
+    };
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
-  await readJson(`/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`, {
+  const payload = await readJson(`/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -13262,6 +13337,7 @@ async function resolveRequest(input) {
       reason: input.reason || void 0
     })
   });
+  return normalizeQueueResolution(payload);
 }
 async function clearEvidence() {
   if (isGuardDemoMode()) {
@@ -14567,7 +14643,7 @@ function ApprovalCenterLayout(props) {
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(ShellSidebar, { queuedCount: queuedItems.length, activeHarness, view: props.view }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-col lg:pl-64", children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { className: "flex-1 p-6 lg:p-10", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto max-w-6xl", children: props.view === "home" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(RuntimeBanner, { runtime: props.runtime }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(RuntimeBanner, { runtime: props.runtime, inventory: props.inventory }),
       props.homeContent
     ] }) : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts }) : props.view === "fleet" ? props.fleetContent : props.view === "settings" ? props.settingsContent : /* @__PURE__ */ jsxRuntimeExports.jsx(
       QueueWorkspace,

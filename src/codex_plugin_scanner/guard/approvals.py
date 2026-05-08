@@ -159,11 +159,11 @@ def apply_approval_resolution(
                 raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
             if error == "not_found":
                 raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
-        if resolve_scope_matches and scope in {"workspace", "publisher", "harness", "global"}:
+        if resolve_scope_matches:
             resolved_scope_ids = store.resolve_matching_approval_requests(
                 harness=resolution_harness,
                 scope=scope,
-                artifact_id=None,
+                artifact_id=str(request["artifact_id"]) if scope == "artifact" else None,
                 workspace=workspace if scope == "workspace" else None,
                 publisher=(
                     str(request["publisher"])
