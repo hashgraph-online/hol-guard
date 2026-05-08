@@ -593,19 +593,20 @@ def test_guard_daemon_start_lock_prevents_concurrent_starts(tmp_path):
 
     events: list[str] = []
     errors: list[Exception] = []
-    release_event = threading.Event()
+    t1_entered = threading.Event()
+    release_holder = threading.Event()
 
     def holder() -> None:
         try:
             with daemon_manager_module._guard_daemon_start_lock(guard_home):
                 events.append("t1-entered")
-                release_event.wait(timeout=5)
+                t1_entered.set()
+                release_holder.wait(timeout=5)
                 events.append("t1-exited")
         except Exception as exc:
             errors.append(exc)
 
     def waiter() -> None:
-        release_event.wait(timeout=1)
         try:
             with daemon_manager_module._guard_daemon_start_lock(guard_home):
                 events.append("t2-entered")
@@ -613,13 +614,11 @@ def test_guard_daemon_start_lock_prevents_concurrent_starts(tmp_path):
             errors.append(exc)
 
     t1 = threading.Thread(target=holder)
-    t2 = threading.Thread(target=waiter)
     t1.start()
-    import time
-    time.sleep(0.1)
+    t1_entered.wait(timeout=5)
+    t2 = threading.Thread(target=waiter)
     t2.start()
-    time.sleep(0.05)
-    release_event.set()
+    release_holder.set()
     t1.join(timeout=10)
     t2.join(timeout=10)
 
