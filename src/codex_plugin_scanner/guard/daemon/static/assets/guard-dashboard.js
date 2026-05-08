@@ -13282,6 +13282,16 @@ async function exportDiagnostics() {
   }
   return response.blob();
 }
+async function repairApprovalCenter() {
+  if (isGuardDemoMode()) {
+    return { repaired: true, cleared: ["locator", "daemon_state"] };
+  }
+  const response = await fetch(guardApiInput("/v1/daemon/repair"), withGuardAuth({ method: "POST" }));
+  if (!response.ok) {
+    throw new Error(`Repair failed with ${response.status}`);
+  }
+  return response.json();
+}
 function ShellHeader(props) {
   function handleMobileNavigationChange(event) {
     props.onNavigate(event.target.value);
@@ -14136,6 +14146,34 @@ function remediationLine(snapshot) {
   }
   return "Open Guard Cloud for shared proof, Watched Apps for local coverage, or the review queue when something needs your choice.";
 }
+function resolveApprovalCenterHealth(snapshot) {
+  if (snapshot.runtime_state === null) {
+    if (snapshot.headline_state === "setup") {
+      return {
+        state: "starting",
+        label: "Approval center starting",
+        detail: "Guard is setting up the local approval center. This takes a few seconds."
+      };
+    }
+    return {
+      state: "stale",
+      label: "Approval center offline",
+      detail: "The local approval center is not running. Start Guard to restore the approval link."
+    };
+  }
+  if (snapshot.approval_center_url === null) {
+    return {
+      state: "repair_needed",
+      label: "Approval center unreachable",
+      detail: "The approval center URL is missing. Use the repair action in Settings to restore it."
+    };
+  }
+  return {
+    state: "ready",
+    label: "Approval center ready",
+    detail: `The approval center is running and accepting requests at ${snapshot.approval_center_url}.`
+  };
+}
 function resolveCloudSyncHealthCopy(health) {
   return {
     label: health.label,
@@ -14178,6 +14216,22 @@ function CloudSyncHealthCard(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue", children: "Cloud sync health" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: cloudSyncHealthTone(props.health.state), children: copy.label })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: copy.detail })
+  ] });
+}
+function approvalHealthTone(state) {
+  if (state === "ready") return "green";
+  if (state === "starting") return "blue";
+  if (state === "repair_needed") return "red";
+  return "slate";
+}
+function ApprovalCenterHealthCard(props) {
+  const copy = resolveApprovalCenterHealth(props.snapshot);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-border bg-white px-5 py-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue", children: "Approval center health" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: approvalHealthTone(copy.state), children: copy.label })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: copy.detail })
   ] });
@@ -14299,6 +14353,7 @@ function RuntimeOverview(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(CloudIntelCard, { cloudState: snapshot.cloud_state, connectUrl: snapshot.connect_url })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(CloudSyncHealthCard, { health: snapshot.cloud_sync_health }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalCenterHealthCard, { snapshot }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-border bg-white px-5 py-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue", children: "Recommended next step" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: remediationLine(snapshot) }),
@@ -15413,6 +15468,7 @@ function SettingsWorkspace() {
   const [clearingApprovals, setClearingApprovals] = reactExports.useState(false);
   const [clearingEvidence, setClearingEvidence] = reactExports.useState(false);
   const [exporting, setExporting] = reactExports.useState(false);
+  const [repairing, setRepairing] = reactExports.useState(false);
   const [actionMessage, setActionMessage] = reactExports.useState(null);
   const [perfSnapshot, setPerfSnapshot] = reactExports.useState(null);
   const saveSuccessTimerRef = reactExports.useRef(null);
@@ -15440,7 +15496,8 @@ function SettingsWorkspace() {
     let cancelled = false;
     fetchRuntimeSnapshot().then((snapshot) => {
       if (!cancelled) setPerfSnapshot(snapshot);
-    }).catch(() => {
+    }).catch((error) => {
+      console.error("Failed to fetch runtime snapshot:", error);
     });
     return () => {
       cancelled = true;
@@ -15602,6 +15659,21 @@ function SettingsWorkspace() {
       setActionMessage(error instanceof Error ? error.message : "Unable to export diagnostics.");
     } finally {
       setExporting(false);
+    }
+  }, []);
+  const handleRepairApprovalCenter = reactExports.useCallback(async () => {
+    if (!window.confirm("Reset the approval center locator? The daemon will be reachable again after Guard restarts. Pending approvals are preserved.")) {
+      return;
+    }
+    setRepairing(true);
+    setActionMessage(null);
+    try {
+      await repairApprovalCenter();
+      setActionMessage("Approval center repaired. Restart Guard to reconnect.");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "Unable to repair approval center.");
+    } finally {
+      setRepairing(false);
     }
   }, []);
   if (state.kind === "loading") {
@@ -15808,6 +15880,11 @@ function SettingsWorkspace() {
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Downloads a JSON file with local Guard evidence for debugging or support." }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleExportDiagnostics, disabled: exporting, variant: "secondary", children: exporting ? "Exporting…" : "Export diagnostics" }) })
             ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Repair local approval center" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Resets the approval center locator when the approval link returns an API error. Pending approvals are preserved." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairApprovalCenter, disabled: repairing, variant: "secondary", children: repairing ? "Repairing…" : "Repair approval center" }) })
+            ] }),
             perfSnapshot !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticsPerfCard, { snapshot: perfSnapshot }) : null,
             actionMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-fade-in text-sm leading-6 text-brand-dark/70", children: actionMessage }) : null
           ] })
@@ -15822,14 +15899,14 @@ function SettingsWorkspace() {
 }
 function DiagnosticsPerfCard(props) {
   const { snapshot } = props;
-  const threadCount = snapshot.thread_count ?? null;
+  const threadCount = snapshot.thread_count ?? void 0;
   const daemonPort = snapshot.runtime_state?.daemon_port ?? null;
   const startedAt = snapshot.runtime_state?.started_at ?? null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Runtime performance" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Runtime performance" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Live process metrics for this Guard daemon session." }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-2 gap-2", children: [
-      threadCount !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Active threads", value: String(threadCount) }) : null,
+      threadCount !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Total interpreter threads", value: String(threadCount) }) : null,
       daemonPort !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Daemon port", value: String(daemonPort) }) : null,
       startedAt !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Started", value: new Date(startedAt).toLocaleTimeString() }) : null
     ] })
