@@ -1768,6 +1768,15 @@ def _build_approval_table(items: list[dict[str, object]], *, title: str | None) 
         table.add_row("—", "—", "No pending approvals", "—", "—", "—", "—")
         return table
     for item in items:
+        approval_url = item.get("approval_url")
+        fallback_cli = item.get("fallback_cli_command")
+        review_cmd = str(item.get("review_command") or "hol-guard approvals")
+        if approval_url and fallback_cli:
+            resolve_text = f"{approval_url}\n  or: {fallback_cli}"
+        elif approval_url:
+            resolve_text = str(approval_url)
+        else:
+            resolve_text = review_cmd
         table.add_row(
             str(item.get("request_id") or "unknown"),
             str(item.get("harness") or "unknown"),
@@ -1775,7 +1784,7 @@ def _build_approval_table(items: list[dict[str, object]], *, title: str | None) 
             ", ".join(_coerce_string_list(item.get("changed_fields"))) or "none",
             str(item.get("risk_summary") or "no obvious secret/network signal"),
             _action_text(str(item.get("policy_action") or "warn")),
-            str(item.get("review_command") or "hol-guard approvals"),
+            resolve_text,
         )
     return table
 

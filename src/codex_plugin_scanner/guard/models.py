@@ -180,6 +180,7 @@ class GuardApprovalRequest:
     risk_headline: str | None = None
     action_envelope_json: dict[str, object] | None = None
     decision_v2_json: dict[str, object] | None = None
+    fallback_cli_command: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
