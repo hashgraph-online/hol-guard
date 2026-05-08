@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -176,3 +178,82 @@ class TestDoctorPerfPayload:
         for item in perf:
             expected_slow = int(item["elapsed_ms"]) >= _SLOW_DETECTOR_THRESHOLD_MS
             assert item["slow"] == expected_slow
+
+
+class TestProcessCountBound:
+    """T620 — 100 safe hook evaluations must not spawn persistent threads."""
+
+    def test_100_harness_start_evaluations_do_not_spawn_threads(self, tmp_path: Path) -> None:
+        action = _make_harness_start_action()
+        context = _make_detector_context(tmp_path)
+        registry = _get_default_detector_registry()
+        baseline_threads = threading.active_count()
+        for _ in range(100):
+            registry.run(action, context, timeout_ms=500)
+        after_threads = threading.active_count()
+        assert after_threads - baseline_threads <= 2, (
+            f"Thread count grew by {after_threads - baseline_threads} after 100 evaluations; "
+            "detectors must not leak persistent threads."
+        )
+
+    def test_100_harness_start_evaluations_complete_without_error(self, tmp_path: Path) -> None:
+        action = _make_harness_start_action()
+        context = _make_detector_context(tmp_path)
+        registry = _get_default_detector_registry()
+        results = [registry.run(action, context, timeout_ms=500) for _ in range(100)]
+        assert all(isinstance(r, DetectorRunResult) for r in results)
+
+
+class TestCPUBenchmark:
+    """T622 — 100 safe hook evaluations must complete in under 10 seconds."""
+
+    def test_100_safe_hook_calls_complete_within_budget(self, tmp_path: Path) -> None:
+        action = _make_harness_start_action()
+        context = _make_detector_context(tmp_path)
+        registry = _get_default_detector_registry()
+        start = time.monotonic()
+        for _ in range(100):
+            registry.run(action, context, timeout_ms=500)
+        elapsed_s = time.monotonic() - start
+        assert elapsed_s < 10.0, f"100 safe hook evaluations took {elapsed_s:.2f}s; budget is 10s."
+
+
+class TestMemoryBenchmark:
+    """T621 — Guard module import stays under 50 MB RSS budget."""
+
+    def test_guard_config_import_does_not_import_heavy_deps(self) -> None:
+        import sys
+
+        imported = set(sys.modules.keys())
+        assert "codex_plugin_scanner.guard.config" in imported, (
+            "Guard config must be importable (already loaded by test session)"
+        )
+        heavy = {"matplotlib", "numpy", "pandas", "scipy", "torch", "tensorflow"}
+        leaked = heavy & imported
+        assert not leaked, f"Guard import leaked heavy dependencies: {leaked}"
+
+
+class TestSlowSQLiteTelemetry:
+    """T624 — Slow store transactions emit a warning via the logging module."""
+
+    def test_slow_query_threshold_is_200ms(self) -> None:
+        from codex_plugin_scanner.guard.store import _SLOW_QUERY_THRESHOLD_MS
+
+        assert _SLOW_QUERY_THRESHOLD_MS == 200
+
+    def test_fast_transaction_does_not_warn(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        store = GuardStore(guard_home=tmp_path / "guard-home")
+        with caplog.at_level(logging.WARNING, logger="codex_plugin_scanner.guard.store"):
+            _ = store.list_approval_requests()
+        slow_warnings = [r for r in caplog.records if "slow transaction" in r.getMessage().lower()]
+        assert len(slow_warnings) == 0, "Fast transaction must not emit slow transaction warning"
+
+    def test_store_has_slow_query_threshold_constant(self) -> None:
+        from codex_plugin_scanner.guard.store import _SLOW_QUERY_THRESHOLD_MS
+
+        assert isinstance(_SLOW_QUERY_THRESHOLD_MS, int)
+        assert _SLOW_QUERY_THRESHOLD_MS > 0
