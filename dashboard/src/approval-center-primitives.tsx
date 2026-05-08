@@ -9,6 +9,7 @@ import {
   HiMiniServerStack,
   HiMiniAdjustmentsHorizontal,
   HiMiniShieldCheck,
+  HiBars3,
 } from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
@@ -53,6 +54,7 @@ export function ShellHeader(props: {
   activeHarness: string | null;
   view: "home" | "inbox" | "fleet" | "evidence" | "settings";
   onNavigate: (pathname: string) => void;
+  onOpenMobileQueue?: () => void;
 }) {
   function handleMobileNavigationChange(event: ChangeEvent<HTMLSelectElement>) {
     props.onNavigate(event.target.value);
@@ -85,13 +87,26 @@ export function ShellHeader(props: {
             ))}
           </select>
         </div>
-        <a
-          href={guardAwareHref("/inbox")}
-          className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15"
-          aria-label={`${props.queuedCount} Guard actions queued`}
-        >
-          {props.queuedCount > 99 ? "99+" : props.queuedCount}
-        </a>
+        {props.onOpenMobileQueue && props.view === "inbox" && props.queuedCount > 0 && (
+          <button
+            type="button"
+            onClick={props.onOpenMobileQueue}
+            aria-label="Open queue list"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15"
+          >
+            <HiBars3 className="h-4 w-4" aria-hidden="true" />
+            {props.queuedCount > 99 ? "99+" : props.queuedCount}
+          </button>
+        )}
+        {(!props.onOpenMobileQueue || props.view !== "inbox" || props.queuedCount === 0) && (
+          <a
+            href={guardAwareHref("/inbox")}
+            className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15"
+            aria-label={`${props.queuedCount} Guard actions queued`}
+          >
+            {props.queuedCount > 99 ? "99+" : props.queuedCount}
+          </a>
+        )}
       </div>
     </header>
   );
@@ -523,9 +538,9 @@ export function WelcomeState(props: {
       <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-brand-green-bg/50 ring-1 ring-brand-green/20">
         <HiMiniShieldCheck className="h-10 w-10 text-brand-green" aria-hidden="true" />
       </div>
-      <h2 className="text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl">Your environment is secure</h2>
+      <h2 className="text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl">No blocked actions</h2>
       <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground">
-        HOL Guard is watching connected apps on this machine. Connect Cloud when you want shared decisions across the team.
+        Guard is still watching your apps. You'll be notified here if something needs your approval.
       </p>
       
       <div className="mt-12 text-left w-full max-w-3xl">
