@@ -6,6 +6,7 @@ import {
   HiMiniExclamationTriangle,
   HiMiniNoSymbol,
   HiMiniArrowTopRightOnSquare,
+  HiMiniChevronLeft,
 } from "react-icons/hi2";
 import {
   ShellHeader,
@@ -24,7 +25,6 @@ import {
 import { DataFlowEvidenceCard } from "./data-flow-evidence-card";
 import { SkillRiskCard, SupplyChainRiskCard, DecodedLayerCard } from "./risk-signal-cards";
 import { ReceiptsWorkspace } from "./receipts-workspace";
-import { RuntimeOverview } from "./runtime-overview";
 import {
   buildPauseLine,
   buildRecommendation,
@@ -51,6 +51,16 @@ import {
   KeyboardHints,
   ConfirmModal
 } from "./approval-center-review-cards";
+import {
+  buildProgressCopy,
+  sortQueue,
+  searchQueue,
+  groupDuplicates,
+  isReadOnlyQueueGroup,
+  bulkApproveActionCount,
+  bulkApprovePrimaryIds,
+  type QueueSortDirection,
+} from "./queue-state";
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
@@ -138,10 +148,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         <main className="flex-1 p-6 lg:p-10">
           <div className="mx-auto max-w-6xl">
             {props.view === "home" ? (
-              <>
-                <RuntimeBanner runtime={props.runtime} inventory={props.inventory} />
-                {props.homeContent}
-              </>
+              props.homeContent
             ) : props.view === "evidence" ? (
               <ReceiptsWorkspace receipts={props.receipts} />
             ) : props.view === "fleet" ? (
@@ -166,27 +173,6 @@ export function ApprovalCenterLayout(props: LayoutProps) {
       </div>
     </div>
   );
-}
-
-function RuntimeBanner(props: { runtime: RuntimeState; inventory: GuardInventoryItem[] }) {
-  if (props.runtime.kind === "loading") {
-    return <div className="mb-6 guard-skeleton h-20 w-full" />;
-  }
-  if (props.runtime.kind === "error") {
-    return (
-      <Surface className="mb-6" tone="warning">
-        <SectionLabel>Runtime health</SectionLabel>
-        <h2 className="mt-1 text-lg font-semibold tracking-tight text-brand-dark">
-          Guard is not connected to the local runtime right now
-        </h2>
-        <p className="mt-2 text-sm text-brand-dark/80">{props.runtime.message}</p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Restart with hol-guard bootstrap if the local approval center stopped or if the daemon lost its session.
-        </p>
-      </Surface>
-    );
-  }
-  return <RuntimeOverview snapshot={props.runtime.snapshot} inventory={props.inventory} />;
 }
 
 function QueueWorkspace(props: {
@@ -226,24 +212,57 @@ function QueueWorkspace(props: {
       />
     );
   }
+  const showSideBySide = props.requests.items.length > 1;
+  const activeIndex = props.requests.items.findIndex(
+    (item) => item.request_id === props.activeRequestId
+  );
+  const progressCopy = buildProgressCopy(
+    Math.max(0, activeIndex),
+    props.requests.items.length
+  );
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <QueueHeader
         activeRequestId={props.activeRequestId}
         requests={props.requests.items}
+        progressCopy={progressCopy}
         runtime={props.runtime}
       />
-      <DecisionWorkspace
-        detail={props.detail}
-        onGoHome={props.onGoHome}
-        onResolve={props.onResolve}
-      />
-      <QueueBrowser
-        activeRequestId={props.activeRequestId}
-        items={props.requests.items}
-        onOpenRequest={props.onOpenRequest}
-        onBulkApprove={props.onBulkApprove}
-      />
+      {showSideBySide ? (
+        <div className="grid gap-6 lg:grid-cols-[300px_1fr] lg:items-start">
+          <aside className="lg:sticky lg:top-6">
+            <QueueBrowser
+              activeRequestId={props.activeRequestId}
+              items={props.requests.items}
+              onOpenRequest={props.onOpenRequest}
+              onBulkApprove={props.onBulkApprove}
+            />
+          </aside>
+          <div>
+            <DecisionWorkspace
+              detail={props.detail}
+              onGoHome={props.onGoHome}
+              onResolve={props.onResolve}
+            />
+          </div>
+        </div>
+      ) : (
+        <div>
+          <button
+            type="button"
+            onClick={props.onGoHome}
+            className="mb-3 flex items-center gap-1 text-sm font-medium text-brand-blue transition-colors hover:text-brand-blue/70 lg:hidden"
+          >
+            <HiMiniChevronLeft className="h-4 w-4" />
+            Back to queue
+          </button>
+          <DecisionWorkspace
+            detail={props.detail}
+            onGoHome={props.onGoHome}
+            onResolve={props.onResolve}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -251,12 +270,13 @@ function QueueWorkspace(props: {
 function QueueHeader(props: {
   activeRequestId: string | null;
   requests: GuardApprovalRequest[];
+  progressCopy: string;
   runtime: RuntimeState;
 }) {
   const activeItem = props.requests.find((item) => item.request_id === props.activeRequestId) ?? props.requests[0] ?? null;
   const runtimeLabel = props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_state_label : "Local runtime";
   return (
-    <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-[-0.02em] text-brand-dark">
           Review Queue
@@ -265,7 +285,15 @@ function QueueHeader(props: {
           HOL Guard paused this before it ran. Review what was stopped, then approve or block it.
         </p>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {props.progressCopy.length > 0 && (
+          <span
+            className="font-mono text-xs font-semibold text-muted-foreground"
+            aria-label={`Queue position: ${props.progressCopy}`}
+          >
+            {props.progressCopy}
+          </span>
+        )}
         <Badge tone="warning">{props.requests.length} waiting</Badge>
         {activeItem ? <Tag tone="blue">{harnessDisplayName(activeItem.harness)}</Tag> : null}
         <Tag tone="slate">{runtimeLabel}</Tag>
@@ -282,33 +310,28 @@ function QueueBrowser(props: {
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [harnessFilter, setHarnessFilter] = useState("all");
-  const [actionFilter, setActionFilter] = useState("all");
+  const [sortDirection, setSortDirection] = useState<QueueSortDirection>("newest");
   const [page, setPage] = useState(1);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness))).sort();
-  const actions = Array.from(new Set(props.items.map((item) => item.policy_action))).sort();
+
   const filteredItems = useMemo(() => {
-    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
-    return props.items.filter((item) => {
-      const matchesHarness = harnessFilter === "all" || item.harness === harnessFilter;
-      const matchesAction = actionFilter === "all" || item.policy_action === actionFilter;
-      if (!matchesHarness || !matchesAction) {
-        return false;
-      }
-      if (normalizedSearchTerm.length === 0) {
-        return true;
-      }
-      const searchable = `${displayArtifactName(item)} ${item.artifact_type} ${item.harness} ${item.policy_action} ${buildQueueSummary(item)}`.toLowerCase();
-      return searchable.includes(normalizedSearchTerm);
-    });
-  }, [actionFilter, harnessFilter, props.items, searchTerm]);
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / queuePageSize));
+    const byHarness =
+      harnessFilter === "all"
+        ? props.items
+        : props.items.filter((item) => item.harness === harnessFilter);
+    const searched = searchQueue(byHarness, searchTerm);
+    return sortQueue(searched, sortDirection);
+  }, [harnessFilter, props.items, searchTerm, sortDirection]);
+
+  const groups = useMemo(() => groupDuplicates(filteredItems), [filteredItems]);
+  const totalPages = Math.max(1, Math.ceil(groups.length / queuePageSize));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * queuePageSize;
-  const visibleItems = filteredItems.slice(pageStart, pageStart + queuePageSize);
+  const visibleGroups = groups.slice(pageStart, pageStart + queuePageSize);
 
   useEffect(() => {
     setPage(1);
-  }, [actionFilter, harnessFilter, searchTerm, props.items.length]);
+  }, [harnessFilter, searchTerm, sortDirection, props.items.length]);
 
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
@@ -318,8 +341,8 @@ function QueueBrowser(props: {
     setHarnessFilter(event.target.value);
   }, []);
 
-  const handleActionFilterChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
-    setActionFilter(event.target.value);
+  const handleSortChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    setSortDirection(event.target.value as QueueSortDirection);
   }, []);
 
   const handlePreviousPage = useCallback(() => {
@@ -330,26 +353,33 @@ function QueueBrowser(props: {
     setPage((value) => Math.min(totalPages, value + 1));
   }, [totalPages]);
 
-  const isReadOnlyItem = useCallback((item: GuardApprovalRequest) =>
-    item.policy_action !== "block" &&
-    (item.action_envelope_json?.action_type === "file_read" || item.artifact_type === "file_read_request"),
-  []);
-
-  const bulkReadOnlyItems = useMemo(
-    () => filteredItems.filter(isReadOnlyItem),
-    [filteredItems, isReadOnlyItem]
+  const isReadOnlyGroup = useCallback(
+    (group: ReturnType<typeof groupDuplicates>[number]) => isReadOnlyQueueGroup(group),
+    []
   );
+
+  const bulkEligibleGroups = useMemo(
+    () => groups.filter(isReadOnlyGroup),
+    [groups, isReadOnlyGroup]
+  );
+
+  const bulkEligibleActionCount = useMemo(
+    () => bulkApproveActionCount(bulkEligibleGroups),
+    [bulkEligibleGroups]
+  );
+
   const showBulkApprove =
     props.onBulkApprove !== undefined &&
-    filteredItems.length > 0 &&
-    bulkReadOnlyItems.length === filteredItems.length;
+    bulkEligibleGroups.length > 0 &&
+    bulkEligibleGroups.length === groups.length;
 
   const handleBulkApprove = useCallback(() => {
-    props.onBulkApprove?.(filteredItems.map((item) => item.request_id));
-  }, [props.onBulkApprove, filteredItems]);
+    const ids = bulkApprovePrimaryIds(bulkEligibleGroups);
+    props.onBulkApprove?.(ids);
+  }, [props.onBulkApprove, bulkEligibleGroups]);
 
   return (
-    <section className="border-t border-slate-200/70 pt-6">
+    <section>
       {showBulkApprove && (
         <div className="mb-4">
           <button
@@ -357,27 +387,15 @@ function QueueBrowser(props: {
             onClick={handleBulkApprove}
             className="rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue shadow-sm transition-colors hover:bg-brand-blue/5"
           >
-            Approve all read-only actions ({filteredItems.length})
+            Approve all read-only actions ({bulkEligibleActionCount})
           </button>
         </div>
       )}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <SectionLabel>Other waiting actions</SectionLabel>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight text-brand-dark">
-            Switch only if this is not the action you meant to review.
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-            The current action stays above. Use this list when several apps are waiting for Guard decisions.
-          </p>
-        </div>
-        <Badge tone="warning">{filteredItems.length} shown</Badge>
-      </div>
-      <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
+      <div className="mb-3 grid gap-2">
         <ListControls
           searchLabel="Search waiting actions"
           searchValue={searchTerm}
-          searchPlaceholder="Search action, app, or reason"
+          searchPlaceholder="Command, file, MCP, host…"
           filterLabel="Filter by app"
           filterValue={harnessFilter}
           filterOptions={harnesses}
@@ -386,27 +404,25 @@ function QueueBrowser(props: {
           onFilterChange={handleHarnessFilterChange}
         />
         <label className="block">
-          <span className="sr-only">Filter by decision</span>
+          <span className="sr-only">Sort order</span>
           <select
-            value={actionFilter}
-            onChange={handleActionFilterChange}
+            value={sortDirection}
+            onChange={handleSortChange}
             className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           >
-            <option value="all">All decisions</option>
-            {actions.map((action) => (
-              <option key={action} value={action}>{policyActionLabel(action)}</option>
-            ))}
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
           </select>
         </label>
       </div>
-      <div className="mt-4 divide-y divide-slate-200/70 overflow-hidden rounded-[1.5rem] border border-slate-200/70 bg-white/75 shadow-sm">
-        {visibleItems.length > 0 ? (
-          visibleItems.map((item) => (
-            <QueueCard
-              key={item.request_id}
-              item={item}
-              active={item.request_id === props.activeRequestId}
-              onClick={() => props.onOpenRequest(item.request_id)}
+      <div className="divide-y divide-slate-200/70 overflow-hidden rounded-[1.5rem] border border-slate-200/70 bg-white/75 shadow-sm">
+        {visibleGroups.length > 0 ? (
+          visibleGroups.map((group) => (
+            <QueueCardRow
+              key={group.primary.request_id}
+              group={group}
+              activeRequestId={props.activeRequestId}
+              onOpenRequest={props.onOpenRequest}
             />
           ))
         ) : (
@@ -418,7 +434,7 @@ function QueueBrowser(props: {
       <PaginationControls
         page={currentPage}
         totalPages={totalPages}
-        totalItems={filteredItems.length}
+        totalItems={groups.length}
         pageSize={queuePageSize}
         onPrevious={handlePreviousPage}
         onNext={handleNextPage}
@@ -428,13 +444,34 @@ function QueueBrowser(props: {
   );
 }
 
-function QueueCard(props: { item: GuardApprovalRequest; active: boolean; onClick: () => void }) {
+function QueueCardRow(props: {
+  group: ReturnType<typeof groupDuplicates>[number];
+  activeRequestId: string | null;
+  onOpenRequest: (requestId: string) => void;
+}) {
+  const handleClick = useCallback(() => {
+    props.onOpenRequest(props.group.primary.request_id);
+  }, [props.onOpenRequest, props.group.primary.request_id]);
+
+  return (
+    <QueueCard
+      item={props.group.primary}
+      duplicateCount={props.group.duplicateCount}
+      active={props.group.primary.request_id === props.activeRequestId}
+      onClick={handleClick}
+    />
+  );
+}
+
+function QueueCard(props: { item: GuardApprovalRequest; duplicateCount: number; active: boolean; onClick: () => void }) {
   const summary = buildQueueSummary(props.item);
   const isBlocked = props.item.policy_action === "block";
+  const statusDotClass = queueCardStatusDotClass(props.active, isBlocked);
   return (
     <button
       type="button"
       onClick={props.onClick}
+      aria-pressed={props.active}
       className={`group/item w-full cursor-pointer border-l-4 px-4 py-3.5 text-left transition-all duration-150 hover:bg-brand-blue/[0.035] ${
         props.active
           ? "border-brand-blue bg-brand-blue/[0.06]"
@@ -443,11 +480,11 @@ function QueueCard(props: { item: GuardApprovalRequest; active: boolean; onClick
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <span
-            className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${
-              props.active ? "bg-brand-blue" : isBlocked ? "bg-brand-purple" : "bg-slate-200"
-            }`}
-          />
+           <span
+             className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${
+               statusDotClass
+             }`}
+           />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-brand-dark">{actionDisplayTitle(props.item)}</p>
             <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
@@ -455,13 +492,30 @@ function QueueCard(props: { item: GuardApprovalRequest; active: boolean; onClick
             </p>
           </div>
         </div>
-        <PolicyBadge action={props.item.policy_action} />
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <PolicyBadge action={props.item.policy_action} />
+          {props.duplicateCount > 0 && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
+              +{props.duplicateCount} repeat{props.duplicateCount !== 1 ? "s" : ""} collapsed
+            </span>
+          )}
+        </div>
       </div>
       <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
         {harnessDisplayName(props.item.harness)} · {summary}
       </p>
     </button>
   );
+}
+
+function queueCardStatusDotClass(active: boolean, blocked: boolean): string {
+  if (active) {
+    return "bg-brand-blue";
+  }
+  if (blocked) {
+    return "bg-brand-purple";
+  }
+  return "bg-slate-200";
 }
 function DecisionWorkspace(props: {
   detail: DetailState;
@@ -574,7 +628,7 @@ function DecisionWorkspace(props: {
     );
   }
   if (props.detail.kind === "idle") {
-    return <EmptyState title="Select an item" body="Choose a blocked item from the sidebar to review the evidence and make a decision." />;
+    return <EmptyState title="Select an item" body="Choose a blocked item from the list to review the evidence and make a decision." />;
   }
   const { item, diff, receipt, policy } = props.detail;
   const commonScopeOpts = scopeOptions.filter((option) => commonScopeValues.has(option.value));
@@ -601,7 +655,25 @@ function DecisionWorkspace(props: {
         onReasonChange={setReason}
         onResolve={handleRequestResolve}
       />
+      <ScannerEvidenceSection item={item} />
       <WhatChanged item={item} diff={diff} receipt={receipt} policy={policy} />
+    </div>
+  );
+}
+
+function ScannerEvidenceSection(props: { item: GuardApprovalRequest }) {
+  const hasSignals =
+    (props.item.risk_signals ?? []).length > 0 ||
+    !!props.item.risk_summary ||
+    !!props.item.why_now;
+  if (!hasSignals) return null;
+  return (
+    <div className="space-y-3">
+      <WhyGuardCares item={props.item} />
+      <DataFlowEvidenceCard item={props.item} />
+      <SkillRiskCard item={props.item} />
+      <SupplyChainRiskCard item={props.item} />
+      <DecodedLayerCard item={props.item} />
     </div>
   );
 }
@@ -661,11 +733,6 @@ function WhatChanged(props: { item: GuardApprovalRequest; diff: GuardArtifactDif
       </summary>
       <div className="mt-4 space-y-3 border-l-2 border-brand-blue/10 pl-4">
         <p className="text-sm leading-relaxed text-brand-dark/70">{buildStoppedReason(item, receipt)}</p>
-        <WhyGuardCares item={item} />
-        <DataFlowEvidenceCard item={item} />
-        <SkillRiskCard item={item} />
-        <SupplyChainRiskCard item={item} />
-        <DecodedLayerCard item={item} />
         {policy.length > 0 ? (
           <p className="text-sm leading-relaxed text-brand-dark/70">
             HOL Guard checked {policy.length} saved {policy.length === 1 ? "decision" : "decisions"} before asking you.
@@ -704,6 +771,9 @@ function RuleBuilder(props: {
 
   const handleAllow = useCallback(() => props.onResolve("allow"), [props.onResolve]);
   const handleBlock = useCallback(() => props.onResolve("block"), [props.onResolve]);
+  const handleReasonChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    props.onReasonChange(e.target.value);
+  }, [props.onReasonChange]);
 
   return (
     <section className="guard-surface-in relative overflow-hidden rounded-[2rem] border border-brand-blue/15 bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.08)_100%)] p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7">
@@ -742,7 +812,7 @@ function RuleBuilder(props: {
 
       <div className="relative mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)] xl:items-start">
         <BlockedActionCard item={props.item} />
-        <div className="space-y-4">
+        <div className="space-y-4 xl:sticky xl:top-6">
           <div>
             <SectionLabel>Approval scope</SectionLabel>
             <p className="mt-2 text-sm leading-6 text-brand-dark/75">
@@ -756,13 +826,11 @@ function RuleBuilder(props: {
             <legend className="sr-only">Approval scope</legend>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
               {props.commonScopeOptions.map((option) => (
-                <ScopeOption
+                <ScopeOptionRow
                   key={option.value}
-                  value={option.value}
-                  label={option.label}
-                  description={option.description}
+                  option={option}
                   checked={props.scope === option.value}
-                  onChange={() => props.onScopeChange(option.value)}
+                  onScopeChange={props.onScopeChange}
                 />
               ))}
             </div>
@@ -776,13 +844,11 @@ function RuleBuilder(props: {
                 </p>
                 <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
                   {props.broadScopeOptions.map((option) => (
-                    <ScopeOption
+                    <ScopeOptionRow
                       key={option.value}
-                      value={option.value}
-                      label={option.label}
-                      description={option.description}
+                      option={option}
                       checked={props.scope === option.value}
-                      onChange={() => props.onScopeChange(option.value)}
+                      onScopeChange={props.onScopeChange}
                     />
                   ))}
                 </div>
@@ -797,7 +863,7 @@ function RuleBuilder(props: {
               id="guard-reason"
               type="text"
               value={props.reason}
-              onChange={(e) => props.onReasonChange(e.target.value)}
+              onChange={handleReasonChange}
               className="mt-2 min-h-11 w-full rounded-full border border-border bg-white/90 px-4 py-2 text-sm text-brand-dark placeholder:text-muted-foreground transition-colors focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
               placeholder="Why are you allowing or blocking this?"
             />
@@ -820,6 +886,9 @@ function DecisionActionPanel(props: {
   onAllow: () => void;
   onBlock: () => void;
 }) {
+  const allowText = resolveAllowButtonText(props.submitting, props.isBlocked, props.allowLabel);
+  const blockText = resolveBlockButtonText(props.submitting, props.isBlocked);
+
   return (
     <div className="rounded-[1.65rem] border border-white/80 bg-white/80 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur">
       <SectionLabel>Decision</SectionLabel>
@@ -832,10 +901,10 @@ function DecisionActionPanel(props: {
       </div>
       <div className="mt-4 grid gap-2">
         <ActionButton variant="success" onClick={props.onAllow} disabled={props.submitting !== null}>
-          {props.submitting === "allow" ? "Saving…" : (props.isBlocked ? "Allow — override block" : props.allowLabel)}
+          {allowText}
         </ActionButton>
         <ActionButton variant="danger" onClick={props.onBlock} disabled={props.submitting !== null}>
-          {props.submitting === "block" ? "Saving…" : (props.isBlocked ? "Keep blocked" : "Block this action")}
+          {blockText}
         </ActionButton>
       </div>
       <p className="mt-3 text-xs leading-5 text-muted-foreground">
@@ -843,6 +912,30 @@ function DecisionActionPanel(props: {
       </p>
     </div>
   );
+}
+
+function resolveAllowButtonText(
+  submitting: "allow" | "block" | null,
+  blocked: boolean,
+  allowLabel: string
+): string {
+  if (submitting === "allow") {
+    return "Saving…";
+  }
+  if (blocked) {
+    return "Allow — override block";
+  }
+  return allowLabel;
+}
+
+function resolveBlockButtonText(submitting: "allow" | "block" | null, blocked: boolean): string {
+  if (submitting === "block") {
+    return "Saving…";
+  }
+  if (blocked) {
+    return "Keep blocked";
+  }
+  return "Block this action";
 }
 
 function DecisionSteps(props: { activeStep: number }) {
@@ -1018,6 +1111,26 @@ function getRulePreviewText(
   return "Remember this choice more broadly on this machine.";
 }
 
+function ScopeOptionRow(props: {
+  option: { value: DecisionScope; label: string; description: string };
+  checked: boolean;
+  onScopeChange: (scope: DecisionScope) => void;
+}) {
+  const handleChange = useCallback(() => {
+    props.onScopeChange(props.option.value);
+  }, [props.onScopeChange, props.option.value]);
+
+  return (
+    <ScopeOption
+      value={props.option.value}
+      label={props.option.label}
+      description={props.option.description}
+      checked={props.checked}
+      onChange={handleChange}
+    />
+  );
+}
+
 function ScopeOption(props: {
   value: string;
   label: string;
@@ -1052,11 +1165,13 @@ function ScopeOption(props: {
 }
 
 function PolicyBadge(props: { action: string }) {
-  const tone =
-    props.action === "block" ? "destructive" as const :
-    props.action === "allow" ? "success" as const :
-    "warning" as const;
-  return <Badge tone={tone}>{policyActionLabel(props.action)}</Badge>;
+  if (props.action === "block") {
+    return <Badge tone="destructive">{policyActionLabel(props.action)}</Badge>;
+  }
+  if (props.action === "allow") {
+    return <Badge tone="success">{policyActionLabel(props.action)}</Badge>;
+  }
+  return <Badge tone="warning">{policyActionLabel(props.action)}</Badge>;
 }
 
 function simplifyRiskHeadline(headline: string, harness: string): string {
