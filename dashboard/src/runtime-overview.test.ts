@@ -1,5 +1,5 @@
-import { resolveCloudIntelCopy, resolveCloudSyncHealthCopy, resolveProtectionLevelCopy } from "./runtime-overview";
-import type { GuardCloudSyncHealth } from "./guard-types";
+import { resolveCloudIntelCopy, resolveCloudSyncHealthCopy, resolveProtectionLevelCopy, resolveApprovalCenterHealth } from "./runtime-overview";
+import type { GuardCloudSyncHealth, GuardRuntimeSnapshot } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -53,3 +53,55 @@ assert(protectionStrict.includes("network"), "T508: strict description should me
 
 const protectionCustom = resolveProtectionLevelCopy("custom");
 assert(protectionCustom.includes("Custom"), "T508: custom description should mention Custom");
+
+const baseSnapshot: GuardRuntimeSnapshot = {
+  generated_at: new Date().toISOString(),
+  approval_center_url: "http://localhost:7392/approval",
+  runtime_state: {
+    session_id: "sess-1",
+    daemon_host: "localhost",
+    daemon_port: 7391,
+    started_at: new Date().toISOString(),
+    last_heartbeat_at: new Date().toISOString(),
+    approval_center_url: "http://localhost:7392/approval",
+  },
+  pending_count: 0,
+  receipt_count: 0,
+  headline_state: "protected",
+  headline_label: "Protected",
+  headline_detail: "Guard is active.",
+  sync_configured: false,
+  cloud_state: "local_only",
+  cloud_state_label: "Offline",
+  cloud_state_detail: "Running locally.",
+  cloud_pairing_state: { state: "local_only", label: "Offline", detail: "No cloud." },
+  cloud_sync_health: healthDisabled,
+  dashboard_url: "http://localhost:7392",
+  inbox_url: "http://localhost:7392/inbox",
+  fleet_url: "http://localhost:7392/fleet",
+  connect_url: "http://localhost:7392/connect",
+  items: [],
+  latest_receipts: [],
+};
+
+const healthyApproval = resolveApprovalCenterHealth(baseSnapshot);
+assert(healthyApproval.state === "ready", "T738: protected snapshot with URL should be ready");
+assert(healthyApproval.label.toLowerCase().includes("ready"), "T738: ready label should say ready");
+assert(healthyApproval.detail.includes("http://localhost:7392/approval"), "T738: ready detail should include the URL");
+
+const nullRuntimeSnapshot: GuardRuntimeSnapshot = { ...baseSnapshot, runtime_state: null };
+const offlineApproval = resolveApprovalCenterHealth(nullRuntimeSnapshot);
+assert(offlineApproval.state === "stale", "T738: null runtime_state (non-setup) should be stale");
+assert(offlineApproval.label.toLowerCase().includes("offline"), "T738: stale label should mention offline");
+
+const setupSnapshot: GuardRuntimeSnapshot = { ...baseSnapshot, runtime_state: null, headline_state: "setup" };
+const startingApproval = resolveApprovalCenterHealth(setupSnapshot);
+assert(startingApproval.state === "starting", "T738: null runtime_state + setup headline should be starting");
+assert(startingApproval.label.toLowerCase().includes("starting"), "T738: starting label should say starting");
+
+const noUrlSnapshot: GuardRuntimeSnapshot = { ...baseSnapshot, approval_center_url: null };
+const repairApproval = resolveApprovalCenterHealth(noUrlSnapshot);
+assert(repairApproval.state === "repair_needed", "T738: null approval_center_url should need repair");
+assert(repairApproval.label.toLowerCase().includes("unreachable"), "T738: repair label should mention unreachable");
+assert(repairApproval.detail.toLowerCase().includes("repair"), "T738: repair detail should suggest repair action");
+
