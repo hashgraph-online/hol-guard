@@ -127,10 +127,11 @@ def build_cisco_deep_scan_payload(
             "scan_type": "skills",
             "scanner": "cisco-skill-scanner",
             "target": str(scan_root),
+            "mode": mode,
             "status": summary.status.value,
             "message": summary.message,
             "finding_count": len(signals),
-            "target_count": summary.skills_scanned,
+            "targets_scanned": summary.skills_scanned,
             "analyzers_used": list(summary.analyzers_used),
             "scanner_evidence": [signal.to_dict() for signal in signals],
             "policy_action": policy_action_for_cisco_signals(signals, config=config, harness=harness),
@@ -146,10 +147,11 @@ def build_cisco_deep_scan_payload(
             "scan_type": "mcp",
             "scanner": "cisco-mcp-scanner",
             "target": str(target),
+            "mode": mode,
             "status": summary.status.value,
             "message": summary.message,
             "finding_count": len(signals),
-            "target_count": summary.targets_scanned,
+            "targets_scanned": summary.targets_scanned,
             "analyzers_used": list(summary.analyzers_used),
             "scanner_evidence": [signal.to_dict() for signal in signals],
             "policy_action": policy_action_for_cisco_signals(signals, config=config, harness=harness),
@@ -186,7 +188,7 @@ def policy_action_for_cisco_signals(
 
     if not signals:
         return "allow"
-    action: GuardAction = "warn"
+    action: GuardAction = "allow"
     for signal in signals:
         risk_class = _SOURCE_RISK_CLASS.get(signal.source, "mcp_dangerous_tool")
         resolved = resolve_risk_action(config, risk_class, harness=harness)

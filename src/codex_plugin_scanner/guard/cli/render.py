@@ -1260,13 +1260,13 @@ def _render_deep_scan(console: Console, payload: dict[str, object]) -> None:
     body.add_row("Type", scan_type)
     body.add_row("Status", _cisco_status_text(status))
     body.add_row("Mode", str(payload.get("mode") or "auto"))
-    body.add_row("Findings", str(payload.get("total_findings") or 0))
+    body.add_row("Findings", str(payload.get("finding_count") or 0))
     body.add_row("Targets", str(payload.get("targets_scanned") or 0))
     body.add_row("Analyzers", str(payload.get("analyzers_used") or 0))
     if payload.get("message"):
         body.add_row("Message", str(payload["message"]))
     console.print(Panel(body, title=f"Deep scan — {scan_type}", border_style="cyan"))
-    findings = _coerce_dict_list(payload.get("findings"))
+    findings = _coerce_dict_list(payload.get("scanner_evidence") or payload.get("findings"))
     if findings:
         table = Table(box=box.SIMPLE_HEAVY, show_header=True)
         table.add_column("Severity", style="bold")
