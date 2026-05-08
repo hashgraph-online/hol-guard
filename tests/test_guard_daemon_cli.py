@@ -118,3 +118,27 @@ class TestDaemonStopCommand:
         code, payload = _run(["daemon", "stop"], tmp_path)
         assert code == 0
         assert "stopped" in payload or "running" in payload
+
+    def test_stop_handles_corrupted_state_file(self, tmp_path: Path) -> None:
+        """Regression: corrupted daemon-state.json must not raise."""
+        state_path = tmp_path / "daemon-state.json"
+        state_path.write_text("{this is not valid json!!")
+        code, _payload = _run(["daemon", "stop"], tmp_path)
+        assert code == 0
+
+    def test_status_with_pid_reuse_returns_not_running(self, tmp_path: Path) -> None:
+        """Regression: status must verify daemon identity, not just PID liveness."""
+        import json as _json
+
+        from codex_plugin_scanner.guard.daemon.manager import write_guard_daemon_state
+
+        write_guard_daemon_state(tmp_path, port=19998, auth_token="tok")
+        state_path = tmp_path / "daemon-state.json"
+        state = _json.loads(state_path.read_text())
+        state["pid"] = os.getpid()
+        state["guard_home"] = "/some/other/guard/home"
+        state_path.write_text(_json.dumps(state))
+
+        code, payload = _run(["daemon", "status"], tmp_path)
+        assert code == 0
+        assert payload.get("running") is False, "PID reuse must not be reported as running"

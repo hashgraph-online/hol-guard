@@ -6574,8 +6574,13 @@ def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
             state = _json.loads(state_path.read_text())
             pid = state.get("pid") if isinstance(state, dict) else None
             port = state.get("port") if isinstance(state, dict) else None
-            if isinstance(pid, int) and pid > 0:
-                running = _guard_daemon_pid_is_running(pid)
+            if (
+                isinstance(pid, int)
+                and pid > 0
+                and _guard_daemon_pid_is_running(pid)
+                and _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
+            ):
+                running = True
         except Exception:
             pass
     payload: dict[str, object] = {
@@ -6619,7 +6624,7 @@ def _handle_daemon_stop(guard_home: Path, as_json: bool) -> int:
             ):
                 os.kill(pid, _signal.SIGTERM)
                 stopped = True
-        except (ProcessLookupError, PermissionError, OSError):
+        except (ProcessLookupError, PermissionError, OSError, _json.JSONDecodeError, ValueError):
             pass
     from codex_plugin_scanner.guard.daemon.manager import clear_guard_daemon_state
 
