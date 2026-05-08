@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import glob as globlib
-import shutil
 from pathlib import Path
 
 from ..adapters import get_adapter, list_adapters
@@ -51,12 +50,8 @@ def list_harness_setup_items(context: HarnessContext, store: GuardStore | None =
     items: list[dict[str, object]] = []
     for adapter in list_adapters():
         detection = _safe_setup_detection(adapter, context, store)
-        detected = (
-            bool(detection["installed"])
-            or bool(detection["command_available"])
-            or bool(detection["config_paths"])
-        )
-        if bool(detection["installed"]):
+        detected = detection["installed"] or detection["command_available"] or bool(detection["config_paths"])
+        if detection["installed"]:
             status = "protected"
         elif detected:
             status = "found"
@@ -154,7 +149,7 @@ def _safe_setup_detection(
     config_paths = protection_contract.config_paths if protection_contract is not None else ()
     return {
         "installed": bool(managed and managed.get("active")),
-        "command_available": bool(adapter.executable and shutil.which(adapter.executable)),
+        "command_available": adapter.resolved_executable(context) is not None,
         "config_paths": _existing_contract_config_paths(config_paths, context),
     }
 
@@ -176,11 +171,9 @@ def _contract_config_path_candidates(config_path: str, context: HarnessContext) 
 
 
 def _expand_contract_config_path(config_path: str, context: HarnessContext) -> Path:
-    if config_path == "~":
-        return context.home_dir
-    if config_path.startswith("~/"):
-        return context.home_dir / config_path[2:]
     path = Path(config_path)
+    if path.parts and path.parts[0] == "~":
+        return context.home_dir.joinpath(*path.parts[1:])
     if path.is_absolute():
         return path
     return context.home_dir / path
