@@ -286,12 +286,7 @@ When Guard blocks a launch, it opens a persistent approval link in the terminal 
 
 4. After you resolve the request, Guard emits copy telling you to return to your AI assistant and retry. No page reload or session restart is needed.
 
-To get the approval URL or the post-resolution retry hint from the CLI:
-
-```bash
-hol-guard approvals open <request-id>
-hol-guard approvals retry-hint <request-id>
-```
+To inspect a pending request's details or get the approval URL, pass the request-id to the `approve` command with `--dry-run`, or visit the approval center URL shown in the block message directly.
 
 ## Troubleshooting
 
