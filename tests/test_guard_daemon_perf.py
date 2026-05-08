@@ -255,11 +255,15 @@ class TestSlowSQLiteTelemetry:
 
         assert _SLOW_QUERY_THRESHOLD_MS == 200
 
-    def test_fast_transaction_does_not_warn(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    def test_fast_transaction_does_not_warn(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         import logging
 
+        import codex_plugin_scanner.guard.store as store_module
         from codex_plugin_scanner.guard.store import GuardStore
 
+        monkeypatch.setattr(store_module, "_SLOW_QUERY_THRESHOLD_MS", 10_000)
         store = GuardStore(guard_home=tmp_path / "guard-home")
         with caplog.at_level(logging.WARNING, logger="codex_plugin_scanner.guard.store"):
             _ = store.list_approval_requests()
