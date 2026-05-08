@@ -26,7 +26,9 @@ from .store_approvals import (
     add_approval_request as persist_approval_request,
 )
 from .store_approvals import (
+    approval_index_statements,
     approval_schema_statement,
+    backfill_approval_queue_columns,
 )
 from .store_approvals import (
     count_approval_requests as count_pending_approval_requests,
@@ -35,10 +37,28 @@ from .store_approvals import (
     get_approval_request as load_approval_request,
 )
 from .store_approvals import (
+    get_next_pending_request as load_next_pending_request,
+)
+from .store_approvals import (
+    list_approval_request_page as load_approval_request_page,
+)
+from .store_approvals import (
     list_approval_requests as load_approval_requests,
 )
 from .store_approvals import (
+    list_pending_approval_summaries as load_pending_approval_summaries,
+)
+from .store_approvals import (
     resolve_approval_request as persist_approval_resolution,
+)
+from .store_approvals import (
+    resolve_matching_duplicate_requests as persist_duplicate_resolutions,
+)
+from .store_approvals import (
+    resolve_one_request_only as persist_one_resolution,
+)
+from .store_approvals import (
+    resolve_request_with_queue_result as persist_queue_resolution,
 )
 from .store_connect import (
     build_connect_request as build_pending_connect_request,
@@ -87,6 +107,7 @@ from .types import CapabilitySet
 _SYNC_TOKEN_REF = "guard-cloud-token"
 _SYNC_TOKEN_HASH_KEY = "token_sha256"
 _DEVICE_ROW_KEY = "local-device"
+_MAX_RESOLVED_SCOPE_IDS = 200
 
 
 def _token_sha256(value: str) -> str:
@@ -700,7 +721,14 @@ class GuardStore:
             self._ensure_approval_column(connection, "decision_v2_json", "text")
             self._ensure_approval_column(connection, "workspace", "text")
             self._ensure_approval_column(connection, "normalized_identity_key", "text")
+            self._ensure_approval_column(connection, "action_identity", "text")
+            self._ensure_approval_column(connection, "queue_group_id", "text")
+            self._ensure_approval_column(connection, "dedupe_count", "integer not null default 1")
+            self._ensure_approval_column(connection, "last_seen_at", "text")
             self._ensure_approval_column(connection, "fallback_cli_command", "text")
+            backfill_approval_queue_columns(connection)
+            for idx_stmt in approval_index_statements():
+                connection.execute(idx_stmt)
             self._ensure_attachment_column(connection, "lease_id", "text not null default ''")
             self._ensure_attachment_column(connection, "lease_expires_at", "text")
             self._ensure_local_device(connection)
@@ -1510,13 +1538,62 @@ class GuardStore:
         status: str | None = "pending",
         harness: str | None = None,
         limit: int | None = 50,
+        cursor: str | None = None,
+        search: str | None = None,
     ) -> list[dict[str, object]]:
         with self._connect() as connection:
-            return load_approval_requests(connection, status=status, harness=harness, limit=limit)
+            return load_approval_requests(
+                connection,
+                status=status,
+                harness=harness,
+                limit=limit,
+                cursor=cursor,
+                search=search,
+            )
+
+    def list_pending_approval_summaries(
+        self,
+        *,
+        limit: int = 50,
+        cursor: str | None = None,
+        harness: str | None = None,
+        search: str | None = None,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            return load_pending_approval_summaries(
+                connection,
+                limit=limit,
+                cursor=cursor,
+                harness=harness,
+                search=search,
+            )
+
+    def list_approval_request_page(
+        self,
+        *,
+        status: str | None = "pending",
+        limit: int = 50,
+        cursor: str | None = None,
+        harness: str | None = None,
+        search: str | None = None,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            return load_approval_request_page(
+                connection,
+                status=status,
+                limit=limit,
+                cursor=cursor,
+                harness=harness,
+                search=search,
+            )
 
     def get_approval_request(self, request_id: str) -> dict[str, object] | None:
         with self._connect() as connection:
             return load_approval_request(connection, request_id)
+
+    def get_next_pending_request(self, *, exclude_ids: set[str] | None = None) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return load_next_pending_request(connection, exclude_ids=exclude_ids)
 
     def resolve_approval_request(
         self,
@@ -1537,10 +1614,69 @@ class GuardStore:
                 resolved_at=resolved_at,
             )
 
+    def resolve_one_request_only(
+        self,
+        request_id: str,
+        *,
+        resolution_action: str,
+        resolution_scope: str,
+        reason: str | None,
+        resolved_at: str,
+    ) -> bool:
+        with self._connect() as connection:
+            return persist_one_resolution(
+                connection,
+                request_id,
+                resolution_action=resolution_action,
+                resolution_scope=resolution_scope,
+                reason=reason,
+                resolved_at=resolved_at,
+            )
+
+    def resolve_matching_duplicate_requests(
+        self,
+        *,
+        queue_group_id: str | None,
+        request_id: str,
+        resolution_action: str,
+        resolution_scope: str,
+        reason: str | None,
+        resolved_at: str,
+    ) -> list[str]:
+        with self._connect() as connection:
+            return persist_duplicate_resolutions(
+                connection,
+                queue_group_id=queue_group_id,
+                request_id=request_id,
+                resolution_action=resolution_action,
+                resolution_scope=resolution_scope,
+                reason=reason,
+                resolved_at=resolved_at,
+            )
+
+    def resolve_request_with_queue_result(
+        self,
+        request_id: str,
+        *,
+        resolution_action: str,
+        resolution_scope: str,
+        reason: str | None,
+        resolved_at: str,
+    ) -> dict[str, object]:
+        with self._connect() as connection:
+            return persist_queue_resolution(
+                connection,
+                request_id,
+                resolution_action=resolution_action,
+                resolution_scope=resolution_scope,
+                reason=reason,
+                resolved_at=resolved_at,
+            )
+
     def resolve_matching_approval_requests(
         self,
         *,
-        harness: str,
+        harness: str | None,
         scope: str,
         artifact_id: str | None,
         workspace: str | None,
@@ -1550,27 +1686,74 @@ class GuardStore:
         reason: str | None,
         resolved_at: str,
     ) -> list[str]:
-        pending = self.list_approval_requests(status="pending", harness=harness, limit=None)
-        resolved_ids: list[str] = []
-        for item in pending:
-            if not self._matches_scope(
-                item,
-                scope=scope,
-                artifact_id=artifact_id,
-                workspace=workspace,
-                publisher=publisher,
-            ):
-                continue
-            request_id = str(item["request_id"])
-            self.resolve_approval_request(
-                request_id,
-                resolution_action=resolution_action,
-                resolution_scope=resolution_scope,
-                reason=reason,
-                resolved_at=resolved_at,
+        conditions, params = self._approval_scope_conditions(
+            harness=harness,
+            scope=scope,
+            artifact_id=artifact_id,
+            workspace=workspace,
+            publisher=publisher,
+        )
+        if conditions is None:
+            return []
+        where_clause = " and ".join(["status = 'pending'", *conditions])
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                select request_id
+                from approval_requests
+                where {where_clause}
+                order by last_seen_at desc, request_id desc
+                limit ?
+                """,
+                (*params, _MAX_RESOLVED_SCOPE_IDS),
+            ).fetchall()
+            connection.execute(
+                f"""
+                update approval_requests
+                set status = 'resolved',
+                    resolution_action = ?,
+                    resolution_scope = ?,
+                    reason = ?,
+                    resolved_at = ?
+                where {where_clause}
+                """,
+                (resolution_action, resolution_scope, reason, resolved_at, *params),
             )
-            resolved_ids.append(request_id)
-        return resolved_ids
+        return [str(row["request_id"]) for row in rows]
+
+    @staticmethod
+    def _approval_scope_conditions(
+        *,
+        harness: str | None,
+        scope: str,
+        artifact_id: str | None,
+        workspace: str | None,
+        publisher: str | None,
+    ) -> tuple[list[str] | None, tuple[object, ...]]:
+        if scope == "global":
+            return [], ()
+        if scope == "harness":
+            if harness is None:
+                return None, ()
+            return ["harness = ?"], (harness,)
+        if scope == "artifact":
+            if harness is None or artifact_id is None:
+                return None, ()
+            return ["harness = ?", "artifact_id = ?"], (harness, artifact_id)
+        if scope == "publisher":
+            if harness is None or publisher is None:
+                return None, ()
+            return ["harness = ?", "publisher = ?"], (harness, publisher)
+        if scope == "workspace":
+            if harness is None or workspace is None:
+                return None, ()
+            workspace_prefix = f"{workspace.rstrip('/')}/%"
+            return ["harness = ?", "(config_path = ? or config_path like ?)"], (
+                harness,
+                workspace,
+                workspace_prefix,
+            )
+        return None, ()
 
     @staticmethod
     def _matches_scope(
@@ -1594,9 +1777,18 @@ class GuardStore:
             return _path_within_workspace(config_path, workspace)
         return False
 
-    def count_approval_requests(self, *, status: str | None = "pending") -> int:
+    def count_approval_requests(
+        self,
+        *,
+        status: str | None = "pending",
+        harness: str | None = None,
+        search: str | None = None,
+    ) -> int:
         with self._connect() as connection:
-            return count_pending_approval_requests(connection, status=status)
+            return count_pending_approval_requests(connection, status=status, harness=harness, search=search)
+
+    def count_pending_requests(self, *, harness: str | None = None, search: str | None = None) -> int:
+        return self.count_approval_requests(status="pending", harness=harness, search=search)
 
     def clear_approval_requests(self, *, harness: str | None = None, status: str | None = None) -> int:
         conditions: list[str] = []
