@@ -186,6 +186,7 @@ class RuntimeMcpGuardProxy:
             event["decision"] = "forward-response"
             return None, event
         if method != "tools/call" or not isinstance(params, dict):
+            list_generation = self._tool_catalog_generation if method == "tools/list" else None
             response = self._forward_message(
                 message,
                 child_stdin,
@@ -195,7 +196,6 @@ class RuntimeMcpGuardProxy:
             )
             if method == "tools/list":
                 list_cursor = params.get("cursor") if isinstance(params, dict) else None
-                list_generation = self._tool_catalog_generation
                 self._capture_tools_catalog(
                     response,
                     request_cursor=list_cursor,
