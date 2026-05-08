@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -451,6 +452,105 @@ class PersistenceDetector:
         )
 
 
+class GuardBypassDetector:
+    """Detects shell commands that uninstall, disable, or circumvent HOL Guard."""
+
+    detector_id = "bypass.shell"
+    categories: tuple[RiskSignalCategory, ...] = ("bypass",)
+
+    _UNINSTALL_PATTERN = re.compile(
+        r"(?:^|[\s;&|])"
+        r"(?:"
+        r"pip(?:3)?\s+uninstall\s+(?:-y\s+)?(?:holguard|hol[_-]guard|codex[_-]plugin[_-]scanner)\b|"
+        r"brew\s+(?:uninstall|remove)\s+hol[_-]guard\b|"
+        r"npm\s+(?:uninstall|remove)\s+(?:-g\s+)?hol[_-]guard\b|"
+        r"apt(?:-get)?\s+(?:remove|purge)\s+hol[_-]guard\b"
+        r")",
+        re.IGNORECASE,
+    )
+
+    _CONFIG_DESTROY_PATTERN = re.compile(
+        r"(?:^|[\s;&|])"
+        r"(?:rm|rmdir)\b[^\r\n;&|]{0,100}"
+        r"(?:~?/?\.hol[_-]guard|guard[_-]home|guard\.db|guard\.lock)",
+        re.IGNORECASE,
+    )
+
+    _DAEMON_KILL_PATTERN = re.compile(
+        r"(?:^|[\s;&|])"
+        r"(?:"
+        r"kill\b[^\r\n;&|]{0,80}hol[_-]guard|"
+        r"pkill\b[^\r\n;&|]{0,40}guard|"
+        r"launchctl\s+(?:unload|disable)\b[^\r\n;&|]{0,80}(?:hol[_-]guard|guard)"
+        r")",
+        re.IGNORECASE,
+    )
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        if action.action_type not in ("shell_command", "prompt") or action.command is None:
+            return ()
+        signals: list[RiskSignalV2] = []
+        if self._UNINSTALL_PATTERN.search(action.command):
+            signals.append(
+                RiskSignalV2(
+                    signal_id="bypass:guard-uninstall",
+                    category="bypass",
+                    severity="critical",
+                    confidence="strong",
+                    detector=self.detector_id,
+                    title="Command uninstalls HOL Guard",
+                    plain_reason=("This command removes HOL Guard, which would disable all AI harness protection."),
+                    technical_detail="matched guard uninstall pattern",
+                    evidence_ref="command",
+                    redaction_level="summary",
+                    false_positive_hint=("Allow only if you intentionally want to remove Guard from this machine."),
+                    advisory_id=None,
+                )
+            )
+        if self._CONFIG_DESTROY_PATTERN.search(action.command):
+            signals.append(
+                RiskSignalV2(
+                    signal_id="bypass:guard-config-destroy",
+                    category="bypass",
+                    severity="critical",
+                    confidence="strong",
+                    detector=self.detector_id,
+                    title="Command destroys Guard configuration or data",
+                    plain_reason=(
+                        "This command deletes HOL Guard configuration or state files,"
+                        " which would reset all protection settings and history."
+                    ),
+                    technical_detail="matched guard config/data deletion pattern",
+                    evidence_ref="command",
+                    redaction_level="summary",
+                    false_positive_hint=("Allow only if you intend to fully reset Guard and are aware of data loss."),
+                    advisory_id=None,
+                )
+            )
+        if self._DAEMON_KILL_PATTERN.search(action.command):
+            signals.append(
+                RiskSignalV2(
+                    signal_id="bypass:guard-daemon-kill",
+                    category="bypass",
+                    severity="high",
+                    confidence="strong",
+                    detector=self.detector_id,
+                    title="Command stops HOL Guard daemon",
+                    plain_reason=(
+                        "This command stops the HOL Guard background service,"
+                        " which temporarily disables harness protection."
+                    ),
+                    technical_detail="matched guard daemon kill/unload pattern",
+                    evidence_ref="command",
+                    redaction_level="summary",
+                    false_positive_hint="Allow only if you intentionally want to pause Guard for maintenance.",
+                    advisory_id=None,
+                )
+            )
+        return tuple(signals)
+
+
 def register_default_detectors() -> tuple[GuardDetector, ...]:
     """Return the default ordered detector list.
 
@@ -468,6 +568,7 @@ def register_default_detectors() -> tuple[GuardDetector, ...]:
         CiscoSkillPreflightDetector(),
         FalsePositiveSuppressorDetector(),
         DataFlowExfiltrationDetector(),
+        GuardBypassDetector(),
         PersistenceDetector(),
         PromptInjectionDetector(),
         SafeDecodeDetector(),
