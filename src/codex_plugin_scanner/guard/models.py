@@ -142,10 +142,12 @@ class GuardReceipt:
     artifact_name: str | None = None
     source_scope: str | None = None
     action_envelope_json: dict[str, object] | None = None
+    scanner_evidence: tuple[dict[str, object], ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
         payload["changed_capabilities"] = list(self.changed_capabilities)
+        payload["scanner_evidence"] = [dict(item) for item in self.scanner_evidence]
         return payload
 
 
@@ -185,11 +187,13 @@ class GuardApprovalRequest:
     queue_group_id: str | None = None
     dedupe_count: int = 1
     last_seen_at: str | None = None
+    scanner_evidence: tuple[dict[str, object], ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
         payload["changed_fields"] = list(self.changed_fields)
         payload["risk_signals"] = list(self.risk_signals)
+        payload["scanner_evidence"] = [dict(item) for item in self.scanner_evidence]
         return payload
 
 

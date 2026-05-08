@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -19,6 +20,7 @@ def build_receipt(
     artifact_name: str | None,
     source_scope: str | None,
     user_override: str | None = None,
+    scanner_evidence: Sequence[Mapping[str, object]] = (),
 ) -> GuardReceipt:
     """Create a runtime receipt."""
 
@@ -35,4 +37,5 @@ def build_receipt(
         user_override=user_override,
         artifact_name=artifact_name,
         source_scope=source_scope,
+        scanner_evidence=tuple(dict(item) for item in scanner_evidence),
     )
