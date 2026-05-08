@@ -12,6 +12,7 @@ from pathlib import Path
 from ...path_support import resolves_within_root
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
+from .contracts import HarnessCoverageSummary, HarnessSetupContract, HarnessSetupStep, setup_contract_for
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +118,24 @@ class HarnessAdapter:
             "config_path": shim_manifest["shim_path"],
             **shim_manifest,
         }
+
+    def setup_contract(self) -> HarnessSetupContract:
+        contract = setup_contract_for(self.harness)
+        if contract is None:
+            raise ValueError(f"Unsupported harness setup contract: {self.harness}")
+        return contract
+
+    def setup_steps(self) -> tuple[HarnessSetupStep, ...]:
+        return self.setup_contract().setup_steps
+
+    def verify_steps(self) -> tuple[HarnessSetupStep, ...]:
+        return self.setup_contract().verify_steps
+
+    def repair_steps(self) -> tuple[HarnessSetupStep, ...]:
+        return self.setup_contract().repair_steps
+
+    def coverage_summary(self) -> HarnessCoverageSummary:
+        return self.setup_contract().coverage
 
     def executable_candidates(self, context: HarnessContext) -> tuple[Path, ...]:
         del context
