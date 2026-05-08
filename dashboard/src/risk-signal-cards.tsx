@@ -56,7 +56,7 @@ export function SupplyChainRiskCard(props: SupplyChainRiskCardProps) {
   const isSupplyChainArtifact =
     props.item.artifact_type === "supply_chain" ||
     props.item.artifact_type === "package_request" ||
-    props.item.artifact_type.endsWith("_package");
+    (typeof props.item.artifact_type === "string" && props.item.artifact_type.endsWith("_package"));
   if (scSignals.length === 0 && !isSupplyChainArtifact) return null;
   return (
     <div
@@ -110,7 +110,10 @@ export function DecodedLayerCard(props: DecodedLayerCardProps) {
   const encodedSignals = deriveEncodedLayerSignals(props.item);
   if (encodedSignals.length === 0) return null;
   const primary = encodedSignals[0];
-  const extraCount = Math.max(0, encodedSignals.length - 1);
+  const extraCount = Math.max(0, (() => {
+    const m = /Decoded (\d+) encoding layer/i.exec(primary.plain_reason ?? "");
+    return m != null ? parseInt(m[1], 10) - 1 : encodedSignals.length - 1;
+  })());
   return (
     <div
       className="rounded-xl border border-rose-200/60 bg-rose-50/60 p-4"

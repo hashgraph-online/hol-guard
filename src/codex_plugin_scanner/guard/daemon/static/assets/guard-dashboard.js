@@ -13923,7 +13923,7 @@ function SkillSignalRow(props) {
 }
 function SupplyChainRiskCard(props) {
   const scSignals = deriveSupplyChainRiskSignals(props.item);
-  const isSupplyChainArtifact = props.item.artifact_type === "supply_chain" || props.item.artifact_type === "package_request" || props.item.artifact_type.endsWith("_package");
+  const isSupplyChainArtifact = props.item.artifact_type === "supply_chain" || props.item.artifact_type === "package_request" || typeof props.item.artifact_type === "string" && props.item.artifact_type.endsWith("_package");
   if (scSignals.length === 0 && !isSupplyChainArtifact) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
@@ -13953,7 +13953,10 @@ function DecodedLayerCard(props) {
   const encodedSignals = deriveEncodedLayerSignals(props.item);
   if (encodedSignals.length === 0) return null;
   const primary = encodedSignals[0];
-  const extraCount = Math.max(0, encodedSignals.length - 1);
+  const extraCount = Math.max(0, (() => {
+    const m = /Decoded (\d+) encoding layer/i.exec(primary.plain_reason ?? "");
+    return m != null ? parseInt(m[1], 10) - 1 : encodedSignals.length - 1;
+  })());
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
