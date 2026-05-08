@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from multiprocessing import get_context
 from pathlib import Path
-from queue import Queue
-from threading import Thread
+from queue import Empty
 
 from ..models import Finding, Severity, severity_from_value
 
@@ -72,31 +72,55 @@ def _build_unavailable_summary(message: str, *, status: CiscoIntegrationStatus) 
     )
 
 
-def _scan_directory_with_timeout(scanner: object, skills_dir: Path, timeout_seconds: float | None) -> dict[str, object]:
+def _scan_directory_payload(skills_dir: Path, policy_name: str) -> dict[str, object]:
+    from skill_scanner import SkillScanner
+    from skill_scanner.core.scan_policy import ScanPolicy
+
+    scanner = SkillScanner(policy=ScanPolicy(preset_base=policy_name))
+    report = scanner.scan_directory(skills_dir)
+    payload = report.to_dict()
+    return payload if isinstance(payload, dict) else {}
+
+
+def _scan_directory_worker(skills_dir: str, policy_name: str, result_queue: object) -> None:
+    try:
+        payload = _scan_directory_payload(Path(skills_dir), policy_name)
+        result_queue.put(("ok", payload))
+    except BaseException as exc:
+        result_queue.put(("error", type(exc).__name__, str(exc)))
+
+
+def _scan_directory_with_timeout(
+    skills_dir: Path, policy_name: str, timeout_seconds: float | None
+) -> dict[str, object]:
     if timeout_seconds is None:
-        report = scanner.scan_directory(skills_dir)
-        payload = report.to_dict()
-        return payload if isinstance(payload, dict) else {}
+        return _scan_directory_payload(skills_dir, policy_name)
 
-    results: Queue[dict[str, object] | BaseException] = Queue(maxsize=1)
-
-    def _runner() -> None:
-        try:
-            report = scanner.scan_directory(skills_dir)
-            payload = report.to_dict()
-            results.put(payload if isinstance(payload, dict) else {})
-        except BaseException as exc:
-            results.put(exc)
-
-    thread = Thread(target=_runner, daemon=True)
-    thread.start()
-    thread.join(timeout_seconds)
-    if thread.is_alive():
+    context = get_context("spawn")
+    result_queue = context.Queue(maxsize=1)
+    process = context.Process(
+        target=_scan_directory_worker,
+        args=(str(skills_dir), policy_name, result_queue),
+    )
+    process.start()
+    process.join(timeout_seconds)
+    if process.is_alive():
+        process.terminate()
+        process.join(1)
+        if process.is_alive():
+            process.kill()
+            process.join()
         raise TimeoutError("Cisco skill scanner timed out")
-    result = results.get()
-    if isinstance(result, BaseException):
-        raise result
-    return result
+
+    try:
+        status, payload, *details = result_queue.get_nowait()
+    except Empty as exc:
+        raise RuntimeError(f"Cisco skill scanner exited with code {process.exitcode}") from exc
+    if status == "error":
+        error_type = str(payload)
+        error_message = str(details[0]) if details else "unknown error"
+        raise RuntimeError(f"{error_type}: {error_message}")
+    return payload if isinstance(payload, dict) else {}
 
 
 def _to_local_finding(plugin_dir: Path, skill_result: dict[str, object], finding: dict[str, object]) -> Finding:
@@ -176,8 +200,8 @@ def run_cisco_skill_scan(
         )
 
     try:
-        from skill_scanner import SkillScanner
-        from skill_scanner.core.scan_policy import ScanPolicy
+        __import__("skill_scanner")
+        __import__("skill_scanner.core.scan_policy")
     except ImportError:
         if mode == "on":
             return _build_unavailable_summary(
@@ -190,8 +214,7 @@ def run_cisco_skill_scan(
         )
 
     try:
-        scanner = SkillScanner(policy=ScanPolicy(preset_base=policy_name))
-        payload = _scan_directory_with_timeout(scanner, skills_dir.resolve(), timeout_seconds)
+        payload = _scan_directory_with_timeout(skills_dir.resolve(), policy_name, timeout_seconds)
     except TimeoutError:
         return _build_unavailable_summary(
             "Cisco skill scanner timed out before it could finish.",
