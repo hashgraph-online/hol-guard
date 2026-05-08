@@ -70,9 +70,9 @@ const BASE_REQUEST: GuardApprovalRequest = {
   action_envelope_json: null,
 };
 
-const skillSignal = makeSignal({ signal_id: "skill-001", category: "skill", title: "Skill risk" });
-const scSignal = makeSignal({ signal_id: "sc-001", category: "supply_chain", title: "SC risk" });
-const encodedSignal = makeSignal({ signal_id: "enc-001", category: "encoded", title: "Encoded payload" });
+const skillSignal = makeSignal({ signal_id: "skill-001", category: "execution", detector: "skill.content", title: "Skill risk" });
+const scSignal = makeSignal({ signal_id: "sc-001", category: "secret", detector: "supply-chain.content", title: "SC risk" });
+const encodedSignal = makeSignal({ signal_id: "encoded.code-execution", category: "execution", detector: "safe-decode.content", title: "Encoded payload" });
 const networkSignal = makeSignal({ signal_id: "net-001", category: "network", title: "Network risk" });
 
 const requestWithAll: GuardApprovalRequest = {
@@ -89,7 +89,7 @@ const requestNoDecision: GuardApprovalRequest = { ...BASE_REQUEST };
 
 assert(
   deriveSkillRiskSignals(requestWithAll).length === 1,
-  "T282: deriveSkillRiskSignals returns exactly skill-category signals"
+  "T282: deriveSkillRiskSignals returns exactly skill-detector signals"
 );
 assert(
   deriveSkillRiskSignals(requestWithAll)[0].signal_id === "skill-001",
@@ -106,7 +106,7 @@ assert(
 
 assert(
   deriveSupplyChainRiskSignals(requestWithAll).length === 1,
-  "T317: deriveSupplyChainRiskSignals returns exactly supply_chain signals"
+  "T317: deriveSupplyChainRiskSignals returns exactly supply-chain-detector signals"
 );
 assert(
   deriveSupplyChainRiskSignals(requestWithAll)[0].signal_id === "sc-001",
@@ -114,7 +114,7 @@ assert(
 );
 assert(
   deriveSupplyChainRiskSignals(requestEmpty).length === 0,
-  "T317: deriveSupplyChainRiskSignals returns empty array when no supply_chain signals"
+  "T317: deriveSupplyChainRiskSignals returns empty array when no supply-chain signals"
 );
 assert(
   deriveSupplyChainRiskSignals(requestNoDecision).length === 0,
@@ -123,10 +123,10 @@ assert(
 
 assert(
   deriveEncodedLayerSignals(requestWithAll).length === 1,
-  "T349: deriveEncodedLayerSignals returns exactly encoded signals"
+  "T349: deriveEncodedLayerSignals returns exactly safe-decode-detector signals"
 );
 assert(
-  deriveEncodedLayerSignals(requestWithAll)[0].signal_id === "enc-001",
+  deriveEncodedLayerSignals(requestWithAll)[0].signal_id === "encoded.code-execution",
   "T349: deriveEncodedLayerSignals returns the correct signal"
 );
 assert(
@@ -141,8 +141,8 @@ assert(
 const multiSkillRequest: GuardApprovalRequest = {
   ...BASE_REQUEST,
   decision_v2_json: makeDecisionV2([
-    makeSignal({ signal_id: "skill-a", category: "skill" }),
-    makeSignal({ signal_id: "skill-b", category: "skill" }),
+    makeSignal({ signal_id: "skill-a", category: "execution", detector: "skill.content" }),
+    makeSignal({ signal_id: "skill-b", category: "secret", detector: "skill.content" }),
     networkSignal,
   ]),
 };
@@ -151,8 +151,8 @@ assert(
   "T282: deriveSkillRiskSignals returns all skill signals when multiple exist"
 );
 assert(
-  !deriveSkillRiskSignals(multiSkillRequest).some((s) => s.category !== "skill"),
-  "T282: deriveSkillRiskSignals never returns non-skill signals"
+  deriveSkillRiskSignals(multiSkillRequest).every((s) => s.detector === "skill.content"),
+  "T282: deriveSkillRiskSignals never returns non-skill-detector signals"
 );
 
 console.log("risk-signal-cards: all assertions passed");

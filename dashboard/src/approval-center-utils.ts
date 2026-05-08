@@ -33,15 +33,17 @@ export function deriveDataFlowEvidence(item: GuardApprovalRequest): DataFlowEvid
 }
 
 export function deriveSkillRiskSignals(item: GuardApprovalRequest): RiskSignalV2[] {
-  return (item.decision_v2_json?.signals ?? []).filter((s) => s.category === "skill");
+  return (item.decision_v2_json?.signals ?? []).filter((s) => s.detector === "skill.content");
 }
 
 export function deriveSupplyChainRiskSignals(item: GuardApprovalRequest): RiskSignalV2[] {
-  return (item.decision_v2_json?.signals ?? []).filter((s) => s.category === "supply_chain");
+  return (item.decision_v2_json?.signals ?? []).filter((s) => s.detector === "supply-chain.content");
 }
 
 export function deriveEncodedLayerSignals(item: GuardApprovalRequest): RiskSignalV2[] {
-  return (item.decision_v2_json?.signals ?? []).filter((s) => s.category === "encoded");
+  return (item.decision_v2_json?.signals ?? []).filter(
+    (s) => s.detector === "safe-decode.content" || s.signal_id.startsWith("encoded.")
+  );
 }
 
 function resolveDataFlowSinkLabel(signal: RiskSignalV2): string {
