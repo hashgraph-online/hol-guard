@@ -580,9 +580,7 @@ def _render_approvals(console: Console, payload: dict[str, object]) -> None:
         console.print(Panel(body, title="Approval resolved", border_style="green"))
         return
     if payload.get("error"):
-        console.print(
-            Panel(str(payload.get("error")), title="Approval error", border_style="red")
-        )
+        console.print(Panel(str(payload.get("error")), title="Approval error", border_style="red"))
         return
     if "history_cleared" in payload or "cleared_policies" in payload:
         error = payload.get("error")
