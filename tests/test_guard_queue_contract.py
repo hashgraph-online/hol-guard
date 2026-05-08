@@ -6,6 +6,7 @@ import json
 import sqlite3
 import urllib.parse
 import urllib.request
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -450,6 +451,78 @@ def test_queue_backfill_runs_once_per_schema_version(tmp_path: Path, monkeypatch
     GuardStore(guard_home)
 
     assert calls == ["backfill"]
+
+
+def test_workspace_scope_resolution_matches_windows_paths(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(
+        replace(
+            _request("req-win", artifact_id="codex:project:win"),
+            workspace=r"C:\repo",
+            config_path=r"C:\repo\.codex\config.toml",
+        ),
+        "2026-05-08T10:00:00+00:00",
+    )
+    store.add_approval_request(
+        replace(
+            _request("req-win-other", artifact_id="codex:project:win-other"),
+            workspace=r"C:\repo-other",
+            config_path=r"C:\repo-other\.codex\config.toml",
+        ),
+        "2026-05-08T10:01:00+00:00",
+    )
+
+    resolved_ids = store.resolve_matching_approval_requests(
+        harness="codex",
+        scope="workspace",
+        artifact_id=None,
+        workspace=r"C:\repo",
+        publisher=None,
+        resolution_action="allow",
+        resolution_scope="workspace",
+        reason="trusted workspace",
+        resolved_at="2026-05-08T10:03:00+00:00",
+    )
+
+    assert resolved_ids == ["req-win"]
+    assert store.get_approval_request("req-win")["status"] == "resolved"
+    assert store.get_approval_request("req-win-other")["status"] == "pending"
+
+
+def test_workspace_scope_resolution_escapes_sql_wildcard_names(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(
+        replace(
+            _request("req-workspace", artifact_id="codex:project:wild"),
+            workspace="/tmp/work_%",
+            config_path="/tmp/work_%/.codex/config.toml",
+        ),
+        "2026-05-08T10:00:00+00:00",
+    )
+    store.add_approval_request(
+        replace(
+            _request("req-neighbor", artifact_id="codex:project:neighbor"),
+            workspace="/tmp/work-A",
+            config_path="/tmp/work-A/.codex/config.toml",
+        ),
+        "2026-05-08T10:01:00+00:00",
+    )
+
+    resolved_ids = store.resolve_matching_approval_requests(
+        harness="codex",
+        scope="workspace",
+        artifact_id=None,
+        workspace="/tmp/work_%",
+        publisher=None,
+        resolution_action="allow",
+        resolution_scope="workspace",
+        reason="trusted workspace",
+        resolved_at="2026-05-08T10:03:00+00:00",
+    )
+
+    assert resolved_ids == ["req-workspace"]
+    assert store.get_approval_request("req-workspace")["status"] == "resolved"
+    assert store.get_approval_request("req-neighbor")["status"] == "pending"
 
 
 def test_daemon_resolution_envelope_and_request_filters(tmp_path: Path) -> None:

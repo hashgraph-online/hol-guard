@@ -108,6 +108,7 @@ _SYNC_TOKEN_REF = "guard-cloud-token"
 _SYNC_TOKEN_HASH_KEY = "token_sha256"
 _DEVICE_ROW_KEY = "local-device"
 _MAX_RESOLVED_SCOPE_IDS = 200
+_SQLITE_ID_BATCH_SIZE = 500
 
 
 def _token_sha256(value: str) -> str:
@@ -1696,6 +1697,17 @@ class GuardStore:
         reason: str | None,
         resolved_at: str,
     ) -> list[str]:
+        if scope == "workspace":
+            if harness is None or workspace is None:
+                return []
+            return self._resolve_workspace_matching_approval_requests(
+                harness=harness,
+                workspace=workspace,
+                resolution_action=resolution_action,
+                resolution_scope=resolution_scope,
+                reason=reason,
+                resolved_at=resolved_at,
+            )
         conditions, params = self._approval_scope_conditions(
             harness=harness,
             scope=scope,
@@ -1755,15 +1767,51 @@ class GuardStore:
                 return None, ()
             return ["harness = ?", "publisher = ?"], (harness, publisher)
         if scope == "workspace":
-            if harness is None or workspace is None:
-                return None, ()
-            workspace_prefix = f"{workspace.rstrip('/')}/%"
-            return ["harness = ?", "(config_path = ? or config_path like ?)"], (
-                harness,
-                workspace,
-                workspace_prefix,
-            )
+            return None, ()
         return None, ()
+
+    def _resolve_workspace_matching_approval_requests(
+        self,
+        *,
+        harness: str,
+        workspace: str,
+        resolution_action: str,
+        resolution_scope: str,
+        reason: str | None,
+        resolved_at: str,
+    ) -> list[str]:
+        with self._connect() as connection:
+            connection.execute("begin immediate")
+            rows = connection.execute(
+                """
+                select request_id, config_path
+                from approval_requests
+                where status = 'pending'
+                  and harness = ?
+                order by last_seen_at desc, request_id desc
+                """,
+                (harness,),
+            ).fetchall()
+            matching_ids = [
+                str(row["request_id"])
+                for row in rows
+                if _path_within_workspace(str(row["config_path"]), workspace)
+            ]
+            for chunk in _chunks(matching_ids, _SQLITE_ID_BATCH_SIZE):
+                placeholders = ", ".join("?" for _ in chunk)
+                connection.execute(
+                    f"""
+                    update approval_requests
+                    set status = 'resolved',
+                        resolution_action = ?,
+                        resolution_scope = ?,
+                        reason = ?,
+                        resolved_at = ?
+                    where request_id in ({placeholders})
+                    """,
+                    (resolution_action, resolution_scope, reason, resolved_at, *chunk),
+                )
+        return matching_ids[:_MAX_RESOLVED_SCOPE_IDS]
 
     @staticmethod
     def _matches_scope(
@@ -2955,9 +3003,23 @@ class GuardStore:
 
 
 def _path_within_workspace(config_path: str, workspace: str) -> bool:
-    config_path_obj = Path(config_path)
-    workspace_path_obj = Path(workspace)
-    return config_path_obj == workspace_path_obj or workspace_path_obj in config_path_obj.parents
+    normalized_config = _normalized_workspace_path(config_path)
+    normalized_workspace = _normalized_workspace_path(workspace)
+    if not normalized_config or not normalized_workspace:
+        return False
+    return normalized_config == normalized_workspace or normalized_config.startswith(f"{normalized_workspace}/")
+
+
+def _normalized_workspace_path(value: str) -> str:
+    normalized = value.strip().replace("\\", "/").rstrip("/")
+    if len(normalized) >= 2 and normalized[1] == ":":
+        normalized = normalized.lower()
+    return normalized
+
+
+def _chunks(values: list[str], size: int) -> Iterator[list[str]]:
+    for index in range(0, len(values), size):
+        yield values[index : index + size]
 
 
 def _now() -> str:
