@@ -13282,16 +13282,6 @@ async function exportDiagnostics() {
   }
   return response.blob();
 }
-async function repairApprovalCenter() {
-  if (isGuardDemoMode()) {
-    return { repaired: true, cleared: ["locator", "daemon_state"] };
-  }
-  const response = await fetch(guardApiInput("/v1/daemon/repair"), withGuardAuth({ method: "POST" }));
-  if (!response.ok) {
-    throw new Error(`Repair failed with ${response.status}`);
-  }
-  return response.json();
-}
 function ShellHeader(props) {
   function handleMobileNavigationChange(event) {
     props.onNavigate(event.target.value);
@@ -13619,17 +13609,6 @@ function deriveDataFlowEvidence(item) {
     count: dataFlowSignals.length
   };
 }
-function deriveSkillRiskSignals(item) {
-  return (item.decision_v2_json?.signals ?? []).filter((s) => s.detector === "skill.content");
-}
-function deriveSupplyChainRiskSignals(item) {
-  return (item.decision_v2_json?.signals ?? []).filter((s) => s.detector === "supply-chain.content");
-}
-function deriveEncodedLayerSignals(item) {
-  return (item.decision_v2_json?.signals ?? []).filter(
-    (s) => s.detector === "safe-decode.content" || s.signal_id.startsWith("encoded.")
-  );
-}
 function resolveDataFlowSinkLabel(signal) {
   if (signal.category === "network") {
     return "Network host";
@@ -13890,84 +13869,6 @@ function DataFlowEvidenceCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: evidence.signalTitle }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-mono text-[11px] text-muted-foreground", children: evidence.signalId }),
         extraCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: `and ${extraCount} more data-flow ${extraCount === 1 ? "signal" : "signals"}` }) : null
-      ]
-    }
-  );
-}
-function SkillRiskCard(props) {
-  const skillSignals = deriveSkillRiskSignals(props.item);
-  if (skillSignals.length === 0) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "rounded-xl border border-amber-200/60 bg-amber-50/60 p-4",
-      "aria-label": "Skill risk details",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Skill risk" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: skillSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(SkillSignalRow, { signal }, signal.signal_id)) })
-      ]
-    }
-  );
-}
-function SkillSignalRow(props) {
-  const { signal } = props;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "space-y-1", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: signal.title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/70", children: signal.plain_reason }),
-    signal.technical_detail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] text-muted-foreground break-all", children: signal.technical_detail }) : null,
-    signal.false_positive_hint !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-amber-700/80", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Might be safe if: " }),
-      signal.false_positive_hint
-    ] }) : null
-  ] });
-}
-function SupplyChainRiskCard(props) {
-  const scSignals = deriveSupplyChainRiskSignals(props.item);
-  const isSupplyChainArtifact = props.item.artifact_type === "supply_chain" || props.item.artifact_type === "package_request" || typeof props.item.artifact_type === "string" && props.item.artifact_type.endsWith("_package");
-  if (scSignals.length === 0 && !isSupplyChainArtifact) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "rounded-xl border border-orange-200/60 bg-orange-50/60 p-4",
-      "aria-label": "Supply-chain risk",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Supply-chain risk" }),
-        scSignals.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainSignalRow, { signal }, signal.signal_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: "This action originates from a supply-chain artifact. Verify the publisher and version before approving." })
-      ]
-    }
-  );
-}
-function SupplyChainSignalRow(props) {
-  const { signal } = props;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "space-y-1", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: signal.title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/70", children: signal.plain_reason }),
-    signal.advisory_id !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[11px] text-brand-purple", children: signal.advisory_id }) : null,
-    signal.false_positive_hint !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-orange-700/80", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Might be safe if: " }),
-      signal.false_positive_hint
-    ] }) : null
-  ] });
-}
-function DecodedLayerCard(props) {
-  const encodedSignals = deriveEncodedLayerSignals(props.item);
-  if (encodedSignals.length === 0) return null;
-  const primary = encodedSignals[0];
-  const extraCount = Math.max(0, (() => {
-    const m = /Decoded (\d+) encoding layer/i.exec(primary.plain_reason ?? "");
-    return m != null ? parseInt(m[1], 10) - 1 : encodedSignals.length - 1;
-  })());
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: "rounded-xl border border-rose-200/60 bg-rose-50/60 p-4",
-      "aria-label": "Decoded-layer evidence",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Encoded payload detected" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: primary.plain_reason }),
-        primary.technical_detail !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-mono text-[11px] text-muted-foreground break-all", children: primary.technical_detail }) : null,
-        primary.evidence_ref !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 font-mono text-[11px] text-rose-700/70 break-all", children: primary.evidence_ref }) : null,
-        extraCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: `and ${extraCount} more encoded ${extraCount === 1 ? "layer" : "layers"}` }) : null
       ]
     }
   );
@@ -14235,34 +14136,6 @@ function remediationLine(snapshot) {
   }
   return "Open Guard Cloud for shared proof, Watched Apps for local coverage, or the review queue when something needs your choice.";
 }
-function resolveApprovalCenterHealth(snapshot) {
-  if (snapshot.runtime_state === null) {
-    if (snapshot.headline_state === "setup") {
-      return {
-        state: "starting",
-        label: "Approval center starting",
-        detail: "Guard is setting up the local approval center. This takes a few seconds."
-      };
-    }
-    return {
-      state: "stale",
-      label: "Approval center offline",
-      detail: "The local approval center is not running. Start Guard to restore the approval link."
-    };
-  }
-  if (snapshot.approval_center_url === null) {
-    return {
-      state: "repair_needed",
-      label: "Approval center unreachable",
-      detail: "The approval center URL is missing. Use the repair action in Settings to restore it."
-    };
-  }
-  return {
-    state: "ready",
-    label: "Approval center ready",
-    detail: `The approval center is running and accepting requests at ${snapshot.approval_center_url}.`
-  };
-}
 function resolveCloudSyncHealthCopy(health) {
   return {
     label: health.label,
@@ -14305,22 +14178,6 @@ function CloudSyncHealthCard(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue", children: "Cloud sync health" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: cloudSyncHealthTone(props.health.state), children: copy.label })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: copy.detail })
-  ] });
-}
-function approvalHealthTone(state) {
-  if (state === "ready") return "green";
-  if (state === "starting") return "blue";
-  if (state === "repair_needed") return "red";
-  return "slate";
-}
-function ApprovalCenterHealthCard(props) {
-  const copy = resolveApprovalCenterHealth(props.snapshot);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-border bg-white px-5 py-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue", children: "Approval center health" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: approvalHealthTone(copy.state), children: copy.label })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: copy.detail })
   ] });
@@ -14442,7 +14299,6 @@ function RuntimeOverview(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(CloudIntelCard, { cloudState: snapshot.cloud_state, connectUrl: snapshot.connect_url })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(CloudSyncHealthCard, { health: snapshot.cloud_sync_health }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalCenterHealthCard, { snapshot }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-border bg-white px-5 py-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue", children: "Recommended next step" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/80", children: remediationLine(snapshot) }),
@@ -15006,9 +14862,6 @@ function WhatChanged(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/70", children: buildStoppedReason(item, receipt) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(WhyGuardCares, { item }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(DataFlowEvidenceCard, { item }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SkillRiskCard, { item }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SupplyChainRiskCard, { item }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(DecodedLayerCard, { item }),
       policy.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-relaxed text-brand-dark/70", children: [
         "HOL Guard checked ",
         policy.length,
@@ -15560,8 +15413,8 @@ function SettingsWorkspace() {
   const [clearingApprovals, setClearingApprovals] = reactExports.useState(false);
   const [clearingEvidence, setClearingEvidence] = reactExports.useState(false);
   const [exporting, setExporting] = reactExports.useState(false);
-  const [repairing, setRepairing] = reactExports.useState(false);
   const [actionMessage, setActionMessage] = reactExports.useState(null);
+  const [perfSnapshot, setPerfSnapshot] = reactExports.useState(null);
   const saveSuccessTimerRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     let cancelled = false;
@@ -15578,6 +15431,16 @@ function SettingsWorkspace() {
           message: error instanceof Error ? error.message : "Unable to load Guard settings."
         });
       }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    fetchRuntimeSnapshot().then((snapshot) => {
+      if (!cancelled) setPerfSnapshot(snapshot);
+    }).catch(() => {
     });
     return () => {
       cancelled = true;
@@ -15739,21 +15602,6 @@ function SettingsWorkspace() {
       setActionMessage(error instanceof Error ? error.message : "Unable to export diagnostics.");
     } finally {
       setExporting(false);
-    }
-  }, []);
-  const handleRepairApprovalCenter = reactExports.useCallback(async () => {
-    if (!window.confirm("Reset the approval center locator? The daemon will be reachable again after Guard restarts. Pending approvals are preserved.")) {
-      return;
-    }
-    setRepairing(true);
-    setActionMessage(null);
-    try {
-      await repairApprovalCenter();
-      setActionMessage("Approval center repaired. Restart Guard to reconnect.");
-    } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : "Unable to repair approval center.");
-    } finally {
-      setRepairing(false);
     }
   }, []);
   if (state.kind === "loading") {
@@ -15960,11 +15808,7 @@ function SettingsWorkspace() {
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Downloads a JSON file with local Guard evidence for debugging or support." }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleExportDiagnostics, disabled: exporting, variant: "secondary", children: exporting ? "Exporting…" : "Export diagnostics" }) })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Repair local approval center" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Resets the approval center locator when the approval link returns an API error. Pending approvals are preserved." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairApprovalCenter, disabled: repairing, variant: "secondary", children: repairing ? "Repairing…" : "Repair approval center" }) })
-            ] }),
+            perfSnapshot !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticsPerfCard, { snapshot: perfSnapshot }) : null,
             actionMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-fade-in text-sm leading-6 text-brand-dark/70", children: actionMessage }) : null
           ] })
         ] }),
@@ -15974,6 +15818,27 @@ function SettingsWorkspace() {
         ] })
       ] })
     ] })
+  ] });
+}
+function DiagnosticsPerfCard(props) {
+  const { snapshot } = props;
+  const threadCount = snapshot.thread_count ?? null;
+  const daemonPort = snapshot.runtime_state?.daemon_port ?? null;
+  const startedAt = snapshot.runtime_state?.started_at ?? null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Runtime performance" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Live process metrics for this Guard daemon session." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-2 gap-2", children: [
+      threadCount !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Active threads", value: String(threadCount) }) : null,
+      daemonPort !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Daemon port", value: String(daemonPort) }) : null,
+      startedAt !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Started", value: new Date(startedAt).toLocaleTimeString() }) : null
+    ] })
+  ] });
+}
+function PerfMetric(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl bg-surface-1 px-3 py-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono text-sm font-semibold text-brand-dark", children: props.value })
   ] });
 }
 function SettingSelect(props) {
