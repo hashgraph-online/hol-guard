@@ -14370,6 +14370,15 @@ function ConfirmModal(props) {
     }
   );
 }
+function isReadOnlyQueueGroup(group) {
+  return group.primary.policy_action !== "block" && (group.primary.action_envelope_json?.action_type === "file_read" || group.primary.artifact_type === "file_read_request");
+}
+function bulkApproveActionCount(groups) {
+  return groups.reduce((sum, g) => sum + 1 + g.duplicateCount, 0);
+}
+function bulkApprovePrimaryIds(groups) {
+  return groups.map((g) => g.primary.request_id);
+}
 function buildProgressCopy(activeIndex, total) {
   if (total === 0) {
     return "";
@@ -14676,17 +14685,21 @@ function QueueBrowser(props) {
   const handleNextPage = reactExports.useCallback(() => {
     setPage((value) => Math.min(totalPages, value + 1));
   }, [totalPages]);
-  const isIdenticalDuplicateGroup = reactExports.useCallback(
-    (group) => group.duplicateCount > 0 && group.primary.policy_action !== "block" && (group.primary.action_envelope_json?.action_type === "file_read" || group.primary.artifact_type === "file_read_request"),
+  const isReadOnlyGroup = reactExports.useCallback(
+    (group) => isReadOnlyQueueGroup(group),
     []
   );
   const bulkEligibleGroups = reactExports.useMemo(
-    () => groups.filter(isIdenticalDuplicateGroup),
-    [groups, isIdenticalDuplicateGroup]
+    () => groups.filter(isReadOnlyGroup),
+    [groups, isReadOnlyGroup]
+  );
+  const bulkEligibleActionCount = reactExports.useMemo(
+    () => bulkApproveActionCount(bulkEligibleGroups),
+    [bulkEligibleGroups]
   );
   const showBulkApprove = props.onBulkApprove !== void 0 && bulkEligibleGroups.length > 0 && bulkEligibleGroups.length === groups.length;
   const handleBulkApprove = reactExports.useCallback(() => {
-    const ids = bulkEligibleGroups.flatMap((g) => [g.primary.request_id, ...g.duplicateIds]);
+    const ids = bulkApprovePrimaryIds(bulkEligibleGroups);
     props.onBulkApprove?.(ids);
   }, [props.onBulkApprove, bulkEligibleGroups]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
@@ -14698,7 +14711,7 @@ function QueueBrowser(props) {
         className: "rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue shadow-sm transition-colors hover:bg-brand-blue/5",
         children: [
           "Approve all read-only actions (",
-          bulkEligibleGroups.length,
+          bulkEligibleActionCount,
           ")"
         ]
       }
@@ -16407,6 +16420,33 @@ function App() {
   const handleOpenRequest = reactExports.useCallback((nextRequestId) => {
     navigate(`/requests/${nextRequestId}`);
   }, []);
+  const refreshStateAfterAction = reactExports.useCallback(async () => {
+    const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([
+      fetchRuntimeSnapshot(),
+      fetchReceipts(),
+      fetchPolicies()
+    ]);
+    if (snapshotResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
+      setRequests({ kind: "ready", items: snapshotResult.value.items });
+    }
+    if (receiptsResult.status === "fulfilled") {
+      setReceipts({ kind: "ready", items: receiptsResult.value });
+    } else {
+      setReceipts({
+        kind: "error",
+        message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history."
+      });
+    }
+    if (policiesResult.status === "fulfilled") {
+      setPolicies({ kind: "ready", items: policiesResult.value });
+    } else {
+      setPolicies({
+        kind: "error",
+        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load remembered decisions."
+      });
+    }
+  }, [setRuntime, setRequests, setReceipts, setPolicies]);
   const handleClearPolicies = reactExports.useCallback(async (scope) => {
     const target = scope.all ? "all saved approvals" : `${scope.harness ?? "this app"} approvals`;
     if (!window.confirm(`Clear ${target}? Guard will ask again next time matching actions run.`)) {
@@ -16438,28 +16478,8 @@ function App() {
       setResolutionMessage(result.resolution_summary || "Decision saved. Return to your chat and retry the command.");
       navigate("/inbox");
     }
-    const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchReceipts(), fetchPolicies()]);
-    if (snapshotResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
-      setRequests({ kind: "ready", items: snapshotResult.value.items });
-    }
-    if (receiptsResult.status === "fulfilled") {
-      setReceipts({ kind: "ready", items: receiptsResult.value });
-    } else {
-      setReceipts({
-        kind: "error",
-        message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history."
-      });
-    }
-    if (policiesResult.status === "fulfilled") {
-      setPolicies({ kind: "ready", items: policiesResult.value });
-    } else {
-      setPolicies({
-        kind: "error",
-        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load remembered decisions."
-      });
-    }
-  }, [requests, setRuntime, setRequests, setReceipts, setPolicies, setResolutionMessage]);
+    await refreshStateAfterAction();
+  }, [requests, refreshStateAfterAction, setResolutionMessage]);
   const handleBulkApprove = reactExports.useCallback(async (ids) => {
     const results = await Promise.allSettled(
       ids.map(
@@ -16471,28 +16491,8 @@ function App() {
     const label = failed === 0 ? `${succeeded} item${succeeded !== 1 ? "s" : ""} approved.` : `${succeeded} approved, ${failed} failed. Retry the failed items manually.`;
     setResolutionMessage(label);
     navigate("/inbox");
-    const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchReceipts(), fetchPolicies()]);
-    if (snapshotResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
-      setRequests({ kind: "ready", items: snapshotResult.value.items });
-    }
-    if (receiptsResult.status === "fulfilled") {
-      setReceipts({ kind: "ready", items: receiptsResult.value });
-    } else {
-      setReceipts({
-        kind: "error",
-        message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history."
-      });
-    }
-    if (policiesResult.status === "fulfilled") {
-      setPolicies({ kind: "ready", items: policiesResult.value });
-    } else {
-      setPolicies({
-        kind: "error",
-        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load remembered decisions."
-      });
-    }
-  }, [setRuntime, setRequests, setReceipts, setPolicies, setResolutionMessage]);
+    await refreshStateAfterAction();
+  }, [refreshStateAfterAction, setResolutionMessage]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     ApprovalCenterLayout,
     {

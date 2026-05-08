@@ -274,6 +274,34 @@ export function App() {
     navigate(`/requests/${nextRequestId}`);
   }, []);
 
+  const refreshStateAfterAction = useCallback(async () => {
+    const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([
+      fetchRuntimeSnapshot(),
+      fetchReceipts(),
+      fetchPolicies(),
+    ]);
+    if (snapshotResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
+      setRequests({ kind: "ready", items: snapshotResult.value.items });
+    }
+    if (receiptsResult.status === "fulfilled") {
+      setReceipts({ kind: "ready", items: receiptsResult.value });
+    } else {
+      setReceipts({
+        kind: "error",
+        message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history.",
+      });
+    }
+    if (policiesResult.status === "fulfilled") {
+      setPolicies({ kind: "ready", items: policiesResult.value });
+    } else {
+      setPolicies({
+        kind: "error",
+        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load remembered decisions.",
+      });
+    }
+  }, [setRuntime, setRequests, setReceipts, setPolicies]);
+
   const handleClearPolicies = useCallback(async (scope: { harness?: string; all?: boolean }) => {
     const target = scope.all ? "all saved approvals" : `${scope.harness ?? "this app"} approvals`;
     if (!window.confirm(`Clear ${target}? Guard will ask again next time matching actions run.`)) {
@@ -312,28 +340,8 @@ export function App() {
       setResolutionMessage(result.resolution_summary || "Decision saved. Return to your chat and retry the command.");
       navigate("/inbox");
     }
-    const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchReceipts(), fetchPolicies()]);
-    if (snapshotResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
-      setRequests({ kind: "ready", items: snapshotResult.value.items });
-    }
-    if (receiptsResult.status === "fulfilled") {
-      setReceipts({ kind: "ready", items: receiptsResult.value });
-    } else {
-      setReceipts({
-        kind: "error",
-        message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history.",
-      });
-    }
-    if (policiesResult.status === "fulfilled") {
-      setPolicies({ kind: "ready", items: policiesResult.value });
-    } else {
-      setPolicies({
-        kind: "error",
-        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load remembered decisions.",
-      });
-    }
-  }, [requests, setRuntime, setRequests, setReceipts, setPolicies, setResolutionMessage]);
+    await refreshStateAfterAction();
+  }, [requests, refreshStateAfterAction, setResolutionMessage]);
 
   const handleBulkApprove = useCallback(async (ids: string[]) => {
     const results = await Promise.allSettled(
@@ -349,28 +357,8 @@ export function App() {
         : `${succeeded} approved, ${failed} failed. Retry the failed items manually.`;
     setResolutionMessage(label);
     navigate("/inbox");
-    const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchReceipts(), fetchPolicies()]);
-    if (snapshotResult.status === "fulfilled") {
-      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
-      setRequests({ kind: "ready", items: snapshotResult.value.items });
-    }
-    if (receiptsResult.status === "fulfilled") {
-      setReceipts({ kind: "ready", items: receiptsResult.value });
-    } else {
-      setReceipts({
-        kind: "error",
-        message: receiptsResult.reason instanceof Error ? receiptsResult.reason.message : "Unable to load local approval history.",
-      });
-    }
-    if (policiesResult.status === "fulfilled") {
-      setPolicies({ kind: "ready", items: policiesResult.value });
-    } else {
-      setPolicies({
-        kind: "error",
-        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load remembered decisions.",
-      });
-    }
-  }, [setRuntime, setRequests, setReceipts, setPolicies, setResolutionMessage]);
+    await refreshStateAfterAction();
+  }, [refreshStateAfterAction, setResolutionMessage]);
 
   return (
     <ApprovalCenterLayout
