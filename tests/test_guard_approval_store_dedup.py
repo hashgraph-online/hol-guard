@@ -156,3 +156,27 @@ class TestDifferentWorkspacesGetSeparateRows:
         assert id_ls != id_rm, "Different commands must not collapse into one approval row"
         total = count_approval_requests(conn, status="pending")
         assert total == 2, f"Expected 2 pending rows for different commands, got {total}"
+
+
+class TestLegacyNullIdentityKeyUpgradePath:
+    """Regression: existing rows with NULL normalized_identity_key must still be deduped."""
+
+    def test_legacy_null_row_is_updated_not_duplicated(self) -> None:
+        """After upgrade, a pending row with NULL identity key must be reused for the same
+        artifact+workspace instead of inserting a duplicate row."""
+        conn = _make_conn()
+        artifact_id = "codex:project:tool-legacy"
+        req_legacy = _make_request(artifact_id=artifact_id, workspace="ws-a", launch_target="run tool")
+        first_id = add_approval_request(conn, req_legacy, "2026-01-01T00:00:00Z")
+
+        conn.execute(
+            "update approval_requests set normalized_identity_key = NULL where request_id = ?",
+            (first_id,),
+        )
+
+        req_new = _make_request(artifact_id=artifact_id, workspace="ws-a", launch_target="run tool")
+        second_id = add_approval_request(conn, req_new, "2026-01-01T00:01:00Z")
+
+        assert first_id == second_id, "Legacy row with NULL identity key must be reused, not duplicated"
+        total = count_approval_requests(conn, status="pending")
+        assert total == 1, f"Expected 1 pending row after deduping legacy null row, got {total}"

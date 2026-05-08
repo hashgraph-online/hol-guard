@@ -56,6 +56,7 @@ def approval_schema_statement() -> str:
 
 
 def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalRequest, now: str) -> str:
+    identity_key = _normalized_identity_key(request.launch_target)
     existing = connection.execute(
         """
         select request_id
@@ -68,8 +69,23 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
         order by created_at desc
         limit 1
         """,
-        (request.harness, request.artifact_id, request.workspace, _normalized_identity_key(request.launch_target)),
+        (request.harness, request.artifact_id, request.workspace, identity_key),
     ).fetchone()
+    if existing is None:
+        existing = connection.execute(
+            """
+            select request_id
+            from approval_requests
+            where harness = ?
+              and artifact_id = ?
+              and workspace IS ?
+              and normalized_identity_key IS NULL
+              and status = 'pending'
+            order by created_at desc
+            limit 1
+            """,
+            (request.harness, request.artifact_id, request.workspace),
+        ).fetchone()
     request_id = str(existing["request_id"]) if existing is not None else request.request_id
     if existing is not None:
         review_command = _rewrite_review_command(request.review_command, request_id)
