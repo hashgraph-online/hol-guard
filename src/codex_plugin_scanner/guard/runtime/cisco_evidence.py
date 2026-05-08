@@ -78,7 +78,7 @@ def _signal_id(finding: Finding) -> str:
 
 
 def _source_from_finding(finding: Finding) -> RiskSignalSource:
-    source = finding.source.lower()
+    source = (finding.source or "").lower()
     if "mcp" in source:
         return "cisco_mcp"
     if "skill" in source:
