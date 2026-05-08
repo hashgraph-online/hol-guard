@@ -198,3 +198,22 @@ class TestLegacyNullIdentityKeyUpgradePath:
         assert id_a != id_b, "Different commands must each get their own pending row even when legacy row is NULL"
         total = count_approval_requests(conn, status="pending")
         assert total == 2, f"Expected 2 pending rows for different commands, got {total}"
+
+    def test_legacy_null_launch_target_row_is_deduped(self) -> None:
+        """Legacy rows with NULL launch_target AND NULL identity key must be deduped for the same artifact."""
+        conn = _make_conn()
+        artifact_id = "codex:project:tool-null-target"
+        req_null = _make_request(artifact_id=artifact_id, workspace="ws-a", launch_target=None)
+        first_id = add_approval_request(conn, req_null, "2026-01-01T00:00:00Z")
+
+        conn.execute(
+            "update approval_requests set normalized_identity_key = NULL where request_id = ?",
+            (first_id,),
+        )
+
+        req_retry = _make_request(artifact_id=artifact_id, workspace="ws-a", launch_target=None)
+        second_id = add_approval_request(conn, req_retry, "2026-01-01T00:01:00Z")
+
+        assert first_id == second_id, "NULL-launch-target legacy row must be reused for the same artifact"
+        total = count_approval_requests(conn, status="pending")
+        assert total == 1, f"Expected 1 pending row for NULL launch_target dedup, got {total}"

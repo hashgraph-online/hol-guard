@@ -79,7 +79,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
             where harness = ?
               and artifact_id = ?
               and workspace IS ?
-              and launch_target = ?
+              and launch_target IS ?
               and normalized_identity_key IS NULL
               and status = 'pending'
             order by created_at desc
