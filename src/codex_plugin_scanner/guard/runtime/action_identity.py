@@ -25,7 +25,7 @@ _PORT_FLAG_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-_MARKDOWN_BOLD_ITALIC = re.compile(r"\*{1,3}|_{1,3}")
+_MARKDOWN_BOLD_ITALIC = re.compile(r"\*{1,3}|(?<!\w)_{1,3}(?=\w)|(?<=\w)_{1,3}(?!\w)")
 
 _BACKTICK_INLINE_CODE = re.compile(r"`([^`]+)`")
 

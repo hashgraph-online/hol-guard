@@ -198,7 +198,7 @@ class TestDeniedCommandBehavior:
         )
 
         assert evaluation.get("blocked") is True, "Denied artifact must be blocked"
-        assert len(approvals) == 0, "Denied artifact must not queue a new approval request"
+        assert len(approvals) > 0, "Blocked artifact must still queue for user review in Guard"
 
 
 class TestMeaningfulChangeAsksAgain:

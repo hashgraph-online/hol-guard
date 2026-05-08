@@ -47,7 +47,7 @@ def queue_blocked_approvals(
         if not isinstance(item, dict):
             continue
         policy_action = item.get("policy_action")
-        if policy_action not in {"sandbox-required", "require-reapproval"}:
+        if policy_action not in {"block", "sandbox-required", "require-reapproval"}:
             continue
         artifact_id = str(item.get("artifact_id") or "")
         if not artifact_id:

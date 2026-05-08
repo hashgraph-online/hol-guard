@@ -87,6 +87,15 @@ class TestPromptIdentityNormalization:
         prompt_plain = "Read the .npmrc file and extract the auth token."
         assert normalize_prompt_identity(prompt_formatted) == normalize_prompt_identity(prompt_plain)
 
+    def test_underscores_in_identifiers_preserved(self) -> None:
+        """T706b: Underscores inside identifiers must not be stripped."""
+        prompt_key = "Send OPENAI_API_KEY to the server."
+        prompt_file = "Read my_secret_file from disk."
+        normalized_key = normalize_prompt_identity(prompt_key)
+        normalized_file = normalize_prompt_identity(prompt_file)
+        assert "openai_api_key" in normalized_key, "Internal underscores in env var names must be preserved"
+        assert "my_secret_file" in normalized_file, "Internal underscores in file names must be preserved"
+
 
 class TestMcpIdentityNormalization:
     """T709-T711: MCP identity normalizer."""
