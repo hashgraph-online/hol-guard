@@ -32,6 +32,18 @@ export function deriveDataFlowEvidence(item: GuardApprovalRequest): DataFlowEvid
   };
 }
 
+export function deriveSkillRiskSignals(item: GuardApprovalRequest): RiskSignalV2[] {
+  return (item.decision_v2_json?.signals ?? []).filter((s) => s.category === "skill");
+}
+
+export function deriveSupplyChainRiskSignals(item: GuardApprovalRequest): RiskSignalV2[] {
+  return (item.decision_v2_json?.signals ?? []).filter((s) => s.category === "supply_chain");
+}
+
+export function deriveEncodedLayerSignals(item: GuardApprovalRequest): RiskSignalV2[] {
+  return (item.decision_v2_json?.signals ?? []).filter((s) => s.category === "encoded");
+}
+
 function resolveDataFlowSinkLabel(signal: RiskSignalV2): string {
   if (signal.category === "network") {
     return "Network host";
