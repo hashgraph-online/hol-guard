@@ -15862,9 +15862,14 @@ function SettingsWorkspace() {
             /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { label: "Billing features", checked: draft.billing, onChange: handleBooleanChange("billing") })
           ] })
         ] }),
+        perfSnapshot !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Runtime diagnostics" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticsPerfCard, { snapshot: perfSnapshot }) })
+        ] }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-red-100 bg-red-50/50 p-5 shadow-sm", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Data management" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-3", children: [
+            "              ",
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Clear saved approvals" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Removes all stored allow/block decisions. Guard will ask again for previously approved actions." }),
@@ -15885,7 +15890,6 @@ function SettingsWorkspace() {
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Resets the approval center locator when the approval link returns an API error. Pending approvals are preserved." }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairApprovalCenter, disabled: repairing, variant: "secondary", children: repairing ? "Repairing…" : "Repair approval center" }) })
             ] }),
-            perfSnapshot !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticsPerfCard, { snapshot: perfSnapshot }) : null,
             actionMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-fade-in text-sm leading-6 text-brand-dark/70", children: actionMessage }) : null
           ] })
         ] }),
