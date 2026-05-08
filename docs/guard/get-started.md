@@ -270,3 +270,45 @@ That means the user should never get a silent pass-through on a risky Codex acti
 - native Bash deny plus HOL Guard approval-center recovery for sensitive shell actions
 - same-chat approve or deny when Codex can render the inline MCP prompt
 - explicit approval-center recovery when the session cannot
+
+## Seamless approvals
+
+When Guard blocks a launch, it opens a persistent approval link in the terminal rather than pausing the session. You can resolve requests without leaving your harness:
+
+1. Guard returns the approval URL in the block output and queues the request locally.
+2. Open the approval center at the URL or in your browser.
+3. Approve or deny the request from the approval center UI or the CLI:
+
+   ```bash
+   hol-guard approvals approve <request-id>
+   hol-guard approvals deny <request-id>
+   ```
+
+4. After you resolve the request, Guard emits copy telling you to return to your AI assistant and retry. No page reload or session restart is needed.
+
+To get the approval URL or the post-resolution retry hint from the CLI:
+
+```bash
+hol-guard approvals open <request-id>
+hol-guard approvals retry-hint <request-id>
+```
+
+## Troubleshooting
+
+### Approval link says API error
+
+If the approval center URL in a block message returns an API error, the local approval center locator may be stale.
+Run the repair command to reset the locator file without touching the approval store or pending requests:
+
+```bash
+hol-guard daemon repair
+```
+
+Or call the repair endpoint directly when the daemon is running:
+
+```bash
+curl -s -X POST http://127.0.0.1:5474/v1/daemon/repair \
+  -H "X-Guard-Token: $(cat ~/.hol-guard/daemon-auth-token)"
+```
+
+After repair, retry the block message URL or relaunch your harness through Guard. Pending approval requests are preserved across repairs.
