@@ -40,6 +40,44 @@ function remediationLine(snapshot: GuardRuntimeSnapshot): string {
   return "Open Guard Cloud for shared proof, Watched Apps for local coverage, or the review queue when something needs your choice.";
 }
 
+export type ApprovalCenterHealthState = "ready" | "starting" | "stale" | "repair_needed";
+
+export type ApprovalCenterHealthCopy = {
+  state: ApprovalCenterHealthState;
+  label: string;
+  detail: string;
+};
+
+export function resolveApprovalCenterHealth(snapshot: GuardRuntimeSnapshot): ApprovalCenterHealthCopy {
+  if (snapshot.runtime_state === null) {
+    return {
+      state: "stale",
+      label: "Approval center offline",
+      detail: "The local approval center is not running. Start Guard to restore the approval link.",
+    };
+  }
+  if (snapshot.headline_state === "setup") {
+    return {
+      state: "starting",
+      label: "Approval center starting",
+      detail: "Guard is setting up the local approval center. This takes a few seconds.",
+    };
+  }
+  if (snapshot.approval_center_url === null) {
+    return {
+      state: "repair_needed",
+      label: "Approval center unreachable",
+      detail: "The approval center URL is missing. Use the repair action in Settings to restore it.",
+    };
+  }
+  return {
+    state: "ready",
+    label: "Approval center ready",
+    detail: "The approval center is running and accepting requests at " + snapshot.approval_center_url + ".",
+  };
+}
+
+
 export function resolveCloudSyncHealthCopy(health: GuardCloudSyncHealth): { label: string; detail: string } {
   return {
     label: health.label,
