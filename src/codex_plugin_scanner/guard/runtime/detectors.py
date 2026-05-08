@@ -618,7 +618,7 @@ class McpDescriptionDeceptionDetector:
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
         del context
-        if action.prompt_excerpt is None:
+        if action.action_type not in ("mcp_tool", "mcp_tool_call") or action.prompt_excerpt is None:
             return ()
         excerpt = action.prompt_excerpt
         signals: list[RiskSignalV2] = []
