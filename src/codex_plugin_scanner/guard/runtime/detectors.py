@@ -219,10 +219,10 @@ class SupplyChainDetector:
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
         del context
-        content = action.prompt_text or action.command
-        if content is None:
-            return ()
-        return detect_supply_chain_risk(content)
+        signals: list[RiskSignalV2] = []
+        for content in filter(None, (action.prompt_text, action.command)):
+            signals.extend(detect_supply_chain_risk(content))
+        return tuple(signals)
 
 
 class SafeDecodeDetector:
@@ -568,7 +568,7 @@ class McpToolSchemaRiskDetector:
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
         del context
-        if action.action_type != "mcp_tool_call" or action.mcp_tool is None:
+        if action.action_type != "mcp_tool" or action.mcp_tool is None:
             return ()
         tool_name = action.mcp_tool
         if not _MCP_RISKY_TOOL_PATTERN.search(tool_name):
