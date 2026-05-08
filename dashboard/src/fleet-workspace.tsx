@@ -1,12 +1,13 @@
+import { useCallback } from "react";
 import {
   ActionButton,
-  Badge,
   EmptyState,
   KeyValueGrid,
   SectionLabel,
   Tag
 } from "./approval-center-primitives";
 import { harnessDisplayName } from "./approval-center-utils";
+import { WatchedAppCard } from "./watched-app-card";
 import type { GuardInventoryItem, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
 type FleetWorkspaceProps = {
@@ -17,6 +18,9 @@ type FleetWorkspaceProps = {
     | { kind: "loading" }
     | { kind: "error"; message: string }
     | { kind: "ready"; items: GuardInventoryItem[] };
+  onConnectHarness?: (harness: string) => void;
+  onTestHarness?: (harness: string) => void;
+  onRepairHarness?: (harness: string) => void;
 };
 
 function collectHarnesses(snapshot: GuardRuntimeSnapshot): string[] {
@@ -49,6 +53,20 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
     ])
   ).sort((left, right) => left.localeCompare(right));
   const runtimeState = props.runtime.runtime_state;
+
+  const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness));
+
+  const handleConnect = useCallback((harness: string) => {
+    props.onConnectHarness?.(harness);
+  }, [props.onConnectHarness]);
+
+  const handleTest = useCallback((harness: string) => {
+    props.onTestHarness?.(harness);
+  }, [props.onTestHarness]);
+
+  const handleRepair = useCallback((harness: string) => {
+    props.onRepairHarness?.(harness);
+  }, [props.onRepairHarness]);
 
   return (
     <div className="space-y-6">
@@ -86,26 +104,25 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
         <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
           <SectionLabel>App coverage</SectionLabel>
           {visibleHarnesses.length > 0 ? (
-            <div className="mt-4 overflow-hidden rounded-[1.5rem] border border-slate-200/70 bg-white/75">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {visibleHarnesses.map((harness) => {
                 const install = managedInstalls.find((item) => item.harness === harness);
                 const harnessInventory = inventory.filter((item) => item.harness === harness && item.present);
                 const harnessPolicies = props.policies.filter((item) => item.harness === harness);
-                const statusLabel = install === undefined ? "Observed" : install.active ? "Protected" : "Disabled";
+                const hasReceipts = receiptHarnesses.has(harness);
                 return (
-                  <div key={harness} className="border-b border-slate-200/70 px-4 py-3 last:border-b-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-brand-dark">{harnessDisplayName(harness)}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {harnessInventory.length} actions seen · {harnessPolicies.length} saved approvals
-                        </p>
-                      </div>
-                      <Badge tone={install === undefined || install.active ? "success" : "destructive"}>
-                        {statusLabel}
-                      </Badge>
-                    </div>
-                  </div>
+                  <WatchedAppCard
+                    key={harness}
+                    harness={harness}
+                    install={install}
+                    harnessInventory={harnessInventory}
+                    harnessPolicies={harnessPolicies}
+                    hasReceipts={hasReceipts}
+                    fleetUrl={props.runtime.fleet_url}
+                    onConnect={handleConnect}
+                    onTest={handleTest}
+                    onRepair={handleRepair}
+                  />
                 );
               })}
             </div>

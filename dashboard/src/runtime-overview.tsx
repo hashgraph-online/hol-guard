@@ -106,7 +106,7 @@ export function resolveCloudIntelCopy(state: "local_only" | "paired_waiting" | "
     return { label: "Offline, free", detail: "Running locally with no cloud sync. Your choices stay on this machine." };
   }
   if (state === "paired_waiting") {
-    return { label: "Pairing…", detail: "Connected to Guard Cloud, waiting for the first shared proof to land." };
+    return { label: "Pairing…", detail: "Connected to Guard Cloud, waiting for sync to start." };
   }
   return { label: "Synced, pro", detail: "Guard Cloud is active and syncing choices across your devices." };
 }
