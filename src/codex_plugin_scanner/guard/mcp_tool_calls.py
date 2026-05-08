@@ -451,9 +451,6 @@ def _resolve_local_schema_ref(root_schema: Mapping[str, object], reference: str)
                 return None
         return current
     if not reference.startswith("#"):
-        fragment_index = reference.find("#")
-        if fragment_index >= 0:
-            return _resolve_local_schema_ref(root_schema, reference[fragment_index:])
         return None
     anchor_name = reference[1:]
     if not anchor_name:
