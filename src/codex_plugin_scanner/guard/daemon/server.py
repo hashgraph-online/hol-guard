@@ -456,9 +456,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"resolved": False, "error": str(error)}, status=400)
             return
+        normalized_scope = scope.strip()
+        harness_str = str(updated.get("harness", ""))
         self.server.store.add_event(  # type: ignore[attr-defined]
             "approval_resolved",
-            {"request_id": request_id, "action": action, "scope": scope, "harness": str(updated.get("harness", ""))},
+            {"request_id": request_id, "action": action, "scope": normalized_scope, "harness": harness_str},
             _now(),
         )
         harness = str(updated.get("harness", ""))

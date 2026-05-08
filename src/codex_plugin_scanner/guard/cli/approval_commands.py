@@ -170,7 +170,8 @@ def run_approval_retry_hint_command(
         return {"error": "not_resolved", "status": status, "request_id": request_id}, 1
     resolution_action = str(item.get("resolution_action", ""))
     harness = str(item.get("harness", ""))
-    return _build_retry_hint(resolution_action, harness), 0
+    hint: dict[str, object] = dict(_build_retry_hint(resolution_action, harness))
+    return hint, 0
 
 
 def _now() -> str:
