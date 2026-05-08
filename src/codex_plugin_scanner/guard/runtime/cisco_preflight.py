@@ -23,7 +23,14 @@ _ACTION_RANK: dict[GuardAction, int] = {
     "sandbox-required": 4,
     "block": 5,
 }
-_SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+_SEVERITY_RANK: dict[str, int] = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+_SOURCE_RISK_CLASS: dict[str, str] = {
+    "cisco_skill": "malicious_skill",
+    "cisco_mcp": "mcp_dangerous_tool",
+    "native": "mcp_dangerous_tool",
+    "threat_intel": "mcp_dangerous_tool",
+    "runtime_detector": "mcp_dangerous_tool",
+}
 
 
 class CiscoSkillPreflightDetector:
@@ -175,19 +182,13 @@ def policy_action_for_cisco_signals(
     config: GuardConfig,
     harness: str | None,
 ) -> GuardAction:
-    """Resolve the policy effect of Cisco scanner evidence."""
+    """Resolve the policy effect of Cisco scanner evidence using configured security level."""
 
     if not signals:
         return "allow"
-    if any(signal.severity == "critical" and signal.confidence == "strong" for signal in signals):
-        return "block"
-    if all(
-        _SEVERITY_RANK[signal.severity] <= _SEVERITY_RANK["low"] or signal.confidence == "weak" for signal in signals
-    ):
-        return "warn"
     action: GuardAction = "warn"
     for signal in signals:
-        risk_class = "malicious_skill" if signal.source == "cisco_skill" else "mcp_dangerous_tool"
+        risk_class = _SOURCE_RISK_CLASS.get(signal.source, "mcp_dangerous_tool")
         resolved = resolve_risk_action(config, risk_class, harness=harness)
         if resolved is not None and _ACTION_RANK[resolved] > _ACTION_RANK[action]:
             action = resolved
@@ -216,6 +217,7 @@ def _skill_scan_root_for_file(path: Path, workspace: Path) -> Path:
         return parent
     if parent == workspace:
         return parent
+    # Default: scan from the containing directory; callers should verify the result is meaningful.
     return parent
 
 

@@ -757,7 +757,7 @@ def run_guard_command(
                 config=config,
             )
             payload["generated_at"] = _now()
-            _emit("scan", payload, getattr(args, "json", False))
+            _emit("deep-scan", payload, getattr(args, "json", False))
             return 0
         payload = _run_consumer_scan_with_mode(Path(args.target).resolve(), cisco_mode=args.cisco_mode)
         _emit("scan", payload, args.json or args.consumer_mode)
@@ -1766,7 +1766,11 @@ def run_guard_command(
                 return 0
             changed_capabilities = [runtime_artifact.artifact_type]
             data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
-            scanner_evidence = scan_action_for_cisco_evidence(action_envelope, workspace=runtime_workspace)
+            scanner_evidence = (
+                scan_action_for_cisco_evidence(action_envelope, workspace=runtime_workspace)
+                if action_envelope is not None
+                else ()
+            )
             scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
             if data_flow_signals and requested_policy_action not in VALID_GUARD_ACTIONS:
                 data_flow_action = resolve_risk_action(
@@ -1776,6 +1780,7 @@ def run_guard_command(
                 )
                 if _guard_action_severity(data_flow_action) > _guard_action_severity(policy_action):
                     policy_action = data_flow_action
+            _pre_scanner_policy_action = policy_action
             if scanner_evidence and requested_policy_action not in VALID_GUARD_ACTIONS:
                 scanner_action = policy_action_for_cisco_signals(
                     scanner_evidence,
@@ -1784,6 +1789,9 @@ def run_guard_command(
                 )
                 if _guard_action_severity(scanner_action) > _guard_action_severity(policy_action):
                     policy_action = scanner_action
+            scanner_raised_to_block = (
+                policy_action == "block" and _pre_scanner_policy_action != "block" and bool(scanner_evidence)
+            )
             base_decision_signals = data_flow_signals or artifact_risk_signals_v2(runtime_artifact)
             scanner_decision_signals = tuple(cisco_risk_signal_v3_to_v2(signal) for signal in scanner_evidence)
             decision_signals = (*base_decision_signals, *scanner_decision_signals)
@@ -1796,7 +1804,7 @@ def run_guard_command(
                 risk_summary = artifact_risk_summary(runtime_artifact)
             if scanner_risk_signals:
                 risk_signals.extend(scanner_risk_signals)
-                if policy_action == "block":
+                if scanner_raised_to_block:
                     risk_summary = scanner_risk_signals[0]
             decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
             incident = build_incident_context(

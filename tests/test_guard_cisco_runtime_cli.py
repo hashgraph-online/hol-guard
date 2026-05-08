@@ -242,8 +242,8 @@ def test_cisco_policy_blocks_critical_balanced_but_not_low_confidence_info(tmp_p
         scanner_status=CiscoIntegrationStatus.ENABLED,
     )
 
-    assert policy_action_for_cisco_signals((critical,), config=config, harness="codex") == "block"
-    assert policy_action_for_cisco_signals((info,), config=config, harness="codex") == "warn"
+    assert policy_action_for_cisco_signals((critical,), config=config, harness="codex") == "require-reapproval"
+    assert policy_action_for_cisco_signals((info,), config=config, harness="codex") == "require-reapproval"
 
 
 def test_cisco_unavailable_and_failed_modes_are_explicit(

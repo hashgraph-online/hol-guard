@@ -287,6 +287,13 @@ class SafeDecodeDetector:
 
 
 def register_default_detectors() -> tuple[GuardDetector, ...]:
+    """Return the default ordered detector list.
+
+    Cisco scanner detectors run first so their preflight signals are available
+    before native data-flow and prompt detectors evaluate the same action.
+    This ordering is intentional: scanner evidence can influence policy before
+    runtime detectors produce additional signals.
+    """
     return (
         CiscoMcpPreflightDetector(),
         CiscoSkillPreflightDetector(),

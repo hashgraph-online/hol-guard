@@ -1253,6 +1253,37 @@ def _render_scan(console: Console, payload: dict[str, object]) -> None:
     _render_cisco_evidence(console, payload)
 
 
+def _render_deep_scan(console: Console, payload: dict[str, object]) -> None:
+    scan_type = str(payload.get("scan_type") or "unknown")
+    status = str(payload.get("status") or "unknown")
+    body = Table.grid(padding=(0, 1))
+    body.add_row("Type", scan_type)
+    body.add_row("Status", _cisco_status_text(status))
+    body.add_row("Mode", str(payload.get("mode") or "auto"))
+    body.add_row("Findings", str(payload.get("total_findings") or 0))
+    body.add_row("Targets", str(payload.get("targets_scanned") or 0))
+    body.add_row("Analyzers", str(payload.get("analyzers_used") or 0))
+    if payload.get("message"):
+        body.add_row("Message", str(payload["message"]))
+    console.print(Panel(body, title=f"Deep scan — {scan_type}", border_style="cyan"))
+    findings = _coerce_dict_list(payload.get("findings"))
+    if findings:
+        table = Table(box=box.SIMPLE_HEAVY, show_header=True)
+        table.add_column("Severity", style="bold")
+        table.add_column("Title")
+        table.add_column("Category")
+        for finding in findings[:50]:
+            sev = str(finding.get("severity") or "info")
+            table.add_row(
+                sev,
+                str(finding.get("title") or finding.get("rule_id") or "unknown"),
+                str(finding.get("category") or ""),
+            )
+        if len(findings) > 50:
+            table.add_row("…", f"and {len(findings) - 50} more", "")
+        console.print(table)
+
+
 def _render_explain(console: Console, payload: dict[str, object]) -> None:
     advisories = _coerce_dict_list(payload.get("advisories"))
     if "artifact_snapshot" in payload:
@@ -1996,5 +2027,6 @@ _RENDERERS: dict[str, Any] = {
     "protect": _render_protect,
     "preflight": _render_preflight,
     "scan": _render_scan,
+    "deep-scan": _render_deep_scan,
     "explain": _render_explain,
 }

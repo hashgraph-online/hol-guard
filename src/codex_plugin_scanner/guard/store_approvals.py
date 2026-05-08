@@ -526,7 +526,7 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "action_envelope_json": _optional_json_object(row["action_envelope_json"]),
         "decision_v2_json": _optional_json_object(row["decision_v2_json"]),
         "fallback_cli_command": row["fallback_cli_command"],
-        "scanner_evidence": _safe_json_object_list(row["scanner_evidence_json"]),
+        "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
         "review_command": str(row["review_command"]),
         "approval_url": str(row["approval_url"]),
         "status": str(row["status"]),
@@ -548,7 +548,7 @@ def _safe_json_list(value: object) -> list[object]:
     return list(parsed) if isinstance(parsed, list) else []
 
 
-def _safe_json_object_list(value: object) -> list[dict[str, object]]:
+def _json_object_list(value: object) -> list[dict[str, object]]:
     if value is None:
         return []
     try:

@@ -24,12 +24,13 @@ from .models import GuardApprovalRequest, GuardArtifact, GuardReceipt, GuardRunt
 from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
 from .store_approvals import (
-    add_approval_request as persist_approval_request,
-)
-from .store_approvals import (
+    _json_object_list,
     approval_index_statements,
     approval_schema_statement,
     backfill_approval_queue_columns,
+)
+from .store_approvals import (
+    add_approval_request as persist_approval_request,
 )
 from .store_approvals import (
     count_approval_requests as count_pending_approval_requests,
@@ -3126,16 +3127,6 @@ def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if isinstance(item, str) and item]
-
-
-def _json_object_list(value: object) -> list[dict[str, object]]:
-    try:
-        parsed = json.loads(str(value))
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return []
-    if not isinstance(parsed, list):
-        return []
-    return [dict(item) for item in parsed if isinstance(item, dict)]
 
 
 def _transport_value(value: object) -> str:
