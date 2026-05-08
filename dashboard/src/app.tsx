@@ -333,17 +333,20 @@ export function App() {
   }) => {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
-    const result = await resolveRequestWithQueueResult(payload);
-    const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
-    if (nextId !== null) {
-      setResolutionMessage(null);
-      navigate(`/requests/${nextId}`);
-    } else {
-      setResolutionMessage(result.resolution_summary || "Decision saved. Return to your chat and retry the command.");
-      navigate("/inbox");
+    try {
+      const result = await resolveRequestWithQueueResult(payload);
+      const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
+      if (nextId !== null) {
+        setResolutionMessage(null);
+        navigate(`/requests/${nextId}`);
+      } else {
+        setResolutionMessage(result.resolution_summary || "Decision saved. Return to your chat and retry the command.");
+        navigate("/inbox");
+      }
+      await refreshStateAfterAction();
+    } finally {
+      resolutionInFlight.current = false;
     }
-    await refreshStateAfterAction();
-    resolutionInFlight.current = false;
   }, [requests, refreshStateAfterAction, setResolutionMessage]);
 
   const handleBulkApprove = useCallback(async (ids: string[]) => {
@@ -380,12 +383,15 @@ export function App() {
   }, []);
 
   const handleConnectHarness = useCallback((_harness: string) => {
+    navigate("/fleet");
   }, []);
 
   const handleTestHarness = useCallback((_harness: string) => {
+    navigate("/inbox");
   }, []);
 
   const handleRepairHarness = useCallback((_harness: string) => {
+    navigate("/fleet");
   }, []);
 
   return (
