@@ -171,6 +171,7 @@ export type GuardRuntimeSnapshot = {
   headline_state: GuardHeadlineState;
   headline_label: string;
   headline_detail: string;
+  thread_count?: number;
   sync_configured: boolean;
   cloud_state: "local_only" | "paired_waiting" | "paired_active";
   cloud_state_label: string;

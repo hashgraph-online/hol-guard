@@ -15562,6 +15562,7 @@ function SettingsWorkspace() {
   const [exporting, setExporting] = reactExports.useState(false);
   const [repairing, setRepairing] = reactExports.useState(false);
   const [actionMessage, setActionMessage] = reactExports.useState(null);
+  const [perfSnapshot, setPerfSnapshot] = reactExports.useState(null);
   const saveSuccessTimerRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     let cancelled = false;
@@ -15578,6 +15579,17 @@ function SettingsWorkspace() {
           message: error instanceof Error ? error.message : "Unable to load Guard settings."
         });
       }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    fetchRuntimeSnapshot().then((snapshot) => {
+      if (!cancelled) setPerfSnapshot(snapshot);
+    }).catch((error) => {
+      console.error("Failed to fetch runtime snapshot:", error);
     });
     return () => {
       cancelled = true;
@@ -15942,6 +15954,10 @@ function SettingsWorkspace() {
             /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { label: "Billing features", checked: draft.billing, onChange: handleBooleanChange("billing") })
           ] })
         ] }),
+        perfSnapshot !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Runtime diagnostics" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticsPerfCard, { snapshot: perfSnapshot }) })
+        ] }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-red-100 bg-red-50/50 p-5 shadow-sm", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Data management" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-3", children: [
@@ -15974,6 +15990,27 @@ function SettingsWorkspace() {
         ] })
       ] })
     ] })
+  ] });
+}
+function DiagnosticsPerfCard(props) {
+  const { snapshot } = props;
+  const threadCount = snapshot.thread_count;
+  const daemonPort = snapshot.runtime_state?.daemon_port ?? null;
+  const startedAt = snapshot.runtime_state?.started_at ?? null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Runtime performance" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Live process metrics for this Guard daemon session." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-2 gap-2", children: [
+      threadCount !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Total interpreter threads", value: String(threadCount) }) : null,
+      daemonPort !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Daemon port", value: String(daemonPort) }) : null,
+      startedAt !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Started", value: new Date(startedAt).toLocaleTimeString() }) : null
+    ] })
+  ] });
+}
+function PerfMetric(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl bg-surface-1 px-3 py-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono text-sm font-semibold text-brand-dark", children: props.value })
   ] });
 }
 function SettingSelect(props) {

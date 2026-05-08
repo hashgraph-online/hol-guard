@@ -13,9 +13,9 @@ import {
   SectionLabel,
   Tag
 } from "./approval-center-primitives";
-import { clearEvidence, exportDiagnostics, fetchSettings, updateSettings, clearPolicy, repairApprovalCenter } from "./guard-api";
+import { clearEvidence, exportDiagnostics, fetchRuntimeSnapshot, fetchSettings, updateSettings, clearPolicy, repairApprovalCenter } from "./guard-api";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
-import type { GuardSettings, GuardSettingsPayload } from "./guard-types";
+import type { GuardRuntimeSnapshot, GuardSettings, GuardSettingsPayload } from "./guard-types";
 
 type SettingsState =
   | { kind: "loading" }
@@ -165,6 +165,7 @@ export function SettingsWorkspace() {
   const [exporting, setExporting] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [perfSnapshot, setPerfSnapshot] = useState<GuardRuntimeSnapshot | null>(null);
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -184,6 +185,20 @@ export function SettingsWorkspace() {
             message: error instanceof Error ? error.message : "Unable to load Guard settings."
           });
         }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchRuntimeSnapshot()
+      .then((snapshot) => {
+        if (!cancelled) setPerfSnapshot(snapshot);
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to fetch runtime snapshot:", error);
       });
     return () => {
       cancelled = true;
@@ -610,6 +625,14 @@ export function SettingsWorkspace() {
               <SettingToggle label="Billing features" checked={draft.billing} onChange={handleBooleanChange("billing")} />
             </div>
           </div>
+          {perfSnapshot !== null ? (
+            <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
+              <SectionLabel>Runtime diagnostics</SectionLabel>
+              <div className="mt-4">
+                <DiagnosticsPerfCard snapshot={perfSnapshot} />
+              </div>
+            </div>
+          ) : null}
           <div className="rounded-[1.75rem] border border-red-100 bg-red-50/50 p-5 shadow-sm">
             <SectionLabel>Data management</SectionLabel>
             <div className="mt-4 space-y-3">
@@ -678,6 +701,41 @@ export function SettingsWorkspace() {
           </div>
         </aside>
       </section>
+    </div>
+  );
+}
+
+function DiagnosticsPerfCard(props: { snapshot: GuardRuntimeSnapshot }) {
+  const { snapshot } = props;
+  const threadCount = snapshot.thread_count;
+  const daemonPort = snapshot.runtime_state?.daemon_port ?? null;
+  const startedAt = snapshot.runtime_state?.started_at ?? null;
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-brand-dark">Runtime performance</h3>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+        Live process metrics for this Guard daemon session.
+      </p>
+      <dl className="mt-3 grid grid-cols-2 gap-2">
+        {threadCount !== undefined ? (
+          <PerfMetric label="Total interpreter threads" value={String(threadCount)} />
+        ) : null}
+        {daemonPort !== null ? (
+          <PerfMetric label="Daemon port" value={String(daemonPort)} />
+        ) : null}
+        {startedAt !== null ? (
+          <PerfMetric label="Started" value={new Date(startedAt).toLocaleTimeString()} />
+        ) : null}
+      </dl>
+    </div>
+  );
+}
+
+function PerfMetric(props: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-surface-1 px-3 py-2">
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{props.label}</dt>
+      <dd className="mt-0.5 font-mono text-sm font-semibold text-brand-dark">{props.value}</dd>
     </div>
   );
 }
