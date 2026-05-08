@@ -383,7 +383,7 @@ export function App() {
   }, []);
 
   const handleConnectHarness = useCallback((_harness: string) => {
-    navigate("/fleet");
+    navigate("/settings");
   }, []);
 
   const handleTestHarness = useCallback((_harness: string) => {
@@ -391,7 +391,7 @@ export function App() {
   }, []);
 
   const handleRepairHarness = useCallback((_harness: string) => {
-    navigate("/fleet");
+    navigate("/settings");
   }, []);
 
   return (

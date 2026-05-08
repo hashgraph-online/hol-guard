@@ -204,20 +204,12 @@ function MobileQueueDrawer(props: {
   onOpenRequest: (requestId: string) => void;
   onBulkApprove?: (ids: string[]) => void;
 }) {
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.target === e.currentTarget) props.onClose();
-    },
-    [props.onClose]
-  );
-
   return (
     <div
       className="fixed inset-0 z-50 flex lg:hidden"
-      onClick={handleBackdropClick}
     >
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-      <div className="relative ml-0 flex w-full max-w-sm flex-col overflow-hidden bg-white shadow-2xl">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={props.onClose} />
+      <div className="relative ml-0 flex w-full max-w-sm flex-col overflow-hidden bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <span className="text-sm font-semibold text-brand-dark">
             Review Queue ({props.requests.length})
