@@ -123,10 +123,16 @@ class TestNoDashboardApprovalURLWake:
     def test_approval_url_exposed_without_browser_open(self, tmp_path, monkeypatch) -> None:
         """Guard must provide an approval URL for CLI/headless consumers
         even when webbrowser.open is never called."""
+        import webbrowser
+
         guard_home = tmp_path / "guard-home"
         port = 5703
         browser_opens: list[str] = []
 
+        def _fake_browser_open(url: str, *_args, **_kwargs) -> None:
+            browser_opens.append(url)
+
+        monkeypatch.setattr(webbrowser, "open", _fake_browser_open)
         monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
         monkeypatch.setattr(
             daemon_manager_module,
@@ -137,7 +143,7 @@ class TestNoDashboardApprovalURLWake:
         url = daemon_manager_module.ensure_guard_daemon(guard_home)
 
         assert url is not None
-        assert len(browser_opens) == 0, "No browser should have been opened by ensure_guard_daemon"
+        assert len(browser_opens) == 0, "ensure_guard_daemon must not open a browser on its own"
 
     def test_daemon_wake_survives_stale_state_file(self, tmp_path, monkeypatch) -> None:
         """When the state file references a dead process, the daemon must be retired
@@ -150,9 +156,9 @@ class TestNoDashboardApprovalURLWake:
         stale_state = {
             "pid": 99999,
             "port": 4000,
-            "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-            "source_root": daemon_manager_module._current_guard_daemon_source_root(),
-            "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
+            "compatibility_version": "0.0.0-stale",
+            "source_root": "/tmp/old-install/guard",
+            "runtime_fingerprint": "stale-fingerprint",
         }
         url_iter = iter([None, None, f"http://127.0.0.1:{port}"])
         monkeypatch.setattr(daemon_manager_module, "_load_state", lambda _gh: stale_state)
@@ -161,7 +167,12 @@ class TestNoDashboardApprovalURLWake:
             "load_guard_daemon_url",
             lambda _gh: next(url_iter, f"http://127.0.0.1:{port}"),
         )
-        monkeypatch.setattr(daemon_manager_module, "_retire_guard_daemon_process", lambda _state: None)
+        retire_calls: list[dict] = []
+        monkeypatch.setattr(
+            daemon_manager_module,
+            "_retire_guard_daemon_process",
+            lambda state: retire_calls.append(state),
+        )
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _gh: False)
         monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
         monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", _make_start_mock(guard_home, port))
@@ -174,3 +185,4 @@ class TestNoDashboardApprovalURLWake:
         url = daemon_manager_module.ensure_guard_daemon(guard_home)
 
         assert url == f"http://127.0.0.1:{port}"
+        assert len(retire_calls) >= 1, "_retire_guard_daemon_process must be called to recover stale daemon state"
