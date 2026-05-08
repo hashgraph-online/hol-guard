@@ -404,7 +404,7 @@ def run_cisco_mcp_scan(
         if timeout_seconds is not None:
             scan_awaitable = asyncio.wait_for(scan_awaitable, timeout=timeout_seconds)
         findings, targets_scanned = _run_awaitable(scan_awaitable)
-    except TimeoutError:
+    except (TimeoutError, asyncio.TimeoutError):
         return _build_summary(
             status=CiscoIntegrationStatus.TIMED_OUT,
             message="Cisco MCP scanner timed out before it could finish.",
