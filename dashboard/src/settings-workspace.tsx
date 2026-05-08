@@ -196,7 +196,9 @@ export function SettingsWorkspace() {
       .then((snapshot) => {
         if (!cancelled) setPerfSnapshot(snapshot);
       })
-      .catch(() => { /* perf data is best-effort */ });
+      .catch((error: unknown) => {
+        console.error("Failed to fetch runtime snapshot:", error);
+      });
     return () => {
       cancelled = true;
     };
@@ -672,18 +674,18 @@ export function SettingsWorkspace() {
 
 function DiagnosticsPerfCard(props: { snapshot: GuardRuntimeSnapshot }) {
   const { snapshot } = props;
-  const threadCount = snapshot.thread_count ?? null;
+  const threadCount = snapshot.thread_count ?? undefined;
   const daemonPort = snapshot.runtime_state?.daemon_port ?? null;
   const startedAt = snapshot.runtime_state?.started_at ?? null;
   return (
     <div>
-      <p className="text-sm font-semibold text-brand-dark">Runtime performance</p>
+      <h3 className="text-sm font-semibold text-brand-dark">Runtime performance</h3>
       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
         Live process metrics for this Guard daemon session.
       </p>
       <dl className="mt-3 grid grid-cols-2 gap-2">
-        {threadCount !== null ? (
-          <PerfMetric label="Active threads" value={String(threadCount)} />
+        {threadCount !== undefined ? (
+          <PerfMetric label="Total interpreter threads" value={String(threadCount)} />
         ) : null}
         {daemonPort !== null ? (
           <PerfMetric label="Daemon port" value={String(daemonPort)} />

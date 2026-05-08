@@ -15440,7 +15440,8 @@ function SettingsWorkspace() {
     let cancelled = false;
     fetchRuntimeSnapshot().then((snapshot) => {
       if (!cancelled) setPerfSnapshot(snapshot);
-    }).catch(() => {
+    }).catch((error) => {
+      console.error("Failed to fetch runtime snapshot:", error);
     });
     return () => {
       cancelled = true;
@@ -15822,14 +15823,14 @@ function SettingsWorkspace() {
 }
 function DiagnosticsPerfCard(props) {
   const { snapshot } = props;
-  const threadCount = snapshot.thread_count ?? null;
+  const threadCount = snapshot.thread_count ?? void 0;
   const daemonPort = snapshot.runtime_state?.daemon_port ?? null;
   const startedAt = snapshot.runtime_state?.started_at ?? null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Runtime performance" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Runtime performance" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Live process metrics for this Guard daemon session." }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-2 gap-2", children: [
-      threadCount !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Active threads", value: String(threadCount) }) : null,
+      threadCount !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Total interpreter threads", value: String(threadCount) }) : null,
       daemonPort !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Daemon port", value: String(daemonPort) }) : null,
       startedAt !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Started", value: new Date(startedAt).toLocaleTimeString() }) : null
     ] })
