@@ -1793,9 +1793,7 @@ class GuardStore:
                 (harness,),
             ).fetchall()
             matching_ids = [
-                str(row["request_id"])
-                for row in rows
-                if _path_within_workspace(str(row["config_path"]), workspace)
+                str(row["request_id"]) for row in rows if _path_within_workspace(str(row["config_path"]), workspace)
             ]
             for chunk in _chunks(matching_ids, _SQLITE_ID_BATCH_SIZE):
                 placeholders = ", ".join("?" for _ in chunk)
