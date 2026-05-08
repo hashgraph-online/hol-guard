@@ -56,6 +56,9 @@ import {
   sortQueue,
   searchQueue,
   groupDuplicates,
+  isReadOnlyQueueGroup,
+  bulkApproveActionCount,
+  bulkApprovePrimaryIds,
   type QueueSortDirection,
 } from "./queue-state";
 import type {
@@ -350,18 +353,19 @@ function QueueBrowser(props: {
     setPage((value) => Math.min(totalPages, value + 1));
   }, [totalPages]);
 
-  const isIdenticalDuplicateGroup = useCallback(
-    (group: ReturnType<typeof groupDuplicates>[number]) =>
-      group.duplicateCount > 0 &&
-      group.primary.policy_action !== "block" &&
-      (group.primary.action_envelope_json?.action_type === "file_read" ||
-        group.primary.artifact_type === "file_read_request"),
+  const isReadOnlyGroup = useCallback(
+    (group: ReturnType<typeof groupDuplicates>[number]) => isReadOnlyQueueGroup(group),
     []
   );
 
   const bulkEligibleGroups = useMemo(
-    () => groups.filter(isIdenticalDuplicateGroup),
-    [groups, isIdenticalDuplicateGroup]
+    () => groups.filter(isReadOnlyGroup),
+    [groups, isReadOnlyGroup]
+  );
+
+  const bulkEligibleActionCount = useMemo(
+    () => bulkApproveActionCount(bulkEligibleGroups),
+    [bulkEligibleGroups]
   );
 
   const showBulkApprove =
@@ -370,7 +374,7 @@ function QueueBrowser(props: {
     bulkEligibleGroups.length === groups.length;
 
   const handleBulkApprove = useCallback(() => {
-    const ids = bulkEligibleGroups.flatMap((g) => [g.primary.request_id, ...g.duplicateIds]);
+    const ids = bulkApprovePrimaryIds(bulkEligibleGroups);
     props.onBulkApprove?.(ids);
   }, [props.onBulkApprove, bulkEligibleGroups]);
 
@@ -383,7 +387,7 @@ function QueueBrowser(props: {
             onClick={handleBulkApprove}
             className="rounded-full border border-brand-blue/30 bg-white px-4 py-2 text-sm font-medium text-brand-blue shadow-sm transition-colors hover:bg-brand-blue/5"
           >
-            Approve all read-only actions ({bulkEligibleGroups.length})
+            Approve all read-only actions ({bulkEligibleActionCount})
           </button>
         </div>
       )}
