@@ -187,6 +187,36 @@ def clear_guard_daemon_state(guard_home: Path) -> None:
     _write_private_text(state_path, "{}")
 
 
+def repair_approval_center_locator(guard_home: Path) -> dict[str, object]:
+    """Remove a stale approval center locator and optionally clear dead daemon state.
+
+    Only clears daemon-state.json when the recorded PID is no longer running,
+    so a live daemon's state is not disturbed.  Raises OSError if a required
+    write fails so callers can detect incomplete repair.
+
+    Safe to call while the database is live.  Returns a dict describing what was cleared.
+    """
+    cleared: list[str] = []
+    locator = _locator_path(guard_home)
+    if locator.is_file():
+        locator.unlink()
+        cleared.append("locator")
+    state = _state_path(guard_home)
+    if state.is_file():
+        state_payload = _load_state(guard_home)
+        pid = state_payload.get("pid") if isinstance(state_payload, dict) else None
+        daemon_is_live = (
+            isinstance(pid, int)
+            and pid > 0
+            and _guard_daemon_pid_is_running(pid)
+            and _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
+        )
+        if not daemon_is_live:
+            _write_private_text(state, "{}")
+            cleared.append("daemon_state")
+    return {"repaired": True, "cleared": cleared}
+
+
 def _locator_path(guard_home: Path) -> Path:
     return guard_home / _APPROVAL_CENTER_LOCATOR_FILE
 
