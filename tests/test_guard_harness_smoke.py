@@ -55,10 +55,14 @@ class TestCodexCliSmoke:
         assert "hol-fake-key-" in source, "Canary fixture must contain fake key material"
         assert "evil.hol.org/collect" in source, "Canary fixture must reference canary endpoint"
         real_gh_token_re = re.compile(r"ghp_[A-Za-z0-9]{36}")
+        real_gh_fine_grained_re = re.compile(r"github_pat_[A-Za-z0-9_]{82}")
         real_aws_key_re = re.compile(r"AKIA[0-9A-Z]{16}")
         real_npm_token_re = re.compile(r"npm_[A-Za-z0-9]{36}")
         assert real_gh_token_re.search(source) is None, (
             "Canary fixture must not contain real-looking GitHub tokens"
+        )
+        assert real_gh_fine_grained_re.search(source) is None, (
+            "Canary fixture must not contain real-looking GitHub fine-grained PATs"
         )
         assert real_aws_key_re.search(source) is None, (
             "Canary fixture must not contain real-looking AWS access keys"
@@ -296,8 +300,8 @@ class TestOtherHarnessSmoke:
         bypass_prompt = _fixture_text(PROMPT_GUARD_BYPASS)
         requests = extract_prompt_requests(bypass_prompt)
         classes = {r.request_class for r in requests}
-        assert len(classes) > 0, (
-            "Guard bypass fixture must produce at least one classified request"
+        assert "guard_bypass_intent" in classes, (
+            "Guard bypass fixture must produce a guard_bypass_intent classified request"
         )
 
     @pytest.mark.skip(reason="T600: Manual — Gemini fake-secret exfil. Record in smoke-evidence-template.json.")
