@@ -109,7 +109,12 @@ from ..runtime.secret_sensitivity import (
 from ..runtime.signals import RiskSignalV2
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
-from .approval_commands import add_approval_parser, run_approval_command
+from .approval_commands import (
+    add_approval_parser,
+    run_approval_command,
+    run_approval_open_command,
+    run_approval_retry_hint_command,
+)
 from .bootstrap import DEFAULT_ALIAS_NAME, build_guard_bootstrap_payload
 from .connect_flow import (
     DEFAULT_GUARD_CONNECT_URL,
@@ -1152,6 +1157,15 @@ def run_guard_command(
         return 0
 
     if args.guard_command == "approvals":
+        approvals_command = getattr(args, "approvals_command", None)
+        if approvals_command == "open":
+            payload, exit_code = run_approval_open_command(args, store=store)
+            _emit("approvals", payload, getattr(args, "json", False))
+            return exit_code
+        if approvals_command == "retry-hint":
+            payload, exit_code = run_approval_retry_hint_command(args, store=store)
+            _emit("approvals", payload, getattr(args, "json", False))
+            return exit_code
         payload = run_approval_command(args, store=store, workspace=workspace)
         _emit("approvals", payload, getattr(args, "json", False))
         return int(payload.get("exit_code", 0))
