@@ -625,10 +625,17 @@ export function SettingsWorkspace() {
               <SettingToggle label="Billing features" checked={draft.billing} onChange={handleBooleanChange("billing")} />
             </div>
           </div>
+          {perfSnapshot !== null ? (
+            <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
+              <SectionLabel>Runtime diagnostics</SectionLabel>
+              <div className="mt-4">
+                <DiagnosticsPerfCard snapshot={perfSnapshot} />
+              </div>
+            </div>
+          ) : null}
           <div className="rounded-[1.75rem] border border-red-100 bg-red-50/50 p-5 shadow-sm">
             <SectionLabel>Data management</SectionLabel>
-            <div className="mt-4 space-y-3">
-              <div>
+            <div className="mt-4 space-y-3">              <div>
                 <p className="text-sm font-semibold text-brand-dark">Clear saved approvals</p>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                   Removes all stored allow/block decisions. Guard will ask again for previously approved actions.
@@ -672,9 +679,6 @@ export function SettingsWorkspace() {
                   </ActionButton>
                 </div>
               </div>
-              {perfSnapshot !== null ? (
-                <DiagnosticsPerfCard snapshot={perfSnapshot} />
-              ) : null}
               {actionMessage ? (
                 <p className="guard-fade-in text-sm leading-6 text-brand-dark/70">{actionMessage}</p>
               ) : null}
