@@ -10,6 +10,19 @@ from ..approvals import apply_approval_resolution, build_runtime_snapshot
 from ..daemon import load_guard_daemon_url
 from ..store import GuardStore
 
+_HARNESS_RETRY_COPY: dict[str, str] = {
+    "codex": "Return to Codex and retry",
+    "claude-code": "Return to Claude and retry",
+    "opencode": "Return to OpenCode and retry",
+    "copilot": "Return to Copilot and retry",
+}
+_DEFAULT_RETRY_COPY = "Return to your AI assistant and retry"
+
+
+def _build_retry_hint(action: str, harness: str) -> dict[str, str]:
+    title = "Approved. Retry in chat." if action == "allow" else "Blocked. Guard will remember this decision."
+    return {"title": title, "body": _HARNESS_RETRY_COPY.get(harness, _DEFAULT_RETRY_COPY)}
+
 
 def add_approval_parser(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
@@ -56,6 +69,22 @@ def add_approval_parser(
     )
     add_common_args(clear_history_parser)
     clear_history_parser.add_argument("--json", action="store_true")
+
+    open_parser = approvals_subparsers.add_parser(
+        "open",
+        help="Show the approval URL for a pending request",
+    )
+    open_parser.add_argument("request_id", help="The approval request ID to open")
+    add_common_args(open_parser)
+    open_parser.add_argument("--json", action="store_true")
+
+    retry_hint_parser = approvals_subparsers.add_parser(
+        "retry-hint",
+        help="Print the retry hint for a resolved approval request",
+    )
+    retry_hint_parser.add_argument("request_id", help="The approval request ID to get the retry hint for")
+    add_common_args(retry_hint_parser)
+    retry_hint_parser.add_argument("--json", action="store_true")
 
 
 def run_approval_command(
@@ -113,6 +142,35 @@ def run_approval_command(
         now=_now(),
     )
     return {"resolved": True, "item": item}
+
+
+def run_approval_open_command(
+    args: argparse.Namespace,
+    *,
+    store: GuardStore,
+) -> tuple[dict[str, object], int]:
+    request_id = args.request_id
+    item = store.get_approval_request(request_id)
+    if item is None:
+        return {"error": "not_found", "request_id": request_id}, 1
+    return {"request_id": request_id, "approval_url": str(item.get("approval_url", ""))}, 0
+
+
+def run_approval_retry_hint_command(
+    args: argparse.Namespace,
+    *,
+    store: GuardStore,
+) -> tuple[dict[str, object], int]:
+    request_id = args.request_id
+    item = store.get_approval_request(request_id)
+    if item is None:
+        return {"error": "not_found", "request_id": request_id}, 1
+    status = str(item.get("status", ""))
+    if status != "resolved":
+        return {"error": "not_resolved", "status": status, "request_id": request_id}, 1
+    resolution_action = str(item.get("resolution_action", ""))
+    harness = str(item.get("harness", ""))
+    return _build_retry_hint(resolution_action, harness), 0
 
 
 def _now() -> str:
