@@ -36,6 +36,7 @@ def approval_schema_statement() -> str:
            risk_headline text,
             action_envelope_json text,
             decision_v2_json text,
+            fallback_cli_command text,
             review_command text not null,
            approval_url text not null,
           status text not null,
@@ -70,7 +71,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
                 recommended_scope = ?, changed_fields_json = ?, source_scope = ?, config_path = ?, workspace = ?,
                 launch_target = ?, transport = ?, risk_summary = ?, risk_signals_json = ?,
                 artifact_label = ?, source_label = ?, trigger_summary = ?, why_now = ?, launch_summary = ?,
-                risk_headline = ?, action_envelope_json = ?, decision_v2_json = ?,
+                risk_headline = ?, action_envelope_json = ?, decision_v2_json = ?, fallback_cli_command = ?,
                 review_command = ?, approval_url = ?, created_at = ?
             where request_id = ?
             """,
@@ -97,6 +98,11 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
                 request.risk_headline,
                 json.dumps(request.action_envelope_json) if request.action_envelope_json is not None else None,
                 json.dumps(request.decision_v2_json) if request.decision_v2_json is not None else None,
+                (
+                    _rewrite_review_command(request.fallback_cli_command, request_id)
+                    if request.fallback_cli_command
+                    else None
+                ),
                 review_command,
                 approval_url,
                 now,
@@ -111,10 +117,10 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
           recommended_scope, changed_fields_json, source_scope, config_path, workspace,
            launch_target, transport, risk_summary,
            risk_signals_json, artifact_label, source_label, trigger_summary, why_now, launch_summary, risk_headline,
-            action_envelope_json, decision_v2_json, review_command,
+            action_envelope_json, decision_v2_json, fallback_cli_command, review_command,
             approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
           )
-          values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             request.request_id,
@@ -142,6 +148,7 @@ def add_approval_request(connection: sqlite3.Connection, request: GuardApprovalR
             request.risk_headline,
             json.dumps(request.action_envelope_json) if request.action_envelope_json is not None else None,
             json.dumps(request.decision_v2_json) if request.decision_v2_json is not None else None,
+            request.fallback_cli_command,
             request.review_command,
             request.approval_url,
             "pending",
@@ -211,7 +218,8 @@ def list_approval_requests(
         select request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
                recommended_scope, changed_fields_json, source_scope, config_path, workspace, launch_target, transport,
                 risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
-                launch_summary, risk_headline, action_envelope_json, decision_v2_json, review_command,
+                launch_summary, risk_headline, action_envelope_json, decision_v2_json,
+                fallback_cli_command, review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
         from approval_requests
         {where_clause}
@@ -230,7 +238,8 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
         select request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
                recommended_scope, changed_fields_json, source_scope, config_path, workspace, launch_target, transport,
                 risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
-                launch_summary, risk_headline, action_envelope_json, decision_v2_json, review_command,
+                launch_summary, risk_headline, action_envelope_json, decision_v2_json,
+                fallback_cli_command, review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
         from approval_requests
         where request_id = ?
@@ -311,6 +320,7 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "risk_headline": row["risk_headline"],
         "action_envelope_json": _optional_json_object(row["action_envelope_json"]),
         "decision_v2_json": _optional_json_object(row["decision_v2_json"]),
+        "fallback_cli_command": row["fallback_cli_command"],
         "review_command": str(row["review_command"]),
         "approval_url": str(row["approval_url"]),
         "status": str(row["status"]),
