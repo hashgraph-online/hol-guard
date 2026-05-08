@@ -91,12 +91,12 @@ assert(healthyApproval.detail.includes("http://localhost:7392/approval"), "T738:
 
 const nullRuntimeSnapshot: GuardRuntimeSnapshot = { ...baseSnapshot, runtime_state: null };
 const offlineApproval = resolveApprovalCenterHealth(nullRuntimeSnapshot);
-assert(offlineApproval.state === "stale", "T738: null runtime_state should be stale");
+assert(offlineApproval.state === "stale", "T738: null runtime_state (non-setup) should be stale");
 assert(offlineApproval.label.toLowerCase().includes("offline"), "T738: stale label should mention offline");
 
-const setupSnapshot: GuardRuntimeSnapshot = { ...baseSnapshot, headline_state: "setup" };
+const setupSnapshot: GuardRuntimeSnapshot = { ...baseSnapshot, runtime_state: null, headline_state: "setup" };
 const startingApproval = resolveApprovalCenterHealth(setupSnapshot);
-assert(startingApproval.state === "starting", "T738: setup headline should be starting");
+assert(startingApproval.state === "starting", "T738: null runtime_state + setup headline should be starting");
 assert(startingApproval.label.toLowerCase().includes("starting"), "T738: starting label should say starting");
 
 const noUrlSnapshot: GuardRuntimeSnapshot = { ...baseSnapshot, approval_center_url: null };

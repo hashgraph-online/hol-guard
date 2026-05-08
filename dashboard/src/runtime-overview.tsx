@@ -50,17 +50,17 @@ export type ApprovalCenterHealthCopy = {
 
 export function resolveApprovalCenterHealth(snapshot: GuardRuntimeSnapshot): ApprovalCenterHealthCopy {
   if (snapshot.runtime_state === null) {
+    if (snapshot.headline_state === "setup") {
+      return {
+        state: "starting",
+        label: "Approval center starting",
+        detail: "Guard is setting up the local approval center. This takes a few seconds.",
+      };
+    }
     return {
       state: "stale",
       label: "Approval center offline",
       detail: "The local approval center is not running. Start Guard to restore the approval link.",
-    };
-  }
-  if (snapshot.headline_state === "setup") {
-    return {
-      state: "starting",
-      label: "Approval center starting",
-      detail: "Guard is setting up the local approval center. This takes a few seconds.",
     };
   }
   if (snapshot.approval_center_url === null) {
@@ -73,7 +73,7 @@ export function resolveApprovalCenterHealth(snapshot: GuardRuntimeSnapshot): App
   return {
     state: "ready",
     label: "Approval center ready",
-    detail: "The approval center is running and accepting requests at " + snapshot.approval_center_url + ".",
+    detail: `The approval center is running and accepting requests at ${snapshot.approval_center_url}.`,
   };
 }
 
