@@ -274,6 +274,10 @@ class TestFalsePositiveSourceSearch:
         assert "safe-decode.content" not in detectors, (
             f"Benign source search should not trigger safe-decode detector; got {detectors}"
         )
+        outcome = _compose(action, context)
+        assert outcome.action != "block", (
+            f"Benign source search prompt should not be blocked; got action={outcome.action!r}"
+        )
 
 
 class TestFalsePositiveFakeToken:
@@ -286,6 +290,10 @@ class TestFalsePositiveFakeToken:
         assert "secret.path" not in detectors, (
             f"Docs file read should not trigger secret.path; got {detectors}"
         )
+        outcome = _compose(action, context)
+        assert outcome.action != "block", (
+            f"Docs file read should not be blocked; got action={outcome.action!r}"
+        )
 
     def test_benign_nvmrc_fake_creds_file_read_has_no_secret_path_signal(self, tmp_path: Path) -> None:
         action = _file_read_action("~/.nvmrc")
@@ -293,6 +301,10 @@ class TestFalsePositiveFakeToken:
         detectors = _run_detectors(action, context)
         assert "secret.path" not in detectors, (
             f"Benign nvmrc file read should not trigger secret.path; got {detectors}"
+        )
+        outcome = _compose(action, context)
+        assert outcome.action != "block", (
+            f"nvmrc file read should not be blocked; got action={outcome.action!r}"
         )
 
 
@@ -308,6 +320,10 @@ class TestFalsePositiveHealthEndpoint:
         detectors = _run_detectors(action, context)
         assert "safe-decode.content" not in detectors, (
             f"Health endpoint fetch should not trigger safe-decode; got {detectors}"
+        )
+        outcome = _compose(action, context)
+        assert outcome.action != "block", (
+            f"Health endpoint prompt should not be blocked; got action={outcome.action!r}"
         )
 
     def test_loopback_health_check_shell_has_no_blocking_signals(self, tmp_path: Path) -> None:
