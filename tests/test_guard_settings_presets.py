@@ -193,7 +193,7 @@ class TestCustomModeActivation:
         assert loaded.security_level == "custom"
         for key in VALID_RISK_ACTION_KEYS:
             action = resolve_risk_action(loaded, key, harness="codex")
-            assert action in ("allow", "warn", "block", "require_approval", "require-reapproval")
+            assert action in ("allow", "warn", "block", "require-reapproval")
 
     def test_applying_preset_after_override_restores_named_preset(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
