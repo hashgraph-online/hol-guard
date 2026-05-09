@@ -13,6 +13,7 @@ import {
 } from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
+import { EMPTY_QUEUE_TITLE } from "./approval-center-utils";
 
 const footerSections = [
   {
@@ -538,7 +539,7 @@ export function WelcomeState(props: {
       <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-brand-green-bg/50 ring-1 ring-brand-green/20">
         <HiMiniShieldCheck className="h-10 w-10 text-brand-green" aria-hidden="true" />
       </div>
-      <h2 className="text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl">No blocked actions</h2>
+      <h2 className="text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl">{EMPTY_QUEUE_TITLE}</h2>
       <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground">
         Guard is still watching your apps. You'll be notified here if something needs your approval.
       </p>

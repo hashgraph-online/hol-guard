@@ -3,6 +3,8 @@ import {
   resolveStoppedCommandText,
   resolveTerminalLabel,
   displayArtifactName,
+  EMPTY_QUEUE_TITLE,
+  STALE_REQUEST_COPY,
 } from "./approval-center-utils";
 import type { GuardActionEnvelope, GuardApprovalRequest } from "./guard-types";
 
@@ -185,4 +187,24 @@ assert(
 assert(
   resolveTerminalLabel(BASE_REQUEST) === "Stopped command",
   "T479-T484: resolveTerminalLabel returns 'Stopped command' when no envelope present"
+);
+
+assert(
+  EMPTY_QUEUE_TITLE === "No blocked actions",
+  'C5: Empty queue shows friendly copy "No blocked actions" — EMPTY_QUEUE_TITLE constant is correct'
+);
+
+assert(
+  EMPTY_QUEUE_TITLE.toLowerCase().includes("no blocked"),
+  'C5: Empty queue title does not say "no items" — uses friendly language instead'
+);
+
+assert(
+  STALE_REQUEST_COPY === "This request was already decided.",
+  'C6: Stale request shows "already decided" copy — STALE_REQUEST_COPY constant is correct'
+);
+
+assert(
+  STALE_REQUEST_COPY.toLowerCase().includes("already decided"),
+  'C6: Stale request copy contains "already decided" — not approve/block buttons'
 );

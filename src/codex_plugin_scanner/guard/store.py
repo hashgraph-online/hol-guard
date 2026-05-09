@@ -99,6 +99,9 @@ from .store_evidence import (
     evidence_index_statements,
     evidence_schema_statement,
 )
+from .store_evidence import (
+    list_evidence as _list_evidence_impl,
+)
 from .store_threat_intel import (
     threat_intel_bundle_schema_statement,
     threat_intel_index_statements,
@@ -716,6 +719,9 @@ class GuardStore:
         with self._connect() as connection:
             for statement in statements:
                 connection.execute(statement)
+            if not self._schema_version_applied(connection, version=4):
+                self._ensure_column(connection, "guard_evidence", "action_identity", "text")
+                self._record_schema_version(connection, version=4)
             for idx_stmt in evidence_index_statements():
                 connection.execute(idx_stmt)
             for idx_stmt in threat_intel_index_statements():
@@ -756,7 +762,8 @@ class GuardStore:
             self._ensure_attachment_column(connection, "lease_id", "text not null default ''")
             self._ensure_attachment_column(connection, "lease_expires_at", "text")
             self._ensure_local_device(connection)
-            self._record_schema_version(connection, version=2)
+            if not self._schema_version_applied(connection, version=2):
+                self._record_schema_version(connection, version=2)
 
     @staticmethod
     def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
@@ -783,12 +790,28 @@ class GuardStore:
         connection.execute(f"alter table approval_requests add column {column_name} {column_type}")
 
     @staticmethod
+    def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, column_type: str) -> None:
+        rows = connection.execute(f"pragma table_info({table_name})").fetchall()
+        existing = {str(row["name"]) for row in rows}
+        if column_name in existing:
+            return
+        connection.execute(f"alter table {table_name} add column {column_name} {column_type}")
+
+    @staticmethod
     def _ensure_attachment_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
         rows = connection.execute("pragma table_info(guard_client_attachments)").fetchall()
         existing = {str(row["name"]) for row in rows}
         if column_name in existing:
             return
         connection.execute(f"alter table guard_client_attachments add column {column_name} {column_type}")
+
+    @staticmethod
+    def _ensure_evidence_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
+        rows = connection.execute("pragma table_info(guard_evidence)").fetchall()
+        existing = {str(row["name"]) for row in rows}
+        if column_name in existing:
+            return
+        connection.execute(f"alter table guard_evidence add column {column_name} {column_type}")
 
     @staticmethod
     def _record_schema_version(connection: sqlite3.Connection, *, version: int) -> None:
@@ -3079,6 +3102,46 @@ class GuardStore:
                 (surface, open_key),
             ).fetchone()
         return row is not None
+
+    def list_evidence(
+        self,
+        *,
+        harness: str | None = None,
+        category: str | None = None,
+        severity: str | None = None,
+        request_id: str | None = None,
+        action_identity: str | None = None,
+        before_cursor: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, object]]:
+        with self._connect() as connection:
+            records = _list_evidence_impl(
+                connection,
+                harness=harness,
+                category=category,
+                severity=severity,
+                request_id=request_id,
+                action_identity=action_identity,
+                before_cursor=before_cursor,
+                limit=limit,
+            )
+        return [
+            {
+                "evidence_id": r.evidence_id,
+                "action_id": r.action_id,
+                "request_id": r.request_id,
+                "harness": r.harness,
+                "workspace": r.workspace,
+                "signal_id": r.signal_id,
+                "category": r.category,
+                "severity": r.severity,
+                "confidence": r.confidence,
+                "summary": r.summary,
+                "action_identity": r.action_identity,
+                "created_at": r.created_at,
+            }
+            for r in records
+        ]
 
     @staticmethod
     def _advisory_cache_key(advisory: dict[str, object]) -> str:

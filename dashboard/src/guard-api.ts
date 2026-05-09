@@ -526,7 +526,7 @@ export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
   const cloudState = "paired_waiting";
   const cloudLabel = "Connected";
   const cloudDetail =
-    "This machine is connected to Guard Cloud, but the first shared proof has not landed yet. Open Watched Apps while the first sync settles.";
+    "This machine is connected to Guard Cloud, but the first protected session has not landed yet. Open Watched Apps while the first sync settles.";
   const dashboardUrl = "https://hol.org/guard";
   const inboxUrl = "https://hol.org/guard/inbox";
   const fleetUrl = "https://hol.org/guard/fleet";
@@ -549,7 +549,7 @@ export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
     headline_detail:
       demoRequests.length > 0
         ? "A blocked action is waiting for review."
-        : "This machine is connected to Guard Cloud and waiting for the first shared proof to appear.",
+        : "This machine is connected to Guard Cloud and waiting for the first protected session to appear.",
     sync_configured: true,
     cloud_state: cloudState,
     cloud_state_label: cloudLabel,
