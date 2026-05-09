@@ -3399,6 +3399,13 @@ def _runtime_stored_policy_action(
         and scope in {"workspace", "publisher", "harness", "global"}
         and _runtime_artifact_risk_classes(artifact)
     ):
+        if scope == "workspace":
+            decision_artifact_id = _optional_string(decision.get("artifact_id"))
+            decision_artifact_hash = _optional_string(decision.get("artifact_hash"))
+            if decision_artifact_id == artifact_id and (
+                decision_artifact_hash is None or decision_artifact_hash == artifact_hash
+            ):
+                return action
         return None
     return action
 
