@@ -13799,21 +13799,21 @@ function EmptyState(props) {
     props.action ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: props.action }) : null
   ] });
 }
-function ActionButton(props) {
-  const className = actionButtonClass(props.variant);
-  if (props.href) {
+function ActionButton({ children, href, variant, disabled, onClick, ...buttonProps }) {
+  const className = actionButtonClass(variant);
+  if (href) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       "a",
       {
-        href: guardAwareHref(props.href),
-        target: props.href.startsWith("https://") ? "_blank" : void 0,
-        rel: props.href.startsWith("https://") ? "noreferrer" : void 0,
+        href: guardAwareHref(href),
+        target: href.startsWith("https://") ? "_blank" : void 0,
+        rel: href.startsWith("https://") ? "noreferrer" : void 0,
         className,
-        children: props.children
+        children
       }
     );
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className, onClick: props.onClick, disabled: props.disabled, children: props.children });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className, onClick, disabled, ...buttonProps, children });
 }
 function ListControls(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px]${props.className ? ` ${props.className}` : ""}`, children: [
@@ -14746,7 +14746,11 @@ function QueueWorkspace(props) {
   if (props.requests.kind === "error") {
     const approvalUrl = props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null;
     const handleOpenDaemon = () => {
-      window.open("http://localhost:7957", "_blank");
+      if (approvalUrl !== null) {
+        window.open(approvalUrl, "_blank", "noopener,noreferrer");
+      } else {
+        void handleRepair();
+      }
     };
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", children: "Guard daemon not responding — click to reconnect." }),
@@ -16659,8 +16663,6 @@ function HomeWorkspace(props) {
         cloudState: snapshot.cloud_state,
         connectUrl: snapshot.connect_url,
         fleetUrl: snapshot.fleet_url,
-        activeInstallsCount: activeInstalls.length,
-        latestReceiptsCount: snapshot.latest_receipts.length,
         onOpenInbox: props.onOpenInbox,
         onOpenFleet: props.onOpenFleet
       }
@@ -16705,7 +16707,6 @@ function HomeWorkspace(props) {
   ] });
 }
 function ProtectionHero(props) {
-  const [testRunning, setTestRunning] = reactExports.useState(false);
   const handlePrimaryCta = reactExports.useCallback(() => {
     if (props.status === "setup_needed") {
       props.onOpenFleet();
@@ -16713,19 +16714,12 @@ function ProtectionHero(props) {
       props.onOpenInbox();
     }
   }, [props.status, props.onOpenInbox, props.onOpenFleet]);
-  const handleRunTest = reactExports.useCallback(() => {
-    setTestRunning(true);
-    fetch("/v1/protect/test").catch(() => void 0).finally(() => {
-      setTestRunning(false);
-    });
-  }, []);
   const heroBg = heroBackgroundClass(props.status);
   const statusBadge = props.status === "needs_decision" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "default", children: [
     props.queuedCount,
     " waiting"
   ] }) : props.status === "setup_needed" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Setup needed" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Protected" });
   const showConnectCta = props.cloudState === "local_only" && !props.syncConfigured;
-  const showTestProtection = props.activeInstallsCount > 0 && props.latestReceiptsCount === 0;
   const showGuardCloud = props.cloudState !== "local_only";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "section",
@@ -16744,13 +16738,12 @@ function ProtectionHero(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold tracking-tight text-brand-dark", children: props.copy }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-3", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handlePrimaryCta, "data-primary": "true", "aria-label": props.ctaLabel, children: props.ctaLabel }),
-            showTestProtection && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRunTest, variant: "secondary", disabled: testRunning, children: testRunning ? "Running test…" : "Run a quick protection test" }),
             showConnectCta && props.status !== "needs_decision" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.connectUrl, variant: "secondary", children: "Connect this machine" })
           ] }),
           showGuardCloud && /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "a",
             {
-              href: "https://hol.org/guard",
+              href: props.fleetUrl,
               target: "_blank",
               rel: "noreferrer",
               className: "inline-flex items-center gap-1 text-sm font-medium text-brand-blue transition-colors hover:text-brand-blue/70",

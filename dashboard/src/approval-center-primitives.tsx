@@ -1,4 +1,4 @@
-import type { ChangeEvent, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ChangeEvent, ReactNode } from "react";
 import {
   HiMiniArrowTopRightOnSquare,
   HiMiniCloud,
@@ -296,29 +296,31 @@ export function EmptyState(props: {
   );
 }
 
-export function ActionButton(props: {
+type ActionButtonProps = {
   children: ReactNode;
   onClick?: () => void;
   href?: string;
   variant?: "primary" | "secondary" | "danger" | "outline" | "ghost" | "success";
   disabled?: boolean;
-}) {
-  const className = actionButtonClass(props.variant);
-  if (props.href) {
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "className" | "onClick" | "type">;
+
+export function ActionButton({ children, href, variant, disabled, onClick, ...buttonProps }: ActionButtonProps) {
+  const className = actionButtonClass(variant);
+  if (href) {
     return (
       <a
-        href={guardAwareHref(props.href)}
-        target={props.href.startsWith("https://") ? "_blank" : undefined}
-        rel={props.href.startsWith("https://") ? "noreferrer" : undefined}
+        href={guardAwareHref(href)}
+        target={href.startsWith("https://") ? "_blank" : undefined}
+        rel={href.startsWith("https://") ? "noreferrer" : undefined}
         className={className}
       >
-        {props.children}
+        {children}
       </a>
     );
   }
   return (
-    <button type="button" className={className} onClick={props.onClick} disabled={props.disabled}>
-      {props.children}
+    <button type="button" className={className} onClick={onClick} disabled={disabled} {...buttonProps}>
+      {children}
     </button>
   );
 }

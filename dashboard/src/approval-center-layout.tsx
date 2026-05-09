@@ -289,7 +289,11 @@ function QueueWorkspace(props: {
     const approvalUrl =
       props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null;
     const handleOpenDaemon = () => {
-      window.open("http://localhost:7957", "_blank");
+      if (approvalUrl !== null) {
+        window.open(approvalUrl, "_blank", "noopener,noreferrer");
+      } else {
+        void handleRepair();
+      }
     };
     return (
       <div className="space-y-4">

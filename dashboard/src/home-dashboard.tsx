@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 
 import {
   HiMiniCheckCircle,
@@ -176,8 +176,6 @@ export function HomeWorkspace(props: {
         cloudState={snapshot.cloud_state}
         connectUrl={snapshot.connect_url}
         fleetUrl={snapshot.fleet_url}
-        activeInstallsCount={activeInstalls.length}
-        latestReceiptsCount={snapshot.latest_receipts.length}
         onOpenInbox={props.onOpenInbox}
         onOpenFleet={props.onOpenFleet}
       />
@@ -239,13 +237,9 @@ function ProtectionHero(props: {
   cloudState: "local_only" | "paired_waiting" | "paired_active";
   connectUrl: string;
   fleetUrl: string;
-  activeInstallsCount: number;
-  latestReceiptsCount: number;
   onOpenInbox: () => void;
   onOpenFleet: () => void;
 }) {
-  const [testRunning, setTestRunning] = useState(false);
-
   const handlePrimaryCta = useCallback(() => {
     if (props.status === "setup_needed") {
       props.onOpenFleet();
@@ -253,15 +247,6 @@ function ProtectionHero(props: {
       props.onOpenInbox();
     }
   }, [props.status, props.onOpenInbox, props.onOpenFleet]);
-
-  const handleRunTest = useCallback(() => {
-    setTestRunning(true);
-    fetch("/v1/protect/test")
-      .catch(() => undefined)
-      .finally(() => {
-        setTestRunning(false);
-      });
-  }, []);
 
   const heroBg = heroBackgroundClass(props.status);
   const statusBadge =
@@ -275,9 +260,6 @@ function ProtectionHero(props: {
 
   const showConnectCta =
     props.cloudState === "local_only" && !props.syncConfigured;
-
-  const showTestProtection =
-    props.activeInstallsCount > 0 && props.latestReceiptsCount === 0;
 
   const showGuardCloud = props.cloudState !== "local_only";
 
@@ -299,11 +281,6 @@ function ProtectionHero(props: {
           <ActionButton onClick={handlePrimaryCta} data-primary="true" aria-label={props.ctaLabel}>
             {props.ctaLabel}
           </ActionButton>
-          {showTestProtection && (
-            <ActionButton onClick={handleRunTest} variant="secondary" disabled={testRunning}>
-              {testRunning ? "Running test…" : "Run a quick protection test"}
-            </ActionButton>
-          )}
           {showConnectCta && props.status !== "needs_decision" && (
             <ActionButton href={props.connectUrl} variant="secondary">
               Connect this machine
@@ -312,7 +289,7 @@ function ProtectionHero(props: {
         </div>
         {showGuardCloud && (
           <a
-            href="https://hol.org/guard"
+            href={props.fleetUrl}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 text-sm font-medium text-brand-blue transition-colors hover:text-brand-blue/70"
