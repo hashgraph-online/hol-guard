@@ -119,8 +119,10 @@ function cloudSyncHealthTone(state: GuardCloudSyncHealth["state"]): "blue" | "sl
 }
 
 function humanizeCloudSyncHealthLabel(label: string): string {
-  if (label === "Cloud sync stale") return "Your protection history hasn't synced recently";
-  return label;
+  const labels: Record<string, string> = {
+    "Cloud sync stale": "Your protection history hasn't synced recently",
+  };
+  return labels[label] ?? label;
 }
 
 function CloudSyncHealthCard(props: { health: GuardCloudSyncHealth }) {
