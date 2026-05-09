@@ -762,7 +762,8 @@ class GuardStore:
             if not self._schema_version_applied(connection, version=4):
                 self._record_schema_version(connection, version=4)
             self._ensure_local_device(connection)
-            self._record_schema_version(connection, version=2)
+            if not self._schema_version_applied(connection, version=2):
+                self._record_schema_version(connection, version=2)
 
     @staticmethod
     def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
@@ -787,6 +788,16 @@ class GuardStore:
         if column_name in existing:
             return
         connection.execute(f"alter table approval_requests add column {column_name} {column_type}")
+
+    @staticmethod
+    def _ensure_column(
+        connection: sqlite3.Connection, table_name: str, column_name: str, column_type: str
+    ) -> None:
+        rows = connection.execute(f"pragma table_info({table_name})").fetchall()
+        existing = {str(row["name"]) for row in rows}
+        if column_name in existing:
+            return
+        connection.execute(f"alter table {table_name} add column {column_name} {column_type}")
 
     @staticmethod
     def _ensure_attachment_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
