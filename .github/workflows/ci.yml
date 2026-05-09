@@ -25,7 +25,36 @@ jobs:
       - run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
       - run: uv run --no-sync python -m ruff check src/
       - run: uv run --no-sync python -m ruff format --check src/
+      - name: Dead-code scan (L329)
+        run: uv run --no-sync python -m ruff check src/codex_plugin_scanner/guard/ --select=F401,F811,F841
+      - name: TODO/FIXME scan (L330)
+        run: |
+          count=$(grep -rn "TODO\|FIXME\|HACK\|XXX" src/codex_plugin_scanner/guard/ --include="*.py" | grep -v "# type: ignore" | wc -l | tr -d ' ')
+          echo "Guard TODO/FIXME count: $count"
+          if [ "$count" -gt "0" ]; then
+            grep -rn "TODO\|FIXME\|HACK\|XXX" src/codex_plugin_scanner/guard/ --include="*.py" | grep -v "# type: ignore"
+            exit 1
+          fi
       - run: uv run --no-sync pytest --tb=short
+
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
+        with:
+          version: "10"
+      - run: cd dashboard && pnpm install --frozen-lockfile
+      - run: cd dashboard && pnpm test
+      - name: Dashboard build and bundle-size report (L331)
+        run: |
+          cd dashboard && pnpm build
+          js_size=$(du -sh dist/assets/*.js 2>/dev/null | awk '{print $1}' | head -1)
+          css_size=$(du -sh dist/assets/*.css 2>/dev/null | awk '{print $1}' | head -1)
+          echo "Bundle JS: ${js_size:-unknown}, CSS: ${css_size:-unknown}"
 
   cisco-full:
     runs-on: ubuntu-latest
