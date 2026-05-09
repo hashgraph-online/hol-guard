@@ -25,24 +25,26 @@ class EvidenceRecord:
     confidence: float
     summary: str
     details: dict[str, object] = field(default_factory=dict)
+    action_identity: str | None = None
     created_at: str = field(default_factory=_now_iso)
 
 
 def evidence_schema_statement() -> str:
     return """
     create table if not exists guard_evidence (
-      evidence_id text not null primary key,
-      action_id   text not null default '',
-      request_id  text not null default '',
-      harness     text not null default '',
-      workspace   text not null default '',
-      signal_id   text not null default '',
-      category    text not null default '',
-      severity    text not null default '',
-      confidence  real not null default 0.0,
-      summary     text not null default '',
-      details_json text not null default '{}',
-      created_at  text not null
+      evidence_id     text not null primary key,
+      action_id       text not null default '',
+      request_id      text not null default '',
+      harness         text not null default '',
+      workspace       text not null default '',
+      signal_id       text not null default '',
+      category        text not null default '',
+      severity        text not null default '',
+      confidence      real not null default 0.0,
+      summary         text not null default '',
+      details_json    text not null default '{}',
+      action_identity text,
+      created_at      text not null
     )
     """
 
@@ -54,6 +56,7 @@ def evidence_index_statements() -> list[str]:
         "create index if not exists idx_evidence_action on guard_evidence(action_id)",
         "create index if not exists idx_evidence_category_severity on guard_evidence(category, severity)",
         "create index if not exists idx_evidence_harness_workspace on guard_evidence(harness, workspace)",
+        "create index if not exists idx_evidence_identity on guard_evidence(action_identity)",
     ]
 
 
@@ -62,6 +65,7 @@ def _row_to_record(row: sqlite3.Row) -> EvidenceRecord:
         details: dict[str, object] = json.loads(row["details_json"])
     except (json.JSONDecodeError, TypeError):
         details = {}
+    columns = set(row.keys())
     return EvidenceRecord(
         evidence_id=row["evidence_id"],
         action_id=row["action_id"],
@@ -74,6 +78,7 @@ def _row_to_record(row: sqlite3.Row) -> EvidenceRecord:
         confidence=row["confidence"],
         summary=row["summary"],
         details=details,
+        action_identity=row["action_identity"] if "action_identity" in columns else None,
         created_at=row["created_at"],
     )
 
@@ -83,8 +88,8 @@ def store_evidence(conn: sqlite3.Connection, record: EvidenceRecord) -> Evidence
         """
         insert or replace into guard_evidence
           (evidence_id, action_id, request_id, harness, workspace, signal_id,
-           category, severity, confidence, summary, details_json, created_at)
-        values (?,?,?,?,?,?,?,?,?,?,?,?)
+           category, severity, confidence, summary, details_json, action_identity, created_at)
+        values (?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             record.evidence_id,
@@ -98,6 +103,7 @@ def store_evidence(conn: sqlite3.Connection, record: EvidenceRecord) -> Evidence
             record.confidence,
             record.summary,
             json.dumps(record.details),
+            record.action_identity,
             record.created_at,
         ),
     )
@@ -112,6 +118,7 @@ def list_evidence(
     category: str | None = None,
     severity: str | None = None,
     request_id: str | None = None,
+    action_identity: str | None = None,
     before_cursor: str | None = None,
     limit: int = 100,
 ) -> list[EvidenceRecord]:
@@ -130,6 +137,9 @@ def list_evidence(
     if request_id is not None:
         clauses.append("request_id = ?")
         params.append(request_id)
+    if action_identity is not None:
+        clauses.append("action_identity = ?")
+        params.append(action_identity)
     if before_cursor is not None:
         clauses.append("created_at < ?")
         params.append(before_cursor)
@@ -180,27 +190,35 @@ def export_evidence_json(
     conn: sqlite3.Connection,
     *,
     limit: int = 10_000,
+    redact_fields: tuple[str, ...] | None = None,
 ) -> str:
+    """Export evidence records as JSON, omitting sensitive fields by default.
+
+    Pass ``redact_fields=()`` to include all fields including ``details``.
+    By default ``details`` is redacted (excluded from export).
+    """
+    _redact = {"details"} if redact_fields is None else set(redact_fields)
     records = list_evidence(conn, limit=limit)
-    return json.dumps(
-        [
-            {
-                "evidence_id": r.evidence_id,
-                "action_id": r.action_id,
-                "request_id": r.request_id,
-                "harness": r.harness,
-                "workspace": r.workspace,
-                "signal_id": r.signal_id,
-                "category": r.category,
-                "severity": r.severity,
-                "confidence": r.confidence,
-                "summary": r.summary,
-                "created_at": r.created_at,
-            }
-            for r in records
-        ],
-        indent=2,
-    )
+    rows: list[dict[str, object]] = []
+    for r in records:
+        row: dict[str, object] = {
+            "evidence_id": r.evidence_id,
+            "action_id": r.action_id,
+            "request_id": r.request_id,
+            "harness": r.harness,
+            "workspace": r.workspace,
+            "signal_id": r.signal_id,
+            "category": r.category,
+            "severity": r.severity,
+            "confidence": r.confidence,
+            "summary": r.summary,
+            "action_identity": r.action_identity,
+            "created_at": r.created_at,
+        }
+        if "details" not in _redact:
+            row["details"] = r.details
+        rows.append(row)
+    return json.dumps(rows, indent=2)
 
 
 def clear_evidence(conn: sqlite3.Connection) -> int:

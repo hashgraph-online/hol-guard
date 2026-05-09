@@ -284,3 +284,89 @@ class TestCompactEvidence:
         compact_evidence(conn, retain_days=30)
         removed2 = compact_evidence(conn, retain_days=30)
         assert removed2 == 0
+
+
+class TestActionIdentityField:
+    def test_store_and_retrieve_action_identity(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        rec = _rec(evidence_id="e-ai-1", action_identity="codex:tool:bash")
+        store_evidence(conn, rec)
+        results = list_evidence(conn, action_identity="codex:tool:bash")
+        assert len(results) == 1
+        assert results[0].action_identity == "codex:tool:bash"
+
+    def test_action_identity_none_by_default(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        store_evidence(conn, _rec(evidence_id="e-ai-2"))
+        results = list_evidence(conn)
+        assert results[0].action_identity is None
+
+    def test_filter_by_action_identity_excludes_others(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        store_evidence(conn, _rec(evidence_id="e-ai-3", action_identity="tool:a"))
+        store_evidence(conn, _rec(evidence_id="e-ai-4", action_identity="tool:b"))
+        results = list_evidence(conn, action_identity="tool:a")
+        assert len(results) == 1
+        assert results[0].evidence_id == "e-ai-3"
+
+
+class TestLargeScalePagination:
+    def test_cursor_pagination_covers_all_records(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        total = 250
+        for i in range(total):
+            ts = f"2024-01-{(i // 28) + 1:02d}T{(i % 24):02d}:00:{(i % 60):02d}Z"
+            store_evidence(conn, _rec(evidence_id=f"bulk-{i:04d}", created_at=ts))
+
+        page_size = 50
+        seen: list[str] = []
+        cursor: str | None = None
+
+        for _ in range(total // page_size + 2):
+            page = list_evidence(conn, before_cursor=cursor, limit=page_size)
+            if not page:
+                break
+            seen.extend(r.evidence_id for r in page)
+            cursor = page[-1].created_at
+
+        assert len(seen) == total
+
+    def test_first_page_returns_most_recent(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        for i in range(10):
+            store_evidence(conn, _rec(evidence_id=f"p-{i}", created_at=f"2024-01-01T{i:02d}:00:00Z"))
+        page = list_evidence(conn, limit=3)
+        assert page[0].evidence_id == "p-9"
+        assert page[1].evidence_id == "p-8"
+        assert page[2].evidence_id == "p-7"
+
+
+class TestExportRedaction:
+    def test_export_omits_details_by_default(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        store_evidence(conn, _rec(evidence_id="ex-1", details={"secret": "password123"}))
+        exported = json.loads(export_evidence_json(conn))
+        assert len(exported) == 1
+        assert "details" not in exported[0]
+        assert "password123" not in json.dumps(exported)
+
+    def test_export_includes_details_when_redact_empty(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        store_evidence(conn, _rec(evidence_id="ex-2", details={"key": "val"}))
+        exported = json.loads(export_evidence_json(conn, redact_fields=()))
+        assert len(exported) == 1
+        assert exported[0]["details"] == {"key": "val"}
+
+    def test_export_includes_action_identity(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        store_evidence(conn, _rec(evidence_id="ex-3", action_identity="tool:bash"))
+        exported = json.loads(export_evidence_json(conn))
+        assert exported[0]["action_identity"] == "tool:bash"
+
+    def test_export_fields_include_required_keys(self, tmp_path: Path) -> None:
+        conn = _db(tmp_path)
+        store_evidence(conn, _rec(evidence_id="ex-4"))
+        exported = json.loads(export_evidence_json(conn))
+        row = exported[0]
+        for key in ("evidence_id", "action_id", "request_id", "harness", "category", "severity", "summary"):
+            assert key in row, f"missing key: {key}"
