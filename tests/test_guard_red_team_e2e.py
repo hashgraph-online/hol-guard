@@ -73,7 +73,7 @@ def _prompt_action(text: str) -> GuardActionEnvelope:
         workspace_hash="workspace-hash",
         tool_name=None,
         command=None,
-        prompt_excerpt=text[:200],
+        prompt_excerpt=text[:240],
         prompt_text=text,
         target_paths=(),
         network_hosts=(),
@@ -82,7 +82,7 @@ def _prompt_action(text: str) -> GuardActionEnvelope:
         package_manager=None,
         package_name=None,
         script_name=None,
-        raw_payload_redacted={"prompt_excerpt": text[:200]},
+        raw_payload_redacted={"prompt_excerpt": text[:240]},
     )
 
 
@@ -122,13 +122,13 @@ def _make_context(tmp_path: Path) -> DetectorContext:
 
 def _run_detectors(action: GuardActionEnvelope, context: DetectorContext) -> list[str]:
     registry = _make_registry()
-    result = registry.run(action, context, timeout_ms=500)
+    result = registry.run(action, context, timeout_ms=50)
     return [sig.detector for sig in result.signals if sig.detector]
 
 
 def _compose(action: GuardActionEnvelope, context: DetectorContext) -> CompositionResult:
     registry = _make_registry()
-    result = registry.run(action, context, timeout_ms=500)
+    result = registry.run(action, context, timeout_ms=50)
     return compose_action_from_signals(result.signals, "warn")
 
 
@@ -145,6 +145,8 @@ class TestRedTeamMaliciousSkill:
         assert "safe-decode.content" in detectors, (
             f"Expected 'safe-decode.content' for malicious-mcp-skill-exfil.md; got {detectors}"
         )
+        unrelated = [d for d in detectors if d not in {"safe-decode.content", "prompt.injection"}]
+        assert not unrelated, f"Unexpected detector signals fired: {unrelated}"
         outcome = _compose(action, context)
         assert outcome.action != "allow", (
             f"Malicious MCP exfil prompt should not be allowed; got action={outcome.action!r}"
@@ -315,10 +317,13 @@ class TestFalsePositiveFakeToken:
         content = fixture.read_text(encoding="utf-8")
         action = _prompt_action(content)
         context = _make_context(tmp_path)
+        detectors = _run_detectors(action, context)
+        blocking = [d for d in detectors if d in {"data_flow.exfiltration", "bypass.shell", "secret.path"}]
+        assert not blocking, f"Docs with fake token text triggered blocking detectors: {blocking}"
         outcome = _compose(action, context)
         assert outcome.action != "block", (
             f"Docs with fake token text should not be blocked; got action={outcome.action!r}, "
-            f"detectors={_run_detectors(action, context)}"
+            f"detectors={detectors}"
         )
 
     def test_benign_nvmrc_fake_creds_file_read_has_no_secret_path_signal(self, tmp_path: Path) -> None:
@@ -331,6 +336,20 @@ class TestFalsePositiveFakeToken:
         outcome = _compose(action, context)
         assert outcome.action != "block", (
             f"nvmrc file read should not be blocked; got action={outcome.action!r}"
+        )
+
+    def test_benign_nvmrc_fixture_prompt_has_no_blocking_signals(self, tmp_path: Path) -> None:
+        fixture = _FIXTURES / "benign-nvmrc-fake-creds.py"
+        assert fixture.exists()
+        content = fixture.read_text(encoding="utf-8")
+        action = _prompt_action(content)
+        context = _make_context(tmp_path)
+        detectors = _run_detectors(action, context)
+        blocking = [d for d in detectors if d in {"data_flow.exfiltration", "bypass.shell"}]
+        assert not blocking, f"nvmrc fixture content triggered blocking detectors: {blocking}"
+        outcome = _compose(action, context)
+        assert outcome.action != "block", (
+            f"nvmrc fixture as prompt should not be blocked; got action={outcome.action!r}, detectors={detectors}"
         )
 
 
@@ -347,9 +366,11 @@ class TestFalsePositiveHealthEndpoint:
         assert "safe-decode.content" not in detectors, (
             f"Health endpoint fetch should not trigger safe-decode; got {detectors}"
         )
+        blocking = [d for d in detectors if d in {"data_flow.exfiltration", "bypass.shell", "secret.path"}]
+        assert not blocking, f"Health endpoint prompt triggered blocking detectors: {blocking}"
         outcome = _compose(action, context)
         assert outcome.action != "block", (
-            f"Health endpoint prompt should not be blocked; got action={outcome.action!r}"
+            f"Health endpoint prompt should not be blocked; got action={outcome.action!r}, detectors={detectors}"
         )
 
     def test_loopback_health_check_shell_has_no_blocking_signals(self, tmp_path: Path) -> None:
