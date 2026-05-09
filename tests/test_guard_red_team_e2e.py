@@ -264,56 +264,50 @@ class TestFalsePositiveSourceSearch:
             f"Benign source search should not trigger blocking signals; got {blocking}"
         )
 
-    def test_benign_source_search_fixture_as_prompt_has_no_data_flow_signal(self, tmp_path: Path) -> None:
+    def test_benign_source_search_fixture_as_prompt_has_no_safe_decode_signal(self, tmp_path: Path) -> None:
         fixture = _FIXTURES / "benign-source-search.py"
         assert fixture.exists()
         content = fixture.read_text(encoding="utf-8")
         action = _prompt_action(content)
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
-        assert "data_flow.exfiltration" not in detectors, (
-            f"Benign source search should not trigger exfil detector; got {detectors}"
+        assert "safe-decode.content" not in detectors, (
+            f"Benign source search should not trigger safe-decode detector; got {detectors}"
         )
 
 
 class TestFalsePositiveFakeToken:
     """L355 — Fake token fixture is allowed (no real secret exfil)."""
 
-    def test_benign_fake_token_prompt_has_no_data_flow_signal(self, tmp_path: Path) -> None:
-        fixture = _FIXTURES / "benign-docs-fake-token.py"
-        assert fixture.exists()
-        content = fixture.read_text(encoding="utf-8")
-        action = _prompt_action(content)
-        context = _make_context(tmp_path)
-        detectors = _run_detectors(action, context)
-        assert "data_flow.exfiltration" not in detectors, (
-            f"Benign fake-token fixture should not trigger exfil; got {detectors}"
-        )
-
-    def test_benign_nvmrc_fake_creds_prompt_has_no_secret_path_signal(self, tmp_path: Path) -> None:
-        fixture = _FIXTURES / "benign-nvmrc-fake-creds.py"
-        assert fixture.exists()
-        content = fixture.read_text(encoding="utf-8")
-        action = _prompt_action(content)
+    def test_benign_fake_token_docs_file_read_has_no_secret_path_signal(self, tmp_path: Path) -> None:
+        action = _file_read_action("~/docs/api-authentication-guide.md")
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
         assert "secret.path" not in detectors, (
-            f"Benign nvmrc fixture should not trigger secret.path; got {detectors}"
+            f"Docs file read should not trigger secret.path; got {detectors}"
+        )
+
+    def test_benign_nvmrc_fake_creds_file_read_has_no_secret_path_signal(self, tmp_path: Path) -> None:
+        action = _file_read_action("~/.nvmrc")
+        context = _make_context(tmp_path)
+        detectors = _run_detectors(action, context)
+        assert "secret.path" not in detectors, (
+            f"Benign nvmrc file read should not trigger secret.path; got {detectors}"
         )
 
 
 class TestFalsePositiveHealthEndpoint:
     """L356 — Health endpoint fetch is allowed."""
 
-    def test_benign_health_endpoint_prompt_has_no_exfil_signal(self, tmp_path: Path) -> None:
+    def test_benign_health_endpoint_prompt_has_no_safe_decode_signal(self, tmp_path: Path) -> None:
         fixture = _FIXTURES / "benign-health-endpoint.py"
         assert fixture.exists()
         content = fixture.read_text(encoding="utf-8")
         action = _prompt_action(content)
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
-        assert "data_flow.exfiltration" not in detectors, (
-            f"Health endpoint fetch should not trigger exfil; got {detectors}"
+        assert "safe-decode.content" not in detectors, (
+            f"Health endpoint fetch should not trigger safe-decode; got {detectors}"
         )
 
     def test_loopback_health_check_shell_has_no_blocking_signals(self, tmp_path: Path) -> None:
