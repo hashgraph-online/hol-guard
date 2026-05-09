@@ -15,7 +15,6 @@ Uses actual detector IDs from the runtime registry:
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -24,7 +23,6 @@ from codex_plugin_scanner.guard.runtime.composition_rules import CompositionResu
 from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, DetectorRegistry, register_default_detectors
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "guard-red-team"
-_EXPECTED = json.loads((_FIXTURES / "expected-decisions.json").read_text(encoding="utf-8"))
 
 
 def _make_registry() -> DetectorRegistry:
@@ -299,8 +297,8 @@ class TestFalsePositiveFakeToken:
         action = _prompt_action(content)
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
-        assert "data_flow.exfiltration" not in detectors, (
-            f"Benign nvmrc fixture should not trigger exfil; got {detectors}"
+        assert "secret.path" not in detectors, (
+            f"Benign nvmrc fixture should not trigger secret.path; got {detectors}"
         )
 
 
