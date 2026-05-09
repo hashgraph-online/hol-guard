@@ -104,11 +104,6 @@ body {
   50% { opacity: 1; }
 }
 
-@keyframes guard-checkmark-draw {
-  from { stroke-dashoffset: 24; }
-  to { stroke-dashoffset: 0; }
-}
-
 @keyframes guard-fade-scale {
   from {
     opacity: 0;
@@ -124,29 +119,11 @@ body {
   animation: guard-enter 320ms var(--ease-out-quint) both;
 }
 
-.guard-delay-1 {
-  animation-delay: 60ms;
-}
-
-.guard-delay-2 {
-  animation-delay: 120ms;
-}
-
-.guard-delay-3 {
-  animation-delay: 180ms;
-}
-
 .guard-skeleton {
   background: linear-gradient(90deg, var(--surface-1) 25%, var(--surface-2) 50%, var(--surface-1) 75%);
   background-size: 200% 100%;
   animation: guard-shimmer 1.5s infinite;
   border-radius: 8px;
-}
-
-.guard-success-check {
-  stroke-dasharray: 24;
-  stroke-dashoffset: 24;
-  animation: guard-checkmark-draw 400ms var(--ease-out-quart) 150ms forwards;
 }
 
 .guard-fade-in {
@@ -174,10 +151,6 @@ a:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   .guard-surface-in,
-  .guard-delay-1,
-  .guard-delay-2,
-  .guard-delay-3,
-  .guard-success-check,
   .guard-fade-in {
     animation: none !important;
   }

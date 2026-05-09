@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -218,9 +219,10 @@ class SupplyChainDetector:
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
         del context
-        if action.prompt_text is None:
-            return ()
-        return detect_supply_chain_risk(action.prompt_text)
+        signals: list[RiskSignalV2] = []
+        for content in filter(None, (action.prompt_text, action.command)):
+            signals.extend(detect_supply_chain_risk(content))
+        return tuple(signals)
 
 
 class SafeDecodeDetector:
@@ -451,6 +453,205 @@ class PersistenceDetector:
         )
 
 
+class GuardBypassDetector:
+    """Detects shell commands that uninstall, disable, or circumvent HOL Guard."""
+
+    detector_id = "bypass.shell"
+    categories: tuple[RiskSignalCategory, ...] = ("bypass",)
+
+    _UNINSTALL_PATTERN = re.compile(
+        r"(?:^|[\s;&|])"
+        r"(?:"
+        r"pip(?:3)?\s+uninstall\s+(?:-y\s+)?(?:holguard|hol[_-]guard|codex[_-]plugin[_-]scanner)\b|"
+        r"brew\s+(?:uninstall|remove)\s+hol[_-]guard\b|"
+        r"npm\s+(?:uninstall|remove)\s+(?:-g\s+)?hol[_-]guard\b|"
+        r"apt(?:-get)?\s+(?:remove|purge)\s+hol[_-]guard\b"
+        r")",
+        re.IGNORECASE,
+    )
+
+    _CONFIG_DESTROY_PATTERN = re.compile(
+        r"(?:^|[\s;&|])"
+        r"(?:rm|rmdir)\b[^\r\n;&|]{0,100}"
+        r"(?:~?/?\.hol[_-]guard|guard[_-]home|(?<![a-zA-Z0-9_])guard\.db(?![a-zA-Z0-9_])|(?<![a-zA-Z0-9_])guard\.lock(?![a-zA-Z0-9_]))",
+        re.IGNORECASE,
+    )
+
+    _DAEMON_KILL_PATTERN = re.compile(
+        r"(?:^|[\s;&|])"
+        r"(?:"
+        r"kill\b[^\r\n;&|]{0,80}hol[_-]guard|"
+        r"pkill\b[^\r\n;&|]{0,40}(?<![a-zA-Z0-9_])hol[_-]guard(?![a-zA-Z0-9_])|"
+        r"launchctl\s+(?:unload|disable)\b[^\r\n;&|]{0,80}(?:hol[_-]guard|com\.hol\.guard)"
+        r")",
+        re.IGNORECASE,
+    )
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        if action.action_type not in ("shell_command", "prompt") or action.command is None:
+            return ()
+        signals: list[RiskSignalV2] = []
+        if self._UNINSTALL_PATTERN.search(action.command):
+            signals.append(
+                RiskSignalV2(
+                    signal_id="bypass:guard-uninstall",
+                    category="bypass",
+                    severity="critical",
+                    confidence="strong",
+                    detector=self.detector_id,
+                    title="Command uninstalls HOL Guard",
+                    plain_reason=("This command removes HOL Guard, which would disable all AI harness protection."),
+                    technical_detail="matched guard uninstall pattern",
+                    evidence_ref="command",
+                    redaction_level="summary",
+                    false_positive_hint=("Allow only if you intentionally want to remove Guard from this machine."),
+                    advisory_id=None,
+                )
+            )
+        if self._CONFIG_DESTROY_PATTERN.search(action.command):
+            signals.append(
+                RiskSignalV2(
+                    signal_id="bypass:guard-config-destroy",
+                    category="bypass",
+                    severity="critical",
+                    confidence="strong",
+                    detector=self.detector_id,
+                    title="Command destroys Guard configuration or data",
+                    plain_reason=(
+                        "This command deletes HOL Guard configuration or state files,"
+                        " which would reset all protection settings and history."
+                    ),
+                    technical_detail="matched guard config/data deletion pattern",
+                    evidence_ref="command",
+                    redaction_level="summary",
+                    false_positive_hint=("Allow only if you intend to fully reset Guard and are aware of data loss."),
+                    advisory_id=None,
+                )
+            )
+        if self._DAEMON_KILL_PATTERN.search(action.command):
+            signals.append(
+                RiskSignalV2(
+                    signal_id="bypass:guard-daemon-kill",
+                    category="bypass",
+                    severity="high",
+                    confidence="strong",
+                    detector=self.detector_id,
+                    title="Command stops HOL Guard daemon",
+                    plain_reason=(
+                        "This command stops the HOL Guard background service,"
+                        " which temporarily disables harness protection."
+                    ),
+                    technical_detail="matched guard daemon kill/unload pattern",
+                    evidence_ref="command",
+                    redaction_level="summary",
+                    false_positive_hint="Allow only if you intentionally want to pause Guard for maintenance.",
+                    advisory_id=None,
+                )
+            )
+        return tuple(signals)
+
+
+_MCP_RISKY_TOOL_PATTERN = re.compile(
+    r"(?:exec(?:ute)?|run|shell|spawn|eval|invoke|dispatch|launch)"
+    r"|(?:write|send|upload|post|exfil|steal|dump|leak).*(?:cred|secret|token|key|password)"
+    r"|(?:arbitrary|remote|unsafe|untruste[d])",
+    re.IGNORECASE,
+)
+
+
+class McpToolSchemaRiskDetector:
+    """Detects MCP tool names that suggest dangerous execution or exfiltration capability."""
+
+    detector_id = "mcp.schema-risk"
+    categories: tuple[RiskSignalCategory, ...] = ("mcp",)
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        if action.action_type != "mcp_tool" or action.mcp_tool is None:
+            return ()
+        tool_name = action.mcp_tool
+        if not _MCP_RISKY_TOOL_PATTERN.search(tool_name):
+            return ()
+        return (
+            RiskSignalV2(
+                signal_id=f"mcp:schema-risk:{tool_name[:40]}",
+                category="mcp",
+                severity="high",
+                confidence="moderate",
+                detector=self.detector_id,
+                title="MCP tool name suggests dangerous capability",
+                plain_reason=(
+                    f"The MCP tool '{tool_name}' has a name that suggests it can execute code,"
+                    " run shell commands, or exfiltrate credentials. Review the tool's actual"
+                    " implementation before approving."
+                ),
+                technical_detail=f"tool name matched risky-capability pattern: {tool_name!r}",
+                evidence_ref="mcp_tool",
+                redaction_level="summary",
+                false_positive_hint=(
+                    "Allow if this tool is from a trusted server and its implementation"
+                    " is audited and does not perform unauthorized actions."
+                ),
+                advisory_id=None,
+            ),
+        )
+
+
+_MCP_INJECTION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instruction", re.IGNORECASE),
+    re.compile(r"you\s+(?:are\s+now|have\s+no\s+restriction|must\s+obey)", re.IGNORECASE),
+    re.compile(r"(?:disregard|forget|override)\s+(?:your\s+)?(?:instruction|system\s+prompt|training)", re.IGNORECASE),
+    re.compile(r"(?:send|post|upload|exfil(?:trate)?)\s+.*\bto\s+https?://(?!localhost|127\.0\.0\.1)", re.IGNORECASE),
+    re.compile(
+        r"when\s+you\s+(?:read|access|open|process)\s+.{0,60}(?:also|then|and)\s+(?:send|post|upload)",
+        re.IGNORECASE,
+    ),
+)
+
+
+class McpDescriptionDeceptionDetector:
+    """Detects prompt injection and deception patterns in MCP tool descriptions or prompts."""
+
+    detector_id = "mcp.description-deception"
+    categories: tuple[RiskSignalCategory, ...] = ("prompt",)
+
+    def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
+        del context
+        if action.action_type not in ("mcp_tool", "mcp_tool_call") or action.prompt_excerpt is None:
+            return ()
+        excerpt = action.prompt_excerpt
+        signals: list[RiskSignalV2] = []
+        for i, pattern in enumerate(_MCP_INJECTION_PATTERNS):
+            m = pattern.search(excerpt)
+            if m:
+                signals.append(
+                    RiskSignalV2(
+                        signal_id=f"mcp:desc-deception:p{i}",
+                        category="prompt",
+                        severity="critical",
+                        confidence="strong",
+                        detector=self.detector_id,
+                        title="MCP description contains prompt injection or jailbreak attempt",
+                        plain_reason=(
+                            "The tool description or prompt contains language designed to override"
+                            " your AI assistant's instructions or cause it to exfiltrate data."
+                            " This is a common technique used by malicious MCP servers."
+                        ),
+                        technical_detail=f"matched deception pattern {i}: {m.group(0)[:60]!r}",
+                        evidence_ref="prompt_excerpt",
+                        redaction_level="summary",
+                        false_positive_hint=(
+                            "Allow only if you authored this tool description yourself"
+                            " and verified it does not cause unintended behavior."
+                        ),
+                        advisory_id=None,
+                    )
+                )
+                break
+        return tuple(signals)
+
+
 def register_default_detectors() -> tuple[GuardDetector, ...]:
     """Return the default ordered detector list.
 
@@ -468,6 +669,9 @@ def register_default_detectors() -> tuple[GuardDetector, ...]:
         CiscoSkillPreflightDetector(),
         FalsePositiveSuppressorDetector(),
         DataFlowExfiltrationDetector(),
+        GuardBypassDetector(),
+        McpDescriptionDeceptionDetector(),
+        McpToolSchemaRiskDetector(),
         PersistenceDetector(),
         PromptInjectionDetector(),
         SafeDecodeDetector(),

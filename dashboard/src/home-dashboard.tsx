@@ -1,6 +1,11 @@
 import { useCallback } from "react";
 
 import {
+  HiMiniCheckCircle,
+  HiMiniExclamationCircle,
+  HiMiniMinusCircle,
+} from "react-icons/hi2";
+import {
   ActionButton,
   Badge,
   EmptyState,
@@ -11,9 +16,12 @@ import {
   buildHomePrimaryState,
   type HomeProtectionStatus,
 } from "./queue-state";
+import { harnessDisplayName } from "./approval-center-utils";
 import type {
   GuardApprovalRequest,
+  GuardManagedInstall,
   GuardPolicyDecision,
+  GuardReceipt,
   GuardRuntimeSnapshot,
 } from "./guard-types";
 
@@ -117,6 +125,9 @@ export function HomeWorkspace(props: {
         syncConfigured={snapshot.sync_configured}
         cloudState={snapshot.cloud_state}
         connectUrl={snapshot.connect_url}
+        fleetUrl={snapshot.fleet_url}
+        activeInstallsCount={activeInstalls.length}
+        latestReceiptsCount={snapshot.latest_receipts.length}
         onOpenInbox={props.onOpenInbox}
         onOpenFleet={props.onOpenFleet}
       />
@@ -128,6 +139,15 @@ export function HomeWorkspace(props: {
         onOpenEvidence={props.onOpenEvidence}
         onOpenSettings={props.onOpenSettings}
       />
+
+      <AppsProtectedSection
+        managedInstalls={managedInstalls}
+        observedHarnesses={observedHarnesses}
+      />
+
+      {snapshot.latest_receipts.length > 0 && (
+        <RecentProtectionSection receipts={snapshot.latest_receipts} />
+      )}
 
       <section className="rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 sm:p-6">
         <details className="group">
@@ -164,6 +184,9 @@ function ProtectionHero(props: {
   syncConfigured: boolean;
   cloudState: "local_only" | "paired_waiting" | "paired_active";
   connectUrl: string;
+  fleetUrl: string;
+  activeInstallsCount: number;
+  latestReceiptsCount: number;
   onOpenInbox: () => void;
   onOpenFleet: () => void;
 }) {
@@ -178,12 +201,18 @@ function ProtectionHero(props: {
   const heroBg = heroBackgroundClass(props.status);
   const statusBadge =
     props.status === "needs_decision" ? (
-      <Badge tone="warning">{props.queuedCount} waiting</Badge>
+      <Badge tone="default">{props.queuedCount} waiting</Badge>
     ) : props.status === "setup_needed" ? (
       <Badge tone="default">Setup needed</Badge>
     ) : (
       <Badge tone="success">Protected</Badge>
     );
+
+  const showConnectCta =
+    props.cloudState === "local_only" && !props.syncConfigured;
+
+  const showTestProtection =
+    props.activeInstallsCount > 0 && props.latestReceiptsCount === 0;
 
   return (
     <section
@@ -199,7 +228,12 @@ function ProtectionHero(props: {
         <h2 className="text-xl font-semibold tracking-tight text-brand-dark">{props.copy}</h2>
         <div className="flex flex-wrap gap-3">
           <ActionButton onClick={handlePrimaryCta}>{props.ctaLabel}</ActionButton>
-          {props.cloudState === "local_only" && (
+          {showTestProtection && (
+            <ActionButton href={props.fleetUrl} variant="secondary">
+              Test protection
+            </ActionButton>
+          )}
+          {showConnectCta && props.status !== "needs_decision" && (
             <ActionButton href={props.connectUrl} variant="secondary">
               Connect this machine
             </ActionButton>
@@ -254,5 +288,153 @@ function HomeStatChip(props: { label: string; value: string }) {
       </p>
       <p className="mt-1 text-2xl font-semibold tracking-tight text-brand-dark">{props.value}</p>
     </div>
+  );
+}
+
+type AppRowProps = {
+  harness: string;
+  install: GuardManagedInstall | undefined;
+  isObserved: boolean;
+};
+
+function AppStatusIcon(props: { install: GuardManagedInstall | undefined; isObserved: boolean }) {
+  if (props.install?.active === true) {
+    return <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />;
+  }
+  if (props.install !== undefined && !props.install.active) {
+    return <HiMiniExclamationCircle className="h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />;
+  }
+  if (props.isObserved) {
+    return <HiMiniMinusCircle className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />;
+  }
+  return <HiMiniMinusCircle className="h-4 w-4 shrink-0 text-slate-300" aria-hidden="true" />;
+}
+
+function AppStatusBadge(props: { install: GuardManagedInstall | undefined; isObserved: boolean }) {
+  if (props.install?.active === true) {
+    return <Badge tone="success">Active</Badge>;
+  }
+  if (props.install !== undefined && !props.install.active) {
+    return <Badge tone="default">Needs setup</Badge>;
+  }
+  if (props.isObserved) {
+    return <Badge tone="default">Observed</Badge>;
+  }
+  return <Badge tone="default">Unknown</Badge>;
+}
+
+function AppRow(props: AppRowProps) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 px-4 py-3 last:border-b-0">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <AppStatusIcon install={props.install} isObserved={props.isObserved} />
+        <p className="truncate text-sm font-medium text-brand-dark">
+          {harnessDisplayName(props.harness)}
+        </p>
+      </div>
+      <AppStatusBadge install={props.install} isObserved={props.isObserved} />
+    </div>
+  );
+}
+
+type AppsProtectedSectionProps = {
+  managedInstalls: GuardManagedInstall[];
+  observedHarnesses: string[];
+};
+
+function AppsProtectedSection(props: AppsProtectedSectionProps) {
+  const allHarnesses = Array.from(
+    new Set([
+      ...props.managedInstalls.map((i) => i.harness),
+      ...props.observedHarnesses,
+    ])
+  ).sort();
+
+  if (allHarnesses.length === 0) {
+    return (
+      <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+        <SectionLabel>Apps protected</SectionLabel>
+        <p className="mt-3 text-sm text-muted-foreground">
+          None yet. Connect an AI harness to start.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+      <SectionLabel>Apps protected</SectionLabel>
+      <div className="mt-3 overflow-hidden rounded-[1.25rem] border border-slate-200/70">
+        {allHarnesses.map((harness) => {
+          const install = props.managedInstalls.find((i) => i.harness === harness);
+          const isObserved = props.observedHarnesses.includes(harness);
+          return (
+            <AppRow
+              key={harness}
+              harness={harness}
+              install={install}
+              isObserved={isObserved}
+            />
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function formatReceiptTimestamp(timestamp: string): string {
+  try {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${Math.floor(diffHours / 24)}d ago`;
+  } catch {
+    return timestamp;
+  }
+}
+
+type RecentReceiptRowProps = {
+  receipt: GuardReceipt;
+};
+
+function RecentReceiptRow(props: RecentReceiptRowProps) {
+  const { receipt } = props;
+  const decisionLabel = receipt.policy_decision === "allow" ? "allowed" : "blocked";
+  const name = receipt.artifact_name ?? receipt.artifact_id;
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-slate-200/70 px-4 py-3 last:border-b-0">
+      <div className="min-w-0">
+        <p className="text-sm text-brand-dark">
+          <span className="font-medium">{harnessDisplayName(receipt.harness)}</span>{" "}
+          {decisionLabel}{" "}
+          <span className="font-mono text-xs">{name}</span>
+        </p>
+      </div>
+      <span className="shrink-0 text-[11px] text-muted-foreground">
+        {formatReceiptTimestamp(receipt.timestamp)}
+      </span>
+    </div>
+  );
+}
+
+type RecentProtectionSectionProps = {
+  receipts: GuardReceipt[];
+};
+
+function RecentProtectionSection(props: RecentProtectionSectionProps) {
+  const recent = props.receipts.slice(0, 3);
+  return (
+    <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+      <SectionLabel>Recent protection</SectionLabel>
+      <div className="mt-3 overflow-hidden rounded-[1.25rem] border border-slate-200/70">
+        {recent.map((receipt) => (
+          <RecentReceiptRow key={receipt.receipt_id} receipt={receipt} />
+        ))}
+      </div>
+    </section>
   );
 }

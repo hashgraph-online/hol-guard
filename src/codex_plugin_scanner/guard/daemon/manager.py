@@ -174,6 +174,7 @@ def write_guard_daemon_state(guard_home: Path, port: int, auth_token: str) -> No
                 "source_root": _current_guard_daemon_source_root(),
                 "runtime_fingerprint": _current_guard_daemon_runtime_fingerprint(),
                 "pid": os.getpid(),
+                "started_at": datetime.now(timezone.utc).isoformat(),
             },
             indent=2,
         ),

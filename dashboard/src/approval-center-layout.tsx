@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useState, useEffect, useCallback, useMemo, type ChangeEvent } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type ChangeEvent } from "react";
 import {
   HiMiniClipboard,
   HiMiniClipboardDocumentCheck,
@@ -7,6 +7,10 @@ import {
   HiMiniNoSymbol,
   HiMiniArrowTopRightOnSquare,
   HiMiniChevronLeft,
+  HiBars3,
+  HiMiniXMark as HiMiniXMarkLayout,
+  HiMiniCheckCircle,
+  HiMiniInformationCircle,
 } from "react-icons/hi2";
 import {
   ShellHeader,
@@ -19,12 +23,13 @@ import {
   EmptyState,
   WelcomeState,
   SectionLabel,
-  ListControls,
   PaginationControls
 } from "./approval-center-primitives";
 import { DataFlowEvidenceCard } from "./data-flow-evidence-card";
 import { SkillRiskCard, SupplyChainRiskCard, DecodedLayerCard } from "./risk-signal-cards";
 import { ReceiptsWorkspace } from "./receipts-workspace";
+import { QueueChipFilter } from "./queue-chip-filter";
+import { ScannerEvidenceSection } from "./scanner-evidence-badge";
 import {
   buildPauseLine,
   buildRecommendation,
@@ -42,7 +47,8 @@ import {
   resolveStoppedCommandText,
   displayArtifactName,
   resolveTerminalLabel,
-  scopeLabel
+  scopeLabel,
+  STALE_REQUEST_COPY,
 } from "./approval-center-utils";
 import {
   WhyThisPaused,
@@ -79,6 +85,7 @@ type DetailState =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "error"; message: string }
+  | { kind: "stale" }
   | {
       kind: "ready";
       item: GuardApprovalRequest;
@@ -110,6 +117,7 @@ type LayoutProps = {
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
   onOpenRequest: (requestId: string) => void;
+  onRetry?: () => void;
   onResolve: (payload: {
     requestId: string;
     action: "allow" | "block";
@@ -118,6 +126,7 @@ type LayoutProps = {
     reason: string;
   }) => void;
   onBulkApprove?: (ids: string[]) => void;
+  onRepair?: () => Promise<void>;
 };
 
 const scopeOptions: Array<{ value: DecisionScope; label: string; description: string }> = [
@@ -132,9 +141,14 @@ const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 const broadScopeValues = new Set<DecisionScope>(["publisher", "harness", "global"]);
 const queuePageSize = 8;
 export function ApprovalCenterLayout(props: LayoutProps) {
+  const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
   const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
   const activeHarness =
     props.detail.kind === "ready" ? props.detail.item.harness : queuedItems[0]?.harness ?? null;
+
+  const handleOpenMobileQueue = useCallback(() => setMobileQueueOpen(true), []);
+  const handleCloseMobileQueue = useCallback(() => setMobileQueueOpen(false), []);
+
   return (
     <div className="min-h-screen bg-white text-brand-dark">
       <ShellHeader
@@ -142,8 +156,18 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         activeHarness={activeHarness}
         view={props.view}
         onNavigate={props.onNavigate}
+        onOpenMobileQueue={handleOpenMobileQueue}
       />
       <ShellSidebar queuedCount={queuedItems.length} activeHarness={activeHarness} view={props.view} />
+      {mobileQueueOpen && props.view === "inbox" && props.requests.kind === "ready" && (
+        <MobileQueueDrawer
+          requests={props.requests.items}
+          activeRequestId={props.activeRequestId}
+          onClose={handleCloseMobileQueue}
+          onOpenRequest={props.onOpenRequest}
+          onBulkApprove={props.onBulkApprove}
+        />
+      )}
       <div className="flex flex-col lg:pl-64">
         <main className="flex-1 p-6 lg:p-10">
           <div className="mx-auto max-w-6xl">
@@ -166,10 +190,54 @@ export function ApprovalCenterLayout(props: LayoutProps) {
                 onGoHome={props.onGoHome}
                 onResolve={props.onResolve}
                 onBulkApprove={props.onBulkApprove}
+                onRetry={props.onRetry}
+                onRepair={props.onRepair}
               />
             )}
           </div>
         </main>
+      </div>
+    </div>
+  );
+}
+
+function MobileQueueDrawer(props: {
+  requests: GuardApprovalRequest[];
+  activeRequestId: string | null;
+  onClose: () => void;
+  onOpenRequest: (requestId: string) => void;
+  onBulkApprove?: (ids: string[]) => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex lg:hidden"
+      role="dialog"
+      aria-label="Review queue"
+      aria-modal="true"
+    >
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={props.onClose} />
+      <div className="relative ml-0 flex w-full max-w-sm flex-col overflow-hidden bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <span className="text-sm font-semibold text-brand-dark">
+            Review Queue ({props.requests.length})
+          </span>
+          <button
+            type="button"
+            onClick={props.onClose}
+            aria-label="Close queue"
+            className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100"
+          >
+            <HiMiniXMarkLayout className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <QueueBrowser
+            activeRequestId={props.activeRequestId}
+            items={props.requests}
+            onOpenRequest={props.onOpenRequest}
+            onBulkApprove={props.onBulkApprove}
+          />
+        </div>
       </div>
     </div>
   );
@@ -185,7 +253,21 @@ function QueueWorkspace(props: {
   onGoHome: () => void;
   onResolve: LayoutProps["onResolve"];
   onBulkApprove?: (ids: string[]) => void;
+  onRetry?: () => void;
+  onRepair?: () => Promise<void>;
 }) {
+  const [repairing, setRepairing] = useState(false);
+
+  const handleRepair = useCallback(async () => {
+    if (props.onRepair === undefined) return;
+    setRepairing(true);
+    try {
+      await props.onRepair();
+    } finally {
+      setRepairing(false);
+    }
+  }, [props.onRepair]);
+
   if (props.requests.kind === "loading") {
     return (
       <div className="space-y-4">
@@ -195,10 +277,31 @@ function QueueWorkspace(props: {
     );
   }
   if (props.requests.kind === "error") {
+    const approvalUrl =
+      props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null;
     return (
-      <Surface tone="danger">
-        <p className="text-sm text-brand-purple">{props.requests.message}</p>
-      </Surface>
+      <div className="space-y-4">
+        <Surface tone="danger">
+          <p className="text-sm font-semibold text-brand-purple">Guard connection lost. Check if the daemon is running.</p>
+          <p className="mt-1 text-sm text-brand-purple/80">{props.requests.message}</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            {props.onRepair !== undefined && (
+              <ActionButton onClick={handleRepair} disabled={repairing}>
+                {repairing ? "Repairing…" : "Repair"}
+              </ActionButton>
+            )}
+            <code className="inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all">hol-guard start</code>
+            {props.onRetry && (
+              <ActionButton variant="outline" onClick={props.onRetry}>Retry</ActionButton>
+            )}
+            {approvalUrl && (
+              <ActionButton href={approvalUrl} variant="outline" onClick={() => window.location.reload()}>
+                Open dashboard
+              </ActionButton>
+            )}
+          </div>
+        </Surface>
+      </div>
     );
   }
   if (props.requests.items.length === 0) {
@@ -222,6 +325,12 @@ function QueueWorkspace(props: {
   );
   return (
     <div className="space-y-4">
+      {props.resolutionMessage && props.requests.items.length > 0 && (
+        <div className="flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3">
+          <HiMiniCheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
+          <p className="text-sm font-medium text-brand-green-text">{props.resolutionMessage}</p>
+        </div>
+      )}
       <QueueHeader
         activeRequestId={props.activeRequestId}
         requests={props.requests.items}
@@ -294,7 +403,7 @@ function QueueHeader(props: {
             {props.progressCopy}
           </span>
         )}
-        <Badge tone="warning">{props.requests.length} waiting</Badge>
+        <Badge tone="default">{props.requests.length} waiting</Badge>
         {activeItem ? <Tag tone="blue">{harnessDisplayName(activeItem.harness)}</Tag> : null}
         <Tag tone="slate">{runtimeLabel}</Tag>
       </div>
@@ -329,16 +438,20 @@ function QueueBrowser(props: {
   const pageStart = (currentPage - 1) * queuePageSize;
   const visibleGroups = groups.slice(pageStart, pageStart + queuePageSize);
 
+  const allGroups = useMemo(() => groupDuplicates(props.items), [props.items]);
+  const nextUpItem = useMemo(() => {
+    if (allGroups.length < 2 || props.activeRequestId === null) return null;
+    const activeIdx = allGroups.findIndex((g) => g.primary.request_id === props.activeRequestId);
+    if (activeIdx < 0 || activeIdx >= allGroups.length - 1) return null;
+    return allGroups[activeIdx + 1]?.primary ?? null;
+  }, [allGroups, props.activeRequestId]);
+
   useEffect(() => {
     setPage(1);
   }, [harnessFilter, searchTerm, sortDirection, props.items.length]);
 
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
-  }, []);
-
-  const handleHarnessFilterChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
-    setHarnessFilter(event.target.value);
   }, []);
 
   const handleSortChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
@@ -391,18 +504,24 @@ function QueueBrowser(props: {
           </button>
         </div>
       )}
-      <div className="mb-3 grid gap-2">
-        <ListControls
-          searchLabel="Search waiting actions"
-          searchValue={searchTerm}
-          searchPlaceholder="Command, file, MCP, host…"
-          filterLabel="Filter by app"
-          filterValue={harnessFilter}
-          filterOptions={harnesses}
-          allLabel="All apps"
-          onSearchChange={handleSearchChange}
-          onFilterChange={handleHarnessFilterChange}
-        />
+      <div className="mb-3 space-y-2">
+        <label className="block">
+          <span className="sr-only">Search waiting actions</span>
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={handleSearchChange}
+            placeholder="Command, file, MCP, host…"
+            className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          />
+        </label>
+        {harnesses.length > 0 && (
+          <QueueChipFilter
+            harnesses={harnesses}
+            activeFilter={harnessFilter}
+            onFilterChange={setHarnessFilter}
+          />
+        )}
         <label className="block">
           <span className="sr-only">Sort order</span>
           <select
@@ -422,6 +541,11 @@ function QueueBrowser(props: {
               key={group.primary.request_id}
               group={group}
               activeRequestId={props.activeRequestId}
+              nextUpItem={
+                nextUpItem !== null && group.primary.request_id === props.activeRequestId
+                  ? nextUpItem
+                  : null
+              }
               onOpenRequest={props.onOpenRequest}
             />
           ))
@@ -447,6 +571,7 @@ function QueueBrowser(props: {
 function QueueCardRow(props: {
   group: ReturnType<typeof groupDuplicates>[number];
   activeRequestId: string | null;
+  nextUpItem: GuardApprovalRequest | null;
   onOpenRequest: (requestId: string) => void;
 }) {
   const handleClick = useCallback(() => {
@@ -454,12 +579,22 @@ function QueueCardRow(props: {
   }, [props.onOpenRequest, props.group.primary.request_id]);
 
   return (
-    <QueueCard
-      item={props.group.primary}
-      duplicateCount={props.group.duplicateCount}
-      active={props.group.primary.request_id === props.activeRequestId}
-      onClick={handleClick}
-    />
+    <div>
+      <QueueCard
+        item={props.group.primary}
+        duplicateCount={props.group.duplicateCount}
+        active={props.group.primary.request_id === props.activeRequestId}
+        onClick={handleClick}
+      />
+      {props.nextUpItem !== null && (
+        <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-2">
+          <p className="truncate text-[11px] text-muted-foreground">
+            <span className="font-semibold">Next up:</span>{" "}
+            {displayArtifactName(props.nextUpItem)}
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -517,6 +652,30 @@ function queueCardStatusDotClass(active: boolean, blocked: boolean): string {
   }
   return "bg-slate-200";
 }
+
+function StickyMobileActions(props: {
+  allowLabel: string;
+  submitting: "allow" | "block" | null;
+  isBlocked: boolean;
+  onAllow: () => void;
+  onBlock: () => void;
+}) {
+  const allowText = resolveAllowButtonText(props.submitting, props.isBlocked, props.allowLabel);
+  const blockText = resolveBlockButtonText(props.submitting, props.isBlocked);
+  return (
+    <div className="sticky bottom-0 z-20 -mx-6 border-t border-slate-200/70 bg-white/95 px-4 py-3 shadow-[0_-4px_16px_rgba(63,65,116,0.08)] backdrop-blur lg:hidden">
+      <div className="grid grid-cols-2 gap-2">
+        <ActionButton variant="success" onClick={props.onAllow} disabled={props.submitting !== null}>
+          {allowText}
+        </ActionButton>
+        <ActionButton variant="danger" onClick={props.onBlock} disabled={props.submitting !== null}>
+          {blockText}
+        </ActionButton>
+      </div>
+    </div>
+  );
+}
+
 function DecisionWorkspace(props: {
   detail: DetailState;
   onGoHome: () => void;
@@ -527,14 +686,35 @@ function DecisionWorkspace(props: {
   const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confirmPending, setConfirmPending] = useState<"allow" | "block" | null>(null);
+  const [resolvedBanner, setResolvedBanner] = useState<"allow" | "block" | null>(null);
+  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevRequestIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (props.detail.kind === "ready") {
+      const isNewItem = props.detail.item.request_id !== prevRequestIdRef.current;
+      prevRequestIdRef.current = props.detail.item.request_id;
+      if (isNewItem) {
+        setResolvedBanner(null);
+        if (bannerTimerRef.current !== null) {
+          clearTimeout(bannerTimerRef.current);
+          bannerTimerRef.current = null;
+        }
+      }
       setScope(props.detail.item.recommended_scope);
       setErrorMessage(null);
       setSubmitting(null);
     }
   }, [props.detail]);
+
+  useEffect(() => {
+    return () => {
+      if (bannerTimerRef.current !== null) {
+        clearTimeout(bannerTimerRef.current);
+      }
+    };
+  }, []);
+
   const readyItem = props.detail.kind === "ready" ? props.detail.item : null;
   const readyRequestId = readyItem?.request_id ?? "";
   const readyWorkspace = readyItem?.workspace ?? undefined;
@@ -551,6 +731,10 @@ function DecisionWorkspace(props: {
           reason,
           workspace: scope === "workspace" ? readyWorkspace : undefined,
         });
+        setResolvedBanner(action);
+        bannerTimerRef.current = setTimeout(() => {
+          setResolvedBanner(null);
+        }, 1500);
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
         setSubmitting(null);
@@ -580,6 +764,9 @@ function DecisionWorkspace(props: {
   const handleCancelConfirm = useCallback(() => {
     setConfirmPending(null);
   }, []);
+
+  const handleAllowDirect = useCallback(() => handleRequestResolve("allow"), [handleRequestResolve]);
+  const handleBlockDirect = useCallback(() => handleRequestResolve("block"), [handleRequestResolve]);
 
   useEffect(() => {
     if (props.detail.kind !== "ready") return;
@@ -619,6 +806,24 @@ function DecisionWorkspace(props: {
       </div>
     );
   }
+  if (props.detail.kind === "stale") {
+    return (
+      <Surface tone="default">
+        <div className="flex items-start gap-3">
+          <HiMiniInformationCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-medium text-brand-dark">{STALE_REQUEST_COPY}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Someone already reviewed this blocked action. No further action needed.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4">
+          <ActionButton variant="outline" onClick={props.onGoHome}>Back to queue</ActionButton>
+        </div>
+      </Surface>
+    );
+  }
   if (props.detail.kind === "error") {
     return (
       <Surface tone="danger">
@@ -633,8 +838,39 @@ function DecisionWorkspace(props: {
   const { item, diff, receipt, policy } = props.detail;
   const commonScopeOpts = scopeOptions.filter((option) => commonScopeValues.has(option.value));
   const broadScopeOpts = scopeOptions.filter((option) => !commonScopeValues.has(option.value));
+  const isAlreadyDecided = item.resolution_action !== null;
+  const decidedLabel =
+    item.resolution_action === "allow" ? "allow" : item.resolution_action === "block" ? "block" : item.resolution_action ?? "decided";
+  const allowLabel = scope === "artifact" ? "Approve once" : "Approve and remember";
   return (
     <div className="guard-surface-in space-y-4">
+      {resolvedBanner !== null && (
+        <div
+          className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${
+            resolvedBanner === "allow"
+              ? "border-brand-green/25 bg-brand-green-bg/30"
+              : "border-brand-purple/25 bg-brand-purple/[0.06]"
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          <HiMiniCheckCircle
+            className={`h-4 w-4 shrink-0 ${resolvedBanner === "allow" ? "text-brand-green" : "text-brand-purple"}`}
+            aria-hidden="true"
+          />
+          <p className={`text-sm font-medium ${resolvedBanner === "allow" ? "text-brand-green-text" : "text-brand-purple"}`}>
+            {resolvedBanner === "allow" ? "✓ Approved" : "✗ Blocked"}
+          </p>
+        </div>
+      )}
+      {isAlreadyDecided && (
+        <div className="flex items-start gap-3 rounded-2xl border border-slate-200/60 bg-slate-50 px-4 py-3">
+          <HiMiniInformationCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+          <p className="text-sm text-muted-foreground">
+            This action was already decided — {decidedLabel}. No further action needed.
+          </p>
+        </div>
+      )}
       {confirmPending !== null && (
         <ConfirmModal
           action={confirmPending}
@@ -655,13 +891,25 @@ function DecisionWorkspace(props: {
         onReasonChange={setReason}
         onResolve={handleRequestResolve}
       />
-      <ScannerEvidenceSection item={item} />
+      <StickyMobileActions
+        allowLabel={allowLabel}
+        submitting={submitting}
+        isBlocked={item.policy_action === "block"}
+        onAllow={handleAllowDirect}
+        onBlock={handleBlockDirect}
+      />
+      <ScannerEvidenceSectionFull item={item} />
       <WhatChanged item={item} diff={diff} receipt={receipt} policy={policy} />
     </div>
   );
 }
 
-function ScannerEvidenceSection(props: { item: GuardApprovalRequest }) {
+function InlineScannerSection(props: { item: GuardApprovalRequest }) {
+  const allSignals = props.item.decision_v2_json?.signals ?? [];
+  return <ScannerEvidenceSection signals={allSignals} />;
+}
+
+function ScannerEvidenceSectionFull(props: { item: GuardApprovalRequest }) {
   const hasSignals =
     (props.item.risk_signals ?? []).length > 0 ||
     !!props.item.risk_summary ||
@@ -669,6 +917,7 @@ function ScannerEvidenceSection(props: { item: GuardApprovalRequest }) {
   if (!hasSignals) return null;
   return (
     <div className="space-y-3">
+      <InlineScannerSection item={props.item} />
       <WhyGuardCares item={props.item} />
       <DataFlowEvidenceCard item={props.item} />
       <SkillRiskCard item={props.item} />
@@ -795,7 +1044,7 @@ function RuleBuilder(props: {
         </div>
       </div>
 
-      <div className="relative mt-5">
+      <div className="relative mt-5 sticky top-4 z-10">
         <DecisionActionPanel
           allowLabel={allowLabel}
           previewText={previewText}
@@ -999,6 +1248,18 @@ function CopyCommandButton(props: { command: string }) {
   );
 }
 
+function resolveMcpInputSummary(payload: Record<string, unknown>): string | null {
+  const inputs = payload.arguments ?? payload.input ?? payload.params ?? null;
+  if (inputs === null || inputs === undefined) return null;
+  try {
+    const serialized = JSON.stringify(inputs);
+    if (serialized.length <= 2) return null;
+    return serialized.length > 140 ? `${serialized.slice(0, 140)}…` : serialized;
+  } catch {
+    return null;
+  }
+}
+
 function BlockedActionCard(props: { item: GuardApprovalRequest }) {
   const launchText = actionLaunchText(props.item);
   const decisionDetail = resolveDecisionV2Detail(props.item);
@@ -1009,6 +1270,14 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
   const bannerLabel = isBlocked ? "Blocked" : "Paused for review";
   const bannerIcon = isBlocked ? HiMiniNoSymbol : HiMiniExclamationTriangle;
   const BannerIcon = bannerIcon;
+  const envelope = props.item.action_envelope_json;
+  const isMcpTool = envelope?.action_type === "mcp_tool";
+  const mcpServer = isMcpTool ? (envelope?.mcp_server ?? null) : null;
+  const mcpTool = isMcpTool ? (envelope?.mcp_tool ?? null) : null;
+  const mcpInputSummary =
+    isMcpTool && envelope !== null
+      ? resolveMcpInputSummary(envelope.raw_payload_redacted)
+      : null;
 
   return (
     <div className="overflow-hidden rounded-[1.65rem] border border-brand-blue/15 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
@@ -1030,6 +1299,23 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
         ) : null}
       </div>
       <div className="p-4">
+        {isMcpTool && mcpServer !== null && mcpTool !== null && (
+          <div className="mb-3 space-y-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.15em] text-brand-blue">
+                MCP
+              </span>
+              <span className="font-mono text-sm font-medium text-brand-dark">
+                {mcpServer} → {mcpTool}
+              </span>
+            </div>
+            {mcpInputSummary !== null && (
+              <p className="truncate font-mono text-xs text-brand-dark/60">
+                {mcpInputSummary}
+              </p>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <SectionLabel>What was stopped</SectionLabel>
         </div>

@@ -685,6 +685,18 @@ export function SettingsWorkspace() {
               ) : null}
             </div>
           </div>
+          <div>
+            <SectionLabel>Deep scanner</SectionLabel>
+            <div className="mt-4 rounded-[1.25rem] border border-slate-200/70 bg-white/80 px-5 py-4">
+              <p className="text-sm font-semibold text-brand-dark">Enhanced scanning</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Install the Cisco scanner extension to enable skill and MCP evidence enrichment.
+              </p>
+              <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark">
+                pip install holguard[cisco]
+              </p>
+            </div>
+          </div>
           <div className="sticky top-24 rounded-[1.75rem] border border-white/80 bg-white/90 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur">
             <ActionButton onClick={handleSave} disabled={saving}>
               {saving ? "Saving…" : "Save settings"}

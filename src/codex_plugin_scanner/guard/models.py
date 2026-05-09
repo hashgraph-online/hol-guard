@@ -19,6 +19,8 @@ GUARD_ACTION_VALUES: tuple[GuardAction, ...] = (
 )
 DECISION_SCOPE_VALUES: tuple[DecisionScope, ...] = ("global", "harness", "workspace", "artifact", "publisher")
 
+SEVERITY_RANK: dict[str, int] = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+
 
 def _redact_url(value: str | None) -> str | None:
     if value is None:
