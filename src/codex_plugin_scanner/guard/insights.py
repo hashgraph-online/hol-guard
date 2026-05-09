@@ -18,8 +18,9 @@ def _now_iso() -> str:
 def _max_severity(signals: tuple[RiskSignalV2, ...]) -> str:
     best = "info"
     for sig in signals:
-        if SEVERITY_RANK.get(sig.severity, 0) > SEVERITY_RANK.get(best, 0):
-            best = sig.severity
+        sev = str(sig.severity or "info").lower()
+        if SEVERITY_RANK.get(sev, 0) > SEVERITY_RANK.get(best, 0):
+            best = sev
     return best
 
 
