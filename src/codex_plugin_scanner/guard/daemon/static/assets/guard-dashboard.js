@@ -14737,14 +14737,7 @@ function QueueWorkspace(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: props.requests.message }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
         props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, children: repairing ? "Repairing…" : "Repair" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "a",
-          {
-            href: "x-terminal-emulator://",
-            className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-white px-3 py-2 text-sm font-medium text-brand-purple transition-colors hover:bg-brand-purple/5",
-            children: "Open Terminal"
-          }
-        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: "hol-guard start" }),
         props.onRetry && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Retry" }),
         approvalUrl && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: approvalUrl, variant: "outline", onClick: () => window.location.reload(), children: "Open dashboard" })
       ] })

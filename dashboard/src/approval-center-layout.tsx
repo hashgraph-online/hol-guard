@@ -290,12 +290,9 @@ function QueueWorkspace(props: {
                 {repairing ? "Repairing…" : "Repair"}
               </ActionButton>
             )}
-            <a
-              href="x-terminal-emulator://"
-              className="inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-white px-3 py-2 text-sm font-medium text-brand-purple transition-colors hover:bg-brand-purple/5"
-            >
-              Open Terminal
-            </a>
+            <code className="inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all">
+              hol-guard start
+            </code>
             {props.onRetry && (
               <ActionButton variant="outline" onClick={props.onRetry}>Retry</ActionButton>
             )}

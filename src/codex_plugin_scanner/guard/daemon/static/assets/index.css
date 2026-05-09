@@ -2731,6 +2731,11 @@
     transition-duration: .3s;
   }
 
+  .select-all {
+    -webkit-user-select: all;
+    user-select: all;
+  }
+
   .select-none {
     -webkit-user-select: none;
     user-select: none;
@@ -2813,16 +2818,6 @@
     @supports (color: color-mix(in lab, red, red)) {
       .hover\:bg-brand-blue\/\[0\.035\]:hover {
         background-color: color-mix(in oklab, var(--brand-blue) 3.5%, transparent);
-      }
-    }
-
-    .hover\:bg-brand-purple\/5:hover {
-      background-color: var(--brand-purple);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .hover\:bg-brand-purple\/5:hover {
-        background-color: color-mix(in oklab, var(--brand-purple) 5%, transparent);
       }
     }
 
