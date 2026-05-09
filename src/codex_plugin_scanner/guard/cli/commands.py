@@ -80,7 +80,7 @@ from ..mcp_tool_calls import (
     build_tool_call_hash,
     evaluate_tool_call,
 )
-from ..models import GuardArtifact, HarnessDetection, PolicyDecision
+from ..models import SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2
 from ..protect import build_protect_payload
 from ..proxy import (
@@ -1292,10 +1292,11 @@ def run_guard_command(
         else:
             all_advs = store.list_cached_advisories()
             sev_filter = getattr(args, "severity", None)
-            _sev_rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-            if sev_filter and sev_filter in _sev_rank:
-                min_rank = _sev_rank[sev_filter]
-                all_advs = [a for a in all_advs if _sev_rank.get(str(a.get("severity", "")).lower(), -1) >= min_rank]
+            if sev_filter and sev_filter in SEVERITY_RANK:
+                min_rank = SEVERITY_RANK[sev_filter]
+                all_advs = [
+                    a for a in all_advs if SEVERITY_RANK.get(str(a.get("severity", "")).lower(), -1) >= min_rank
+                ]
             _emit(
                 "advisories",
                 {"generated_at": _now(), "items": all_advs},

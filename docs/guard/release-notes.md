@@ -7,6 +7,31 @@ Update this file for every release that touches a Guard integration path.
 
 ## Unreleased
 
+### Legacy code cleanup
+
+- **Removed unused CSS classes** — `guard-delay-1`, `guard-delay-2`, `guard-delay-3`, and
+  `guard-success-check` were defined in `styles.css` but had zero usages across all dashboard
+  components. They have been removed together with the `@keyframes guard-checkmark-draw`
+  animation that was their sole dependency. The `@media (prefers-reduced-motion)` block has
+  been narrowed to match. No visual change for end users.
+
+- **Unified severity rank constant** — Three inline severity-rank dictionaries scattered
+  across `cisco_preflight.py`, `insights.py`, and `cli/commands.py` have been consolidated
+  into a single `SEVERITY_RANK` constant exported from `guard/models.py`. All callers now
+  import and reference the shared constant. Behaviour is identical; the constant adds `"info"`
+  coverage uniformly (previously absent from the advisory-filter code path).
+
+- **Unified severity colour constant** — Two identical severity-to-Rich-colour maps inside
+  `cli/render.py` (one in `_render_supply_chain_risk_results`, one in
+  `_render_safe_decode_results`) have been collapsed into a single module-level
+  `_SEVERITY_COLORS` dict. No output change.
+
+**Rollback notes for removed paths:**
+- `guard-delay-1/2/3` and `guard-success-check` CSS classes: these were never applied at
+  runtime. Adding them back requires a one-line addition to `styles.css` and no Python changes.
+- `_SEVERITY_RANK` in `cisco_preflight.py`: restore by adding the local dict and removing the
+  `SEVERITY_RANK` import from `models`. The shared constant in `models.py` can remain.
+
 ### False-positive improvements (T647)
 
 - **Supply-chain artifact fallback** — `SupplyChainRiskCard` now matches `package_request`

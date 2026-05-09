@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
+from .models import SEVERITY_RANK
 from .runtime.actions import GuardActionEnvelope
 from .runtime.signals import RiskSignalV2
 
@@ -15,10 +16,9 @@ def _now_iso() -> str:
 
 
 def _max_severity(signals: tuple[RiskSignalV2, ...]) -> str:
-    order = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
     best = "info"
     for sig in signals:
-        if order.get(sig.severity, 0) > order.get(best, 0):
+        if SEVERITY_RANK.get(sig.severity, 0) > SEVERITY_RANK.get(best, 0):
             best = sig.severity
     return best
 
