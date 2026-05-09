@@ -114,10 +114,14 @@ class TestPresetCliCommands:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str], preset: str
     ) -> None:
         home_dir = tmp_path / "home"
-        _write_text(
-            home_dir / "config.toml",
-            'security_level = "custom"\n[risk_actions]\nlocal_secret_read = "allow"\n',
+        config_toml = (
+            'security_level = "custom"\n'
+            "[risk_actions]\n"
+            'local_secret_read = "allow"\n'
+            "[harness_risk_actions.codex]\n"
+            'local_secret_read = "allow"\n'
         )
+        _write_text(home_dir / "config.toml", config_toml)
         rc = main(["guard", "settings", "set", "preset", preset, "--home", str(home_dir), "--json"])
         assert rc == 0
         capsys.readouterr()
@@ -125,6 +129,8 @@ class TestPresetCliCommands:
         expected = SECURITY_LEVEL_RISK_ACTIONS[preset]["local_secret_read"]
         actual = resolve_risk_action(loaded, "local_secret_read", harness="codex")
         assert actual == expected
+        assert loaded.risk_actions == {}
+        assert loaded.harness_risk_actions == {}
 
 
 class TestCustomModeActivation:
