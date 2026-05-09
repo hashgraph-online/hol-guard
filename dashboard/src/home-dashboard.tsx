@@ -350,7 +350,16 @@ function AppsProtectedSection(props: AppsProtectedSectionProps) {
     ])
   ).sort();
 
-  if (allHarnesses.length === 0) return null;
+  if (allHarnesses.length === 0) {
+    return (
+      <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+        <SectionLabel>Apps protected</SectionLabel>
+        <p className="mt-3 text-sm text-muted-foreground">
+          None yet. Connect an AI harness to start.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">

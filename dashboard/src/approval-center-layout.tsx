@@ -47,7 +47,8 @@ import {
   resolveStoppedCommandText,
   displayArtifactName,
   resolveTerminalLabel,
-  scopeLabel
+  scopeLabel,
+  STALE_REQUEST_COPY,
 } from "./approval-center-utils";
 import {
   WhyThisPaused,
@@ -210,6 +211,9 @@ function MobileQueueDrawer(props: {
   return (
     <div
       className="fixed inset-0 z-50 flex lg:hidden"
+      role="dialog"
+      aria-label="Review queue"
+      aria-modal="true"
     >
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={props.onClose} />
       <div className="relative ml-0 flex w-full max-w-sm flex-col overflow-hidden bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -278,7 +282,7 @@ function QueueWorkspace(props: {
     return (
       <div className="space-y-4">
         <Surface tone="danger">
-          <p className="text-sm font-semibold text-brand-purple">Guard is not responding</p>
+          <p className="text-sm font-semibold text-brand-purple">Guard connection lost. Check if the daemon is running.</p>
           <p className="mt-1 text-sm text-brand-purple/80">{props.requests.message}</p>
           <div className="mt-4 flex flex-wrap gap-3">
             {props.onRepair !== undefined && (
@@ -286,6 +290,12 @@ function QueueWorkspace(props: {
                 {repairing ? "Repairing…" : "Repair"}
               </ActionButton>
             )}
+            <a
+              href="x-terminal-emulator://"
+              className="inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-white px-3 py-2 text-sm font-medium text-brand-purple transition-colors hover:bg-brand-purple/5"
+            >
+              Open Terminal
+            </a>
             {props.onRetry && (
               <ActionButton variant="outline" onClick={props.onRetry}>Retry</ActionButton>
             )}
@@ -398,7 +408,7 @@ function QueueHeader(props: {
             {props.progressCopy}
           </span>
         )}
-        <Badge tone="warning">{props.requests.length} waiting</Badge>
+        <Badge tone="default">{props.requests.length} waiting</Badge>
         {activeItem ? <Tag tone="blue">{harnessDisplayName(activeItem.harness)}</Tag> : null}
         <Tag tone="slate">{runtimeLabel}</Tag>
       </div>
@@ -510,7 +520,7 @@ function QueueBrowser(props: {
             className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           />
         </label>
-        {harnesses.length > 1 && (
+        {harnesses.length > 0 && (
           <QueueChipFilter
             harnesses={harnesses}
             activeFilter={harnessFilter}
@@ -807,7 +817,7 @@ function DecisionWorkspace(props: {
         <div className="flex items-start gap-3">
           <HiMiniInformationCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
           <div>
-            <p className="text-sm font-medium text-brand-dark">This request was already decided.</p>
+            <p className="text-sm font-medium text-brand-dark">{STALE_REQUEST_COPY}</p>
             <p className="mt-1 text-sm text-muted-foreground">
               Someone already reviewed this blocked action. No further action needed.
             </p>

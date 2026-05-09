@@ -1294,6 +1294,16 @@
     }
   }
 
+  .border-brand-purple\/30 {
+    border-color: var(--brand-purple);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-brand-purple\/30 {
+      border-color: color-mix(in oklab, var(--brand-purple) 30%, transparent);
+    }
+  }
+
   .border-brand-purple\/35 {
     border-color: var(--brand-purple);
   }
@@ -2806,6 +2816,16 @@
       }
     }
 
+    .hover\:bg-brand-purple\/5:hover {
+      background-color: var(--brand-purple);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-brand-purple\/5:hover {
+        background-color: color-mix(in oklab, var(--brand-purple) 5%, transparent);
+      }
+    }
+
     .hover\:bg-brand-purple\/90:hover {
       background-color: var(--brand-purple);
     }
@@ -3343,16 +3363,6 @@ body {
   }
 }
 
-@keyframes guard-checkmark-draw {
-  from {
-    stroke-dashoffset: 24px;
-  }
-
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
 @keyframes guard-fade-scale {
   from {
     opacity: 0;
@@ -3369,29 +3379,11 @@ body {
   animation: guard-enter .32s var(--ease-out-quint) both;
 }
 
-.guard-delay-1 {
-  animation-delay: 60ms;
-}
-
-.guard-delay-2 {
-  animation-delay: .12s;
-}
-
-.guard-delay-3 {
-  animation-delay: .18s;
-}
-
 .guard-skeleton {
   background: linear-gradient(90deg, var(--surface-1) 25%, var(--surface-2) 50%, var(--surface-1) 75%);
   background-size: 200% 100%;
   border-radius: 8px;
   animation: 1.5s infinite guard-shimmer;
-}
-
-.guard-success-check {
-  stroke-dasharray: 24;
-  stroke-dashoffset: 24px;
-  animation: guard-checkmark-draw .4s var(--ease-out-quart) .15s forwards;
 }
 
 .guard-fade-in {
@@ -3421,7 +3413,7 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .guard-surface-in, .guard-delay-1, .guard-delay-2, .guard-delay-3, .guard-success-check, .guard-fade-in, .guard-skeleton {
+  .guard-surface-in, .guard-fade-in, .guard-skeleton {
     animation: none !important;
   }
 
