@@ -6,6 +6,9 @@ import type {
   RiskSignalV2
 } from "./guard-types";
 
+export const EMPTY_QUEUE_TITLE = "No blocked actions";
+export const STALE_REQUEST_COPY = "This request was already decided.";
+
 export type DataFlowEvidenceSummary = {
   signalTitle: string;
   sourceLabel: string;

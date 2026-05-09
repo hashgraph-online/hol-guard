@@ -75,10 +75,10 @@ function StatusBadge(props: StatusBadgeProps) {
     return <Badge tone="success">Protected</Badge>;
   }
   if (props.status === "found_unprotected") {
-    return <Badge tone="warning">Found</Badge>;
+    return <Badge tone="warning">Found, protection not installed</Badge>;
   }
   if (props.status === "needs_repair") {
-    return <Badge tone="destructive">Needs repair</Badge>;
+    return <Badge tone="warning">Repair needed</Badge>;
   }
   if (props.status === "not_found") {
     return <Badge tone="default">Not found</Badge>;
@@ -124,7 +124,7 @@ function CardAction(props: CardActionProps) {
   }
   if (props.status === "needs_repair") {
     return (
-      <ActionButton variant="danger" onClick={handleRepair}>
+      <ActionButton variant="outline" onClick={handleRepair}>
         Repair
       </ActionButton>
     );
