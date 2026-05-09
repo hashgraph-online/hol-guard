@@ -1,9 +1,10 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 
 import {
   HiMiniCheckCircle,
   HiMiniExclamationCircle,
   HiMiniMinusCircle,
+  HiMiniArrowTopRightOnSquare,
 } from "react-icons/hi2";
 import {
   ActionButton,
@@ -48,6 +49,55 @@ function heroBackgroundClass(status: HomeProtectionStatus): string {
     return "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.06)_100%)]";
   }
   return "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)]";
+}
+
+const KNOWN_HARNESSES = [
+  "codex",
+  "claude-code",
+  "opencode",
+  "copilot",
+  "gemini",
+  "cursor",
+  "hermes",
+  "openclaw",
+] as const;
+
+type SetupSuggestionRowProps = {
+  harness: string;
+};
+
+function SetupSuggestionRow(props: SetupSuggestionRowProps) {
+  return (
+    <li className="flex items-center justify-between gap-3 border-b border-slate-200/70 px-4 py-3 last:border-b-0">
+      <p className="text-sm text-brand-dark">
+        Set up <span className="font-medium">{harnessDisplayName(props.harness)}</span> →{" "}
+        <span className="font-mono text-xs text-brand-blue">
+          hol-guard apps connect {props.harness}
+        </span>
+      </p>
+    </li>
+  );
+}
+
+type SetupSuggestionsSectionProps = {
+  configuredHarnesses: string[];
+};
+
+function SetupSuggestionsSection(props: SetupSuggestionsSectionProps) {
+  const unconfigured = KNOWN_HARNESSES.filter(
+    (h) => !props.configuredHarnesses.includes(h)
+  );
+  if (unconfigured.length === 0) return null;
+  return (
+    <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+      <SectionLabel>Connect more apps</SectionLabel>
+      <ul className="mt-3 overflow-hidden rounded-[1.25rem] border border-slate-200/70">
+        {unconfigured.slice(0, 4).map((harness) => (
+          <SetupSuggestionRow key={harness} harness={harness} />
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function ClearHarnessButton(props: {
@@ -145,6 +195,10 @@ export function HomeWorkspace(props: {
         observedHarnesses={observedHarnesses}
       />
 
+      {primaryState.status === "setup_needed" && (
+        <SetupSuggestionsSection configuredHarnesses={observedHarnesses} />
+      )}
+
       {snapshot.latest_receipts.length > 0 && (
         <RecentProtectionSection receipts={snapshot.latest_receipts} />
       )}
@@ -190,6 +244,8 @@ function ProtectionHero(props: {
   onOpenInbox: () => void;
   onOpenFleet: () => void;
 }) {
+  const [testRunning, setTestRunning] = useState(false);
+
   const handlePrimaryCta = useCallback(() => {
     if (props.status === "setup_needed") {
       props.onOpenFleet();
@@ -197,6 +253,15 @@ function ProtectionHero(props: {
       props.onOpenInbox();
     }
   }, [props.status, props.onOpenInbox, props.onOpenFleet]);
+
+  const handleRunTest = useCallback(() => {
+    setTestRunning(true);
+    fetch("/v1/protect/test")
+      .catch(() => undefined)
+      .finally(() => {
+        setTestRunning(false);
+      });
+  }, []);
 
   const heroBg = heroBackgroundClass(props.status);
   const statusBadge =
@@ -214,23 +279,29 @@ function ProtectionHero(props: {
   const showTestProtection =
     props.activeInstallsCount > 0 && props.latestReceiptsCount === 0;
 
+  const showGuardCloud = props.cloudState !== "local_only";
+
   return (
     <section
       className={`guard-surface-in relative overflow-hidden rounded-[2rem] border border-brand-blue/15 ${heroBg} p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7`}
+      role="region"
+      aria-label="Protection status"
     >
       <div className="pointer-events-none absolute right-10 top-8 h-24 w-24 rounded-full bg-brand-blue/20 blur-3xl" />
       <div className="relative space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <SectionLabel>Protection status</SectionLabel>
           {statusBadge}
-          {props.cloudState !== "local_only" && <Tag tone="blue">Cloud synced</Tag>}
+          {props.cloudState !== "local_only" && <Tag tone="blue">Cloud backup up to date</Tag>}
         </div>
         <h2 className="text-xl font-semibold tracking-tight text-brand-dark">{props.copy}</h2>
         <div className="flex flex-wrap gap-3">
-          <ActionButton onClick={handlePrimaryCta}>{props.ctaLabel}</ActionButton>
+          <ActionButton onClick={handlePrimaryCta} data-primary="true" aria-label={props.ctaLabel}>
+            {props.ctaLabel}
+          </ActionButton>
           {showTestProtection && (
-            <ActionButton href={props.fleetUrl} variant="secondary">
-              Test protection
+            <ActionButton onClick={handleRunTest} variant="secondary" disabled={testRunning}>
+              {testRunning ? "Running test…" : "Run a quick protection test"}
             </ActionButton>
           )}
           {showConnectCta && props.status !== "needs_decision" && (
@@ -239,6 +310,17 @@ function ProtectionHero(props: {
             </ActionButton>
           )}
         </div>
+        {showGuardCloud && (
+          <a
+            href="https://hol.org/guard"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-sm font-medium text-brand-blue transition-colors hover:text-brand-blue/70"
+          >
+            Open Guard Cloud
+            <HiMiniArrowTopRightOnSquare className="h-3.5 w-3.5" aria-hidden="true" />
+          </a>
+        )}
       </div>
     </section>
   );

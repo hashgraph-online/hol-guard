@@ -13696,11 +13696,11 @@ function ShellHeader(props) {
           {
             type: "button",
             onClick: props.onOpenMobileQueue,
-            "aria-label": "Open queue list",
+            "aria-label": `Open queue list — ${props.queuedCount} decisions waiting`,
             className: "inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15",
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiBars3, { className: "h-4 w-4", "aria-hidden": "true" }),
-              props.queuedCount > 99 ? "99+" : props.queuedCount
+              props.queuedCount > 1 ? `${props.queuedCount > 99 ? "99+" : props.queuedCount} decisions waiting` : props.queuedCount
             ]
           }
         ),
@@ -13954,7 +13954,7 @@ function WelcomeState(props) {
     props.resolutionMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-10 w-full max-w-xl flex justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Surface, { tone: "success", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: props.resolutionMessage }) }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-brand-green-bg/50 ring-1 ring-brand-green/20", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-10 w-10 text-brand-green", "aria-hidden": "true" }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl", children: EMPTY_QUEUE_TITLE }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground", children: "Guard is still watching your apps. You'll be notified here if something needs your approval." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground", children: "Guard is still watching your apps." }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-12 text-left w-full max-w-3xl", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-border bg-card p-6 shadow-[0_4px_20px_rgba(85,153,254,0.04)]", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue mb-4", children: "Sync decisions" }),
@@ -14594,6 +14594,11 @@ function searchQueue(items, term) {
     return parts.join(" ").toLowerCase().includes(normalized);
   });
 }
+function buildNextUpChipText(item) {
+  const envelope = item.action_envelope_json;
+  const preview = envelope?.command?.slice(0, 40) ?? envelope?.mcp_tool ?? envelope?.prompt_excerpt?.slice(0, 40) ?? item.artifact_type;
+  return `${item.harness} — ${preview}`;
+}
 function buildHomePrimaryState(pendingCount, watchedAppsCount) {
   if (pendingCount > 0) {
     return {
@@ -14732,11 +14737,15 @@ function QueueWorkspace(props) {
   }
   if (props.requests.kind === "error") {
     const approvalUrl = props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null;
+    const handleOpenDaemon = () => {
+      window.open("http://localhost:7957", "_blank");
+    };
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", children: "Guard connection lost. Check if the daemon is running." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", children: "Guard daemon not responding — click to reconnect." }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: props.requests.message }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
-        props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, children: repairing ? "Repairing…" : "Repair" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),
+        props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, variant: "outline", children: repairing ? "Repairing…" : "Reconnect" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: "hol-guard start" }),
         props.onRetry && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Retry" }),
         approvalUrl && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: approvalUrl, variant: "outline", onClick: () => window.location.reload(), children: "Open dashboard" })
@@ -14928,7 +14937,7 @@ function QueueBrowser(props) {
           }
         )
       ] }),
-      harnesses.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      harnesses.length >= 2 && /* @__PURE__ */ jsxRuntimeExports.jsx(
         QueueChipFilter,
         {
           harnesses,
@@ -14991,9 +15000,9 @@ function QueueCardRow(props) {
       }
     ),
     props.nextUpItem !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 bg-slate-50/60 px-4 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "truncate text-[11px] text-muted-foreground", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Next up:" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Next:" }),
       " ",
-      displayArtifactName(props.nextUpItem)
+      buildNextUpChipText(props.nextUpItem)
     ] }) })
   ] });
 }
@@ -15066,6 +15075,7 @@ function DecisionWorkspace(props) {
   const [errorMessage, setErrorMessage] = reactExports.useState(null);
   const [confirmPending, setConfirmPending] = reactExports.useState(null);
   const [resolvedBanner, setResolvedBanner] = reactExports.useState(null);
+  const [resolvedState, setResolvedState] = reactExports.useState("idle");
   const bannerTimerRef = reactExports.useRef(null);
   const prevRequestIdRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
@@ -15074,6 +15084,7 @@ function DecisionWorkspace(props) {
       prevRequestIdRef.current = props.detail.item.request_id;
       if (isNewItem) {
         setResolvedBanner(null);
+        setResolvedState("loaded");
         if (bannerTimerRef.current !== null) {
           clearTimeout(bannerTimerRef.current);
           bannerTimerRef.current = null;
@@ -15106,6 +15117,7 @@ function DecisionWorkspace(props) {
           reason,
           workspace: scope === "workspace" ? readyWorkspace : void 0
         });
+        setResolvedState("decided");
         setResolvedBanner(action);
         bannerTimerRef.current = setTimeout(() => {
           setResolvedBanner(null);
@@ -15163,6 +15175,18 @@ function DecisionWorkspace(props) {
   }, [props.detail.kind, submitting, handleRequestResolve, confirmPending, handleConfirmResolve, handleCancelConfirm]);
   if (props.detail.kind === "loading") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+      resolvedState === "decided" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "flex items-center gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3",
+          role: "status",
+          "aria-live": "polite",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: "Decided — loading next…" })
+          ]
+        }
+      ),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-40 w-full" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-56 w-full" })
@@ -16539,6 +16563,38 @@ function heroBackgroundClass(status) {
   }
   return "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)]";
 }
+const KNOWN_HARNESSES = [
+  "codex",
+  "claude-code",
+  "opencode",
+  "copilot",
+  "gemini",
+  "cursor",
+  "hermes",
+  "openclaw"
+];
+function SetupSuggestionRow(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "flex items-center justify-between gap-3 border-b border-slate-200/70 px-4 py-3 last:border-b-0", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
+    "Set up ",
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: harnessDisplayName(props.harness) }),
+    " →",
+    " ",
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-xs text-brand-blue", children: [
+      "hol-guard apps connect ",
+      props.harness
+    ] })
+  ] }) });
+}
+function SetupSuggestionsSection(props) {
+  const unconfigured = KNOWN_HARNESSES.filter(
+    (h) => !props.configuredHarnesses.includes(h)
+  );
+  if (unconfigured.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Connect more apps" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 overflow-hidden rounded-[1.25rem] border border-slate-200/70", children: unconfigured.slice(0, 4).map((harness) => /* @__PURE__ */ jsxRuntimeExports.jsx(SetupSuggestionRow, { harness }, harness)) })
+  ] });
+}
 function ClearHarnessButton(props) {
   const handleClick = reactExports.useCallback(() => {
     void props.onClearPolicies({ harness: props.harness });
@@ -16618,6 +16674,7 @@ function HomeWorkspace(props) {
         observedHarnesses
       }
     ),
+    primaryState.status === "setup_needed" && /* @__PURE__ */ jsxRuntimeExports.jsx(SetupSuggestionsSection, { configuredHarnesses: observedHarnesses }),
     snapshot.latest_receipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(RecentProtectionSection, { receipts: snapshot.latest_receipts }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "flex cursor-pointer select-none items-center justify-between gap-3 text-sm font-semibold text-brand-dark [&::-webkit-details-marker]:hidden", children: [
@@ -16640,6 +16697,7 @@ function HomeWorkspace(props) {
   ] });
 }
 function ProtectionHero(props) {
+  const [testRunning, setTestRunning] = reactExports.useState(false);
   const handlePrimaryCta = reactExports.useCallback(() => {
     if (props.status === "setup_needed") {
       props.onOpenFleet();
@@ -16647,6 +16705,12 @@ function ProtectionHero(props) {
       props.onOpenInbox();
     }
   }, [props.status, props.onOpenInbox, props.onOpenFleet]);
+  const handleRunTest = reactExports.useCallback(() => {
+    setTestRunning(true);
+    fetch("/v1/protect/test").catch(() => void 0).finally(() => {
+      setTestRunning(false);
+    });
+  }, []);
   const heroBg = heroBackgroundClass(props.status);
   const statusBadge = props.status === "needs_decision" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "default", children: [
     props.queuedCount,
@@ -16654,24 +16718,40 @@ function ProtectionHero(props) {
   ] }) : props.status === "setup_needed" ? /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Setup needed" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Protected" });
   const showConnectCta = props.cloudState === "local_only" && !props.syncConfigured;
   const showTestProtection = props.activeInstallsCount > 0 && props.latestReceiptsCount === 0;
+  const showGuardCloud = props.cloudState !== "local_only";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "section",
     {
       className: `guard-surface-in relative overflow-hidden rounded-[2rem] border border-brand-blue/15 ${heroBg} p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7`,
+      role: "region",
+      "aria-label": "Protection status",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pointer-events-none absolute right-10 top-8 h-24 w-24 rounded-full bg-brand-blue/20 blur-3xl" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative space-y-4", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Protection status" }),
             statusBadge,
-            props.cloudState !== "local_only" && /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: "Cloud synced" })
+            props.cloudState !== "local_only" && /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: "Cloud backup up to date" })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold tracking-tight text-brand-dark", children: props.copy }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handlePrimaryCta, children: props.ctaLabel }),
-            showTestProtection && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.fleetUrl, variant: "secondary", children: "Test protection" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handlePrimaryCta, "data-primary": "true", "aria-label": props.ctaLabel, children: props.ctaLabel }),
+            showTestProtection && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRunTest, variant: "secondary", disabled: testRunning, children: testRunning ? "Running test…" : "Run a quick protection test" }),
             showConnectCta && props.status !== "needs_decision" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: props.connectUrl, variant: "secondary", children: "Connect this machine" })
-          ] })
+          ] }),
+          showGuardCloud && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "a",
+            {
+              href: "https://hol.org/guard",
+              target: "_blank",
+              rel: "noreferrer",
+              className: "inline-flex items-center gap-1 text-sm font-medium text-brand-blue transition-colors hover:text-brand-blue/70",
+              children: [
+                "Open Guard Cloud",
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+              ]
+            }
+          )
         ] })
       ]
     }

@@ -92,11 +92,13 @@ export function ShellHeader(props: {
           <button
             type="button"
             onClick={props.onOpenMobileQueue}
-            aria-label="Open queue list"
+            aria-label={`Open queue list — ${props.queuedCount} decisions waiting`}
             className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white no-underline transition-colors duration-150 hover:bg-white/15"
           >
             <HiBars3 className="h-4 w-4" aria-hidden="true" />
-            {props.queuedCount > 99 ? "99+" : props.queuedCount}
+            {props.queuedCount > 1
+              ? `${props.queuedCount > 99 ? "99+" : props.queuedCount} decisions waiting`
+              : props.queuedCount}
           </button>
         )}
         {(!props.onOpenMobileQueue || props.view !== "inbox" || props.queuedCount === 0) && (
@@ -541,7 +543,7 @@ export function WelcomeState(props: {
       </div>
       <h2 className="text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl">{EMPTY_QUEUE_TITLE}</h2>
       <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground">
-        Guard is still watching your apps. You'll be notified here if something needs your approval.
+        Guard is still watching your apps.
       </p>
       
       <div className="mt-12 text-left w-full max-w-3xl">
