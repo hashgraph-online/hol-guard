@@ -131,8 +131,16 @@ type LayoutProps = {
 };
 
 const scopeOptions: Array<{ value: DecisionScope; label: string; description: string }> = [
-  { value: "artifact", label: "This exact action", description: "Ask again if the command or tool details change." },
-  { value: "workspace", label: "This project folder", description: "Remember this choice only for this project." },
+  {
+    value: "artifact",
+    label: "This retry only",
+    description: "Remember this exact prompt, command, tool, path, or host fingerprint."
+  },
+  {
+    value: "workspace",
+    label: "Same action in this project",
+    description: "Skip the next prompt for this same action here; different sensitive actions still ask."
+  },
   { value: "publisher", label: "This source", description: "Trust future actions from the same source in this app." },
   { value: "harness", label: "This app", description: "Trust matching actions from this app." },
   { value: "global", label: "Every project", description: "Use this choice across this machine." }

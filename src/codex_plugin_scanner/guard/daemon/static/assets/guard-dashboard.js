@@ -13496,12 +13496,12 @@ function buildPauseLine(item) {
 }
 function buildRecommendation(item) {
   if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
-    return "If this is what you expected, approve the exact action. Use broader trust only when you deliberately want Guard to ask less often.";
+    return "If this is what you expected, approve this retry. Project approval remembers this same action here without trusting new sensitive actions.";
   }
   if (item.policy_action === "block") {
     return "Keep it blocked unless you are sure this action is safe and expected.";
   }
-  return "Approve the smallest choice that matches what you meant to do. Broader trust should be a deliberate second step.";
+  return "Approve the smallest choice that matches what you meant to do. Different commands, prompts, paths, hosts, or tools should ask again.";
 }
 function buildQueueSummary(item) {
   if (item.policy_action === "block") {
@@ -13521,9 +13521,9 @@ function buildMemorySummary(item, receipt) {
 function scopeLabel(scope) {
   switch (scope) {
     case "artifact":
-      return "This exact action";
+      return "This retry only";
     case "workspace":
-      return "This project folder";
+      return "Same action in this project";
     case "publisher":
       return "This source in this app";
     case "harness":
@@ -14621,8 +14621,16 @@ function buildHomePrimaryState(pendingCount, watchedAppsCount) {
   };
 }
 const scopeOptions = [
-  { value: "artifact", label: "This exact action", description: "Ask again if the command or tool details change." },
-  { value: "workspace", label: "This project folder", description: "Remember this choice only for this project." },
+  {
+    value: "artifact",
+    label: "This retry only",
+    description: "Remember this exact prompt, command, tool, path, or host fingerprint."
+  },
+  {
+    value: "workspace",
+    label: "Same action in this project",
+    description: "Skip the next prompt for this same action here; different sensitive actions still ask."
+  },
   { value: "publisher", label: "This source", description: "Trust future actions from the same source in this app." },
   { value: "harness", label: "This app", description: "Trust matching actions from this app." },
   { value: "global", label: "Every project", description: "Use this choice across this machine." }

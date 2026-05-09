@@ -23,6 +23,13 @@ GUARD_DASHBOARD_URL = "https://hol.org/guard"
 GUARD_INBOX_URL = f"{GUARD_DASHBOARD_URL}/inbox"
 GUARD_FLEET_URL = f"{GUARD_DASHBOARD_URL}/fleet"
 GUARD_CONNECT_URL = f"{GUARD_DASHBOARD_URL}/connect"
+_WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES = frozenset(
+    {
+        "file_read_request",
+        "prompt_request",
+        "tool_action_request",
+    }
+)
 
 
 class ApprovalRequestNotFoundError(ValueError):
@@ -133,12 +140,13 @@ def apply_approval_resolution(
         raise ValueError(f"Approval request {request_id} requires --workspace for workspace scope.")
     if scope == "publisher" and not isinstance(request.get("publisher"), str):
         raise ValueError(f"Approval request {request_id} has no publisher scope to approve.")
+    workspace_artifact_id, workspace_artifact_hash = _workspace_policy_artifact_keys(request, scope)
     decision = PolicyDecision(
         harness="*" if scope == "global" else str(request["harness"]),
         scope=scope,
         action="allow" if action == "allow" else "block",
-        artifact_id=str(request["artifact_id"]) if scope == "artifact" else None,
-        artifact_hash=str(request["artifact_hash"]) if scope == "artifact" else None,
+        artifact_id=str(request["artifact_id"]) if scope == "artifact" else workspace_artifact_id,
+        artifact_hash=str(request["artifact_hash"]) if scope == "artifact" else workspace_artifact_hash,
         workspace=workspace if scope == "workspace" else None,
         publisher=str(request["publisher"]) if scope == "publisher" else None,
         reason=reason,
@@ -164,7 +172,7 @@ def apply_approval_resolution(
             resolved_scope_ids = store.resolve_matching_approval_requests(
                 harness=resolution_harness,
                 scope=scope,
-                artifact_id=str(request["artifact_id"]) if scope == "artifact" else None,
+                artifact_id=str(request["artifact_id"]) if scope == "artifact" else workspace_artifact_id,
                 workspace=workspace if scope == "workspace" else None,
                 publisher=(
                     str(request["publisher"])
@@ -184,7 +192,7 @@ def apply_approval_resolution(
         resolved_ids = store.resolve_matching_approval_requests(
             harness=resolution_harness,
             scope=scope,
-            artifact_id=str(request["artifact_id"]) if scope == "artifact" else None,
+            artifact_id=str(request["artifact_id"]) if scope == "artifact" else workspace_artifact_id,
             workspace=workspace if scope == "workspace" else None,
             publisher=(
                 str(request["publisher"])
@@ -208,6 +216,18 @@ def apply_approval_resolution(
     if updated is None:
         raise ValueError(f"Approval request disappeared: {request_id}")
     return updated
+
+
+def _workspace_policy_artifact_keys(request: Mapping[str, object], scope: str) -> tuple[str | None, str | None]:
+    if scope != "workspace" or request.get("artifact_type") not in _WORKSPACE_SCOPED_RUNTIME_ARTIFACT_TYPES:
+        return None, None
+    artifact_id = request.get("artifact_id")
+    artifact_hash = request.get("artifact_hash")
+    if not isinstance(artifact_id, str) or not artifact_id:
+        return None, None
+    if not isinstance(artifact_hash, str) or not artifact_hash:
+        return artifact_id, None
+    return artifact_id, artifact_hash
 
 
 def _refresh_queue_result(
