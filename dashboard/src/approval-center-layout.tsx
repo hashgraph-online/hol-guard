@@ -403,7 +403,7 @@ function QueueHeader(props: {
             {props.progressCopy}
           </span>
         )}
-        <Badge tone="warning">{props.requests.length} waiting</Badge>
+        <Badge tone="default">{props.requests.length} waiting</Badge>
         {activeItem ? <Tag tone="blue">{harnessDisplayName(activeItem.harness)}</Tag> : null}
         <Tag tone="slate">{runtimeLabel}</Tag>
       </div>
@@ -515,7 +515,7 @@ function QueueBrowser(props: {
             className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           />
         </label>
-        {harnesses.length > 1 && (
+        {harnesses.length > 0 && (
           <QueueChipFilter
             harnesses={harnesses}
             activeFilter={harnessFilter}
