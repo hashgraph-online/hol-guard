@@ -1194,7 +1194,7 @@ def run_guard_command(
                 msg = f"No receipt found for ID {receipt_id!r}"
                 _emit("history.explain", {"error": msg}, getattr(args, "json", False))
                 return 1
-            evidence = store.list_evidence(request_id=receipt_id)
+            evidence = store.list_evidence(request_id=receipt_id, limit=10_000)
             payload: dict[str, object] = {
                 "receipt_id": receipt_id,
                 "receipt": match,

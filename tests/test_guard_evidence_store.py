@@ -69,6 +69,7 @@ class TestSchema:
         assert "idx_evidence_action" in names
         assert "idx_evidence_category_severity" in names
         assert "idx_evidence_harness_workspace" in names
+        assert "idx_evidence_identity" in names
 
     def test_indexes_idempotent(self, tmp_path: Path) -> None:
         conn = _db(tmp_path)

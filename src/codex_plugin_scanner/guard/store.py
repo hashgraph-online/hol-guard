@@ -719,7 +719,9 @@ class GuardStore:
         with self._connect() as connection:
             for statement in statements:
                 connection.execute(statement)
-            self._ensure_evidence_column(connection, "action_identity", "text")
+            if not self._schema_version_applied(connection, version=4):
+                self._ensure_column(connection, "guard_evidence", "action_identity", "text")
+                self._record_schema_version(connection, version=4)
             for idx_stmt in evidence_index_statements():
                 connection.execute(idx_stmt)
             for idx_stmt in threat_intel_index_statements():
@@ -759,8 +761,6 @@ class GuardStore:
                 connection.execute(idx_stmt)
             self._ensure_attachment_column(connection, "lease_id", "text not null default ''")
             self._ensure_attachment_column(connection, "lease_expires_at", "text")
-            if not self._schema_version_applied(connection, version=4):
-                self._record_schema_version(connection, version=4)
             self._ensure_local_device(connection)
             if not self._schema_version_applied(connection, version=2):
                 self._record_schema_version(connection, version=2)
