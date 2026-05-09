@@ -32,12 +32,12 @@ function remediationLine(snapshot: GuardRuntimeSnapshot): string {
     return "Open the review queue, choose what to do with the blocked action, then retry in the same chat.";
   }
   if (snapshot.cloud_state === "paired_waiting") {
-    return "Open Guard Cloud while the first shared proof lands and this machine finishes syncing.";
+    return "Open Guard Cloud while the first protected session lands and this machine finishes syncing.";
   }
   if (snapshot.cloud_state === "local_only") {
     return "Stay local for now or connect this machine when you want shared queue memory and cross-device proof.";
   }
-  return "Open Guard Cloud for shared proof, Watched Apps for local coverage, or the review queue when something needs your choice.";
+  return "Open Guard Cloud for shared decisions, Watched Apps for local coverage, or the review queue when something needs your choice.";
 }
 
 export type ApprovalCenterHealthState = "ready" | "starting" | "stale" | "repair_needed";
@@ -118,6 +118,13 @@ function cloudSyncHealthTone(state: GuardCloudSyncHealth["state"]): "blue" | "sl
   return "blue";
 }
 
+function humanizeCloudSyncHealthLabel(label: string): string {
+  const labels: Record<string, string> = {
+    "Cloud sync stale": "Your protection history hasn't synced recently",
+  };
+  return labels[label] ?? label;
+}
+
 function CloudSyncHealthCard(props: { health: GuardCloudSyncHealth }) {
   const copy = resolveCloudSyncHealthCopy(props.health);
   return (
@@ -126,7 +133,7 @@ function CloudSyncHealthCard(props: { health: GuardCloudSyncHealth }) {
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
           Cloud sync health
         </p>
-        <Tag tone={cloudSyncHealthTone(props.health.state)}>{copy.label}</Tag>
+        <Tag tone={cloudSyncHealthTone(props.health.state)}>{humanizeCloudSyncHealthLabel(copy.label)}</Tag>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
     </div>

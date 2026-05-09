@@ -23,7 +23,6 @@ _ACTION_RANK: dict[GuardAction, int] = {
     "sandbox-required": 4,
     "block": 5,
 }
-_SEVERITY_RANK: dict[str, int] = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 _SOURCE_RISK_CLASS: dict[str, str] = {
     "cisco_skill": "malicious_skill",
     "cisco_mcp": "mcp_dangerous_tool",

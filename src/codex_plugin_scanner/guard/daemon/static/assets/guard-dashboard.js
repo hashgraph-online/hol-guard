@@ -12947,7 +12947,7 @@ function buildDemoRuntimeSnapshot() {
   const now2 = (/* @__PURE__ */ new Date()).toISOString();
   const cloudState = "paired_waiting";
   const cloudLabel = "Connected";
-  const cloudDetail = "This machine is connected to Guard Cloud, but the first shared proof has not landed yet. Open Watched Apps while the first sync settles.";
+  const cloudDetail = "This machine is connected to Guard Cloud, but the first protected session has not landed yet. Open Watched Apps while the first sync settles.";
   const dashboardUrl = "https://hol.org/guard";
   const inboxUrl = "https://hol.org/guard/inbox";
   const fleetUrl = "https://hol.org/guard/fleet";
@@ -12967,7 +12967,7 @@ function buildDemoRuntimeSnapshot() {
     receipt_count: demoReceipts.length,
     headline_state: demoRequests2.length > 0 ? "blocked" : "connected",
     headline_label: demoRequests2.length > 0 ? "Blocked" : "Connected",
-    headline_detail: demoRequests2.length > 0 ? "A blocked action is waiting for review." : "This machine is connected to Guard Cloud and waiting for the first shared proof to appear.",
+    headline_detail: demoRequests2.length > 0 ? "A blocked action is waiting for review." : "This machine is connected to Guard Cloud and waiting for the first protected session to appear.",
     sync_configured: true,
     cloud_state: cloudState,
     cloud_state_label: cloudLabel,
@@ -13389,6 +13389,277 @@ function HiMiniArrowTopRightOnSquare(props) {
 function HiMiniAdjustmentsHorizontal(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 3.75a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM17.25 4.5a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0 0 1.5h5.5ZM5 3.75a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5a.75.75 0 0 1 .75.75ZM4.25 17a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM17.25 17a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0 0 1.5h5.5ZM9 10a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1 0-1.5h5.5A.75.75 0 0 1 9 10ZM17.25 10.75a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM14 10a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM10 16.25a2 2 0 1 0-4 0 2 2 0 0 0 4 0Z" }, "child": [] }] })(props);
 }
+const EMPTY_QUEUE_TITLE = "No blocked actions";
+const STALE_REQUEST_COPY = "This request was already decided.";
+function deriveDataFlowEvidence(item) {
+  const signals = item.decision_v2_json?.signals ?? [];
+  const dataFlowSignals = signals.filter(
+    (s) => s.detector === "data_flow.exfiltration" || s.signal_id.startsWith("data-flow:")
+  );
+  if (dataFlowSignals.length === 0) {
+    return null;
+  }
+  const primary = dataFlowSignals[0];
+  return {
+    signalTitle: primary.title,
+    sourceLabel: "Local secret",
+    sinkLabel: resolveDataFlowSinkLabel(primary),
+    signalId: primary.signal_id,
+    count: dataFlowSignals.length
+  };
+}
+function deriveSkillRiskSignals(item) {
+  return (item.decision_v2_json?.signals ?? []).filter((s) => s.detector === "skill.content");
+}
+function deriveSupplyChainRiskSignals(item) {
+  return (item.decision_v2_json?.signals ?? []).filter((s) => s.detector === "supply-chain.content");
+}
+function deriveEncodedLayerSignals(item) {
+  return (item.decision_v2_json?.signals ?? []).filter(
+    (s) => s.detector === "safe-decode.content" || s.signal_id.startsWith("encoded.")
+  );
+}
+function resolveDataFlowSinkLabel(signal) {
+  if (signal.category === "network") {
+    return "Network host";
+  }
+  if (signal.signal_id === "data-flow:clipboard-secret") {
+    return "Clipboard";
+  }
+  if (signal.signal_id === "data-flow:world-readable-temp-secret") {
+    return "World-readable temp file";
+  }
+  if (signal.signal_id === "data-flow:git-remote-token") {
+    return "Git remote config";
+  }
+  return "External sink";
+}
+function resolveEnvelopeDisplayText(envelope) {
+  if (envelope.action_type === "shell_command" && envelope.command !== null) {
+    return envelope.command;
+  }
+  if (envelope.action_type === "prompt" && envelope.prompt_excerpt !== null) {
+    return envelope.prompt_excerpt;
+  }
+  if (envelope.action_type === "mcp_tool" && envelope.mcp_server !== null && envelope.mcp_tool !== null) {
+    return `${envelope.mcp_server} / ${envelope.mcp_tool}`;
+  }
+  if (envelope.tool_name !== null) {
+    return envelope.tool_name;
+  }
+  if (envelope.target_paths.length > 0) {
+    return envelope.target_paths[0];
+  }
+  return envelope.action_type === "harness_start" ? null : envelope.action_type;
+}
+function humanizeList(values) {
+  if (values.length === 0) {
+    return "nothing tracked yet";
+  }
+  if (values.length === 1) {
+    return values[0];
+  }
+  if (values.length === 2) {
+    return `${values[0]} and ${values[1]}`;
+  }
+  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
+}
+function humanizeChangedFields(values) {
+  const translated = values.map((value) => {
+    if (value === "first_seen") {
+      return "this action";
+    }
+    if (value === "args") {
+      return "the command details";
+    }
+    if (value === "command") {
+      return "the command";
+    }
+    if (value === "headers") {
+      return "network details";
+    }
+    if (value === "tool_action_request") {
+      return "the requested action";
+    }
+    return value.replaceAll("_", " ");
+  });
+  return humanizeList(translated);
+}
+function buildPauseLine(item) {
+  if (item.policy_action === "block") {
+    return `${harnessDisplayName(item.harness)} kept this blocked because you already saved a block decision for it.`;
+  }
+  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
+    return `${harnessDisplayName(item.harness)} has not run this exact action here before, so HOL Guard paused it for you to review.`;
+  }
+  return `${harnessDisplayName(item.harness)} wants to run something that changed since your last saved decision: ${humanizeChangedFields(item.changed_fields)}.`;
+}
+function buildRecommendation(item) {
+  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
+    return "If this is what you expected, approve the exact action. Use broader trust only when you deliberately want Guard to ask less often.";
+  }
+  if (item.policy_action === "block") {
+    return "Keep it blocked unless you are sure this action is safe and expected.";
+  }
+  return "Approve the smallest choice that matches what you meant to do. Broader trust should be a deliberate second step.";
+}
+function buildQueueSummary(item) {
+  if (item.policy_action === "block") {
+    return "You already chose to block this action.";
+  }
+  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
+    return "First time HOL Guard has seen this here.";
+  }
+  return `Changed since your last decision: ${humanizeChangedFields(item.changed_fields)}.`;
+}
+function buildMemorySummary(item, receipt) {
+  if (receipt === null) {
+    return `HOL Guard has not saved an earlier approval for ${item.artifact_name}.`;
+  }
+  return `The last saved decision for ${item.artifact_name} was ${receipt.policy_decision}.`;
+}
+function scopeLabel(scope) {
+  switch (scope) {
+    case "artifact":
+      return "This exact action";
+    case "workspace":
+      return "This project folder";
+    case "publisher":
+      return "This source in this app";
+    case "harness":
+      return "This app";
+    case "global":
+      return "Every project on this machine";
+    default:
+      return scope;
+  }
+}
+function policyActionLabel(action) {
+  switch (action) {
+    case "require-reapproval":
+      return "Needs review";
+    case "block":
+      return "Blocked";
+    case "allow":
+      return "Allowed";
+    default:
+      return action;
+  }
+}
+function artifactTypeLabel(artifactType) {
+  switch (artifactType) {
+    case "mcp_server":
+      return "MCP server";
+    case "extension":
+      return "Extension";
+    case "hook":
+      return "Hook";
+    case "agent":
+      return "Agent";
+    case "command":
+      return "Command";
+    case "tool_action_request":
+      return "Tool action";
+    default:
+      return artifactType.replaceAll("_", " ");
+  }
+}
+function buildStoppedReason(item, receipt) {
+  if (item.policy_action === "block") {
+    const changed = item.changed_fields.length > 0 ? ` ${humanizeChangedFields(item.changed_fields)} also changed.` : "";
+    return `A saved block decision already covers this action, so HOL Guard kept it paused.${changed}`;
+  }
+  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
+    return "HOL Guard has never seen this action in this project folder before, so there is no saved approval for it yet.";
+  }
+  if (receipt !== null) {
+    return `HOL Guard found an earlier ${receipt.policy_decision} decision, but ${humanizeChangedFields(item.changed_fields)} no longer matches what you approved before.`;
+  }
+  return "This action changed after the last known state, so HOL Guard needs a new decision before it can run.";
+}
+function shortConfigPath(path) {
+  const sanitizedPath = path.replace(/\/Users\/[^/\s]+/g, "~");
+  const marker = "/.codex/";
+  const index = sanitizedPath.lastIndexOf(marker);
+  if (index >= 0) {
+    return `…${sanitizedPath.slice(index)}`;
+  }
+  return sanitizedPath;
+}
+function buildTechnicalSummary(_diff, item) {
+  return [["Approval command", item.review_command]];
+}
+function capitalizeHarness(harness) {
+  if (harness.length === 0) {
+    return harness;
+  }
+  return `${harness.charAt(0).toUpperCase()}${harness.slice(1)}`;
+}
+function resolveDecisionV2Title(item) {
+  const title = item.decision_v2_json?.user_title;
+  return title !== void 0 && title.trim().length > 0 ? title : null;
+}
+function resolveDecisionV2Detail(item) {
+  const detail = item.decision_v2_json?.dashboard_primary_detail;
+  return detail !== void 0 && detail.trim().length > 0 ? detail : null;
+}
+function resolveStoppedCommandText(item) {
+  if (item.action_envelope_json) {
+    const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
+    if (envelopeText !== null) {
+      return envelopeText;
+    }
+  }
+  if (item.launch_target?.trim()) {
+    return item.launch_target;
+  }
+  if (item.launch_summary?.trim()) {
+    const commandMatch = item.launch_summary.match(/`([^`]+)`/);
+    if (commandMatch?.[1]) {
+      return commandMatch[1];
+    }
+    return item.launch_summary;
+  }
+  return item.artifact_name.trim() || item.artifact_id;
+}
+function harnessDisplayName(harness) {
+  switch (harness) {
+    case "claude-code":
+      return "Claude Code";
+    case "copilot":
+      return "Copilot";
+    case "codex":
+      return "Codex";
+    case "opencode":
+      return "OpenCode";
+    case "gemini":
+      return "Gemini";
+    case "cursor":
+      return "Cursor";
+    case "hermes":
+      return "Hermes";
+    case "openclaw":
+      return "OpenClaw";
+    default:
+      return capitalizeHarness(harness);
+  }
+}
+function displayArtifactName(item) {
+  return item.artifact_name || item.artifact_id || "this action";
+}
+function resolveTerminalLabel(item) {
+  const actionType = item.action_envelope_json?.action_type;
+  if (actionType === "shell_command") return "Command";
+  if (actionType === "prompt") return "Prompt excerpt";
+  if (actionType === "file_read" || actionType === "file_write") return "File path";
+  if (actionType === "mcp_tool") return "MCP server / tool";
+  if (actionType === "package_script") return "Package";
+  if (actionType === "network_request") return "Network destination";
+  if (item.artifact_type === "file_read_request") return "File path";
+  if (item.artifact_type === "prompt_request") return "Prompt excerpt";
+  if (item.artifact_type === "tool_action_request") return "Tool action";
+  return "Stopped command";
+}
 function ShellHeader(props) {
   function handleMobileNavigationChange(event) {
     props.onNavigate(event.target.value);
@@ -13682,7 +13953,7 @@ function WelcomeState(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-surface-in flex flex-col items-center justify-center py-16 text-center sm:py-24", children: [
     props.resolutionMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-10 w-full max-w-xl flex justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Surface, { tone: "success", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: props.resolutionMessage }) }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-brand-green-bg/50 ring-1 ring-brand-green/20", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-10 w-10 text-brand-green", "aria-hidden": "true" }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl", children: "No blocked actions" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl", children: EMPTY_QUEUE_TITLE }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground", children: "Guard is still watching your apps. You'll be notified here if something needs your approval." }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-12 text-left w-full max-w-3xl", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-border bg-card p-6 shadow-[0_4px_20px_rgba(85,153,254,0.04)]", children: [
@@ -13711,267 +13982,6 @@ function TrustCard(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: props.title }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-muted-foreground", children: props.body })
   ] });
-}
-function deriveDataFlowEvidence(item) {
-  const signals = item.decision_v2_json?.signals ?? [];
-  const dataFlowSignals = signals.filter(
-    (s) => s.detector === "data_flow.exfiltration" || s.signal_id.startsWith("data-flow:")
-  );
-  if (dataFlowSignals.length === 0) {
-    return null;
-  }
-  const primary = dataFlowSignals[0];
-  return {
-    signalTitle: primary.title,
-    sourceLabel: "Local secret",
-    sinkLabel: resolveDataFlowSinkLabel(primary),
-    signalId: primary.signal_id,
-    count: dataFlowSignals.length
-  };
-}
-function deriveSkillRiskSignals(item) {
-  return (item.decision_v2_json?.signals ?? []).filter((s) => s.detector === "skill.content");
-}
-function deriveSupplyChainRiskSignals(item) {
-  return (item.decision_v2_json?.signals ?? []).filter((s) => s.detector === "supply-chain.content");
-}
-function deriveEncodedLayerSignals(item) {
-  return (item.decision_v2_json?.signals ?? []).filter(
-    (s) => s.detector === "safe-decode.content" || s.signal_id.startsWith("encoded.")
-  );
-}
-function resolveDataFlowSinkLabel(signal) {
-  if (signal.category === "network") {
-    return "Network host";
-  }
-  if (signal.signal_id === "data-flow:clipboard-secret") {
-    return "Clipboard";
-  }
-  if (signal.signal_id === "data-flow:world-readable-temp-secret") {
-    return "World-readable temp file";
-  }
-  if (signal.signal_id === "data-flow:git-remote-token") {
-    return "Git remote config";
-  }
-  return "External sink";
-}
-function resolveEnvelopeDisplayText(envelope) {
-  if (envelope.action_type === "shell_command" && envelope.command !== null) {
-    return envelope.command;
-  }
-  if (envelope.action_type === "prompt" && envelope.prompt_excerpt !== null) {
-    return envelope.prompt_excerpt;
-  }
-  if (envelope.action_type === "mcp_tool" && envelope.mcp_server !== null && envelope.mcp_tool !== null) {
-    return `${envelope.mcp_server} / ${envelope.mcp_tool}`;
-  }
-  if (envelope.tool_name !== null) {
-    return envelope.tool_name;
-  }
-  if (envelope.target_paths.length > 0) {
-    return envelope.target_paths[0];
-  }
-  return envelope.action_type === "harness_start" ? null : envelope.action_type;
-}
-function humanizeList(values) {
-  if (values.length === 0) {
-    return "nothing tracked yet";
-  }
-  if (values.length === 1) {
-    return values[0];
-  }
-  if (values.length === 2) {
-    return `${values[0]} and ${values[1]}`;
-  }
-  return `${values.slice(0, -1).join(", ")}, and ${values.at(-1)}`;
-}
-function humanizeChangedFields(values) {
-  const translated = values.map((value) => {
-    if (value === "first_seen") {
-      return "this action";
-    }
-    if (value === "args") {
-      return "the command details";
-    }
-    if (value === "command") {
-      return "the command";
-    }
-    if (value === "headers") {
-      return "network details";
-    }
-    if (value === "tool_action_request") {
-      return "the requested action";
-    }
-    return value.replaceAll("_", " ");
-  });
-  return humanizeList(translated);
-}
-function buildPauseLine(item) {
-  if (item.policy_action === "block") {
-    return `${harnessDisplayName(item.harness)} kept this blocked because you already saved a block decision for it.`;
-  }
-  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
-    return `${harnessDisplayName(item.harness)} has not run this exact action here before, so HOL Guard paused it for you to review.`;
-  }
-  return `${harnessDisplayName(item.harness)} wants to run something that changed since your last saved decision: ${humanizeChangedFields(item.changed_fields)}.`;
-}
-function buildRecommendation(item) {
-  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
-    return "If this is what you expected, approve the exact action. Use broader trust only when you deliberately want Guard to ask less often.";
-  }
-  if (item.policy_action === "block") {
-    return "Keep it blocked unless you are sure this action is safe and expected.";
-  }
-  return "Approve the smallest choice that matches what you meant to do. Broader trust should be a deliberate second step.";
-}
-function buildQueueSummary(item) {
-  if (item.policy_action === "block") {
-    return "You already chose to block this action.";
-  }
-  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
-    return "First time HOL Guard has seen this here.";
-  }
-  return `Changed since your last decision: ${humanizeChangedFields(item.changed_fields)}.`;
-}
-function buildMemorySummary(item, receipt) {
-  if (receipt === null) {
-    return `HOL Guard has not saved an earlier approval for ${item.artifact_name}.`;
-  }
-  return `The last saved decision for ${item.artifact_name} was ${receipt.policy_decision}.`;
-}
-function scopeLabel(scope) {
-  switch (scope) {
-    case "artifact":
-      return "This exact action";
-    case "workspace":
-      return "This project folder";
-    case "publisher":
-      return "This source in this app";
-    case "harness":
-      return "This app";
-    case "global":
-      return "Every project on this machine";
-    default:
-      return scope;
-  }
-}
-function policyActionLabel(action) {
-  switch (action) {
-    case "require-reapproval":
-      return "Needs review";
-    case "block":
-      return "Blocked";
-    case "allow":
-      return "Allowed";
-    default:
-      return action;
-  }
-}
-function artifactTypeLabel(artifactType) {
-  switch (artifactType) {
-    case "mcp_server":
-      return "MCP server";
-    case "extension":
-      return "Extension";
-    case "hook":
-      return "Hook";
-    case "agent":
-      return "Agent";
-    case "command":
-      return "Command";
-    case "tool_action_request":
-      return "Tool action";
-    default:
-      return artifactType.replaceAll("_", " ");
-  }
-}
-function buildStoppedReason(item, receipt) {
-  if (item.policy_action === "block") {
-    const changed = item.changed_fields.length > 0 ? ` ${humanizeChangedFields(item.changed_fields)} also changed.` : "";
-    return `A saved block decision already covers this action, so HOL Guard kept it paused.${changed}`;
-  }
-  if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
-    return "HOL Guard has never seen this action in this project folder before, so there is no saved approval for it yet.";
-  }
-  if (receipt !== null) {
-    return `HOL Guard found an earlier ${receipt.policy_decision} decision, but ${humanizeChangedFields(item.changed_fields)} no longer matches what you approved before.`;
-  }
-  return "This action changed after the last known state, so HOL Guard needs a new decision before it can run.";
-}
-function shortConfigPath(path) {
-  const sanitizedPath = path.replace(/\/Users\/[^/\s]+/g, "~");
-  const marker = "/.codex/";
-  const index = sanitizedPath.lastIndexOf(marker);
-  if (index >= 0) {
-    return `…${sanitizedPath.slice(index)}`;
-  }
-  return sanitizedPath;
-}
-function buildTechnicalSummary(_diff, item) {
-  return [["Approval command", item.review_command]];
-}
-function capitalizeHarness(harness) {
-  if (harness.length === 0) {
-    return harness;
-  }
-  return `${harness.charAt(0).toUpperCase()}${harness.slice(1)}`;
-}
-function resolveDecisionV2Title(item) {
-  const title = item.decision_v2_json?.user_title;
-  return title !== void 0 && title.trim().length > 0 ? title : null;
-}
-function resolveDecisionV2Detail(item) {
-  const detail = item.decision_v2_json?.dashboard_primary_detail;
-  return detail !== void 0 && detail.trim().length > 0 ? detail : null;
-}
-function resolveStoppedCommandText(item) {
-  if (item.action_envelope_json) {
-    const envelopeText = resolveEnvelopeDisplayText(item.action_envelope_json);
-    if (envelopeText !== null) {
-      return envelopeText;
-    }
-  }
-  if (item.launch_target?.trim()) {
-    return item.launch_target;
-  }
-  if (item.launch_summary?.trim()) {
-    const commandMatch = item.launch_summary.match(/`([^`]+)`/);
-    if (commandMatch?.[1]) {
-      return commandMatch[1];
-    }
-    return item.launch_summary;
-  }
-  return item.artifact_name.trim() || item.artifact_id;
-}
-function harnessDisplayName(harness) {
-  switch (harness) {
-    case "claude-code":
-      return "Claude Code";
-    case "copilot":
-      return "Copilot";
-    case "codex":
-      return "Codex";
-    case "opencode":
-      return "OpenCode";
-    default:
-      return capitalizeHarness(harness);
-  }
-}
-function displayArtifactName(item) {
-  return item.artifact_name || item.artifact_id || "this action";
-}
-function resolveTerminalLabel(item) {
-  const actionType = item.action_envelope_json?.action_type;
-  if (actionType === "shell_command") return "Command";
-  if (actionType === "prompt") return "Prompt excerpt";
-  if (actionType === "file_read" || actionType === "file_write") return "File path";
-  if (actionType === "mcp_tool") return "MCP server / tool";
-  if (actionType === "package_script") return "Package";
-  if (actionType === "network_request") return "Network destination";
-  if (item.artifact_type === "file_read_request") return "File path";
-  if (item.artifact_type === "prompt_request") return "Prompt excerpt";
-  if (item.artifact_type === "tool_action_request") return "Tool action";
-  return "Stopped command";
 }
 function DataFlowEvidenceCard(props) {
   const evidence = deriveDataFlowEvidence(props.item);
@@ -14595,13 +14605,13 @@ function buildHomePrimaryState(pendingCount, watchedAppsCount) {
   if (watchedAppsCount === 0) {
     return {
       status: "setup_needed",
-      copy: "HOL Guard is running but no apps are connected yet.",
-      ctaLabel: "Connect an app"
+      copy: "Guard is running but no apps are connected yet.",
+      ctaLabel: "Set up protection"
     };
   }
   return {
     status: "protected",
-    copy: "HOL Guard is watching this machine. No blocked actions right now.",
+    copy: "Guard is protecting your apps. No blocked actions right now.",
     ctaLabel: "Open review queue"
   };
 }
@@ -14655,26 +14665,23 @@ function ApprovalCenterLayout(props) {
         onGoHome: props.onGoHome,
         onResolve: props.onResolve,
         onBulkApprove: props.onBulkApprove,
-        onRetry: props.onRetry
+        onRetry: props.onRetry,
+        onRepair: props.onRepair
       }
     ) }) }) })
   ] });
 }
 function MobileQueueDrawer(props) {
-  const handleBackdropClick = reactExports.useCallback(
-    (e) => {
-      if (e.target === e.currentTarget) props.onClose();
-    },
-    [props.onClose]
-  );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
       className: "fixed inset-0 z-50 flex lg:hidden",
-      onClick: handleBackdropClick,
+      role: "dialog",
+      "aria-label": "Review queue",
+      "aria-modal": "true",
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute inset-0 bg-black/30 backdrop-blur-sm" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative ml-0 flex w-full max-w-sm flex-col overflow-hidden bg-white shadow-2xl", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute inset-0 bg-black/30 backdrop-blur-sm", onClick: props.onClose }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative ml-0 flex w-full max-w-sm flex-col overflow-hidden bg-white shadow-2xl", onClick: (e) => e.stopPropagation(), children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between border-b border-slate-200 px-4 py-3", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm font-semibold text-brand-dark", children: [
               "Review Queue (",
@@ -14707,6 +14714,16 @@ function MobileQueueDrawer(props) {
   );
 }
 function QueueWorkspace(props) {
+  const [repairing, setRepairing] = reactExports.useState(false);
+  const handleRepair = reactExports.useCallback(async () => {
+    if (props.onRepair === void 0) return;
+    setRepairing(true);
+    try {
+      await props.onRepair();
+    } finally {
+      setRepairing(false);
+    }
+  }, [props.onRepair]);
   if (props.requests.kind === "loading") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-64" }),
@@ -14716,10 +14733,13 @@ function QueueWorkspace(props) {
   if (props.requests.kind === "error") {
     const approvalUrl = props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null;
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-purple", children: props.requests.message }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", children: "Guard connection lost. Check if the daemon is running." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: props.requests.message }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
-        props.onRetry && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onRetry, children: "Retry" }),
-        approvalUrl && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: approvalUrl, variant: "outline", children: "Open Guard dashboard" })
+        props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, children: repairing ? "Repairing…" : "Repair" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: "hol-guard start" }),
+        props.onRetry && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Retry" }),
+        approvalUrl && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: approvalUrl, variant: "outline", onClick: () => window.location.reload(), children: "Open dashboard" })
       ] })
     ] }) });
   }
@@ -14816,7 +14836,7 @@ function QueueHeader(props) {
           children: props.progressCopy
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "warning", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "default", children: [
         props.requests.length,
         " waiting"
       ] }),
@@ -14908,7 +14928,7 @@ function QueueBrowser(props) {
           }
         )
       ] }),
-      harnesses.length > 1 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      harnesses.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
         QueueChipFilter,
         {
           harnesses,
@@ -15031,19 +15051,46 @@ function queueCardStatusDotClass(active, blocked) {
   }
   return "bg-slate-200";
 }
+function StickyMobileActions(props) {
+  const allowText = resolveAllowButtonText(props.submitting, props.isBlocked, props.allowLabel);
+  const blockText = resolveBlockButtonText(props.submitting, props.isBlocked);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sticky bottom-0 z-20 -mx-6 border-t border-slate-200/70 bg-white/95 px-4 py-3 shadow-[0_-4px_16px_rgba(63,65,116,0.08)] backdrop-blur lg:hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "success", onClick: props.onAllow, disabled: props.submitting !== null, children: allowText }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "danger", onClick: props.onBlock, disabled: props.submitting !== null, children: blockText })
+  ] }) });
+}
 function DecisionWorkspace(props) {
   const [scope, setScope] = reactExports.useState("artifact");
   const [reason, setReason] = reactExports.useState("approved in local approval center");
   const [submitting, setSubmitting] = reactExports.useState(null);
   const [errorMessage, setErrorMessage] = reactExports.useState(null);
   const [confirmPending, setConfirmPending] = reactExports.useState(null);
+  const [resolvedBanner, setResolvedBanner] = reactExports.useState(null);
+  const bannerTimerRef = reactExports.useRef(null);
+  const prevRequestIdRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     if (props.detail.kind === "ready") {
+      const isNewItem = props.detail.item.request_id !== prevRequestIdRef.current;
+      prevRequestIdRef.current = props.detail.item.request_id;
+      if (isNewItem) {
+        setResolvedBanner(null);
+        if (bannerTimerRef.current !== null) {
+          clearTimeout(bannerTimerRef.current);
+          bannerTimerRef.current = null;
+        }
+      }
       setScope(props.detail.item.recommended_scope);
       setErrorMessage(null);
       setSubmitting(null);
     }
   }, [props.detail]);
+  reactExports.useEffect(() => {
+    return () => {
+      if (bannerTimerRef.current !== null) {
+        clearTimeout(bannerTimerRef.current);
+      }
+    };
+  }, []);
   const readyItem = props.detail.kind === "ready" ? props.detail.item : null;
   const readyRequestId = readyItem?.request_id ?? "";
   const readyWorkspace = readyItem?.workspace ?? void 0;
@@ -15059,6 +15106,10 @@ function DecisionWorkspace(props) {
           reason,
           workspace: scope === "workspace" ? readyWorkspace : void 0
         });
+        setResolvedBanner(action);
+        bannerTimerRef.current = setTimeout(() => {
+          setResolvedBanner(null);
+        }, 1500);
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Something went wrong.");
         setSubmitting(null);
@@ -15085,6 +15136,8 @@ function DecisionWorkspace(props) {
   const handleCancelConfirm = reactExports.useCallback(() => {
     setConfirmPending(null);
   }, []);
+  const handleAllowDirect = reactExports.useCallback(() => handleRequestResolve("allow"), [handleRequestResolve]);
+  const handleBlockDirect = reactExports.useCallback(() => handleRequestResolve("block"), [handleRequestResolve]);
   reactExports.useEffect(() => {
     if (props.detail.kind !== "ready") return;
     const onKeyDown = (event) => {
@@ -15115,6 +15168,18 @@ function DecisionWorkspace(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-56 w-full" })
     ] });
   }
+  if (props.detail.kind === "stale") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "default", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: STALE_REQUEST_COPY }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: "Someone already reviewed this blocked action. No further action needed." })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onGoHome, children: "Back to queue" }) })
+    ] });
+  }
   if (props.detail.kind === "error") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-purple", children: props.detail.message }),
@@ -15129,7 +15194,26 @@ function DecisionWorkspace(props) {
   const broadScopeOpts = scopeOptions.filter((option) => !commonScopeValues.has(option.value));
   const isAlreadyDecided = item.resolution_action !== null;
   const decidedLabel = item.resolution_action === "allow" ? "allow" : item.resolution_action === "block" ? "block" : item.resolution_action ?? "decided";
+  const allowLabel = scope === "artifact" ? "Approve once" : "Approve and remember";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-surface-in space-y-4", children: [
+    resolvedBanner !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: `flex items-center gap-3 rounded-2xl border px-4 py-3 ${resolvedBanner === "allow" ? "border-brand-green/25 bg-brand-green-bg/30" : "border-brand-purple/25 bg-brand-purple/[0.06]"}`,
+        role: "status",
+        "aria-live": "polite",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            HiMiniCheckCircle,
+            {
+              className: `h-4 w-4 shrink-0 ${resolvedBanner === "allow" ? "text-brand-green" : "text-brand-purple"}`,
+              "aria-hidden": "true"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolvedBanner === "allow" ? "text-brand-green-text" : "text-brand-purple"}`, children: resolvedBanner === "allow" ? "✓ Approved" : "✗ Blocked" })
+        ]
+      }
+    ),
     isAlreadyDecided && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-slate-200/60 bg-slate-50 px-4 py-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-muted-foreground", children: [
@@ -15160,6 +15244,16 @@ function DecisionWorkspace(props) {
         onScopeChange: setScope,
         onReasonChange: setReason,
         onResolve: handleRequestResolve
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      StickyMobileActions,
+      {
+        allowLabel,
+        submitting,
+        isBlocked: item.policy_action === "block",
+        onAllow: handleAllowDirect,
+        onBlock: handleBlockDirect
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerEvidenceSectionFull, { item }),
@@ -15417,6 +15511,17 @@ function CopyCommandButton(props) {
     }
   );
 }
+function resolveMcpInputSummary(payload) {
+  const inputs = payload.arguments ?? payload.input ?? payload.params ?? null;
+  if (inputs === null || inputs === void 0) return null;
+  try {
+    const serialized = JSON.stringify(inputs);
+    if (serialized.length <= 2) return null;
+    return serialized.length > 140 ? `${serialized.slice(0, 140)}…` : serialized;
+  } catch {
+    return null;
+  }
+}
 function BlockedActionCard(props) {
   const launchText = actionLaunchText(props.item);
   const decisionDetail = resolveDecisionV2Detail(props.item);
@@ -15429,6 +15534,7 @@ function BlockedActionCard(props) {
   const isMcpTool = envelope?.action_type === "mcp_tool";
   const mcpServer = isMcpTool ? envelope?.mcp_server ?? null : null;
   const mcpTool = isMcpTool ? envelope?.mcp_tool ?? null : null;
+  const mcpInputSummary = isMcpTool && envelope !== null ? resolveMcpInputSummary(envelope.raw_payload_redacted) : null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-[1.65rem] border border-brand-blue/15 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex items-center gap-2 px-4 py-2.5 ${bannerBg}`, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(BannerIcon, { className: "h-3.5 w-3.5 shrink-0 text-white", "aria-hidden": "true" }),
@@ -15448,13 +15554,16 @@ function BlockedActionCard(props) {
       ) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4", children: [
-      isMcpTool && mcpServer !== null && mcpTool !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 flex items-center gap-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.15em] text-brand-blue", children: "MCP" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-sm font-medium text-brand-dark", children: [
-          mcpServer,
-          " → ",
-          mcpTool
-        ] })
+      isMcpTool && mcpServer !== null && mcpTool !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 space-y-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.15em] text-brand-blue", children: "MCP" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-sm font-medium text-brand-dark", children: [
+            mcpServer,
+            " → ",
+            mcpTool
+          ] })
+        ] }),
+        mcpInputSummary !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate font-mono text-xs text-brand-dark/60", children: mcpInputSummary })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center justify-between gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What was stopped" }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "mt-2 text-xl font-semibold tracking-tight text-brand-dark", children: actionDisplayTitle(props.item) }),
@@ -15603,10 +15712,10 @@ function StatusBadge(props) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Protected" });
   }
   if (props.status === "found_unprotected") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "warning", children: "Found" });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "warning", children: "Found, protection not installed" });
   }
   if (props.status === "needs_repair") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "destructive", children: "Needs repair" });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "warning", children: "Repair needed" });
   }
   if (props.status === "not_found") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Not found" });
@@ -15630,7 +15739,7 @@ function CardAction(props) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleConnect, children: "Connect" });
   }
   if (props.status === "needs_repair") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "danger", onClick: handleRepair, children: "Repair" });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleRepair, children: "Repair" });
   }
   if (props.status === "not_found") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "https://hol.org/guard/docs/install", variant: "outline", children: "How to install" });
@@ -16633,7 +16742,12 @@ function AppsProtectedSection(props) {
       ...props.observedHarnesses
     ])
   ).sort();
-  if (allHarnesses.length === 0) return null;
+  if (allHarnesses.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Apps protected" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-muted-foreground", children: "None yet. Connect an AI harness to start." })
+    ] });
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Apps protected" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 overflow-hidden rounded-[1.25rem] border border-slate-200/70", children: allHarnesses.map((harness) => {
@@ -16734,9 +16848,13 @@ async function loadDetail(requestId) {
     ]);
     return { kind: "ready", item, diff, receipt, policy };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("404")) {
+      return { kind: "stale" };
+    }
     return {
       kind: "error",
-      message: error instanceof Error ? error.message : "Unable to load the approval request."
+      message: message.length > 0 ? message : "Unable to load the approval request."
     };
   }
 }
@@ -16918,17 +17036,20 @@ function App() {
   const handleResolve = reactExports.useCallback(async (payload) => {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
-    const result = await resolveRequestWithQueueResult(payload);
-    const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
-    if (nextId !== null) {
-      setResolutionMessage(null);
-      navigate(`/requests/${nextId}`);
-    } else {
-      setResolutionMessage(result.resolution_summary || "Decision saved. Return to your chat and retry the command.");
-      navigate("/inbox");
+    try {
+      const result = await resolveRequestWithQueueResult(payload);
+      const nextId = selectNextAfterResolution(result, queuedItemsSnapshot);
+      if (nextId !== null) {
+        setResolutionMessage(null);
+        navigate(`/requests/${nextId}`);
+      } else {
+        setResolutionMessage(result.resolution_summary || "Decision saved. Return to your chat and retry the command.");
+        navigate("/inbox");
+      }
+      await refreshStateAfterAction();
+    } finally {
+      resolutionInFlight.current = false;
     }
-    await refreshStateAfterAction();
-    resolutionInFlight.current = false;
   }, [requests, refreshStateAfterAction, setResolutionMessage]);
   const handleBulkApprove = reactExports.useCallback(async (ids) => {
     const results = await Promise.allSettled(
@@ -16955,11 +17076,26 @@ function App() {
       setRequests({ kind: "error", message });
     });
   }, []);
+  const handleRepair = reactExports.useCallback(async () => {
+    await repairApprovalCenter();
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    fetchRuntimeSnapshot().then((snapshot) => {
+      setRuntime({ kind: "ready", snapshot });
+      setRequests({ kind: "ready", items: snapshot.items });
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : "Unable to reconnect to Guard daemon.";
+      setRuntime({ kind: "error", message });
+      setRequests({ kind: "error", message });
+    });
+  }, []);
   const handleConnectHarness = reactExports.useCallback((_harness) => {
+    navigate("/settings");
   }, []);
   const handleTestHarness = reactExports.useCallback((_harness) => {
+    navigate("/inbox");
   }, []);
   const handleRepairHarness = reactExports.useCallback((_harness) => {
+    navigate("/settings");
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     ApprovalCenterLayout,
@@ -16991,6 +17127,7 @@ function App() {
       onResolve: handleResolve,
       onBulkApprove: handleBulkApprove,
       onRetry: handleRetry,
+      onRepair: handleRepair,
       fleetContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         FleetWorkspace,
         {

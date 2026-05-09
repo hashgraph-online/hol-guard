@@ -6,6 +6,9 @@ import type {
   RiskSignalV2
 } from "./guard-types";
 
+export const EMPTY_QUEUE_TITLE = "No blocked actions";
+export const STALE_REQUEST_COPY = "This request was already decided.";
+
 export type DataFlowEvidenceSummary = {
   signalTitle: string;
   sourceLabel: string;
@@ -306,6 +309,14 @@ export function harnessDisplayName(harness: string): string {
       return "Codex";
     case "opencode":
       return "OpenCode";
+    case "gemini":
+      return "Gemini";
+    case "cursor":
+      return "Cursor";
+    case "hermes":
+      return "Hermes";
+    case "openclaw":
+      return "OpenClaw";
     default:
       return capitalizeHarness(harness);
   }

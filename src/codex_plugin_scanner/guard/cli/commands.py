@@ -80,7 +80,7 @@ from ..mcp_tool_calls import (
     build_tool_call_hash,
     evaluate_tool_call,
 )
-from ..models import GuardArtifact, HarnessDetection, PolicyDecision
+from ..models import SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2
 from ..protect import build_protect_payload
 from ..proxy import (
@@ -387,6 +387,13 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     receipts_parser = guard_subparsers.add_parser("receipts", help="List local Guard receipts")
     _add_guard_common_args(receipts_parser)
     receipts_parser.add_argument("--json", action="store_true")
+
+    history_parser = guard_subparsers.add_parser("history", help="Inspect Guard decision history")
+    _add_guard_common_args(history_parser)
+    history_sub = history_parser.add_subparsers(dest="history_command", metavar="COMMAND")
+    history_explain_parser = history_sub.add_parser("explain", help="Show insight and evidence for a receipt ID")
+    history_explain_parser.add_argument("receipt_id", help="Receipt ID to explain")
+    history_explain_parser.add_argument("--json", action="store_true")
 
     inventory_parser = guard_subparsers.add_parser("inventory", help="List the local Guard artifact inventory")
     _add_guard_common_args(inventory_parser)
@@ -1178,6 +1185,36 @@ def run_guard_command(
         _emit("receipts", {"generated_at": _now(), "items": store.list_receipts()}, getattr(args, "json", False))
         return 0
 
+    if args.guard_command == "history":
+        history_cmd = getattr(args, "history_command", None)
+        if history_cmd == "explain":
+            receipt_id: str = args.receipt_id
+            match = store.get_receipt(receipt_id)
+            if match is None:
+                msg = f"No receipt found for ID {receipt_id!r}"
+                _emit("history.explain", {"error": msg}, getattr(args, "json", False))
+                return 1
+            evidence = store.list_evidence(request_id=receipt_id, limit=10_000)
+            payload: dict[str, object] = {
+                "receipt_id": receipt_id,
+                "receipt": match,
+                "evidence": [
+                    {
+                        "evidence_id": e.get("evidence_id", ""),
+                        "category": e.get("category", ""),
+                        "severity": e.get("severity", ""),
+                        "summary": e.get("summary", ""),
+                        "action_identity": e.get("action_identity"),
+                        "created_at": e.get("created_at", ""),
+                    }
+                    for e in evidence
+                ],
+            }
+            _emit("history.explain", payload, getattr(args, "json", False))
+            return 0
+        _emit("history", {"error": "Use: hol-guard history explain <receipt_id>"}, getattr(args, "json", False))
+        return 1
+
     if args.guard_command == "inventory":
         _emit("inventory", {"generated_at": _now(), "items": store.list_inventory()}, getattr(args, "json", False))
         return 0
@@ -1292,10 +1329,11 @@ def run_guard_command(
         else:
             all_advs = store.list_cached_advisories()
             sev_filter = getattr(args, "severity", None)
-            _sev_rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-            if sev_filter and sev_filter in _sev_rank:
-                min_rank = _sev_rank[sev_filter]
-                all_advs = [a for a in all_advs if _sev_rank.get(str(a.get("severity", "")).lower(), -1) >= min_rank]
+            if sev_filter and sev_filter in SEVERITY_RANK:
+                min_rank = SEVERITY_RANK[sev_filter]
+                all_advs = [
+                    a for a in all_advs if SEVERITY_RANK.get(str(a.get("severity", "")).lower(), -1) >= min_rank
+                ]
             _emit(
                 "advisories",
                 {"generated_at": _now(), "items": all_advs},
