@@ -153,6 +153,7 @@ class TestCustomModeActivation:
         loaded = load_guard_config(home_dir)
         assert resolve_risk_action(loaded, "network_egress", harness="codex") == "block"
         assert loaded.risk_actions.get("network_egress") == "block"
+        assert loaded.security_level == "balanced"
 
     def test_set_risk_action_override_applied_on_strict(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -177,6 +178,7 @@ class TestCustomModeActivation:
         loaded = load_guard_config(home_dir)
         assert resolve_risk_action(loaded, "local_secret_read", harness="codex") == "warn"
         assert loaded.risk_actions.get("local_secret_read") == "warn"
+        assert loaded.security_level == "strict"
 
     def test_explicit_custom_mode_preserves_effective_risks(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -189,6 +191,9 @@ class TestCustomModeActivation:
         assert payload["settings"]["security_level"] == "custom"
         loaded = load_guard_config(home_dir)
         assert loaded.security_level == "custom"
+        for key in VALID_RISK_ACTION_KEYS:
+            action = resolve_risk_action(loaded, key, harness="codex")
+            assert action in ("allow", "warn", "block", "require_approval", "require-reapproval")
 
     def test_applying_preset_after_override_restores_named_preset(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -222,15 +227,6 @@ class TestSettingsExplainCommand:
         assert payload["preset"] == preset
         assert isinstance(payload["description"], str)
         assert len(payload["description"]) > 0
-
-    def test_settings_explain_lists_all_valid_presets(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        home_dir = tmp_path / "home"
-        _write_text(home_dir / "config.toml", 'security_level = "balanced"\n')
-        rc = main(["guard", "settings", "explain", "--home", str(home_dir), "--json"])
-        assert rc == 0
-        payload = json.loads(capsys.readouterr().out)
-        assert payload["preset"] == "balanced"
-        assert isinstance(payload.get("description"), str)
 
 
 class TestConfigMigration:
