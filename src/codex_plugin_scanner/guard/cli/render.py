@@ -33,7 +33,7 @@ except ModuleNotFoundError:
 
 
 _MODE_ACRONYMS = frozenset({"mcp", "api", "cli"})
-_SEVERITY_COLORS: dict[str, str] = {"critical": "red", "high": "yellow", "medium": "cyan", "low": "dim"}
+_SEVERITY_COLORS: dict[str, str] = {"critical": "red", "high": "yellow", "medium": "cyan", "low": "dim", "info": "dim"}
 _KNOWN_MANAGED_INSTALL_MODES = {
     "codex-mcp-proxy": "Codex MCP proxy",
 }
@@ -669,7 +669,7 @@ def _render_supply_chain_risk_results(console: Console, supply_chain_risks: list
     table.add_column("Confidence", no_wrap=True)
     table.add_column("Explanation", overflow="fold")
     for entry in supply_chain_risks:
-        severity = str(entry.get("severity", "medium"))
+        severity = str(entry.get("severity", "medium")).lower()
         severity_color = _SEVERITY_COLORS.get(severity, "white")
         table.add_row(
             str(entry.get("signal_id", "?")),
@@ -693,7 +693,7 @@ def _render_safe_decode_results(console: Console, safe_decode_risks: list[dict[s
     table.add_column("Severity", no_wrap=True)
     table.add_column("Explanation", overflow="fold")
     for entry in safe_decode_risks:
-        severity = str(entry.get("severity", "medium"))
+        severity = str(entry.get("severity", "medium")).lower()
         severity_color = _SEVERITY_COLORS.get(severity, "white")
         layers = entry.get("technical_detail") or ""
         table.add_row(
