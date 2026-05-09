@@ -290,9 +290,7 @@ function QueueWorkspace(props: {
                 {repairing ? "Repairing…" : "Repair"}
               </ActionButton>
             )}
-            <code className="inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all">
-              hol-guard start
-            </code>
+            <code className="inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all">hol-guard start</code>
             {props.onRetry && (
               <ActionButton variant="outline" onClick={props.onRetry}>Retry</ActionButton>
             )}
