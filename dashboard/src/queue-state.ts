@@ -1,3 +1,4 @@
+import { useRef, useCallback } from "react";
 import type { GuardApprovalRequest, GuardQueueResolutionResult } from "./guard-types";
 
 export type QueueSortDirection = "newest" | "oldest";
@@ -161,6 +162,29 @@ export function resolveStaleRequestRecovery(
     return activeRequestId;
   }
   return items[0]?.request_id ?? null;
+}
+
+export type IsResolvingGuard = {
+  isResolvingRef: React.RefObject<boolean>;
+  setResolving: (value: boolean) => void;
+};
+
+export function useIsResolving(): IsResolvingGuard {
+  const isResolvingRef = useRef(false);
+  const setResolving = useCallback((value: boolean) => {
+    isResolvingRef.current = value;
+  }, []);
+  return { isResolvingRef, setResolving };
+}
+
+export function buildNextUpChipText(item: GuardApprovalRequest): string {
+  const envelope = item.action_envelope_json;
+  const preview =
+    envelope?.command?.slice(0, 40) ??
+    envelope?.mcp_tool ??
+    envelope?.prompt_excerpt?.slice(0, 40) ??
+    item.artifact_type;
+  return `${item.harness} — ${preview}`;
 }
 
 export function buildHomePrimaryState(

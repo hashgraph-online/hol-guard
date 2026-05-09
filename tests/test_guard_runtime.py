@@ -10943,7 +10943,11 @@ def test_guard_hook_claude_native_block_does_not_queue_approval_center_request(t
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
     _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    monkeypatch.setattr(
+        guard_commands_module,
+        "ensure_guard_daemon",
+        lambda _guard_home: "http://127.0.0.1:4455",
+    )
     blocked_event = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
@@ -11289,6 +11293,172 @@ def test_guard_hook_codex_user_prompt_submit_reuses_artifact_approval(
     payload = json.loads(output)
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     assert store.list_approval_requests(limit=10) == []
+
+
+def test_guard_hook_codex_user_prompt_submit_reuses_workspace_approval_for_same_prompt(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Open ./.npmrc",
+        "source_scope": "project",
+    }
+
+    _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    store = GuardStore(home_dir)
+    pending = store.list_approval_requests(limit=10)
+    assert len(pending) == 1
+    apply_approval_resolution(
+        store=store,
+        request_id=str(pending[0]["request_id"]),
+        action="allow",
+        scope="workspace",
+        workspace=str(workspace_dir),
+        reason="approved in browser",
+    )
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+
+    assert rc == 0
+    payload = json.loads(output)
+    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    assert store.list_approval_requests(limit=10) == []
+
+
+def test_guard_hook_codex_user_prompt_submit_workspace_approval_stays_in_workspace(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    other_workspace_dir = tmp_path / "other-workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _build_guard_fixture(home_dir, other_workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
+    monkeypatch.setattr(
+        guard_commands_module,
+        "ensure_guard_daemon",
+        lambda _guard_home: "http://127.0.0.1:4455",
+    )
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Open ./.npmrc",
+        "source_scope": "project",
+    }
+
+    _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    store = GuardStore(home_dir)
+    pending = store.list_approval_requests(limit=10)
+    apply_approval_resolution(
+        store=store,
+        request_id=str(pending[0]["request_id"]),
+        action="allow",
+        scope="workspace",
+        workspace=str(workspace_dir),
+        reason="approved in browser",
+    )
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=other_workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+
+    assert rc == 0
+    payload = json.loads(output)
+    assert payload["decision"] == "block"
+    assert "HOL Guard" in payload["reason"]
+
+
+def test_guard_hook_codex_user_prompt_submit_workspace_approval_requires_same_prompt_action(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    _write_text(home_dir / "config.toml", "approval_wait_timeout_seconds = 0\n")
+    monkeypatch.setattr(
+        guard_commands_module,
+        "ensure_guard_daemon",
+        lambda _guard_home: "http://127.0.0.1:4455",
+    )
+    secret_event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Open ./.npmrc",
+        "source_scope": "project",
+    }
+    destructive_event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Run rm -rf ./dangerous-marker.json.",
+        "source_scope": "project",
+    }
+
+    _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=secret_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    store = GuardStore(home_dir)
+    pending = store.list_approval_requests(limit=10)
+    apply_approval_resolution(
+        store=store,
+        request_id=str(pending[0]["request_id"]),
+        action="allow",
+        scope="workspace",
+        workspace=str(workspace_dir),
+        reason="approved in browser",
+    )
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=destructive_event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+
+    assert rc == 0
+    payload = json.loads(output)
+    assert payload["decision"] == "block"
+    assert "HOL Guard" in payload["reason"]
 
 
 def test_guard_hook_codex_user_prompt_submit_uses_strictest_mixed_prompt_risk(
