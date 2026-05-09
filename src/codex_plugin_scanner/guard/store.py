@@ -1388,17 +1388,37 @@ class GuardStore:
                       artifact_hash is null or (? is not null and artifact_hash = ?)
                     )
                   )
-                  or (scope = 'workspace' and workspace = ?)
+                  or (
+                    scope = 'workspace' and workspace = ? and (
+                      artifact_id is null or (
+                        artifact_id = ? and (
+                          artifact_hash is null or (? is not null and artifact_hash = ?)
+                        )
+                      )
+                    )
+                  )
                   or (scope = 'publisher' and publisher = ?)
                   or scope = 'harness'
                   or scope = 'global'
                 )
                 and (expires_at is null or expires_at > ?)
                 order by case scope when 'artifact' then 0 when 'workspace' then 1 when 'publisher' then 2
-                         when 'harness' then 3 else 4 end,
+                          when 'harness' then 3 else 4 end,
+                         case when scope = 'workspace' and artifact_id is not null then 0 else 1 end,
                          updated_at desc
                 """,
-                (harness, artifact_id, artifact_hash, artifact_hash, workspace, publisher, current_time),
+                (
+                    harness,
+                    artifact_id,
+                    artifact_hash,
+                    artifact_hash,
+                    workspace,
+                    artifact_id,
+                    artifact_hash,
+                    artifact_hash,
+                    publisher,
+                    current_time,
+                ),
             ).fetchall()
         if not rows:
             return None
@@ -1416,8 +1436,8 @@ class GuardStore:
 
     @staticmethod
     def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:
-        artifact_id = decision.artifact_id if decision.scope == "artifact" else None
-        artifact_hash = decision.artifact_hash if decision.scope == "artifact" else None
+        artifact_id = decision.artifact_id if decision.scope in {"artifact", "workspace"} else None
+        artifact_hash = decision.artifact_hash if decision.scope in {"artifact", "workspace"} else None
         workspace = decision.workspace if decision.scope == "workspace" else None
         publisher = decision.publisher if decision.scope == "publisher" else None
         return artifact_id, artifact_hash, workspace, publisher
@@ -1816,6 +1836,7 @@ class GuardStore:
                 return []
             return self._resolve_workspace_matching_approval_requests(
                 harness=harness,
+                artifact_id=artifact_id,
                 workspace=workspace,
                 resolution_action=resolution_action,
                 resolution_scope=resolution_scope,
@@ -1888,6 +1909,7 @@ class GuardStore:
         self,
         *,
         harness: str,
+        artifact_id: str | None,
         workspace: str,
         resolution_action: str,
         resolution_scope: str,
@@ -1898,7 +1920,7 @@ class GuardStore:
             connection.execute("begin immediate")
             rows = connection.execute(
                 """
-                select request_id, config_path
+                select request_id, artifact_id, config_path
                 from approval_requests
                 where status = 'pending'
                   and harness = ?
@@ -1907,7 +1929,10 @@ class GuardStore:
                 (harness,),
             ).fetchall()
             matching_ids = [
-                str(row["request_id"]) for row in rows if _path_within_workspace(str(row["config_path"]), workspace)
+                str(row["request_id"])
+                for row in rows
+                if _path_within_workspace(str(row["config_path"]), workspace)
+                and (artifact_id is None or row["artifact_id"] == artifact_id)
             ]
             for chunk in _chunks(matching_ids, _SQLITE_ID_BATCH_SIZE):
                 placeholders = ", ".join("?" for _ in chunk)

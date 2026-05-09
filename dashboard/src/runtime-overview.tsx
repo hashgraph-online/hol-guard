@@ -120,7 +120,9 @@ function cloudSyncHealthTone(state: GuardCloudSyncHealth["state"]): "blue" | "sl
 
 function humanizeCloudSyncHealthLabel(label: string): string {
   const labels: Record<string, string> = {
-    "Cloud sync stale": "Your protection history hasn't synced recently",
+    "Cloud sync stale": "Cloud backup is out of date",
+    "Cloud sync healthy": "Cloud backup up to date",
+    "First shared proof": "First cloud backup",
   };
   return labels[label] ?? label;
 }
@@ -131,7 +133,7 @@ function CloudSyncHealthCard(props: { health: GuardCloudSyncHealth }) {
     <div className="rounded-xl border border-border bg-white px-5 py-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
-          Cloud sync health
+          Guard cloud backup
         </p>
         <Tag tone={cloudSyncHealthTone(props.health.state)}>{humanizeCloudSyncHealthLabel(copy.label)}</Tag>
       </div>
