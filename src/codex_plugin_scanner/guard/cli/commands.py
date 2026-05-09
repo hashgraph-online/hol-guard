@@ -1189,8 +1189,7 @@ def run_guard_command(
         history_cmd = getattr(args, "history_command", None)
         if history_cmd == "explain":
             receipt_id: str = args.receipt_id
-            receipts = store.list_receipts()
-            match = next((r for r in receipts if r.get("receipt_id") == receipt_id), None)
+            match = store.get_receipt(receipt_id)
             if match is None:
                 msg = f"No receipt found for ID {receipt_id!r}"
                 _emit("history.explain", {"error": msg}, getattr(args, "json", False))
