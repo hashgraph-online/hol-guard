@@ -790,9 +790,7 @@ class GuardStore:
         connection.execute(f"alter table approval_requests add column {column_name} {column_type}")
 
     @staticmethod
-    def _ensure_column(
-        connection: sqlite3.Connection, table_name: str, column_name: str, column_type: str
-    ) -> None:
+    def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, column_type: str) -> None:
         rows = connection.execute(f"pragma table_info({table_name})").fetchall()
         existing = {str(row["name"]) for row in rows}
         if column_name in existing:

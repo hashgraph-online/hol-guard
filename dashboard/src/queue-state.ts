@@ -177,13 +177,13 @@ export function buildHomePrimaryState(
   if (watchedAppsCount === 0) {
     return {
       status: "setup_needed",
-      copy: "HOL Guard is running but no apps are connected yet.",
-      ctaLabel: "Connect an app",
+      copy: "Guard is running but no apps are connected yet.",
+      ctaLabel: "Set up protection",
     };
   }
   return {
     status: "protected",
-    copy: "HOL Guard is watching this machine. No blocked actions right now.",
+    copy: "Guard is protecting your apps. No blocked actions right now.",
     ctaLabel: "Open review queue",
   };
 }
