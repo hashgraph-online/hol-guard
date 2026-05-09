@@ -290,9 +290,7 @@ function QueueWorkspace(props: {
                 {repairing ? "Repairing…" : "Repair"}
               </ActionButton>
             )}
-            <code className="inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all">
-              hol-guard start
-            </code>
+            <code className="inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all">hol-guard start</code>
             {props.onRetry && (
               <ActionButton variant="outline" onClick={props.onRetry}>Retry</ActionButton>
             )}
@@ -405,7 +403,7 @@ function QueueHeader(props: {
             {props.progressCopy}
           </span>
         )}
-        <Badge tone="default">{props.requests.length} waiting</Badge>
+        <Badge tone="warning">{props.requests.length} waiting</Badge>
         {activeItem ? <Tag tone="blue">{harnessDisplayName(activeItem.harness)}</Tag> : null}
         <Tag tone="slate">{runtimeLabel}</Tag>
       </div>
@@ -517,7 +515,7 @@ function QueueBrowser(props: {
             className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           />
         </label>
-        {harnesses.length > 0 && (
+        {harnesses.length > 1 && (
           <QueueChipFilter
             harnesses={harnesses}
             activeFilter={harnessFilter}
