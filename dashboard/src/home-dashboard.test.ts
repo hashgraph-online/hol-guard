@@ -178,3 +178,59 @@ for (const copy of [setupCopy, pendingCopy, protectedCopy]) {
     `L140: Copy must not contain jargon words — got: "${copy}"`
   );
 }
+
+const EXTENDED_JARGON = ["daemon", "runtime", "v1", "MCP", "harness", "artifact"];
+function containsExtendedJargon(text: string): boolean {
+  return EXTENDED_JARGON.some((word) =>
+    text.toLowerCase().includes(word.toLowerCase())
+  );
+}
+
+const setupOnlyCta = buildHomePrimaryState(0, 0);
+assert(
+  setupOnlyCta.ctaLabel === "Set up protection",
+  'C1: setup_needed primary CTA is "Set up protection"'
+);
+
+assert(
+  setupOnlyCta.status === "setup_needed",
+  "C1: buildHomePrimaryState returns setup_needed for zero pending and zero installs"
+);
+
+const queueCta = buildHomePrimaryState(3, 1);
+assert(
+  queueCta.ctaLabel.toLowerCase().includes("review") ||
+    queueCta.ctaLabel.toLowerCase().includes("queue") ||
+    queueCta.ctaLabel.toLowerCase().includes("action"),
+  'C2: Queue count CTA label navigates to Review Queue — label contains "review", "queue", or "action"'
+);
+
+const allStates = [
+  buildHomePrimaryState(0, 0),
+  buildHomePrimaryState(2, 2),
+  buildHomePrimaryState(0, 1),
+];
+const allCopies = allStates.map((s) => s.copy);
+const allCtaLabels = allStates.map((s) => s.ctaLabel);
+
+const uniqueCopies = new Set(allCopies);
+assert(
+  uniqueCopies.size === allCopies.length,
+  "C3: No duplicate copy across the three dashboard states"
+);
+
+const uniqueCtaLabels = new Set(allCtaLabels);
+assert(
+  uniqueCtaLabels.size === allCtaLabels.length,
+  "C3: No duplicate CTA labels across the three dashboard states"
+);
+
+const setupStateForJargon = buildHomePrimaryState(0, 0);
+assert(
+  !containsExtendedJargon(setupStateForJargon.copy),
+  `C4: setup_needed copy has no jargon — got: "${setupStateForJargon.copy}"`
+);
+assert(
+  !containsExtendedJargon(setupStateForJargon.ctaLabel),
+  `C4: setup_needed CTA label has no jargon — got: "${setupStateForJargon.ctaLabel}"`
+);

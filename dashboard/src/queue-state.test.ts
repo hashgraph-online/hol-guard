@@ -268,8 +268,8 @@ assert(
   "T-QS-32: buildHomePrimaryState returns setup_needed when no watched apps and no pending"
 );
 assert(
-  setupNeeded.ctaLabel === "Connect an app",
-  "T-QS-33: buildHomePrimaryState CTA is 'Connect an app' when no watched apps"
+  setupNeeded.ctaLabel === "Set up protection",
+  "T-QS-33: buildHomePrimaryState CTA is 'Set up protection' when no watched apps"
 );
 
 const protectedState = buildHomePrimaryState(0, 2);
@@ -278,8 +278,8 @@ assert(
   "T-QS-34: buildHomePrimaryState returns protected status when guarded with apps present"
 );
 assert(
-  protectedState.copy.includes("watching"),
-  "T-QS-35: buildHomePrimaryState copy mentions watching when protected"
+  protectedState.copy.includes("protecting"),
+  "T-QS-35: buildHomePrimaryState copy mentions protecting when protected"
 );
 
 const singlePending = buildHomePrimaryState(1, 1);
