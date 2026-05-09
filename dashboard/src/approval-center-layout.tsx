@@ -59,6 +59,7 @@ import {
 } from "./approval-center-review-cards";
 import {
   buildProgressCopy,
+  buildNextUpChipText,
   sortQueue,
   searchQueue,
   groupDuplicates,
@@ -130,8 +131,16 @@ type LayoutProps = {
 };
 
 const scopeOptions: Array<{ value: DecisionScope; label: string; description: string }> = [
-  { value: "artifact", label: "This exact action", description: "Ask again if the command or tool details change." },
-  { value: "workspace", label: "This project folder", description: "Remember this choice only for this project." },
+  {
+    value: "artifact",
+    label: "This retry only",
+    description: "Remember this exact prompt, command, tool, path, or host fingerprint."
+  },
+  {
+    value: "workspace",
+    label: "Same action in this project",
+    description: "Skip the next prompt for this same action here; different sensitive actions still ask."
+  },
   { value: "publisher", label: "This source", description: "Trust future actions from the same source in this app." },
   { value: "harness", label: "This app", description: "Trust matching actions from this app." },
   { value: "global", label: "Every project", description: "Use this choice across this machine." }
@@ -279,15 +288,25 @@ function QueueWorkspace(props: {
   if (props.requests.kind === "error") {
     const approvalUrl =
       props.runtime.kind === "ready" ? props.runtime.snapshot.approval_center_url : null;
+    const handleOpenDaemon = () => {
+      if (approvalUrl !== null) {
+        window.open(approvalUrl, "_blank", "noopener,noreferrer");
+      } else {
+        void handleRepair();
+      }
+    };
     return (
       <div className="space-y-4">
         <Surface tone="danger">
-          <p className="text-sm font-semibold text-brand-purple">Guard connection lost. Check if the daemon is running.</p>
+          <p className="text-sm font-semibold text-brand-purple">Guard daemon not responding — click to reconnect.</p>
           <p className="mt-1 text-sm text-brand-purple/80">{props.requests.message}</p>
           <div className="mt-4 flex flex-wrap gap-3">
+            <ActionButton onClick={handleOpenDaemon}>
+              Repair
+            </ActionButton>
             {props.onRepair !== undefined && (
-              <ActionButton onClick={handleRepair} disabled={repairing}>
-                {repairing ? "Repairing…" : "Repair"}
+              <ActionButton onClick={handleRepair} disabled={repairing} variant="outline">
+                {repairing ? "Repairing…" : "Reconnect"}
               </ActionButton>
             )}
             <code className="inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all">hol-guard start</code>
@@ -515,7 +534,7 @@ function QueueBrowser(props: {
             className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           />
         </label>
-        {harnesses.length > 0 && (
+        {harnesses.length >= 2 && (
           <QueueChipFilter
             harnesses={harnesses}
             activeFilter={harnessFilter}
@@ -589,8 +608,8 @@ function QueueCardRow(props: {
       {props.nextUpItem !== null && (
         <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-2">
           <p className="truncate text-[11px] text-muted-foreground">
-            <span className="font-semibold">Next up:</span>{" "}
-            {displayArtifactName(props.nextUpItem)}
+            <span className="font-semibold">Next:</span>{" "}
+            {buildNextUpChipText(props.nextUpItem)}
           </p>
         </div>
       )}
@@ -687,6 +706,7 @@ function DecisionWorkspace(props: {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confirmPending, setConfirmPending] = useState<"allow" | "block" | null>(null);
   const [resolvedBanner, setResolvedBanner] = useState<"allow" | "block" | null>(null);
+  const [resolvedState, setResolvedState] = useState<"idle" | "decided" | "loaded">("idle");
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevRequestIdRef = useRef<string | null>(null);
 
@@ -696,6 +716,7 @@ function DecisionWorkspace(props: {
       prevRequestIdRef.current = props.detail.item.request_id;
       if (isNewItem) {
         setResolvedBanner(null);
+        setResolvedState("loaded");
         if (bannerTimerRef.current !== null) {
           clearTimeout(bannerTimerRef.current);
           bannerTimerRef.current = null;
@@ -731,6 +752,7 @@ function DecisionWorkspace(props: {
           reason,
           workspace: scope === "workspace" ? readyWorkspace : undefined,
         });
+        setResolvedState("decided");
         setResolvedBanner(action);
         bannerTimerRef.current = setTimeout(() => {
           setResolvedBanner(null);
@@ -800,6 +822,16 @@ function DecisionWorkspace(props: {
   if (props.detail.kind === "loading") {
     return (
       <div className="space-y-4">
+        {resolvedState === "decided" && (
+          <div
+            className="flex items-center gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3"
+            role="status"
+            aria-live="polite"
+          >
+            <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
+            <p className="text-sm font-medium text-brand-green-text">Decided — loading next…</p>
+          </div>
+        )}
         <div className="guard-skeleton h-8 w-48" />
         <div className="guard-skeleton h-40 w-full" />
         <div className="guard-skeleton h-56 w-full" />

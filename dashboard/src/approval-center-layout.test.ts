@@ -5,6 +5,8 @@ import {
   displayArtifactName,
   EMPTY_QUEUE_TITLE,
   STALE_REQUEST_COPY,
+  buildRecommendation,
+  scopeLabel,
 } from "./approval-center-utils";
 import type { GuardActionEnvelope, GuardApprovalRequest } from "./guard-types";
 
@@ -207,4 +209,19 @@ assert(
 assert(
   STALE_REQUEST_COPY.toLowerCase().includes("already decided"),
   'C6: Stale request copy contains "already decided" — not approve/block buttons'
+);
+
+assert(
+  scopeLabel("artifact") === "This retry only",
+  "C7: Artifact scope copy makes one-retry behavior clear"
+);
+
+assert(
+  scopeLabel("workspace") === "Same action in this project",
+  "C8: Workspace scope copy makes same-action project behavior clear"
+);
+
+assert(
+  buildRecommendation(BASE_REQUEST).includes("Project approval remembers this same action"),
+  "C9: Recommendation explains project approval does not trust new sensitive actions"
 );

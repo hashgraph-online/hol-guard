@@ -131,12 +131,12 @@ export function buildPauseLine(item: GuardApprovalRequest): string {
 
 export function buildRecommendation(item: GuardApprovalRequest): string {
   if (item.changed_fields.length === 1 && item.changed_fields[0] === "first_seen") {
-    return "If this is what you expected, approve the exact action. Use broader trust only when you deliberately want Guard to ask less often.";
+    return "If this is what you expected, approve this retry. Project approval remembers this same action here without trusting new sensitive actions.";
   }
   if (item.policy_action === "block") {
     return "Keep it blocked unless you are sure this action is safe and expected.";
   }
-  return "Approve the smallest choice that matches what you meant to do. Broader trust should be a deliberate second step.";
+  return "Approve the smallest choice that matches what you meant to do. Different commands, prompts, paths, hosts, or tools should ask again.";
 }
 
 export function buildQueueSummary(item: GuardApprovalRequest): string {
@@ -162,9 +162,9 @@ export function buildMemorySummary(
 export function scopeLabel(scope: string): string {
   switch (scope) {
     case "artifact":
-      return "This exact action";
+      return "This retry only";
     case "workspace":
-      return "This project folder";
+      return "Same action in this project";
     case "publisher":
       return "This source in this app";
     case "harness":
