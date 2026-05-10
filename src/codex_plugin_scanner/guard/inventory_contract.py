@@ -403,8 +403,8 @@ def _mcp_tool_items_from_artifact(
     raw_metadata = getattr(artifact, "metadata", {})
     if not isinstance(raw_metadata, dict):
         return ()
-    raw_tools = raw_metadata.get("tools") or raw_metadata.get("tool_schemas") or raw_metadata.get("toolSchemas")
-    if not isinstance(raw_tools, list):
+    raw_tools = _mcp_tool_definitions(raw_metadata)
+    if not raw_tools:
         return ()
 
     items: list[GuardAgentInventoryItem] = []
@@ -470,13 +470,47 @@ def _first_present_value(mapping: dict[str, object], *keys: str) -> object | Non
     return None
 
 
+def _mcp_tool_definitions(metadata: dict[str, object]) -> tuple[dict[str, object], ...]:
+    tools: list[dict[str, object]] = []
+    seen_names: set[str] = set()
+    for key in ("tools", "tool_schemas", "toolSchemas"):
+        raw_tools = metadata.get(key)
+        if not isinstance(raw_tools, list):
+            continue
+        for raw_tool in raw_tools:
+            if not isinstance(raw_tool, dict):
+                continue
+            name = raw_tool.get("name")
+            if not isinstance(name, str) or not name.strip() or name in seen_names:
+                continue
+            tools.append(raw_tool)
+            seen_names.add(name)
+    return tuple(tools)
+
+
+def _mcp_schema_signal_text(value: object) -> str:
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key, item in value.items():
+            if key in {"$schema", "$id"}:
+                continue
+            parts.append(key)
+            parts.append(_mcp_schema_signal_text(item))
+        return " ".join(part for part in parts if part)
+    if isinstance(value, list):
+        return " ".join(_mcp_schema_signal_text(item) for item in value)
+    if isinstance(value, str):
+        return value
+    return ""
+
+
 def _capabilities_for_mcp_tool(
     name: str,
     description: str,
     input_schema: object,
     annotations: dict[str, object],
 ) -> tuple[InventoryCapability, ...]:
-    text = f"{name} {description} {json.dumps(input_schema, sort_keys=True, default=str)}".lower()
+    text = f"{name} {description} {_mcp_schema_signal_text(input_schema)}".lower()
     capabilities: set[InventoryCapability] = set()
     if annotations.get("readOnlyHint") is True or _MCP_READ_RE.search(text):
         capabilities.add("reads_files")

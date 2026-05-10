@@ -318,3 +318,91 @@ def test_inventory_snapshot_mcp_capabilities_avoid_substring_false_positives(tmp
 
     assert tool_items["thread_listener"].capability_categories == ("unknown",)
     assert tool_items["credential_probe"].capability_categories == ("reads_secrets",)
+
+
+def test_inventory_snapshot_mcp_capabilities_ignore_schema_boilerplate(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=False,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hermes:mcp:schema-boilerplate",
+                name="schema-boilerplate",
+                harness="hermes",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(tmp_path / ".hermes" / "mcp_servers.json"),
+                metadata={
+                    "tools": [
+                        {
+                            "name": "local_formatter",
+                            "inputSchema": {
+                                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                                "type": "object",
+                                "properties": {"format": {"type": "string"}},
+                            },
+                        },
+                        {
+                            "name": "remote_probe",
+                            "inputSchema": {
+                                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                                "type": "object",
+                                "properties": {"url": {"type": "string"}},
+                            },
+                        },
+                    ]
+                },
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    tool_items = {item.display_name: item for item in snapshot.items if item.item_kind == "mcp_tool"}
+
+    assert tool_items["local_formatter"].capability_categories == ("unknown",)
+    assert tool_items["remote_probe"].capability_categories == ("network_egress",)
+
+
+def test_inventory_snapshot_mcp_tool_fallback_skips_non_schema_tool_allowlist(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=False,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hermes:mcp:tool-schema-fallback",
+                name="tool-schema-fallback",
+                harness="hermes",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(tmp_path / ".hermes" / "mcp_servers.json"),
+                metadata={
+                    "tools": ["*"],
+                    "tool_schemas": [
+                        {
+                            "name": "search_repo",
+                            "description": "Search local project files.",
+                        }
+                    ],
+                },
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    tool_items = [item for item in snapshot.items if item.item_kind == "mcp_tool"]
+
+    assert len(tool_items) == 1
+    assert tool_items[0].display_name == "search_repo"
+    assert tool_items[0].capability_categories == ("reads_files",)
