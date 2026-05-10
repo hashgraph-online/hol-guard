@@ -77,6 +77,7 @@ import type {
   GuardRuntimeSnapshot,
   DecisionScope
 } from "./guard-types";
+import { guardAwareHref } from "./guard-api";
 
 type RequestState =
   | { kind: "loading" }
@@ -1295,6 +1296,7 @@ function resolveMcpInputSummary(payload: Record<string, unknown>): string | null
 function BlockedActionCard(props: { item: GuardApprovalRequest }) {
   const launchText = actionLaunchText(props.item);
   const decisionDetail = resolveDecisionV2Detail(props.item);
+  const [shareState, setShareState] = useState<"idle" | "copied" | "failed">("idle");
   const isBlocked = props.item.policy_action === "block";
   const bannerBg = isBlocked
     ? "bg-gradient-to-r from-brand-purple/90 to-brand-purple/75"
@@ -1310,6 +1312,19 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
     isMcpTool && envelope !== null
       ? resolveMcpInputSummary(envelope.raw_payload_redacted)
       : null;
+  const approvalUrl = props.item.approval_url ? guardAwareHref(props.item.approval_url) : null;
+
+  const handleCopyApprovalUrl = useCallback(async () => {
+    if (approvalUrl === null) return;
+    try {
+      await navigator.clipboard.writeText(approvalUrl);
+      setShareState("copied");
+      window.setTimeout(() => setShareState("idle"), 1800);
+    } catch {
+      setShareState("failed");
+      window.setTimeout(() => setShareState("idle"), 2400);
+    }
+  }, [approvalUrl]);
 
   return (
     <div className="overflow-hidden rounded-[1.65rem] border border-brand-blue/15 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
@@ -1318,16 +1333,27 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
         <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-white">
           {bannerLabel}
         </span>
-        {props.item.approval_url ? (
-          <a
-            href={props.item.approval_url}
-            target="_blank"
-            rel="noreferrer"
-            className="ml-auto inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80 transition-colors hover:text-white"
-          >
-            Approval link
-            <HiMiniArrowTopRightOnSquare className="h-3 w-3" aria-hidden="true" />
-          </a>
+        {approvalUrl ? (
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopyApprovalUrl}
+              className="inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80 transition-colors hover:text-white"
+              aria-label="Copy local review link"
+            >
+              <HiMiniClipboard className="h-3 w-3" aria-hidden="true" />
+              {shareState === "copied" ? "Copied" : shareState === "failed" ? "Copy failed" : "Copy link"}
+            </button>
+            <a
+              href={approvalUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80 transition-colors hover:text-white"
+            >
+              Open
+              <HiMiniArrowTopRightOnSquare className="h-3 w-3" aria-hidden="true" />
+            </a>
+          </div>
         ) : null}
       </div>
       <div className="p-4">
