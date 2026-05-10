@@ -292,6 +292,8 @@ def redact_headers(headers: dict[str, str]) -> dict[str, str]:
 def redact_url(value: str) -> str:
     parsed = urlsplit(value)
     hostname = parsed.hostname or parsed.netloc
+    if ":" in hostname and not hostname.startswith("["):
+        hostname = f"[{hostname}]"
     netloc = hostname
     try:
         port = parsed.port
@@ -473,6 +475,11 @@ def _redact_command_value(value: str, home_dir: Path, workspace_dir: Path | None
     )
     redacted = re.sub(
         r"(?i)((?:api[_-]?key|auth|password|secret|token)=)\S+",
+        r"\1redacted",
+        redacted,
+    )
+    redacted = re.sub(
+        r"(?i)((?:--)?(?:api[_-]?key|auth|password|secret|token)\s+)\S+",
         r"\1redacted",
         redacted,
     )
