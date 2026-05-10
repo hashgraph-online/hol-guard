@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import (
     GuardAgentInventoryFinding,
     GuardAgentInventoryItem,
@@ -19,6 +20,7 @@ from codex_plugin_scanner.guard.inventory_contract import (
     serialize_inventory_snapshot,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.models import Finding, Severity
 
 
 class _Detection:
@@ -406,3 +408,64 @@ def test_inventory_snapshot_mcp_tool_fallback_skips_non_schema_tool_allowlist(tm
     assert len(tool_items) == 1
     assert tool_items[0].display_name == "search_repo"
     assert tool_items[0].capability_categories == ("reads_files",)
+
+
+def test_inventory_snapshot_maps_cisco_findings_to_redacted_inventory_evidence(tmp_path: Path) -> None:
+    skill_path = tmp_path / ".hermes" / "skills" / "ops" / "reviewer" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text("---\nname: reviewer\n---\nUse safe local review.\n")
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=False,
+        config_paths=(str(skill_path),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hermes:skill:ops:reviewer",
+                name="reviewer",
+                harness="hermes",
+                artifact_type="skill",
+                source_scope="global",
+                config_path=str(skill_path),
+                metadata={"content_hash": "abc123"},
+            ),
+        ),
+    )
+    finding = Finding(
+        rule_id="CISCO-SKILL-PROMPT-INJECTION",
+        severity=Severity.HIGH,
+        category="skill-security",
+        title="Prompt injection guard_live_secret",
+        description=f"Unsafe instruction in {skill_path} with token=guard_live_secret",
+        file_path=str(skill_path),
+        line_number=7,
+        source="cisco-skill-scanner",
+    )
+    cisco_run = CiscoInventoryRun(
+        source="cisco-skill-scanner",
+        status="enabled",
+        message="Cisco skill scanner found guard_live_secret",
+        findings=(finding, finding),
+        duration_ms=42,
+        metadata={"totalFindings": 2},
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+        cisco_runs=(cisco_run,),
+    )
+    payload = serialize_inventory_snapshot(snapshot)
+    encoded = json.dumps(payload, sort_keys=True)
+
+    assert len(payload["findings"]) == 1
+    assert payload["findings"][0]["source"] == "cisco-skill-scanner"
+    assert payload["findings"][0]["severity"] == "high"
+    assert payload["findings"][0]["confidence"] == "high"
+    assert payload["findings"][0]["artifact_id"] == "hermes:skill:ops:reviewer"
+    assert payload["findings"][0]["evidence"]["durationMs"] == 42
+    assert payload["findings"][0]["evidence"]["riskComponent"]["scoreDelta"] == -25
+    assert payload["sources"][-1]["source_type"] == "scanner"
+    assert "guard_live_secret" not in encoded
+    assert str(tmp_path) not in encoded
