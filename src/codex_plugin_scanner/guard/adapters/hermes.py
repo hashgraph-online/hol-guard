@@ -13,6 +13,7 @@ import re
 import sys
 from pathlib import Path
 
+from ..inventory_contract import GuardAgentInventorySnapshot, inventory_snapshot_from_detection
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, _command_available, _json_payload, _run_command_probe
@@ -244,6 +245,14 @@ class HermesHarnessAdapter(HarnessAdapter):
             command_available=_command_available(self.executable),
             artifacts=tuple(artifacts),
             config_paths=tuple(found_paths),
+        )
+
+    def inventory_snapshot(self, context: HarnessContext, *, generated_at: str) -> GuardAgentInventorySnapshot:
+        return inventory_snapshot_from_detection(
+            self.detect(context),
+            generated_at=generated_at,
+            home_dir=context.home_dir,
+            workspace_dir=context.workspace_dir,
         )
 
     # ------------------------------------------------------------------
