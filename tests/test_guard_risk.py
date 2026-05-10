@@ -1217,6 +1217,46 @@ def test_tool_action_request_classifier_detects_redirection_to_quoted_space_targ
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_allows_graphql_query_file_workflow(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "query($owner:String!,$name:String!,$number:Int!){\n"
+                "  repository(owner:$owner,name:$name){\n"
+                "    pullRequest(number:$number){ reviewDecision mergeStateStatus }\n"
+                "  }\n"
+                "}\n"
+                "EOF\n"
+                "gh api graphql -F owner=hashgraph-online -F name=points-portal -F number=542 "
+                f'-f query="$(cat {query_path})"'
+            )
+        },
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_rejects_graphql_mutation_file_workflow(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "mutation($id:ID!){ deleteIssue(input:{issueId:$id}) { clientMutationId } }\n"
+                "EOF\n"
+                f'gh api graphql -F id=I_kw -f query="$(cat {query_path})"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_python_heredoc_file_write():
     request = extract_sensitive_tool_action_request(
         "bash",
