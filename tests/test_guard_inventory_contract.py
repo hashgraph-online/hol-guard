@@ -98,6 +98,7 @@ def test_inventory_helpers_emit_safe_endpoint_and_stable_hashes(tmp_path: Path) 
     )
     assert classify_endpoint_host("https://user:pass@example.com/mcp?token=value") == "remote_public"
     assert classify_endpoint_host("http://172.20.4.5:8080/mcp") == "local_private"
+    assert classify_endpoint_host("http://[not-an-ip]/mcp") == "remote_public"
     assert redact_url("https://user:pass@example.com/mcp?token=value&mode=safe") == "https://example.com/mcp?token=redacted&mode=safe"
     assert redact_url("https://example.com/mcp?auth=value&mode=safe") == "https://example.com/mcp?auth=redacted&mode=safe"
     assert redact_url("https://example.com/mcp?mode=safe;token=value") == "https://example.com/mcp?mode=safe&token=redacted"

@@ -314,7 +314,10 @@ def redact_url(value: str) -> str:
 def classify_endpoint_host(value: str | None) -> Literal["none", "local_loopback", "local_private", "remote_public"]:
     if not value:
         return "none"
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return "remote_public"
     host = (parsed.hostname or "").lower()
     if host in {"localhost", "127.0.0.1", "::1"}:
         return "local_loopback"
