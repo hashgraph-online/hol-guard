@@ -433,7 +433,7 @@ def _sanitize_paths(value: object, home_dir: Path, workspace_dir: Path | None) -
         for key, item in value.items():
             string_key = str(key)
             if _SENSITIVE_KEY_RE.search(string_key):
-                redacted[string_key] = "present_redacted"
+                redacted[string_key] = item if isinstance(item, bool) else "present_redacted"
                 continue
             redacted[string_key] = _sanitize_paths(item, home_dir, workspace_dir)
         return redacted
