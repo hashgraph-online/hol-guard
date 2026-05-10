@@ -2628,6 +2628,8 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     normalized = command_text.strip()
     if not normalized:
         return False
+    if _looks_like_safe_graphql_query_file_workflow(normalized):
+        return False
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
@@ -2662,6 +2664,61 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     return any(
         command_name == "sed" and any(part == "-i" or part.startswith("-i") for part in parts[1:])
         for command_name in command_names
+    )
+
+
+_SAFE_GRAPHQL_QUERY_FILE_WORKFLOW_PATTERN = re.compile(
+    r"\A\s*cat\s*>\s*(?P<path>'[^']+'|\"[^\"]+\"|[^\s]+)\s*<<['\"]?(?P<label>[A-Za-z_][A-Za-z0-9_]*)['\"]?"
+    r"\s*\n(?P<body>.*?)\n(?P=label)\s*(?:\n|&&|;)\s*(?P<rest>.+)\Z",
+    re.DOTALL,
+)
+
+
+def _looks_like_safe_graphql_query_file_workflow(command_text: str) -> bool:
+    match = _SAFE_GRAPHQL_QUERY_FILE_WORKFLOW_PATTERN.match(command_text)
+    if match is None:
+        return False
+    target_path = _strip_shell_quotes(match.group("path").strip())
+    if not target_path.endswith(".graphql") or _path_text_looks_sensitive(target_path):
+        return False
+    body = match.group("body").strip()
+    if not re.search(r"\bquery\b", body) or re.search(r"\bmutation\b|\bsubscription\b", body):
+        return False
+    rest = match.group("rest").strip()
+    if not rest.startswith("gh api graphql "):
+        return False
+    if re.search(r"(?:^|[;&|])\s*(?:rm|mv|cp|chmod|chown|curl|wget|python|python3|node|bash|sh|zsh)\b", rest):
+        return False
+    query_file_refs = {
+        f"$(cat {target_path})",
+        f'$(cat "{target_path}")',
+        f"$(cat '{target_path}')",
+    }
+    return any(ref in rest for ref in query_file_refs) and re.search(r"(?:^|\s)-f\s+query=", rest) is not None
+
+
+def _strip_shell_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def _path_text_looks_sensitive(path_text: str) -> bool:
+    lowered = path_text.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "/.aws/",
+            "/.docker/",
+            "/.kube/",
+            "/.ssh/",
+            ".env",
+            ".git-credentials",
+            ".netrc",
+            ".npmrc",
+            ".pypirc",
+            "id_rsa",
+        )
     )
 
 
