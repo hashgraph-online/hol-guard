@@ -235,6 +235,8 @@ pip install "plugin-scanner[cisco]"
 
 On Guard surfaces, the Cisco extra adds optional offline evidence to `hol-guard scan`, `hol-guard preflight`, and `hol-guard explain <path>`. Use `--cisco-mode {auto,on,off}` to control that consumer-mode evidence path for local artifact scans. `hol-guard run` and Guard runtime prompt/file-read protection remain native Guard behavior in this pass.
 
+Guard inventory snapshots can also carry Cisco MCP and skill-scanner status when a Hermes or OpenClaw inventory run explicitly enables those scanners. The Cloud evidence model records scanner source, status, redacted finding text, duration, mapped artifact ID, and risk component metadata without storing raw local paths or secrets.
+
 Guard does not add Cisco AIBOM runtime integration in this pass. If AIBOM support returns later, it should stay on evidence or export surfaces rather than Guard blocking or approval logic.
 
 ### Cisco package status
