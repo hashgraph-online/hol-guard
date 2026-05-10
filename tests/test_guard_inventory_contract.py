@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.inventory_contract import (
     redact_url,
     serialize_inventory_snapshot,
 )
+from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 
 
 class _Detection:
@@ -157,3 +158,84 @@ def test_inventory_snapshot_deduplicates_config_sources(tmp_path: Path) -> None:
     )
 
     assert len(snapshot.sources) == 1
+
+
+def test_inventory_snapshot_extracts_mcp_tool_items(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=False,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hermes:mcp:json:tools",
+                name="tools",
+                harness="hermes",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(tmp_path / ".hermes" / "mcp_servers.json"),
+                metadata={
+                    "tools": [
+                        {
+                            "name": "search_docs",
+                            "title": "Search docs",
+                            "description": "Read-only search over project documentation.",
+                            "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}},
+                            "outputSchema": {"type": "object"},
+                            "annotations": {"readOnlyHint": True, "destructiveHint": False},
+                        },
+                        {
+                            "name": "delete_file",
+                            "description": "Delete a file from disk.",
+                            "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}},
+                            "annotations": {"destructiveHint": True},
+                        },
+                    ]
+                },
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    items = {item.item_id: item for item in snapshot.items}
+
+    assert "hermes:mcp:json:tools:tool:search_docs" in items
+    assert "hermes:mcp:json:tools:tool:delete_file" in items
+    assert items["hermes:mcp:json:tools:tool:search_docs"].capability_categories == ("reads_files",)
+    assert "writes_files" in items["hermes:mcp:json:tools:tool:delete_file"].capability_categories
+    assert items["hermes:mcp:json:tools:tool:delete_file"].risk_level == "high"
+
+
+def test_inventory_snapshot_handles_missing_mcp_tool_schema_and_scale(tmp_path: Path) -> None:
+    tools = [{"name": f"tool_{index}", "description": "No schema available."} for index in range(500)]
+    detection = HarnessDetection(
+        harness="openclaw",
+        installed=True,
+        command_available=False,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="openclaw:mcp:bulk",
+                name="bulk",
+                harness="openclaw",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(tmp_path / ".openclaw" / "openclaw.json"),
+                metadata={"tools": tools},
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    tool_items = [item for item in snapshot.items if item.item_kind == "mcp_tool"]
+
+    assert len(tool_items) == 500
+    assert all(item.capability_categories == ("unknown",) for item in tool_items)

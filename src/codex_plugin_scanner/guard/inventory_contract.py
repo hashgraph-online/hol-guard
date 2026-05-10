@@ -191,15 +191,16 @@ def inventory_snapshot_from_detection(
 ) -> GuardAgentInventorySnapshot:
     harness = str(getattr(detection, "harness", "unknown"))
     artifacts = tuple(getattr(detection, "artifacts", ()))
-    items = tuple(
-        _item_from_artifact(
+    items: list[GuardAgentInventoryItem] = []
+    for artifact in artifacts:
+        item = _item_from_artifact(
             harness,
             artifact,
             home_dir=home_dir,
             workspace_dir=workspace_dir,
         )
-        for artifact in artifacts
-    )
+        items.append(item)
+        items.extend(_mcp_tool_items_from_artifact(harness, artifact, item))
     config_paths = tuple(dict.fromkeys(str(path) for path in getattr(detection, "config_paths", ())))
     sources = tuple(
         GuardInventorySource(
@@ -224,7 +225,7 @@ def inventory_snapshot_from_detection(
         agent_type=_agent_type(harness),
         generated_at=generated_at,
         runtime_version=runtime_version,
-        items=items,
+        items=tuple(items),
         sources=sources,
         redaction_report={
             "rawSecretsIncluded": False,
@@ -360,6 +361,115 @@ def _item_from_artifact(
         scanner_sources=("hol-detector",),
         metadata=safe_metadata,
     )
+
+
+def _mcp_tool_items_from_artifact(
+    harness: str,
+    artifact: object,
+    server_item: GuardAgentInventoryItem,
+) -> tuple[GuardAgentInventoryItem, ...]:
+    artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
+    if artifact_type != "mcp_server":
+        return ()
+    raw_metadata = getattr(artifact, "metadata", {})
+    if not isinstance(raw_metadata, dict):
+        return ()
+    raw_tools = raw_metadata.get("tools") or raw_metadata.get("tool_schemas") or raw_metadata.get("toolSchemas")
+    if not isinstance(raw_tools, list):
+        return ()
+
+    items: list[GuardAgentInventoryItem] = []
+    for raw_tool in raw_tools:
+        if not isinstance(raw_tool, dict):
+            continue
+        name = raw_tool.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        display_name = _string_value(raw_tool.get("title")) or name
+        description = _string_value(raw_tool.get("description")) or ""
+        input_schema = raw_tool.get("inputSchema") or raw_tool.get("input_schema")
+        output_schema = raw_tool.get("outputSchema") or raw_tool.get("output_schema")
+        annotations = raw_tool.get("annotations")
+        safe_annotations = annotations if isinstance(annotations, dict) else {}
+        metadata = {
+            "serverItemId": server_item.item_id,
+            "toolName": name,
+            "title": display_name,
+            "descriptionHash": fingerprint_text(description),
+            "inputSchemaHash": fingerprint_mapping(input_schema) if input_schema is not None else None,
+            "outputSchemaHash": fingerprint_mapping(output_schema) if output_schema is not None else None,
+            "annotations": safe_annotations,
+            "schemaPresent": input_schema is not None or output_schema is not None,
+        }
+        capabilities = _capabilities_for_mcp_tool(name, description, input_schema, safe_annotations)
+        semantic_hash = fingerprint_mapping(
+            {
+                "server": server_item.item_id,
+                "name": name,
+                "description": description,
+                "inputSchema": input_schema,
+                "outputSchema": output_schema,
+                "annotations": safe_annotations,
+            }
+        )
+        items.append(
+            GuardAgentInventoryItem(
+                item_id=f"{server_item.item_id}:tool:{name}",
+                item_kind="mcp_tool",
+                display_name=display_name,
+                source_fingerprint=fingerprint_mapping(
+                    {"harness": harness, "server": server_item.item_id, "tool": name}
+                ),
+                content_hash=semantic_hash,
+                capability_categories=capabilities,
+                risk_level=_risk_level_for_capabilities(capabilities),
+                scanner_sources=("hol-detector",),
+                metadata=metadata,
+            )
+        )
+    return tuple(items)
+
+
+def _string_value(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _capabilities_for_mcp_tool(
+    name: str,
+    description: str,
+    input_schema: object,
+    annotations: dict[str, object],
+) -> tuple[InventoryCapability, ...]:
+    text = f"{name} {description} {json.dumps(input_schema, sort_keys=True, default=str)}".lower()
+    capabilities: set[InventoryCapability] = set()
+    if annotations.get("readOnlyHint") is True or "read" in text or "search" in text or "list" in text:
+        capabilities.add("reads_files")
+    if annotations.get("destructiveHint") is True or any(term in text for term in ("delete", "remove", "destroy")):
+        capabilities.update({"writes_files", "deletes_files"})
+    if annotations.get("writeHint") is True or any(term in text for term in ("write", "update", "create", "modify")):
+        capabilities.add("writes_files")
+    if any(term in text for term in ("shell", "command", "execute", "exec", "subprocess")):
+        capabilities.add("runs_shell")
+    if any(term in text for term in ("secret", "token", "password", "credential", "api key")):
+        capabilities.add("reads_secrets")
+    if any(term in text for term in ("http", "url", "network", "fetch", "webhook")):
+        capabilities.add("network_egress")
+    if any(term in text for term in ("sampling", "model", "llm")):
+        capabilities.add("uses_model_sampling")
+    if "permission" in text or "chmod" in text:
+        capabilities.add("changes_permissions")
+    return tuple(sorted(capabilities)) if capabilities else ("unknown",)
+
+
+def _risk_level_for_capabilities(capabilities: tuple[InventoryCapability, ...]) -> InventorySeverity:
+    if any(capability in capabilities for capability in ("deletes_files", "reads_secrets", "runs_shell")):
+        return "high"
+    if any(
+        capability in capabilities
+        for capability in ("writes_files", "network_egress", "uses_model_sampling", "changes_permissions")
+    ):
+        return "medium"
+    return "info"
 
 
 def _agent_type(value: str) -> AgentInventoryType:
