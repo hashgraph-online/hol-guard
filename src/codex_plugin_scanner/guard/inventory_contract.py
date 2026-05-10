@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import re
 from dataclasses import asdict, dataclass, field
@@ -49,8 +50,13 @@ InventoryConfidence = Literal["high", "medium", "low", "unknown"]
 InventoryDriftState = Literal["new", "changed", "removed", "unchanged"]
 DockerProofStatus = Literal["passed", "failed", "skipped", "stale"]
 
-_SENSITIVE_KEY_RE = re.compile(r"(authorization|bearer|token|secret|password|credential|api[_-]?key)", re.IGNORECASE)
+_SENSITIVE_KEY_RE = re.compile(
+    r"(auth|authorization|bearer|token|secret|password|credential|api[^a-z0-9]?key)",
+    re.IGNORECASE,
+)
 _WHITESPACE_RE = re.compile(r"\s+")
+_IGNORED_TREE_DIR_NAMES = {".git", ".hg", ".svn", "__pycache__", ".mypy_cache", ".ruff_cache", ".venv", "node_modules"}
+_MAX_FINGERPRINT_FILE_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,10 +250,16 @@ def fingerprint_path_tree(root: Path, *, home_dir: Path | None = None) -> str:
     if root.is_file():
         paths = [root]
     else:
-        paths = sorted(path for path in root.rglob("*") if path.is_file() and path.name != ".env")
+        paths = sorted(
+            path
+            for path in root.rglob("*")
+            if path.is_file()
+            and path.name != ".env"
+            and not any(part in _IGNORED_TREE_DIR_NAMES for part in path.parts)
+        )
     for path in paths:
         safe_path = redact_local_path(path, home_dir=home_dir)
-        content_hash = fingerprint_text(path.read_text(encoding="utf-8", errors="ignore"))
+        content_hash = _fingerprint_file_bytes(path)
         entries.append({"path": safe_path, "sha256": content_hash})
     return fingerprint_mapping(entries)
 
@@ -287,8 +299,11 @@ def classify_endpoint_host(value: str | None) -> Literal["none", "local_loopback
     host = (parsed.hostname or "").lower()
     if host in {"localhost", "127.0.0.1", "::1"}:
         return "local_loopback"
-    if host.startswith("10.") or host.startswith("192.168.") or host.startswith("172.16."):
-        return "local_private"
+    try:
+        if ipaddress.ip_address(host).is_private:
+            return "local_private"
+    except ValueError:
+        pass
     return "remote_public"
 
 
@@ -317,7 +332,7 @@ def _item_from_artifact(
         item_kind=item_kind,
         display_name=name,
         source_fingerprint=fingerprint_mapping({"harness": harness, "artifact_id": artifact_id}),
-        content_hash=fingerprint_mapping(semantic_text),
+        content_hash=semantic_text,
         capability_categories=_capabilities_for_artifact(artifact_type, safe_metadata),
         risk_level=_risk_level(safe_metadata),
         scanner_sources=("hol-detector",),
@@ -396,6 +411,8 @@ def _safe_artifact_metadata(
 
 
 def _sanitize_paths(value: object, home_dir: Path, workspace_dir: Path | None) -> object:
+    if isinstance(value, Path):
+        return _redact_known_path(str(value), home_dir, workspace_dir)
     if isinstance(value, dict):
         redacted: dict[str, object] = {}
         for key, item in value.items():
@@ -438,5 +455,18 @@ def _safe_json(value: object) -> object:
     if isinstance(value, Path):
         return value.name
     if isinstance(value, str):
-        return redact_url(value) if "://" in value else value
+        return value
     return value
+
+
+def _fingerprint_file_bytes(path: Path) -> str:
+    digest = hashlib.sha256()
+    remaining = _MAX_FINGERPRINT_FILE_BYTES
+    with path.open("rb") as file_handle:
+        while remaining > 0:
+            chunk = file_handle.read(min(65536, remaining))
+            if not chunk:
+                break
+            digest.update(chunk)
+            remaining -= len(chunk)
+    return digest.hexdigest()

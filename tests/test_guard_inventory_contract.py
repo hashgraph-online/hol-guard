@@ -88,5 +88,44 @@ def test_inventory_helpers_emit_safe_endpoint_and_stable_hashes(tmp_path: Path) 
         path_b.read_text(),
     )
     assert classify_endpoint_host("https://user:pass@example.com/mcp?token=value") == "remote_public"
+    assert classify_endpoint_host("http://172.20.4.5:8080/mcp") == "local_private"
     assert redact_url("https://user:pass@example.com/mcp?token=value&mode=safe") == "https://example.com/mcp?token=redacted&mode=safe"
+    assert redact_url("https://example.com/mcp?auth=value&mode=safe") == "https://example.com/mcp?auth=redacted&mode=safe"
     assert redact_local_path(path_a, home_dir=tmp_path) == "{home}/skill-a/SKILL.md"
+
+
+def test_fingerprint_path_tree_skips_large_ignored_and_path_objects(tmp_path: Path) -> None:
+    root = tmp_path / "workspace"
+    (root / "node_modules" / "pkg").mkdir(parents=True)
+    (root / ".git" / "objects").mkdir(parents=True)
+    (root / "safe").mkdir(parents=True)
+    (root / "safe" / "config.json").write_text('{"ok": true}\n')
+    (root / "node_modules" / "pkg" / "ignored.json").write_text('{"ignored": true}\n')
+    (root / ".git" / "objects" / "ignored").write_text("ignored\n")
+
+    fingerprint = fingerprint_path_tree(root, home_dir=tmp_path)
+    (root / "node_modules" / "pkg" / "ignored.json").write_text('{"ignored": "changed"}\n')
+    (root / ".git" / "objects" / "ignored").write_text("changed\n")
+    fingerprint_after_ignored_changes = fingerprint_path_tree(root, home_dir=tmp_path)
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-path-object",
+        agent_id="agent",
+        agent_type="openclaw",
+        generated_at="2026-05-10T00:00:00Z",
+        items=(
+            GuardAgentInventoryItem(
+                item_id="item",
+                item_kind="repository",
+                display_name="Repo",
+                source_fingerprint=fingerprint,
+                content_hash=fingerprint_text("repo"),
+                capability_categories=("reads_files",),
+                metadata={"pathObject": root / "safe" / "config.json"},
+            ),
+        ),
+    )
+
+    encoded = json.dumps(serialize_inventory_snapshot(snapshot), sort_keys=True)
+
+    assert fingerprint_after_ignored_changes == fingerprint
+    assert str(tmp_path) not in encoded
