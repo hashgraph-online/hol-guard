@@ -2687,14 +2687,30 @@ def _looks_like_safe_graphql_query_file_workflow(command_text: str) -> bool:
     rest = match.group("rest").strip()
     if not rest.startswith("gh api graphql "):
         return False
-    if re.search(r"(?:^|[;&|])\s*(?:rm|mv|cp|chmod|chown|curl|wget|python|python3|node|bash|sh|zsh)\b", rest):
+    if _path_text_looks_sensitive(rest):
         return False
     query_file_refs = {
         f"$(cat {target_path})",
         f'$(cat "{target_path}")',
         f"$(cat '{target_path}')",
     }
-    return any(ref in rest for ref in query_file_refs) and re.search(r"(?:^|\s)-f\s+query=", rest) is not None
+    query_file_field_refs = {
+        f"query=@{target_path}",
+        f'query=@"{target_path}"',
+        f"query=@'{target_path}'",
+    }
+    if re.search(r"(?:;|&&|\|\||\||>|<|\n)", rest):
+        return False
+    rest_without_allowed_query_refs = rest
+    for ref in query_file_refs:
+        rest_without_allowed_query_refs = rest_without_allowed_query_refs.replace(ref, "")
+    if "$(" in rest_without_allowed_query_refs or "`" in rest_without_allowed_query_refs:
+        return False
+    has_query_file_read = any(ref in rest for ref in query_file_refs)
+    has_query_file_field = any(ref in rest for ref in query_file_field_refs)
+    return (has_query_file_read or has_query_file_field) and re.search(
+        r"(?:^|\s)(?:-f|--field)\s*query=", rest
+    ) is not None
 
 
 def _strip_shell_quotes(value: str) -> str:
@@ -2708,10 +2724,10 @@ def _path_text_looks_sensitive(path_text: str) -> bool:
     return any(
         marker in lowered
         for marker in (
-            "/.aws/",
-            "/.docker/",
-            "/.kube/",
-            "/.ssh/",
+            ".aws/",
+            ".docker/",
+            ".kube/",
+            ".ssh/",
             ".env",
             ".git-credentials",
             ".netrc",
