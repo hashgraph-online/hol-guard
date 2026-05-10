@@ -10,9 +10,11 @@ import pytest
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
+from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import serialize_inventory_snapshot
 from codex_plugin_scanner.guard.risk import artifact_risk_signals
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.models import Finding, Severity
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
@@ -138,6 +140,50 @@ def test_inventory_snapshot_redacts_openclaw_channels_mcp_and_skills(tmp_path: P
     assert "guard_live_secret" not in encoded
     assert str(context.home_dir) not in encoded
     assert str(context.workspace_dir) not in encoded
+
+
+def test_inventory_snapshot_can_include_cisco_openclaw_inventory_runs(tmp_path: Path, monkeypatch) -> None:
+    context = _ctx(tmp_path)
+    config_path = context.home_dir / ".openclaw" / "openclaw.json"
+    skill_path = context.home_dir / ".openclaw" / "workspace" / "skills" / "reviewer" / "SKILL.md"
+    _write(config_path, json.dumps({"skills": {"load": {}}}))
+    _write(skill_path, "---\nname: reviewer\n---\nReview local files.\n")
+    calls: list[dict[str, object]] = []
+
+    def fake_cisco_runs(**kwargs):
+        calls.append(kwargs)
+        return (
+            CiscoInventoryRun(
+                source="cisco-skill-scanner",
+                status="enabled",
+                message="Cisco skill scanner completed.",
+                findings=(
+                    Finding(
+                        rule_id="CISCO-SKILL-001",
+                        severity=Severity.LOW,
+                        category="skill-security",
+                        title="Review instruction risk",
+                        description="Prompt injection pattern.",
+                        file_path=str(skill_path),
+                        source="cisco-skill-scanner",
+                    ),
+                ),
+                duration_ms=9,
+                metadata={"totalFindings": 1},
+            ),
+        )
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.openclaw.run_cisco_inventory_scans", fake_cisco_runs)
+
+    snapshot = OpenClawHarnessAdapter().inventory_snapshot(
+        context,
+        generated_at="2026-05-10T00:00:00Z",
+        cisco_skill_scan="on",
+    )
+
+    assert calls[0]["harness"] == "openclaw"
+    assert calls[0]["skill_mode"] == "on"
+    assert snapshot.findings[0].source == "cisco-skill-scanner"
 
 
 def test_openclaw_flags_open_dm_policy_and_remote_mcp(tmp_path: Path) -> None:

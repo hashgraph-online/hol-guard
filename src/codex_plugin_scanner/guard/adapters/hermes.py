@@ -13,6 +13,7 @@ import re
 import sys
 from pathlib import Path
 
+from ..inventory_cisco import run_cisco_inventory_scans
 from ..inventory_contract import GuardAgentInventorySnapshot, inventory_snapshot_from_detection
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
@@ -247,12 +248,29 @@ class HermesHarnessAdapter(HarnessAdapter):
             config_paths=tuple(found_paths),
         )
 
-    def inventory_snapshot(self, context: HarnessContext, *, generated_at: str) -> GuardAgentInventorySnapshot:
+    def inventory_snapshot(
+        self,
+        context: HarnessContext,
+        *,
+        generated_at: str,
+        cisco_mcp_scan: str = "off",
+        cisco_skill_scan: str = "off",
+        cisco_timeout_seconds: float | None = None,
+    ) -> GuardAgentInventorySnapshot:
+        detection = self.detect(context)
         return inventory_snapshot_from_detection(
-            self.detect(context),
+            detection,
             generated_at=generated_at,
             home_dir=context.home_dir,
             workspace_dir=context.workspace_dir,
+            cisco_runs=run_cisco_inventory_scans(
+                harness=self.harness,
+                context=context,
+                detection=detection,
+                mcp_mode=cisco_mcp_scan,
+                skill_mode=cisco_skill_scan,
+                timeout_seconds=cisco_timeout_seconds,
+            ),
         )
 
     # ------------------------------------------------------------------
