@@ -8,7 +8,7 @@ import json
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 InventoryItemKind = Literal[
@@ -49,6 +49,16 @@ InventorySeverity = Literal["critical", "high", "medium", "low", "info"]
 InventoryConfidence = Literal["high", "medium", "low", "unknown"]
 InventoryDriftState = Literal["new", "changed", "removed", "unchanged"]
 DockerProofStatus = Literal["passed", "failed", "skipped", "stale"]
+AgentInventoryType = Literal["hermes", "openclaw", "codex", "claude-code", "cursor", "gemini", "opencode"]
+_AGENT_INVENTORY_TYPES: tuple[AgentInventoryType, ...] = (
+    "hermes",
+    "openclaw",
+    "codex",
+    "claude-code",
+    "cursor",
+    "gemini",
+    "opencode",
+)
 
 _SENSITIVE_KEY_RE = re.compile(
     r"(auth|authorization|bearer|token|secret|password|credential|api[^a-z0-9]?key)",
@@ -153,7 +163,7 @@ class GuardAgentInventoryItem:
 class GuardAgentInventorySnapshot:
     snapshot_id: str
     agent_id: str
-    agent_type: Literal["hermes", "openclaw", "codex", "claude-code", "cursor", "gemini", "opencode"]
+    agent_type: AgentInventoryType
     generated_at: str
     runtime_version: str | None = None
     items: tuple[GuardAgentInventoryItem, ...] = ()
@@ -283,8 +293,12 @@ def redact_url(value: str) -> str:
     parsed = urlsplit(value)
     hostname = parsed.hostname or parsed.netloc
     netloc = hostname
-    if parsed.port is not None:
-        netloc = f"{netloc}:{parsed.port}"
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    if port is not None:
+        netloc = f"{netloc}:{port}"
     redacted_pairs = [
         (key, "redacted" if _SENSITIVE_KEY_RE.search(key) else item)
         for key, item in parse_qsl(parsed.query, keep_blank_values=True)
@@ -340,9 +354,10 @@ def _item_from_artifact(
     )
 
 
-def _agent_type(value: str) -> Literal["hermes", "openclaw", "codex", "claude-code", "cursor", "gemini", "opencode"]:
-    if value in {"hermes", "openclaw", "codex", "claude-code", "cursor", "gemini", "opencode"}:
-        return cast(Literal["hermes", "openclaw", "codex", "claude-code", "cursor", "gemini", "opencode"], value)
+def _agent_type(value: str) -> AgentInventoryType:
+    for agent_type in _AGENT_INVENTORY_TYPES:
+        if value == agent_type:
+            return agent_type
     return "codex"
 
 
@@ -400,7 +415,7 @@ def _safe_artifact_metadata(
     if isinstance(config_path, str) and config_path:
         metadata["configPath"] = _redact_known_path(config_path, home_dir, workspace_dir)
     if isinstance(command, str) and command:
-        metadata["command"] = _redact_known_path(command, home_dir, workspace_dir)
+        metadata["command"] = _redact_command_value(command, home_dir, workspace_dir)
     if isinstance(url, str) and url:
         metadata["url"] = redact_url(url)
         metadata["endpointHostClass"] = classify_endpoint_host(url)
@@ -418,11 +433,11 @@ def _sanitize_paths(value: object, home_dir: Path, workspace_dir: Path | None) -
         for key, item in value.items():
             string_key = str(key)
             if _SENSITIVE_KEY_RE.search(string_key):
-                redacted[string_key] = "present_redacted" if item else "absent"
+                redacted[string_key] = "present_redacted"
                 continue
             redacted[string_key] = _sanitize_paths(item, home_dir, workspace_dir)
         return redacted
-    if isinstance(value, list | tuple):
+    if isinstance(value, (list, tuple)):
         return [_sanitize_paths(item, home_dir, workspace_dir) for item in value]
     if isinstance(value, str):
         if "://" in value:
@@ -441,16 +456,35 @@ def _redact_known_path(value: str, home_dir: Path, workspace_dir: Path | None) -
             try:
                 relative = path.resolve().relative_to(workspace_dir.resolve())
                 return f"{{workspace}}/{relative.as_posix()}"
-            except ValueError:
+            except (OSError, RuntimeError, ValueError):
                 return path.name
         return path.name
     return value
 
 
+def _redact_command_value(value: str, home_dir: Path, workspace_dir: Path | None) -> str:
+    path_redacted = _redact_known_path(value, home_dir, workspace_dir)
+    if path_redacted != value:
+        return path_redacted
+    redacted = re.sub(
+        r"(?i)(authorization:\s*bearer\s+)\S+",
+        r"\1redacted",
+        value,
+    )
+    redacted = re.sub(
+        r"(?i)((?:api[_-]?key|auth|password|secret|token)=)\S+",
+        r"\1redacted",
+        redacted,
+    )
+    if "://" in redacted:
+        return redact_url(redacted)
+    return redacted
+
+
 def _safe_json(value: object) -> object:
     if isinstance(value, dict):
         return {str(key): _safe_json(item) for key, item in value.items()}
-    if isinstance(value, list | tuple):
+    if isinstance(value, (list, tuple)):
         return [_safe_json(item) for item in value]
     if isinstance(value, Path):
         return value.name
