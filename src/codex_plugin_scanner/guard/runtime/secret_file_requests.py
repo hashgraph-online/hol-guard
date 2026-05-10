@@ -2703,7 +2703,7 @@ def _looks_like_safe_graphql_query_file_workflow(command_text: str) -> bool:
         f'query=@"{target_path}"',
         f"query=@'{target_path}'",
     }
-    if re.search(r"(?:;|&&|\|\||\||>|<|\n)", rest):
+    if re.search(r"(?:;|&|\|\||\||>|<|\n)", rest):
         return False
     rest_without_allowed_query_refs = rest
     for ref in query_file_refs:

@@ -1311,6 +1311,24 @@ def test_tool_action_request_classifier_rejects_graphql_workflow_with_target_sub
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_background_chain(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                f'gh api graphql -F owner=hashgraph-online -f query="$(cat {query_path})" & rm -rf /tmp/x'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_allows_graphql_at_file_workflow(tmp_path):
     query_path = tmp_path / "pr-threads-query.graphql"
     request = extract_sensitive_tool_action_request(
