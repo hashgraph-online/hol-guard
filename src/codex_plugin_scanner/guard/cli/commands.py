@@ -5190,27 +5190,49 @@ def _codex_command_is_read_only_source_inspection(command_text: str, *, cwd: Pat
 
 
 def _split_codex_safe_read_only_chain(command: str) -> list[str] | None:
-    try:
-        parts = _codex_shell_split(command)
-    except ValueError:
-        return None
-    if "&&" not in parts:
-        return None
     segments: list[str] = []
-    current: list[str] = []
-    for part in parts:
-        if part == "&&":
-            if not current:
-                return None
-            segments.append(shlex.join(current))
-            current = []
+    start = 0
+    quote: str | None = None
+    escaped = False
+    found_chain = False
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if escaped:
+            escaped = False
+            index += 1
             continue
-        if part in {"||", ";", "&"}:
+        if char == "\\":
+            escaped = True
+            index += 1
+            continue
+        if quote is not None:
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            index += 1
+            continue
+        if command.startswith("&&", index):
+            segment = command[start:index].strip()
+            if not segment:
+                return None
+            segments.append(segment)
+            found_chain = True
+            index += 2
+            start = index
+            continue
+        if command.startswith("||", index) or char in {";", "&"}:
             return None
-        current.append(part)
-    if not current:
+        index += 1
+    if quote is not None or escaped or not found_chain:
         return None
-    segments.append(shlex.join(current))
+    segment = command[start:].strip()
+    if not segment:
+        return None
+    segments.append(segment)
     return segments if len(segments) > 1 else None
 
 
