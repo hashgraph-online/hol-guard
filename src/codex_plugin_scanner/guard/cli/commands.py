@@ -5170,6 +5170,9 @@ def _codex_command_is_read_only_source_inspection(command_text: str, *, cwd: Pat
         return False
     if _codex_command_has_unquoted_glob_metachar(command):
         return False
+    chained_segments = _split_codex_safe_read_only_chain(command)
+    if chained_segments is not None:
+        return all(_codex_command_is_read_only_source_inspection(segment, cwd=cwd) for segment in chained_segments)
     segments = _split_codex_safe_read_only_pipeline(command)
     if segments is None:
         return _codex_command_is_read_only_source_search(command, cwd=cwd) or _codex_command_is_read_only_source_view(
@@ -5184,6 +5187,53 @@ def _codex_command_is_read_only_source_inspection(command_text: str, *, cwd: Pat
     ):
         return False
     return all(_codex_command_is_bounded_read_only_filter(segment) for segment in filter_segments)
+
+
+def _split_codex_safe_read_only_chain(command: str) -> list[str] | None:
+    segments: list[str] = []
+    start = 0
+    quote: str | None = None
+    escaped = False
+    found_chain = False
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if char == "\\":
+            escaped = True
+            index += 1
+            continue
+        if quote is not None:
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            index += 1
+            continue
+        if command.startswith("&&", index):
+            segment = command[start:index].strip()
+            if not segment:
+                return None
+            segments.append(segment)
+            found_chain = True
+            index += 2
+            start = index
+            continue
+        if command.startswith("||", index) or char in {";", "&"}:
+            return None
+        index += 1
+    if quote is not None or escaped or not found_chain:
+        return None
+    segment = command[start:].strip()
+    if not segment:
+        return None
+    segments.append(segment)
+    return segments if len(segments) > 1 else None
 
 
 def _codex_command_has_unquoted_glob_metachar(command: str) -> bool:

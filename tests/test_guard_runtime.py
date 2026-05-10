@@ -13243,3 +13243,85 @@ def test_codex_read_only_source_inspection_allows_quoted_bracket_targets(tmp_pat
             command,
             cwd=workspace_dir,
         )
+
+
+def test_codex_read_only_source_inspection_allows_safe_sed_chains(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    route_file = workspace_dir / "src" / "api" / "routes" / "skill-registry.ts"
+    service_file = workspace_dir / "src" / "services" / "skill-registry" / "skill-registry-service.ts"
+    _write_text(route_file, "export const headerName = 'x-api-key';\n")
+    _write_text(service_file, "export const registryTokenField = 'tokenId';\n")
+
+    command = (
+        "sed -n '450,510p' src/api/routes/skill-registry.ts && "
+        "sed -n '940,1005p' src/services/skill-registry/skill-registry-service.ts"
+    )
+
+    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+        command,
+        cwd=workspace_dir,
+    )
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {
+                "stdout": "export const headerName = 'x-api-key';\nexport const registryTokenField = 'tokenId';\n"
+            },
+        },
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=workspace_dir,
+    )
+    assert artifact is None
+
+
+def test_codex_read_only_source_inspection_rejects_sed_chain_with_secret_file(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    route_file = workspace_dir / "src" / "api" / "routes" / "skill-registry.ts"
+    _write_text(route_file, "export const safe = true;\n")
+
+    command = "sed -n '450,510p' src/api/routes/skill-registry.ts && cat .env"
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        command,
+        cwd=workspace_dir,
+    )
+
+
+def test_codex_read_only_source_inspection_preserves_pipelines_in_safe_chains(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    route_file = workspace_dir / "src" / "api" / "routes" / "skill-registry.ts"
+    service_file = workspace_dir / "src" / "services" / "skill-registry" / "skill-registry-service.ts"
+    _write_text(route_file, "export const safe = true;\n")
+    _write_text(service_file, "export const alsoSafe = true;\n")
+
+    command = (
+        "rg skill src/api/routes/skill-registry.ts | head -20 && "
+        "sed -n '940,1005p' src/services/skill-registry/skill-registry-service.ts"
+    )
+
+    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+        command,
+        cwd=workspace_dir,
+    )
+
+
+def test_codex_read_only_source_inspection_rejects_malformed_chains(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+
+    commands = [
+        "&& sed -n '1,10p' src/safe.ts",
+        "sed -n '1,10p' src/safe.ts &&",
+        "sed -n '1,10p' src/safe.ts && && cat src/safe.ts",
+        "sed -n '1,10p' src/safe.ts || cat src/safe.ts",
+        "sed -n '1,10p' src/safe.ts; cat src/safe.ts",
+    ]
+
+    for command in commands:
+        assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+            command,
+            cwd=workspace_dir,
+        )
