@@ -174,3 +174,55 @@ def test_cisco_inventory_scans_preserve_timeout_status(tmp_path: Path, monkeypat
     assert runs[0].source == "cisco-mcp-scanner"
     assert runs[0].status == "timed_out"
     assert runs[0].metadata["targetsScanned"] == 0
+
+
+def test_cisco_inventory_scans_use_detected_nonstandard_skill_roots(tmp_path: Path, monkeypatch) -> None:
+    context = _ctx(tmp_path)
+    extra_root = context.home_dir / "shared-openclaw-skills"
+    skill_path = extra_root / "reviewer" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text("---\nname: reviewer\n---\nReview local files.\n")
+    detection = HarnessDetection(
+        harness="openclaw",
+        installed=True,
+        command_available=False,
+        config_paths=(str(skill_path),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="openclaw:skill:extra:reviewer",
+                name="reviewer",
+                harness="openclaw",
+                artifact_type="skill",
+                source_scope="global",
+                config_path=str(skill_path),
+                metadata={"skill_root": str(extra_root)},
+            ),
+        ),
+    )
+    calls: list[Path] = []
+
+    def fake_skill_scan(skills_dir: Path, mode: str, timeout_seconds: float | None = None) -> _SkillSummary:
+        del mode, timeout_seconds
+        calls.append(skills_dir)
+        return _SkillSummary(
+            status=CiscoIntegrationStatus.ENABLED,
+            message="Skill scanner completed.",
+            findings=(),
+            skills_scanned=1,
+            skills_skipped=(),
+            analyzers_used=("prompt-injection",),
+            policy_name="balanced",
+            total_findings=0,
+            findings_by_severity={severity.value: 0 for severity in Severity},
+        )
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.inventory_cisco.run_cisco_skill_scan", fake_skill_scan)
+
+    run_cisco_inventory_scans(
+        harness="openclaw",
+        context=context,
+        detection=detection,
+        skill_mode="on",
+    )
+
+    assert calls == [extra_root]

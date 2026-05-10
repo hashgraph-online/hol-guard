@@ -64,9 +64,7 @@ _SENSITIVE_KEY_RE = re.compile(
     r"(auth|authorization|bearer|token|secret|password|credential|api[^a-z0-9]?key)",
     re.IGNORECASE,
 )
-_SENSITIVE_VALUE_RE = re.compile(
-    r"(?i)(gh[pousr]_[a-z0-9_]+|sk-[a-z0-9_-]+|guard_live_[a-z0-9_-]+|bearer\s+\S+)"
-)
+_SENSITIVE_VALUE_RE = re.compile(r"(?i)(gh[pousr]_[a-z0-9_]+|sk-[a-z0-9_-]+|guard_live_[a-z0-9_-]+|bearer\s+\S+)")
 _WHITESPACE_RE = re.compile(r"\s+")
 _MCP_READ_RE = re.compile(
     r"(?<![a-z0-9])(read|reads|reading|search|searches|list|lists)(?![a-z0-9])",
@@ -575,7 +573,7 @@ def _cisco_inventory_findings(
             workspace_dir=workspace_dir,
         )
         duration_ms = getattr(run, "duration_ms", None)
-        for raw_finding in tuple(getattr(run, "findings", ())):
+        for raw_finding in tuple(getattr(run, "findings", ()) or ()):
             rule_id = str(getattr(raw_finding, "rule_id", "cisco-finding") or "cisco-finding")
             title = _safe_finding_text(
                 str(getattr(raw_finding, "title", "Cisco scanner finding") or "Cisco scanner finding"),

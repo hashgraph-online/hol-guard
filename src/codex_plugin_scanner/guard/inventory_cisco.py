@@ -148,11 +148,21 @@ def _skill_scan_root(*, harness: str, context: HarnessContext, detection: object
         artifact_type = str(getattr(artifact, "artifact_type", ""))
         if artifact_type not in {"skill", "skill_file"}:
             continue
+        metadata = getattr(artifact, "metadata", {})
+        if isinstance(metadata, dict):
+            skill_root = metadata.get("skill_root")
+            if isinstance(skill_root, str):
+                root = Path(skill_root)
+                if root.is_dir():
+                    return root
         config_path = getattr(artifact, "config_path", None)
         if not isinstance(config_path, str):
             continue
         skill_path = Path(config_path)
         root = _nearest_skills_root(skill_path)
+        if root is not None and root.is_dir():
+            return root
+        root = _nearest_skill_dir(skill_path)
         if root is not None and root.is_dir():
             return root
     return None
@@ -161,5 +171,14 @@ def _skill_scan_root(*, harness: str, context: HarnessContext, detection: object
 def _nearest_skills_root(path: Path) -> Path | None:
     for parent in path.parents:
         if parent.name == "skills":
+            return parent
+    return None
+
+
+def _nearest_skill_dir(path: Path) -> Path | None:
+    if path.name == "SKILL.md":
+        return path.parent
+    for parent in path.parents:
+        if (parent / "SKILL.md").is_file():
             return parent
     return None
