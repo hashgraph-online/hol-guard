@@ -103,6 +103,7 @@ def test_inventory_helpers_emit_safe_endpoint_and_stable_hashes(tmp_path: Path) 
     assert redact_url("https://example.com/mcp?mode=safe;token=value") == "https://example.com/mcp?mode=safe&token=redacted"
     assert redact_url("http://localhost:${PORT}/mcp?auth=value") == "http://localhost/mcp?auth=redacted"
     assert redact_url("http://[2001:db8::1]:8080/mcp?token=value") == "http://[2001:db8::1]:8080/mcp?token=redacted"
+    assert redact_url("http://[not-an-ip]/mcp?token=value") == "malformed_url_redacted"
     assert redact_local_path(path_a, home_dir=tmp_path) == "{home}/skill-a/SKILL.md"
 
 

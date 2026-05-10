@@ -97,7 +97,9 @@ def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path)
         (
             "mcp_servers:\n"
             "  docs:\n"
-            '    command: "/usr/bin/node --token guard_live_secret https://user:pass@example.com/mcp?auth=guard_live_secret"\n'
+            '    command: "/usr/bin/node --token guard_live_secret '
+            'HTTPS://user:pass@example.com/mcp?auth=guard_live_secret '
+            'ws://user:pass@example.com/socket"\n'
             '    url: "https://user:pass@example.com/mcp?token=guard_live_secret&mode=safe"\n'
             "    headers:\n"
             '      Authorization: "Bearer guard_live_secret"\n'

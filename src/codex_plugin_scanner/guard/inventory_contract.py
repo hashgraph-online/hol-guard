@@ -290,7 +290,10 @@ def redact_headers(headers: dict[str, str]) -> dict[str, str]:
 
 
 def redact_url(value: str) -> str:
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return "malformed_url_redacted"
     hostname = parsed.hostname or parsed.netloc
     if ":" in hostname and not hostname.startswith("["):
         hostname = f"[{hostname}]"
@@ -465,7 +468,11 @@ def _redact_known_path(value: str, home_dir: Path, workspace_dir: Path | None) -
 
 
 def _redact_command_value(value: str, home_dir: Path, workspace_dir: Path | None) -> str:
-    redacted = re.sub(r"https?://[^\s]+", lambda match: redact_url(match.group(0)), value)
+    redacted = re.sub(
+        r"(?i)\b[a-z][a-z0-9+.-]*://[^\s]+",
+        lambda match: redact_url(match.group(0)),
+        value,
+    )
     redacted = re.sub(
         r"(^|\s)(/[^\s]+)",
         lambda match: f"{match.group(1)}{_redact_known_path(match.group(2), home_dir, workspace_dir)}",
