@@ -64,6 +64,7 @@ _SENSITIVE_KEY_RE = re.compile(
     r"(auth|authorization|bearer|token|secret|password|credential|api[^a-z0-9]?key)",
     re.IGNORECASE,
 )
+_SENSITIVE_VALUE_RE = re.compile(r"(?i)(gh[pousr]_[a-z0-9_]+|sk-[a-z0-9_-]+|guard_live_[a-z0-9_-]+|bearer\s+\S+)")
 _WHITESPACE_RE = re.compile(r"\s+")
 _MCP_READ_RE = re.compile(
     r"(?<![a-z0-9])(read|reads|reading|search|searches|list|lists)(?![a-z0-9])",
@@ -217,6 +218,7 @@ def inventory_snapshot_from_detection(
     home_dir: Path,
     workspace_dir: Path | None = None,
     runtime_version: str | None = None,
+    cisco_runs: tuple[object, ...] = (),
 ) -> GuardAgentInventorySnapshot:
     harness = str(getattr(detection, "harness", "unknown"))
     artifacts = tuple(getattr(detection, "artifacts", ()))
@@ -231,7 +233,7 @@ def inventory_snapshot_from_detection(
         items.append(item)
         items.extend(_mcp_tool_items_from_artifact(harness, artifact, item))
     config_paths = tuple(dict.fromkeys(str(path) for path in getattr(detection, "config_paths", ())))
-    sources = tuple(
+    config_sources = tuple(
         GuardInventorySource(
             source_id=f"{harness}:config:{fingerprint_text(redact_local_path(path, home_dir=home_dir))[:12]}",
             source_type="config",
@@ -241,11 +243,19 @@ def inventory_snapshot_from_detection(
         )
         for path in config_paths
     )
+    cisco_findings = _cisco_inventory_findings(
+        cisco_runs,
+        items=tuple(items),
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+    )
+    sources = (*config_sources, *_cisco_inventory_sources(cisco_runs))
     snapshot_hash = fingerprint_mapping(
         {
             "agent_type": harness,
             "generated_at": generated_at,
             "item_ids": [item.item_id for item in items],
+            "finding_ids": [finding.finding_id for finding in cisco_findings],
         }
     )
     return GuardAgentInventorySnapshot(
@@ -255,10 +265,11 @@ def inventory_snapshot_from_detection(
         generated_at=generated_at,
         runtime_version=runtime_version,
         items=tuple(items),
+        findings=cisco_findings,
         sources=sources,
         redaction_report={
             "rawSecretsIncluded": False,
-            "redactedFields": ("headers", "env", "url", "paths"),
+            "redactedFields": ("headers", "env", "url", "paths", "ciscoFindingText"),
         },
     )
 
@@ -540,6 +551,162 @@ def _risk_level_for_capabilities(capabilities: tuple[InventoryCapability, ...]) 
     ):
         return "medium"
     return "info"
+
+
+def _cisco_inventory_findings(
+    cisco_runs: tuple[object, ...],
+    *,
+    items: tuple[GuardAgentInventoryItem, ...],
+    home_dir: Path,
+    workspace_dir: Path | None,
+) -> tuple[GuardAgentInventoryFinding, ...]:
+    findings: list[GuardAgentInventoryFinding] = []
+    seen: set[str] = set()
+    for run in cisco_runs:
+        source = _cisco_source(run)
+        if source is None:
+            continue
+        run_status = str(getattr(run, "status", "unknown"))
+        run_message = _safe_finding_text(
+            str(getattr(run, "message", "")),
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+        )
+        duration_ms = getattr(run, "duration_ms", None)
+        for raw_finding in tuple(getattr(run, "findings", ()) or ()):
+            rule_id = str(getattr(raw_finding, "rule_id", "cisco-finding") or "cisco-finding")
+            title = _safe_finding_text(
+                str(getattr(raw_finding, "title", "Cisco scanner finding") or "Cisco scanner finding"),
+                home_dir=home_dir,
+                workspace_dir=workspace_dir,
+            )
+            file_path = getattr(raw_finding, "file_path", None)
+            safe_path = (
+                _redact_known_path(str(file_path), home_dir, workspace_dir)
+                if isinstance(file_path, str) and file_path
+                else None
+            )
+            line_number = getattr(raw_finding, "line_number", None)
+            finding_hash = fingerprint_mapping(
+                {
+                    "source": source,
+                    "rule_id": rule_id,
+                    "title": title,
+                    "path": safe_path,
+                    "line": line_number if isinstance(line_number, int) else None,
+                }
+            )
+            finding_id = f"{source}:{rule_id}:{finding_hash[:16]}"
+            if finding_id in seen:
+                continue
+            seen.add(finding_id)
+            severity = _inventory_severity(getattr(raw_finding, "severity", "info"))
+            findings.append(
+                GuardAgentInventoryFinding(
+                    finding_id=finding_id,
+                    source=source,
+                    severity=severity,
+                    confidence="high" if run_status == "enabled" else "unknown",
+                    title=title,
+                    artifact_id=_artifact_id_for_cisco_finding(safe_path, items),
+                    check_id=rule_id,
+                    summary=_safe_finding_text(
+                        str(getattr(raw_finding, "description", "") or ""),
+                        home_dir=home_dir,
+                        workspace_dir=workspace_dir,
+                    ),
+                    evidence={
+                        "scannerStatus": run_status,
+                        "scannerMessage": run_message,
+                        "filePath": safe_path,
+                        "lineNumber": line_number if isinstance(line_number, int) else None,
+                        "durationMs": duration_ms if isinstance(duration_ms, int) else None,
+                        "riskComponent": {
+                            "source": source,
+                            "severity": severity,
+                            "confidence": "high" if run_status == "enabled" else "unknown",
+                            "scoreDelta": _score_delta_for_severity(severity),
+                        },
+                    },
+                )
+            )
+    return tuple(findings)
+
+
+def _cisco_inventory_sources(cisco_runs: tuple[object, ...]) -> tuple[GuardInventorySource, ...]:
+    sources: list[GuardInventorySource] = []
+    for run in cisco_runs:
+        source = _cisco_source(run)
+        if source is None:
+            continue
+        status = str(getattr(run, "status", "unknown"))
+        detail = _safe_source_detail(run)
+        sources.append(
+            GuardInventorySource(
+                source_id=f"{source}:{fingerprint_mapping({'status': status, 'detail': detail})[:12]}",
+                source_type="scanner",
+                status=_source_status_for_cisco_status(status),
+                detail=detail,
+            )
+        )
+    return tuple(sources)
+
+
+def _cisco_source(run: object) -> InventoryFindingSource | None:
+    source = str(getattr(run, "source", ""))
+    if source in {"cisco-mcp-scanner", "cisco-skill-scanner"}:
+        return source
+    return None
+
+
+def _inventory_severity(value: object) -> InventorySeverity:
+    severity_value = str(getattr(value, "value", value)).strip().lower()
+    if severity_value in {"critical", "high", "medium", "low", "info"}:
+        return severity_value
+    return "info"
+
+
+def _score_delta_for_severity(severity: InventorySeverity) -> int:
+    return {"critical": -40, "high": -25, "medium": -12, "low": -5, "info": 0}[severity]
+
+
+def _artifact_id_for_cisco_finding(
+    safe_path: str | None,
+    items: tuple[GuardAgentInventoryItem, ...],
+) -> str:
+    if safe_path is None:
+        return "unknown"
+    for item in items:
+        config_path = item.metadata.get("configPath")
+        if isinstance(config_path, str) and (config_path == safe_path or config_path.endswith(safe_path)):
+            return item.item_id
+    return "unknown"
+
+
+def _source_status_for_cisco_status(status: str) -> Literal["available", "missing", "failed"]:
+    if status == "enabled":
+        return "available"
+    if status in {"failed", "timed_out"}:
+        return "failed"
+    return "missing"
+
+
+def _safe_source_detail(run: object) -> str:
+    status = str(getattr(run, "status", "unknown"))
+    metadata = getattr(run, "metadata", {})
+    finding_count = None
+    if isinstance(metadata, dict):
+        candidate = metadata.get("totalFindings")
+        if isinstance(candidate, int):
+            finding_count = candidate
+    suffix = f", findings={finding_count}" if finding_count is not None else ""
+    return f"status={status}{suffix}"
+
+
+def _safe_finding_text(value: str, *, home_dir: Path, workspace_dir: Path | None) -> str:
+    redacted = _SENSITIVE_VALUE_RE.sub("redacted", value)
+    redacted = _redact_command_value(redacted, home_dir, workspace_dir)
+    return redacted[:500]
 
 
 def _agent_type(value: str) -> AgentInventoryType:
