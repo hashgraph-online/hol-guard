@@ -239,3 +239,82 @@ def test_inventory_snapshot_handles_missing_mcp_tool_schema_and_scale(tmp_path: 
 
     assert len(tool_items) == 500
     assert all(item.capability_categories == ("unknown",) for item in tool_items)
+
+
+def test_inventory_snapshot_preserves_empty_mcp_tool_schemas(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=False,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hermes:mcp:empty-schema",
+                name="empty-schema",
+                harness="hermes",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(tmp_path / ".hermes" / "mcp_servers.json"),
+                metadata={"tools": [{"name": "ping", "inputSchema": {}, "output_schema": {}}]},
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    tool = next(item for item in snapshot.items if item.item_kind == "mcp_tool")
+
+    assert tool.metadata["schemaPresent"] is True
+    assert tool.metadata["inputSchemaHash"] == fingerprint_mapping({})
+    assert tool.metadata["outputSchemaHash"] == fingerprint_mapping({})
+
+
+def test_inventory_snapshot_mcp_capabilities_avoid_substring_false_positives(tmp_path: Path) -> None:
+    detection = HarnessDetection(
+        harness="hermes",
+        installed=True,
+        command_available=False,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hermes:mcp:false-positive",
+                name="false-positive",
+                harness="hermes",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(tmp_path / ".hermes" / "mcp_servers.json"),
+                metadata={
+                    "tools": [
+                        {
+                            "name": "thread_listener",
+                            "description": "Returns execution_id for listened events.",
+                            "inputSchema": {"type": "object", "properties": {"execution_id": {"type": "string"}}},
+                        },
+                        {
+                            "name": "credential_probe",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "api_key": {"type": "string"},
+                                    "apiKey": {"type": "string"},
+                                },
+                            },
+                        },
+                    ]
+                },
+            ),
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    tool_items = {item.display_name: item for item in snapshot.items if item.item_kind == "mcp_tool"}
+
+    assert tool_items["thread_listener"].capability_categories == ("unknown",)
+    assert tool_items["credential_probe"].capability_categories == ("reads_secrets",)

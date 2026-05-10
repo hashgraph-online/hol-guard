@@ -65,6 +65,35 @@ _SENSITIVE_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 _WHITESPACE_RE = re.compile(r"\s+")
+_MCP_READ_RE = re.compile(
+    r"(?<![a-z0-9])(read|reads|reading|search|searches|list|lists)(?![a-z0-9])",
+    re.IGNORECASE,
+)
+_MCP_DELETE_RE = re.compile(
+    r"(?<![a-z0-9])(delete|deletes|remove|removes|destroy|destroys)(?![a-z0-9])",
+    re.IGNORECASE,
+)
+_MCP_WRITE_RE = re.compile(
+    r"(?<![a-z0-9])(write|writes|update|updates|create|creates|modify|modifies)(?![a-z0-9])",
+    re.IGNORECASE,
+)
+_MCP_SHELL_RE = re.compile(
+    r"(?<![a-z0-9])(shell|command|commands|execute|exec|subprocess)(?![a-z0-9])",
+    re.IGNORECASE,
+)
+_MCP_SECRET_RE = re.compile(
+    r"(?<![a-z0-9])(secret|secrets|token|tokens|password|passwords|credential|credentials|api[_\-\s]?key|apiKey)(?![a-z0-9])",
+    re.IGNORECASE,
+)
+_MCP_NETWORK_RE = re.compile(
+    r"(?<![a-z0-9])(http|url|urls|network|fetch|webhook|webhooks)(?![a-z0-9])",
+    re.IGNORECASE,
+)
+_MCP_MODEL_RE = re.compile(r"(?<![a-z0-9])(sampling|model|models|llm)(?![a-z0-9])", re.IGNORECASE)
+_MCP_PERMISSION_RE = re.compile(
+    r"(?<![a-z0-9])(permission|permissions|chmod)(?![a-z0-9])",
+    re.IGNORECASE,
+)
 _IGNORED_TREE_DIR_NAMES = {".git", ".hg", ".svn", "__pycache__", ".mypy_cache", ".ruff_cache", ".venv", "node_modules"}
 _MAX_FINGERPRINT_FILE_BYTES = 1024 * 1024
 
@@ -387,8 +416,8 @@ def _mcp_tool_items_from_artifact(
             continue
         display_name = _string_value(raw_tool.get("title")) or name
         description = _string_value(raw_tool.get("description")) or ""
-        input_schema = raw_tool.get("inputSchema") or raw_tool.get("input_schema")
-        output_schema = raw_tool.get("outputSchema") or raw_tool.get("output_schema")
+        input_schema = _first_present_value(raw_tool, "inputSchema", "input_schema")
+        output_schema = _first_present_value(raw_tool, "outputSchema", "output_schema")
         annotations = raw_tool.get("annotations")
         safe_annotations = annotations if isinstance(annotations, dict) else {}
         metadata = {
@@ -434,6 +463,13 @@ def _string_value(value: object) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _first_present_value(mapping: dict[str, object], *keys: str) -> object | None:
+    for key in keys:
+        if key in mapping:
+            return mapping[key]
+    return None
+
+
 def _capabilities_for_mcp_tool(
     name: str,
     description: str,
@@ -442,21 +478,21 @@ def _capabilities_for_mcp_tool(
 ) -> tuple[InventoryCapability, ...]:
     text = f"{name} {description} {json.dumps(input_schema, sort_keys=True, default=str)}".lower()
     capabilities: set[InventoryCapability] = set()
-    if annotations.get("readOnlyHint") is True or "read" in text or "search" in text or "list" in text:
+    if annotations.get("readOnlyHint") is True or _MCP_READ_RE.search(text):
         capabilities.add("reads_files")
-    if annotations.get("destructiveHint") is True or any(term in text for term in ("delete", "remove", "destroy")):
+    if annotations.get("destructiveHint") is True or _MCP_DELETE_RE.search(text):
         capabilities.update({"writes_files", "deletes_files"})
-    if annotations.get("writeHint") is True or any(term in text for term in ("write", "update", "create", "modify")):
+    if annotations.get("writeHint") is True or _MCP_WRITE_RE.search(text):
         capabilities.add("writes_files")
-    if any(term in text for term in ("shell", "command", "execute", "exec", "subprocess")):
+    if _MCP_SHELL_RE.search(text):
         capabilities.add("runs_shell")
-    if any(term in text for term in ("secret", "token", "password", "credential", "api key")):
+    if _MCP_SECRET_RE.search(text):
         capabilities.add("reads_secrets")
-    if any(term in text for term in ("http", "url", "network", "fetch", "webhook")):
+    if _MCP_NETWORK_RE.search(text):
         capabilities.add("network_egress")
-    if any(term in text for term in ("sampling", "model", "llm")):
+    if _MCP_MODEL_RE.search(text):
         capabilities.add("uses_model_sampling")
-    if "permission" in text or "chmod" in text:
+    if _MCP_PERMISSION_RE.search(text):
         capabilities.add("changes_permissions")
     return tuple(sorted(capabilities)) if capabilities else ("unknown",)
 
