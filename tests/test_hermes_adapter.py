@@ -12,9 +12,11 @@ from codex_plugin_scanner.guard.adapters.hermes import (
     _extract_env_mentions,
     _looks_like_secret,
 )
+from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import serialize_inventory_snapshot
 from codex_plugin_scanner.guard.risk import artifact_risk_signals
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.models import Finding, Severity
 
 FIXTURES = Path(__file__).parent / "fixtures" / "hermes-plugin-evil"
 
@@ -121,6 +123,50 @@ def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path)
     assert "--token guard_live_secret" not in encoded
     assert "user:pass" not in encoded
     assert str(tmp_path) not in encoded
+
+
+def test_inventory_snapshot_can_include_cisco_hermes_inventory_runs(tmp_path: Path, monkeypatch) -> None:
+    _write(
+        tmp_path / ".hermes" / "skills" / "ops" / "reviewer" / "SKILL.md",
+        "---\nname: reviewer\n---\nReview local files.\n",
+    )
+    context = _ctx(tmp_path)
+    calls: list[dict[str, object]] = []
+
+    def fake_cisco_runs(**kwargs):
+        calls.append(kwargs)
+        return (
+            CiscoInventoryRun(
+                source="cisco-skill-scanner",
+                status="enabled",
+                message="Cisco skill scanner completed.",
+                findings=(
+                    Finding(
+                        rule_id="CISCO-SKILL-001",
+                        severity=Severity.MEDIUM,
+                        category="skill-security",
+                        title="Review instruction risk",
+                        description="Prompt injection pattern.",
+                        file_path=str(tmp_path / ".hermes" / "skills" / "ops" / "reviewer" / "SKILL.md"),
+                        source="cisco-skill-scanner",
+                    ),
+                ),
+                duration_ms=12,
+                metadata={"totalFindings": 1},
+            ),
+        )
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.hermes.run_cisco_inventory_scans", fake_cisco_runs)
+
+    snapshot = HermesHarnessAdapter().inventory_snapshot(
+        context,
+        generated_at="2026-05-10T00:00:00Z",
+        cisco_skill_scan="on",
+    )
+
+    assert calls[0]["harness"] == "hermes"
+    assert calls[0]["skill_mode"] == "on"
+    assert snapshot.findings[0].source == "cisco-skill-scanner"
 
 
 def test_install_includes_non_secret_cloud_identity_hints_when_configured(tmp_path: Path):
