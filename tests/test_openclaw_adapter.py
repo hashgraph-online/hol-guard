@@ -10,6 +10,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
+from codex_plugin_scanner.guard.inventory_contract import serialize_inventory_snapshot
 from codex_plugin_scanner.guard.risk import artifact_risk_signals
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -104,6 +105,39 @@ def test_detects_openclaw_config_channels_mcp_and_skills(tmp_path: Path) -> None
     assert artifacts["openclaw:config:global"].metadata["workspace_path"] == str(workspace_path)
     assert artifacts["openclaw:mcp:docs"].transport == "http"
     assert artifacts["openclaw:mcp:local"].to_dict()["metadata"]["env"]["API_TOKEN"] == "*****"
+
+
+def test_inventory_snapshot_redacts_openclaw_channels_mcp_and_skills(tmp_path: Path) -> None:
+    context = _ctx(tmp_path)
+    config_path = context.home_dir / ".openclaw" / "openclaw.json"
+    skill_root = context.home_dir / ".openclaw" / "workspace" / "skills"
+    _write(
+        config_path,
+        json.dumps(
+            {
+                "channels": {"telegram": {"dmPolicy": "open", "allowFrom": ["*"]}},
+                "mcp": {
+                    "servers": {
+                        "docs": {
+                            "url": "https://user:pass@example.com/mcp?token=guard_live_secret",
+                            "headers": {"Authorization": "Bearer guard_live_secret"},
+                        }
+                    }
+                },
+            }
+        ),
+    )
+    _write(skill_root / "reviewer" / "SKILL.md", "---\nname: reviewer\n---\nRead project files.\n")
+
+    snapshot = OpenClawHarnessAdapter().inventory_snapshot(context, generated_at="2026-05-10T00:00:00Z")
+    payload = serialize_inventory_snapshot(snapshot)
+    encoded = json.dumps(payload, sort_keys=True)
+
+    assert payload["agent_type"] == "openclaw"
+    assert {item["item_kind"] for item in payload["items"]} >= {"channel", "mcp_server", "skill"}
+    assert "guard_live_secret" not in encoded
+    assert str(context.home_dir) not in encoded
+    assert str(context.workspace_dir) not in encoded
 
 
 def test_openclaw_flags_open_dm_policy_and_remote_mcp(tmp_path: Path) -> None:
