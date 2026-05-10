@@ -200,7 +200,7 @@ def inventory_snapshot_from_detection(
         )
         for artifact in artifacts
     )
-    config_paths = tuple(str(path) for path in getattr(detection, "config_paths", ()))
+    config_paths = tuple(dict.fromkeys(str(path) for path in getattr(detection, "config_paths", ())))
     sources = tuple(
         GuardInventorySource(
             source_id=f"{harness}:config:{fingerprint_text(redact_local_path(path, home_dir=home_dir))[:12]}",
@@ -301,7 +301,7 @@ def redact_url(value: str) -> str:
         netloc = f"{netloc}:{port}"
     redacted_pairs = [
         (key, "redacted" if _SENSITIVE_KEY_RE.search(key) else item)
-        for key, item in parse_qsl(parsed.query, keep_blank_values=True)
+        for key, item in parse_qsl(parsed.query.replace(";", "&"), keep_blank_values=True)
     ]
     return urlunsplit((parsed.scheme, netloc, parsed.path, urlencode(redacted_pairs), parsed.fragment))
 

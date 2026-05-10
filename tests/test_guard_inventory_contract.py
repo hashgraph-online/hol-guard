@@ -12,11 +12,20 @@ from codex_plugin_scanner.guard.inventory_contract import (
     fingerprint_path_tree,
     fingerprint_text,
     inventory_item_id,
+    inventory_snapshot_from_detection,
     redact_headers,
     redact_local_path,
     redact_url,
     serialize_inventory_snapshot,
 )
+
+
+class _Detection:
+    harness = "hermes"
+    artifacts = ()
+
+    def __init__(self, config_paths: tuple[str, ...]) -> None:
+        self.config_paths = config_paths
 
 
 def test_inventory_snapshot_serialization_redacts_raw_secrets(tmp_path: Path) -> None:
@@ -91,6 +100,7 @@ def test_inventory_helpers_emit_safe_endpoint_and_stable_hashes(tmp_path: Path) 
     assert classify_endpoint_host("http://172.20.4.5:8080/mcp") == "local_private"
     assert redact_url("https://user:pass@example.com/mcp?token=value&mode=safe") == "https://example.com/mcp?token=redacted&mode=safe"
     assert redact_url("https://example.com/mcp?auth=value&mode=safe") == "https://example.com/mcp?auth=redacted&mode=safe"
+    assert redact_url("https://example.com/mcp?mode=safe;token=value") == "https://example.com/mcp?mode=safe&token=redacted"
     assert redact_url("http://localhost:${PORT}/mcp?auth=value") == "http://localhost/mcp?auth=redacted"
     assert redact_local_path(path_a, home_dir=tmp_path) == "{home}/skill-a/SKILL.md"
 
@@ -130,3 +140,17 @@ def test_fingerprint_path_tree_skips_large_ignored_and_path_objects(tmp_path: Pa
 
     assert fingerprint_after_ignored_changes == fingerprint
     assert str(tmp_path) not in encoded
+
+
+def test_inventory_snapshot_deduplicates_config_sources(tmp_path: Path) -> None:
+    config_path = tmp_path / ".hermes" / "config.yaml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text("mcp_servers: {}\n")
+
+    snapshot = inventory_snapshot_from_detection(
+        _Detection((str(config_path), str(config_path))),
+        generated_at="2026-05-10T00:00:00Z",
+        home_dir=tmp_path,
+    )
+
+    assert len(snapshot.sources) == 1
