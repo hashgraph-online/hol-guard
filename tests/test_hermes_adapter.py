@@ -97,7 +97,7 @@ def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path)
         (
             "mcp_servers:\n"
             "  docs:\n"
-            '    command: "node --token guard_live_secret server.js"\n'
+            '    command: "/usr/bin/node --token guard_live_secret https://user:pass@example.com/mcp?auth=guard_live_secret"\n'
             '    url: "https://user:pass@example.com/mcp?token=guard_live_secret&mode=safe"\n'
             "    headers:\n"
             '      Authorization: "Bearer guard_live_secret"\n'
@@ -117,6 +117,7 @@ def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path)
     assert "guard_live_secret" not in encoded
     assert "Bearer guard_live_secret" not in encoded
     assert "--token guard_live_secret" not in encoded
+    assert "user:pass" not in encoded
     assert str(tmp_path) not in encoded
 
 

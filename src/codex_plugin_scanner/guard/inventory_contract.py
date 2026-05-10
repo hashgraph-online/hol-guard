@@ -465,13 +465,16 @@ def _redact_known_path(value: str, home_dir: Path, workspace_dir: Path | None) -
 
 
 def _redact_command_value(value: str, home_dir: Path, workspace_dir: Path | None) -> str:
-    path_redacted = _redact_known_path(value, home_dir, workspace_dir)
-    if path_redacted != value:
-        return path_redacted
+    redacted = re.sub(r"https?://[^\s]+", lambda match: redact_url(match.group(0)), value)
+    redacted = re.sub(
+        r"(^|\s)(/[^\s]+)",
+        lambda match: f"{match.group(1)}{_redact_known_path(match.group(2), home_dir, workspace_dir)}",
+        redacted,
+    )
     redacted = re.sub(
         r"(?i)(authorization:\s*bearer\s+)\S+",
         r"\1redacted",
-        value,
+        redacted,
     )
     redacted = re.sub(
         r"(?i)((?:api[_-]?key|auth|password|secret|token)=)\S+",
@@ -483,8 +486,6 @@ def _redact_command_value(value: str, home_dir: Path, workspace_dir: Path | None
         r"\1redacted",
         redacted,
     )
-    if "://" in redacted:
-        return redact_url(redacted)
     return redacted
 
 
