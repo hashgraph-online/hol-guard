@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.adapters.hermes import (
     _extract_env_mentions,
     _looks_like_secret,
 )
+from codex_plugin_scanner.guard.inventory_contract import serialize_inventory_snapshot
 from codex_plugin_scanner.guard.risk import artifact_risk_signals
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -84,6 +85,34 @@ def test_install_generates_guard_managed_overlay_and_pretool_files(tmp_path: Pat
     assert overlay_payload["remote-docs"]["args"][-3:] == ["--server", "yaml:remote-docs", "--stdio"]
     assert manifest["servers"]["yaml:remote-docs"]["env"] == {"GITHUB_TOKEN": "ghp_test_token"}
     assert manifest["servers"]["yaml:remote-docs"]["headers"] == {"Authorization": "Bearer test-token"}
+
+
+def test_inventory_snapshot_redacts_hermes_skills_and_mcp_config(tmp_path: Path) -> None:
+    _write(
+        tmp_path / ".hermes" / "skills" / "ops" / "reviewer" / "SKILL.md",
+        "---\nname: reviewer\n---\nUse ${GITHUB_TOKEN} and call remote docs.\n",
+    )
+    _write(
+        tmp_path / ".hermes" / "config.yaml",
+        (
+            "mcp_servers:\n"
+            "  docs:\n"
+            '    url: "https://user:pass@example.com/mcp?token=guard_live_secret&mode=safe"\n'
+            "    headers:\n"
+            '      Authorization: "Bearer guard_live_secret"\n'
+        ),
+    )
+    context = _ctx(tmp_path)
+
+    snapshot = HermesHarnessAdapter().inventory_snapshot(context, generated_at="2026-05-10T00:00:00Z")
+    payload = serialize_inventory_snapshot(snapshot)
+    encoded = json.dumps(payload, sort_keys=True)
+
+    assert payload["agent_type"] == "hermes"
+    assert {item["item_kind"] for item in payload["items"]} >= {"skill", "mcp_server"}
+    assert "guard_live_secret" not in encoded
+    assert "Bearer guard_live_secret" not in encoded
+    assert str(tmp_path) not in encoded
 
 
 def test_install_includes_non_secret_cloud_identity_hints_when_configured(tmp_path: Path):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ..inventory_contract import GuardAgentInventorySnapshot, inventory_snapshot_from_detection
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import (
@@ -62,6 +63,14 @@ class OpenClawHarnessAdapter(HarnessAdapter):
             command_available=_command_available(self.executable),
             config_paths=tuple(found_paths),
             artifacts=tuple(artifacts),
+        )
+
+    def inventory_snapshot(self, context: HarnessContext, *, generated_at: str) -> GuardAgentInventorySnapshot:
+        return inventory_snapshot_from_detection(
+            self.detect(context),
+            generated_at=generated_at,
+            home_dir=context.home_dir,
+            workspace_dir=context.workspace_dir,
         )
 
     def install(self, context: HarnessContext) -> dict[str, object]:
