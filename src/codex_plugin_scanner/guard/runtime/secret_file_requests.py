@@ -2679,7 +2679,11 @@ def _looks_like_safe_graphql_query_file_workflow(command_text: str) -> bool:
     if match is None:
         return False
     target_path = _strip_shell_quotes(match.group("path").strip())
-    if not target_path.endswith(".graphql") or _path_text_looks_sensitive(target_path):
+    if (
+        not target_path.endswith(".graphql")
+        or _path_text_looks_sensitive(target_path)
+        or _contains_shell_expansion(target_path)
+    ):
         return False
     body = match.group("body").strip()
     if not re.search(r"\bquery\b", body) or re.search(r"\bmutation\b|\bsubscription\b", body):
@@ -2717,6 +2721,10 @@ def _strip_shell_quotes(value: str) -> str:
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         return value[1:-1]
     return value
+
+
+def _contains_shell_expansion(value: str) -> bool:
+    return "$(" in value or "`" in value or "${" in value
 
 
 def _path_text_looks_sensitive(path_text: str) -> bool:
