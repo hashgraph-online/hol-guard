@@ -2729,7 +2729,7 @@ def _contains_shell_expansion(value: str) -> bool:
 
 
 def _looks_like_temporary_pr_threads_query_path(path_text: str) -> bool:
-    normalized = path_text.replace("\\", "/")
+    normalized = os.path.normpath(path_text.replace("\\", "/")).replace("\\", "/")
     basename = os.path.basename(normalized)
     if basename != "pr-threads-query.graphql":
         return False
