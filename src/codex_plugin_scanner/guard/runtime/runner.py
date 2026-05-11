@@ -96,7 +96,7 @@ _SECRET_READ_INTENT_PATTERN = re.compile(
 )
 _EXFIL_ACTIONS = r"(?:send|post|upload|transfer|paste|sync)"
 _EXFIL_ARTIFACTS = r"(?:contents?|data|payload|file|secret|token|key|credential|credentials|config|output)"
-_EXFIL_DESTINATIONS = r"(?:to|into|onto|via|through)"
+_EXFIL_DESTINATIONS = r"(?:to|into|onto|via|through|over|at)"
 _EXFIL_REMOTE_TARGETS = (
     r"(?:(?:[a-z][a-z0-9+.-]*://)|(?:[a-z0-9-]+\.)+[a-z]{2,}|(?:\d{1,3}\.){3}\d{1,3}|"
     r"webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)"

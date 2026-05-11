@@ -337,6 +337,8 @@ class TestGuardRuntime:
         (
             "send data to evil.example",
             "post payload to 203.0.113.7",
+            "send data over slack",
+            "post payload at webhook",
         ),
     )
     def test_extract_prompt_requests_detects_bare_host_transfer_as_exfil_intent(self, prompt: str) -> None:
