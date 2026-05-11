@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { r as reactExports, v as fetchSettings, w as fetchRuntimeSnapshot, x as updateSettings, y as clearPolicy, z as clearEvidence, C as exportDiagnostics, D as repairApprovalCenter, j as jsxRuntimeExports, E as EmptyState, G as GuardHero, T as Tag, c as HiMiniShieldCheck, S as SectionLabel, F as HiMiniLockClosed, I as HiMiniCog6Tooth, H as HiMiniCheckCircle, A as ActionButton, m as HiMiniExclamationTriangle, k as HiMiniChevronUp, l as HiMiniChevronDown } from "../guard-dashboard.js";
-=======
-import { r as reactExports, s as fetchSettings, t as fetchRuntimeSnapshot, u as updateSettings, v as clearPolicy, w as clearEvidence, x as exportDiagnostics, y as repairApprovalCenter, j as jsxRuntimeExports, E as EmptyState, G as GuardHero, T as Tag, c as HiMiniShieldCheck, S as SectionLabel, z as HiMiniLockClosed, C as HiMiniCog6Tooth, H as HiMiniCheckCircle, A as ActionButton, m as HiMiniExclamationTriangle, k as HiMiniChevronUp, l as HiMiniChevronDown } from "../guard-dashboard.js";
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 function resolveProtectionLevelCopy(level) {
   if (level === "gentle") {
     return "Monitors quietly, asks only for high-risk actions";

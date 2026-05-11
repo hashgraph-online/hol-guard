@@ -13424,23 +13424,12 @@ function HiOutlineShieldCheck(props) {
 function HiOutlineNoSymbol(props) {
   return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" }, "child": [] }] })(props);
 }
-<<<<<<< HEAD
 function HiOutlineMinus(props) {
   return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M5 12h14" }, "child": [] }] })(props);
-=======
-function HiOutlineListBullet(props) {
-  return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" }, "child": [] }] })(props);
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 }
 function HiOutlineFire(props) {
   return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" }, "child": [] }, { "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" }, "child": [] }] })(props);
 }
-<<<<<<< HEAD
-=======
-function HiOutlineCalendarDays(props) {
-  return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z" }, "child": [] }] })(props);
-}
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 function HiOutlineArrowTrendingUp(props) {
   return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" }, "child": [] }] })(props);
 }
@@ -13474,9 +13463,6 @@ function HiMiniServerStack(props) {
 function HiMiniQuestionMarkCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.94 6.94a.75.75 0 1 1-1.061-1.061 3 3 0 1 1 2.871 5.026v.345a.75.75 0 0 1-1.5 0v-.5c0-.72.57-1.172 1.081-1.287A1.5 1.5 0 1 0 8.94 6.94ZM10 15a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
-function HiMiniPencilSquare(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "m5.433 13.917 1.262-3.155A4 4 0 0 1 7.58 9.42l6.92-6.918a2.121 2.121 0 0 1 3 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 0 1-.65-.65Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0 0 10 3H4.75A2.75 2.75 0 0 0 2 5.75v9.5A2.75 2.75 0 0 0 4.75 18h9.5A2.75 2.75 0 0 0 17 15.25V10a.75.75 0 0 0-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5Z" }, "child": [] }] })(props);
-}
 function HiMiniNoSymbol(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "m5.965 4.904 9.131 9.131a6.5 6.5 0 0 0-9.131-9.131Zm8.07 10.192L4.904 5.965a6.5 6.5 0 0 0 9.131 9.131ZM4.343 4.343a8 8 0 1 1 11.314 11.314A8 8 0 0 1 4.343 4.343Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -13485,9 +13471,6 @@ function HiMiniMinusCircle(props) {
 }
 function HiMiniLockClosed(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniKey(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniInformationCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-7-4a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM9 9a.75.75 0 0 0 0 1.5h.253a.25.25 0 0 1 .244.304l-.459 2.066A1.75 1.75 0 0 0 10.747 15H11a.75.75 0 0 0 0-1.5h-.253a.25.25 0 0 1-.244-.304l.459-2.066A1.75 1.75 0 0 0 9.253 9H9Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -13516,28 +13499,14 @@ function HiMiniExclamationCircle(props) {
 function HiMiniDocumentText(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
-<<<<<<< HEAD
 function HiMiniComputerDesktop(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.105a3.501 3.501 0 0 0 1.1 1.677A.75.75 0 0 1 13.26 18H6.74a.75.75 0 0 1-.484-1.323A3.501 3.501 0 0 0 7.355 15H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Zm1.5 0a.75.75 0 0 1 .75-.75h11.5a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.75.75H4.25a.75.75 0 0 1-.75-.75v-7.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-=======
-function HiMiniDocumentPlus(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5ZM10 8a.75.75 0 0 1 .75.75v1.5h1.5a.75.75 0 0 1 0 1.5h-1.5v1.5a.75.75 0 0 1-1.5 0v-1.5h-1.5a.75.75 0 0 1 0-1.5h1.5v-1.5A.75.75 0 0 1 10 8Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniDocumentMagnifyingGlass(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M8 10a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm5 5a3 3 0 1 0 1.524 5.585l1.196 1.195a.75.75 0 1 0 1.06-1.06l-1.195-1.196A3 3 0 0 0 9.5 7Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniCube(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10.362 1.093a.75.75 0 0 0-.724 0L2.523 5.018 10 9.143l7.477-4.125-7.115-3.925ZM18 6.443l-7.25 4v8.25l6.862-3.786A.75.75 0 0 0 18 14.25V6.443ZM9.25 18.693v-8.25l-7.25-4v7.807a.75.75 0 0 0 .388.657l6.862 3.786Z" }, "child": [] }] })(props);
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 }
 function HiMiniCommandLine(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3.25 3A2.25 2.25 0 0 0 1 5.25v9.5A2.25 2.25 0 0 0 3.25 17h13.5A2.25 2.25 0 0 0 19 14.75v-9.5A2.25 2.25 0 0 0 16.75 3H3.25Zm.943 8.752a.75.75 0 0 1 .055-1.06L6.128 9l-1.88-1.693a.75.75 0 1 1 1.004-1.114l2.5 2.25a.75.75 0 0 1 0 1.114l-2.5 2.25a.75.75 0 0 1-1.06-.055ZM9.75 10.25a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniCog6Tooth(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .206 1.25l-1.18 2.045a1 1 0 0 1-1.187.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.114a7.05 7.05 0 0 1 0-2.227L1.821 7.773a1 1 0 0 1-.206-1.25l1.18-2.045a1 1 0 0 1 1.187-.447l1.598.54A6.992 6.992 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniCodeBracket(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.28 5.22a.75.75 0 0 1 0 1.06L2.56 10l3.72 3.72a.75.75 0 0 1-1.06 1.06L.97 10.53a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Zm7.44 0a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L17.44 10l-3.72-3.72a.75.75 0 0 1 0-1.06ZM11.377 2.011a.75.75 0 0 1 .612.867l-2.5 14.5a.75.75 0 0 1-1.478-.255l2.5-14.5a.75.75 0 0 1 .866-.612Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniCloud(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M1 12.5A4.5 4.5 0 0 0 5.5 17H15a4 4 0 0 0 1.866-7.539 3.504 3.504 0 0 0-4.504-4.272A4.5 4.5 0 0 0 4.06 8.235 4.502 4.502 0 0 0 1 12.5Z" }, "child": [] }] })(props);
@@ -14373,7 +14342,6 @@ function DecodedLayerCard(props) {
     }
   );
 }
-<<<<<<< HEAD
 const CATEGORIES = [
   {
     key: "secret",
@@ -14588,35 +14556,20 @@ function StoryTab({ receipts, selectedDay, onSelectDay }) {
     onSelectDay(d.toISOString().split("T")[0]);
   };
   const handleNextDay = () => {
-    if (!selectedDay) return;
-    const d = new Date(selectedDay);
+    const d = selectedDay ? new Date(selectedDay) : /* @__PURE__ */ new Date();
     d.setDate(d.getDate() + 1);
     const today = /* @__PURE__ */ new Date();
-    today.setHours(0, 0, 0, 0);
     if (d > today) return;
     onSelectDay(d.toISOString().split("T")[0]);
   };
-  const { hasPrev, hasNext } = reactExports.useMemo(() => {
-    if (!selectedDay) {
-      return { hasPrev: receipts.length > 20, hasNext: false };
-    }
-    const current = new Date(selectedDay);
-    current.setHours(0, 0, 0, 0);
-    const today = /* @__PURE__ */ new Date();
-    today.setHours(0, 0, 0, 0);
-    const oldestReceipt = receipts.length > 0 ? new Date(receipts[receipts.length - 1].timestamp) : null;
-    const hasPrevDay = oldestReceipt !== null && oldestReceipt < current;
-    const hasNextDay = current < today;
-    return { hasPrev: hasPrevDay, hasNext: hasNextDay };
-  }, [receipts, selectedDay]);
   if (dayReceipts.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(DayHeader, { dayLabel, onPrev: handlePrevDay, onNext: handleNextDay, hasPrev, hasNext }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DayHeader, { dayLabel, onPrev: handlePrevDay, onNext: handleNextDay, hasPrev: !!selectedDay, hasNext: false }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "All quiet. Guard is watching." }) })
     ] });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(DayHeader, { dayLabel, onPrev: handlePrevDay, onNext: handleNextDay, hasPrev, hasNext }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(DayHeader, { dayLabel, onPrev: handlePrevDay, onNext: handleNextDay, hasPrev: true, hasNext: false }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
       "Guard reviewed ",
       summary.total,
@@ -14799,7 +14752,7 @@ function CategoryTab({ receipts, onFilterCategory }) {
     Array.from(groups.values()).every((items) => items.length === 0) && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No activity yet." }) })
   ] });
 }
-function AppTab({ receipts }) {
+function AppTab({ receipts, onFilterApp }) {
   const [selectedApp, setSelectedApp] = reactExports.useState(null);
   const apps = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
@@ -14861,6 +14814,7 @@ function AppTab({ receipts }) {
         {
           onClick: () => {
             setSelectedApp(harness);
+            onFilterApp?.(harness);
           },
           className: "flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:shadow-md",
           children: [
@@ -14891,8 +14845,6 @@ function AppTab({ receipts }) {
     apps.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No activity yet." }) })
   ] });
 }
-=======
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 function HistoryInsights({
   receipts,
   onFilterHarness,
@@ -15272,89 +15224,6 @@ function aggregateByAction(receipts) {
   }
   return Array.from(map.values()).sort((a, b) => b.total - a.total);
 }
-<<<<<<< HEAD
-=======
-function exportReceiptsAsCsv(receipts, filters) {
-  const headers = [
-    "timestamp",
-    "harness",
-    "artifact_id",
-    "artifact_name",
-    "policy_decision",
-    "artifact_hash",
-    "capabilities_summary",
-    "provenance_summary",
-    "source_scope"
-  ];
-  const rows = receipts.map((r) => [
-    r.timestamp,
-    r.harness,
-    r.artifact_id,
-    r.artifact_name ?? "",
-    r.policy_decision,
-    r.artifact_hash,
-    r.capabilities_summary ?? "",
-    r.provenance_summary ?? "",
-    r.source_scope ?? ""
-  ]);
-  const csv = [headers.join(","), ...rows.map((row) => row.map(escapeCsvCell).join(","))].join("\n");
-  const fromDate = receipts.length > 0 ? formatDateIso(new Date(receipts[receipts.length - 1].timestamp)) : "all";
-  const toDate = receipts.length > 0 ? formatDateIso(new Date(receipts[0].timestamp)) : "all";
-  const filename = `guard-history-${fromDate}-to-${toDate}.csv`;
-  return { blob: new Blob([csv], { type: "text/csv;charset=utf-8;" }), filename };
-}
-function exportReceiptsAsJson(receipts, filters) {
-  const payload = {
-    exported_at: (/* @__PURE__ */ new Date()).toISOString(),
-    filter_summary: filters ?? {},
-    total_rows: receipts.length,
-    items: receipts
-  };
-  const fromDate = receipts.length > 0 ? formatDateIso(new Date(receipts[receipts.length - 1].timestamp)) : "all";
-  const toDate = receipts.length > 0 ? formatDateIso(new Date(receipts[0].timestamp)) : "all";
-  const filename = `guard-history-${fromDate}-to-${toDate}.json`;
-  return { blob: new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }), filename };
-}
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-function escapeCsvCell(value) {
-  const needsQuotes = /[",\n\r]/.test(value);
-  if (needsQuotes) {
-    return `"${value.replaceAll('"', '""')}"`;
-  }
-  return value;
-}
-function formatDateIso(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-function useKeyboardShortcut(key, callback, options = {}) {
-  const callbackRef = reactExports.useRef(callback);
-  callbackRef.current = callback;
-  reactExports.useEffect(() => {
-    function handleKeyDown(event) {
-      const target = event.target;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
-        return;
-      }
-      if (event.key !== key) return;
-      if (options.preventDefault) {
-        event.preventDefault();
-      }
-      callbackRef.current(event);
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [key, options.preventDefault]);
-}
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 function DecisionPieChart({ receipts }) {
   const { allow, block, total } = reactExports.useMemo(() => {
     const allow2 = receipts.filter((r) => r.policy_decision === "allow").length;
@@ -15502,7 +15371,6 @@ function AppActivityBars({ receipts }) {
     ] }, app.harness)) })
   ] });
 }
-<<<<<<< HEAD
 function DecisionTrendLine({ receipts }) {
   const days = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
@@ -15665,15 +15533,12 @@ function TimeOfDayHeatmap({ receipts }) {
     ] })
   ] });
 }
-=======
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 function HistoryCharts({ receipts }) {
   const hasData = receipts.length > 0;
   if (!hasData) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionPieChart, { receipts }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActivityBarChart, { receipts }) }),
-<<<<<<< HEAD
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AppActivityBars, { receipts }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionTrendLine, { receipts }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(BlockReasonBreakdown, { receipts }) }),
@@ -15889,7 +15754,7 @@ function escapeCsvCell(value) {
 function formatDateIso(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-function ExploreTab({ receipts, filteredReceipts, filters, onFilterDay, onFilterHarness, onFilterAction }) {
+function ExploreTab({ receipts, filteredReceipts, filters, onFilterDay }) {
   const [activeSubTab, setActiveSubTab] = reactExports.useState("overview");
   const [showAnalytics, setShowAnalytics] = reactExports.useState(false);
   if (!showAnalytics) {
@@ -15933,12 +15798,14 @@ function ExploreTab({ receipts, filteredReceipts, filters, onFilterDay, onFilter
         HistoryInsights,
         {
           receipts,
-          onFilterHarness,
+          onFilterHarness: () => {
+          },
           onFilterDay
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(HistoryCharts, { receipts: filteredReceipts }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TopActions, { receipts: filteredReceipts, onFilterAction })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(TopActions, { receipts: filteredReceipts, onFilterAction: () => {
+      } })
     ] }),
     activeSubTab === "calendar" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActivityCalendar, { receipts: filteredReceipts, onSelectDay: onFilterDay }),
     activeSubTab === "compare" && /* @__PURE__ */ jsxRuntimeExports.jsx(CompareTimePeriods, { receipts }),
@@ -16000,11 +15867,6 @@ const TAB_CONFIG = [
   { key: "app", label: "App", icon: HiMiniComputerDesktop },
   { key: "explore", label: "Explore", icon: HiMiniChartBar }
 ];
-=======
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AppActivityBars, { receipts }) })
-  ] });
-}
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 function ReceiptsWorkspace(props) {
   if (props.receipts.kind === "loading") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
@@ -16017,27 +15879,17 @@ function ReceiptsWorkspace(props) {
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsx(ReadyReceiptsWorkspace, { receiptItems: props.receipts.items });
 }
-const TIME_FILTER_VALUES = ["all", "today", "yesterday", "week", "last7d", "last30d"];
-const DECISION_FILTER_VALUES = ["all", "allow", "block"];
 function readUrlParams() {
   const params = new URLSearchParams(window.location.search);
   const time = params.get("time");
   const decision = params.get("decision");
-<<<<<<< HEAD
   const tab = params.get("tab");
-=======
-  const view = params.get("view");
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
   return {
     search: params.get("search") ?? "",
     time: TIME_FILTER_VALUES.includes(time) ? time : "all",
     decision: DECISION_FILTER_VALUES.includes(decision) ? decision : "all",
     harness: params.get("harness") ?? "all",
-<<<<<<< HEAD
     tab: TAB_CONFIG.some((t) => t.key === tab) ? tab : "story",
-=======
-    view: view === "calendar" ? "calendar" : "list",
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
     day: params.get("day") ?? ""
   };
 }
@@ -16048,44 +15900,18 @@ function writeUrlParams(params) {
   if (params.time !== "all") url.searchParams.set("time", params.time);
   if (params.decision !== "all") url.searchParams.set("decision", params.decision);
   if (params.harness !== "all") url.searchParams.set("harness", params.harness);
-<<<<<<< HEAD
   if (params.tab !== "story") url.searchParams.set("tab", params.tab);
-=======
-  if (params.view !== "list") url.searchParams.set("view", params.view);
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
   if (params.day) url.searchParams.set("day", params.day);
   window.history.replaceState({}, "", url.toString());
-}
-function timeFilterLabel(filter) {
-  switch (filter) {
-    case "today":
-      return "Today";
-    case "yesterday":
-      return "Yesterday";
-    case "week":
-      return "This week";
-    case "last7d":
-      return "Last 7 days";
-    case "last30d":
-      return "Last 30 days";
-    default:
-      return "All time";
-  }
 }
 function ReadyReceiptsWorkspace(props) {
   const initial = reactExports.useMemo(() => readUrlParams(), []);
   const [search, setSearch] = reactExports.useState(initial.search);
-  const [categoryFilter, setCategoryFilter] = reactExports.useState("");
   const [timeFilter, setTimeFilter] = reactExports.useState(initial.time);
   const [decisionFilter, setDecisionFilter] = reactExports.useState(initial.decision);
-<<<<<<< HEAD
   const [activeTab, setActiveTab] = reactExports.useState(initial.tab);
   const [dayFilter, setDayFilter] = reactExports.useState(initial.day);
   const [harnessFilter, setHarnessFilter] = reactExports.useState(initial.harness);
-=======
-  const [viewMode, setViewMode] = reactExports.useState(initial.view);
-  const [dayFilter, setDayFilter] = reactExports.useState(initial.day);
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
   const harnesses = reactExports.useMemo(
     () => Array.from(new Set(props.receiptItems.map((r) => r.harness))).sort(),
     [props.receiptItems]
@@ -16096,33 +15922,8 @@ function ReadyReceiptsWorkspace(props) {
     }
   }, [harnesses, harnessFilter]);
   reactExports.useEffect(() => {
-<<<<<<< HEAD
     writeUrlParams({ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter, tab: activeTab, day: dayFilter });
   }, [search, timeFilter, decisionFilter, harnessFilter, activeTab, dayFilter]);
-  reactExports.useCallback(() => {
-    setCategoryFilter("");
-  }, []);
-=======
-    writeUrlParams({ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter, view: viewMode, day: dayFilter });
-  }, [search, timeFilter, decisionFilter, harnessFilter, viewMode, dayFilter]);
-  const searchRef = reactExports.useRef(null);
-  useKeyboardShortcut("f", () => {
-    searchRef.current?.focus();
-  }, { preventDefault: true });
-  useKeyboardShortcut("e", () => {
-    handleExportCsv();
-  }, { preventDefault: true });
-  useKeyboardShortcut("g", () => {
-    setViewMode((prev) => prev === "list" ? "calendar" : "list");
-  }, { preventDefault: true });
-  useKeyboardShortcut("t", () => {
-    const cycle = ["all", "today", "yesterday", "week", "last7d", "last30d"];
-    setTimeFilter((prev) => {
-      const idx = cycle.indexOf(prev);
-      return cycle[(idx + 1) % cycle.length];
-    });
-  }, { preventDefault: true });
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
   const filtered = reactExports.useMemo(() => {
     let items = props.receiptItems;
     if (decisionFilter !== "all") {
@@ -16161,70 +15962,18 @@ function ReadyReceiptsWorkspace(props) {
         return d >= dayStart && d < dayEnd;
       });
     }
-<<<<<<< HEAD
-    if (categoryFilter) {
-      items = items.filter((r) => detectCategory(r) === categoryFilter);
-    }
-    if (search.trim() && !categoryFilter) {
-=======
     if (search.trim()) {
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
       const q = search.toLowerCase();
       items = items.filter(
         (r) => (r.artifact_name ?? r.artifact_id).toLowerCase().includes(q) || r.harness.toLowerCase().includes(q)
       );
     }
     return items.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-<<<<<<< HEAD
-  }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, search, dayFilter, categoryFilter]);
-  const handleFilterDay = reactExports.useCallback((day) => {
-    setDayFilter(day);
-    setTimeFilter("all");
-  }, []);
-=======
   }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, search, dayFilter]);
-  const groups = reactExports.useMemo(() => {
-    const today = [];
-    const yesterday = [];
-    const thisWeek = [];
-    const earlier = [];
-    const now2 = /* @__PURE__ */ new Date();
-    const startOfToday = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate());
-    const startOfYesterday = new Date(startOfToday);
-    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-    const startOfWeek = new Date(startOfToday);
-    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-    filtered.forEach((r) => {
-      const d = new Date(r.timestamp);
-      if (d >= startOfToday) today.push(r);
-      else if (d >= startOfYesterday) yesterday.push(r);
-      else if (d >= startOfWeek) thisWeek.push(r);
-      else earlier.push(r);
-    });
-    return { today, yesterday, thisWeek, earlier };
-  }, [filtered]);
-  const handleFilterHarness = reactExports.useCallback((harness) => {
-    setHarnessFilter(harness);
-    setViewMode("list");
-  }, []);
   const handleFilterDay = reactExports.useCallback((day) => {
     setDayFilter(day);
     setTimeFilter("all");
-    setViewMode("list");
   }, []);
-  const handleFilterAction = reactExports.useCallback((name) => {
-    setSearch(name);
-    setViewMode("list");
-  }, []);
-  const handleExportCsv = reactExports.useCallback(() => {
-    const { blob, filename } = exportReceiptsAsCsv(filtered);
-    downloadBlob(blob, filename);
-  }, [filtered, search, timeFilter, decisionFilter, harnessFilter]);
-  const handleExportJson = reactExports.useCallback(() => {
-    const { blob, filename } = exportReceiptsAsJson(filtered, { search, time: timeFilter, decision: decisionFilter, harness: harnessFilter });
-    downloadBlob(blob, filename);
-  }, [filtered, search, timeFilter, decisionFilter, harnessFilter]);
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
   const totalCount = props.receiptItems.length;
   if (totalCount === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -16249,20 +15998,19 @@ function ReadyReceiptsWorkspace(props) {
         ] })
       }
     ),
-<<<<<<< HEAD
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
       [
-        { key: "all", label: "All", value: "" },
-        { key: "secret", label: "Secrets", value: "secret" },
-        { key: "network", label: "Network", value: "network" },
-        { key: "destructive", label: "Destructive", value: "destructive" },
-        { key: "hidden", label: "Hidden", value: "hidden" },
-        { key: "other", label: "Other", value: "other" }
+        { key: "all", label: "All" },
+        { key: "secret", label: "Secrets" },
+        { key: "network", label: "Network" },
+        { key: "destructive", label: "Destructive" },
+        { key: "hidden", label: "Hidden" },
+        { key: "other", label: "Other" }
       ].map((c) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
-          className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${categoryFilter === c.value ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
-          onClick: () => setCategoryFilter(categoryFilter === c.value ? "" : c.value),
+          className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${search === c.key ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
+          onClick: () => setSearch(search === c.key ? "" : c.key),
           children: c.label
         },
         c.key
@@ -16279,314 +16027,12 @@ function ReadyReceiptsWorkspace(props) {
             harnesses.map((h) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: h, children: harnessDisplayName(h) }, h))
           ]
         }
-      ),
-      (search || categoryFilter || harnessFilter !== "all") && /* @__PURE__ */ jsxRuntimeExports.jsx(
-=======
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      HistoryInsights,
-      {
-        receipts: props.receiptItems,
-        onFilterHarness: handleFilterHarness,
-        onFilterDay: handleFilterDay
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(HistoryCharts, { receipts: filtered }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          FilterChip,
-          {
-            active: decisionFilter === "all",
-            onClick: () => setDecisionFilter("all"),
-            children: "All"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          FilterChip,
-          {
-            active: decisionFilter === "allow",
-            onClick: () => setDecisionFilter("allow"),
-            children: "Allowed"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          FilterChip,
-          {
-            active: decisionFilter === "block",
-            onClick: () => setDecisionFilter("block"),
-            children: "Blocked"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 h-4 w-px bg-slate-200" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          FilterChip,
-          {
-            active: timeFilter === "all",
-            onClick: () => setTimeFilter("all"),
-            children: "All time"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          FilterChip,
-          {
-            active: timeFilter === "today",
-            onClick: () => setTimeFilter("today"),
-            children: "Today"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          FilterChip,
-          {
-            active: timeFilter === "yesterday",
-            onClick: () => setTimeFilter("yesterday"),
-            children: "Yesterday"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          FilterChip,
-          {
-            active: timeFilter === "week",
-            onClick: () => setTimeFilter("week"),
-            children: "This week"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          FilterChip,
-          {
-            active: timeFilter === "last7d",
-            onClick: () => setTimeFilter("last7d"),
-            children: "Last 7d"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          FilterChip,
-          {
-            active: timeFilter === "last30d",
-            onClick: () => setTimeFilter("last30d"),
-            children: "Last 30d"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 h-4 w-px bg-slate-200" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "select",
-          {
-            value: harnessFilter,
-            onChange: (e) => setHarnessFilter(e.target.value),
-            className: "h-8 rounded-md border-0 bg-transparent px-2 py-1 text-xs font-medium text-brand-dark hover:bg-slate-100 focus:bg-slate-100 focus:outline-none",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All apps" }),
-              harnesses.map((h) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: h, children: harnessDisplayName(h) }, h))
-            ]
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 h-4 w-px bg-slate-200" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ViewToggleButton, { active: viewMode === "list", onClick: () => setViewMode("list"), ariaLabel: "List view", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineListBullet, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ViewToggleButton, { active: viewMode === "calendar", onClick: () => setViewMode("calendar"), ariaLabel: "Calendar view", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineCalendarDays, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 h-4 w-px bg-slate-200" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            onClick: handleExportCsv,
-            className: "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-brand-dark",
-            title: "Export as CSV",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineArrowDownTray, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-              "CSV"
-            ]
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            onClick: handleExportJson,
-            className: "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-brand-dark",
-            title: "Export as JSON",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineArrowDownTray, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-              "JSON"
-            ]
-          }
-        )
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          ref: searchRef,
-          value: search,
-          onChange: (e) => setSearch(e.target.value),
-          placeholder: "Search by name or app...",
-          className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-        }
       )
     ] }),
-    (search || decisionFilter !== "all" || timeFilter !== "all" || harnessFilter !== "all" || dayFilter) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      search && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActiveFilterChip, { onClick: () => setSearch(""), children: [
-        "Search: ",
-        search
-      ] }),
-      decisionFilter !== "all" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActiveFilterChip, { onClick: () => setDecisionFilter("all"), children: decisionFilter === "allow" ? "Allowed" : "Blocked" }),
-      timeFilter !== "all" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActiveFilterChip, { onClick: () => setTimeFilter("all"), children: timeFilterLabel(timeFilter) }),
-      harnessFilter !== "all" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActiveFilterChip, { onClick: () => setHarnessFilter("all"), children: harnessDisplayName(harnessFilter) }),
-      dayFilter && /* @__PURE__ */ jsxRuntimeExports.jsx(ActiveFilterChip, { onClick: () => setDayFilter(""), children: dayFilter }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
-        "button",
-        {
-          onClick: () => {
-            setSearch("");
-            setCategoryFilter("");
-            setHarnessFilter("all");
-            setDayFilter("");
-          },
-          className: "ml-auto text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
-          children: "Clear filters"
-        }
-      )
-    ] }),
-<<<<<<< HEAD
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm", children: TAB_CONFIG.map((t) => {
       const Icon = t.icon;
       const isActive = activeTab === t.key;
       return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-=======
-    viewMode === "calendar" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ActivityCalendar,
-      {
-        receipts: filtered,
-        onSelectDay: handleFilterDay
-      }
-    ) : filtered.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      EmptyState,
-      {
-        title: "No matching history",
-        body: "Try different filters or search terms.",
-        tone: "teach"
-      }
-    ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptGroup, { title: "Today", items: groups.today }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptGroup, { title: "Yesterday", items: groups.yesterday }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptGroup, { title: "This week", items: groups.thisWeek }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptGroup, { title: "Earlier", items: groups.earlier })
-    ] }),
-    viewMode === "list" && /* @__PURE__ */ jsxRuntimeExports.jsx(TopActions, { receipts: filtered, onFilterAction: handleFilterAction })
-  ] });
-}
-function ViewToggleButton({
-  active,
-  onClick,
-  children,
-  ariaLabel
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "button",
-    {
-      onClick,
-      "aria-label": ariaLabel,
-      className: `rounded-md p-1.5 transition-colors ${active ? "bg-brand-blue text-white" : "text-slate-400 hover:bg-slate-100 hover:text-brand-dark"}`,
-      children
-    }
-  );
-}
-function FilterChip({
-  active,
-  onClick,
-  children
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "button",
-    {
-      onClick,
-      className: `rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active ? "bg-brand-blue text-white" : "text-slate-500 hover:bg-slate-100 hover:text-brand-dark"}`,
-      children
-    }
-  );
-}
-function ActiveFilterChip({
-  onClick,
-  children
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      onClick,
-      className: "inline-flex items-center gap-1 rounded-full border border-brand-blue/30 bg-brand-blue/[0.08] px-3 py-1.5 text-xs font-medium text-brand-blue transition-all hover:bg-brand-blue/15",
-      children: [
-        children,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-0.5 text-brand-blue/70", children: "×" })
-      ]
-    }
-  );
-}
-function getGroupCollapsedKey(title) {
-  return `guard-history-group-${title.toLowerCase().replace(/\s+/g, "-")}`;
-}
-function ReceiptGroup({ title, items }) {
-  const storageKey = getGroupCollapsedKey(title);
-  const [collapsed, setCollapsed] = reactExports.useState(() => {
-    try {
-      return localStorage.getItem(storageKey) === "true";
-    } catch {
-      return false;
-    }
-  });
-  if (items.length === 0) return null;
-  const toggle = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(storageKey, String(next));
-      } catch {
-      }
-      return next;
-    });
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 pt-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        onClick: toggle,
-        className: "flex w-full items-center justify-between text-left group",
-        "aria-expanded": !collapsed,
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: items.length })
-          ] }),
-          collapsed ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4 text-slate-300 transition-colors group-hover:text-slate-500", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4 text-slate-300 transition-colors group-hover:text-slate-500", "aria-hidden": "true" })
-        ]
-      }
-    ),
-    !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 space-y-0", children: items.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx(HistoryRow, { receipt }, receipt.receipt_id)) })
-  ] });
-}
-function HistoryRow({ receipt }) {
-  const [expanded, setExpanded] = reactExports.useState(false);
-  const decisionLabel = receipt.policy_decision === "allow" ? "Allowed" : "Blocked";
-  const decisionColor = receipt.policy_decision === "allow" ? "text-emerald-600" : "text-brand-attention";
-  const name = receipt.artifact_name ?? receipt.artifact_id;
-  const appHref = guardAwareHref(`/apps/${receipt.harness}`);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 py-2.5 transition-colors hover:bg-slate-50/50", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-xs font-medium ${decisionColor}`, children: decisionLabel }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate font-mono text-xs text-slate-500", children: name })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "a",
-            {
-              href: appHref,
-              className: "text-brand-blue hover:text-brand-dark transition-colors",
-              children: harnessDisplayName(receipt.harness)
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "·" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: formatRelativeTime(receipt.timestamp) })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
         "button",
         {
           onClick: () => setActiveTab(t.key),
@@ -16601,17 +16047,15 @@ function HistoryRow({ receipt }) {
     }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-[300px]", children: [
       activeTab === "story" && /* @__PURE__ */ jsxRuntimeExports.jsx(StoryTab, { receipts: filtered, selectedDay: dayFilter, onSelectDay: handleFilterDay }),
-      activeTab === "category" && /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryTab, { receipts: filtered }),
-      activeTab === "app" && /* @__PURE__ */ jsxRuntimeExports.jsx(AppTab, { receipts: filtered }),
+      activeTab === "category" && /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryTab, { receipts: filtered, onFilterCategory: (cat) => setSearch(cat) }),
+      activeTab === "app" && /* @__PURE__ */ jsxRuntimeExports.jsx(AppTab, { receipts: filtered, onFilterApp: (app) => setHarnessFilter(app) }),
       activeTab === "explore" && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ExploreTab,
         {
           receipts: props.receiptItems,
           filteredReceipts: filtered,
           filters: { search, time: timeFilter, decision: decisionFilter, harness: harnessFilter },
-          onFilterDay: handleFilterDay,
-          onFilterHarness: (harness) => setHarnessFilter(harness),
-          onFilterAction: (name) => setSearch(name)
+          onFilterDay: handleFilterDay
         }
       )
     ] })
@@ -16647,337 +16091,6 @@ function ScannerEvidenceSection(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scannerSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerSignalRow, { signal }, signal.signal_id)) })
   ] });
 }
-const QUEUE_CATEGORIES = [
-  {
-    id: "secret_access",
-    label: "Secret or credential access",
-    shortLabel: "Secrets",
-    description: "Reads or exposes local credentials, tokens, keys, or secret files."
-  },
-  {
-    id: "data_exfiltration",
-    label: "Data exfiltration path",
-    shortLabel: "Exfiltration",
-    description: "Moves local sensitive data toward a network host, upload, clipboard, or external sink."
-  },
-  {
-    id: "file_edit",
-    label: "File edit command",
-    shortLabel: "File edit",
-    description: "Changes local files in place without matching a delete or wipe pattern."
-  },
-  {
-    id: "file_read",
-    label: "Sensitive file read",
-    shortLabel: "File read",
-    description: "Requests local file contents, paths, or read-only filesystem access."
-  },
-  {
-    id: "destructive_shell",
-    label: "Destructive shell command",
-    shortLabel: "Destructive",
-    description: "Deletes, overwrites, wipes, force-cleans, or otherwise risks data loss."
-  },
-  {
-    id: "encoded_shell",
-    label: "Encoded shell execution",
-    shortLabel: "Encoded shell",
-    description: "Runs encoded, encrypted, decoded, or obfuscated shell payloads."
-  },
-  {
-    id: "network",
-    label: "Network access",
-    shortLabel: "Network",
-    description: "Contacts hosts, downloads, calls APIs, or opens network destinations."
-  },
-  {
-    id: "mcp_tool",
-    label: "MCP tool call",
-    shortLabel: "MCP",
-    description: "Invokes an MCP server or tool with sensitive arguments."
-  },
-  {
-    id: "package_script",
-    label: "Package script",
-    shortLabel: "Package",
-    description: "Runs install, postinstall, build, or package-manager scripts."
-  },
-  {
-    id: "prompt_instruction",
-    label: "Prompt instruction",
-    shortLabel: "Prompt",
-    description: "User or model prompt asks the harness to perform a sensitive action."
-  },
-  {
-    id: "config_change",
-    label: "Configuration change",
-    shortLabel: "Config",
-    description: "Modifies Guard, harness, project, or tool configuration."
-  },
-  {
-    id: "browser_action",
-    label: "Browser action",
-    shortLabel: "Browser",
-    description: "Uses browser automation, navigation, or form interaction."
-  },
-  {
-    id: "harness_start",
-    label: "Harness launch",
-    shortLabel: "Launch",
-    description: "Starts or reconnects an AI app under Guard control."
-  },
-  {
-    id: "shell_command",
-    label: "Shell command",
-    shortLabel: "Shell",
-    description: "Runs a shell command that does not fit a more specific category."
-  },
-  {
-    id: "other",
-    label: "Other review",
-    shortLabel: "Other",
-    description: "Needs review but has no more specific category signal."
-  }
-];
-const QUEUE_CATEGORY_BY_ID = new Map(QUEUE_CATEGORIES.map((category) => [category.id, category]));
-function isReadOnlyQueueGroup(group) {
-  return group.primary.policy_action !== "block" && (group.primary.action_envelope_json?.action_type === "file_read" || group.primary.artifact_type === "file_read_request");
-}
-function bulkApproveActionCount(groups) {
-  return groups.reduce((sum, g) => sum + 1 + g.duplicateCount, 0);
-}
-function bulkApprovePrimaryIds(groups) {
-  return groups.map((g) => g.primary.request_id);
-}
-function buildProgressCopy(activeIndex, total) {
-  if (total === 0) {
-    return "";
-  }
-  return `${activeIndex + 1} of ${total} decisions`;
-}
-function selectNextAfterResolution(result, currentItems) {
-  if (result.next_selectable_request_id !== null) {
-    return result.next_selectable_request_id;
-  }
-  const remaining = result.remaining_pending_summaries;
-  if (remaining.length > 0) {
-    return remaining[0].request_id;
-  }
-  const resolvedIds = new Set(result.resolved_duplicate_ids);
-  if (result.resolved_scope_ids !== void 0) {
-    for (const id of result.resolved_scope_ids) {
-      resolvedIds.add(id);
-    }
-  }
-  if (result.resolved_request !== null) {
-    resolvedIds.add(result.resolved_request.request_id);
-  }
-  if (result.item !== null) {
-    resolvedIds.add(result.item.request_id);
-  }
-  const next = currentItems.find((item) => !resolvedIds.has(item.request_id));
-  return next?.request_id ?? null;
-}
-function groupDuplicates(items) {
-  const seen2 = /* @__PURE__ */ new Set();
-  const groups = [];
-  const groupedItems = /* @__PURE__ */ new Map();
-  for (const item of items) {
-    const groupId = item.queue_group_id ?? null;
-    if (groupId === null) {
-      continue;
-    }
-    const peers = groupedItems.get(groupId) ?? [];
-    peers.push(item);
-    groupedItems.set(groupId, peers);
-  }
-  for (const item of items) {
-    if (seen2.has(item.request_id)) {
-      continue;
-    }
-    seen2.add(item.request_id);
-    const groupId = item.queue_group_id ?? null;
-    if (groupId !== null) {
-      const peers = (groupedItems.get(groupId) ?? []).filter(
-        (peer) => peer.request_id !== item.request_id && !seen2.has(peer.request_id)
-      );
-      for (const peer of peers) {
-        seen2.add(peer.request_id);
-      }
-      groups.push({
-        primary: item,
-        duplicateCount: peers.length,
-        duplicateIds: peers.map((p) => p.request_id)
-      });
-    } else {
-      groups.push({ primary: item, duplicateCount: 0, duplicateIds: [] });
-    }
-  }
-  return groups;
-}
-function queueTimestamp(item) {
-  return new Date(item.last_seen_at ?? item.created_at).getTime();
-}
-function queueCategoryById(id) {
-  return QUEUE_CATEGORY_BY_ID.get(id) ?? QUEUE_CATEGORIES[QUEUE_CATEGORIES.length - 1];
-}
-function resolveQueueCategory(item) {
-  return queueCategoryById(resolveQueueCategoryId(item));
-}
-function queueCategoriesForItems(items) {
-  const seen2 = /* @__PURE__ */ new Set();
-  for (const item of items) {
-    seen2.add(resolveQueueCategory(item).id);
-  }
-  return QUEUE_CATEGORIES.filter((category) => seen2.has(category.id));
-}
-function resolveQueueCategoryId(item) {
-  const envelope = item.action_envelope_json;
-  const decisionCategories = item.decision_v2_json?.signals.map((signal) => signal.category) ?? [];
-  const text = queueCategoryText(item);
-  if (decisionCategories.includes("network") || textIncludesAny(text, ["network host", "outbound", "webhook", "https://", "http://"]) || /\bcurl\b/.test(text)) {
-    if (textIncludesAny(text, ["secret", "credential", "token", "api key", "upload", "exfiltrat"])) {
-      return "data_exfiltration";
-    }
-    return "network";
-  }
-  if (decisionCategories.includes("secret") || textIncludesAny(text, ["credential-looking", "secret", ".env", "token", "api key", "password", "private key"])) {
-    return "secret_access";
-  }
-  if (textIncludesAny(text, ["encoded or encrypted shell command", "base64", "openssl enc", "xxd -r", "decode-and-exec"])) {
-    return "encoded_shell";
-  }
-  if (envelope?.action_type === "file_read" || item.artifact_type === "file_read_request") {
-    return "file_read";
-  }
-  if (envelope?.action_type === "mcp_tool") {
-    return "mcp_tool";
-  }
-  if (envelope?.action_type === "package_script") {
-    return "package_script";
-  }
-  if (envelope?.action_type === "prompt") {
-    return "prompt_instruction";
-  }
-  if (envelope?.action_type === "config_change") {
-    return "config_change";
-  }
-  if (envelope?.action_type === "browser_action") {
-    return "browser_action";
-  }
-  if (envelope?.action_type === "harness_start") {
-    return "harness_start";
-  }
-  if (envelope?.action_type === "file_write" || commandLooksLikeFileEdit(envelope?.command ?? item.launch_target ?? "")) {
-    return "file_edit";
-  }
-  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete", "wipe", "force-clean", "git clean -fd", "truncate"])) {
-    return "destructive_shell";
-  }
-  if (envelope?.action_type === "shell_command" || item.artifact_type === "command" || text.includes("shell command")) {
-    return "shell_command";
-  }
-  return "other";
-}
-function queueCategoryText(item) {
-  const envelope = item.action_envelope_json;
-  return [
-    item.artifact_name,
-    item.artifact_type,
-    item.risk_headline ?? "",
-    item.risk_summary ?? "",
-    item.trigger_summary ?? "",
-    item.launch_summary ?? "",
-    item.why_now ?? "",
-    item.launch_target ?? "",
-    envelope?.action_type ?? "",
-    envelope?.command ?? "",
-    envelope?.tool_name ?? "",
-    envelope?.prompt_excerpt ?? "",
-    envelope?.mcp_server ?? "",
-    envelope?.mcp_tool ?? "",
-    envelope?.package_manager ?? "",
-    envelope?.package_name ?? "",
-    envelope?.script_name ?? "",
-    ...item.risk_signals ?? [],
-    ...envelope?.target_paths ?? [],
-    ...envelope?.network_hosts ?? [],
-    ...item.decision_v2_json?.signals.map((signal) => `${signal.category} ${signal.title} ${signal.plain_reason}`) ?? []
-  ].join(" ").toLowerCase();
-}
-function textIncludesAny(text, needles) {
-  return needles.some((needle) => text.includes(needle));
-}
-function commandLooksLikeFileEdit(command) {
-  const normalized = command.trim().toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-  return /\bperl\b[\s\S]*\s-[\w-]*i\b/.test(normalized) || /\bsed\b[\s\S]*\s-[\w-]*i\b/.test(normalized) || /\bpython(?:3)?\b[\s\S]*(?:write_text|open\([^)]*,\s*['"]w|path\.write)/.test(normalized) || /\btee\s+-a?\b/.test(normalized) || /\bapply_patch\b/.test(normalized);
-}
-function sortQueue(items, direction) {
-  const categoryLabels = direction === "category" ? new Map(items.map((item) => [item.request_id, resolveQueueCategory(item).label])) : null;
-  return [...items].sort((a, b) => {
-    if (categoryLabels !== null) {
-      const categoryDelta = (categoryLabels.get(a.request_id) ?? "").localeCompare(
-        categoryLabels.get(b.request_id) ?? ""
-      );
-      if (categoryDelta !== 0) {
-        return categoryDelta;
-      }
-    }
-    const dateA = queueTimestamp(a);
-    const dateB = queueTimestamp(b);
-    const dateDelta = direction === "oldest" ? dateA - dateB : dateB - dateA;
-    if (dateDelta !== 0) {
-      return dateDelta;
-    }
-    return direction === "oldest" ? a.request_id.localeCompare(b.request_id) : b.request_id.localeCompare(a.request_id);
-  });
-}
-function filterQueueByCategory(items, categoryId) {
-  if (categoryId === "all") {
-    return items;
-  }
-  return items.filter((item) => resolveQueueCategory(item).id === categoryId);
-}
-function searchQueue(items, term) {
-  const normalized = term.trim().toLowerCase();
-  if (normalized.length === 0) {
-    return items;
-  }
-  return items.filter((item) => {
-    const envelope = item.action_envelope_json;
-    const category = resolveQueueCategory(item);
-    const parts = [
-      item.artifact_name,
-      item.artifact_id,
-      item.artifact_type,
-      item.harness,
-      item.policy_action,
-      item.risk_headline ?? "",
-      item.risk_summary ?? "",
-      item.trigger_summary ?? "",
-      item.launch_summary ?? "",
-      item.why_now ?? "",
-      envelope?.command ?? "",
-      envelope?.prompt_excerpt ?? "",
-      envelope?.mcp_server ?? "",
-      envelope?.mcp_tool ?? "",
-      envelope?.package_name ?? "",
-      category.label,
-      category.shortLabel,
-      ...envelope?.network_hosts ?? [],
-      ...envelope?.target_paths ?? []
-    ];
-    return parts.join(" ").toLowerCase().includes(normalized);
-  });
-}
-function buildNextUpChipText(item) {
-  const envelope = item.action_envelope_json;
-  const preview = envelope?.command?.slice(0, 40) ?? envelope?.mcp_tool ?? envelope?.prompt_excerpt?.slice(0, 40) ?? item.artifact_type;
-  return `${item.harness} — ${preview}`;
-}
 const scopeChoices = [
   {
     value: "artifact",
@@ -17008,73 +16121,38 @@ const scopeChoices = [
 function ReviewWorkspace(props) {
   const { requests, activeRequestId, detail } = props;
   const queueRef = reactExports.useRef(null);
-  const [searchTerm, setSearchTerm] = reactExports.useState("");
-  const [categoryFilter, setCategoryFilter] = reactExports.useState("all");
-  const [sortDirection, setSortDirection] = reactExports.useState("newest");
-  const filteredRequests = reactExports.useMemo(() => {
-    const byCategory = filterQueueByCategory(requests, categoryFilter);
-    const searched = searchQueue(byCategory, searchTerm);
-    return sortQueue(searched, sortDirection);
-  }, [categoryFilter, requests, searchTerm, sortDirection]);
-  const categoryOptions = reactExports.useMemo(() => queueCategoriesForItems(requests), [requests]);
-  const activeRequest = activeRequestId !== null ? requests.find((r) => r.request_id === activeRequestId) ?? null : null;
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
-      if (filteredRequests.length === 0) return;
-      const activeIdx = filteredRequests.findIndex((r) => r.request_id === activeRequestId);
+      if (requests.length === 0) return;
+      const activeIdx = requests.findIndex((r) => r.request_id === activeRequestId);
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        const nextIdx = Math.min(activeIdx + 1, filteredRequests.length - 1);
-        if (nextIdx !== activeIdx) props.onOpenRequest(filteredRequests[nextIdx].request_id);
+        const nextIdx = Math.min(activeIdx + 1, requests.length - 1);
+        if (nextIdx !== activeIdx) props.onOpenRequest(requests[nextIdx].request_id);
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
         const prevIdx = Math.max(activeIdx - 1, 0);
-        if (prevIdx !== activeIdx) props.onOpenRequest(filteredRequests[prevIdx].request_id);
+        if (prevIdx !== activeIdx) props.onOpenRequest(requests[prevIdx].request_id);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [filteredRequests, activeRequestId, props.onOpenRequest]);
-  reactExports.useEffect(() => {
-    if (filteredRequests.length === 0) {
-      return;
-    }
-    if (activeRequestId === null || !filteredRequests.some((item) => item.request_id === activeRequestId)) {
-      props.onOpenRequest(filteredRequests[0].request_id);
-    }
-  }, [activeRequestId, filteredRequests, props.onOpenRequest]);
+  }, [requests, activeRequestId, props.onOpenRequest]);
   if (requests.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewEmptyState, { runtime: props.runtime, resolutionMessage: props.resolutionMessage });
   }
-  const activeItem = activeRequest ?? filteredRequests[0] ?? requests[0];
-  const progressIndex = filteredRequests.findIndex((r) => r.request_id === activeItem.request_id);
-  const progress = filteredRequests.length > 0 ? `${Math.max(0, progressIndex) + 1} of ${filteredRequests.length}` : `0 of ${requests.length}`;
+  const activeItem = activeRequestId ? requests.find((r) => r.request_id === activeRequestId) ?? requests[0] : requests[0];
+  const progressIndex = requests.findIndex((r) => r.request_id === activeItem.request_id);
+  const progress = `${Math.max(0, progressIndex) + 1} of ${requests.length}`;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ReviewHeader,
-      {
-        count: requests.length,
-        filteredCount: filteredRequests.length,
-        progress,
-        activeHarness: activeItem.harness,
-        activeCategory: resolveQueueCategory(activeItem)
-      }
-    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewHeader, { count: requests.length, progress, activeHarness: activeItem.harness }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[320px_1fr]", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         ReviewQueueList,
         {
-          requests: filteredRequests,
-          totalCount: requests.length,
+          requests,
           activeRequestId: activeItem.request_id,
-          categoryOptions,
-          categoryFilter,
-          searchTerm,
-          sortDirection,
-          onCategoryFilterChange: setCategoryFilter,
-          onSearchTermChange: setSearchTerm,
-          onSortDirectionChange: setSortDirection,
           onOpenRequest: props.onOpenRequest,
           ref: queueRef
         }
@@ -17090,13 +16168,7 @@ function ReviewWorkspace(props) {
     ] })
   ] });
 }
-function ReviewHeader({
-  count,
-  filteredCount,
-  progress,
-  activeHarness,
-  activeCategory
-}) {
+function ReviewHeader({ count, progress, activeHarness }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold tracking-[-0.02em] text-brand-dark", children: "Review" }),
@@ -17108,125 +16180,41 @@ function ReviewHeader({
         count,
         " waiting"
       ] }),
-      filteredCount !== count ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "slate", children: [
-        filteredCount,
-        " shown"
-      ] }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: harnessDisplayName(activeHarness) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: activeCategory.shortLabel })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: harnessDisplayName(activeHarness) })
     ] })
   ] });
 }
-const ReviewQueueList = reactExports.forwardRef(({
-  requests,
-  totalCount,
-  activeRequestId,
-  categoryOptions,
-  categoryFilter,
-  searchTerm,
-  sortDirection,
-  onCategoryFilterChange,
-  onSearchTermChange,
-  onSortDirectionChange,
-  onOpenRequest
-}, ref) => {
-  const handleSearchChange = reactExports.useCallback((event) => {
-    onSearchTermChange(event.target.value);
-  }, [onSearchTermChange]);
-  const handleCategoryChange = reactExports.useCallback((event) => {
-    onCategoryFilterChange(event.target.value);
-  }, [onCategoryFilterChange]);
-  const handleSortChange = reactExports.useCallback((event) => {
-    onSortDirectionChange(event.target.value);
-  }, [onSortDirectionChange]);
+const ReviewQueueList = reactExports.forwardRef(({ requests, activeRequestId, onOpenRequest }, ref) => {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-3", ref, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Queue" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] font-semibold text-muted-foreground", children: [
-        requests.length,
-        "/",
-        totalCount
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 rounded-xl border border-slate-100 bg-white p-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search review queue" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "input",
-          {
-            type: "search",
-            value: searchTerm,
-            onChange: handleSearchChange,
-            placeholder: "Search command, category, host...",
-            className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          }
-        )
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Review category" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "select",
-          {
-            value: categoryFilter,
-            onChange: handleCategoryChange,
-            className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All categories" }),
-              categoryOptions.map((category) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: category.id, children: category.label }, category.id))
-            ]
-          }
-        )
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Sort review queue" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "select",
-          {
-            value: sortDirection,
-            onChange: handleSortChange,
-            className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "newest", children: "Newest first" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "oldest", children: "Oldest first" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "category", children: "Category" })
-            ]
-          }
-        )
-      ] })
-    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Queue" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
         role: "listbox",
         "aria-label": "Review queue",
         className: "max-h-[70vh] space-y-2 overflow-y-auto rounded-lg border border-slate-100 bg-white p-1.5",
-        children: requests.length > 0 ? requests.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        children: requests.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           QueueItemRow,
           {
             item,
             active: item.request_id === activeRequestId,
             index,
-            onOpenRequest
+            onClick: () => onOpenRequest(item.request_id)
           },
           item.request_id
-        )) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-3 py-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "No matching actions", body: "Try a different category, search, or sort mode.", tone: "teach" }) })
+        ))
       }
     )
   ] });
 });
 ReviewQueueList.displayName = "ReviewQueueList";
-function QueueItemRow({ item, active, index, onOpenRequest }) {
+function QueueItemRow({ item, active, index, onClick }) {
+  const title = item.artifact_name ?? item.artifact_id;
   const isBlocked = item.policy_action === "block";
-  const category = resolveQueueCategory(item);
-  const CategoryIcon = iconForQueueCategory(category.id);
-  const preview = queueItemPreview(item);
-  const handleClick = reactExports.useCallback(() => {
-    onOpenRequest(item.request_id);
-  }, [item.request_id, onOpenRequest]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "button",
     {
-      onClick: handleClick,
+      onClick,
       role: "option",
       "aria-selected": active,
       "aria-posinset": index + 1,
@@ -17238,64 +16226,13 @@ function QueueItemRow({ item, active, index, onOpenRequest }) {
       className: `w-full rounded-lg py-2.5 text-left transition-all ${active ? "border-brand-blue bg-brand-blue/[0.06]" : "border-transparent bg-white hover:bg-slate-50"}`,
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "span",
-              {
-                className: `inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"}`,
-                children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryIcon, { className: "h-4 w-4", "aria-hidden": "true" })
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: category.label })
-          ] }),
-          isBlocked ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-3.5 w-3.5 shrink-0 text-brand-attention", "aria-hidden": "true" }) : null
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: title }),
+          isBlocked ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-3.5 w-3.5 shrink-0 text-brand-attention", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBolt, { className: "h-3.5 w-3.5 shrink-0 text-brand-blue", "aria-hidden": "true" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 truncate text-[11px] text-muted-foreground", children: [
-          harnessDisplayName(item.harness),
-          " · ",
-          preview
-        ] })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-[11px] text-muted-foreground", children: harnessDisplayName(item.harness) })
       ]
     }
   );
-}
-function iconForQueueCategory(categoryId) {
-  switch (categoryId) {
-    case "secret_access":
-      return HiMiniKey;
-    case "data_exfiltration":
-      return HiMiniArrowTopRightOnSquare;
-    case "file_edit":
-      return HiMiniPencilSquare;
-    case "file_read":
-      return HiMiniDocumentMagnifyingGlass;
-    case "destructive_shell":
-      return HiMiniNoSymbol;
-    case "encoded_shell":
-      return HiMiniCodeBracket;
-    case "network":
-      return HiMiniGlobeAlt;
-    case "mcp_tool":
-      return HiMiniServerStack;
-    case "package_script":
-      return HiMiniCube;
-    case "prompt_instruction":
-      return HiMiniInformationCircle;
-    case "config_change":
-      return HiMiniCog6Tooth;
-    case "browser_action":
-      return HiMiniArrowTopRightOnSquare;
-    case "harness_start":
-      return HiMiniShieldCheck;
-    case "shell_command":
-      return HiMiniCommandLine;
-    case "other":
-      return HiMiniDocumentPlus;
-  }
-}
-function queueItemPreview(item) {
-  const envelope = item.action_envelope_json;
-  return envelope?.command ?? envelope?.mcp_tool ?? envelope?.prompt_excerpt ?? envelope?.package_name ?? displayArtifactName(item);
 }
 function ReviewDecisionCard(props) {
   const detail = props.detail;
@@ -17882,7 +16819,6 @@ function ConfirmModal(props) {
     }
   );
 }
-<<<<<<< HEAD
 function isReadOnlyQueueGroup(group) {
   return group.primary.policy_action !== "block" && (group.primary.action_envelope_json?.action_type === "file_read" || group.primary.artifact_type === "file_read_request");
 }
@@ -18000,8 +16936,6 @@ function buildNextUpChipText(item) {
   const preview = envelope?.command?.slice(0, 40) ?? envelope?.mcp_tool ?? envelope?.prompt_excerpt?.slice(0, 40) ?? item.artifact_type;
   return `${item.harness} — ${preview}`;
 }
-=======
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 const scopeOptions = [
   {
     value: "artifact",
@@ -19641,7 +18575,6 @@ clientExports.createRoot(container).render(
 export {
   ActionButton as A,
   Badge as B,
-<<<<<<< HEAD
   exportDiagnostics as C,
   repairApprovalCenter as D,
   EmptyState as E,
@@ -19661,25 +18594,6 @@ export {
   SectionLabel as S,
   Tag as T,
   HiMiniQuestionMarkCircle as U,
-=======
-  HiMiniCog6Tooth as C,
-  fetchApprovalPage as D,
-  EmptyState as E,
-  fetchPolicy as F,
-  GuardHero as G,
-  HiMiniCheckCircle as H,
-  HiMiniArrowLeft as I,
-  HiMiniHome as J,
-  HiMiniBolt as K,
-  HiMiniAdjustmentsHorizontal as L,
-  HiMiniCloud as M,
-  HiMiniChartBar as N,
-  HiMiniCommandLine as O,
-  ProofStrip as P,
-  HiMiniQuestionMarkCircle as Q,
-  SectionLabel as S,
-  Tag as T,
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
   HiMiniFire as a,
   HiMiniCalendarDays as b,
   HiMiniShieldCheck as c,
@@ -19693,7 +18607,6 @@ export {
   HiMiniChevronUp as k,
   HiMiniChevronDown as l,
   HiMiniExclamationTriangle as m,
-<<<<<<< HEAD
   HiMiniBolt as n,
   HiMiniMinusCircle as o,
   HiMiniExclamationCircle as p,
@@ -19707,19 +18620,4 @@ export {
   updateSettings as x,
   clearPolicy as y,
   clearEvidence as z
-=======
-  HiMiniMinusCircle as n,
-  HiMiniExclamationCircle as o,
-  HiMiniWrenchScrewdriver as p,
-  HiMiniXCircle as q,
-  reactExports as r,
-  fetchSettings as s,
-  fetchRuntimeSnapshot as t,
-  updateSettings as u,
-  clearPolicy as v,
-  clearEvidence as w,
-  exportDiagnostics as x,
-  repairApprovalCenter as y,
-  HiMiniLockClosed as z
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 };
