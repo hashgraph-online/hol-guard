@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { r as reactExports, J as fetchApprovalPage, K as fetchPolicy, h as harnessDisplayName, j as jsxRuntimeExports, L as HiMiniArrowLeft, i as HiMiniChevronRight, G as GuardHero, A as ActionButton, P as ProofStrip, M as HiMiniHome, n as HiMiniBolt, N as HiMiniAdjustmentsHorizontal, S as SectionLabel, d as formatRelativeTime, m as HiMiniExclamationTriangle, T as Tag, B as Badge, E as EmptyState, O as HiMiniCloud, Q as HiMiniChartBar, l as HiMiniChevronDown } from "../guard-dashboard.js";
-=======
-import { r as reactExports, D as fetchApprovalPage, F as fetchPolicy, h as harnessDisplayName, j as jsxRuntimeExports, I as HiMiniArrowLeft, i as HiMiniChevronRight, G as GuardHero, A as ActionButton, P as ProofStrip, J as HiMiniHome, K as HiMiniBolt, L as HiMiniAdjustmentsHorizontal, S as SectionLabel, d as formatRelativeTime, m as HiMiniExclamationTriangle, T as Tag, B as Badge, E as EmptyState, M as HiMiniCloud, N as HiMiniChartBar, l as HiMiniChevronDown } from "../guard-dashboard.js";
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 import { u as useFocusTrap } from "./use-focus-trap.js";
 const tabOrder = ["overview", "activity", "settings"];
 function readTabFromUrl() {
