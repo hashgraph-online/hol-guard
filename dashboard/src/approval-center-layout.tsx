@@ -156,12 +156,30 @@ const broadScopeValues = new Set<DecisionScope>(["publisher", "harness", "global
 const queuePageSize = 8;
 export function ApprovalCenterLayout(props: LayoutProps) {
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("guard-sidebar-collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
   const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
   const activeHarness =
     props.detail.kind === "ready" ? props.detail.item.harness : queuedItems[0]?.harness ?? null;
 
   const handleOpenMobileQueue = useCallback(() => setMobileQueueOpen(true), []);
   const handleCloseMobileQueue = useCallback(() => setMobileQueueOpen(false), []);
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("guard-sidebar-collapsed", String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   return (
     <div className="min-h-screen bg-white text-brand-dark">
@@ -172,7 +190,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         onNavigate={props.onNavigate}
         onOpenMobileQueue={handleOpenMobileQueue}
       />
-      <ShellSidebar queuedCount={queuedItems.length} activeHarness={activeHarness} view={props.view} />
+      <ShellSidebar queuedCount={queuedItems.length} activeHarness={activeHarness} view={props.view} collapsed={sidebarCollapsed} onToggleCollapse={handleToggleSidebar} />
       {mobileQueueOpen && props.view === "inbox" && props.requests.kind === "ready" && (
         <MobileQueueDrawer
           requests={props.requests.items}
@@ -182,7 +200,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
           onBulkApprove={props.onBulkApprove}
         />
       )}
-      <div className="flex flex-col lg:pl-64">
+      <div className={`flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
         <main className="flex-1 p-6 lg:p-10">
           <div className="mx-auto max-w-6xl">
             {props.view === "home" ? (
