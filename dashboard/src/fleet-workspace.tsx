@@ -67,10 +67,10 @@ function StatusIcon({ status }: { status: AppStatus }) {
 }
 
 function StatusBadge({ status }: { status: AppStatus }) {
-  if (status === "protected") return <span className="text-xs font-medium text-emerald-600">Protected</span>;
-  if (status === "found_unprotected") return <span className="text-xs font-medium text-brand-attention">Found, not installed</span>;
-  if (status === "needs_repair") return <span className="text-xs font-medium text-brand-purple">Repair needed</span>;
-  return <span className="text-xs text-slate-400">Not found</span>;
+  if (status === "protected") return <span className="text-xs font-medium text-emerald-600">Active</span>;
+  if (status === "found_unprotected") return <span className="text-xs font-medium text-brand-attention">Needs setup</span>;
+  if (status === "needs_repair") return <span className="text-xs font-medium text-brand-attention">Needs setup</span>;
+  return <span className="text-xs text-slate-400">Inactive</span>;
 }
 
 export function FleetWorkspace(props: FleetWorkspaceProps) {

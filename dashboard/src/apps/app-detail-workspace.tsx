@@ -29,6 +29,7 @@ import {
 } from "../guard-api";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { useFocusTrap } from "../use-focus-trap";
+import { detectCategory, CATEGORIES } from "../evidence/categories";
 import type {
   GuardApprovalRequest,
   GuardInventoryItem,
@@ -523,6 +524,7 @@ function AppActivityTab(props: {
 }) {
   const [filter, setFilter] = useState<"all" | "pending" | "allowed" | "blocked">("all");
   const [timeFilter, setTimeFilter] = useState<"all" | "today" | "week">("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -557,6 +559,9 @@ function AppActivityTab(props: {
       start.setDate(start.getDate() - 7);
       items = items.filter((r) => new Date(r.timestamp) >= start);
     }
+    if (categoryFilter) {
+      items = items.filter((r) => detectCategory(r) === categoryFilter);
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       items = items.filter((r) =>
@@ -564,7 +569,7 @@ function AppActivityTab(props: {
       );
     }
     return items;
-  }, [props.harnessReceipts, filter, timeFilter, search]);
+  }, [props.harnessReceipts, filter, timeFilter, search, categoryFilter]);
 
   const groups = useMemo(() => {
     const today: GuardReceipt[] = [];
@@ -648,6 +653,20 @@ function AppActivityTab(props: {
               }`}
             >
               {c.label}
+            </button>
+          ))}
+          <span className="mx-1 h-4 w-px bg-slate-200" />
+          {CATEGORIES.slice(0, 5).map((cat) => (
+            <button
+              key={cat.key}
+              onClick={() => { setCategoryFilter(categoryFilter === cat.key ? "" : cat.key); clearSelection(); }}
+              className={`rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider transition-all ${
+                categoryFilter === cat.key
+                  ? `${cat.color} bg-slate-50 shadow-sm`
+                  : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              {cat.label}
             </button>
           ))}
           <div className="ml-auto flex gap-2">
