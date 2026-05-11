@@ -6,6 +6,8 @@ import {
   HiMiniCheckCircle,
   HiMiniInformationCircle,
   HiMiniExclamationTriangle,
+  HiMiniChevronDown,
+  HiMiniChevronUp,
 } from "react-icons/hi2";
 
 import {
@@ -19,6 +21,12 @@ import {
 import { clearEvidence, exportDiagnostics, fetchRuntimeSnapshot, fetchSettings, updateSettings, clearPolicy, repairApprovalCenter } from "./guard-api";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
 import type { GuardRuntimeSnapshot, GuardSettings, GuardSettingsPayload } from "./guard-types";
+
+export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
+
+export function buildClearPolicyPayload(all: boolean): { harness?: string; all?: boolean } {
+  return { all };
+}
 
 type SettingsState =
   | { kind: "loading" }
@@ -42,7 +50,7 @@ const surfacePolicyOptions = [
 
 const securityLevels = [
   {
-    value: "balanced",
+    value: "balanced" as const,
     label: "Balanced",
     description: "Ask before secret access, hidden execution, exfiltration, and destructive actions.",
     icon: HiMiniShieldCheck,
@@ -50,7 +58,7 @@ const securityLevels = [
     tone: "blue" as const,
   },
   {
-    value: "strict",
+    value: "strict" as const,
     label: "Strict",
     description: "Ask more often, including new network destinations.",
     icon: HiMiniLockClosed,
@@ -58,46 +66,22 @@ const securityLevels = [
     tone: "purple" as const,
   },
   {
-    value: "custom",
+    value: "custom" as const,
     label: "Custom",
     description: "Use the exact choices below for this machine and connected apps.",
     icon: HiMiniCog6Tooth,
     protects: [],
     tone: "slate" as const,
   }
-] as const;
+];
 
 const riskControls = [
-  {
-    key: "local_secret_read",
-    label: "Local secrets",
-    description: "Files such as .env, .npmrc, .netrc, SSH keys, and cloud credentials."
-  },
-  {
-    key: "credential_exfiltration",
-    label: "Credential sharing",
-    description: "Commands or scripts that appear to send keys, tokens, or credentials away."
-  },
-  {
-    key: "data_flow_exfiltration",
-    label: "Secret data flow",
-    description: "Detected source-to-sink route where a local secret is read and its value reaches a network or external sink."
-  },
-  {
-    key: "destructive_shell",
-    label: "Destructive commands",
-    description: "Shell actions that delete, overwrite, or rewrite local files."
-  },
-  {
-    key: "encoded_execution",
-    label: "Hidden scripts",
-    description: "Encoded, encrypted, or decoded-and-run command payloads."
-  },
-  {
-    key: "network_egress",
-    label: "New network destinations",
-    description: "Outbound connections Guard has not seen in this context."
-  }
+  { key: "local_secret_read", label: "Local secrets", description: "Files such as .env, .npmrc, .netrc, SSH keys, and cloud credentials." },
+  { key: "credential_exfiltration", label: "Credential sharing", description: "Commands or scripts that appear to send keys, tokens, or credentials away." },
+  { key: "data_flow_exfiltration", label: "Secret data flow", description: "Detected source-to-sink route where a local secret is read and its value reaches a network or external sink." },
+  { key: "destructive_shell", label: "Destructive commands", description: "Shell actions that delete, overwrite, or rewrite local files." },
+  { key: "encoded_execution", label: "Hidden scripts", description: "Encoded, encrypted, or decoded-and-run command payloads." },
+  { key: "network_egress", label: "New network destinations", description: "Outbound connections Guard has not seen in this context." }
 ] as const;
 
 type RiskKey = (typeof riskControls)[number]["key"];
@@ -130,10 +114,7 @@ const riskProfileActions: Record<"balanced" | "strict" | "custom", Record<RiskKe
 };
 
 function normalizeSettingsPayload(payload: GuardSettingsPayload): GuardSettingsPayload {
-  return {
-    ...payload,
-    settings: normalizeGuardSettings(payload.settings)
-  };
+  return { ...payload, settings: normalizeGuardSettings(payload.settings) };
 }
 
 function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
@@ -151,27 +132,13 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
   };
 }
 
-export const resolveSecurityLevelDescription = resolveProtectionLevelCopy;
-
-export function buildClearPolicyPayload(all: boolean): { harness?: string; all?: boolean } {
-  return { all };
-}
-
 function buildConsequenceSummary(settings: GuardSettings): string {
   const level = settings.security_level;
   const mode = settings.mode;
-  if (mode === "observe") {
-    return "Guard is watching and recording what your AI apps do, but it will not pause any actions. Switch to Prompt or Enforce when you want Guard to actively protect you.";
-  }
-  if (level === "balanced") {
-    return "Guard will ask before secret access, hidden execution, and destructive commands. New network destinations get a warning. This is the recommended setting for most users.";
-  }
-  if (level === "strict") {
-    return "Guard will ask before almost every risky action, including new network destinations. Use this when working with sensitive data or untrusted AI tools.";
-  }
-  if (level === "custom") {
-    return "You have customized individual risk controls. Review the choices below to make sure they match how you want Guard to behave.";
-  }
+  if (mode === "observe") return "Guard is watching and recording what your AI apps do, but it will not pause any actions. Switch to Prompt or Enforce when you want Guard to actively protect you.";
+  if (level === "balanced") return "Guard will ask before secret access, hidden execution, and destructive commands. New network destinations get a warning. This is the recommended setting for most users.";
+  if (level === "strict") return "Guard will ask before almost every risky action, including new network destinations. Use this when working with sensitive data or untrusted AI tools.";
+  if (level === "custom") return "You have customized individual risk controls. Review the choices below to make sure they match how you want Guard to behave.";
   return "";
 }
 
@@ -193,53 +160,39 @@ export function SettingsWorkspace() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [perfSnapshot, setPerfSnapshot] = useState<GuardRuntimeSnapshot | null>(null);
   const [pendingMode, setPendingMode] = useState<GuardSettings["mode"] | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ "protection": true, "risk": false, "diagnostics": false });
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedSettingsRef = useRef<GuardSettings | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-      fetchSettings()
-        .then((payload) => {
-          if (!cancelled) {
-            const normalizedPayload = normalizeSettingsPayload(payload);
-            setState({ kind: "ready", payload: normalizedPayload });
-            setDraft(normalizedPayload.settings);
-            savedSettingsRef.current = normalizedPayload.settings;
-          }
-        })
+    fetchSettings()
+      .then((payload) => {
+        if (!cancelled) {
+          const normalizedPayload = normalizeSettingsPayload(payload);
+          setState({ kind: "ready", payload: normalizedPayload });
+          setDraft(normalizedPayload.settings);
+          savedSettingsRef.current = normalizedPayload.settings;
+        }
+      })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setState({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Unable to load Guard settings."
-          });
+          setState({ kind: "error", message: error instanceof Error ? error.message : "Unable to load Guard settings." });
         }
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     fetchRuntimeSnapshot()
-      .then((snapshot) => {
-        if (!cancelled) setPerfSnapshot(snapshot);
-      })
-      .catch((error: unknown) => {
-        console.error("Failed to fetch runtime snapshot:", error);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .then((snapshot) => { if (!cancelled) setPerfSnapshot(snapshot); })
+      .catch((error: unknown) => { console.error("Failed to fetch runtime snapshot:", error); });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
-    return () => {
-      if (saveSuccessTimerRef.current !== null) {
-        clearTimeout(saveSuccessTimerRef.current);
-      }
-    };
+    return () => { if (saveSuccessTimerRef.current !== null) clearTimeout(saveSuccessTimerRef.current); };
   }, []);
 
   useEffect(() => {
@@ -253,6 +206,10 @@ export function SettingsWorkspace() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [draft]);
 
+  const toggleSection = useCallback((key: string) => {
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
   const handleStringChange = useCallback(
     (key: keyof GuardSettings) => (event: ChangeEvent<HTMLSelectElement>) => {
       setDraft((value) => value === null ? value : { ...value, [key]: event.target.value });
@@ -264,16 +221,8 @@ export function SettingsWorkspace() {
   const handleSecurityLevelChange = useCallback((securityLevel: GuardSettings["security_level"]) => {
     setDraft((value) => {
       if (value === null) return value;
-      if (securityLevel === "custom") {
-        return { ...value, security_level: securityLevel };
-      }
-      return {
-        ...value,
-        security_level: securityLevel,
-        risk_actions: riskProfileActions[securityLevel],
-        risk_action_overrides: {},
-        harness_risk_actions: {}
-      };
+      if (securityLevel === "custom") return { ...value, security_level: securityLevel };
+      return { ...value, security_level: securityLevel, risk_actions: riskProfileActions[securityLevel], risk_action_overrides: {}, harness_risk_actions: {} };
     });
     setSaveError(null);
   }, []);
@@ -282,18 +231,7 @@ export function SettingsWorkspace() {
     (riskKey: string) => (event: ChangeEvent<HTMLSelectElement>) => {
       setDraft((value) => {
         if (value === null) return value;
-        return {
-          ...value,
-          security_level: "custom",
-          risk_actions: {
-            ...value.risk_actions,
-            [riskKey]: event.target.value
-          },
-          risk_action_overrides: {
-            ...value.risk_action_overrides,
-            [riskKey]: event.target.value
-          }
-        };
+        return { ...value, security_level: "custom", risk_actions: { ...value.risk_actions, [riskKey]: event.target.value }, risk_action_overrides: { ...value.risk_action_overrides, [riskKey]: event.target.value } };
       });
       setSaveError(null);
     },
@@ -303,17 +241,7 @@ export function SettingsWorkspace() {
   const handleCodexSecretReadChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     setDraft((value) => {
       if (value === null) return value;
-      return {
-        ...value,
-        security_level: "custom",
-        harness_risk_actions: {
-          ...value.harness_risk_actions,
-          codex: {
-            ...(value.harness_risk_actions.codex ?? {}),
-            local_secret_read: event.target.value
-          }
-        }
-      };
+      return { ...value, security_level: "custom", harness_risk_actions: { ...value.harness_risk_actions, codex: { ...(value.harness_risk_actions.codex ?? {}), local_secret_read: event.target.value } } };
     });
     setSaveError(null);
   }, []);
@@ -326,10 +254,7 @@ export function SettingsWorkspace() {
 
   const handleModeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const nextMode = event.target.value as GuardSettings["mode"];
-    if (nextMode === "observe") {
-      setPendingMode(nextMode);
-      return;
-    }
+    if (nextMode === "observe") { setPendingMode(nextMode); return; }
     setDraft((value) => value === null ? value : { ...value, mode: nextMode });
     setSaveError(null);
   }, []);
@@ -341,9 +266,7 @@ export function SettingsWorkspace() {
     setSaveError(null);
   }, [pendingMode]);
 
-  const cancelModeChange = useCallback(() => {
-    setPendingMode(null);
-  }, []);
+  const cancelModeChange = useCallback(() => { setPendingMode(null); }, []);
 
   const handleBooleanChange = useCallback(
     (key: keyof GuardSettings) => (event: ChangeEvent<HTMLInputElement>) => {
@@ -359,21 +282,14 @@ export function SettingsWorkspace() {
     setSaveError(null);
     setSaveSuccess(false);
     try {
-      const payload = await updateSettings({
-        ...draft,
-        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides
-      });
+      const payload = await updateSettings({ ...draft, risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides });
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
       setDraft(normalizedPayload.settings);
       savedSettingsRef.current = normalizedPayload.settings;
       setSaveSuccess(true);
-      if (saveSuccessTimerRef.current !== null) {
-        clearTimeout(saveSuccessTimerRef.current);
-      }
-      saveSuccessTimerRef.current = setTimeout(() => {
-        setSaveSuccess(false);
-      }, 2000);
+      if (saveSuccessTimerRef.current !== null) clearTimeout(saveSuccessTimerRef.current);
+      saveSuccessTimerRef.current = setTimeout(() => setSaveSuccess(false), 2000);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Unable to save settings.");
     } finally {
@@ -382,9 +298,7 @@ export function SettingsWorkspace() {
   }, [draft]);
 
   const handleClearApprovals = useCallback(async () => {
-    if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) {
-      return;
-    }
+    if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) return;
     setClearingApprovals(true);
     setActionMessage(null);
     try {
@@ -398,9 +312,7 @@ export function SettingsWorkspace() {
   }, []);
 
   const handleClearEvidence = useCallback(async () => {
-    if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) {
-      return;
-    }
+    if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) return;
     setClearingEvidence(true);
     setActionMessage(null);
     try {
@@ -433,9 +345,7 @@ export function SettingsWorkspace() {
   }, []);
 
   const handleRepairApprovalCenter = useCallback(async () => {
-    if (!window.confirm("Reset the approval center locator? The daemon will be reachable again after Guard restarts. Pending approvals are preserved.")) {
-      return;
-    }
+    if (!window.confirm("Reset the approval center locator? The daemon will be reachable again after Guard restarts. Pending approvals are preserved.")) return;
     setRepairing(true);
     setActionMessage(null);
     try {
@@ -460,12 +370,7 @@ export function SettingsWorkspace() {
     return <EmptyState title="Settings are unavailable" body={state.kind === "error" ? state.message : "Guard did not return editable settings."} tone="teach" />;
   }
 
-  const modeHelp = draft.mode === "enforce"
-    ? "Guard blocks risky actions until a saved decision allows them."
-    : draft.mode === "observe"
-      ? "Guard records what it sees without pausing actions."
-      : "Guard asks before risky actions continue.";
-
+  const modeHelp = draft.mode === "enforce" ? "Guard blocks risky actions until a saved decision allows them." : draft.mode === "observe" ? "Guard records what it sees without pausing actions." : "Guard asks before risky actions continue.";
   const consequenceSummary = buildConsequenceSummary(draft);
 
   return (
@@ -478,64 +383,55 @@ export function SettingsWorkspace() {
       />
 
       {consequenceSummary && (
-        <div className="rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 shadow-sm sm:p-6">
+        <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4">
           <div className="flex items-start gap-3">
             <HiMiniShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-brand-blue" />
             <div>
               <SectionLabel>What to expect</SectionLabel>
-              <p className="mt-2 text-sm text-muted-foreground">{consequenceSummary}</p>
+              <p className="mt-1 text-sm text-slate-500">{consequenceSummary}</p>
             </div>
           </div>
         </div>
       )}
 
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-6">
-          <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
-            <SectionLabel>Security level</SectionLabel>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Pick a level to set up all risk choices at once. Switch to Custom only when you need to override individual behaviors.
-            </p>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <div className="space-y-2">
+        {/* Protection Level */}
+        <AccordionSection
+          title="Protection level"
+          subtitle={`${draft.security_level === "balanced" ? "Balanced" : draft.security_level === "strict" ? "Strict" : "Custom"} · ${draft.mode}`}
+          expanded={expandedSections["protection"]}
+          onToggle={() => toggleSection("protection")}
+        >
+          <div className="space-y-6">
+            <div className="grid gap-3 md:grid-cols-3">
               {securityLevels.map((level) => {
                 const LevelIcon = level.icon;
                 const isSelected = draft.security_level === level.value;
-                const iconColorClass =
-                  level.tone === "blue" ? "text-brand-blue" :
-                  level.tone === "purple" ? "text-brand-purple" :
-                  "text-slate-500";
-                const iconBgClass =
-                  level.tone === "blue" ? "bg-brand-blue/10" :
-                  level.tone === "purple" ? "bg-brand-purple/10" :
-                  "bg-slate-100";
-                const selectedBorderClass =
-                  level.tone === "blue" ? "border-brand-blue/35 bg-brand-blue/[0.07] shadow-[0_12px_32px_rgba(85,153,254,0.14)]" :
-                  level.tone === "purple" ? "border-brand-purple/35 bg-brand-purple/[0.06] shadow-[0_12px_32px_rgba(181,108,255,0.12)]" :
-                  "border-slate-300 bg-slate-50 shadow-sm";
+                const iconColorClass = level.tone === "blue" ? "text-brand-blue" : level.tone === "purple" ? "text-brand-purple" : "text-slate-500";
+                const iconBgClass = level.tone === "blue" ? "bg-brand-blue/10" : level.tone === "purple" ? "bg-brand-purple/10" : "bg-slate-100";
+                const selectedBorderClass = level.tone === "blue" ? "border-brand-blue/30 bg-brand-blue/[0.05]" : level.tone === "purple" ? "border-brand-purple/30 bg-brand-purple/[0.04]" : "border-slate-300 bg-slate-50";
                 return (
                   <button
                     key={level.value}
                     type="button"
                     onClick={() => handleSecurityLevelChange(level.value)}
                     aria-pressed={isSelected}
-                    className={`relative min-h-36 rounded-[1.5rem] border p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                      isSelected ? selectedBorderClass : "border-transparent bg-surface-1/80 hover:bg-white"
-                    }`}
+                    className={`relative rounded-xl border p-4 text-left transition-all duration-150 hover:-translate-y-0.5 ${isSelected ? selectedBorderClass : "border-transparent bg-slate-50/80 hover:bg-white"}`}
                   >
                     {isSelected && (
                       <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[#059669]">
-                        <HiMiniCheckCircle className="h-4 w-4 text-white" aria-hidden="true" />
+                        <HiMiniCheckCircle className="h-3.5 w-3.5 text-white" aria-hidden="true" />
                       </span>
                     )}
                     <span className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${iconBgClass}`}>
                       <LevelIcon className={`h-4 w-4 ${iconColorClass}`} aria-hidden="true" />
                     </span>
-                    <span className="mt-3 block text-base font-semibold text-brand-dark">{level.label}</span>
-                    <span className="mt-1.5 block text-sm leading-6 text-muted-foreground">{level.description}</span>
+                    <span className="mt-2 block text-sm font-semibold text-brand-dark">{level.label}</span>
+                    <span className="mt-1 block text-xs leading-relaxed text-slate-500">{level.description}</span>
                     {level.protects.length > 0 && (
-                      <ul className="mt-3 space-y-1">
+                      <ul className="mt-2 space-y-0.5">
                         {level.protects.map((item) => (
-                          <li key={item} className="flex items-center gap-1.5 text-[11px] font-medium text-brand-dark/60">
+                          <li key={item} className="flex items-center gap-1.5 text-[11px] text-slate-500">
                             <span className={`h-1 w-1 shrink-0 rounded-full ${iconColorClass}`} />
                             {item}
                           </li>
@@ -546,270 +442,174 @@ export function SettingsWorkspace() {
                 );
               })}
             </div>
-          </div>
 
-          <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
-            <SectionLabel>Protection mode</SectionLabel>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {(["prompt", "enforce", "observe"] as const).map((mode) => (
-                <label
-                  key={mode}
-                  className={`cursor-pointer rounded-[1.25rem] border p-4 transition-all duration-150 ${
-                    draft.mode === mode ? "border-brand-blue/30 bg-brand-blue/[0.06] shadow-sm" : "border-transparent bg-surface-1/80 hover:bg-white"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="mode"
-                    value={mode}
-                    checked={draft.mode === mode}
-                    onChange={handleModeChange}
-                    className="sr-only"
-                  />
-                  <span className="text-sm font-semibold capitalize text-brand-dark">{mode}</span>
-                </label>
-              ))}
+            <div>
+              <SectionLabel>Protection mode</SectionLabel>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {(["prompt", "enforce", "observe"] as const).map((mode) => (
+                  <label
+                    key={mode}
+                    className={`cursor-pointer rounded-lg border p-3 transition-all ${draft.mode === mode ? "border-brand-blue/25 bg-brand-blue/[0.04]" : "border-transparent bg-slate-50/80 hover:bg-white"}`}
+                  >
+                    <input type="radio" name="mode" value={mode} checked={draft.mode === mode} onChange={handleModeChange} className="sr-only" />
+                    <span className="text-sm font-semibold capitalize text-brand-dark">{mode}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="mt-2 text-sm text-slate-500">{modeHelp}</p>
             </div>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">{modeHelp}</p>
-          </div>
 
-          <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <SectionLabel>Risk choices</SectionLabel>
-              {draft.security_level !== "custom" ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  <HiMiniLockClosed className="h-3 w-3" aria-hidden="true" />
-                  Managed by {draft.security_level === "balanced" ? "Balanced" : "Strict"}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-blue/25 bg-brand-blue/[0.06] px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue">
-                  <HiMiniCog6Tooth className="h-3 w-3" aria-hidden="true" />
-                  Custom overrides active
-                </span>
-              )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="approval-wait" className="block text-sm font-semibold text-brand-dark">Approval wait timeout</label>
+                <p className="text-xs text-slate-500">Seconds to wait before returning to the harness</p>
+                <input id="approval-wait" type="number" min={0} max={600} value={draft.approval_wait_timeout_seconds} onChange={handleTimeoutChange} className="mt-2 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20" />
+              </div>
+              <div className="space-y-2">
+                <SettingToggle label="Telemetry" checked={draft.telemetry} onChange={handleBooleanChange("telemetry")} />
+                <SettingToggle label="Cloud sync" checked={draft.sync} onChange={handleBooleanChange("sync")} />
+                <SettingToggle label="Billing features" checked={draft.billing} onChange={handleBooleanChange("billing")} />
+              </div>
             </div>
+          </div>
+        </AccordionSection>
+
+        {/* Risk Controls */}
+        <AccordionSection
+          title="Risk choices"
+          subtitle={draft.security_level !== "custom" ? `Managed by ${draft.security_level}` : "Custom overrides active"}
+          expanded={expandedSections["risk"]}
+          onToggle={() => toggleSection("risk")}
+        >
+          <div className="space-y-4">
             {draft.security_level !== "custom" && (
-              <div className="mt-3 flex items-center justify-between gap-3 rounded-[1rem] border border-slate-200/60 bg-slate-50/80 px-4 py-3">
-                <p className="text-sm text-brand-dark/65">
-                  All risk behaviors are set by the <span className="font-semibold">{draft.security_level === "balanced" ? "Balanced" : "Strict"}</span> level. Select <span className="font-semibold">Custom</span> above to override individual choices.
-                </p>
-              </div>
+              <p className="text-sm text-slate-500">All risk behaviors are set by the <span className="font-semibold">{draft.security_level === "balanced" ? "Balanced" : "Strict"}</span> level. Select <span className="font-semibold">Custom</span> above to override individual choices.</p>
             )}
-            <div className={`mt-4 divide-y divide-slate-200/70 overflow-hidden rounded-[1.35rem] border border-slate-200/70 bg-white ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
+            <div className={`divide-y divide-slate-100 border-t border-slate-100 ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
               {riskControls.map((risk) => (
-                <div key={risk.key} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-center">
+                <div key={risk.key} className="grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center">
                   <div>
-                    <p className="text-sm font-semibold text-brand-dark">{risk.label}</p>
-                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{risk.description}</p>
-                    <details className="group mt-1">
-                      <summary className="cursor-pointer text-xs font-semibold text-brand-blue [&::-webkit-details-marker]:hidden">
-                        What this means ›
-                      </summary>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        {risk.description} Choosing <strong>Ask again</strong> means Guard will prompt your AI agent each time it tries this action until you approve it for the current session or workspace.
-                      </p>
-                    </details>
+                    <p className="text-sm font-medium text-brand-dark">{risk.label}</p>
+                    <p className="text-xs text-slate-500">{risk.description}</p>
                   </div>
-                  <SettingSelect
-                    label="Guard should"
-                    value={draft.risk_actions[risk.key] ?? "require-reapproval"}
-                    options={actionOptions}
-                    onChange={handleRiskActionChange(risk.key)}
-                    disabled={draft.security_level !== "custom"}
-                  />
+                  <SettingSelect label="Guard should" value={draft.risk_actions[risk.key] ?? "require-reapproval"} options={actionOptions} onChange={handleRiskActionChange(risk.key)} disabled={draft.security_level !== "custom"} />
                 </div>
               ))}
             </div>
+            <div className={`grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center border-t border-slate-100 ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
+              <div>
+                <p className="text-sm font-medium text-brand-dark">Codex reading local secret files</p>
+                <p className="text-xs text-slate-500">Use this only for trusted projects where Codex should be allowed to open files such as .env or .npmrc.</p>
+              </div>
+              <SettingSelect label="Codex should" value={draft.harness_risk_actions.codex?.local_secret_read ?? draft.risk_actions.local_secret_read ?? "require-reapproval"} options={actionOptions} onChange={handleCodexSecretReadChange} disabled={draft.security_level !== "custom"} />
+            </div>
+            <div className="border-t border-slate-100 pt-3">
+              <SectionLabel>Advanced defaults</SectionLabel>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                <SettingSelect label="New action" value={draft.default_action} options={actionOptions} onChange={handleStringChange("default_action")} />
+                <SettingSelect label="Unknown source" value={draft.unknown_publisher_action} options={actionOptions} onChange={handleStringChange("unknown_publisher_action")} />
+                <SettingSelect label="Changed command" value={draft.changed_hash_action} options={actionOptions} onChange={handleStringChange("changed_hash_action")} />
+                <SettingSelect label="New network domain" value={draft.new_network_domain_action} options={actionOptions} onChange={handleStringChange("new_network_domain_action")} />
+                <SettingSelect label="Subprocess action" value={draft.subprocess_action} options={actionOptions} onChange={handleStringChange("subprocess_action")} />
+                <SettingSelect label="Approval surface" value={draft.approval_surface_policy} options={surfacePolicyOptions} onChange={handleStringChange("approval_surface_policy")} />
+              </div>
+            </div>
           </div>
+        </AccordionSection>
 
-          <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
-            <SectionLabel>Codex override</SectionLabel>
-            <div className={`mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_260px] md:items-center ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
-              <div>
-                <p className="text-sm font-semibold text-brand-dark">Codex reading local secret files</p>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Use this only for trusted projects where Codex should be allowed to open files such as .env or .npmrc.
-                </p>
+        {/* Diagnostics */}
+        <AccordionSection
+          title="Diagnostics & data"
+          subtitle="Clear approvals, export logs, repair"
+          expanded={expandedSections["diagnostics"]}
+          onToggle={() => toggleSection("diagnostics")}
+        >
+          <div className="space-y-4">
+            {perfSnapshot !== null && <DiagnosticsPerfCard snapshot={perfSnapshot} />}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-brand-dark">Clear saved approvals</p>
+                  <p className="text-xs text-slate-500">Removes all stored allow/block decisions. Guard will ask again for previously approved actions.</p>
+                  <div className="mt-2">
+                    <ActionButton onClick={handleClearApprovals} disabled={clearingApprovals} variant="outline">{clearingApprovals ? "Clearing…" : "Clear approvals"}</ActionButton>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-brand-dark">Clear evidence log</p>
+                  <p className="text-xs text-slate-500">Permanently removes all recorded evidence. This cannot be undone.</p>
+                  <div className="mt-2">
+                    <ActionButton onClick={handleClearEvidence} disabled={clearingEvidence} variant="outline">{clearingEvidence ? "Clearing…" : "Clear evidence"}</ActionButton>
+                  </div>
+                </div>
               </div>
-              <SettingSelect
-                label="Codex should"
-                value={draft.harness_risk_actions.codex?.local_secret_read ?? draft.risk_actions.local_secret_read ?? "require-reapproval"}
-                options={actionOptions}
-                onChange={handleCodexSecretReadChange}
-                disabled={draft.security_level !== "custom"}
-              />
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-brand-dark">Export diagnostics</p>
+                  <p className="text-xs text-slate-500">Downloads a JSON file with local Guard evidence for debugging or support.</p>
+                  <div className="mt-2">
+                    <ActionButton onClick={handleExportDiagnostics} disabled={exporting} variant="secondary">{exporting ? "Exporting…" : "Export"}</ActionButton>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-brand-dark">Repair approval center</p>
+                  <p className="text-xs text-slate-500">Resets the approval center locator when the approval link returns an API error.</p>
+                  <div className="mt-2">
+                    <ActionButton onClick={handleRepairApprovalCenter} disabled={repairing} variant="secondary">{repairing ? "Repairing…" : "Repair"}</ActionButton>
+                  </div>
+                </div>
+              </div>
             </div>
+            {actionMessage ? <p className="text-sm text-slate-600">{actionMessage}</p> : null}
           </div>
+        </AccordionSection>
+      </div>
 
-          <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
-            <SectionLabel>Advanced defaults</SectionLabel>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <SettingSelect label="New action" value={draft.default_action} options={actionOptions} onChange={handleStringChange("default_action")} />
-              <SettingSelect label="Unknown source" value={draft.unknown_publisher_action} options={actionOptions} onChange={handleStringChange("unknown_publisher_action")} />
-              <SettingSelect label="Changed command" value={draft.changed_hash_action} options={actionOptions} onChange={handleStringChange("changed_hash_action")} />
-              <SettingSelect label="New network domain" value={draft.new_network_domain_action} options={actionOptions} onChange={handleStringChange("new_network_domain_action")} />
-              <SettingSelect label="Subprocess action" value={draft.subprocess_action} options={actionOptions} onChange={handleStringChange("subprocess_action")} />
-              <SettingSelect label="Approval surface" value={draft.approval_surface_policy} options={surfacePolicyOptions} onChange={handleStringChange("approval_surface_policy")} />
-            </div>
-          </div>
-        </div>
-
-        <aside className="space-y-4">
-          <div className="rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5">
-            <SectionLabel>Approval wait</SectionLabel>
-            <label htmlFor="approval-wait" className="mt-3 block text-sm font-semibold text-brand-dark">
-              Seconds to wait before returning to the harness
-            </label>
-            <input
-              id="approval-wait"
-              type="number"
-              min={0}
-              max={600}
-              value={draft.approval_wait_timeout_seconds}
-              onChange={handleTimeoutChange}
-              className="mt-2 min-h-11 w-full rounded-full border border-border bg-white px-4 py-2 text-sm text-brand-dark transition-colors focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            />
-          </div>
-          <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
-            <SectionLabel>Local toggles</SectionLabel>
-            <div className="mt-4 space-y-3">
-              <SettingToggle label="Telemetry" checked={draft.telemetry} onChange={handleBooleanChange("telemetry")} />
-              <SettingToggle label="Cloud sync" checked={draft.sync} onChange={handleBooleanChange("sync")} />
-              <SettingToggle label="Billing features" checked={draft.billing} onChange={handleBooleanChange("billing")} />
-            </div>
-          </div>
-          {perfSnapshot !== null ? (
-            <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm">
-              <SectionLabel>Runtime diagnostics</SectionLabel>
-              <div className="mt-4">
-                <DiagnosticsPerfCard snapshot={perfSnapshot} />
-              </div>
-            </div>
-          ) : null}
-          <div className="rounded-[1.75rem] border border-brand-purple/20 bg-brand-purple/[0.04] p-5">
-            <SectionLabel>Data management</SectionLabel>
-            <div className="mt-4 space-y-4">
-              <div>
-                <p className="text-sm font-semibold text-brand-dark">Clear saved approvals</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Removes all stored allow/block decisions. Guard will ask again for previously approved actions.
-                </p>
-                <div className="mt-2">
-                  <ActionButton onClick={handleClearApprovals} disabled={clearingApprovals} variant="danger">
-                    {clearingApprovals ? "Clearing…" : "Clear all approvals"}
-                  </ActionButton>
-                </div>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-brand-dark">Clear evidence log</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Permanently removes all recorded evidence. This cannot be undone.
-                </p>
-                <div className="mt-2">
-                  <ActionButton onClick={handleClearEvidence} disabled={clearingEvidence} variant="danger">
-                    {clearingEvidence ? "Clearing…" : "Clear evidence log"}
-                  </ActionButton>
-                </div>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-brand-dark">Export diagnostics</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Downloads a JSON file with local Guard evidence for debugging or support.
-                </p>
-                <div className="mt-2">
-                  <ActionButton onClick={handleExportDiagnostics} disabled={exporting} variant="secondary">
-                    {exporting ? "Exporting…" : "Export diagnostics"}
-                  </ActionButton>
-                </div>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-brand-dark">Repair local approval center</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  Resets the approval center locator when the approval link returns an API error. Pending approvals are preserved.
-                </p>
-                <div className="mt-2">
-                  <ActionButton onClick={handleRepairApprovalCenter} disabled={repairing} variant="secondary">
-                    {repairing ? "Repairing…" : "Repair approval center"}
-                  </ActionButton>
-                </div>
-              </div>
-              {actionMessage ? (
-                <p className="guard-fade-in text-sm leading-6 text-brand-dark/70">{actionMessage}</p>
-              ) : null}
-            </div>
-          </div>
+      {/* Sticky save bar */}
+      <div className="sticky bottom-4 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <SectionLabel>Deep scanner</SectionLabel>
-            <div className="mt-4 rounded-[1.25rem] border border-slate-200/70 bg-white/80 px-5 py-4">
-              <p className="text-sm font-semibold text-brand-dark">Enhanced scanning</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Install the Cisco scanner extension to enable skill and MCP evidence enrichment.
-              </p>
-              <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark">
-                pip install holguard[cisco]
-              </p>
-            </div>
-          </div>
-          <div className="sticky top-24 rounded-[1.75rem] border border-white/80 bg-white/90 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur">
             <ActionButton onClick={handleSave} disabled={saving || saveSuccess}>
               {saveSuccess ? (
                 <span className="flex items-center gap-2">
                   <HiMiniCheckCircle className="h-4 w-4" aria-hidden="true" />
                   Saved
                 </span>
-              ) : saving ? (
-                "Saving…"
-              ) : (
-                "Save settings"
-              )}
+              ) : saving ? "Saving…" : "Save settings"}
             </ActionButton>
             {hasUnsavedChanges(savedSettingsRef.current, draft) && (
-              <span className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-attention">
+              <span className="ml-3 inline-flex items-center gap-1.5 text-xs font-medium text-brand-attention">
                 <span className="h-1.5 w-1.5 rounded-full bg-brand-attention" />
                 Unsaved changes
               </span>
             )}
-            {saveSuccess ? (
-              <p className="guard-fade-in mt-3 text-sm font-semibold leading-6 text-brand-green">Settings saved</p>
-            ) : saveError ? (
-              <p className="guard-fade-in mt-3 text-sm leading-6 text-brand-purple">{saveError}</p>
-            ) : (
-              <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                Use this for local tuning. Team policy from Guard Cloud may still override some decisions.
-              </p>
-            )}
           </div>
-        </aside>
-      </section>
+          {saveSuccess ? (
+            <p className="text-sm font-semibold text-emerald-600">Settings saved</p>
+          ) : saveError ? (
+            <p className="text-sm text-brand-purple">{saveError}</p>
+          ) : (
+            <p className="text-xs text-slate-500">Use this for local tuning. Team policy from Guard Cloud may still override some decisions.</p>
+          )}
+        </div>
+      </div>
 
       {/* Mode change confirmation */}
       {pendingMode === "observe" && (
         <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-[1.75rem] border border-brand-attention/20 bg-white p-6 shadow-xl">
+          <div className="w-full max-w-sm rounded-2xl border border-brand-attention/15 bg-white p-6 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-attention/10">
                 <HiMiniExclamationTriangle className="h-5 w-5 text-brand-attention" aria-hidden="true" />
               </span>
               <div>
                 <h3 className="text-base font-semibold text-brand-dark">Switch to Observe mode?</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  In Observe mode, Guard records what your AI apps do but does not pause any actions. This reduces your protection. Only use this when debugging or in trusted environments.
-                </p>
+                <p className="mt-2 text-sm text-slate-500">In Observe mode, Guard records what your AI apps do but does not pause any actions. This reduces your protection. Only use this when debugging or in trusted environments.</p>
               </div>
             </div>
             <div className="mt-6 flex flex-wrap gap-2">
-              <button
-                onClick={confirmModeChange}
-                className="inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90"
-              >
-                Switch to Observe
-              </button>
-              <button
-                onClick={cancelModeChange}
-                className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50"
-              >
-                Keep current mode
-              </button>
+              <button onClick={confirmModeChange} className="inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90">Switch to Observe</button>
+              <button onClick={cancelModeChange} className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50">Keep current mode</button>
             </div>
           </div>
         </div>
@@ -818,37 +618,51 @@ export function SettingsWorkspace() {
   );
 }
 
-function DiagnosticsPerfCard(props: { snapshot: GuardRuntimeSnapshot }) {
-  const { snapshot } = props;
-  const threadCount = snapshot.thread_count;
-  const daemonPort = snapshot.runtime_state?.daemon_port ?? null;
-  const startedAt = snapshot.runtime_state?.started_at ?? null;
+function AccordionSection(props: {
+  title: string;
+  subtitle: string;
+  expanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <div>
-      <h3 className="text-sm font-semibold text-brand-dark">Runtime performance</h3>
-      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-        Live process metrics for this Guard daemon session.
-      </p>
-      <dl className="mt-3 grid grid-cols-2 gap-2">
-        {threadCount !== undefined ? (
-          <PerfMetric label="Total interpreter threads" value={String(threadCount)} />
-        ) : null}
-        {daemonPort !== null ? (
-          <PerfMetric label="Daemon port" value={String(daemonPort)} />
-        ) : null}
-        {startedAt !== null ? (
-          <PerfMetric label="Started" value={new Date(startedAt).toLocaleTimeString()} />
-        ) : null}
-      </dl>
+    <div className="rounded-xl border border-slate-100 overflow-hidden">
+      <button
+        onClick={props.onToggle}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50/60"
+        aria-expanded={props.expanded}
+      >
+        <div>
+          <p className="text-sm font-semibold text-brand-dark">{props.title}</p>
+          <p className="text-xs text-slate-400">{props.subtitle}</p>
+        </div>
+        {props.expanded ? (
+          <HiMiniChevronUp className="h-4 w-4 text-slate-400" aria-hidden="true" />
+        ) : (
+          <HiMiniChevronDown className="h-4 w-4 text-slate-400" aria-hidden="true" />
+        )}
+      </button>
+      {props.expanded && (
+        <div className="border-t border-slate-100 px-4 py-4">
+          {props.children}
+        </div>
+      )}
     </div>
   );
 }
 
-function PerfMetric(props: { label: string; value: string }) {
+function DiagnosticsPerfCard(props: { snapshot: GuardRuntimeSnapshot }) {
+  const threadCount = props.snapshot.thread_count;
+  const daemonPort = props.snapshot.runtime_state?.daemon_port ?? null;
+  const startedAt = props.snapshot.runtime_state?.started_at ?? null;
   return (
-    <div className="rounded-xl bg-surface-1 px-3 py-2">
-      <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{props.label}</dt>
-      <dd className="mt-0.5 font-mono text-sm font-semibold text-brand-dark">{props.value}</dd>
+    <div className="rounded-lg bg-slate-50/80 px-3 py-2">
+      <p className="text-xs font-semibold text-brand-dark">Runtime</p>
+      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+        {threadCount !== undefined && <span>{threadCount} threads</span>}
+        {daemonPort !== null && <span>Port {daemonPort}</span>}
+        {startedAt !== null && <span>Started {new Date(startedAt).toLocaleTimeString()}</span>}
+      </div>
     </div>
   );
 }
@@ -862,12 +676,12 @@ function SettingSelect(props: {
 }) {
   return (
     <label className="block">
-      <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.label}</span>
+      <span className="text-xs font-medium text-slate-500">{props.label}</span>
       <select
         value={props.value}
         onChange={props.onChange}
         disabled={props.disabled}
-        className="mt-2 min-h-11 w-full rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {props.options.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
@@ -883,9 +697,9 @@ function SettingToggle(props: {
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-full bg-surface-1 px-4 py-2">
-      <span className="text-sm font-semibold text-brand-dark">{props.label}</span>
-      <input type="checkbox" checked={props.checked} onChange={props.onChange} className="h-5 w-5 accent-brand-blue" />
+    <label className="flex min-h-10 cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 transition-colors hover:bg-slate-100/60">
+      <span className="text-sm text-brand-dark">{props.label}</span>
+      <input type="checkbox" checked={props.checked} onChange={props.onChange} className="h-4 w-4 accent-brand-blue" />
     </label>
   );
 }

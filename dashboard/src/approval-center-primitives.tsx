@@ -237,7 +237,7 @@ export function Surface(props: {
   const toneClass = surfaceToneClass(props.tone);
   return (
     <section
-      className={`guard-surface-in rounded-[1.35rem] border shadow-sm p-5 sm:p-6 ${toneClass}${props.className ? ` ${props.className}` : ""}`}
+      className={`guard-surface-in rounded-xl border p-4 sm:p-5 ${toneClass}${props.className ? ` ${props.className}` : ""}`}
     >
       {props.children}
     </section>
@@ -296,8 +296,8 @@ export function EmptyState(props: {
 }) {
   const isTeach = props.tone === "teach";
   return (
-    <div className={`guard-surface-in flex flex-col items-center justify-center py-12 text-center sm:py-16 ${isTeach ? "rounded-[2rem] border border-brand-blue/15 bg-gradient-to-br from-white to-brand-blue/[0.03] px-6" : "rounded-lg bg-surface-1 px-6"}`}>
-      <div className={`mb-5 flex h-14 w-14 items-center justify-center rounded-full ${isTeach ? "bg-brand-blue/10" : "bg-white"} ring-1 ring-brand-blue/20`}>
+    <div className={`flex flex-col items-center justify-center py-12 text-center sm:py-16 ${isTeach ? "rounded-2xl border border-brand-blue/10 bg-gradient-to-br from-white to-brand-blue/[0.02] px-6" : "px-6"}`}>
+      <div className={`mb-5 flex h-14 w-14 items-center justify-center rounded-full ${isTeach ? "bg-brand-blue/10" : "bg-slate-100"}`}>
         <HiMiniInformationCircle className={`h-7 w-7 ${isTeach ? "text-brand-blue" : "text-slate-400"}`} aria-hidden="true" />
       </div>
       <h3 className="text-lg font-semibold tracking-tight text-brand-dark">{props.title}</h3>
@@ -472,12 +472,12 @@ function SidebarAction(props: { href: string; children: ReactNode; icon: ReactNo
 }
 
 function surfaceToneClass(tone: "default" | "accent" | "success" | "warning" | "danger" | "attention" | undefined): string {
-  if (tone === "accent") return "border-brand-blue/20 bg-gradient-to-b from-white to-blue-50/40";
-  if (tone === "success") return "border-brand-green/20 bg-brand-green-bg/30";
-  if (tone === "warning") return "border-brand-blue/25 bg-brand-blue/[0.04]";
-  if (tone === "danger") return "border-brand-purple/25 bg-brand-purple/[0.05]";
-  if (tone === "attention") return "border-brand-attention/20 bg-brand-attention-bg";
-  return "border-gray-200/50 bg-white/80";
+  if (tone === "accent") return "border-brand-blue/15 bg-gradient-to-b from-white to-blue-50/30";
+  if (tone === "success") return "border-brand-green/15 bg-brand-green-bg/20";
+  if (tone === "warning") return "border-brand-blue/20 bg-brand-blue/[0.03]";
+  if (tone === "danger") return "border-brand-purple/20 bg-brand-purple/[0.03]";
+  if (tone === "attention") return "border-brand-attention/15 bg-brand-attention-bg/60";
+  return "border-slate-100 bg-white/60";
 }
 
 function badgeToneClass(tone: "default" | "success" | "warning" | "info" | "destructive" | "attention" | undefined): string {
@@ -665,11 +665,10 @@ export function GuardHero(props: {
 
   return (
     <section
-      className={`guard-surface-in relative overflow-hidden rounded-[2rem] border border-brand-blue/15 ${bgClass} p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7`}
+      className={`guard-surface-in relative overflow-hidden rounded-2xl border border-brand-blue/10 ${bgClass} p-5 sm:p-6 lg:p-7`}
       role="region"
       aria-label="Protection status"
     >
-      <div className="pointer-events-none absolute right-10 top-8 h-24 w-24 rounded-full bg-brand-blue/20 blur-3xl" />
       <div className="relative space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <SectionLabel>Protection status</SectionLabel>
@@ -699,20 +698,18 @@ export function ProofStrip(props: {
   items: Array<{ label: string; value: string | number; tone?: "blue" | "green" | "purple" | "slate"; icon?: ReactNode; pulse?: boolean; hint?: string }>;
 }) {
   return (
-    <div className="guard-surface-in grid gap-3 sm:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-3">
       {props.items.map((item) => (
         <div
           key={item.label}
-          className={`rounded-[1.25rem] border border-white/80 bg-white/80 px-4 py-3 shadow-sm ${item.pulse ? "guard-pulse" : ""}`}
+          className={`flex items-baseline gap-2 ${item.pulse ? "guard-pulse" : ""}`}
           title={item.hint}
         >
-          <div className="flex items-center gap-2">
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              {item.label}
-            </p>
+          <p className="text-2xl font-semibold tracking-tight text-brand-dark">{item.value}</p>
+          <div className="flex items-center gap-1">
+            <p className="text-xs text-muted-foreground">{item.label}</p>
             {item.icon}
           </div>
-          <p className="mt-1 text-2xl font-semibold tracking-tight text-brand-dark">{item.value}</p>
         </div>
       ))}
     </div>
@@ -727,19 +724,19 @@ export function NextActionCard(props: {
 }) {
   const borderClass =
     props.tone === "green"
-      ? "border-brand-green/25"
+      ? "border-brand-green/20"
       : props.tone === "purple"
-      ? "border-brand-purple/25"
-      : "border-brand-blue/25";
+      ? "border-brand-purple/20"
+      : "border-brand-blue/20";
   const bgClass =
     props.tone === "green"
-      ? "bg-brand-green-bg/30"
+      ? "bg-brand-green-bg/20"
       : props.tone === "purple"
-      ? "bg-brand-purple/[0.04]"
-      : "bg-brand-blue/[0.04]";
+      ? "bg-brand-purple/[0.03]"
+      : "bg-brand-blue/[0.03]";
 
   return (
-    <div className={`guard-surface-in rounded-[1.75rem] border ${borderClass} ${bgClass} p-5 sm:p-6`}>
+    <div className={`rounded-xl border ${borderClass} ${bgClass} p-4 sm:p-5`}>
       <SectionLabel>{props.title}</SectionLabel>
       <p className="mt-2 text-sm leading-relaxed text-brand-dark/70">{props.body}</p>
       <div className="mt-4">{props.cta}</div>
