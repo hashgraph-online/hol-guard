@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, memo } from "react";
 import { HiMiniChevronRight, HiMiniCheckCircle, HiMiniMinusCircle, HiMiniExclamationCircle } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { harnessDisplayName } from "../approval-center-utils";
@@ -9,7 +9,7 @@ interface AppTabProps {
   receipts: GuardReceipt[];
 }
 
-export function AppTab({ receipts }: AppTabProps) {
+function AppTabRaw({ receipts }: AppTabProps) {
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
 
   const apps = useMemo(() => {
@@ -106,3 +106,5 @@ export function AppTab({ receipts }: AppTabProps) {
     </div>
   );
 }
+
+export const AppTab = memo(AppTabRaw);
