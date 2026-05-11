@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { j as jsxRuntimeExports, G as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, h as harnessDisplayName, i as HiMiniChevronRight, E as EmptyState, H as HiMiniCheckCircle, p as HiMiniExclamationCircle, q as HiMiniWrenchScrewdriver, s as HiMiniXCircle, r as reactExports, t as HiMiniClipboardDocumentCheck, u as HiMiniClipboard } from "../guard-dashboard.js";
-=======
-import { j as jsxRuntimeExports, G as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, h as harnessDisplayName, i as HiMiniChevronRight, E as EmptyState, H as HiMiniCheckCircle, o as HiMiniExclamationCircle, p as HiMiniWrenchScrewdriver, q as HiMiniXCircle } from "../guard-dashboard.js";
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 function collectHarnesses(snapshot) {
   const harnesses = /* @__PURE__ */ new Set();
   for (const item of snapshot.items) harnesses.add(item.harness);
@@ -142,7 +138,6 @@ function FleetWorkspace(props) {
           }
         )
       ] })
-<<<<<<< HEAD
     ] }),
     activeInstalls.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
       SetupGuide,
@@ -222,8 +217,6 @@ function SetupStep(props) {
           ]
         }
       )
-=======
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
     ] })
   ] });
 }
