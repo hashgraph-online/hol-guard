@@ -1217,6 +1217,353 @@ def test_tool_action_request_classifier_detects_redirection_to_quoted_space_targ
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_allows_graphql_query_file_workflow(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "query($owner:String!,$name:String!,$number:Int!){\n"
+                "  repository(owner:$owner,name:$name){\n"
+                "    pullRequest(number:$number){ reviewDecision mergeStateStatus }\n"
+                "  }\n"
+                "}\n"
+                "EOF\n"
+                "gh api graphql -F owner=hashgraph-online -F name=points-portal -F number=542 "
+                f'-f query="$(cat {query_path})"'
+            )
+        },
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_rejects_graphql_mutation_file_workflow(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "mutation($id:ID!){ deleteIssue(input:{issueId:$id}) { clientMutationId } }\n"
+                "EOF\n"
+                f'gh api graphql -F id=I_kw -f query="$(cat {query_path})"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_extra_substitution(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                "gh api graphql "
+                f'-F owner="$(rm -rf /tmp/x)" -f query="$(cat {query_path})"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_sensitive_redirect(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                f'gh api graphql -F owner=hashgraph-online -f query="$(cat {query_path})" > ~/.ssh/authorized_keys'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_target_substitution():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "cat > $(rm${IFS}-rf${IFS}/tmp/x).graphql <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                'gh api graphql -F owner=hashgraph-online -f query="$(cat $(rm${IFS}-rf${IFS}/tmp/x).graphql)"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_background_chain(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                f'gh api graphql -F owner=hashgraph-online -f query="$(cat {query_path})" & rm -rf /tmp/x'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_repo_target():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "cat > /work/repo/schema.graphql <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                'gh api graphql -F owner=hashgraph-online -f query="$(cat /work/repo/schema.graphql)"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_unquoted_heredoc(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<EOF\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "$(rm -rf /tmp/x)\n"
+                "EOF\n"
+                f'gh api graphql -F owner=hashgraph-online -f query="$(cat {query_path})"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_repo_cache_target():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "cat > ./.cache/pr-threads-query.graphql <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                'gh api graphql -F owner=hashgraph-online -f query="$(cat ./.cache/pr-threads-query.graphql)"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_temp_traversal_target():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "cat > /tmp/../../workspace/repo/pr-threads-query.graphql <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                "gh api graphql -F owner=hashgraph-online "
+                '-f query="$(cat /tmp/../../workspace/repo/pr-threads-query.graphql)"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_target_variable():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "cat > /tmp/$MAL/pr-threads-query.graphql <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                'gh api graphql -F owner=hashgraph-online -f query="$(cat /tmp/$MAL/pr-threads-query.graphql)"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_different_query_file(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                f"gh api graphql -F owner=hashgraph-online --field query=@{query_path}.mut"
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_repo_copilot_target():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "cat > /workspace/repo/.copilot/session-state/pr-threads-query.graphql <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                "gh api graphql -F owner=hashgraph-online "
+                '-f query="$(cat /workspace/repo/.copilot/session-state/pr-threads-query.graphql)"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_symlink_target(tmp_path):
+    link_path = tmp_path / "link"
+    try:
+        link_path.symlink_to(Path.cwd(), target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are not supported in this environment")
+    query_path = link_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                f'gh api graphql -F owner=hashgraph-online -f query="$(cat {query_path})"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_existing_target(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    query_path.write_text("existing", encoding="utf-8")
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                f'gh api graphql -F owner=hashgraph-online -f query="$(cat {query_path})"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_glob_target():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "cat > /tmp/*/pr-threads-query.graphql <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                'gh api graphql -F owner=hashgraph-online -f query="$(cat /tmp/*/pr-threads-query.graphql)"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_ansi_c_quoted_target():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "cat > /tmp/$'..'/../workspace/repo/pr-threads-query.graphql <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                'gh api graphql -F owner=hashgraph-online -f query="$(cat /tmp/$'
+                "'..'/../workspace/repo/pr-threads-query.graphql)\""
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_allows_graphql_query_for_env_named_repo(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "query($owner:String!,$name:String!){ repository(owner:$owner,name:$name){ name } }\n"
+                "EOF\n"
+                f'gh api graphql -F owner=hashgraph-online -F name=my.env.repo -f query="$(cat {query_path})"'
+            )
+        },
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_allows_graphql_at_file_workflow(tmp_path):
+    query_path = tmp_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                f"gh api graphql -F owner=hashgraph-online --field query=@{query_path}"
+            )
+        },
+    )
+
+    assert request is None
+
+
 def test_tool_action_request_classifier_detects_python_heredoc_file_write():
     request = extract_sensitive_tool_action_request(
         "bash",

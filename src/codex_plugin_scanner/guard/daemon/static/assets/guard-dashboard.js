@@ -12728,11 +12728,11 @@ function guardAwareHref(href) {
     return href;
   }
   const url = new URL(href, window.location.origin);
-  if (url.origin !== window.location.origin) {
+  const daemonOrigin = readGuardDaemonOrigin();
+  if (url.origin !== window.location.origin && url.origin !== daemonOrigin) {
     return href;
   }
   const fragmentPairs = [[GUARD_TOKEN_PARAM, guardToken]];
-  const daemonOrigin = readGuardDaemonOrigin();
   if (daemonOrigin) {
     fragmentPairs.push([GUARD_DAEMON_PARAM, daemonOrigin]);
   }
@@ -15561,6 +15561,7 @@ function resolveMcpInputSummary(payload) {
 function BlockedActionCard(props) {
   const launchText = actionLaunchText(props.item);
   const decisionDetail = resolveDecisionV2Detail(props.item);
+  const [shareState, setShareState] = reactExports.useState("idle");
   const isBlocked = props.item.policy_action === "block";
   const bannerBg = isBlocked ? "bg-gradient-to-r from-brand-purple/90 to-brand-purple/75" : "bg-gradient-to-r from-brand-blue/85 to-brand-dark/80";
   const bannerLabel = isBlocked ? "Blocked" : "Paused for review";
@@ -15571,23 +15572,50 @@ function BlockedActionCard(props) {
   const mcpServer = isMcpTool ? envelope?.mcp_server ?? null : null;
   const mcpTool = isMcpTool ? envelope?.mcp_tool ?? null : null;
   const mcpInputSummary = isMcpTool && envelope !== null ? resolveMcpInputSummary(envelope.raw_payload_redacted) : null;
+  const approvalUrl = props.item.approval_url ? guardAwareHref(props.item.approval_url) : null;
+  const handleCopyApprovalUrl = reactExports.useCallback(async () => {
+    if (approvalUrl === null) return;
+    try {
+      await navigator.clipboard.writeText(approvalUrl);
+      setShareState("copied");
+      window.setTimeout(() => setShareState("idle"), 1800);
+    } catch {
+      setShareState("failed");
+      window.setTimeout(() => setShareState("idle"), 2400);
+    }
+  }, [approvalUrl]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "overflow-hidden rounded-[1.65rem] border border-brand-blue/15 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex items-center gap-2 px-4 py-2.5 ${bannerBg}`, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(BannerIcon, { className: "h-3.5 w-3.5 shrink-0 text-white", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-white", children: bannerLabel }),
-      props.item.approval_url ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "a",
-        {
-          href: props.item.approval_url,
-          target: "_blank",
-          rel: "noreferrer",
-          className: "ml-auto inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80 transition-colors hover:text-white",
-          children: [
-            "Approval link",
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "h-3 w-3", "aria-hidden": "true" })
-          ]
-        }
-      ) : null
+      approvalUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "ml-auto flex items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleCopyApprovalUrl,
+            className: "inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80 transition-colors hover:text-white",
+            "aria-label": "Copy local review link",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "h-3 w-3", "aria-hidden": "true" }),
+              shareState === "copied" ? "Copied" : shareState === "failed" ? "Copy failed" : "Copy link"
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "a",
+          {
+            href: approvalUrl,
+            target: "_blank",
+            rel: "noreferrer",
+            className: "inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80 transition-colors hover:text-white",
+            children: [
+              "Open",
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "h-3 w-3", "aria-hidden": "true" })
+            ]
+          }
+        )
+      ] }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-4", children: [
       isMcpTool && mcpServer !== null && mcpTool !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 space-y-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-2", children: [

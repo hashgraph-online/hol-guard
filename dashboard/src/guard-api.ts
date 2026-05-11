@@ -163,12 +163,12 @@ export function guardAwareHref(href: string): string {
   }
 
   const url = new URL(href, window.location.origin);
-  if (url.origin !== window.location.origin) {
+  const daemonOrigin = readGuardDaemonOrigin();
+  if (url.origin !== window.location.origin && url.origin !== daemonOrigin) {
     return href;
   }
 
   const fragmentPairs = [[GUARD_TOKEN_PARAM, guardToken]];
-  const daemonOrigin = readGuardDaemonOrigin();
   if (daemonOrigin) {
     fragmentPairs.push([GUARD_DAEMON_PARAM, daemonOrigin]);
   }
