@@ -32,6 +32,15 @@ const shortcuts: ShortcutGroup[] = [
     ],
   },
   {
+    title: "History",
+    items: [
+      { keys: ["f"], description: "Focus search" },
+      { keys: ["e"], description: "Export current view" },
+      { keys: ["g"], description: "Toggle grouping" },
+      { keys: ["t"], description: "Toggle time range" },
+    ],
+  },
+  {
     title: "Navigation",
     items: [
       { keys: ["/"], description: "Focus search input" },
@@ -74,7 +83,7 @@ export function HelpModal(props: { open: boolean; onClose: () => void }) {
       aria-modal="true"
       aria-label="Keyboard shortcuts help"
     >
-      <div ref={dialogRef} className="guard-fade-in w-full max-w-lg rounded-[1.75rem] border border-slate-200/70 bg-white/95 p-6 shadow-2xl">
+      <div ref={dialogRef} className="guard-fade-in w-full max-w-lg rounded-2xl border border-slate-200/70 bg-white/95 p-6 shadow-2xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <HiMiniCommandLine className="h-5 w-5 text-brand-blue" aria-hidden="true" />

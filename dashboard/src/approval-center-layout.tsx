@@ -576,7 +576,7 @@ function QueueBrowser(props: {
           </select>
         </label>
       </div>
-      <div className="divide-y divide-slate-200/70 overflow-hidden rounded-[1.5rem] border border-slate-200/70 bg-white/75 shadow-sm">
+      <div className="divide-y divide-slate-200/70 overflow-hidden rounded-2xl border border-slate-200/70 bg-white/75 shadow-sm">
         {visibleGroups.length > 0 ? (
           visibleGroups.map((group) => (
             <QueueCardRow
@@ -1080,7 +1080,7 @@ function RuleBuilder(props: {
   }, [props.onReasonChange]);
 
   return (
-    <section className="guard-surface-in relative overflow-hidden rounded-[2rem] border border-brand-blue/15 bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.08)_100%)] p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7">
+    <section className="guard-surface-in relative overflow-hidden rounded-2xl border border-brand-blue/15 bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.08)_100%)] p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7">
       <div className="pointer-events-none absolute right-8 top-8 h-24 w-24 rounded-full bg-brand-green/20 blur-3xl" />
       <div className="relative">
         <div className="flex flex-wrap items-center gap-2">
@@ -1142,7 +1142,7 @@ function RuleBuilder(props: {
               <summary className="cursor-pointer select-none py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-brand-dark/70 [&::-webkit-details-marker]:hidden">
                 › Broader approval scopes
               </summary>
-              <div className="mt-2 rounded-[1rem] border border-brand-blue/20 bg-brand-blue/[0.04] p-2">
+              <div className="mt-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-2">
                 <p className="mb-2 px-1 text-[11px] font-medium text-brand-blue">
                   Broader scopes apply across more sessions. Use only when the narrower options are not enough.
                 </p>
@@ -1194,7 +1194,7 @@ function DecisionActionPanel(props: {
   const blockText = resolveBlockButtonText(props.submitting, props.isBlocked);
 
   return (
-    <div className="rounded-[1.65rem] border border-white/80 bg-white/80 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur">
+    <div className="rounded-2xl border border-white/80 bg-white/80 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur">
       <SectionLabel>Decision</SectionLabel>
       <p className="mt-2 text-sm leading-6 text-brand-dark/70">
         {props.previewText}
@@ -1349,7 +1349,7 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
   }, [approvalUrl]);
 
   return (
-    <div className="overflow-hidden rounded-[1.65rem] border border-brand-blue/15 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
+    <div className="overflow-hidden rounded-2xl border border-brand-blue/15 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
       <div className={`flex items-center gap-2 px-4 py-2.5 ${bannerBg}`}>
         <BannerIcon className="h-3.5 w-3.5 shrink-0 text-white" aria-hidden="true" />
         <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-white">
@@ -1410,7 +1410,7 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
             {decisionDetail}
           </p>
         ) : null}
-        <div className="mt-4 rounded-[1.25rem] bg-[#090d1a] p-1 shadow-[0_14px_35px_rgba(9,13,26,0.18)]">
+        <div className="mt-4 rounded-xl bg-[#090d1a] p-1 shadow-[0_14px_35px_rgba(9,13,26,0.18)]">
           <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
             <span className="h-2.5 w-2.5 rounded-full bg-brand-purple" />
             <span className="h-2.5 w-2.5 rounded-full bg-brand-blue" />
@@ -1428,7 +1428,7 @@ function BlockedActionCard(props: { item: GuardApprovalRequest }) {
         </div>
         <WhyThisPaused item={props.item} />
         {isBlocked && (
-          <div className="mt-3 rounded-[1rem] border border-brand-purple/20 bg-brand-purple/[0.05] px-3 py-2.5">
+          <div className="mt-3 rounded-xl border border-brand-purple/20 bg-brand-purple/[0.05] px-3 py-2.5">
             <p className="text-sm leading-6 text-brand-purple">
               HOL Guard blocked this based on a saved decision. If this is a false positive, choose <span className="font-semibold">Allow</span> below and pick how broadly to remember the override.
             </p>
@@ -1506,7 +1506,7 @@ function ScopeOption(props: {
 }) {
   return (
     <label
-      className={`flex cursor-pointer items-start gap-3 rounded-[1.15rem] border p-3 transition-all duration-150 ${
+      className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all duration-150 ${
         props.checked
           ? "border-brand-blue/30 bg-white shadow-sm"
           : "border-transparent bg-white/55 hover:border-brand-dark/15 hover:bg-white"
