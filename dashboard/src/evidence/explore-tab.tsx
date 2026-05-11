@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { HiMiniChevronDown, HiMiniChevronUp, HiMiniChartBar, HiMiniCalendarDays, HiMiniArrowPathRoundedSquare, HiOutlineArrowDownTray } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { HistoryInsights, ActivityCalendar, TopActions } from "../history-analytics";
@@ -23,7 +23,7 @@ interface ExploreTabProps {
   onFilterAction: (name: string) => void;
 }
 
-export function ExploreTab({ receipts, filteredReceipts, filters, onFilterDay, onFilterHarness, onFilterAction }: ExploreTabProps) {
+function ExploreTabRaw({ receipts, filteredReceipts, filters, onFilterDay, onFilterHarness, onFilterAction }: ExploreTabProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>("overview");
   const [showAnalytics, setShowAnalytics] = useState(false);
 
@@ -141,3 +141,5 @@ function ExportPanel({
     </div>
   );
 }
+
+export const ExploreTab = memo(ExploreTabRaw);
