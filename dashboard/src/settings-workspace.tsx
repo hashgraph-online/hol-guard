@@ -50,6 +50,14 @@ const surfacePolicyOptions = [
 
 const securityLevels = [
   {
+    value: "relaxed" as const,
+    label: "Relaxed",
+    description: "Ask before dangerous actions. Allow most safe ones.",
+    icon: HiMiniShieldCheck,
+    protects: ["Destructive commands", "Credential sharing"],
+    tone: "green" as const,
+  },
+  {
     value: "balanced" as const,
     label: "Balanced",
     description: "Ask before secret access, hidden execution, exfiltration, and destructive actions.",
@@ -86,7 +94,15 @@ const riskControls = [
 
 type RiskKey = (typeof riskControls)[number]["key"];
 
-const riskProfileActions: Record<"balanced" | "strict" | "custom", Record<RiskKey, string>> = {
+const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", Record<RiskKey, string>> = {
+  relaxed: {
+    local_secret_read: "warn",
+    credential_exfiltration: "require-reapproval",
+    data_flow_exfiltration: "require-reapproval",
+    destructive_shell: "require-reapproval",
+    encoded_execution: "warn",
+    network_egress: "allow"
+  },
   balanced: {
     local_secret_read: "require-reapproval",
     credential_exfiltration: "require-reapproval",
@@ -136,6 +152,7 @@ function buildConsequenceSummary(settings: GuardSettings): string {
   const level = settings.security_level;
   const mode = settings.mode;
   if (mode === "observe") return "Guard is watching and recording what your AI apps do, but it will not pause any actions. Switch to Prompt or Enforce when you want Guard to actively protect you.";
+  if (level === "relaxed") return "Guard will ask before destructive commands and credential sharing. Most safe actions are allowed automatically. Good for trusted environments.";
   if (level === "balanced") return "Guard will ask before secret access, hidden execution, and destructive commands. New network destinations get a warning. This is the recommended setting for most users.";
   if (level === "strict") return "Guard will ask before almost every risky action, including new network destinations. Use this when working with sensitive data or untrusted AI tools.";
   if (level === "custom") return "You have customized individual risk controls. Review the choices below to make sure they match how you want Guard to behave.";
@@ -160,6 +177,7 @@ export function SettingsWorkspace() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [perfSnapshot, setPerfSnapshot] = useState<GuardRuntimeSnapshot | null>(null);
   const [pendingMode, setPendingMode] = useState<GuardSettings["mode"] | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ "protection": true, "risk": false, "diagnostics": false });
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedSettingsRef = useRef<GuardSettings | null>(null);
@@ -398,18 +416,18 @@ export function SettingsWorkspace() {
         {/* Protection Level */}
         <AccordionSection
           title="Protection level"
-          subtitle={`${draft.security_level === "balanced" ? "Balanced" : draft.security_level === "strict" ? "Strict" : "Custom"} · ${draft.mode}`}
+          subtitle={`${draft.security_level === "relaxed" ? "Relaxed" : draft.security_level === "balanced" ? "Balanced" : draft.security_level === "strict" ? "Strict" : "Custom"} · ${draft.mode}`}
           expanded={expandedSections["protection"]}
           onToggle={() => toggleSection("protection")}
         >
           <div className="space-y-6">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
               {securityLevels.map((level) => {
                 const LevelIcon = level.icon;
                 const isSelected = draft.security_level === level.value;
-                const iconColorClass = level.tone === "blue" ? "text-brand-blue" : level.tone === "purple" ? "text-brand-purple" : "text-slate-500";
-                const iconBgClass = level.tone === "blue" ? "bg-brand-blue/10" : level.tone === "purple" ? "bg-brand-purple/10" : "bg-slate-100";
-                const selectedBorderClass = level.tone === "blue" ? "border-brand-blue/30 bg-brand-blue/[0.05]" : level.tone === "purple" ? "border-brand-purple/30 bg-brand-purple/[0.04]" : "border-slate-300 bg-slate-50";
+                const iconColorClass = level.tone === "green" ? "text-emerald-600" : level.tone === "blue" ? "text-brand-blue" : level.tone === "purple" ? "text-brand-purple" : "text-slate-500";
+                const iconBgClass = level.tone === "green" ? "bg-emerald-50" : level.tone === "blue" ? "bg-brand-blue/10" : level.tone === "purple" ? "bg-brand-purple/10" : "bg-slate-100";
+                const selectedBorderClass = level.tone === "green" ? "border-emerald-300 bg-emerald-50" : level.tone === "blue" ? "border-brand-blue/30 bg-brand-blue/[0.05]" : level.tone === "purple" ? "border-brand-purple/30 bg-brand-purple/[0.04]" : "border-slate-300 bg-slate-50";
                 return (
                   <button
                     key={level.value}
@@ -474,6 +492,26 @@ export function SettingsWorkspace() {
           </div>
         </AccordionSection>
 
+        {/* Advanced toggle */}
+        <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-4">
+          <div>
+            <p className="text-sm font-semibold text-brand-dark">Advanced settings</p>
+            <p className="text-xs text-slate-500">Fine-tune individual risk controls and diagnostics.</p>
+          </div>
+          <label className="relative inline-flex cursor-pointer items-center">
+            <input
+              type="checkbox"
+              checked={showAdvanced}
+              onChange={(e) => setShowAdvanced(e.target.checked)}
+              className="peer sr-only"
+            />
+            <div className="h-6 w-11 rounded-full bg-slate-200 transition-colors peer-checked:bg-brand-blue" />
+            <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform peer-checked:translate-x-5" />
+          </label>
+        </div>
+
+        {showAdvanced && (
+          <>
         {/* Risk Controls */}
         <AccordionSection
           title="Risk choices"
@@ -483,7 +521,7 @@ export function SettingsWorkspace() {
         >
           <div className="space-y-4">
             {draft.security_level !== "custom" && (
-              <p className="text-sm text-slate-500">All risk behaviors are set by the <span className="font-semibold">{draft.security_level === "balanced" ? "Balanced" : "Strict"}</span> level. Select <span className="font-semibold">Custom</span> above to override individual choices.</p>
+              <p className="text-sm text-slate-500">All risk behaviors are set by the <span className="font-semibold">{draft.security_level === "relaxed" ? "Relaxed" : draft.security_level === "balanced" ? "Balanced" : "Strict"}</span> level. Select <span className="font-semibold">Custom</span> above to override individual choices.</p>
             )}
             <div className={`divide-y divide-slate-100 border-t border-slate-100 ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
               {riskControls.map((risk) => (
@@ -563,6 +601,8 @@ export function SettingsWorkspace() {
             {actionMessage ? <p className="text-sm text-slate-600">{actionMessage}</p> : null}
           </div>
         </AccordionSection>
+          </>
+        )}
       </div>
 
       {/* Sticky save bar */}
