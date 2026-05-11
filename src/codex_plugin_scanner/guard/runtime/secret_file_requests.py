@@ -2715,6 +2715,8 @@ def _contains_shell_expansion(value: str) -> bool:
         "$(" in value
         or "`" in value
         or "${" in value
+        or "$'" in value
+        or '$"' in value
         or re.search(r"\$[A-Za-z_][A-Za-z0-9_]*", value) is not None
         or re.search(r"[*?\[\]{}]", value) is not None
     )
