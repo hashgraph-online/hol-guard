@@ -2733,15 +2733,20 @@ def _looks_like_temporary_pr_threads_query_path(path_text: str) -> bool:
     basename = os.path.basename(normalized)
     if basename != "pr-threads-query.graphql":
         return False
+    if not normalized.startswith("/"):
+        return False
     lowered = normalized.lower()
-    return any(
-        marker in lowered
-        for marker in (
-            "/tmp/",
-            "/var/folders/",
-            "/.copilot/session-state/",
-            "/.cache/",
+    return (
+        lowered.startswith(
+            (
+                "/tmp/",
+                "/var/tmp/",
+                "/private/tmp/",
+                "/var/folders/",
+                "/private/var/folders/",
+            )
         )
+        or "/.copilot/session-state/" in lowered
     )
 
 
