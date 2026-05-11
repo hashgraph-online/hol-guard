@@ -135,19 +135,44 @@ export function ShellSidebar(props: {
   queuedCount: number;
   activeHarness: string | null;
   view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail";
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }) {
+  const collapsed = props.collapsed ?? false;
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-slate-200 bg-[#f8fafc] lg:flex">
+    <aside className={`fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-slate-200 bg-[#f8fafc] transition-all duration-200 lg:flex ${collapsed ? "w-20" : "w-64"}`}>
       <div className="flex min-h-[72px] shrink-0 items-center border-b border-brand-blue/20 bg-gradient-to-r from-brand-blue to-brand-dark px-6">
-        <a href={guardAwareHref("/")} className="flex items-center gap-2.5 text-white no-underline transition-opacity hover:opacity-85">
+        <a href={guardAwareHref("/")} className="flex items-center gap-2.5 text-white no-underline transition-opacity hover:opacity-85" title="HOL Guard">
           <img src="/brand/Logo_Icon_Dark.png" alt="HOL" className="h-10 w-10 shrink-0 rounded-none bg-transparent object-contain" />
-          <span className="font-mono text-base font-semibold tracking-tight text-white">HOL Guard</span>
+          {!collapsed && <span className="font-mono text-base font-semibold tracking-tight text-white">HOL Guard</span>}
         </a>
+        {!collapsed && (
+          <button
+            onClick={props.onToggleCollapse}
+            className="ml-auto rounded-md p-1 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
+          >
+            <HiMiniChevronLeft className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
+        {collapsed && (
+          <button
+            onClick={props.onToggleCollapse}
+            className="absolute -right-3 top-6 rounded-full border border-slate-200 bg-white p-1 text-slate-400 shadow-sm transition-colors hover:text-brand-dark"
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+          >
+            <HiMiniChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        )}
       </div>
       <div className="flex flex-1 flex-col overflow-y-auto px-3 py-5">
-        <p className="mb-2 px-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-          Dashboard
-        </p>
+        {!collapsed && (
+          <p className="mb-2 px-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+            Dashboard
+          </p>
+        )}
         <nav className="flex flex-col gap-0.5" aria-label="Guard dashboard">
           {sidebarLinks.map((item) => {
             const Icon = item.icon;
@@ -158,6 +183,7 @@ export function ShellSidebar(props: {
                 active={props.view === item.view || (props.view === "app-detail" && item.view === "fleet")}
                 icon={<Icon className="h-4 w-4" />}
                 badgeCount={item.view === "inbox" ? props.queuedCount : 0}
+                collapsed={collapsed}
               >
                 {item.label}
               </SidebarLink>
@@ -165,44 +191,54 @@ export function ShellSidebar(props: {
           })}
         </nav>
 
-        <div className="mt-6 space-y-2">
-          <p className="px-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-            Quick Actions
-          </p>
-          <SidebarAction href="/" icon={<HiMiniCommandLine className="h-4 w-4" aria-hidden="true" />}>
-            Local dashboard
-          </SidebarAction>
-          <SidebarAction href="https://hol.org/guard" external icon={<HiMiniCloud className="h-4 w-4" aria-hidden="true" />}>
-            Open Guard Cloud
-          </SidebarAction>
-        </div>
+        {!collapsed && (
+          <div className="mt-6 space-y-2">
+            <p className="px-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+              Quick Actions
+            </p>
+            <SidebarAction href="/" icon={<HiMiniCommandLine className="h-4 w-4" aria-hidden="true" />}>
+              Local dashboard
+            </SidebarAction>
+            <SidebarAction href="https://hol.org/guard" external icon={<HiMiniCloud className="h-4 w-4" aria-hidden="true" />}>
+              Open Guard Cloud
+            </SidebarAction>
+          </div>
+        )}
 
         <div className="mt-auto pt-6">
-          <div className="mx-2 overflow-hidden rounded-xl border border-brand-blue/25 bg-gradient-to-br from-brand-blue/[0.05] to-brand-dark/[0.03]">
-            <div className="space-y-2 px-3 pb-2.5 pt-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
-                  <HiMiniShieldCheck className="h-3.5 w-3.5 text-brand-blue" />
-                  <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-brand-blue">
-                    Local Guard
-                  </p>
+          {!collapsed ? (
+            <div className="mx-2 overflow-hidden rounded-xl border border-brand-blue/25 bg-gradient-to-br from-brand-blue/[0.05] to-brand-dark/[0.03]">
+              <div className="space-y-2 px-3 pb-2.5 pt-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <HiMiniShieldCheck className="h-3.5 w-3.5 text-brand-blue" />
+                    <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-brand-blue">
+                      Local Guard
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-brand-blue/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-blue">
+                    {props.queuedCount > 0 ? "Review" : "Clear"}
+                  </span>
                 </div>
-                <span className="rounded-full bg-brand-blue/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-blue">
-                  {props.queuedCount > 0 ? "Review" : "Clear"}
-                </span>
+                <p className="text-[11px] leading-relaxed text-brand-dark/70">
+                  {props.queuedCount > 0
+                    ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.`
+                    : "No local approvals are waiting."}
+                </p>
+                {props.activeHarness ? (
+                  <span className="inline-flex rounded-full bg-white/70 px-2 py-1 font-mono text-[10px] font-semibold text-slate-500">
+                    {props.activeHarness}
+                  </span>
+                ) : null}
               </div>
-              <p className="text-[11px] leading-relaxed text-brand-dark/70">
-                {props.queuedCount > 0
-                  ? `${props.queuedCount} local ${props.queuedCount === 1 ? "action needs" : "actions need"} a Guard decision.`
-                  : "No local approvals are waiting."}
-              </p>
-              {props.activeHarness ? (
-                <span className="inline-flex rounded-full bg-white/70 px-2 py-1 font-mono text-[10px] font-semibold text-slate-500">
-                  {props.activeHarness}
-                </span>
-              ) : null}
             </div>
-          </div>
+          ) : (
+            <div className="flex justify-center">
+              <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full text-[10px] font-bold ${props.queuedCount > 0 ? "bg-brand-blue/15 text-brand-blue" : "bg-slate-200 text-slate-400"}`}>
+                {props.queuedCount > 0 ? (props.queuedCount > 99 ? "99+" : props.queuedCount) : "0"}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </aside>
@@ -432,12 +468,17 @@ function SidebarLink(props: {
   active?: boolean;
   icon?: ReactNode;
   badgeCount?: number;
+  collapsed?: boolean;
 }) {
+  const collapsed = props.collapsed ?? false;
   return (
     <a
       href={guardAwareHref(props.href)}
       aria-current={props.active ? "page" : undefined}
-      className={`flex min-h-10 items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium no-underline transition-colors duration-150 ${
+      title={collapsed ? String(props.children) : undefined}
+      className={`flex min-h-10 items-center rounded-lg no-underline transition-colors duration-150 ${
+        collapsed ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2 text-sm font-medium"
+      } ${
         props.active
           ? "bg-brand-blue/[0.05] font-semibold text-brand-dark"
           : "text-slate-600 hover:bg-slate-200/50 hover:text-slate-900"
@@ -448,8 +489,8 @@ function SidebarLink(props: {
           {props.icon}
         </span>
       ) : null}
-      <span className="flex-1 truncate">{props.children}</span>
-      {props.badgeCount && props.badgeCount > 0 ? (
+      {!collapsed && <span className="flex-1 truncate">{props.children}</span>}
+      {!collapsed && props.badgeCount && props.badgeCount > 0 ? (
         <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-blue/15 px-1.5 text-[10px] font-bold text-brand-blue">
           {props.badgeCount > 99 ? "99+" : props.badgeCount}
         </span>
@@ -458,17 +499,19 @@ function SidebarLink(props: {
   );
 }
 
-function SidebarAction(props: { href: string; children: ReactNode; icon: ReactNode; external?: boolean }) {
+function SidebarAction(props: { href: string; children: ReactNode; icon: ReactNode; external?: boolean; collapsed?: boolean }) {
+  const collapsed = props.collapsed ?? false;
   return (
     <a
       href={props.external ? props.href : guardAwareHref(props.href)}
       target={props.external ? "_blank" : undefined}
       rel={props.external ? "noreferrer" : undefined}
-      className="flex min-h-10 items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 no-underline transition-colors duration-150 hover:border-brand-blue/30 hover:text-brand-dark"
+      title={collapsed ? String(props.children) : undefined}
+      className={`flex min-h-10 items-center rounded-lg border border-slate-200 bg-white no-underline transition-colors duration-150 hover:border-brand-blue/30 hover:text-brand-dark ${collapsed ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2 text-sm font-medium text-slate-700"}`}
     >
       <span className="shrink-0 text-slate-400">{props.icon}</span>
-      <span className="flex-1 truncate">{props.children}</span>
-      {props.external ? <HiMiniArrowTopRightOnSquare className="h-3.5 w-3.5 shrink-0 text-slate-300" /> : null}
+      {!collapsed && <span className="flex-1 truncate">{props.children}</span>}
+      {!collapsed && props.external ? <HiMiniArrowTopRightOnSquare className="h-3.5 w-3.5 shrink-0 text-slate-300" /> : null}
     </a>
   );
 }
