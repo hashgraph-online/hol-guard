@@ -1453,6 +1453,29 @@ def test_tool_action_request_classifier_rejects_graphql_workflow_with_repo_copil
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_rejects_graphql_workflow_with_symlink_target(tmp_path):
+    link_path = tmp_path / "link"
+    try:
+        link_path.symlink_to(Path.cwd(), target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are not supported in this environment")
+    query_path = link_path / "pr-threads-query.graphql"
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                f"cat > {query_path} <<'EOF'\n"
+                "query($owner:String!){ repository(owner:$owner){ name } }\n"
+                "EOF\n"
+                f'gh api graphql -F owner=hashgraph-online -f query="$(cat {query_path})"'
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_allows_graphql_at_file_workflow(tmp_path):
     query_path = tmp_path / "pr-threads-query.graphql"
     request = extract_sensitive_tool_action_request(

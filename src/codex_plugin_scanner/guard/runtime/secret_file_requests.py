@@ -2737,7 +2737,7 @@ def _looks_like_temporary_pr_threads_query_path(path_text: str) -> bool:
         return False
     if not normalized.startswith("/"):
         return False
-    lowered = normalized.lower()
+    lowered = os.path.realpath(normalized).replace("\\", "/").lower()
     return lowered.startswith(
         (
             "/tmp/",
