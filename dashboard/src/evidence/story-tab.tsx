@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, memo } from "react";
 import { HiMiniChevronLeft, HiMiniChevronRight, HiMiniCheckCircle, HiMiniNoSymbol, HiMiniQuestionMarkCircle } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
@@ -11,7 +11,7 @@ interface StoryTabProps {
   onSelectDay: (day: string) => void;
 }
 
-export function StoryTab({ receipts, selectedDay, onSelectDay }: StoryTabProps) {
+function StoryTabRaw({ receipts, selectedDay, onSelectDay }: StoryTabProps) {
   const dayReceipts = useMemo(() => {
     if (!selectedDay) return receipts.slice(0, 20);
     const start = new Date(selectedDay);
@@ -200,3 +200,5 @@ function DecisionBadge({ allowed }: { allowed: boolean }) {
     </span>
   );
 }
+
+export const StoryTab = memo(StoryTabRaw);

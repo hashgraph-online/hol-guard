@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, memo } from "react";
 import { HiMiniChevronRight, HiMiniLockClosed, HiMiniGlobeAlt, HiMiniExclamationTriangle, HiMiniEyeSlash, HiMiniDocumentText, HiMiniWrenchScrewdriver, HiMiniCircleStack } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { groupByCategory, getCategoryInfo, type ReceiptCategory, CATEGORIES } from "./categories";
@@ -20,7 +20,7 @@ const ICON_MAP: Record<ReceiptCategory, React.ReactNode> = {
   other: <HiMiniCircleStack className="h-5 w-5" aria-hidden="true" />,
 };
 
-export function CategoryTab({ receipts, onFilterCategory }: CategoryTabProps) {
+function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
   const [selectedCategory, setSelectedCategory] = useState<ReceiptCategory | null>(null);
 
   const groups = useMemo(() => groupByCategory(receipts), [receipts]);
@@ -112,3 +112,5 @@ export function CategoryTab({ receipts, onFilterCategory }: CategoryTabProps) {
     </div>
   );
 }
+
+export const CategoryTab = memo(CategoryTabRaw);
