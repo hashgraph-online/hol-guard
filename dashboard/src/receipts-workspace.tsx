@@ -285,10 +285,10 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
           <StoryTab receipts={filtered} selectedDay={dayFilter} onSelectDay={handleFilterDay} />
         )}
         {activeTab === "category" && (
-          <CategoryTab receipts={filtered} onFilterCategory={(cat) => setSearch(cat)} />
+          <CategoryTab receipts={filtered} />
         )}
         {activeTab === "app" && (
-          <AppTab receipts={filtered} onFilterApp={(app) => setHarnessFilter(app)} />
+          <AppTab receipts={filtered} />
         )}
         {activeTab === "explore" && (
           <ExploreTab
@@ -296,6 +296,8 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
             filteredReceipts={filtered}
             filters={{ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter }}
             onFilterDay={handleFilterDay}
+            onFilterHarness={(harness) => setHarnessFilter(harness)}
+            onFilterAction={(name) => setSearch(name)}
           />
         )}
       </div>

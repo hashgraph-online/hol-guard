@@ -19,9 +19,11 @@ interface ExploreTabProps {
     harness: string;
   };
   onFilterDay: (day: string) => void;
+  onFilterHarness: (harness: string) => void;
+  onFilterAction: (name: string) => void;
 }
 
-export function ExploreTab({ receipts, filteredReceipts, filters, onFilterDay }: ExploreTabProps) {
+export function ExploreTab({ receipts, filteredReceipts, filters, onFilterDay, onFilterHarness, onFilterAction }: ExploreTabProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>("overview");
   const [showAnalytics, setShowAnalytics] = useState(false);
 
@@ -74,11 +76,11 @@ export function ExploreTab({ receipts, filteredReceipts, filters, onFilterDay }:
         <div className="space-y-6">
           <HistoryInsights
             receipts={receipts}
-            onFilterHarness={() => {}}
+            onFilterHarness={onFilterHarness}
             onFilterDay={onFilterDay}
           />
           <HistoryCharts receipts={filteredReceipts} />
-          <TopActions receipts={filteredReceipts} onFilterAction={() => {}} />
+          <TopActions receipts={filteredReceipts} onFilterAction={onFilterAction} />
         </div>
       )}
 

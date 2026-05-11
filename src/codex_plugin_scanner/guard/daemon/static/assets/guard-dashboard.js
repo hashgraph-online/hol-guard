@@ -14776,7 +14776,7 @@ function CategoryTab({ receipts, onFilterCategory }) {
     Array.from(groups.values()).every((items) => items.length === 0) && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No activity yet." }) })
   ] });
 }
-function AppTab({ receipts, onFilterApp }) {
+function AppTab({ receipts }) {
   const [selectedApp, setSelectedApp] = reactExports.useState(null);
   const apps = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
@@ -14838,7 +14838,6 @@ function AppTab({ receipts, onFilterApp }) {
         {
           onClick: () => {
             setSelectedApp(harness);
-            onFilterApp?.(harness);
           },
           className: "flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:shadow-md",
           children: [
@@ -15778,7 +15777,7 @@ function escapeCsvCell(value) {
 function formatDateIso(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-function ExploreTab({ receipts, filteredReceipts, filters, onFilterDay }) {
+function ExploreTab({ receipts, filteredReceipts, filters, onFilterDay, onFilterHarness, onFilterAction }) {
   const [activeSubTab, setActiveSubTab] = reactExports.useState("overview");
   const [showAnalytics, setShowAnalytics] = reactExports.useState(false);
   if (!showAnalytics) {
@@ -15822,14 +15821,12 @@ function ExploreTab({ receipts, filteredReceipts, filters, onFilterDay }) {
         HistoryInsights,
         {
           receipts,
-          onFilterHarness: () => {
-          },
+          onFilterHarness,
           onFilterDay
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(HistoryCharts, { receipts: filteredReceipts }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TopActions, { receipts: filteredReceipts, onFilterAction: () => {
-      } })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(TopActions, { receipts: filteredReceipts, onFilterAction })
     ] }),
     activeSubTab === "calendar" && /* @__PURE__ */ jsxRuntimeExports.jsx(ActivityCalendar, { receipts: filteredReceipts, onSelectDay: onFilterDay }),
     activeSubTab === "compare" && /* @__PURE__ */ jsxRuntimeExports.jsx(CompareTimePeriods, { receipts }),
@@ -16078,15 +16075,17 @@ function ReadyReceiptsWorkspace(props) {
     }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-[300px]", children: [
       activeTab === "story" && /* @__PURE__ */ jsxRuntimeExports.jsx(StoryTab, { receipts: filtered, selectedDay: dayFilter, onSelectDay: handleFilterDay }),
-      activeTab === "category" && /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryTab, { receipts: filtered, onFilterCategory: (cat) => setSearch(cat) }),
-      activeTab === "app" && /* @__PURE__ */ jsxRuntimeExports.jsx(AppTab, { receipts: filtered, onFilterApp: (app) => setHarnessFilter(app) }),
+      activeTab === "category" && /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryTab, { receipts: filtered }),
+      activeTab === "app" && /* @__PURE__ */ jsxRuntimeExports.jsx(AppTab, { receipts: filtered }),
       activeTab === "explore" && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ExploreTab,
         {
           receipts: props.receiptItems,
           filteredReceipts: filtered,
           filters: { search, time: timeFilter, decision: decisionFilter, harness: harnessFilter },
-          onFilterDay: handleFilterDay
+          onFilterDay: handleFilterDay,
+          onFilterHarness: (harness) => setHarnessFilter(harness),
+          onFilterAction: (name) => setSearch(name)
         }
       )
     ] })

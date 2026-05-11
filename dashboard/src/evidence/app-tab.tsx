@@ -7,10 +7,9 @@ import { formatRelativeTime } from "../approval-center-utils";
 
 interface AppTabProps {
   receipts: GuardReceipt[];
-  onFilterApp?: (harness: string) => void;
 }
 
-export function AppTab({ receipts, onFilterApp }: AppTabProps) {
+export function AppTab({ receipts }: AppTabProps) {
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
 
   const apps = useMemo(() => {
@@ -77,7 +76,6 @@ export function AppTab({ receipts, onFilterApp }: AppTabProps) {
             key={harness}
             onClick={() => {
               setSelectedApp(harness);
-              onFilterApp?.(harness);
             }}
             className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:shadow-md"
           >
