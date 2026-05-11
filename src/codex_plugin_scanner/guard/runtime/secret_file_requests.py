@@ -2692,8 +2692,6 @@ def _looks_like_safe_graphql_query_file_workflow(command_text: str) -> bool:
     rest = match.group("rest").strip()
     if not rest.startswith("gh api graphql "):
         return False
-    if _path_text_looks_sensitive(rest):
-        return False
     if re.search(r"(?:;|&|\|\||\||>|<|\n)", rest):
         return False
     rest_without_allowed_query_refs = rest
@@ -2744,6 +2742,8 @@ def _looks_like_temporary_pr_threads_query_path(path_text: str) -> bool:
     if basename != "pr-threads-query.graphql":
         return False
     if not normalized.startswith("/"):
+        return False
+    if os.path.exists(normalized):
         return False
     lowered = os.path.realpath(normalized).replace("\\", "/").lower()
     return lowered.startswith(
