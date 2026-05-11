@@ -103,11 +103,6 @@ body {
   100% { background-position: 200% 0; }
 }
 
-@keyframes guard-pulse-dot {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
-}
-
 @keyframes guard-fade-scale {
   from {
     opacity: 0;
@@ -198,21 +193,8 @@ a:focus-visible {
   }
 }
 
-@keyframes guard-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(85, 153, 254, 0.2);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(85, 153, 254, 0);
-  }
-}
-
 .guard-fade-out {
   animation: guard-fade-out 250ms var(--ease-out-quart) both;
-}
-
-.guard-pulse {
-  animation: guard-pulse 2s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -220,8 +202,7 @@ a:focus-visible {
   .guard-fade-in,
   .guard-fade-out,
   .guard-tab-enter,
-  .guard-tab-enter-reverse,
-  .guard-pulse {
+  .guard-tab-enter-reverse {
     animation: none !important;
   }
 
