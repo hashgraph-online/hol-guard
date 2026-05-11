@@ -2628,6 +2628,8 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     normalized = command_text.strip()
     if not normalized:
         return False
+    if _looks_like_safe_graphql_query_file_workflow(normalized):
+        return False
     parts = _split_shell_parts(normalized)
     if not parts:
         return False
@@ -2662,6 +2664,115 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     return any(
         command_name == "sed" and any(part == "-i" or part.startswith("-i") for part in parts[1:])
         for command_name in command_names
+    )
+
+
+_SAFE_GRAPHQL_QUERY_FILE_WORKFLOW_PATTERN = re.compile(
+    r"\A\s*cat\s*>\s*(?P<path>'[^']+'|\"[^\"]+\"|[^\s]+)\s*<<(?P<quote>['\"])(?P<label>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)"
+    r"\s*\n(?P<body>.*?)\n(?P=label)\s*(?:\n|&&|;)\s*(?P<rest>.+)\Z",
+    re.DOTALL,
+)
+
+
+def _looks_like_safe_graphql_query_file_workflow(command_text: str) -> bool:
+    match = _SAFE_GRAPHQL_QUERY_FILE_WORKFLOW_PATTERN.match(command_text)
+    if match is None:
+        return False
+    target_path = _strip_shell_quotes(match.group("path").strip())
+    if (
+        not target_path.endswith(".graphql")
+        or _path_text_looks_sensitive(target_path)
+        or _contains_shell_expansion(target_path)
+        or not _looks_like_temporary_pr_threads_query_path(target_path)
+    ):
+        return False
+    body = match.group("body").strip()
+    if not re.search(r"\bquery\b", body) or re.search(r"\bmutation\b|\bsubscription\b", body):
+        return False
+    rest = match.group("rest").strip()
+    if not rest.startswith("gh api graphql "):
+        return False
+    if re.search(r"(?:;|&|\|\||\||>|<|\n)", rest):
+        return False
+    rest_without_allowed_query_refs = rest
+    for ref in _graphql_query_file_substitution_refs(target_path):
+        rest_without_allowed_query_refs = rest_without_allowed_query_refs.replace(ref, "")
+    if "$(" in rest_without_allowed_query_refs or "`" in rest_without_allowed_query_refs:
+        return False
+    return _rest_has_exact_graphql_query_file_arg(rest, target_path)
+
+
+def _strip_shell_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def _contains_shell_expansion(value: str) -> bool:
+    return (
+        "$(" in value
+        or "`" in value
+        or "${" in value
+        or "$'" in value
+        or '$"' in value
+        or re.search(r"\$[A-Za-z_][A-Za-z0-9_]*", value) is not None
+        or re.search(r"[*?\[\]{}]", value) is not None
+    )
+
+
+def _graphql_query_file_substitution_refs(target_path: str) -> set[str]:
+    return {
+        f"$(cat {target_path})",
+        f'$(cat "{target_path}")',
+        f"$(cat '{target_path}')",
+    }
+
+
+def _rest_has_exact_graphql_query_file_arg(rest: str, target_path: str) -> bool:
+    escaped_path = re.escape(target_path)
+    path_value = rf"(?:(?:\"|'){escaped_path}(?:\"|')|{escaped_path})"
+    substitution_pattern = rf"(?:^|\s)(?:-f|--field)\s+query=(?:\"|')?\$\(cat {path_value}\)(?:\"|')?(?:\s|$)"
+    field_pattern = rf"(?:^|\s)(?:-f|--field)\s+query=@{path_value}(?:\s|$)"
+    return re.search(substitution_pattern, rest) is not None or re.search(field_pattern, rest) is not None
+
+
+def _looks_like_temporary_pr_threads_query_path(path_text: str) -> bool:
+    normalized = os.path.normpath(path_text.replace("\\", "/")).replace("\\", "/")
+    basename = os.path.basename(normalized)
+    if basename != "pr-threads-query.graphql":
+        return False
+    if not normalized.startswith("/"):
+        return False
+    if os.path.exists(normalized):
+        return False
+    lowered = os.path.realpath(normalized).replace("\\", "/").lower()
+    return lowered.startswith(
+        (
+            "/tmp/",
+            "/var/tmp/",
+            "/private/tmp/",
+            "/var/folders/",
+            "/private/var/folders/",
+        )
+    )
+
+
+def _path_text_looks_sensitive(path_text: str) -> bool:
+    lowered = path_text.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            ".aws/",
+            ".docker/",
+            ".kube/",
+            ".ssh/",
+            ".env",
+            ".git-credentials",
+            ".netrc",
+            ".npmrc",
+            ".pypirc",
+            "id_rsa",
+        )
     )
 
 
