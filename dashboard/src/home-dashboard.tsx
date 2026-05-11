@@ -163,9 +163,10 @@ export function HomeWorkspace(props: {
 
       <ProofStrip
         items={[
-          { label: "Needs your choice", value: queuedCount, tone: queuedCount > 0 ? "blue" : "slate", pulse: queuedCount > 0 },
-          { label: "Apps watched", value: watchedAppsCount, tone: watchedAppsCount > 0 ? "green" : "slate" },
-          { label: "Day streak", value: streak, tone: streak > 1 ? "purple" : "slate", icon: streak > 1 ? <HiMiniFire className="h-3.5 w-3.5 text-brand-purple" aria-hidden="true" /> : null, hint: streak > 0 ? "Consecutive days with Guard activity. Resets after 48h of inactivity." : "Guard activity streak" },
+          { label: "Pending", value: queuedCount, tone: queuedCount > 0 ? "blue" : "slate" },
+          { label: "Apps", value: watchedAppsCount, tone: watchedAppsCount > 0 ? "green" : "slate" },
+          { label: "Streak", value: streak, tone: streak > 1 ? "purple" : "slate", icon: streak > 1 ? <HiMiniFire className="h-3.5 w-3.5 text-brand-purple" aria-hidden="true" /> : null, hint: streak > 0 ? "Consecutive days with Guard activity. Resets after 48h of inactivity." : "Guard activity streak" },
+          { label: "History", value: snapshot?.receipt_count ?? 0, tone: "purple" },
         ]}
       />
 
@@ -233,12 +234,12 @@ export function HomeWorkspace(props: {
           )}
 
           {policyItems.length > 0 && (
-            <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+            <div className="rounded-xl border border-slate-100 p-4">
               <SectionLabel>Reset remembered decisions</SectionLabel>
-              <p className="mt-2 text-sm text-muted-foreground">
+              <p className="mt-1 text-sm text-slate-500">
                 Clear remembered decisions when you want Guard to ask again next time. This does not remove your history.
               </p>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 {clearHarnesses.slice(0, 4).map((harness: string) => (
                   <ClearHarnessButton
                     key={harness}
@@ -526,12 +527,14 @@ function AppsAtAGlance(props: {
   }
 
   return (
-    <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
-      <SectionLabel>Apps at a glance</SectionLabel>
-      <p className="mt-2 text-sm text-muted-foreground">
-        Guard is watching these apps on this machine.
-      </p>
-      <div ref={listRef} className="mt-4 space-y-2" role="list" aria-label="Apps at a glance">
+    <div>
+      <div className="mb-3">
+        <SectionLabel>Apps at a glance</SectionLabel>
+        <p className="mt-1 text-sm text-slate-500">
+          Guard is watching these apps on this machine.
+        </p>
+      </div>
+      <div ref={listRef} className="divide-y divide-slate-100 border-t border-slate-100" role="list" aria-label="Apps at a glance">
         {sortedHarnesses.map((harness, index) => {
           const install = props.managedInstalls.find((i) => i.harness === harness);
           const isObserved = props.observedHarnesses.includes(harness);
@@ -544,10 +547,10 @@ function AppsAtAGlance(props: {
               onKeyDown={(e) => handleKeyDown(e, index)}
               onFocus={() => setFocusedIndex(index)}
               onBlur={() => setFocusedIndex(-1)}
-              className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-all duration-150 hover:bg-slate-50 hover:shadow-sm active:scale-[0.99] ${
+              className={`flex w-full items-center justify-between gap-3 py-2.5 text-left transition-colors hover:bg-slate-50/60 ${
                 focusedIndex === index
-                  ? "border-brand-blue/50 bg-brand-blue/[0.04] ring-1 ring-brand-blue/20"
-                  : "border-slate-200/70"
+                  ? "bg-brand-blue/[0.04]"
+                  : ""
               }`}
               role="listitem"
             >

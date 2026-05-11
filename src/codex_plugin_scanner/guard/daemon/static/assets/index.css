@@ -998,10 +998,6 @@
     flex-wrap: wrap;
   }
 
-  .items-baseline {
-    align-items: baseline;
-  }
-
   .items-center {
     align-items: center;
   }
@@ -1130,8 +1126,16 @@
     column-gap: calc(var(--spacing) * 4);
   }
 
+  .gap-x-8 {
+    column-gap: calc(var(--spacing) * 8);
+  }
+
   .gap-y-1 {
     row-gap: calc(var(--spacing) * 1);
+  }
+
+  .gap-y-4 {
+    row-gap: calc(var(--spacing) * 4);
   }
 
   :where(.divide-y > :not(:last-child)) {
@@ -1298,7 +1302,7 @@
     border-color: hsl(var(--border));
   }
 
-  .border-brand-attention\/10 {
+  .border-brand-attention, .border-brand-attention\/10 {
     border-color: var(--brand-attention);
   }
 
@@ -1388,16 +1392,6 @@
     }
   }
 
-  .border-brand-blue\/50 {
-    border-color: var(--brand-blue);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .border-brand-blue\/50 {
-      border-color: color-mix(in oklab, var(--brand-blue) 50%, transparent);
-    }
-  }
-
   .border-brand-green\/15 {
     border-color: var(--brand-green);
   }
@@ -1476,6 +1470,10 @@
     .border-brand-purple\/30 {
       border-color: color-mix(in oklab, var(--brand-purple) 30%, transparent);
     }
+  }
+
+  .border-emerald-500 {
+    border-color: var(--color-emerald-500);
   }
 
   .border-gray-200 {
@@ -2224,6 +2222,10 @@
     object-fit: contain;
   }
 
+  .p-0\.5 {
+    padding: calc(var(--spacing) * .5);
+  }
+
   .p-1 {
     padding: calc(var(--spacing) * 1);
   }
@@ -2358,6 +2360,14 @@
 
   .pb-4 {
     padding-bottom: calc(var(--spacing) * 4);
+  }
+
+  .pl-3 {
+    padding-left: calc(var(--spacing) * 3);
+  }
+
+  .pl-3\.5 {
+    padding-left: calc(var(--spacing) * 3.5);
   }
 
   .pl-4 {
@@ -2818,16 +2828,6 @@
   @supports (color: color-mix(in lab, red, red)) {
     .shadow-emerald-500\/15 {
       --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-emerald-500) 15%, transparent) var(--tw-shadow-alpha), transparent);
-    }
-  }
-
-  .ring-brand-blue\/20 {
-    --tw-ring-color: var(--brand-blue);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .ring-brand-blue\/20 {
-      --tw-ring-color: color-mix(in oklab, var(--brand-blue) 20%, transparent);
     }
   }
 
@@ -3298,10 +3298,6 @@
 
   .active\:scale-\[0\.98\]:active {
     scale: .98;
-  }
-
-  .active\:scale-\[0\.99\]:active {
-    scale: .99;
   }
 
   .disabled\:pointer-events-none:disabled {
