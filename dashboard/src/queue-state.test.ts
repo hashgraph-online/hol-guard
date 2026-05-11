@@ -300,33 +300,33 @@ assert(
 );
 assert(
   needsDecision.ctaLabel === "Review blocked action",
-  "T-QS-31: buildHomePrimaryState CTA is 'Review blocked action' when pending"
+  "T-QS-36: buildHomePrimaryState CTA is 'Review blocked action' when pending"
 );
 
 const setupNeeded = buildHomePrimaryState(0, 0);
 assert(
   setupNeeded.status === "setup_needed",
-  "T-QS-32: buildHomePrimaryState returns setup_needed when no watched apps and no pending"
+  "T-QS-37: buildHomePrimaryState returns setup_needed when no watched apps and no pending"
 );
 assert(
   setupNeeded.ctaLabel === "Set up protection",
-  "T-QS-33: buildHomePrimaryState CTA is 'Set up protection' when no watched apps"
+  "T-QS-38: buildHomePrimaryState CTA is 'Set up protection' when no watched apps"
 );
 
 const protectedState = buildHomePrimaryState(0, 2);
 assert(
   protectedState.status === "protected",
-  "T-QS-34: buildHomePrimaryState returns protected status when guarded with apps present"
+  "T-QS-39: buildHomePrimaryState returns protected status when guarded with apps present"
 );
 assert(
   protectedState.copy.includes("protecting"),
-  "T-QS-35: buildHomePrimaryState copy mentions protecting when protected"
+  "T-QS-40: buildHomePrimaryState copy mentions protecting when protected"
 );
 
 const singlePending = buildHomePrimaryState(1, 1);
 assert(
   singlePending.copy.includes("1 action paused"),
-  "T-QS-36: buildHomePrimaryState uses singular 'action' when exactly one pending"
+  "T-QS-41: buildHomePrimaryState uses singular 'action' when exactly one pending"
 );
 
 const fileReadEnvelope: GuardActionEnvelope = {

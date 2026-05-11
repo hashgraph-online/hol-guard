@@ -249,7 +249,11 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
   const decisionCategories = item.decision_v2_json?.signals.map((signal) => signal.category) ?? [];
   const text = queueCategoryText(item);
 
-  if (decisionCategories.includes("network") || textIncludesAny(text, ["network host", "outbound", "webhook", "curl ", "https://", "http://"])) {
+  if (
+    decisionCategories.includes("network") ||
+    textIncludesAny(text, ["network host", "outbound", "webhook", "https://", "http://"]) ||
+    /\bcurl\b/.test(text)
+  ) {
     if (textIncludesAny(text, ["secret", "credential", "token", "api key", "upload", "exfiltrat"])) {
       return "data_exfiltration";
     }
@@ -343,9 +347,15 @@ export function sortQueue(
   items: GuardApprovalRequest[],
   direction: QueueSortDirection
 ): GuardApprovalRequest[] {
+  const categoryLabels =
+    direction === "category"
+      ? new Map(items.map((item) => [item.request_id, resolveQueueCategory(item).label]))
+      : null;
   return [...items].sort((a, b) => {
-    if (direction === "category") {
-      const categoryDelta = resolveQueueCategory(a).label.localeCompare(resolveQueueCategory(b).label);
+    if (categoryLabels !== null) {
+      const categoryDelta = (categoryLabels.get(a.request_id) ?? "").localeCompare(
+        categoryLabels.get(b.request_id) ?? ""
+      );
       if (categoryDelta !== 0) {
         return categoryDelta;
       }
@@ -379,18 +389,25 @@ export function searchQueue(items: GuardApprovalRequest[], term: string): GuardA
   }
   return items.filter((item) => {
     const envelope = item.action_envelope_json;
+    const category = resolveQueueCategory(item);
     const parts: string[] = [
       item.artifact_name,
+      item.artifact_id,
       item.artifact_type,
       item.harness,
       item.policy_action,
+      item.risk_headline ?? "",
+      item.risk_summary ?? "",
+      item.trigger_summary ?? "",
+      item.launch_summary ?? "",
+      item.why_now ?? "",
       envelope?.command ?? "",
       envelope?.prompt_excerpt ?? "",
       envelope?.mcp_server ?? "",
       envelope?.mcp_tool ?? "",
       envelope?.package_name ?? "",
-      resolveQueueCategory(item).label,
-      resolveQueueCategory(item).shortLabel,
+      category.label,
+      category.shortLabel,
       ...(envelope?.network_hosts ?? []),
       ...(envelope?.target_paths ?? []),
     ];

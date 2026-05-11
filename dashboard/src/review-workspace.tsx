@@ -63,6 +63,7 @@ import {
   filterQueueByCategory,
   queueCategoriesForItems,
   resolveQueueCategory,
+  searchQueue,
   sortQueue,
   type QueueCategory,
   type QueueCategoryId,
@@ -129,11 +130,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
 
   const filteredRequests = useMemo(() => {
     const byCategory = filterQueueByCategory(requests, categoryFilter);
-    const normalized = searchTerm.trim().toLowerCase();
-    const searched =
-      normalized.length === 0
-        ? byCategory
-        : byCategory.filter((item) => reviewItemSearchText(item).includes(normalized));
+    const searched = searchQueue(byCategory, searchTerm);
     return sortQueue(searched, sortDirection);
   }, [categoryFilter, requests, searchTerm, sortDirection]);
 
@@ -400,7 +397,7 @@ function QueueItemRow({ item, active, index, onOpenRequest }: {
         </div>
         {isBlocked ? <HiMiniNoSymbol className="h-3.5 w-3.5 shrink-0 text-brand-attention" aria-hidden="true" /> : null}
       </div>
-      <p className="mt-0.5 text-[11px] text-muted-foreground">
+      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
         {harnessDisplayName(item.harness)} · {preview}
       </p>
     </button>
@@ -440,32 +437,6 @@ function iconForQueueCategory(categoryId: QueueCategoryId) {
     case "other":
       return HiMiniDocumentPlus;
   }
-}
-
-function reviewItemSearchText(item: GuardApprovalRequest): string {
-  const envelope = item.action_envelope_json;
-  const category = resolveQueueCategory(item);
-  return [
-    item.artifact_name,
-    item.artifact_id,
-    item.artifact_type,
-    item.harness,
-    item.policy_action,
-    item.risk_headline ?? "",
-    item.risk_summary ?? "",
-    item.trigger_summary ?? "",
-    item.launch_summary ?? "",
-    item.why_now ?? "",
-    category.label,
-    category.shortLabel,
-    envelope?.command ?? "",
-    envelope?.prompt_excerpt ?? "",
-    envelope?.mcp_server ?? "",
-    envelope?.mcp_tool ?? "",
-    envelope?.package_name ?? "",
-    ...(envelope?.network_hosts ?? []),
-    ...(envelope?.target_paths ?? []),
-  ].join(" ").toLowerCase();
 }
 
 function queueItemPreview(item: GuardApprovalRequest): string {
