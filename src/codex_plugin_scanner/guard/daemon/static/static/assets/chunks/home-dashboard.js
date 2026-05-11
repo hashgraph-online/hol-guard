@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { r as reactExports, j as jsxRuntimeExports, E as EmptyState, A as ActionButton, H as HiMiniCheckCircle, G as GuardHero, P as ProofStrip, f as formatNumber, a as HiMiniFire, b as HiMiniCalendarDays, c as HiMiniShieldCheck, S as SectionLabel, h as harnessDisplayName, d as formatRelativeTime, e as HiMiniSparkles, g as HiMiniXMark, B as Badge, i as HiMiniChevronRight, k as HiMiniChevronUp, l as HiMiniChevronDown, m as HiMiniExclamationTriangle, n as HiMiniBolt, o as HiMiniMinusCircle } from "../guard-dashboard.js";
-=======
-import { r as reactExports, j as jsxRuntimeExports, E as EmptyState, A as ActionButton, H as HiMiniCheckCircle, G as GuardHero, P as ProofStrip, f as formatNumber, a as HiMiniFire, b as HiMiniCalendarDays, c as HiMiniShieldCheck, S as SectionLabel, h as harnessDisplayName, d as formatRelativeTime, e as HiMiniSparkles, g as HiMiniXMark, B as Badge, i as HiMiniChevronRight, k as HiMiniChevronUp, l as HiMiniChevronDown, m as HiMiniExclamationTriangle, n as HiMiniMinusCircle } from "../guard-dashboard.js";
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 import { u as useFocusTrap } from "./use-focus-trap.js";
 function HomeWorkspace(props) {
   const [toastMessage, setToastMessage] = reactExports.useState(null);
@@ -91,7 +87,6 @@ function HomeWorkspace(props) {
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(StreakMilestoneBanner, { streak }),
-<<<<<<< HEAD
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       NewAppDiscoveryBanner,
       {
@@ -102,8 +97,6 @@ function HomeWorkspace(props) {
         onOpenAppDetail: props.onOpenAppDetail
       }
     ),
-=======
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -542,7 +535,6 @@ function StreakMilestoneBanner({ streak }) {
     ] })
   ] });
 }
-<<<<<<< HEAD
 function NewAppDiscoveryBanner(props) {
   const activeHarnesses = new Set(props.managedInstalls.map((i) => i.harness));
   const discovered = props.observedHarnesses.filter((h) => !activeHarnesses.has(h));
@@ -595,8 +587,6 @@ function NewAppBanner(props) {
     }
   );
 }
-=======
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 function CollapsibleCard(props) {
   const storageKey = `guard-collapsed-${props.id}`;
   const [isOpen, setIsOpen] = reactExports.useState(() => {
