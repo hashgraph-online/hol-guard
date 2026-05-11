@@ -326,6 +326,29 @@ export function displayArtifactName(item: GuardApprovalRequest): string {
   return item.artifact_name || item.artifact_id || "this action";
 }
 
+export function formatRelativeTime(timestamp: string): string {
+  try {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) {
+      return `Yesterday at ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    }
+    if (diffDays < 7) {
+      return `${date.toLocaleDateString([], { weekday: "long" })} at ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    }
+    return `${date.toLocaleDateString([], { month: "short", day: "numeric" })} at ${date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+  } catch {
+    return timestamp;
+  }
+}
+
 export function resolveTerminalLabel(item: GuardApprovalRequest): string {
   const actionType = item.action_envelope_json?.action_type;
   if (actionType === "shell_command") return "Command";
