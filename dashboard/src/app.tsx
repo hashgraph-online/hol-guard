@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 
 import {
   clearPolicy,
@@ -15,13 +15,22 @@ import {
   resolveRequestWithQueueResult,
 } from "./guard-api";
 import { ApprovalCenterLayout } from "./approval-center-layout";
-import { FleetWorkspace } from "./fleet-workspace";
-import { SettingsWorkspace } from "./settings-workspace";
-import { HomeWorkspace } from "./home-dashboard";
-import { AppDetailWorkspace } from "./apps/app-detail-workspace";
-import { HelpModal } from "./help-modal";
 import { ErrorBoundary } from "./error-boundary";
 import { selectNextAfterResolution } from "./queue-state";
+
+const HomeWorkspace = lazy(() => import("./home-dashboard"));
+const FleetWorkspace = lazy(() => import("./fleet-workspace"));
+const SettingsWorkspace = lazy(() => import("./settings-workspace"));
+const AppDetailWorkspace = lazy(() => import("./apps/app-detail-workspace"));
+const HelpModal = lazy(() => import("./help-modal"));
+
+function LazyFallback() {
+  return (
+    <div className="flex min-h-[200px] items-center justify-center">
+      <div className="guard-skeleton h-8 w-48" />
+    </div>
+  );
+}
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
@@ -509,20 +518,22 @@ export function App() {
       activeRequestId={activeRequestId}
       resolutionMessage={resolutionMessage}
       homeContent={
-        <HomeWorkspace
-          requests={requests}
-          runtime={runtime}
-          policies={policies}
-          onOpenInbox={handleOpenInbox}
-          onOpenFleet={handleOpenFleet}
-          onOpenEvidence={handleOpenEvidence}
-          onOpenSettings={handleOpenSettings}
-          onClearPolicies={handleClearPolicies}
-          onOpenAppDetail={handleOpenAppDetail}
-          clearConfirm={clearConfirm}
-          onConfirmClear={handleConfirmClear}
-          onCancelClear={handleCancelClear}
-        />
+        <Suspense fallback={<LazyFallback />}>
+          <HomeWorkspace
+            requests={requests}
+            runtime={runtime}
+            policies={policies}
+            onOpenInbox={handleOpenInbox}
+            onOpenFleet={handleOpenFleet}
+            onOpenEvidence={handleOpenEvidence}
+            onOpenSettings={handleOpenSettings}
+            onClearPolicies={handleClearPolicies}
+            onOpenAppDetail={handleOpenAppDetail}
+            clearConfirm={clearConfirm}
+            onConfirmClear={handleConfirmClear}
+            onCancelClear={handleCancelClear}
+          />
+        </Suspense>
       }
       onGoHome={handleGoHome}
       onNavigate={navigate}
@@ -533,24 +544,36 @@ export function App() {
       onRepair={handleRepair}
       fleetContent={
         runtime.kind === "ready" ? (
-          <FleetWorkspace
-            runtime={runtime.snapshot}
-            policies={policies.kind === "ready" ? policies.items : []}
-            inventory={inventory}
-            onConnectHarness={handleConnectHarness}
-            onTestHarness={handleTestHarness}
-            onRepairHarness={handleRepairHarness}
-            onOpenAppDetail={handleOpenAppDetail}
-          />
+          <Suspense fallback={<LazyFallback />}>
+            <FleetWorkspace
+              runtime={runtime.snapshot}
+              policies={policies.kind === "ready" ? policies.items : []}
+              inventory={inventory}
+              onConnectHarness={handleConnectHarness}
+              onTestHarness={handleTestHarness}
+              onRepairHarness={handleRepairHarness}
+              onOpenAppDetail={handleOpenAppDetail}
+            />
+          </Suspense>
         ) : null
       }
       appDetailContent={
         <ErrorBoundary onReset={handleGoHome}>
-          {appDetailContent}
+          <Suspense fallback={<LazyFallback />}>
+            {appDetailContent}
+          </Suspense>
         </ErrorBoundary>
       }
-      settingsContent={<SettingsWorkspace />}
+      settingsContent={
+        <Suspense fallback={<LazyFallback />}>
+          <SettingsWorkspace />
+        </Suspense>
+      }
     />
-    {helpOpen && <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />}
+    {helpOpen && (
+      <Suspense fallback={null}>
+        <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
+      </Suspense>
+    )}
     </>);
 }
