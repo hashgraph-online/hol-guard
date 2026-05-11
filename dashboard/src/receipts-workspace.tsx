@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   HiMiniChevronDown,
   HiMiniChevronUp,
@@ -18,6 +18,7 @@ import type { GuardReceipt } from "./guard-types";
 import { guardAwareHref } from "./guard-api";
 import { HistoryInsights, ActivityCalendar, TopActions } from "./history-analytics";
 import { exportReceiptsAsCsv, exportReceiptsAsJson, downloadBlob } from "./history-export";
+import { useKeyboardShortcut } from "./use-keyboard-shortcut";
 
 type ReceiptsState =
   | { kind: "loading" }
@@ -127,6 +128,14 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   useEffect(() => {
     writeUrlParams({ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter, view: viewMode, day: dayFilter });
   }, [search, timeFilter, decisionFilter, harnessFilter, viewMode, dayFilter]);
+
+  const searchRef = useRef<HTMLInputElement>(null);
+  useKeyboardShortcut("f", () => {
+    searchRef.current?.focus();
+  }, { preventDefault: true });
+  useKeyboardShortcut("e", () => {
+    handleExportCsv();
+  }, { preventDefault: true });
 
   const filtered = useMemo(() => {
     let items = props.receiptItems;
@@ -345,6 +354,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
           </button>
         </div>
         <input
+          ref={searchRef}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name or app..."
