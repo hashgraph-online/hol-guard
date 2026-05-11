@@ -11,6 +11,7 @@ import {
   HiMiniSparkles,
   HiMiniExclamationTriangle,
   HiMiniXMark,
+  HiMiniBolt,
 } from "react-icons/hi2";
 import {
   ActionButton,
@@ -171,6 +172,14 @@ export function HomeWorkspace(props: {
       />
 
       <StreakMilestoneBanner streak={streak} />
+
+      <NewAppDiscoveryBanner
+        managedInstalls={managedInstalls}
+        observedHarnesses={observedHarnesses}
+        receipts={snapshot.latest_receipts}
+        policies={policyItems}
+        onOpenAppDetail={props.onOpenAppDetail}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
         <section className="space-y-6">
@@ -706,6 +715,75 @@ function StreakMilestoneBanner({ streak }: { streak: number }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function NewAppDiscoveryBanner(props: {
+  managedInstalls: GuardManagedInstall[];
+  observedHarnesses: string[];
+  receipts: GuardReceipt[];
+  policies: GuardPolicyDecision[];
+  onOpenAppDetail: (harness: string) => void;
+}) {
+  const activeHarnesses = new Set(props.managedInstalls.map((i) => i.harness));
+  const discovered = props.observedHarnesses.filter((h) => !activeHarnesses.has(h));
+
+  return (
+    <>
+      {discovered.map((harness) => (
+        <NewAppBanner
+          key={harness}
+          harness={harness}
+          onOpenAppDetail={props.onOpenAppDetail}
+        />
+      ))}
+    </>
+  );
+}
+
+function NewAppBanner(props: {
+  harness: string;
+  onOpenAppDetail: (harness: string) => void;
+}) {
+  const storageKey = `guard-new-app-dismissed-${props.harness}`;
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(storageKey) === "1";
+  });
+
+  const handleDismiss = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDismissed(true);
+    localStorage.setItem(storageKey, "1");
+  }, [storageKey]);
+
+  if (dismissed) return null;
+
+  return (
+    <button
+      onClick={() => props.onOpenAppDetail(props.harness)}
+      className="guard-fade-in flex w-full items-center gap-3 rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-left transition-colors hover:bg-brand-blue/[0.08]"
+    >
+      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue/10">
+        <HiMiniBolt className="h-4 w-4 text-brand-blue" aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-brand-dark">
+          Guard discovered {harnessDisplayName(props.harness)}
+        </p>
+        <p className="text-xs text-slate-500">
+          Guard saw this app but it is not set up yet. Open to connect it.
+        </p>
+      </div>
+      <span
+        onClick={handleDismiss}
+        className="shrink-0 rounded-full p-1.5 text-slate-400 transition-colors hover:bg-white/70 hover:text-brand-dark"
+        aria-label={`Dismiss ${harnessDisplayName(props.harness)} discovery`}
+        role="button"
+      >
+        <HiMiniXMark className="h-4 w-4" aria-hidden="true" />
+      </span>
+    </button>
   );
 }
 

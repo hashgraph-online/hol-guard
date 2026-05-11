@@ -1,10 +1,12 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   HiMiniCheckCircle,
   HiMiniExclamationCircle,
   HiMiniWrenchScrewdriver,
   HiMiniXCircle,
   HiMiniChevronRight,
+  HiMiniClipboard,
+  HiMiniClipboardDocumentCheck,
 } from "react-icons/hi2";
 import {
   ActionButton,
@@ -204,6 +206,114 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
             />
           )}
         </section>
+      </div>
+
+      {activeInstalls.length === 0 && (
+        <SetupGuide
+          hasReceipts={props.runtime.latest_receipts.length > 0}
+          hasInventory={inventory.length > 0}
+        />
+      )}
+    </div>
+  );
+}
+
+function SetupGuide(props: { hasReceipts: boolean; hasInventory: boolean }) {
+  const steps = [
+    {
+      id: "install",
+      label: "Install Guard hook",
+      description: "Run `hol-guard install` in your project to set up the approval hook.",
+      command: "hol-guard install",
+      done: props.hasInventory,
+    },
+    {
+      id: "run",
+      label: "Run your AI app",
+      description: "Start Codex, Claude Code, or another supported app. Guard will intercept risky actions.",
+      done: props.hasReceipts,
+    },
+    {
+      id: "verify",
+      label: "Verify in dashboard",
+      description: "Check this dashboard to see Guard protecting your app. You will see receipts appear in History.",
+      done: props.hasReceipts && props.hasInventory,
+    },
+  ];
+
+  const completedCount = steps.filter((s) => s.done).length;
+
+  return (
+    <div className="rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.03] p-5 sm:p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <SectionLabel>Setup guide</SectionLabel>
+          <p className="mt-1 text-sm text-slate-500">
+            {completedCount === steps.length
+              ? "Guard is set up and running!"
+              : `${completedCount} of ${steps.length} steps completed`}
+          </p>
+        </div>
+        {completedCount === steps.length && (
+          <HiMiniCheckCircle className="h-6 w-6 text-brand-green" aria-hidden="true" />
+        )}
+      </div>
+      <div className="mt-4 space-y-3">
+        {steps.map((step, index) => (
+          <SetupStep
+            key={step.id}
+            stepNumber={index + 1}
+            label={step.label}
+            description={step.description}
+            command={step.command}
+            done={step.done}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SetupStep(props: {
+  stepNumber: number;
+  label: string;
+  description: string;
+  command?: string;
+  done: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    if (!props.command) return;
+    void navigator.clipboard.writeText(props.command).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [props.command]);
+
+  return (
+    <div className={`flex items-start gap-3 rounded-xl border p-3 ${props.done ? "border-brand-green/20 bg-brand-green/[0.04]" : "border-slate-200 bg-white"}`}>
+      <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${props.done ? "bg-brand-green text-white" : "bg-slate-100 text-slate-500"}`}>
+        {props.done ? <HiMiniCheckCircle className="h-4 w-4" aria-hidden="true" /> : props.stepNumber}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className={`text-sm font-medium ${props.done ? "text-brand-green-text" : "text-brand-dark"}`}>
+          {props.label}
+        </p>
+        <p className="text-xs text-slate-500">{props.description}</p>
+        {props.command && (
+          <button
+            onClick={handleCopy}
+            className="mt-1.5 inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-mono text-brand-dark transition-colors hover:bg-slate-100"
+          >
+            {copied ? (
+              <HiMiniClipboardDocumentCheck className="h-3 w-3 text-brand-green" aria-hidden="true" />
+            ) : (
+              <HiMiniClipboard className="h-3 w-3" aria-hidden="true" />
+            )}
+            {props.command}
+          </button>
+        )}
       </div>
     </div>
   );
