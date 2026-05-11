@@ -2668,7 +2668,7 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
 
 
 _SAFE_GRAPHQL_QUERY_FILE_WORKFLOW_PATTERN = re.compile(
-    r"\A\s*cat\s*>\s*(?P<path>'[^']+'|\"[^\"]+\"|[^\s]+)\s*<<['\"]?(?P<label>[A-Za-z_][A-Za-z0-9_]*)['\"]?"
+    r"\A\s*cat\s*>\s*(?P<path>'[^']+'|\"[^\"]+\"|[^\s]+)\s*<<(?P<quote>['\"])(?P<label>[A-Za-z_][A-Za-z0-9_]*)(?P=quote)"
     r"\s*\n(?P<body>.*?)\n(?P=label)\s*(?:\n|&&|;)\s*(?P<rest>.+)\Z",
     re.DOTALL,
 )
