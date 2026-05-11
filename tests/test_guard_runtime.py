@@ -346,6 +346,18 @@ class TestGuardRuntime:
 
         assert "exfil_intent" in {item.request_class for item in requests}
 
+    @pytest.mark.parametrize(
+        "prompt",
+        (
+            "send to alice@example.com a follow-up",
+            "send to file://tmp/report",
+        ),
+    )
+    def test_extract_prompt_requests_ignores_non_artifact_routing_context(self, prompt: str) -> None:
+        requests = guard_runner_module.extract_prompt_requests(prompt)
+
+        assert requests == []
+
     def test_extract_prompt_requests_ignores_quoted_publish_error_debug_context(self) -> None:
         requests = guard_runner_module.extract_prompt_requests(
             """
