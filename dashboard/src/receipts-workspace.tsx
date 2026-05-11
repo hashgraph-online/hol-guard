@@ -20,6 +20,7 @@ import { HistoryInsights, ActivityCalendar, TopActions } from "./history-analyti
 import { exportReceiptsAsCsv, exportReceiptsAsJson, downloadBlob } from "./history-export";
 import { useKeyboardShortcut } from "./use-keyboard-shortcut";
 import { HistoryCharts } from "./history-charts";
+import { CompareTimePeriods } from "./compare-time-periods";
 
 type ReceiptsState =
   | { kind: "loading" }
@@ -272,6 +273,8 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
       />
 
       <HistoryCharts receipts={filtered} />
+
+      <CompareTimePeriods receipts={props.receiptItems} />
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-1.5">
