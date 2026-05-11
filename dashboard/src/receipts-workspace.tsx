@@ -22,7 +22,7 @@ import type { GuardReceipt } from "./guard-types";
 import { guardAwareHref } from "./guard-api";
 import { useKeyboardShortcut } from "./use-keyboard-shortcut";
 import { exportReceiptsAsCsv, exportReceiptsAsJson, downloadBlob } from "./history-export";
-import { StoryTab, CategoryTab, AppTab, ExploreTab } from "./evidence";
+import { StoryTab, CategoryTab, AppTab, ExploreTab, detectCategory } from "./evidence";
 
 type TabKey = "story" | "category" | "app" | "explore";
 type TimeFilter = "all" | "today" | "yesterday" | "week" | "last7d" | "last30d";
@@ -117,6 +117,7 @@ function timeFilterLabel(filter: TimeFilter): string {
 function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   const initial = useMemo(() => readUrlParams(), []);
   const [search, setSearch] = useState(initial.search);
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>(initial.time);
   const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>(initial.decision);
   const [activeTab, setActiveTab] = useState<TabKey>(initial.tab);
@@ -137,6 +138,10 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   useEffect(() => {
     writeUrlParams({ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter, tab: activeTab, day: dayFilter });
   }, [search, timeFilter, decisionFilter, harnessFilter, activeTab, dayFilter]);
+
+  const clearCategoryFilter = useCallback(() => {
+    setCategoryFilter("");
+  }, []);
 
   const filtered = useMemo(() => {
     let items = props.receiptItems;
@@ -176,7 +181,10 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
         return d >= dayStart && d < dayEnd;
       });
     }
-    if (search.trim()) {
+    if (categoryFilter) {
+      items = items.filter((r) => detectCategory(r) === categoryFilter);
+    }
+    if (search.trim() && !categoryFilter) {
       const q = search.toLowerCase();
       items = items.filter((r) =>
         (r.artifact_name ?? r.artifact_id).toLowerCase().includes(q) ||
@@ -184,7 +192,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
       );
     }
     return items.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-  }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, search, dayFilter]);
+  }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, search, dayFilter, categoryFilter]);
 
   const handleFilterDay = useCallback((day: string) => {
     setDayFilter(day);
@@ -216,22 +224,22 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
       <div className="flex flex-wrap items-center gap-1.5">
         {(
           [
-            { key: "all" as const, label: "All" },
-            { key: "secret" as const, label: "Secrets" },
-            { key: "network" as const, label: "Network" },
-            { key: "destructive" as const, label: "Destructive" },
-            { key: "hidden" as const, label: "Hidden" },
-            { key: "other" as const, label: "Other" },
+            { key: "all" as const, label: "All", value: "" },
+            { key: "secret" as const, label: "Secrets", value: "secret" },
+            { key: "network" as const, label: "Network", value: "network" },
+            { key: "destructive" as const, label: "Destructive", value: "destructive" },
+            { key: "hidden" as const, label: "Hidden", value: "hidden" },
+            { key: "other" as const, label: "Other", value: "other" },
           ] as const
         ).map((c) => (
           <button
             key={c.key}
             className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-              search === c.key
+              categoryFilter === c.value
                 ? "bg-brand-blue text-white shadow-sm"
                 : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
             }`}
-            onClick={() => setSearch(search === c.key ? "" : c.key)}
+            onClick={() => setCategoryFilter(categoryFilter === c.value ? "" : c.value)}
           >
             {c.label}
           </button>

@@ -49,17 +49,45 @@ export function StoryTab({ receipts, selectedDay, onSelectDay }: StoryTabProps) 
   };
 
   const handleNextDay = () => {
-    const d = selectedDay ? new Date(selectedDay) : new Date();
+    if (!selectedDay) return;
+    const d = new Date(selectedDay);
     d.setDate(d.getDate() + 1);
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     if (d > today) return;
     onSelectDay(d.toISOString().split("T")[0]);
   };
 
+  // Calculate if there are receipts on adjacent days for navigation
+  const { hasPrev, hasNext } = useMemo(() => {
+    if (!selectedDay) {
+      // "Recently" view - check if there are receipts beyond the first 20
+      return { hasPrev: receipts.length > 20, hasNext: false };
+    }
+    const current = new Date(selectedDay);
+    current.setHours(0, 0, 0, 0);
+    const prev = new Date(current);
+    prev.setDate(prev.getDate() - 1);
+    const next = new Date(current);
+    next.setDate(next.getDate() + 1);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const hasPrevDay = receipts.some((r) => {
+      const d = new Date(r.timestamp);
+      return d >= prev && d < current;
+    });
+    const hasNextDay = next <= today && receipts.some((r) => {
+      const d = new Date(r.timestamp);
+      return d >= next && d < new Date(next.getTime() + 24 * 60 * 60 * 1000);
+    });
+    return { hasPrev: hasPrevDay, hasNext: hasNextDay };
+  }, [receipts, selectedDay]);
+
   if (dayReceipts.length === 0) {
     return (
       <div className="space-y-6">
-        <DayHeader dayLabel={dayLabel} onPrev={handlePrevDay} onNext={handleNextDay} hasPrev={!!selectedDay} hasNext={false} />
+        <DayHeader dayLabel={dayLabel} onPrev={handlePrevDay} onNext={handleNextDay} hasPrev={hasPrev} hasNext={hasNext} />
         <div className="rounded-2xl border border-slate-100 bg-white/60 p-8 text-center">
           <p className="text-sm text-slate-500">All quiet. Guard is watching.</p>
         </div>
@@ -69,7 +97,7 @@ export function StoryTab({ receipts, selectedDay, onSelectDay }: StoryTabProps) 
 
   return (
     <div className="space-y-6">
-      <DayHeader dayLabel={dayLabel} onPrev={handlePrevDay} onNext={handleNextDay} hasPrev={true} hasNext={false} />
+      <DayHeader dayLabel={dayLabel} onPrev={handlePrevDay} onNext={handleNextDay} hasPrev={hasPrev} hasNext={hasNext} />
 
       <div className="rounded-2xl border border-slate-100 bg-white/60 p-4">
         <p className="text-sm text-brand-dark">

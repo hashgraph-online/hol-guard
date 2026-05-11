@@ -14556,20 +14556,44 @@ function StoryTab({ receipts, selectedDay, onSelectDay }) {
     onSelectDay(d.toISOString().split("T")[0]);
   };
   const handleNextDay = () => {
-    const d = selectedDay ? new Date(selectedDay) : /* @__PURE__ */ new Date();
+    if (!selectedDay) return;
+    const d = new Date(selectedDay);
     d.setDate(d.getDate() + 1);
     const today = /* @__PURE__ */ new Date();
+    today.setHours(0, 0, 0, 0);
     if (d > today) return;
     onSelectDay(d.toISOString().split("T")[0]);
   };
+  const { hasPrev, hasNext } = reactExports.useMemo(() => {
+    if (!selectedDay) {
+      return { hasPrev: receipts.length > 20, hasNext: false };
+    }
+    const current = new Date(selectedDay);
+    current.setHours(0, 0, 0, 0);
+    const prev = new Date(current);
+    prev.setDate(prev.getDate() - 1);
+    const next = new Date(current);
+    next.setDate(next.getDate() + 1);
+    const today = /* @__PURE__ */ new Date();
+    today.setHours(0, 0, 0, 0);
+    const hasPrevDay = receipts.some((r) => {
+      const d = new Date(r.timestamp);
+      return d >= prev && d < current;
+    });
+    const hasNextDay = next <= today && receipts.some((r) => {
+      const d = new Date(r.timestamp);
+      return d >= next && d < new Date(next.getTime() + 24 * 60 * 60 * 1e3);
+    });
+    return { hasPrev: hasPrevDay, hasNext: hasNextDay };
+  }, [receipts, selectedDay]);
   if (dayReceipts.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(DayHeader, { dayLabel, onPrev: handlePrevDay, onNext: handleNextDay, hasPrev: !!selectedDay, hasNext: false }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DayHeader, { dayLabel, onPrev: handlePrevDay, onNext: handleNextDay, hasPrev, hasNext }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "All quiet. Guard is watching." }) })
     ] });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(DayHeader, { dayLabel, onPrev: handlePrevDay, onNext: handleNextDay, hasPrev: true, hasNext: false }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(DayHeader, { dayLabel, onPrev: handlePrevDay, onNext: handleNextDay, hasPrev, hasNext }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
       "Guard reviewed ",
       summary.total,
@@ -15907,6 +15931,7 @@ function writeUrlParams(params) {
 function ReadyReceiptsWorkspace(props) {
   const initial = reactExports.useMemo(() => readUrlParams(), []);
   const [search, setSearch] = reactExports.useState(initial.search);
+  const [categoryFilter, setCategoryFilter] = reactExports.useState("");
   const [timeFilter, setTimeFilter] = reactExports.useState(initial.time);
   const [decisionFilter, setDecisionFilter] = reactExports.useState(initial.decision);
   const [activeTab, setActiveTab] = reactExports.useState(initial.tab);
@@ -15924,6 +15949,9 @@ function ReadyReceiptsWorkspace(props) {
   reactExports.useEffect(() => {
     writeUrlParams({ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter, tab: activeTab, day: dayFilter });
   }, [search, timeFilter, decisionFilter, harnessFilter, activeTab, dayFilter]);
+  reactExports.useCallback(() => {
+    setCategoryFilter("");
+  }, []);
   const filtered = reactExports.useMemo(() => {
     let items = props.receiptItems;
     if (decisionFilter !== "all") {
@@ -15962,14 +15990,17 @@ function ReadyReceiptsWorkspace(props) {
         return d >= dayStart && d < dayEnd;
       });
     }
-    if (search.trim()) {
+    if (categoryFilter) {
+      items = items.filter((r) => detectCategory(r) === categoryFilter);
+    }
+    if (search.trim() && !categoryFilter) {
       const q = search.toLowerCase();
       items = items.filter(
         (r) => (r.artifact_name ?? r.artifact_id).toLowerCase().includes(q) || r.harness.toLowerCase().includes(q)
       );
     }
     return items.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-  }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, search, dayFilter]);
+  }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, search, dayFilter, categoryFilter]);
   const handleFilterDay = reactExports.useCallback((day) => {
     setDayFilter(day);
     setTimeFilter("all");
@@ -16000,17 +16031,17 @@ function ReadyReceiptsWorkspace(props) {
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
       [
-        { key: "all", label: "All" },
-        { key: "secret", label: "Secrets" },
-        { key: "network", label: "Network" },
-        { key: "destructive", label: "Destructive" },
-        { key: "hidden", label: "Hidden" },
-        { key: "other", label: "Other" }
+        { key: "all", label: "All", value: "" },
+        { key: "secret", label: "Secrets", value: "secret" },
+        { key: "network", label: "Network", value: "network" },
+        { key: "destructive", label: "Destructive", value: "destructive" },
+        { key: "hidden", label: "Hidden", value: "hidden" },
+        { key: "other", label: "Other", value: "other" }
       ].map((c) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
-          className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${search === c.key ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
-          onClick: () => setSearch(search === c.key ? "" : c.key),
+          className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${categoryFilter === c.value ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
+          onClick: () => setCategoryFilter(categoryFilter === c.value ? "" : c.value),
           children: c.label
         },
         c.key
