@@ -18,6 +18,8 @@ import {
   HiMiniExclamationTriangle,
   HiMiniChevronDown,
   HiMiniChevronUp,
+  HiMiniChevronLeft,
+  HiMiniChevronRight,
 } from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
