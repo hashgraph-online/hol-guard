@@ -201,7 +201,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         />
       )}
       <div className={`flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-        <main className="flex-1 p-6 lg:p-10">
+        <main id="main-content" className="flex-1 p-6 lg:p-10" tabIndex={-1}>
           <div className="mx-auto max-w-6xl">
             {props.view === "home" ? (
               props.homeContent
