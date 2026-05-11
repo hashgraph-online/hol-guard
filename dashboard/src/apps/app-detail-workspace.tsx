@@ -377,7 +377,7 @@ function AppOverviewTab(props: {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
       <section className="space-y-6">
-        <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+        <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <SectionLabel>Status</SectionLabel>
@@ -428,7 +428,7 @@ function AppOverviewTab(props: {
         </div>
 
         {props.pendingItems.length > 0 && (
-          <div className="rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 shadow-sm sm:p-6">
+          <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5">
             <SectionLabel>Pending review</SectionLabel>
             <p className="mt-2 text-sm text-muted-foreground">
               These actions from {harnessDisplayName(props.harness)} need your decision.
@@ -458,7 +458,7 @@ function AppOverviewTab(props: {
 
       <section className="space-y-6">
         {props.harnessReceipts.length > 0 && (
-          <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+          <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
             <SectionLabel>Recent events</SectionLabel>
             <p className="mt-2 text-sm text-muted-foreground">
               What Guard decided recently.
@@ -490,7 +490,7 @@ function AppOverviewTab(props: {
         )}
 
         {props.harnessInventory.length > 0 && (
-          <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+          <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
             <SectionLabel>Discovered items</SectionLabel>
             <p className="mt-2 text-sm text-muted-foreground">
               Tools and plugins Guard found in this app.
@@ -612,7 +612,7 @@ function AppActivityTab(props: {
   return (
     <div className="space-y-6">
       {props.queueError && (
-        <div className="guard-fade-in rounded-[1.75rem] border border-brand-attention/20 bg-brand-attention/[0.04] p-5 shadow-sm sm:p-6">
+        <div className="guard-fade-in rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5">
           <div className="flex items-start gap-3">
             <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
             <div className="flex-1">
@@ -628,7 +628,7 @@ function AppActivityTab(props: {
           </div>
         </div>
       )}
-      <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+      <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-2">
           {(
             [
@@ -747,7 +747,7 @@ function AppActivityTab(props: {
 function ReceiptGroup({ title, items, selectedIds, onToggle }: { title: string; items: GuardReceipt[]; selectedIds: Set<string>; onToggle: (id: string) => void }) {
   if (items.length === 0) return null;
   return (
-    <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+    <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
       <div className="flex items-center justify-between">
         <SectionLabel>{title}</SectionLabel>
         <span className="text-xs text-muted-foreground">{items.length} events</span>
@@ -866,7 +866,7 @@ function AppSettingsTab(props: {
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
       <div className="space-y-6">
         {props.policyError && (
-          <div className="guard-fade-in rounded-[1.75rem] border border-brand-attention/20 bg-brand-attention/[0.04] p-5 shadow-sm sm:p-6">
+          <div className="guard-fade-in rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5">
             <div className="flex items-start gap-3">
               <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
               <div className="flex-1">
@@ -882,7 +882,7 @@ function AppSettingsTab(props: {
             </div>
           </div>
         )}
-        <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+        <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <SectionLabel>Remembered decisions</SectionLabel>
             {props.harnessPolicies.length > 0 && props.onClearAppPolicies && (
@@ -937,7 +937,7 @@ function AppSettingsTab(props: {
 
         {/* Clear confirmation */}
         {showClearConfirm && (
-          <div ref={confirmRef} className="guard-fade-in rounded-[1.75rem] border border-brand-attention/20 bg-brand-attention/[0.04] p-5 shadow-sm sm:p-6">
+          <div ref={confirmRef} className="guard-fade-in rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5">
             <div className="flex items-start gap-3">
               <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
               <div>
@@ -979,7 +979,7 @@ function AppSettingsTab(props: {
 
       <div className="space-y-6">
         {props.status === "needs_setup" && (
-          <div className="rounded-[1.75rem] border border-brand-attention/15 bg-brand-attention/[0.04] p-5 shadow-sm sm:p-6">
+          <div className="rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5">
             <div className="flex items-start gap-3">
               <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" />
               <div>
@@ -1026,7 +1026,7 @@ function ActivitySparkline({ receipts }: { receipts: GuardReceipt[] }) {
   const maxVal = Math.max(...data.map((d) => d.allowed + d.blocked), 1);
 
   return (
-    <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+    <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
       <div className="flex items-center justify-between">
         <SectionLabel>Last 7 days</SectionLabel>
         <HiMiniChartBar className="h-4 w-4 text-slate-400" aria-hidden="true" />
@@ -1125,7 +1125,7 @@ function CloudValueBanner({
   cta: { label: string; href: string };
 }) {
   return (
-    <div className="rounded-[1.75rem] border border-brand-purple/15 bg-brand-purple/[0.04] p-5 shadow-sm sm:p-6">
+    <div className="rounded-xl border border-brand-purple/10 bg-brand-purple/[0.03] p-4 sm:p-5">
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">{icon}</div>
         <div className="flex-1">
