@@ -109,7 +109,8 @@ _EXFIL_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
         rf"\b{_EXFIL_ACTIONS}\b{_SAME_SENTENCE_80}\b"
         rf"{_EXFIL_ARTIFACTS}\b"
-        rf"(?:{_SAME_SENTENCE_40}\b{_EXFIL_DESTINATIONS}\b)?",
+        rf"{_SAME_SENTENCE_40}\b{_EXFIL_DESTINATIONS}\b{_SAME_SENTENCE_40}\b"
+        rf"{_EXFIL_REMOTE_TARGETS}\b",
         re.IGNORECASE,
     ),
     re.compile(
