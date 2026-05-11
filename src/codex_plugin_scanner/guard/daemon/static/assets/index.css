@@ -71,6 +71,8 @@
 @layer theme {
   :root, :host {
     --font-sans: "Roboto", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --color-emerald-50: oklch(97.9% .021 166.113);
+    --color-emerald-200: oklch(90.5% .093 164.15);
     --color-emerald-500: oklch(69.6% .17 162.48);
     --color-emerald-600: oklch(59.6% .145 163.225);
     --color-blue-50: oklch(97% .014 254.604);
@@ -1472,6 +1474,16 @@
     }
   }
 
+  .border-emerald-200\/60 {
+    border-color: #a4f4cf99;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-emerald-200\/60 {
+      border-color: color-mix(in oklab, var(--color-emerald-200) 60%, transparent);
+    }
+  }
+
   .border-emerald-500 {
     border-color: var(--color-emerald-500);
   }
@@ -1906,6 +1918,16 @@
 
   .bg-card {
     background-color: hsl(var(--card));
+  }
+
+  .bg-emerald-50\/30 {
+    background-color: #ecfdf54d;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-emerald-50\/30 {
+      background-color: color-mix(in oklab, var(--color-emerald-50) 30%, transparent);
+    }
   }
 
   .bg-gray-100 {
