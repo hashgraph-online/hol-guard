@@ -96,8 +96,12 @@ _SECRET_READ_INTENT_PATTERN = re.compile(
 )
 _EXFIL_ACTIONS = r"(?:send|post|upload|transfer|paste|sync)"
 _EXFIL_ARTIFACTS = r"(?:contents?|data|payload|file|secret|token|key|credential|credentials|config|output)"
-_EXFIL_DESTINATIONS = r"(?:to|into|onto|via|through)"
-_EXFIL_REMOTE_TARGETS = r"(?:webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)"
+_EXFIL_DESTINATIONS = r"(?:to|into|onto|via|through|over|at)"
+_EXFIL_NAMED_REMOTE_TARGETS = r"(?:webhook|gist|pastebin|slack|discord|telegram|server|endpoint|url)"
+_EXFIL_REMOTE_TARGETS = (
+    r"(?:(?:[a-z][a-z0-9+.-]*://)|(?:[a-z0-9-]+\.)+[a-z]{2,}|(?:\d{1,3}\.){3}\d{1,3}|"
+    rf"{_EXFIL_NAMED_REMOTE_TARGETS})"
+)
 _SAME_SENTENCE_80 = r"[^.!?;\n]{0,80}"
 _SAME_SENTENCE_40 = r"[^.!?;\n]{0,40}"
 _EXFIL_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -109,13 +113,14 @@ _EXFIL_PROMPT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
         rf"\b{_EXFIL_ACTIONS}\b{_SAME_SENTENCE_80}\b"
         rf"{_EXFIL_ARTIFACTS}\b"
-        rf"(?:{_SAME_SENTENCE_40}\b{_EXFIL_DESTINATIONS}\b)?",
+        rf"{_SAME_SENTENCE_40}\b{_EXFIL_DESTINATIONS}\b{_SAME_SENTENCE_40}\b"
+        rf"{_EXFIL_REMOTE_TARGETS}\b",
         re.IGNORECASE,
     ),
     re.compile(
         rf"\b{_EXFIL_ACTIONS}\b{_SAME_SENTENCE_80}\b"
         rf"{_EXFIL_DESTINATIONS}\b{_SAME_SENTENCE_40}\b"
-        rf"{_EXFIL_REMOTE_TARGETS}\b",
+        rf"{_EXFIL_NAMED_REMOTE_TARGETS}\b",
         re.IGNORECASE,
     ),
     re.compile(
