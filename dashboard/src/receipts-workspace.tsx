@@ -19,6 +19,7 @@ import { guardAwareHref } from "./guard-api";
 import { HistoryInsights, ActivityCalendar, TopActions } from "./history-analytics";
 import { exportReceiptsAsCsv, exportReceiptsAsJson, downloadBlob } from "./history-export";
 import { useKeyboardShortcut } from "./use-keyboard-shortcut";
+import { HistoryCharts } from "./history-charts";
 
 type ReceiptsState =
   | { kind: "loading" }
@@ -269,6 +270,8 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
         onFilterHarness={handleFilterHarness}
         onFilterDay={handleFilterDay}
       />
+
+      <HistoryCharts receipts={filtered} />
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-1.5">
