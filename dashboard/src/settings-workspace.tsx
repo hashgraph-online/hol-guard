@@ -50,8 +50,8 @@ const surfacePolicyOptions = [
 
 const securityLevels = [
   {
-    value: "relaxed" as const,
-    label: "Relaxed",
+    value: "gentle" as const,
+    label: "Gentle",
     description: "Ask before dangerous actions. Allow most safe ones.",
     icon: HiMiniShieldCheck,
     protects: ["Destructive commands", "Credential sharing"],
@@ -94,8 +94,8 @@ const riskControls = [
 
 type RiskKey = (typeof riskControls)[number]["key"];
 
-const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", Record<RiskKey, string>> = {
-  relaxed: {
+const riskProfileActions: Record<"gentle" | "balanced" | "strict" | "custom", Record<RiskKey, string>> = {
+  gentle: {
     local_secret_read: "warn",
     credential_exfiltration: "require-reapproval",
     data_flow_exfiltration: "require-reapproval",
@@ -152,7 +152,7 @@ function buildConsequenceSummary(settings: GuardSettings): string {
   const level = settings.security_level;
   const mode = settings.mode;
   if (mode === "observe") return "Guard is watching and recording what your AI apps do, but it will not pause any actions. Switch to Prompt or Enforce when you want Guard to actively protect you.";
-  if (level === "relaxed") return "Guard will ask before destructive commands and credential sharing. Most safe actions are allowed automatically. Good for trusted environments.";
+  if (level === "gentle") return "Guard will ask before destructive commands and credential sharing. Most safe actions are allowed automatically. Good for trusted environments.";
   if (level === "balanced") return "Guard will ask before secret access, hidden execution, and destructive commands. New network destinations get a warning. This is the recommended setting for most users.";
   if (level === "strict") return "Guard will ask before almost every risky action, including new network destinations. Use this when working with sensitive data or untrusted AI tools.";
   if (level === "custom") return "You have customized individual risk controls. Review the choices below to make sure they match how you want Guard to behave.";
@@ -416,7 +416,7 @@ export function SettingsWorkspace() {
         {/* Protection Level */}
         <AccordionSection
           title="Protection level"
-          subtitle={`${draft.security_level === "relaxed" ? "Relaxed" : draft.security_level === "balanced" ? "Balanced" : draft.security_level === "strict" ? "Strict" : "Custom"} · ${draft.mode}`}
+          subtitle={`${draft.security_level === "gentle" ? "Gentle" : draft.security_level === "balanced" ? "Balanced" : draft.security_level === "strict" ? "Strict" : "Custom"} · ${draft.mode}`}
           expanded={expandedSections["protection"]}
           onToggle={() => toggleSection("protection")}
         >
@@ -521,7 +521,7 @@ export function SettingsWorkspace() {
         >
           <div className="space-y-4">
             {draft.security_level !== "custom" && (
-              <p className="text-sm text-slate-500">All risk behaviors are set by the <span className="font-semibold">{draft.security_level === "relaxed" ? "Relaxed" : draft.security_level === "balanced" ? "Balanced" : "Strict"}</span> level. Select <span className="font-semibold">Custom</span> above to override individual choices.</p>
+              <p className="text-sm text-slate-500">All risk behaviors are set by the <span className="font-semibold">{draft.security_level === "gentle" ? "Gentle" : draft.security_level === "balanced" ? "Balanced" : "Strict"}</span> level. Select <span className="font-semibold">Custom</span> above to override individual choices.</p>
             )}
             <div className={`divide-y divide-slate-100 border-t border-slate-100 ${draft.security_level !== "custom" ? "opacity-60" : ""}`}>
               {riskControls.map((risk) => (

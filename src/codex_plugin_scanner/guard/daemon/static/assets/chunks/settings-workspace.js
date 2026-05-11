@@ -33,8 +33,8 @@ const surfacePolicyOptions = [
 ];
 const securityLevels = [
   {
-    value: "relaxed",
-    label: "Relaxed",
+    value: "gentle",
+    label: "Gentle",
     description: "Ask before dangerous actions. Allow most safe ones.",
     icon: HiMiniShieldCheck,
     protects: ["Destructive commands", "Credential sharing"],
@@ -74,7 +74,7 @@ const riskControls = [
   { key: "network_egress", label: "New network destinations", description: "Outbound connections Guard has not seen in this context." }
 ];
 const riskProfileActions = {
-  relaxed: {
+  gentle: {
     local_secret_read: "warn",
     credential_exfiltration: "require-reapproval",
     data_flow_exfiltration: "require-reapproval",
@@ -128,7 +128,7 @@ function buildConsequenceSummary(settings) {
   const level = settings.security_level;
   const mode = settings.mode;
   if (mode === "observe") return "Guard is watching and recording what your AI apps do, but it will not pause any actions. Switch to Prompt or Enforce when you want Guard to actively protect you.";
-  if (level === "relaxed") return "Guard will ask before destructive commands and credential sharing. Most safe actions are allowed automatically. Good for trusted environments.";
+  if (level === "gentle") return "Guard will ask before destructive commands and credential sharing. Most safe actions are allowed automatically. Good for trusted environments.";
   if (level === "balanced") return "Guard will ask before secret access, hidden execution, and destructive commands. New network destinations get a warning. This is the recommended setting for most users.";
   if (level === "strict") return "Guard will ask before almost every risky action, including new network destinations. Use this when working with sensitive data or untrusted AI tools.";
   if (level === "custom") return "You have customized individual risk controls. Review the choices below to make sure they match how you want Guard to behave.";
@@ -374,7 +374,7 @@ function SettingsWorkspace() {
         AccordionSection,
         {
           title: "Protection level",
-          subtitle: `${draft.security_level === "relaxed" ? "Relaxed" : draft.security_level === "balanced" ? "Balanced" : draft.security_level === "strict" ? "Strict" : "Custom"} · ${draft.mode}`,
+          subtitle: `${draft.security_level === "gentle" ? "Gentle" : draft.security_level === "balanced" ? "Balanced" : draft.security_level === "strict" ? "Strict" : "Custom"} · ${draft.mode}`,
           expanded: expandedSections["protection"],
           onToggle: () => toggleSection("protection"),
           children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
@@ -465,7 +465,7 @@ function SettingsWorkspace() {
             children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
               draft.security_level !== "custom" && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-500", children: [
                 "All risk behaviors are set by the ",
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: draft.security_level === "relaxed" ? "Relaxed" : draft.security_level === "balanced" ? "Balanced" : "Strict" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: draft.security_level === "gentle" ? "Gentle" : draft.security_level === "balanced" ? "Balanced" : "Strict" }),
                 " level. Select ",
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Custom" }),
                 " above to override individual choices."
