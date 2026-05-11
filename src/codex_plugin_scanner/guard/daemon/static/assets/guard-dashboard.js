@@ -13871,7 +13871,7 @@ function Surface(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "section",
     {
-      className: `guard-surface-in rounded-[1.35rem] border shadow-sm p-5 sm:p-6 ${toneClass}${props.className ? ` ${props.className}` : ""}`,
+      className: `guard-surface-in rounded-xl border p-4 sm:p-5 ${toneClass}${props.className ? ` ${props.className}` : ""}`,
       children: props.children
     }
   );
@@ -13895,8 +13895,8 @@ function KeyValueGrid(props) {
 }
 function EmptyState(props) {
   const isTeach = props.tone === "teach";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `guard-surface-in flex flex-col items-center justify-center py-12 text-center sm:py-16 ${isTeach ? "rounded-[2rem] border border-brand-blue/15 bg-gradient-to-br from-white to-brand-blue/[0.03] px-6" : "rounded-lg bg-surface-1 px-6"}`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `mb-5 flex h-14 w-14 items-center justify-center rounded-full ${isTeach ? "bg-brand-blue/10" : "bg-white"} ring-1 ring-brand-blue/20`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: `h-7 w-7 ${isTeach ? "text-brand-blue" : "text-slate-400"}`, "aria-hidden": "true" }) }),
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex flex-col items-center justify-center py-12 text-center sm:py-16 ${isTeach ? "rounded-2xl border border-brand-blue/10 bg-gradient-to-br from-white to-brand-blue/[0.02] px-6" : "px-6"}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `mb-5 flex h-14 w-14 items-center justify-center rounded-full ${isTeach ? "bg-brand-blue/10" : "bg-slate-100"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: `h-7 w-7 ${isTeach ? "text-brand-blue" : "text-slate-400"}`, "aria-hidden": "true" }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold tracking-tight text-brand-dark", children: props.title }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground", children: props.body }),
     props.action ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-6", children: props.action }) : null
@@ -13994,12 +13994,12 @@ function SidebarAction(props) {
   );
 }
 function surfaceToneClass(tone) {
-  if (tone === "accent") return "border-brand-blue/20 bg-gradient-to-b from-white to-blue-50/40";
-  if (tone === "success") return "border-brand-green/20 bg-brand-green-bg/30";
-  if (tone === "warning") return "border-brand-blue/25 bg-brand-blue/[0.04]";
-  if (tone === "danger") return "border-brand-purple/25 bg-brand-purple/[0.05]";
-  if (tone === "attention") return "border-brand-attention/20 bg-brand-attention-bg";
-  return "border-gray-200/50 bg-white/80";
+  if (tone === "accent") return "border-brand-blue/15 bg-gradient-to-b from-white to-blue-50/30";
+  if (tone === "success") return "border-brand-green/15 bg-brand-green-bg/20";
+  if (tone === "warning") return "border-brand-blue/20 bg-brand-blue/[0.03]";
+  if (tone === "danger") return "border-brand-purple/20 bg-brand-purple/[0.03]";
+  if (tone === "attention") return "border-brand-attention/15 bg-brand-attention-bg/60";
+  return "border-slate-100 bg-white/60";
 }
 function badgeToneClass(tone) {
   if (tone === "success") return "border-transparent bg-accent/10 text-accent border-accent/20";
@@ -14068,47 +14068,44 @@ function GuardHero(props) {
   const HeroIcon = props.status === "needs_review" ? HiMiniExclamationTriangle : props.status === "setup_gap" ? HiMiniInformationCircle : HiMiniShieldCheck;
   const iconColorClass = props.status === "needs_review" ? "text-brand-attention" : props.status === "setup_gap" ? "text-brand-blue" : "text-brand-green";
   const iconBgClass = props.status === "needs_review" ? "bg-brand-attention/10" : props.status === "setup_gap" ? "bg-brand-blue/10" : "bg-brand-green/10";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "section",
     {
-      className: `guard-surface-in relative overflow-hidden rounded-[2rem] border border-brand-blue/15 ${bgClass} p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7`,
+      className: `guard-surface-in relative overflow-hidden rounded-2xl border border-brand-blue/10 ${bgClass} p-5 sm:p-6 lg:p-7`,
       role: "region",
       "aria-label": "Protection status",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pointer-events-none absolute right-10 top-8 h-24 w-24 rounded-full bg-brand-blue/20 blur-3xl" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative space-y-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Protection status" }),
-            statusBadge
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-3xl", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${iconBgClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HeroIcon, { className: `h-4 w-4 ${iconColorClass}`, "aria-hidden": "true" }) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold tracking-tight text-brand-dark sm:text-2xl", children: props.headline }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: props.subheadline })
-            ] })
-          ] }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-3", children: [
-            props.cta,
-            props.secondaryCta
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative space-y-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Protection status" }),
+          statusBadge
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-3xl", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${iconBgClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(HeroIcon, { className: `h-4 w-4 ${iconColorClass}`, "aria-hidden": "true" }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold tracking-tight text-brand-dark sm:text-2xl", children: props.headline }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/70", children: props.subheadline })
           ] })
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-3", children: [
+          props.cta,
+          props.secondaryCta
         ] })
-      ]
+      ] })
     }
   );
 }
 function ProofStrip(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-surface-in grid gap-3 sm:grid-cols-3", children: props.items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-4 sm:grid-cols-3", children: props.items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
-      className: `rounded-[1.25rem] border border-white/80 bg-white/80 px-4 py-3 shadow-sm ${item.pulse ? "guard-pulse" : ""}`,
+      className: `flex items-baseline gap-2 ${item.pulse ? "guard-pulse" : ""}`,
       title: item.hint,
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: item.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xl font-semibold tracking-tight text-brand-dark", children: item.value }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground", children: item.label }),
           item.icon
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-2xl font-semibold tracking-tight text-brand-dark", children: item.value })
+        ] })
       ]
     },
     item.label
@@ -14231,7 +14228,7 @@ function ReceiptsWorkspace(props) {
     ] });
   }
   if (props.receipts.kind === "error") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-[1.75rem] border border-brand-attention/15 bg-brand-attention/[0.04] p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: props.receipts.message }) });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: props.receipts.message }) });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsx(ReadyReceiptsWorkspace, { receiptItems: props.receipts.items });
 }
@@ -14350,8 +14347,8 @@ function ReadyReceiptsWorkspace(props) {
         ] })
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           FilterChip,
           {
@@ -14376,7 +14373,7 @@ function ReadyReceiptsWorkspace(props) {
             children: "Blocked"
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-2 h-5 w-px bg-slate-200" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 h-4 w-px bg-slate-200" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           FilterChip,
           {
@@ -14409,13 +14406,13 @@ function ReadyReceiptsWorkspace(props) {
             children: "This week"
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-2 h-5 w-px bg-slate-200" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 h-4 w-px bg-slate-200" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "select",
           {
             value: harnessFilter,
             onChange: (e) => setHarnessFilter(e.target.value),
-            className: "rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+            className: "h-8 rounded-md border-0 bg-transparent px-2 py-1 text-xs font-medium text-brand-dark hover:bg-slate-100 focus:bg-slate-100 focus:outline-none",
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All apps" }),
               harnesses.map((h) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: h, children: harnessDisplayName(h) }, h))
@@ -14429,7 +14426,7 @@ function ReadyReceiptsWorkspace(props) {
           value: search,
           onChange: (e) => setSearch(e.target.value),
           placeholder: "Search by name or app...",
-          className: "mt-3 w-full rounded-xl border border-slate-200/70 bg-white px-4 py-2.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          className: "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
         }
       )
     ] }),
@@ -14479,7 +14476,7 @@ function FilterChip({
     "button",
     {
       onClick,
-      className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${active ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
+      className: `rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active ? "bg-brand-blue text-white" : "text-slate-500 hover:bg-slate-100 hover:text-brand-dark"}`,
       children
     }
   );
@@ -14523,87 +14520,78 @@ function ReceiptGroup$1({ title, items }) {
       return next;
     });
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6 transition-shadow duration-200 hover:shadow-md", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 pt-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
         onClick: toggle,
-        className: "flex w-full items-center justify-between text-left",
+        className: "flex w-full items-center justify-between text-left group",
         "aria-expanded": !collapsed,
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: title }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-muted-foreground", children: [
-              items.length,
-              " events"
-            ] }),
-            collapsed ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" })
-          ] })
+            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: items.length })
+          ] }),
+          collapsed ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4 text-slate-300 transition-colors group-hover:text-slate-500", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4 text-slate-300 transition-colors group-hover:text-slate-500", "aria-hidden": "true" })
         ]
       }
     ),
-    !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: items.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx(HistoryRow, { receipt }, receipt.receipt_id)) })
+    !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 space-y-0", children: items.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx(HistoryRow, { receipt }, receipt.receipt_id)) })
   ] });
 }
 function HistoryRow({ receipt }) {
   const [expanded, setExpanded] = reactExports.useState(false);
   const decisionLabel = receipt.policy_decision === "allow" ? "Allowed" : "Blocked";
+  const decisionColor = receipt.policy_decision === "allow" ? "text-emerald-600" : "text-brand-attention";
   const name = receipt.artifact_name ?? receipt.artifact_id;
   const appHref = guardAwareHref(`/apps/${receipt.harness}`);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200/70 bg-white overflow-hidden", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3 px-4 py-3", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-b border-slate-100 py-2.5 transition-colors hover:bg-slate-50/50", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: decisionLabel }),
-          " ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-xs", children: name }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 text-slate-300", children: "·" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-xs font-medium ${decisionColor}`, children: decisionLabel }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate font-mono text-xs text-slate-500", children: name })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "a",
             {
               href: appHref,
-              className: "text-xs text-brand-blue hover:text-brand-dark transition-colors",
+              className: "text-brand-blue hover:text-brand-dark transition-colors",
               children: harnessDisplayName(receipt.harness)
             }
-          )
-        ] }),
-        receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: receipt.capabilities_summary }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-[11px] text-muted-foreground", children: formatRelativeTime(receipt.timestamp) })
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "·" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: formatRelativeTime(receipt.timestamp) })
+        ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: receipt.policy_decision === "allow" ? "green" : "attention", children: receipt.policy_decision }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: () => setExpanded(!expanded),
-            className: "rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark",
-            "aria-label": expanded ? "Hide details" : "Show details",
-            "aria-expanded": expanded,
-            children: expanded ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4", "aria-hidden": "true" })
-          }
-        )
-      ] })
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => setExpanded(!expanded),
+          className: "shrink-0 rounded p-1 text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-500",
+          "aria-label": expanded ? "Hide details" : "Show details",
+          "aria-expanded": expanded,
+          children: expanded ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+        }
+      )
     ] }),
-    expanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in border-t border-slate-200/70 bg-slate-50/60 px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-1 gap-2 text-xs", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Action ID" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono text-brand-dark", children: receipt.artifact_id })
+    expanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in mt-2 pl-4 border-l-2 border-slate-200", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-1 gap-1.5 text-xs text-slate-500", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "w-20 shrink-0 text-slate-400", children: "ID" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "font-mono text-slate-600", children: receipt.artifact_id })
       ] }),
-      receipt.artifact_hash && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Hash" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono text-brand-dark", children: receipt.artifact_hash })
+      receipt.artifact_hash && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "w-20 shrink-0 text-slate-400", children: "Hash" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "font-mono text-slate-600", children: receipt.artifact_hash })
       ] }),
-      receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Capabilities" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: receipt.capabilities_summary })
+      receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "w-20 shrink-0 text-slate-400", children: "Capabilities" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "text-slate-600", children: receipt.capabilities_summary })
       ] }),
-      receipt.provenance_summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Provenance" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 text-brand-dark", children: receipt.provenance_summary })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-muted-foreground", children: "Time" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono text-brand-dark", children: new Date(receipt.timestamp).toLocaleString() })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "w-20 shrink-0 text-slate-400", children: "Time" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "font-mono text-slate-600", children: new Date(receipt.timestamp).toLocaleString() })
       ] })
     ] }) })
   ] });
@@ -16628,6 +16616,15 @@ function simplifyRiskHeadline(headline, harness) {
   }
   return headline;
 }
+function collectHarnesses(snapshot) {
+  const harnesses = /* @__PURE__ */ new Set();
+  for (const item of snapshot.items) harnesses.add(item.harness);
+  for (const receipt of snapshot.latest_receipts) harnesses.add(receipt.harness);
+  return Array.from(harnesses).sort((a, b) => a.localeCompare(b));
+}
+function renderReceiptContext(receipt) {
+  return `${harnessDisplayName(receipt.harness)} · ${receipt.policy_decision.replace(/-/g, " ")}`;
+}
 function resolveAppStatus(install, hasInventory, hasReceipts) {
   if (install !== void 0) {
     if (install.active) return "protected";
@@ -16636,158 +16633,34 @@ function resolveAppStatus(install, hasInventory, hasReceipts) {
   if (!hasInventory && !hasReceipts) return "not_found";
   return "found_unprotected";
 }
-function StatusIcon(props) {
-  if (props.status === "protected") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-5 w-5 text-brand-green", "aria-hidden": "true" });
-  }
-  if (props.status === "found_unprotected") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationCircle, { className: "h-5 w-5 text-brand-attention", "aria-hidden": "true" });
-  }
-  if (props.status === "needs_repair") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-5 w-5 text-brand-purple", "aria-hidden": "true" });
-  }
-  if (props.status === "not_found") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-5 w-5 text-slate-400", "aria-hidden": "true" });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniQuestionMarkCircle, { className: "h-5 w-5 text-slate-400", "aria-hidden": "true" });
+function StatusIcon({ status }) {
+  if (status === "protected") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 text-emerald-500", "aria-hidden": "true" });
+  if (status === "found_unprotected") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationCircle, { className: "h-4 w-4 text-brand-attention", "aria-hidden": "true" });
+  if (status === "needs_repair") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-4 w-4 text-brand-purple", "aria-hidden": "true" });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" });
 }
-function StatusBadge(props) {
-  if (props.status === "protected") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Protected" });
-  }
-  if (props.status === "found_unprotected") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Found, protection not installed" });
-  }
-  if (props.status === "needs_repair") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Repair needed" });
-  }
-  if (props.status === "not_found") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Not found" });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Unsupported" });
-}
-function CardAction(props) {
-  const handleConnect = reactExports.useCallback(() => {
-    props.onConnect(props.harness);
-  }, [props.onConnect, props.harness]);
-  const handleTest = reactExports.useCallback(() => {
-    props.onTest(props.harness);
-  }, [props.onTest, props.harness]);
-  const handleRepair = reactExports.useCallback(() => {
-    props.onRepair(props.harness);
-  }, [props.onRepair, props.harness]);
-  if (props.status === "protected") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleTest, children: "Test protection" });
-  }
-  if (props.status === "found_unprotected") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleConnect, children: "Connect" });
-  }
-  if (props.status === "needs_repair") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleRepair, children: "Repair" });
-  }
-  if (props.status === "not_found") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "https://hol.org/guard/docs/install", variant: "outline", children: "How to install" });
-  }
-  return null;
-}
-function WatchedAppCard(props) {
-  const hasInventory = props.harnessInventory.length > 0;
-  const status = resolveAppStatus(props.install, hasInventory, props.hasReceipts);
-  const isClickable = props.onOpenDetail !== void 0;
-  const handleOpenDetail = reactExports.useCallback(() => {
-    props.onOpenDetail?.(props.harness);
-  }, [props.onOpenDetail, props.harness]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: `overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-sm ${isClickable ? "cursor-pointer transition-shadow hover:shadow-md" : ""}`,
-      onClick: isClickable ? handleOpenDetail : void 0,
-      role: isClickable ? "button" : void 0,
-      tabIndex: isClickable ? 0 : void 0,
-      "aria-label": isClickable ? `Open details for ${harnessDisplayName(props.harness)}` : void 0,
-      onKeyDown: isClickable ? (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          handleOpenDetail();
-        }
-      } : void 0,
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3 p-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-start gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(StatusIcon, { status }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: harnessDisplayName(props.harness) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 font-mono text-[11px] text-muted-foreground", children: props.harness })
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatusBadge, { status })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-200/70 px-4 py-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What Guard can see" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-muted-foreground", children: [
-            props.harnessInventory.length,
-            " actions seen · ",
-            props.harnessPolicies.length,
-            " saved decisions"
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-200/70 px-4 py-3", onClick: (e) => e.stopPropagation(), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          CardAction,
-          {
-            harness: props.harness,
-            status,
-            fleetUrl: props.fleetUrl,
-            onConnect: props.onConnect,
-            onTest: props.onTest,
-            onRepair: props.onRepair
-          }
-        ) })
-      ]
-    }
-  );
-}
-function collectHarnesses(snapshot) {
-  const harnesses = /* @__PURE__ */ new Set();
-  for (const item of snapshot.items) {
-    harnesses.add(item.harness);
-  }
-  for (const receipt of snapshot.latest_receipts) {
-    harnesses.add(receipt.harness);
-  }
-  return Array.from(harnesses).sort((left, right) => left.localeCompare(right));
-}
-function renderReceiptContext(receipt) {
-  const decision = receipt.policy_decision.replace(/-/g, " ");
-  return `${harnessDisplayName(receipt.harness)} · ${decision}`;
+function StatusBadge({ status }) {
+  if (status === "protected") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-emerald-600", children: "Protected" });
+  if (status === "found_unprotected") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-attention", children: "Found, not installed" });
+  if (status === "needs_repair") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-purple", children: "Repair needed" });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "Not found" });
 }
 function FleetWorkspace(props) {
   const harnesses = collectHarnesses(props.runtime);
   const managedInstalls = props.runtime.managed_installs ?? [];
-  const activeInstalls = managedInstalls.filter((install) => install.active);
+  const activeInstalls = managedInstalls.filter((i) => i.active);
   const inventory = props.inventory.kind === "ready" ? props.inventory.items : [];
   const visibleHarnesses = Array.from(
     /* @__PURE__ */ new Set([
-      ...managedInstalls.map((install) => install.harness),
+      ...managedInstalls.map((i) => i.harness),
       ...harnesses,
-      ...inventory.map((item) => item.harness),
-      ...props.policies.map((item) => item.harness)
+      ...inventory.map((i) => i.harness),
+      ...props.policies.map((p) => p.harness)
     ])
-  ).sort((left, right) => left.localeCompare(right));
+  ).sort((a, b) => a.localeCompare(b));
   const runtimeState = props.runtime.runtime_state;
   const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness));
-  const handleConnect = reactExports.useCallback((harness) => {
-    props.onConnectHarness?.(harness);
-  }, [props.onConnectHarness]);
-  const handleTest = reactExports.useCallback((harness) => {
-    props.onTestHarness?.(harness);
-  }, [props.onTestHarness]);
-  const handleRepair = reactExports.useCallback((harness) => {
-    props.onRepairHarness?.(harness);
-  }, [props.onRepairHarness]);
-  const handleOpenDetail = reactExports.useCallback((harness) => {
-    props.onOpenAppDetail?.(harness);
-  }, [props.onOpenAppDetail]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardHero,
       {
@@ -16809,84 +16682,79 @@ function FleetWorkspace(props) {
         ]
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "App coverage" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "Which apps Guard is watching on this machine." }),
-        visibleHarnesses.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 grid gap-3 sm:grid-cols-2", children: visibleHarnesses.map((harness) => {
-          const install = managedInstalls.find((item) => item.harness === harness);
-          const harnessInventory = inventory.filter((item) => item.harness === harness && item.present);
-          const harnessPolicies = props.policies.filter((item) => item.harness === harness);
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "App coverage" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Which apps Guard is watching on this machine." })
+        ] }),
+        visibleHarnesses.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "divide-y divide-slate-100 border-t border-slate-100", children: visibleHarnesses.map((harness) => {
+          const install = managedInstalls.find((i) => i.harness === harness);
+          const harnessInventory = inventory.filter((i) => i.harness === harness && i.present);
+          const harnessPolicies = props.policies.filter((p) => p.harness === harness);
           const hasReceipts = receiptHarnesses.has(harness);
-          return /* @__PURE__ */ jsxRuntimeExports.jsx(
-            WatchedAppCard,
+          const status = resolveAppStatus(install, harnessInventory.length > 0, hasReceipts);
+          const isClickable = props.onOpenAppDetail !== void 0;
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "div",
             {
-              harness,
-              install,
-              harnessInventory,
-              harnessPolicies,
-              hasReceipts,
-              fleetUrl: props.runtime.fleet_url,
-              onConnect: handleConnect,
-              onTest: handleTest,
-              onRepair: handleRepair,
-              onOpenDetail: handleOpenDetail
+              className: `flex items-center justify-between gap-3 py-3 transition-colors ${isClickable ? "cursor-pointer hover:bg-slate-50/60" : ""}`,
+              onClick: isClickable ? () => props.onOpenAppDetail?.(harness) : void 0,
+              role: isClickable ? "button" : void 0,
+              tabIndex: isClickable ? 0 : void 0,
+              onKeyDown: isClickable ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  props.onOpenAppDetail?.(harness);
+                }
+              } : void 0,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-3", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(StatusIcon, { status }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: harnessDisplayName(harness) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-400", children: [
+                      harnessInventory.length,
+                      " actions · ",
+                      harnessPolicies.length,
+                      " decisions"
+                    ] })
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(StatusBadge, { status }),
+                  isClickable && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" })
+                ] })
+              ]
             },
             harness
           );
-        }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
           EmptyState,
           {
             title: "No watched apps yet",
             body: "Run HOL Guard once with Codex, Claude Code, Cursor, Hermes, or another supported app and this machine will show coverage here.",
             tone: "teach"
           }
-        ) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            KeyValueGrid,
-            {
-              columns: 2,
-              items: [
-                ["Approval center", props.runtime.approval_center_url ?? "offline"],
-                ["Session", runtimeState?.session_id.slice(0, 8) ?? "offline"],
-                ["Started", runtimeState?.started_at ?? "offline"],
-                ["Heartbeat", runtimeState?.last_heartbeat_at ?? "offline"],
-                ["Detected", `${harnesses.length} apps`],
-                ["Actions seen", props.inventory.kind === "loading" ? "loading" : `${inventory.length}`]
-              ]
-            }
-          ),
-          props.inventory.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs leading-relaxed text-muted-foreground", children: props.inventory.message }) : null
-        ] })
+        ),
+        props.inventory.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: props.inventory.message }) : null
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "space-y-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 sm:p-6", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent choices" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "What Guard decided recently." }),
-        props.runtime.latest_receipts.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: props.runtime.latest_receipts.slice(0, 6).map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "div",
-          {
-            className: "rounded-lg border border-border bg-white px-4 py-3",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-semibold text-brand-dark", children: receipt.artifact_name ?? receipt.artifact_id }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: renderReceiptContext(receipt) })
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "green", children: receipt.policy_decision })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs leading-relaxed text-muted-foreground", children: receipt.capabilities_summary || receipt.provenance_summary })
-            ]
-          },
-          receipt.receipt_id
-        )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent choices" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "What Guard decided recently." })
+        ] }),
+        props.runtime.latest_receipts.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-0 divide-y divide-slate-100 border-t border-slate-100", children: props.runtime.latest_receipts.slice(0, 6).map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "py-2.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: receipt.artifact_name ?? receipt.artifact_id }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: renderReceiptContext(receipt) })
+        ] }, receipt.receipt_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
           EmptyState,
           {
             title: "No choices yet",
             body: "Allow or block an action once and HOL Guard will start building local history for this machine."
           }
-        ) })
-      ] }) })
+        )
+      ] })
     ] })
   ] });
 }
@@ -16930,36 +16798,12 @@ const securityLevels = [
   }
 ];
 const riskControls = [
-  {
-    key: "local_secret_read",
-    label: "Local secrets",
-    description: "Files such as .env, .npmrc, .netrc, SSH keys, and cloud credentials."
-  },
-  {
-    key: "credential_exfiltration",
-    label: "Credential sharing",
-    description: "Commands or scripts that appear to send keys, tokens, or credentials away."
-  },
-  {
-    key: "data_flow_exfiltration",
-    label: "Secret data flow",
-    description: "Detected source-to-sink route where a local secret is read and its value reaches a network or external sink."
-  },
-  {
-    key: "destructive_shell",
-    label: "Destructive commands",
-    description: "Shell actions that delete, overwrite, or rewrite local files."
-  },
-  {
-    key: "encoded_execution",
-    label: "Hidden scripts",
-    description: "Encoded, encrypted, or decoded-and-run command payloads."
-  },
-  {
-    key: "network_egress",
-    label: "New network destinations",
-    description: "Outbound connections Guard has not seen in this context."
-  }
+  { key: "local_secret_read", label: "Local secrets", description: "Files such as .env, .npmrc, .netrc, SSH keys, and cloud credentials." },
+  { key: "credential_exfiltration", label: "Credential sharing", description: "Commands or scripts that appear to send keys, tokens, or credentials away." },
+  { key: "data_flow_exfiltration", label: "Secret data flow", description: "Detected source-to-sink route where a local secret is read and its value reaches a network or external sink." },
+  { key: "destructive_shell", label: "Destructive commands", description: "Shell actions that delete, overwrite, or rewrite local files." },
+  { key: "encoded_execution", label: "Hidden scripts", description: "Encoded, encrypted, or decoded-and-run command payloads." },
+  { key: "network_egress", label: "New network destinations", description: "Outbound connections Guard has not seen in this context." }
 ];
 const riskProfileActions = {
   balanced: {
@@ -16988,10 +16832,7 @@ const riskProfileActions = {
   }
 };
 function normalizeSettingsPayload(payload) {
-  return {
-    ...payload,
-    settings: normalizeGuardSettings(payload.settings)
-  };
+  return { ...payload, settings: normalizeGuardSettings(payload.settings) };
 }
 function normalizeGuardSettings(settings) {
   const defaults = riskProfileActions[settings.security_level];
@@ -17010,18 +16851,10 @@ function normalizeGuardSettings(settings) {
 function buildConsequenceSummary(settings) {
   const level = settings.security_level;
   const mode = settings.mode;
-  if (mode === "observe") {
-    return "Guard is watching and recording what your AI apps do, but it will not pause any actions. Switch to Prompt or Enforce when you want Guard to actively protect you.";
-  }
-  if (level === "balanced") {
-    return "Guard will ask before secret access, hidden execution, and destructive commands. New network destinations get a warning. This is the recommended setting for most users.";
-  }
-  if (level === "strict") {
-    return "Guard will ask before almost every risky action, including new network destinations. Use this when working with sensitive data or untrusted AI tools.";
-  }
-  if (level === "custom") {
-    return "You have customized individual risk controls. Review the choices below to make sure they match how you want Guard to behave.";
-  }
+  if (mode === "observe") return "Guard is watching and recording what your AI apps do, but it will not pause any actions. Switch to Prompt or Enforce when you want Guard to actively protect you.";
+  if (level === "balanced") return "Guard will ask before secret access, hidden execution, and destructive commands. New network destinations get a warning. This is the recommended setting for most users.";
+  if (level === "strict") return "Guard will ask before almost every risky action, including new network destinations. Use this when working with sensitive data or untrusted AI tools.";
+  if (level === "custom") return "You have customized individual risk controls. Review the choices below to make sure they match how you want Guard to behave.";
   return "";
 }
 function hasUnsavedChanges(saved, draft) {
@@ -17041,6 +16874,7 @@ function SettingsWorkspace() {
   const [actionMessage, setActionMessage] = reactExports.useState(null);
   const [perfSnapshot, setPerfSnapshot] = reactExports.useState(null);
   const [pendingMode, setPendingMode] = reactExports.useState(null);
+  const [expandedSections, setExpandedSections] = reactExports.useState({ "protection": true, "risk": false, "diagnostics": false });
   const saveSuccessTimerRef = reactExports.useRef(null);
   const savedSettingsRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
@@ -17054,10 +16888,7 @@ function SettingsWorkspace() {
       }
     }).catch((error) => {
       if (!cancelled) {
-        setState({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Unable to load Guard settings."
-        });
+        setState({ kind: "error", message: error instanceof Error ? error.message : "Unable to load Guard settings." });
       }
     });
     return () => {
@@ -17077,9 +16908,7 @@ function SettingsWorkspace() {
   }, []);
   reactExports.useEffect(() => {
     return () => {
-      if (saveSuccessTimerRef.current !== null) {
-        clearTimeout(saveSuccessTimerRef.current);
-      }
+      if (saveSuccessTimerRef.current !== null) clearTimeout(saveSuccessTimerRef.current);
     };
   }, []);
   reactExports.useEffect(() => {
@@ -17092,6 +16921,9 @@ function SettingsWorkspace() {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [draft]);
+  const toggleSection = reactExports.useCallback((key) => {
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
   const handleStringChange = reactExports.useCallback(
     (key) => (event) => {
       setDraft((value) => value === null ? value : { ...value, [key]: event.target.value });
@@ -17102,16 +16934,8 @@ function SettingsWorkspace() {
   const handleSecurityLevelChange = reactExports.useCallback((securityLevel) => {
     setDraft((value) => {
       if (value === null) return value;
-      if (securityLevel === "custom") {
-        return { ...value, security_level: securityLevel };
-      }
-      return {
-        ...value,
-        security_level: securityLevel,
-        risk_actions: riskProfileActions[securityLevel],
-        risk_action_overrides: {},
-        harness_risk_actions: {}
-      };
+      if (securityLevel === "custom") return { ...value, security_level: securityLevel };
+      return { ...value, security_level: securityLevel, risk_actions: riskProfileActions[securityLevel], risk_action_overrides: {}, harness_risk_actions: {} };
     });
     setSaveError(null);
   }, []);
@@ -17119,18 +16943,7 @@ function SettingsWorkspace() {
     (riskKey) => (event) => {
       setDraft((value) => {
         if (value === null) return value;
-        return {
-          ...value,
-          security_level: "custom",
-          risk_actions: {
-            ...value.risk_actions,
-            [riskKey]: event.target.value
-          },
-          risk_action_overrides: {
-            ...value.risk_action_overrides,
-            [riskKey]: event.target.value
-          }
-        };
+        return { ...value, security_level: "custom", risk_actions: { ...value.risk_actions, [riskKey]: event.target.value }, risk_action_overrides: { ...value.risk_action_overrides, [riskKey]: event.target.value } };
       });
       setSaveError(null);
     },
@@ -17139,17 +16952,7 @@ function SettingsWorkspace() {
   const handleCodexSecretReadChange = reactExports.useCallback((event) => {
     setDraft((value) => {
       if (value === null) return value;
-      return {
-        ...value,
-        security_level: "custom",
-        harness_risk_actions: {
-          ...value.harness_risk_actions,
-          codex: {
-            ...value.harness_risk_actions.codex ?? {},
-            local_secret_read: event.target.value
-          }
-        }
-      };
+      return { ...value, security_level: "custom", harness_risk_actions: { ...value.harness_risk_actions, codex: { ...value.harness_risk_actions.codex ?? {}, local_secret_read: event.target.value } } };
     });
     setSaveError(null);
   }, []);
@@ -17189,21 +16992,14 @@ function SettingsWorkspace() {
     setSaveError(null);
     setSaveSuccess(false);
     try {
-      const payload = await updateSettings({
-        ...draft,
-        risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides
-      });
+      const payload = await updateSettings({ ...draft, risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides });
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
       setDraft(normalizedPayload.settings);
       savedSettingsRef.current = normalizedPayload.settings;
       setSaveSuccess(true);
-      if (saveSuccessTimerRef.current !== null) {
-        clearTimeout(saveSuccessTimerRef.current);
-      }
-      saveSuccessTimerRef.current = setTimeout(() => {
-        setSaveSuccess(false);
-      }, 2e3);
+      if (saveSuccessTimerRef.current !== null) clearTimeout(saveSuccessTimerRef.current);
+      saveSuccessTimerRef.current = setTimeout(() => setSaveSuccess(false), 2e3);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Unable to save settings.");
     } finally {
@@ -17211,9 +17007,7 @@ function SettingsWorkspace() {
     }
   }, [draft]);
   const handleClearApprovals = reactExports.useCallback(async () => {
-    if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) {
-      return;
-    }
+    if (!window.confirm("Clear all saved approvals? Guard will ask again for previously approved actions.")) return;
     setClearingApprovals(true);
     setActionMessage(null);
     try {
@@ -17226,9 +17020,7 @@ function SettingsWorkspace() {
     }
   }, []);
   const handleClearEvidence = reactExports.useCallback(async () => {
-    if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) {
-      return;
-    }
+    if (!window.confirm("Clear the evidence log permanently? This cannot be undone.")) return;
     setClearingEvidence(true);
     setActionMessage(null);
     try {
@@ -17259,9 +17051,7 @@ function SettingsWorkspace() {
     }
   }, []);
   const handleRepairApprovalCenter = reactExports.useCallback(async () => {
-    if (!window.confirm("Reset the approval center locator? The daemon will be reachable again after Guard restarts. Pending approvals are preserved.")) {
-      return;
-    }
+    if (!window.confirm("Reset the approval center locator? The daemon will be reachable again after Guard restarts. Pending approvals are preserved.")) return;
     setRepairing(true);
     setActionMessage(null);
     try {
@@ -17294,292 +17084,251 @@ function SettingsWorkspace() {
         cta: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "blue", children: draft.mode })
       }
     ),
-    consequenceSummary && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 shadow-sm sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+    consequenceSummary && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-blue" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What to expect" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: consequenceSummary })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: consequenceSummary })
       ] })
     ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Security level" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-muted-foreground", children: "Pick a level to set up all risk choices at once. Switch to Custom only when you need to override individual behaviors." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 grid gap-3 md:grid-cols-3", children: securityLevels.map((level) => {
-            const LevelIcon = level.icon;
-            const isSelected = draft.security_level === level.value;
-            const iconColorClass = level.tone === "blue" ? "text-brand-blue" : level.tone === "purple" ? "text-brand-purple" : "text-slate-500";
-            const iconBgClass = level.tone === "blue" ? "bg-brand-blue/10" : level.tone === "purple" ? "bg-brand-purple/10" : "bg-slate-100";
-            const selectedBorderClass = level.tone === "blue" ? "border-brand-blue/35 bg-brand-blue/[0.07] shadow-[0_12px_32px_rgba(85,153,254,0.14)]" : level.tone === "purple" ? "border-brand-purple/35 bg-brand-purple/[0.06] shadow-[0_12px_32px_rgba(181,108,255,0.12)]" : "border-slate-300 bg-slate-50 shadow-sm";
-            return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "button",
-              {
-                type: "button",
-                onClick: () => handleSecurityLevelChange(level.value),
-                "aria-pressed": isSelected,
-                className: `relative min-h-36 rounded-[1.5rem] border p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${isSelected ? selectedBorderClass : "border-transparent bg-surface-1/80 hover:bg-white"}`,
-                children: [
-                  isSelected && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[#059669]", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 text-white", "aria-hidden": "true" }) }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-8 w-8 items-center justify-center rounded-lg ${iconBgClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(LevelIcon, { className: `h-4 w-4 ${iconColorClass}`, "aria-hidden": "true" }) }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-3 block text-base font-semibold text-brand-dark", children: level.label }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5 block text-sm leading-6 text-muted-foreground", children: level.description }),
-                  level.protects.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-1", children: level.protects.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-center gap-1.5 text-[11px] font-medium text-brand-dark/60", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `h-1 w-1 shrink-0 rounded-full ${iconColorClass}` }),
-                    item
-                  ] }, item)) })
-                ]
-              },
-              level.value
-            );
-          }) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Protection mode" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 grid gap-3 sm:grid-cols-3", children: ["prompt", "enforce", "observe"].map((mode) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "label",
-            {
-              className: `cursor-pointer rounded-[1.25rem] border p-4 transition-all duration-150 ${draft.mode === mode ? "border-brand-blue/30 bg-brand-blue/[0.06] shadow-sm" : "border-transparent bg-surface-1/80 hover:bg-white"}`,
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "input",
-                  {
-                    type: "radio",
-                    name: "mode",
-                    value: mode,
-                    checked: draft.mode === mode,
-                    onChange: handleModeChange,
-                    className: "sr-only"
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold capitalize text-brand-dark", children: mode })
-              ]
-            },
-            mode
-          )) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm leading-6 text-muted-foreground", children: modeHelp })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Risk choices" }),
-            draft.security_level !== "custom" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "h-3 w-3", "aria-hidden": "true" }),
-              "Managed by ",
-              draft.security_level === "balanced" ? "Balanced" : "Strict"
-            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1.5 rounded-full border border-brand-blue/25 bg-brand-blue/[0.06] px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCog6Tooth, { className: "h-3 w-3", "aria-hidden": "true" }),
-              "Custom overrides active"
-            ] })
-          ] }),
-          draft.security_level !== "custom" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex items-center justify-between gap-3 rounded-[1rem] border border-slate-200/60 bg-slate-50/80 px-4 py-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark/65", children: [
-            "All risk behaviors are set by the ",
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: draft.security_level === "balanced" ? "Balanced" : "Strict" }),
-            " level. Select ",
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Custom" }),
-            " above to override individual choices."
-          ] }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `mt-4 divide-y divide-slate-200/70 overflow-hidden rounded-[1.35rem] border border-slate-200/70 bg-white ${draft.security_level !== "custom" ? "opacity-60" : ""}`, children: riskControls.map((risk) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-center", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        AccordionSection,
+        {
+          title: "Protection level",
+          subtitle: `${draft.security_level === "balanced" ? "Balanced" : draft.security_level === "strict" ? "Strict" : "Custom"} · ${draft.mode}`,
+          expanded: expandedSections["protection"],
+          onToggle: () => toggleSection("protection"),
+          children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-3 md:grid-cols-3", children: securityLevels.map((level) => {
+              const LevelIcon = level.icon;
+              const isSelected = draft.security_level === level.value;
+              const iconColorClass = level.tone === "blue" ? "text-brand-blue" : level.tone === "purple" ? "text-brand-purple" : "text-slate-500";
+              const iconBgClass = level.tone === "blue" ? "bg-brand-blue/10" : level.tone === "purple" ? "bg-brand-purple/10" : "bg-slate-100";
+              const selectedBorderClass = level.tone === "blue" ? "border-brand-blue/30 bg-brand-blue/[0.05]" : level.tone === "purple" ? "border-brand-purple/30 bg-brand-purple/[0.04]" : "border-slate-300 bg-slate-50";
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  type: "button",
+                  onClick: () => handleSecurityLevelChange(level.value),
+                  "aria-pressed": isSelected,
+                  className: `relative rounded-xl border p-4 text-left transition-all duration-150 hover:-translate-y-0.5 ${isSelected ? selectedBorderClass : "border-transparent bg-slate-50/80 hover:bg-white"}`,
+                  children: [
+                    isSelected && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-[#059669]", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 text-white", "aria-hidden": "true" }) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-8 w-8 items-center justify-center rounded-lg ${iconBgClass}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(LevelIcon, { className: `h-4 w-4 ${iconColorClass}`, "aria-hidden": "true" }) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-2 block text-sm font-semibold text-brand-dark", children: level.label }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-xs leading-relaxed text-slate-500", children: level.description }),
+                    level.protects.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-0.5", children: level.protects.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex items-center gap-1.5 text-[11px] text-slate-500", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `h-1 w-1 shrink-0 rounded-full ${iconColorClass}` }),
+                      item
+                    ] }, item)) })
+                  ]
+                },
+                level.value
+              );
+            }) }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: risk.label }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-muted-foreground", children: risk.description }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group mt-1", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-xs font-semibold text-brand-blue [&::-webkit-details-marker]:hidden", children: "What this means ›" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: [
-                  risk.description,
-                  " Choosing ",
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: "Ask again" }),
-                  " means Guard will prompt your AI agent each time it tries this action until you approve it for the current session or workspace."
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Protection mode" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 grid gap-2 sm:grid-cols-3", children: ["prompt", "enforce", "observe"].map((mode) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "label",
+                {
+                  className: `cursor-pointer rounded-lg border p-3 transition-all ${draft.mode === mode ? "border-brand-blue/25 bg-brand-blue/[0.04]" : "border-transparent bg-slate-50/80 hover:bg-white"}`,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "radio", name: "mode", value: mode, checked: draft.mode === mode, onChange: handleModeChange, className: "sr-only" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold capitalize text-brand-dark", children: mode })
+                  ]
+                },
+                mode
+              )) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-500", children: modeHelp })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "approval-wait", className: "block text-sm font-semibold text-brand-dark", children: "Approval wait timeout" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Seconds to wait before returning to the harness" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { id: "approval-wait", type: "number", min: 0, max: 600, value: draft.approval_wait_timeout_seconds, onChange: handleTimeoutChange, className: "mt-2 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20" })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { label: "Telemetry", checked: draft.telemetry, onChange: handleBooleanChange("telemetry") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { label: "Cloud sync", checked: draft.sync, onChange: handleBooleanChange("sync") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { label: "Billing features", checked: draft.billing, onChange: handleBooleanChange("billing") })
+              ] })
+            ] })
+          ] })
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        AccordionSection,
+        {
+          title: "Risk choices",
+          subtitle: draft.security_level !== "custom" ? `Managed by ${draft.security_level}` : "Custom overrides active",
+          expanded: expandedSections["risk"],
+          onToggle: () => toggleSection("risk"),
+          children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+            draft.security_level !== "custom" && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-500", children: [
+              "All risk behaviors are set by the ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: draft.security_level === "balanced" ? "Balanced" : "Strict" }),
+              " level. Select ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "Custom" }),
+              " above to override individual choices."
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `divide-y divide-slate-100 border-t border-slate-100 ${draft.security_level !== "custom" ? "opacity-60" : ""}`, children: riskControls.map((risk) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: risk.label }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: risk.description })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Guard should", value: draft.risk_actions[risk.key] ?? "require-reapproval", options: actionOptions, onChange: handleRiskActionChange(risk.key), disabled: draft.security_level !== "custom" })
+            ] }, risk.key)) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center border-t border-slate-100 ${draft.security_level !== "custom" ? "opacity-60" : ""}`, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Codex reading local secret files" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Use this only for trusted projects where Codex should be allowed to open files such as .env or .npmrc." })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Codex should", value: draft.harness_risk_actions.codex?.local_secret_read ?? draft.risk_actions.local_secret_read ?? "require-reapproval", options: actionOptions, onChange: handleCodexSecretReadChange, disabled: draft.security_level !== "custom" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 pt-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Advanced defaults" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 grid gap-3 sm:grid-cols-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "New action", value: draft.default_action, options: actionOptions, onChange: handleStringChange("default_action") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Unknown source", value: draft.unknown_publisher_action, options: actionOptions, onChange: handleStringChange("unknown_publisher_action") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Changed command", value: draft.changed_hash_action, options: actionOptions, onChange: handleStringChange("changed_hash_action") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "New network domain", value: draft.new_network_domain_action, options: actionOptions, onChange: handleStringChange("new_network_domain_action") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Subprocess action", value: draft.subprocess_action, options: actionOptions, onChange: handleStringChange("subprocess_action") }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Approval surface", value: draft.approval_surface_policy, options: surfacePolicyOptions, onChange: handleStringChange("approval_surface_policy") })
+              ] })
+            ] })
+          ] })
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        AccordionSection,
+        {
+          title: "Diagnostics & data",
+          subtitle: "Clear approvals, export logs, repair",
+          expanded: expandedSections["diagnostics"],
+          onToggle: () => toggleSection("diagnostics"),
+          children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+            perfSnapshot !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticsPerfCard, { snapshot: perfSnapshot }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Clear saved approvals" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Removes all stored allow/block decisions. Guard will ask again for previously approved actions." }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleClearApprovals, disabled: clearingApprovals, variant: "outline", children: clearingApprovals ? "Clearing…" : "Clear approvals" }) })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Clear evidence log" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Permanently removes all recorded evidence. This cannot be undone." }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleClearEvidence, disabled: clearingEvidence, variant: "outline", children: clearingEvidence ? "Clearing…" : "Clear evidence" }) })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Export diagnostics" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Downloads a JSON file with local Guard evidence for debugging or support." }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleExportDiagnostics, disabled: exporting, variant: "secondary", children: exporting ? "Exporting…" : "Export" }) })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Repair approval center" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Resets the approval center locator when the approval link returns an API error." }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairApprovalCenter, disabled: repairing, variant: "secondary", children: repairing ? "Repairing…" : "Repair" }) })
                 ] })
               ] })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              SettingSelect,
-              {
-                label: "Guard should",
-                value: draft.risk_actions[risk.key] ?? "require-reapproval",
-                options: actionOptions,
-                onChange: handleRiskActionChange(risk.key),
-                disabled: draft.security_level !== "custom"
-              }
-            )
-          ] }, risk.key)) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Codex override" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_260px] md:items-center ${draft.security_level !== "custom" ? "opacity-60" : ""}`, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Codex reading local secret files" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-muted-foreground", children: "Use this only for trusted projects where Codex should be allowed to open files such as .env or .npmrc." })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              SettingSelect,
-              {
-                label: "Codex should",
-                value: draft.harness_risk_actions.codex?.local_secret_read ?? draft.risk_actions.local_secret_read ?? "require-reapproval",
-                options: actionOptions,
-                onChange: handleCodexSecretReadChange,
-                disabled: draft.security_level !== "custom"
-              }
-            )
+            actionMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: actionMessage }) : null
           ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Advanced defaults" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 grid gap-4 md:grid-cols-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "New action", value: draft.default_action, options: actionOptions, onChange: handleStringChange("default_action") }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Unknown source", value: draft.unknown_publisher_action, options: actionOptions, onChange: handleStringChange("unknown_publisher_action") }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Changed command", value: draft.changed_hash_action, options: actionOptions, onChange: handleStringChange("changed_hash_action") }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "New network domain", value: draft.new_network_domain_action, options: actionOptions, onChange: handleStringChange("new_network_domain_action") }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Subprocess action", value: draft.subprocess_action, options: actionOptions, onChange: handleStringChange("subprocess_action") }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SettingSelect, { label: "Approval surface", value: draft.approval_surface_policy, options: surfacePolicyOptions, onChange: handleStringChange("approval_surface_policy") })
-          ] })
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sticky bottom-4 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleSave, disabled: saving || saveSuccess, children: saveSuccess ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4", "aria-hidden": "true" }),
+          "Saved"
+        ] }) : saving ? "Saving…" : "Save settings" }),
+        hasUnsavedChanges(savedSettingsRef.current, draft) && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "ml-3 inline-flex items-center gap-1.5 text-xs font-medium text-brand-attention", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-1.5 w-1.5 rounded-full bg-brand-attention" }),
+          "Unsaved changes"
         ] })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval wait" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "approval-wait", className: "mt-3 block text-sm font-semibold text-brand-dark", children: "Seconds to wait before returning to the harness" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              id: "approval-wait",
-              type: "number",
-              min: 0,
-              max: 600,
-              value: draft.approval_wait_timeout_seconds,
-              onChange: handleTimeoutChange,
-              className: "mt-2 min-h-11 w-full rounded-full border border-border bg-white px-4 py-2 text-sm text-brand-dark transition-colors focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Local toggles" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { label: "Telemetry", checked: draft.telemetry, onChange: handleBooleanChange("telemetry") }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { label: "Cloud sync", checked: draft.sync, onChange: handleBooleanChange("sync") }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(SettingToggle, { label: "Billing features", checked: draft.billing, onChange: handleBooleanChange("billing") })
-          ] })
-        ] }),
-        perfSnapshot !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Runtime diagnostics" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DiagnosticsPerfCard, { snapshot: perfSnapshot }) })
-        ] }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-brand-purple/20 bg-brand-purple/[0.04] p-5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Data management" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-4", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Clear saved approvals" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Removes all stored allow/block decisions. Guard will ask again for previously approved actions." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleClearApprovals, disabled: clearingApprovals, variant: "danger", children: clearingApprovals ? "Clearing…" : "Clear all approvals" }) })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Clear evidence log" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Permanently removes all recorded evidence. This cannot be undone." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleClearEvidence, disabled: clearingEvidence, variant: "danger", children: clearingEvidence ? "Clearing…" : "Clear evidence log" }) })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Export diagnostics" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Downloads a JSON file with local Guard evidence for debugging or support." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleExportDiagnostics, disabled: exporting, variant: "secondary", children: exporting ? "Exporting…" : "Export diagnostics" }) })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Repair local approval center" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Resets the approval center locator when the approval link returns an API error. Pending approvals are preserved." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairApprovalCenter, disabled: repairing, variant: "secondary", children: repairing ? "Repairing…" : "Repair approval center" }) })
-            ] }),
-            actionMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-fade-in text-sm leading-6 text-brand-dark/70", children: actionMessage }) : null
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Deep scanner" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-[1.25rem] border border-slate-200/70 bg-white/80 px-5 py-4", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Enhanced scanning" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Install the Cisco scanner extension to enable skill and MCP evidence enrichment." }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark", children: "pip install holguard[cisco]" })
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sticky top-24 rounded-[1.75rem] border border-white/80 bg-white/90 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleSave, disabled: saving || saveSuccess, children: saveSuccess ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4", "aria-hidden": "true" }),
-            "Saved"
-          ] }) : saving ? "Saving…" : "Save settings" }),
-          hasUnsavedChanges(savedSettingsRef.current, draft) && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-attention", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-1.5 w-1.5 rounded-full bg-brand-attention" }),
-            "Unsaved changes"
-          ] }),
-          saveSuccess ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-fade-in mt-3 text-sm font-semibold leading-6 text-brand-green", children: "Settings saved" }) : saveError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-fade-in mt-3 text-sm leading-6 text-brand-purple", children: saveError }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs leading-5 text-muted-foreground", children: "Use this for local tuning. Team policy from Guard Cloud may still override some decisions." })
-        ] })
-      ] })
-    ] }),
-    pendingMode === "observe" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-sm rounded-[1.75rem] border border-brand-attention/20 bg-white p-6 shadow-xl", children: [
+      saveSuccess ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-emerald-600", children: "Settings saved" }) : saveError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-purple", children: saveError }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Use this for local tuning. Team policy from Guard Cloud may still override some decisions." })
+    ] }) }),
+    pendingMode === "observe" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-sm rounded-2xl border border-brand-attention/15 bg-white p-6 shadow-xl", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-attention/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-5 w-5 text-brand-attention", "aria-hidden": "true" }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-base font-semibold text-brand-dark", children: "Switch to Observe mode?" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "In Observe mode, Guard records what your AI apps do but does not pause any actions. This reduces your protection. Only use this when debugging or in trusted environments." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-500", children: "In Observe mode, Guard records what your AI apps do but does not pause any actions. This reduces your protection. Only use this when debugging or in trusted environments." })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex flex-wrap gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: confirmModeChange,
-            className: "inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90",
-            children: "Switch to Observe"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: cancelModeChange,
-            className: "inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
-            children: "Keep current mode"
-          }
-        )
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: confirmModeChange, className: "inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90", children: "Switch to Observe" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: cancelModeChange, className: "inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50", children: "Keep current mode" })
       ] })
     ] }) })
   ] });
 }
-function DiagnosticsPerfCard(props) {
-  const { snapshot } = props;
-  const threadCount = snapshot.thread_count;
-  const daemonPort = snapshot.runtime_state?.daemon_port ?? null;
-  const startedAt = snapshot.runtime_state?.started_at ?? null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Runtime performance" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-relaxed text-muted-foreground", children: "Live process metrics for this Guard daemon session." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-2 gap-2", children: [
-      threadCount !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Total interpreter threads", value: String(threadCount) }) : null,
-      daemonPort !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Daemon port", value: String(daemonPort) }) : null,
-      startedAt !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(PerfMetric, { label: "Started", value: new Date(startedAt).toLocaleTimeString() }) : null
-    ] })
+function AccordionSection(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 overflow-hidden", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        onClick: props.onToggle,
+        className: "flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50/60",
+        "aria-expanded": props.expanded,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: props.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: props.subtitle })
+          ] }),
+          props.expanded ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" })
+        ]
+      }
+    ),
+    props.expanded && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-slate-100 px-4 py-4", children: props.children })
   ] });
 }
-function PerfMetric(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl bg-surface-1 px-3 py-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground", children: props.label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 font-mono text-sm font-semibold text-brand-dark", children: props.value })
+function DiagnosticsPerfCard(props) {
+  const threadCount = props.snapshot.thread_count;
+  const daemonPort = props.snapshot.runtime_state?.daemon_port ?? null;
+  const startedAt = props.snapshot.runtime_state?.started_at ?? null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-slate-50/80 px-3 py-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold text-brand-dark", children: "Runtime" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500", children: [
+      threadCount !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        threadCount,
+        " threads"
+      ] }),
+      daemonPort !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        "Port ",
+        daemonPort
+      ] }),
+      startedAt !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        "Started ",
+        new Date(startedAt).toLocaleTimeString()
+      ] })
+    ] })
   ] });
 }
 function SettingSelect(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: props.label }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "select",
       {
         value: props.value,
         onChange: props.onChange,
         disabled: props.disabled,
-        className: "mt-2 min-h-11 w-full rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60",
+        className: "mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:opacity-60",
         children: props.options.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: option.value, children: option.label }, option.value))
       }
     )
   ] });
 }
 function SettingToggle(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-full bg-surface-1 px-4 py-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: props.label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: props.checked, onChange: props.onChange, className: "h-5 w-5 accent-brand-blue" })
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-10 cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 transition-colors hover:bg-slate-100/60", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: props.checked, onChange: props.onChange, className: "h-4 w-4 accent-brand-blue" })
   ] });
 }
 function getFocusableElements(container2) {
@@ -18443,7 +18192,7 @@ function AppStatusBadge({ status }) {
 function AppOverviewTab(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Status" }),
@@ -18473,7 +18222,7 @@ function AppOverviewTab(props) {
           }
         )
       ] }),
-      props.pendingItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 shadow-sm sm:p-6", children: [
+      props.pendingItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Pending review" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-muted-foreground", children: [
           "These actions from ",
@@ -18502,7 +18251,7 @@ function AppOverviewTab(props) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
-      props.harnessReceipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
+      props.harnessReceipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent events" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "What Guard decided recently." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: props.harnessReceipts.slice(0, 5).map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -18524,7 +18273,7 @@ function AppOverviewTab(props) {
           receipt.receipt_id
         )) })
       ] }),
-      props.harnessInventory.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
+      props.harnessInventory.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Discovered items" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "Tools and plugins Guard found in this app." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-2", children: props.harnessInventory.slice(0, 8).map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -18623,7 +18372,7 @@ function AppActivityTab(props) {
     setSelectedIds(/* @__PURE__ */ new Set());
   }, []);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    props.queueError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in rounded-[1.75rem] border border-brand-attention/20 bg-brand-attention/[0.04] p-5 shadow-sm sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+    props.queueError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Unable to load activity" }),
@@ -18638,7 +18387,7 @@ function AppActivityTab(props) {
         )
       ] })
     ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
         [
           { key: "all", label: "All" },
@@ -18737,7 +18486,7 @@ function AppActivityTab(props) {
 }
 function ReceiptGroup({ title, items, selectedIds, onToggle }) {
   if (items.length === 0) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: title }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-muted-foreground", children: [
@@ -18832,7 +18581,7 @@ function AppSettingsTab(props) {
   }, [props.onClearAppPolicies, props.harness]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-      props.policyError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in rounded-[1.75rem] border border-brand-attention/20 bg-brand-attention/[0.04] p-5 shadow-sm sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+      props.policyError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Unable to load decisions" }),
@@ -18847,7 +18596,7 @@ function AppSettingsTab(props) {
           )
         ] })
       ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Remembered decisions" }),
           props.harnessPolicies.length > 0 && props.onClearAppPolicies && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -18890,7 +18639,7 @@ function AppSettingsTab(props) {
           `${policy.scope}-${policy.artifact_id ?? policy.workspace ?? "global"}`
         )) })
       ] }),
-      showClearConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: confirmRef, className: "guard-fade-in rounded-[1.75rem] border border-brand-attention/20 bg-brand-attention/[0.04] p-5 shadow-sm sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+      showClearConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: confirmRef, className: "guard-fade-in rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-sm font-semibold text-brand-dark", children: [
@@ -18936,7 +18685,7 @@ function AppSettingsTab(props) {
         }
       )
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-6", children: props.status === "needs_setup" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-[1.75rem] border border-brand-attention/15 bg-brand-attention/[0.04] p-5 shadow-sm sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-6", children: props.status === "needs_setup" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Setup needed" }),
@@ -18970,7 +18719,7 @@ function ActivitySparkline({ receipts }) {
     return result;
   }, [receipts]);
   const maxVal = Math.max(...data.map((d) => d.allowed + d.blocked), 1);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Last 7 days" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChartBar, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" })
@@ -19049,7 +18798,7 @@ function CloudValueBanner({
   body,
   cta
 }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-[1.75rem] border border-brand-purple/15 bg-brand-purple/[0.04] p-5 shadow-sm sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-purple/10 bg-brand-purple/[0.03] p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-0.5 shrink-0", children: icon }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: title }),
