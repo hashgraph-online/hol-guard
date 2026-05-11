@@ -2725,7 +2725,7 @@ def _strip_shell_quotes(value: str) -> str:
 
 
 def _contains_shell_expansion(value: str) -> bool:
-    return "$(" in value or "`" in value or "${" in value
+    return "$(" in value or "`" in value or "${" in value or re.search(r"\$[A-Za-z_][A-Za-z0-9_]*", value) is not None
 
 
 def _looks_like_temporary_pr_threads_query_path(path_text: str) -> bool:
