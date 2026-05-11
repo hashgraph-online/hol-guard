@@ -69,6 +69,7 @@ import {
   type QueueCategoryId,
   type QueueSortDirection,
 } from "./queue-state";
+import { plainEnglishRequestTitle, whyPaused } from "./evidence/plain-english";
 
 export type ReviewViewModel = {
   item: GuardApprovalRequest;
@@ -462,6 +463,7 @@ function ReviewDecisionCard(props: {
   const [resolved, setResolved] = useState<"allow" | "block" | null>(null);
   const [showConsequences, setShowConsequences] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
+  const [showTechnical, setShowTechnical] = useState(false);
   const [confirmScope, setConfirmScope] = useState<DecisionScope | null>(null);
   const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -580,10 +582,11 @@ function ReviewDecisionCard(props: {
     );
   }
 
-  const title = item.artifact_name ?? item.artifact_id;
+  const plainTitle = plainEnglishRequestTitle(item);
   const harnessName = harnessDisplayName(item.harness);
   const whatWouldHappen = buildWhatWouldHappen(item);
   const hasEvidence = (item.risk_signals?.length ?? 0) > 0 || item.risk_summary || item.why_now;
+  const pauseReason = whyPaused(item);
 
   return (
     <div className="space-y-5">
@@ -636,9 +639,9 @@ function ReviewDecisionCard(props: {
       {/* Main decision card */}
       <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0 flex-1">
             <SectionLabel>Paused action</SectionLabel>
-            <h2 className="mt-2 text-lg font-semibold text-brand-dark">{title}</h2>
+            <h2 className="mt-2 text-lg font-semibold text-brand-dark">{plainTitle}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               From {harnessName}
             </p>
@@ -648,9 +651,14 @@ function ReviewDecisionCard(props: {
           </Badge>
         </div>
 
+        {/* Why Guard paused */}
+        <div className="mt-4 rounded-xl border border-brand-blue/10 bg-brand-blue/[0.04] p-4">
+          <p className="text-sm text-brand-dark">{pauseReason}</p>
+        </div>
+
         {/* Risk summary */}
         {item.risk_summary && (
-          <div className="mt-5 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4">
+          <div className="mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4">
             <div className="flex items-start gap-2.5">
               <HiMiniExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
               <p className="text-sm text-brand-dark">{item.risk_summary}</p>
@@ -658,8 +666,22 @@ function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {/* Action content — what actually got flagged */}
-        <ActionContentCard item={item} />
+        {/* Technical details — hidden by default */}
+        <div className="mt-4">
+          <button
+            onClick={() => setShowTechnical(!showTechnical)}
+            className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-brand-dark transition-colors"
+            aria-expanded={showTechnical}
+          >
+            {showTechnical ? (
+              <HiMiniChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <HiMiniChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {showTechnical ? "Hide technical details" : "Show technical details"}
+          </button>
+          {showTechnical && <ActionContentCard item={item} />}
+        </div>
 
         {/* What would happen */}
         {whatWouldHappen && (
