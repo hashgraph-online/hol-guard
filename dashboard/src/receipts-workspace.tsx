@@ -21,8 +21,17 @@ import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils"
 import type { GuardReceipt } from "./guard-types";
 import { guardAwareHref } from "./guard-api";
 import { useKeyboardShortcut } from "./use-keyboard-shortcut";
+import { useDebounce } from "./use-debounce";
 import { exportReceiptsAsCsv, exportReceiptsAsJson, downloadBlob } from "./history-export";
 import { StoryTab, CategoryTab, AppTab, ExploreTab, detectCategory } from "./evidence";
+
+function useMountedTabs(activeTab: TabKey): Set<TabKey> {
+  const mountedRef = useRef<Set<TabKey>>(new Set([activeTab]));
+  useEffect(() => {
+    mountedRef.current.add(activeTab);
+  }, [activeTab]);
+  return mountedRef.current;
+}
 
 type TabKey = "story" | "category" | "app" | "explore";
 type TimeFilter = "all" | "today" | "yesterday" | "week" | "last7d" | "last30d";
@@ -234,6 +243,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
         ).map((c) => (
           <button
             key={c.key}
+            aria-pressed={categoryFilter === c.value}
             className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
               categoryFilter === c.value
                 ? "bg-brand-blue text-white shadow-sm"
@@ -266,13 +276,17 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm">
+      <div className="flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm" role="tablist" aria-label="History views">
         {TAB_CONFIG.map((t) => {
           const Icon = t.icon;
           const isActive = activeTab === t.key;
           return (
             <button
               key={t.key}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`tabpanel-${t.key}`}
+              id={`tab-${t.key}`}
               onClick={() => setActiveTab(t.key)}
               className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
                 isActive
@@ -280,7 +294,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
                   : "text-brand-dark hover:bg-slate-50"
               }`}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4" aria-hidden="true" />
               <span className="hidden sm:inline">{t.label}</span>
             </button>
           );
@@ -288,27 +302,54 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
       </div>
 
       {/* Tab content */}
-      <div className="min-h-[300px]">
-        {activeTab === "story" && (
-          <StoryTab receipts={filtered} selectedDay={dayFilter} onSelectDay={handleFilterDay} />
-        )}
-        {activeTab === "category" && (
-          <CategoryTab receipts={filtered} />
-        )}
-        {activeTab === "app" && (
-          <AppTab receipts={filtered} />
-        )}
-        {activeTab === "explore" && (
+      <TabPanels activeTab={activeTab} filtered={filtered} receiptItems={props.receiptItems} dayFilter={dayFilter} handleFilterDay={handleFilterDay} harnessFilter={harnessFilter} setHarnessFilter={setHarnessFilter} setSearch={setSearch} search={search} timeFilter={timeFilter} decisionFilter={decisionFilter} />
+    </div>
+  );
+}
+
+function TabPanels(props: {
+  activeTab: TabKey;
+  filtered: GuardReceipt[];
+  receiptItems: GuardReceipt[];
+  dayFilter: string;
+  handleFilterDay: (day: string) => void;
+  harnessFilter: string;
+  setHarnessFilter: (h: string) => void;
+  setSearch: (s: string) => void;
+  search: string;
+  timeFilter: TimeFilter;
+  decisionFilter: DecisionFilter;
+}) {
+  const mounted = useMountedTabs(props.activeTab);
+  return (
+    <div className="min-h-[300px]">
+      {mounted.has("story") && (
+        <div id="tabpanel-story" role="tabpanel" aria-labelledby="tab-story" hidden={props.activeTab !== "story"}>
+          <StoryTab receipts={props.filtered} selectedDay={props.dayFilter} onSelectDay={props.handleFilterDay} />
+        </div>
+      )}
+      {mounted.has("category") && (
+        <div id="tabpanel-category" role="tabpanel" aria-labelledby="tab-category" hidden={props.activeTab !== "category"}>
+          <CategoryTab receipts={props.filtered} />
+        </div>
+      )}
+      {mounted.has("app") && (
+        <div id="tabpanel-app" role="tabpanel" aria-labelledby="tab-app" hidden={props.activeTab !== "app"}>
+          <AppTab receipts={props.filtered} />
+        </div>
+      )}
+      {mounted.has("explore") && (
+        <div id="tabpanel-explore" role="tabpanel" aria-labelledby="tab-explore" hidden={props.activeTab !== "explore"}>
           <ExploreTab
             receipts={props.receiptItems}
-            filteredReceipts={filtered}
-            filters={{ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter }}
-            onFilterDay={handleFilterDay}
-            onFilterHarness={(harness) => setHarnessFilter(harness)}
-            onFilterAction={(name) => setSearch(name)}
+            filteredReceipts={props.filtered}
+            filters={{ search: props.search, time: props.timeFilter, decision: props.decisionFilter, harness: props.harnessFilter }}
+            onFilterDay={props.handleFilterDay}
+            onFilterHarness={(harness) => props.setHarnessFilter(harness)}
+            onFilterAction={(name) => props.setSearch(name)}
           />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

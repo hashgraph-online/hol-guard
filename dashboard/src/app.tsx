@@ -17,6 +17,7 @@ import {
 import { ApprovalCenterLayout } from "./approval-center-layout";
 import { ErrorBoundary } from "./error-boundary";
 import { selectNextAfterResolution } from "./queue-state";
+import { useRouteFocus } from "./use-route-focus";
 
 const HomeWorkspace = lazy(() => import("./home-dashboard"));
 const FleetWorkspace = lazy(() => import("./fleet-workspace"));
@@ -164,6 +165,7 @@ async function loadDetail(requestId: string): Promise<Exclude<DetailState, { kin
 export function App() {
   const pathname = usePathname();
   const view = resolveView(pathname);
+  useRouteFocus(view);
   const requestId = parseRequestId(pathname);
   const appDetailHarness = parseAppDetail(pathname);
   const [requests, setRequests] = useState<RequestState>({ kind: "loading" });
@@ -508,6 +510,15 @@ export function App() {
 
   return (
     <>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-brand-blue focus:px-4 focus:py-2 focus:text-white focus:outline-none"
+      >
+        Skip to content
+      </a>
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {view === "home" ? "Home" : view === "inbox" ? "Review" : view === "fleet" ? "Apps" : view === "evidence" ? "History" : view === "settings" ? "Settings" : "App detail"}
+      </div>
     <ApprovalCenterLayout
       view={view}
       requests={requests}

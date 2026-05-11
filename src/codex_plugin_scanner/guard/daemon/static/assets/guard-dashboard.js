@@ -14590,7 +14590,7 @@ function whyPaused(request) {
       return "Guard paused this so you can review it first.";
   }
 }
-function StoryTab({ receipts, selectedDay, onSelectDay }) {
+function StoryTabRaw({ receipts, selectedDay, onSelectDay }) {
   const dayReceipts = reactExports.useMemo(() => {
     if (!selectedDay) return receipts.slice(0, 20);
     const start = new Date(selectedDay);
@@ -14743,6 +14743,7 @@ function DecisionBadge({ allowed }) {
     "Stopped"
   ] });
 }
+const StoryTab = reactExports.memo(StoryTabRaw);
 const ICON_MAP = {
   secret: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "h-5 w-5", "aria-hidden": "true" }),
   network: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniGlobeAlt, { className: "h-5 w-5", "aria-hidden": "true" }),
@@ -14752,7 +14753,7 @@ const ICON_MAP = {
   "tool-call": /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-5 w-5", "aria-hidden": "true" }),
   other: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { className: "h-5 w-5", "aria-hidden": "true" })
 };
-function CategoryTab({ receipts, onFilterCategory }) {
+function CategoryTabRaw({ receipts, onFilterCategory }) {
   const [selectedCategory, setSelectedCategory] = reactExports.useState(null);
   const groups = reactExports.useMemo(() => groupByCategory(receipts), [receipts]);
   if (selectedCategory) {
@@ -14835,7 +14836,8 @@ function CategoryTab({ receipts, onFilterCategory }) {
     Array.from(groups.values()).every((items) => items.length === 0) && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No activity yet." }) })
   ] });
 }
-function AppTab({ receipts }) {
+const CategoryTab = reactExports.memo(CategoryTabRaw);
+function AppTabRaw({ receipts }) {
   const [selectedApp, setSelectedApp] = reactExports.useState(null);
   const apps = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
@@ -14927,6 +14929,7 @@ function AppTab({ receipts }) {
     apps.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No activity yet." }) })
   ] });
 }
+const AppTab = reactExports.memo(AppTabRaw);
 function HistoryInsights({
   receipts,
   onFilterHarness,
@@ -15836,7 +15839,7 @@ function escapeCsvCell(value) {
 function formatDateIso(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-function ExploreTab({ receipts, filteredReceipts, filters, onFilterDay, onFilterHarness, onFilterAction }) {
+function ExploreTabRaw({ receipts, filteredReceipts, filters, onFilterDay, onFilterHarness, onFilterAction }) {
   const [activeSubTab, setActiveSubTab] = reactExports.useState("overview");
   const [showAnalytics, setShowAnalytics] = reactExports.useState(false);
   if (!showAnalytics) {
@@ -15938,6 +15941,14 @@ function ExportPanel({
       )
     ] })
   ] });
+}
+const ExploreTab = reactExports.memo(ExploreTabRaw);
+function useMountedTabs(activeTab) {
+  const mountedRef = reactExports.useRef(/* @__PURE__ */ new Set([activeTab]));
+  reactExports.useEffect(() => {
+    mountedRef.current.add(activeTab);
+  }, [activeTab]);
+  return mountedRef.current;
 }
 const TIME_FILTER_VALUES = ["all", "today", "yesterday", "week", "last7d", "last30d"];
 const DECISION_FILTER_VALUES = ["all", "allow", "block"];
@@ -16096,6 +16107,7 @@ function ReadyReceiptsWorkspace(props) {
       ].map((c) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
+          "aria-pressed": categoryFilter === c.value,
           className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${categoryFilter === c.value ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
           onClick: () => setCategoryFilter(categoryFilter === c.value ? "" : c.value),
           children: c.label
@@ -16128,38 +16140,46 @@ function ReadyReceiptsWorkspace(props) {
         }
       )
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm", children: TAB_CONFIG.map((t) => {
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm", role: "tablist", "aria-label": "History views", children: TAB_CONFIG.map((t) => {
       const Icon = t.icon;
       const isActive = activeTab === t.key;
       return /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
+          role: "tab",
+          "aria-selected": isActive,
+          "aria-controls": `tabpanel-${t.key}`,
+          id: `tab-${t.key}`,
           onClick: () => setActiveTab(t.key),
           className: `flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${isActive ? "bg-brand-blue text-white shadow-sm" : "text-brand-dark hover:bg-slate-50"}`,
           children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4", "aria-hidden": "true" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: t.label })
           ]
         },
         t.key
       );
     }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-[300px]", children: [
-      activeTab === "story" && /* @__PURE__ */ jsxRuntimeExports.jsx(StoryTab, { receipts: filtered, selectedDay: dayFilter, onSelectDay: handleFilterDay }),
-      activeTab === "category" && /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryTab, { receipts: filtered }),
-      activeTab === "app" && /* @__PURE__ */ jsxRuntimeExports.jsx(AppTab, { receipts: filtered }),
-      activeTab === "explore" && /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ExploreTab,
-        {
-          receipts: props.receiptItems,
-          filteredReceipts: filtered,
-          filters: { search, time: timeFilter, decision: decisionFilter, harness: harnessFilter },
-          onFilterDay: handleFilterDay,
-          onFilterHarness: (harness) => setHarnessFilter(harness),
-          onFilterAction: (name) => setSearch(name)
-        }
-      )
-    ] })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(TabPanels, { activeTab, filtered, receiptItems: props.receiptItems, dayFilter, handleFilterDay, harnessFilter, setHarnessFilter, setSearch, search, timeFilter, decisionFilter })
+  ] });
+}
+function TabPanels(props) {
+  const mounted = useMountedTabs(props.activeTab);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-[300px]", children: [
+    mounted.has("story") && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "tabpanel-story", role: "tabpanel", "aria-labelledby": "tab-story", hidden: props.activeTab !== "story", children: /* @__PURE__ */ jsxRuntimeExports.jsx(StoryTab, { receipts: props.filtered, selectedDay: props.dayFilter, onSelectDay: props.handleFilterDay }) }),
+    mounted.has("category") && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "tabpanel-category", role: "tabpanel", "aria-labelledby": "tab-category", hidden: props.activeTab !== "category", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryTab, { receipts: props.filtered }) }),
+    mounted.has("app") && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "tabpanel-app", role: "tabpanel", "aria-labelledby": "tab-app", hidden: props.activeTab !== "app", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AppTab, { receipts: props.filtered }) }),
+    mounted.has("explore") && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "tabpanel-explore", role: "tabpanel", "aria-labelledby": "tab-explore", hidden: props.activeTab !== "explore", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ExploreTab,
+      {
+        receipts: props.receiptItems,
+        filteredReceipts: props.filtered,
+        filters: { search: props.search, time: props.timeFilter, decision: props.decisionFilter, harness: props.harnessFilter },
+        onFilterDay: props.handleFilterDay,
+        onFilterHarness: (harness) => props.setHarnessFilter(harness),
+        onFilterAction: (name) => props.setSearch(name)
+      }
+    ) })
   ] });
 }
 function ScannerEvidenceBadge(props) {
@@ -17507,7 +17527,7 @@ function ApprovalCenterLayout(props) {
         onBulkApprove: props.onBulkApprove
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { className: "flex-1 p-6 lg:p-10", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-6 lg:p-10", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ReviewWorkspace,
       {
         requests: props.requests.kind === "ready" ? props.requests.items : [],
@@ -18643,6 +18663,23 @@ class ErrorBoundary extends reactExports.Component {
     return this.props.children;
   }
 }
+function useRouteFocus(view, mainSelector = "main#main-content") {
+  const prevViewRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (prevViewRef.current === null) {
+      prevViewRef.current = view;
+      return;
+    }
+    if (prevViewRef.current === view) {
+      return;
+    }
+    prevViewRef.current = view;
+    const main = document.querySelector(mainSelector);
+    if (main) {
+      main.focus({ preventScroll: true });
+    }
+  }, [view, mainSelector]);
+}
 const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1]) : void 0));
 const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? [] : void 0));
 const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? [] : void 0));
@@ -18720,6 +18757,7 @@ async function loadDetail(requestId) {
 function App() {
   const pathname = usePathname();
   const view = resolveView(pathname);
+  useRouteFocus(view);
   const requestId = parseRequestId(pathname);
   const appDetailHarness = parseAppDetail(pathname);
   const [requests, setRequests] = reactExports.useState({ kind: "loading" });
@@ -19019,6 +19057,15 @@ function App() {
     );
   }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "a",
+      {
+        href: "#main-content",
+        className: "sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-brand-blue focus:px-4 focus:py-2 focus:text-white focus:outline-none",
+        children: "Skip to content"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: view === "home" ? "Home" : view === "inbox" ? "Review" : view === "fleet" ? "Apps" : view === "evidence" ? "History" : view === "settings" ? "Settings" : "App detail" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalCenterLayout,
       {
