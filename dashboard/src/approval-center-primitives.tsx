@@ -16,6 +16,8 @@ import {
   HiMiniCheckCircle,
   HiMiniArrowRight,
   HiMiniExclamationTriangle,
+  HiMiniChevronDown,
+  HiMiniChevronUp,
 } from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
@@ -695,23 +697,19 @@ export function GuardHero(props: {
 }
 
 export function ProofStrip(props: {
-  items: Array<{ label: string; value: string | number; tone?: "blue" | "green" | "purple" | "slate"; icon?: ReactNode; pulse?: boolean; hint?: string }>;
+  items: Array<{ label: string; value: string | number; tone?: "blue" | "green" | "purple" | "slate"; icon?: ReactNode; hint?: string }>;
 }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
-      {props.items.map((item) => (
-        <div
-          key={item.label}
-          className={`flex items-baseline gap-2 ${item.pulse ? "guard-pulse" : ""}`}
-          title={item.hint}
-        >
-          <p className="text-2xl font-semibold tracking-tight text-brand-dark">{item.value}</p>
-          <div className="flex items-center gap-1">
-            <p className="text-xs text-muted-foreground">{item.label}</p>
-            {item.icon}
+    <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+      {props.items.map((item) => {
+        const toneColor = item.tone === "blue" ? "text-brand-blue" : item.tone === "green" ? "text-emerald-600" : item.tone === "purple" ? "text-brand-purple" : "text-brand-dark";
+        return (
+          <div key={item.label} className="flex flex-col" title={item.hint}>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{item.label}</p>
+            <p className={`text-2xl font-semibold tracking-tight ${toneColor}`}>{item.value}</p>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -740,6 +738,146 @@ export function NextActionCard(props: {
       <SectionLabel>{props.title}</SectionLabel>
       <p className="mt-2 text-sm leading-relaxed text-brand-dark/70">{props.body}</p>
       <div className="mt-4">{props.cta}</div>
+    </div>
+  );
+}
+
+export function SegmentedControl<T extends string>(props: {
+  options: Array<{ value: T; label: string }>;
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+      {props.options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => props.onChange(opt.value)}
+          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+            props.value === opt.value
+              ? "bg-white text-brand-dark shadow-sm"
+              : "text-slate-500 hover:text-brand-dark"
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function ListRow(props: {
+  children: ReactNode;
+  accent?: "green" | "attention" | "blue" | "none";
+  onClick?: () => void;
+  href?: string;
+}) {
+  const accentClass =
+    props.accent === "green"
+      ? "border-l-2 border-emerald-500 pl-3"
+      : props.accent === "attention"
+      ? "border-l-2 border-brand-attention pl-3"
+      : props.accent === "blue"
+      ? "border-l-2 border-brand-blue pl-3"
+      : "pl-3.5";
+  const clickable = props.onClick !== undefined || props.href !== undefined;
+  const content = (
+    <div
+      className={`flex items-center gap-3 border-b border-slate-100 py-2.5 transition-colors hover:bg-slate-50/60 ${accentClass} ${
+        clickable ? "cursor-pointer" : ""
+      }`}
+      onClick={props.onClick}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                props.onClick?.();
+              }
+            }
+          : undefined
+      }
+    >
+      {props.children}
+    </div>
+  );
+  if (props.href) {
+    return (
+      <a href={guardAwareHref(props.href)} className="block no-underline">
+        {content}
+      </a>
+    );
+  }
+  return content;
+}
+
+export function TabBar<T extends string>(props: {
+  tabs: Array<{ value: T; label: string }>;
+  active: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="flex gap-1 rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+      {props.tabs.map((tab) => (
+        <button
+          key={tab.value}
+          type="button"
+          onClick={() => props.onChange(tab.value)}
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            props.active === tab.value
+              ? "bg-white text-brand-dark shadow-sm"
+              : "text-slate-500 hover:text-brand-dark"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function AccordionSection(props: {
+  title: string;
+  subtitle?: string;
+  expanded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-100 overflow-hidden">
+      <button
+        onClick={props.onToggle}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50/60"
+        aria-expanded={props.expanded}
+      >
+        <div>
+          <p className="text-sm font-semibold text-brand-dark">{props.title}</p>
+          {props.subtitle ? <p className="text-xs text-slate-400">{props.subtitle}</p> : null}
+        </div>
+        {props.expanded ? (
+          <HiMiniChevronUp className="h-4 w-4 text-slate-400" aria-hidden="true" />
+        ) : (
+          <HiMiniChevronDown className="h-4 w-4 text-slate-400" aria-hidden="true" />
+        )}
+      </button>
+      {props.expanded && (
+        <div className="border-t border-slate-100 px-4 py-4">
+          {props.children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function StickyActionBar(props: {
+  children: ReactNode;
+}) {
+  return (
+    <div className="sticky bottom-4 z-30 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
+      {props.children}
     </div>
   );
 }
