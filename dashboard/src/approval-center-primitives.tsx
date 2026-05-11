@@ -1,4 +1,5 @@
-import type { ButtonHTMLAttributes, ChangeEvent, ReactNode } from "react";
+import { forwardRef } from "react";
+import type { ButtonHTMLAttributes, ChangeEvent, ReactNode, Ref } from "react";
 import {
   HiMiniArrowTopRightOnSquare,
   HiMiniCloud,
@@ -9,7 +10,12 @@ import {
   HiMiniServerStack,
   HiMiniAdjustmentsHorizontal,
   HiMiniShieldCheck,
+  HiMiniInformationCircle,
   HiBars3,
+  HiMiniXMark as HiMiniXMarkLayout,
+  HiMiniCheckCircle,
+  HiMiniArrowRight,
+  HiMiniExclamationTriangle,
 } from "react-icons/hi2";
 
 import { guardAwareHref } from "./guard-api";
@@ -53,7 +59,7 @@ const footerSections = [
 export function ShellHeader(props: {
   queuedCount: number;
   activeHarness: string | null;
-  view: "home" | "inbox" | "fleet" | "evidence" | "settings";
+  view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail";
   onNavigate: (pathname: string) => void;
   onOpenMobileQueue?: () => void;
 }) {
@@ -117,8 +123,8 @@ export function ShellHeader(props: {
 
 const sidebarLinks = [
   { href: "/", label: "Home", view: "home", icon: HiMiniHome },
-  { href: "/inbox", label: "Review Queue", view: "inbox", icon: HiMiniInbox },
-  { href: "/fleet", label: "Watched Apps", view: "fleet", icon: HiMiniServerStack },
+  { href: "/inbox", label: "Review", view: "inbox", icon: HiMiniInbox },
+  { href: "/fleet", label: "Apps", view: "fleet", icon: HiMiniServerStack },
   { href: "/evidence", label: "History", view: "evidence", icon: HiMiniDocumentText },
   { href: "/settings", label: "Settings", view: "settings", icon: HiMiniAdjustmentsHorizontal }
 ] as const;
@@ -126,7 +132,7 @@ const sidebarLinks = [
 export function ShellSidebar(props: {
   queuedCount: number;
   activeHarness: string | null;
-  view: "home" | "inbox" | "fleet" | "evidence" | "settings";
+  view: "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail";
 }) {
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-slate-200 bg-[#f8fafc] lg:flex">
@@ -147,7 +153,7 @@ export function ShellSidebar(props: {
               <SidebarLink
                 key={item.href}
                 href={item.href}
-                active={props.view === item.view}
+                active={props.view === item.view || (props.view === "app-detail" && item.view === "fleet")}
                 icon={<Icon className="h-4 w-4" />}
                 badgeCount={item.view === "inbox" ? props.queuedCount : 0}
               >
@@ -161,10 +167,10 @@ export function ShellSidebar(props: {
           <p className="px-3 font-mono text-[10px] font-semibold uppercase tracking-widest text-slate-400">
             Quick Actions
           </p>
-          <SidebarAction href="/" icon={<HiMiniCommandLine className="h-4 w-4" />}>
+          <SidebarAction href="/" icon={<HiMiniCommandLine className="h-4 w-4" aria-hidden="true" />}>
             Local dashboard
           </SidebarAction>
-          <SidebarAction href="https://hol.org/guard" external icon={<HiMiniCloud className="h-4 w-4" />}>
+          <SidebarAction href="https://hol.org/guard" external icon={<HiMiniCloud className="h-4 w-4" aria-hidden="true" />}>
             Open Guard Cloud
           </SidebarAction>
         </div>
@@ -226,7 +232,7 @@ export function ShellFooter() {
 export function Surface(props: {
   children: ReactNode;
   className?: string;
-  tone?: "default" | "accent" | "success" | "warning" | "danger";
+  tone?: "default" | "accent" | "success" | "warning" | "danger" | "attention";
 }) {
   const toneClass = surfaceToneClass(props.tone);
   return (
@@ -244,7 +250,7 @@ export function SectionLabel(props: { children: ReactNode }) {
 
 export function Badge(props: {
   children: ReactNode;
-  tone?: "default" | "success" | "warning" | "info" | "destructive";
+  tone?: "default" | "success" | "warning" | "info" | "destructive" | "attention";
 }) {
   const toneClass = badgeToneClass(props.tone);
   return (
@@ -256,7 +262,7 @@ export function Badge(props: {
 
 export function Tag(props: {
   children: ReactNode;
-  tone?: "blue" | "green" | "purple" | "slate" | "red";
+  tone?: "blue" | "green" | "purple" | "slate" | "red" | "attention";
 }) {
   const toneClass = tagToneClass(props.tone);
   return (
@@ -286,12 +292,17 @@ export function EmptyState(props: {
   title: string;
   body: string;
   action?: ReactNode;
+  tone?: "default" | "teach";
 }) {
+  const isTeach = props.tone === "teach";
   return (
-    <div className="rounded-lg bg-gray-50 px-6 py-8 text-left">
-      <h3 className="text-base font-semibold tracking-tight text-brand-dark">{props.title}</h3>
-      <p className="mt-2 max-w-xl text-sm leading-6 text-gray-500">{props.body}</p>
-      {props.action ? <div className="mt-4">{props.action}</div> : null}
+    <div className={`guard-surface-in flex flex-col items-center justify-center py-12 text-center sm:py-16 ${isTeach ? "rounded-[2rem] border border-brand-blue/15 bg-gradient-to-br from-white to-brand-blue/[0.03] px-6" : "rounded-lg bg-surface-1 px-6"}`}>
+      <div className={`mb-5 flex h-14 w-14 items-center justify-center rounded-full ${isTeach ? "bg-brand-blue/10" : "bg-white"} ring-1 ring-brand-blue/20`}>
+        <HiMiniInformationCircle className={`h-7 w-7 ${isTeach ? "text-brand-blue" : "text-slate-400"}`} aria-hidden="true" />
+      </div>
+      <h3 className="text-lg font-semibold tracking-tight text-brand-dark">{props.title}</h3>
+      <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">{props.body}</p>
+      {props.action ? <div className="mt-6">{props.action}</div> : null}
     </div>
   );
 }
@@ -300,30 +311,34 @@ type ActionButtonProps = {
   children: ReactNode;
   onClick?: () => void;
   href?: string;
-  variant?: "primary" | "secondary" | "danger" | "outline" | "ghost" | "success";
+  variant?: "primary" | "secondary" | "danger" | "outline" | "ghost" | "success" | "quiet";
   disabled?: boolean;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "className" | "onClick" | "type">;
 
-export function ActionButton({ children, href, variant, disabled, onClick, ...buttonProps }: ActionButtonProps) {
-  const className = actionButtonClass(variant);
-  if (href) {
+export const ActionButton = forwardRef<HTMLButtonElement | HTMLAnchorElement, ActionButtonProps>(
+  ({ children, href, variant, disabled, onClick, ...buttonProps }, ref) => {
+    const className = actionButtonClass(variant);
+    if (href) {
+      return (
+        <a
+          ref={ref as Ref<HTMLAnchorElement>}
+          href={guardAwareHref(href)}
+          target={href.startsWith("https://") ? "_blank" : undefined}
+          rel={href.startsWith("https://") ? "noreferrer" : undefined}
+          className={className}
+        >
+          {children}
+        </a>
+      );
+    }
     return (
-      <a
-        href={guardAwareHref(href)}
-        target={href.startsWith("https://") ? "_blank" : undefined}
-        rel={href.startsWith("https://") ? "noreferrer" : undefined}
-        className={className}
-      >
+      <button ref={ref as Ref<HTMLButtonElement>} type="button" className={className} onClick={onClick} disabled={disabled} {...buttonProps}>
         {children}
-      </a>
+      </button>
     );
   }
-  return (
-    <button type="button" className={className} onClick={onClick} disabled={disabled} {...buttonProps}>
-      {children}
-    </button>
-  );
-}
+);
+ActionButton.displayName = "ActionButton";
 
 export function ListControls(props: {
   searchLabel: string;
@@ -456,31 +471,34 @@ function SidebarAction(props: { href: string; children: ReactNode; icon: ReactNo
   );
 }
 
-function surfaceToneClass(tone: "default" | "accent" | "success" | "warning" | "danger" | undefined): string {
+function surfaceToneClass(tone: "default" | "accent" | "success" | "warning" | "danger" | "attention" | undefined): string {
   if (tone === "accent") return "border-brand-blue/20 bg-gradient-to-b from-white to-blue-50/40";
   if (tone === "success") return "border-brand-green/20 bg-brand-green-bg/30";
   if (tone === "warning") return "border-brand-blue/25 bg-brand-blue/[0.04]";
   if (tone === "danger") return "border-brand-purple/25 bg-brand-purple/[0.05]";
+  if (tone === "attention") return "border-brand-attention/20 bg-brand-attention-bg";
   return "border-gray-200/50 bg-white/80";
 }
 
-function badgeToneClass(tone: "default" | "success" | "warning" | "info" | "destructive" | undefined): string {
+function badgeToneClass(tone: "default" | "success" | "warning" | "info" | "destructive" | "attention" | undefined): string {
   if (tone === "success") return "border-transparent bg-accent/10 text-accent border-accent/20";
   if (tone === "warning") return "border-transparent bg-brand-blue/10 text-brand-blue border-brand-blue/20";
   if (tone === "info") return "border-transparent bg-blue-500/10 text-blue-700 border-blue-500/20";
   if (tone === "destructive") return "border-transparent bg-brand-purple/10 text-brand-purple border-brand-purple/20";
+  if (tone === "attention") return "border-transparent bg-brand-attention-bg text-brand-attention border-brand-attention/20";
   return "border-transparent bg-gray-100 text-gray-600 border-gray-200";
 }
 
-function tagToneClass(tone: "blue" | "green" | "purple" | "slate" | "red" | undefined): string {
+function tagToneClass(tone: "blue" | "green" | "purple" | "slate" | "red" | "attention" | undefined): string {
   if (tone === "green") return "border-transparent bg-brand-green-bg/60 text-brand-green-text";
   if (tone === "purple") return "border-transparent bg-brand-purple/10 text-brand-purple";
   if (tone === "red") return "border-transparent bg-brand-purple/10 text-brand-purple";
   if (tone === "slate") return "border-gray-200 bg-gray-100 text-gray-500";
+  if (tone === "attention") return "border-transparent bg-brand-attention-bg text-brand-attention";
   return "border-transparent bg-blue-500/10 text-blue-700";
 }
 
-function actionButtonClass(variant: "primary" | "secondary" | "danger" | "outline" | "ghost" | "success" | undefined): string {
+function actionButtonClass(variant: "primary" | "secondary" | "danger" | "outline" | "ghost" | "success" | "quiet" | undefined): string {
   const base = "inline-flex items-center justify-center rounded-lg text-sm font-semibold ring-offset-background transition-[color,background-color,border-color,opacity,transform,box-shadow] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-w-0";
   const sizeDefault = "min-h-11 h-auto px-4 py-2";
   if (variant === "outline") return `${base} ${sizeDefault} border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-900`;
@@ -488,6 +506,7 @@ function actionButtonClass(variant: "primary" | "secondary" | "danger" | "outlin
   if (variant === "ghost") return `${base} ${sizeDefault} hover:bg-slate-100 hover:text-slate-900`;
   if (variant === "danger") return `${base} ${sizeDefault} bg-brand-purple text-white shadow-lg shadow-brand-blue/10 hover:bg-brand-purple/90 hover:shadow-brand-blue/20`;
   if (variant === "success") return `${base} ${sizeDefault} bg-[#059669] text-white shadow-lg shadow-emerald-500/15 hover:bg-[#047857] hover:shadow-emerald-500/20`;
+  if (variant === "quiet") return `${base} ${sizeDefault} bg-transparent text-brand-dark hover:bg-surface-1`;
   return `${base} ${sizeDefault} bg-brand-blue text-white shadow-lg shadow-brand-blue/20 hover:bg-brand-blue/90 hover:shadow-brand-blue/30`;
 }
 
@@ -539,15 +558,15 @@ export function WelcomeState(props: {
           </Surface>
         </div>
       )}
-      
+
       <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-brand-green-bg/50 ring-1 ring-brand-green/20">
         <HiMiniShieldCheck className="h-10 w-10 text-brand-green" aria-hidden="true" />
       </div>
       <h2 className="text-2xl font-semibold tracking-tight text-brand-dark sm:text-3xl">{EMPTY_QUEUE_TITLE}</h2>
       <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground">
-        Guard is still watching your apps.
+        Guard is still watching your apps. Nothing needs you right now.
       </p>
-      
+
       <div className="mt-12 text-left w-full max-w-3xl">
         <div className="rounded-xl border border-border bg-card p-6 shadow-[0_4px_20px_rgba(85,153,254,0.04)]">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue mb-4">Sync decisions</p>
@@ -596,6 +615,134 @@ function TrustCard(props: { title: string; body: string }) {
     <div className="space-y-1.5 rounded-xl border border-border bg-card p-5">
       <p className="text-sm font-semibold text-brand-dark">{props.title}</p>
       <p className="text-xs leading-relaxed text-muted-foreground">{props.body}</p>
+    </div>
+  );
+}
+
+export function GuardHero(props: {
+  status: "clear" | "needs_review" | "setup_gap";
+  headline: string;
+  subheadline: string;
+  cta?: ReactNode;
+  secondaryCta?: ReactNode;
+}) {
+  const bgClass =
+    props.status === "needs_review"
+      ? "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(245,158,11,0.08)_100%)]"
+      : props.status === "setup_gap"
+      ? "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.06)_100%)]"
+      : "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)]";
+
+  const statusBadge =
+    props.status === "needs_review" ? (
+      <Badge tone="attention">Needs your choice</Badge>
+    ) : props.status === "setup_gap" ? (
+      <Badge tone="default">Setup needed</Badge>
+    ) : (
+      <Badge tone="success">Protected</Badge>
+    );
+
+  const HeroIcon =
+    props.status === "needs_review"
+      ? HiMiniExclamationTriangle
+      : props.status === "setup_gap"
+      ? HiMiniInformationCircle
+      : HiMiniShieldCheck;
+
+  const iconColorClass =
+    props.status === "needs_review"
+      ? "text-brand-attention"
+      : props.status === "setup_gap"
+      ? "text-brand-blue"
+      : "text-brand-green";
+
+  const iconBgClass =
+    props.status === "needs_review"
+      ? "bg-brand-attention/10"
+      : props.status === "setup_gap"
+      ? "bg-brand-blue/10"
+      : "bg-brand-green/10";
+
+  return (
+    <section
+      className={`guard-surface-in relative overflow-hidden rounded-[2rem] border border-brand-blue/15 ${bgClass} p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7`}
+      role="region"
+      aria-label="Protection status"
+    >
+      <div className="pointer-events-none absolute right-10 top-8 h-24 w-24 rounded-full bg-brand-blue/20 blur-3xl" />
+      <div className="relative space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <SectionLabel>Protection status</SectionLabel>
+          {statusBadge}
+        </div>
+        <div className="max-w-3xl">
+          <div className="flex items-start gap-3">
+            <span className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${iconBgClass}`}>
+              <HeroIcon className={`h-4 w-4 ${iconColorClass}`} aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight text-brand-dark sm:text-2xl">{props.headline}</h2>
+              <p className="mt-2 text-sm leading-relaxed text-brand-dark/70">{props.subheadline}</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {props.cta}
+          {props.secondaryCta}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function ProofStrip(props: {
+  items: Array<{ label: string; value: string | number; tone?: "blue" | "green" | "purple" | "slate"; icon?: ReactNode; pulse?: boolean; hint?: string }>;
+}) {
+  return (
+    <div className="guard-surface-in grid gap-3 sm:grid-cols-3">
+      {props.items.map((item) => (
+        <div
+          key={item.label}
+          className={`rounded-[1.25rem] border border-white/80 bg-white/80 px-4 py-3 shadow-sm ${item.pulse ? "guard-pulse" : ""}`}
+          title={item.hint}
+        >
+          <div className="flex items-center gap-2">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              {item.label}
+            </p>
+            {item.icon}
+          </div>
+          <p className="mt-1 text-2xl font-semibold tracking-tight text-brand-dark">{item.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function NextActionCard(props: {
+  title: string;
+  body: string;
+  cta: ReactNode;
+  tone?: "blue" | "green" | "purple";
+}) {
+  const borderClass =
+    props.tone === "green"
+      ? "border-brand-green/25"
+      : props.tone === "purple"
+      ? "border-brand-purple/25"
+      : "border-brand-blue/25";
+  const bgClass =
+    props.tone === "green"
+      ? "bg-brand-green-bg/30"
+      : props.tone === "purple"
+      ? "bg-brand-purple/[0.04]"
+      : "bg-brand-blue/[0.04]";
+
+  return (
+    <div className={`guard-surface-in rounded-[1.75rem] border ${borderClass} ${bgClass} p-5 sm:p-6`}>
+      <SectionLabel>{props.title}</SectionLabel>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/70">{props.body}</p>
+      <div className="mt-4">{props.cta}</div>
     </div>
   );
 }

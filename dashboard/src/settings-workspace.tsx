@@ -4,6 +4,8 @@ import {
   HiMiniLockClosed,
   HiMiniCog6Tooth,
   HiMiniCheckCircle,
+  HiMiniInformationCircle,
+  HiMiniExclamationTriangle,
 } from "react-icons/hi2";
 
 import {
@@ -11,7 +13,8 @@ import {
   Badge,
   EmptyState,
   SectionLabel,
-  Tag
+  Tag,
+  GuardHero,
 } from "./approval-center-primitives";
 import { clearEvidence, exportDiagnostics, fetchRuntimeSnapshot, fetchSettings, updateSettings, clearPolicy, repairApprovalCenter } from "./guard-api";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
@@ -154,6 +157,29 @@ export function buildClearPolicyPayload(all: boolean): { harness?: string; all?:
   return { all };
 }
 
+function buildConsequenceSummary(settings: GuardSettings): string {
+  const level = settings.security_level;
+  const mode = settings.mode;
+  if (mode === "observe") {
+    return "Guard is watching and recording what your AI apps do, but it will not pause any actions. Switch to Prompt or Enforce when you want Guard to actively protect you.";
+  }
+  if (level === "balanced") {
+    return "Guard will ask before secret access, hidden execution, and destructive commands. New network destinations get a warning. This is the recommended setting for most users.";
+  }
+  if (level === "strict") {
+    return "Guard will ask before almost every risky action, including new network destinations. Use this when working with sensitive data or untrusted AI tools.";
+  }
+  if (level === "custom") {
+    return "You have customized individual risk controls. Review the choices below to make sure they match how you want Guard to behave.";
+  }
+  return "";
+}
+
+function hasUnsavedChanges(saved: GuardSettings | null, draft: GuardSettings | null): boolean {
+  if (saved === null || draft === null) return false;
+  return JSON.stringify(saved) !== JSON.stringify(draft);
+}
+
 export function SettingsWorkspace() {
   const [state, setState] = useState<SettingsState>({ kind: "loading" });
   const [draft, setDraft] = useState<GuardSettings | null>(null);
@@ -166,18 +192,21 @@ export function SettingsWorkspace() {
   const [repairing, setRepairing] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [perfSnapshot, setPerfSnapshot] = useState<GuardRuntimeSnapshot | null>(null);
+  const [pendingMode, setPendingMode] = useState<GuardSettings["mode"] | null>(null);
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedSettingsRef = useRef<GuardSettings | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetchSettings()
-      .then((payload) => {
-        if (!cancelled) {
-          const normalizedPayload = normalizeSettingsPayload(payload);
-          setState({ kind: "ready", payload: normalizedPayload });
-          setDraft(normalizedPayload.settings);
-        }
-      })
+      fetchSettings()
+        .then((payload) => {
+          if (!cancelled) {
+            const normalizedPayload = normalizeSettingsPayload(payload);
+            setState({ kind: "ready", payload: normalizedPayload });
+            setDraft(normalizedPayload.settings);
+            savedSettingsRef.current = normalizedPayload.settings;
+          }
+        })
       .catch((error: unknown) => {
         if (!cancelled) {
           setState({
@@ -212,6 +241,17 @@ export function SettingsWorkspace() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      if (hasUnsavedChanges(savedSettingsRef.current, draft)) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [draft]);
 
   const handleStringChange = useCallback(
     (key: keyof GuardSettings) => (event: ChangeEvent<HTMLSelectElement>) => {
@@ -285,8 +325,24 @@ export function SettingsWorkspace() {
   }, []);
 
   const handleModeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setDraft((value) => value === null ? value : { ...value, mode: event.target.value as GuardSettings["mode"] });
+    const nextMode = event.target.value as GuardSettings["mode"];
+    if (nextMode === "observe") {
+      setPendingMode(nextMode);
+      return;
+    }
+    setDraft((value) => value === null ? value : { ...value, mode: nextMode });
     setSaveError(null);
+  }, []);
+
+  const confirmModeChange = useCallback(() => {
+    if (pendingMode === null) return;
+    setDraft((value) => value === null ? value : { ...value, mode: pendingMode });
+    setPendingMode(null);
+    setSaveError(null);
+  }, [pendingMode]);
+
+  const cancelModeChange = useCallback(() => {
+    setPendingMode(null);
   }, []);
 
   const handleBooleanChange = useCallback(
@@ -310,6 +366,7 @@ export function SettingsWorkspace() {
       const normalizedPayload = normalizeSettingsPayload(payload);
       setState({ kind: "ready", payload: normalizedPayload });
       setDraft(normalizedPayload.settings);
+      savedSettingsRef.current = normalizedPayload.settings;
       setSaveSuccess(true);
       if (saveSuccessTimerRef.current !== null) {
         clearTimeout(saveSuccessTimerRef.current);
@@ -400,7 +457,7 @@ export function SettingsWorkspace() {
     );
   }
   if (state.kind === "error" || draft === null) {
-    return <EmptyState title="Settings are unavailable" body={state.kind === "error" ? state.message : "Guard did not return editable settings."} />;
+    return <EmptyState title="Settings are unavailable" body={state.kind === "error" ? state.message : "Guard did not return editable settings."} tone="teach" />;
   }
 
   const modeHelp = draft.mode === "enforce"
@@ -409,32 +466,28 @@ export function SettingsWorkspace() {
       ? "Guard records what it sees without pausing actions."
       : "Guard asks before risky actions continue.";
 
+  const consequenceSummary = buildConsequenceSummary(draft);
+
   return (
     <div className="space-y-6">
-      <section className="guard-surface-in rounded-[2rem] border border-brand-blue/15 bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_62%,rgba(181,108,255,0.08)_100%)] p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7">
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Tag tone="blue">Local settings</Tag>
-              <Badge tone="info">{draft.mode}</Badge>
+      <GuardHero
+        status="clear"
+        headline="Choose how protective Guard should be"
+        subheadline="Start with a simple security level, then tune exact risk types when a trusted app needs more room to work."
+        cta={<Tag tone="blue">{draft.mode}</Tag>}
+      />
+
+      {consequenceSummary && (
+        <div className="rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 shadow-sm sm:p-6">
+          <div className="flex items-start gap-3">
+            <HiMiniShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-brand-blue" />
+            <div>
+              <SectionLabel>What to expect</SectionLabel>
+              <p className="mt-2 text-sm text-muted-foreground">{consequenceSummary}</p>
             </div>
-            <SectionLabel>Settings</SectionLabel>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-brand-dark">
-              Choose how protective HOL Guard should be.
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/70">
-              Start with a simple security level, then tune exact risk types when a trusted app needs more room to work.
-            </p>
-          </div>
-          <div className="rounded-[1.65rem] border border-white/80 bg-white/80 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur">
-            <SectionLabel>Config file</SectionLabel>
-            <p className="mt-2 break-words font-mono text-xs leading-5 text-brand-dark/75">{state.payload.config_path}</p>
-            <p className="mt-3 text-xs leading-5 text-muted-foreground">
-              Changes are saved locally and apply to the next Guard evaluation.
-            </p>
           </div>
         </div>
-      </section>
+      )}
 
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
@@ -465,7 +518,7 @@ export function SettingsWorkspace() {
                     type="button"
                     onClick={() => handleSecurityLevelChange(level.value)}
                     aria-pressed={isSelected}
-                    className={`relative min-h-36 rounded-[1.5rem] border p-4 text-left transition-all duration-150 ${
+                    className={`relative min-h-36 rounded-[1.5rem] border p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
                       isSelected ? selectedBorderClass : "border-transparent bg-surface-1/80 hover:bg-white"
                     }`}
                   >
@@ -633,9 +686,9 @@ export function SettingsWorkspace() {
               </div>
             </div>
           ) : null}
-          <div className="rounded-[1.75rem] border border-red-100 bg-red-50/50 p-5 shadow-sm">
+          <div className="rounded-[1.75rem] border border-brand-purple/20 bg-brand-purple/[0.04] p-5">
             <SectionLabel>Data management</SectionLabel>
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 space-y-4">
               <div>
                 <p className="text-sm font-semibold text-brand-dark">Clear saved approvals</p>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
@@ -698,13 +751,28 @@ export function SettingsWorkspace() {
             </div>
           </div>
           <div className="sticky top-24 rounded-[1.75rem] border border-white/80 bg-white/90 p-4 shadow-[0_16px_40px_rgba(63,65,116,0.10)] backdrop-blur">
-            <ActionButton onClick={handleSave} disabled={saving}>
-              {saving ? "Saving…" : "Save settings"}
+            <ActionButton onClick={handleSave} disabled={saving || saveSuccess}>
+              {saveSuccess ? (
+                <span className="flex items-center gap-2">
+                  <HiMiniCheckCircle className="h-4 w-4" aria-hidden="true" />
+                  Saved
+                </span>
+              ) : saving ? (
+                "Saving…"
+              ) : (
+                "Save settings"
+              )}
             </ActionButton>
+            {hasUnsavedChanges(savedSettingsRef.current, draft) && (
+              <span className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-attention">
+                <span className="h-1.5 w-1.5 rounded-full bg-brand-attention" />
+                Unsaved changes
+              </span>
+            )}
             {saveSuccess ? (
-              <p className="guard-fade-in mt-3 text-sm font-semibold leading-6 text-green-700">Settings saved</p>
+              <p className="guard-fade-in mt-3 text-sm font-semibold leading-6 text-brand-green">Settings saved</p>
             ) : saveError ? (
-              <p className="guard-fade-in mt-3 text-sm leading-6 text-red-600">{saveError}</p>
+              <p className="guard-fade-in mt-3 text-sm leading-6 text-brand-purple">{saveError}</p>
             ) : (
               <p className="mt-3 text-xs leading-5 text-muted-foreground">
                 Use this for local tuning. Team policy from Guard Cloud may still override some decisions.
@@ -713,6 +781,39 @@ export function SettingsWorkspace() {
           </div>
         </aside>
       </section>
+
+      {/* Mode change confirmation */}
+      {pendingMode === "observe" && (
+        <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-[1.75rem] border border-brand-attention/20 bg-white p-6 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-attention/10">
+                <HiMiniExclamationTriangle className="h-5 w-5 text-brand-attention" aria-hidden="true" />
+              </span>
+              <div>
+                <h3 className="text-base font-semibold text-brand-dark">Switch to Observe mode?</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  In Observe mode, Guard records what your AI apps do but does not pause any actions. This reduces your protection. Only use this when debugging or in trusted environments.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex flex-wrap gap-2">
+              <button
+                onClick={confirmModeChange}
+                className="inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90"
+              >
+                Switch to Observe
+              </button>
+              <button
+                onClick={cancelModeChange}
+                className="inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50"
+              >
+                Keep current mode
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

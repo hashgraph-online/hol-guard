@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 
 import {
   clearPolicy,
@@ -18,6 +18,9 @@ import { ApprovalCenterLayout } from "./approval-center-layout";
 import { FleetWorkspace } from "./fleet-workspace";
 import { SettingsWorkspace } from "./settings-workspace";
 import { HomeWorkspace } from "./home-dashboard";
+import { AppDetailWorkspace } from "./apps/app-detail-workspace";
+import { HelpModal } from "./help-modal";
+import { ErrorBoundary } from "./error-boundary";
 import { selectNextAfterResolution } from "./queue-state";
 import type {
   GuardApprovalRequest,
@@ -94,7 +97,19 @@ function parseRequestId(pathname: string): string | null {
   return null;
 }
 
-function resolveView(pathname: string): "home" | "inbox" | "fleet" | "evidence" | "settings" {
+type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail";
+
+function parseAppDetail(pathname: string): string | null {
+  if (pathname.startsWith("/apps/")) {
+    return pathname.slice("/apps/".length);
+  }
+  return null;
+}
+
+function resolveView(pathname: string): AppView {
+  if (pathname.startsWith("/apps/")) {
+    return "app-detail";
+  }
   if (pathname === "/settings") {
     return "settings";
   }
@@ -141,6 +156,7 @@ export function App() {
   const pathname = usePathname();
   const view = resolveView(pathname);
   const requestId = parseRequestId(pathname);
+  const appDetailHarness = parseAppDetail(pathname);
   const [requests, setRequests] = useState<RequestState>({ kind: "loading" });
   const [detail, setDetail] = useState<DetailState>({ kind: "idle" });
   const [receipts, setReceipts] = useState<ReceiptsState>({ kind: "loading" });
@@ -148,7 +164,27 @@ export function App() {
   const [policies, setPolicies] = useState<PolicyState>({ kind: "loading" });
   const [inventory, setInventory] = useState<InventoryState>({ kind: "idle" });
   const [resolutionMessage, setResolutionMessage] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState<{ harness?: string; all?: boolean } | null>(null);
   const resolutionInFlight = useRef(false);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+      if (event.key === "?") {
+        event.preventDefault();
+        setHelpOpen((open) => !open);
+      }
+      if (event.key === "/") {
+        event.preventDefault();
+        const searchInput = document.querySelector('input[type="search"]') as HTMLInputElement | null;
+        searchInput?.focus();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -280,6 +316,9 @@ export function App() {
   const handleOpenRequest = useCallback((nextRequestId: string) => {
     navigate(`/requests/${nextRequestId}`);
   }, []);
+  const handleOpenAppDetail = useCallback((harness: string) => {
+    navigate(`/apps/${harness}`);
+  }, []);
 
   const refreshStateAfterAction = useCallback(async () => {
     const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([
@@ -310,11 +349,34 @@ export function App() {
   }, [setRuntime, setRequests, setReceipts, setPolicies]);
 
   const handleClearPolicies = useCallback(async (scope: { harness?: string; all?: boolean }) => {
-    const target = scope.all ? "all saved approvals" : `${scope.harness ?? "this app"} approvals`;
-    if (!window.confirm(`Clear ${target}? Guard will ask again next time matching actions run.`)) {
-      return;
+    setClearConfirm(scope);
+  }, []);
+
+  const handleConfirmClear = useCallback(async () => {
+    if (clearConfirm === null) return;
+    await clearPolicy(clearConfirm);
+    setClearConfirm(null);
+    const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
+    if (snapshotResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
+      setRequests({ kind: "ready", items: snapshotResult.value.items });
     }
-    await clearPolicy(scope);
+    if (policiesResult.status === "fulfilled") {
+      setPolicies({ kind: "ready", items: policiesResult.value });
+    } else {
+      setPolicies({
+        kind: "error",
+        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load saved approvals.",
+      });
+    }
+  }, [clearConfirm, setRuntime, setRequests, setPolicies]);
+
+  const handleCancelClear = useCallback(() => {
+    setClearConfirm(null);
+  }, []);
+
+  const handleClearAppPolicies = useCallback(async (harness: string) => {
+    await clearPolicy({ harness });
     const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
     if (snapshotResult.status === "fulfilled") {
       setRuntime({ kind: "ready", snapshot: snapshotResult.value });
@@ -416,7 +478,27 @@ export function App() {
     navigate("/settings");
   }, []);
 
+  const appDetailContent = useMemo(() => {
+    if (view !== "app-detail" || !appDetailHarness || runtime.kind !== "ready") {
+      return null;
+    }
+    return (
+      <AppDetailWorkspace
+        harness={appDetailHarness}
+        runtime={runtime.snapshot}
+        receipts={receipts.kind === "ready" ? receipts.items : []}
+        policies={policies.kind === "ready" ? policies.items : []}
+        inventory={inventory.kind === "ready" ? inventory.items : []}
+        requests={requests.kind === "ready" ? requests.items : []}
+        onGoHome={handleGoHome}
+        onOpenRequest={handleOpenRequest}
+        onClearAppPolicies={handleClearAppPolicies}
+      />
+    );
+  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies]);
+
   return (
+    <>
     <ApprovalCenterLayout
       view={view}
       requests={requests}
@@ -436,6 +518,10 @@ export function App() {
           onOpenEvidence={handleOpenEvidence}
           onOpenSettings={handleOpenSettings}
           onClearPolicies={handleClearPolicies}
+          onOpenAppDetail={handleOpenAppDetail}
+          clearConfirm={clearConfirm}
+          onConfirmClear={handleConfirmClear}
+          onCancelClear={handleCancelClear}
         />
       }
       onGoHome={handleGoHome}
@@ -454,10 +540,17 @@ export function App() {
             onConnectHarness={handleConnectHarness}
             onTestHarness={handleTestHarness}
             onRepairHarness={handleRepairHarness}
+            onOpenAppDetail={handleOpenAppDetail}
           />
         ) : null
       }
+      appDetailContent={
+        <ErrorBoundary onReset={handleGoHome}>
+          {appDetailContent}
+        </ErrorBoundary>
+      }
       settingsContent={<SettingsWorkspace />}
     />
-  );
+    {helpOpen && <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />}
+    </>);
 }

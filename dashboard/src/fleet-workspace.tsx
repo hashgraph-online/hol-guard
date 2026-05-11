@@ -4,7 +4,9 @@ import {
   EmptyState,
   KeyValueGrid,
   SectionLabel,
-  Tag
+  Tag,
+  GuardHero,
+  ProofStrip,
 } from "./approval-center-primitives";
 import { harnessDisplayName } from "./approval-center-utils";
 import { WatchedAppCard } from "./watched-app-card";
@@ -21,6 +23,7 @@ type FleetWorkspaceProps = {
   onConnectHarness?: (harness: string) => void;
   onTestHarness?: (harness: string) => void;
   onRepairHarness?: (harness: string) => void;
+  onOpenAppDetail?: (harness: string) => void;
 };
 
 function collectHarnesses(snapshot: GuardRuntimeSnapshot): string[] {
@@ -68,41 +71,45 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
     props.onRepairHarness?.(harness);
   }, [props.onRepairHarness]);
 
+  const handleOpenDetail = useCallback((harness: string) => {
+    props.onOpenAppDetail?.(harness);
+  }, [props.onOpenAppDetail]);
+
   return (
     <div className="space-y-6">
-      <section className="guard-surface-in relative overflow-hidden rounded-[2rem] border border-brand-blue/15 bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_62%,rgba(72,223,123,0.10)_100%)] p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7">
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
-          <div className="space-y-2">
-            <SectionLabel>Watched Apps</SectionLabel>
-            <h2 className="text-xl font-semibold tracking-tight text-brand-dark">
-              One machine, all connected apps
-            </h2>
-            <p className="max-w-2xl text-sm leading-relaxed text-brand-dark/75">
-              Confirm that HOL Guard is running, see which local apps it is protecting, and review
-              recent choices before you rely on team-wide Cloud sync.
-            </p>
-            <div className="flex flex-wrap gap-3 pt-1">
-              <ActionButton href={props.runtime.fleet_url}>Open Cloud Devices</ActionButton>
-              <ActionButton href={props.runtime.dashboard_url} variant="outline">
-                Open Home
-              </ActionButton>
-              <ActionButton href={props.runtime.inbox_url} variant="outline">
-                Review Queue
-              </ActionButton>
-            </div>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FleetMetric label="Needs review" value={`${props.runtime.pending_count}`} />
-            <FleetMetric label="History" value={`${props.runtime.receipt_count}`} />
-            <FleetMetric label="Watched apps" value={`${activeInstalls.length > 0 ? activeInstalls.length : visibleHarnesses.length}`} />
-            <FleetMetric label="Runtime" value={runtimeState ? "active" : "offline"} />
-          </div>
-        </div>
-      </section>
+      <GuardHero
+        status={activeInstalls.length > 0 ? "clear" : "setup_gap"}
+        headline={activeInstalls.length > 0 ? "Your apps are covered" : "Connect an app to start"}
+        subheadline={
+          activeInstalls.length > 0
+            ? "Confirm that Guard is running and protecting your local AI apps."
+            : "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more."
+        }
+        cta={
+          <ActionButton href={props.runtime.fleet_url}>Open Cloud Devices</ActionButton>
+        }
+        secondaryCta={
+          <ActionButton href={props.runtime.dashboard_url} variant="outline">
+            Open Home
+          </ActionButton>
+        }
+      />
+
+      <ProofStrip
+        items={[
+          { label: "Needs review", value: `${props.runtime.pending_count}`, tone: props.runtime.pending_count > 0 ? "blue" : "slate" },
+          { label: "History", value: `${props.runtime.receipt_count}`, tone: "purple" },
+          { label: "Watched apps", value: `${activeInstalls.length > 0 ? activeInstalls.length : visibleHarnesses.length}`, tone: activeInstalls.length > 0 ? "green" : "slate" },
+          { label: "Runtime", value: runtimeState ? "active" : "offline", tone: runtimeState ? "green" : "slate" },
+        ]}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
         <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
           <SectionLabel>App coverage</SectionLabel>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Which apps Guard is watching on this machine.
+          </p>
           {visibleHarnesses.length > 0 ? (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {visibleHarnesses.map((harness) => {
@@ -122,19 +129,21 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
                     onConnect={handleConnect}
                     onTest={handleTest}
                     onRepair={handleRepair}
+                    onOpenDetail={handleOpenDetail}
                   />
                 );
               })}
             </div>
           ) : (
-            <div className="mt-3">
+            <div className="mt-4">
               <EmptyState
                 title="No watched apps yet"
                 body="Run HOL Guard once with Codex, Claude Code, Cursor, Hermes, or another supported app and this machine will show coverage here."
+                tone="teach"
               />
             </div>
           )}
-          <div className="mt-4">
+          <div className="mt-6">
             <KeyValueGrid
               columns={2}
               items={[
@@ -152,49 +161,45 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
           </div>
         </section>
 
-        <section className="rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 sm:p-6">
-          <SectionLabel>Recent choices</SectionLabel>
-          {props.runtime.latest_receipts.length > 0 ? (
-            <div className="mt-3 space-y-3">
-              {props.runtime.latest_receipts.slice(0, 6).map((receipt) => (
-                <div
-                  key={receipt.receipt_id}
-                  className="rounded-lg border border-border bg-white px-4 py-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-brand-dark">
-                        {receipt.artifact_name ?? receipt.artifact_id}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">{renderReceiptContext(receipt)}</p>
+        <section className="space-y-6">
+          <div className="rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 sm:p-6">
+            <SectionLabel>Recent choices</SectionLabel>
+            <p className="mt-2 text-sm text-muted-foreground">
+              What Guard decided recently.
+            </p>
+            {props.runtime.latest_receipts.length > 0 ? (
+              <div className="mt-4 space-y-3">
+                {props.runtime.latest_receipts.slice(0, 6).map((receipt) => (
+                  <div
+                    key={receipt.receipt_id}
+                    className="rounded-lg border border-border bg-white px-4 py-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-brand-dark">
+                          {receipt.artifact_name ?? receipt.artifact_id}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">{renderReceiptContext(receipt)}</p>
+                      </div>
+                      <Tag tone="green">{receipt.policy_decision}</Tag>
                     </div>
-                    <Tag tone="green">{receipt.policy_decision}</Tag>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      {receipt.capabilities_summary || receipt.provenance_summary}
+                    </p>
                   </div>
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    {receipt.capabilities_summary || receipt.provenance_summary}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-3">
-              <EmptyState
-                title="No choices yet"
-                body="Allow or block an action once and HOL Guard will start building local history for this machine."
-              />
-            </div>
-          )}
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4">
+                <EmptyState
+                  title="No choices yet"
+                  body="Allow or block an action once and HOL Guard will start building local history for this machine."
+                />
+              </div>
+            )}
+          </div>
         </section>
       </div>
-    </div>
-  );
-}
-
-function FleetMetric(props: { label: string; value: string }) {
-  return (
-    <div className="rounded-[1.25rem] border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
-      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.label}</p>
-      <p className="mt-1 text-xl font-semibold tracking-tight text-brand-dark">{props.value}</p>
     </div>
   );
 }
