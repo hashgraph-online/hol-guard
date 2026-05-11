@@ -1,27 +1,32 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   HiMiniChevronDown,
   HiMiniChevronUp,
+  HiOutlineCalendarDays,
+  HiOutlineListBullet,
+  HiOutlineArrowDownTray,
 } from "react-icons/hi2";
 
 import {
   Badge,
   EmptyState,
   SectionLabel,
-  Tag,
   GuardHero,
 } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
 import type { GuardReceipt } from "./guard-types";
 import { guardAwareHref } from "./guard-api";
+import { HistoryInsights, ActivityCalendar, TopActions } from "./history-analytics";
+import { exportReceiptsAsCsv, exportReceiptsAsJson, downloadBlob } from "./history-export";
 
 type ReceiptsState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardReceipt[] };
 
-type TimeFilter = "all" | "today" | "yesterday" | "week";
+type TimeFilter = "all" | "today" | "yesterday" | "week" | "last7d" | "last30d";
 type DecisionFilter = "all" | "allow" | "block";
+type ViewMode = "list" | "calendar";
 
 export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
   if (props.receipts.kind === "loading") {
@@ -42,26 +47,59 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
   return <ReadyReceiptsWorkspace receiptItems={props.receipts.items} />;
 }
 
-function readUrlParams(): { search: string; time: TimeFilter; decision: DecisionFilter; harness: string } {
+const TIME_FILTER_VALUES: TimeFilter[] = ["all", "today", "yesterday", "week", "last7d", "last30d"];
+const DECISION_FILTER_VALUES: DecisionFilter[] = ["all", "allow", "block"];
+
+function readUrlParams(): {
+  search: string;
+  time: TimeFilter;
+  decision: DecisionFilter;
+  harness: string;
+  view: ViewMode;
+  day: string;
+} {
   const params = new URLSearchParams(window.location.search);
   const time = params.get("time") as TimeFilter;
   const decision = params.get("decision") as DecisionFilter;
+  const view = params.get("view") as ViewMode;
   return {
     search: params.get("search") ?? "",
-    time: ["all", "today", "yesterday", "week"].includes(time) ? time : "all",
-    decision: ["all", "allow", "block"].includes(decision) ? decision : "all",
+    time: TIME_FILTER_VALUES.includes(time) ? time : "all",
+    decision: DECISION_FILTER_VALUES.includes(decision) ? decision : "all",
     harness: params.get("harness") ?? "all",
+    view: view === "calendar" ? "calendar" : "list",
+    day: params.get("day") ?? "",
   };
 }
 
-function writeUrlParams(params: { search: string; time: TimeFilter; decision: DecisionFilter; harness: string }) {
+function writeUrlParams(params: {
+  search: string;
+  time: TimeFilter;
+  decision: DecisionFilter;
+  harness: string;
+  view: ViewMode;
+  day: string;
+}) {
   const url = new URL(window.location.href);
   url.search = "";
   if (params.search) url.searchParams.set("search", params.search);
   if (params.time !== "all") url.searchParams.set("time", params.time);
   if (params.decision !== "all") url.searchParams.set("decision", params.decision);
   if (params.harness !== "all") url.searchParams.set("harness", params.harness);
+  if (params.view !== "list") url.searchParams.set("view", params.view);
+  if (params.day) url.searchParams.set("day", params.day);
   window.history.replaceState({}, "", url.toString());
+}
+
+function timeFilterLabel(filter: TimeFilter): string {
+  switch (filter) {
+    case "today": return "Today";
+    case "yesterday": return "Yesterday";
+    case "week": return "This week";
+    case "last7d": return "Last 7 days";
+    case "last30d": return "Last 30 days";
+    default: return "All time";
+  }
 }
 
 function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
@@ -69,6 +107,8 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   const [search, setSearch] = useState(initial.search);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>(initial.time);
   const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>(initial.decision);
+  const [viewMode, setViewMode] = useState<ViewMode>(initial.view);
+  const [dayFilter, setDayFilter] = useState<string>(initial.day);
 
   const harnesses = useMemo(
     () => Array.from(new Set(props.receiptItems.map((r) => r.harness))).sort(),
@@ -85,8 +125,8 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   }, [harnesses, harnessFilter]);
 
   useEffect(() => {
-    writeUrlParams({ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter });
-  }, [search, timeFilter, decisionFilter, harnessFilter]);
+    writeUrlParams({ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter, view: viewMode, day: dayFilter });
+  }, [search, timeFilter, decisionFilter, harnessFilter, viewMode, dayFilter]);
 
   const filtered = useMemo(() => {
     let items = props.receiptItems;
@@ -103,12 +143,27 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
       startOfYesterday.setDate(startOfYesterday.getDate() - 1);
       const startOfWeek = new Date(startOfToday);
       startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+      const startOfLast7d = new Date(startOfToday);
+      startOfLast7d.setDate(startOfLast7d.getDate() - 7);
+      const startOfLast30d = new Date(startOfToday);
+      startOfLast30d.setDate(startOfLast30d.getDate() - 30);
       items = items.filter((r) => {
         const d = new Date(r.timestamp);
         if (timeFilter === "today") return d >= startOfToday;
         if (timeFilter === "yesterday") return d >= startOfYesterday && d < startOfToday;
         if (timeFilter === "week") return d >= startOfWeek;
+        if (timeFilter === "last7d") return d >= startOfLast7d;
+        if (timeFilter === "last30d") return d >= startOfLast30d;
         return true;
+      });
+    }
+    if (dayFilter) {
+      const dayStart = new Date(dayFilter);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      items = items.filter((r) => {
+        const d = new Date(r.timestamp);
+        return d >= dayStart && d < dayEnd;
       });
     }
     if (search.trim()) {
@@ -119,7 +174,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
       );
     }
     return items.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-  }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, search]);
+  }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, search, dayFilter]);
 
   const groups = useMemo(() => {
     const today: GuardReceipt[] = [];
@@ -143,6 +198,32 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
     return { today, yesterday, thisWeek, earlier };
   }, [filtered]);
 
+  const handleFilterHarness = useCallback((harness: string) => {
+    setHarnessFilter(harness);
+    setViewMode("list");
+  }, []);
+
+  const handleFilterDay = useCallback((day: string) => {
+    setDayFilter(day);
+    setTimeFilter("all");
+    setViewMode("list");
+  }, []);
+
+  const handleFilterAction = useCallback((name: string) => {
+    setSearch(name);
+    setViewMode("list");
+  }, []);
+
+  const handleExportCsv = useCallback(() => {
+    const { blob, filename } = exportReceiptsAsCsv(filtered, { search, time: timeFilter, decision: decisionFilter, harness: harnessFilter });
+    downloadBlob(blob, filename);
+  }, [filtered, search, timeFilter, decisionFilter, harnessFilter]);
+
+  const handleExportJson = useCallback(() => {
+    const { blob, filename } = exportReceiptsAsJson(filtered, { search, time: timeFilter, decision: decisionFilter, harness: harnessFilter });
+    downloadBlob(blob, filename);
+  }, [filtered, search, timeFilter, decisionFilter, harnessFilter]);
+
   const totalCount = props.receiptItems.length;
 
   if (totalCount === 0) {
@@ -162,6 +243,12 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
         headline="History"
         subheadline="What Guard decided. Filter by time, app, or decision."
         cta={<Badge tone="info">{totalCount} saved</Badge>}
+      />
+
+      <HistoryInsights
+        receipts={props.receiptItems}
+        onFilterHarness={handleFilterHarness}
+        onFilterDay={handleFilterDay}
       />
 
       <div className="space-y-3">
@@ -209,6 +296,18 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
           >
             This week
           </FilterChip>
+          <FilterChip
+            active={timeFilter === "last7d"}
+            onClick={() => setTimeFilter("last7d")}
+          >
+            Last 7d
+          </FilterChip>
+          <FilterChip
+            active={timeFilter === "last30d"}
+            onClick={() => setTimeFilter("last30d")}
+          >
+            Last 30d
+          </FilterChip>
           <span className="mx-1 h-4 w-px bg-slate-200" />
           <select
             value={harnessFilter}
@@ -220,6 +319,30 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
               <option key={h} value={h}>{harnessDisplayName(h)}</option>
             ))}
           </select>
+          <span className="mx-1 h-4 w-px bg-slate-200" />
+          <ViewToggleButton active={viewMode === "list"} onClick={() => setViewMode("list")} ariaLabel="List view">
+            <HiOutlineListBullet className="h-3.5 w-3.5" aria-hidden="true" />
+          </ViewToggleButton>
+          <ViewToggleButton active={viewMode === "calendar"} onClick={() => setViewMode("calendar")} ariaLabel="Calendar view">
+            <HiOutlineCalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+          </ViewToggleButton>
+          <span className="mx-1 h-4 w-px bg-slate-200" />
+          <button
+            onClick={handleExportCsv}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-brand-dark"
+            title="Export as CSV"
+          >
+            <HiOutlineArrowDownTray className="h-3.5 w-3.5" aria-hidden="true" />
+            CSV
+          </button>
+          <button
+            onClick={handleExportJson}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-brand-dark"
+            title="Export as JSON"
+          >
+            <HiOutlineArrowDownTray className="h-3.5 w-3.5" aria-hidden="true" />
+            JSON
+          </button>
         </div>
         <input
           value={search}
@@ -230,7 +353,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
       </div>
 
       {/* Active filter chips */}
-      {(search || decisionFilter !== "all" || timeFilter !== "all" || harnessFilter !== "all") && (
+      {(search || decisionFilter !== "all" || timeFilter !== "all" || harnessFilter !== "all" || dayFilter) && (
         <div className="flex flex-wrap items-center gap-2">
           {search && (
             <ActiveFilterChip onClick={() => setSearch("")}>
@@ -244,12 +367,17 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
           )}
           {timeFilter !== "all" && (
             <ActiveFilterChip onClick={() => setTimeFilter("all")}>
-              {timeFilter === "today" ? "Today" : timeFilter === "yesterday" ? "Yesterday" : "This week"}
+              {timeFilterLabel(timeFilter)}
             </ActiveFilterChip>
           )}
           {harnessFilter !== "all" && (
             <ActiveFilterChip onClick={() => setHarnessFilter("all")}>
               {harnessDisplayName(harnessFilter)}
+            </ActiveFilterChip>
+          )}
+          {dayFilter && (
+            <ActiveFilterChip onClick={() => setDayFilter("")}>
+              {dayFilter}
             </ActiveFilterChip>
           )}
           <button
@@ -258,6 +386,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
               setDecisionFilter("all");
               setTimeFilter("all");
               setHarnessFilter("all");
+              setDayFilter("");
             }}
             className="ml-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
           >
@@ -266,7 +395,12 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
         </div>
       )}
 
-      {filtered.length === 0 ? (
+      {viewMode === "calendar" ? (
+        <ActivityCalendar
+          receipts={filtered}
+          onSelectDay={handleFilterDay}
+        />
+      ) : filtered.length === 0 ? (
         <EmptyState
           title="No matching history"
           body="Try different filters or search terms."
@@ -280,7 +414,37 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
           <ReceiptGroup title="Earlier" items={groups.earlier} />
         </div>
       )}
+
+      {viewMode === "list" && (
+        <TopActions receipts={filtered} onFilterAction={handleFilterAction} />
+      )}
     </div>
+  );
+}
+
+function ViewToggleButton({
+  active,
+  onClick,
+  children,
+  ariaLabel,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  ariaLabel: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className={`rounded-md p-1.5 transition-colors ${
+        active
+          ? "bg-brand-blue text-white"
+          : "text-slate-400 hover:bg-slate-100 hover:text-brand-dark"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
