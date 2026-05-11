@@ -2694,28 +2694,14 @@ def _looks_like_safe_graphql_query_file_workflow(command_text: str) -> bool:
         return False
     if _path_text_looks_sensitive(rest):
         return False
-    query_file_refs = {
-        f"$(cat {target_path})",
-        f'$(cat "{target_path}")',
-        f"$(cat '{target_path}')",
-    }
-    query_file_field_refs = {
-        f"query=@{target_path}",
-        f'query=@"{target_path}"',
-        f"query=@'{target_path}'",
-    }
     if re.search(r"(?:;|&|\|\||\||>|<|\n)", rest):
         return False
     rest_without_allowed_query_refs = rest
-    for ref in query_file_refs:
+    for ref in _graphql_query_file_substitution_refs(target_path):
         rest_without_allowed_query_refs = rest_without_allowed_query_refs.replace(ref, "")
     if "$(" in rest_without_allowed_query_refs or "`" in rest_without_allowed_query_refs:
         return False
-    has_query_file_read = any(ref in rest for ref in query_file_refs)
-    has_query_file_field = any(ref in rest for ref in query_file_field_refs)
-    return (has_query_file_read or has_query_file_field) and re.search(
-        r"(?:^|\s)(?:-f|--field)\s*query=", rest
-    ) is not None
+    return _rest_has_exact_graphql_query_file_arg(rest, target_path)
 
 
 def _strip_shell_quotes(value: str) -> str:
@@ -2728,6 +2714,22 @@ def _contains_shell_expansion(value: str) -> bool:
     return "$(" in value or "`" in value or "${" in value or re.search(r"\$[A-Za-z_][A-Za-z0-9_]*", value) is not None
 
 
+def _graphql_query_file_substitution_refs(target_path: str) -> set[str]:
+    return {
+        f"$(cat {target_path})",
+        f'$(cat "{target_path}")',
+        f"$(cat '{target_path}')",
+    }
+
+
+def _rest_has_exact_graphql_query_file_arg(rest: str, target_path: str) -> bool:
+    escaped_path = re.escape(target_path)
+    path_value = rf"(?:(?:\"|'){escaped_path}(?:\"|')|{escaped_path})"
+    substitution_pattern = rf"(?:^|\s)(?:-f|--field)\s+query=(?:\"|')?\$\(cat {path_value}\)(?:\"|')?(?:\s|$)"
+    field_pattern = rf"(?:^|\s)(?:-f|--field)\s+query=@{path_value}(?:\s|$)"
+    return re.search(substitution_pattern, rest) is not None or re.search(field_pattern, rest) is not None
+
+
 def _looks_like_temporary_pr_threads_query_path(path_text: str) -> bool:
     normalized = os.path.normpath(path_text.replace("\\", "/")).replace("\\", "/")
     basename = os.path.basename(normalized)
@@ -2736,17 +2738,14 @@ def _looks_like_temporary_pr_threads_query_path(path_text: str) -> bool:
     if not normalized.startswith("/"):
         return False
     lowered = normalized.lower()
-    return (
-        lowered.startswith(
-            (
-                "/tmp/",
-                "/var/tmp/",
-                "/private/tmp/",
-                "/var/folders/",
-                "/private/var/folders/",
-            )
+    return lowered.startswith(
+        (
+            "/tmp/",
+            "/var/tmp/",
+            "/private/tmp/",
+            "/var/folders/",
+            "/private/var/folders/",
         )
-        or "/.copilot/session-state/" in lowered
     )
 
 
