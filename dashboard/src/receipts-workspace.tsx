@@ -136,6 +136,16 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   useKeyboardShortcut("e", () => {
     handleExportCsv();
   }, { preventDefault: true });
+  useKeyboardShortcut("g", () => {
+    setViewMode((prev) => (prev === "list" ? "calendar" : "list"));
+  }, { preventDefault: true });
+  useKeyboardShortcut("t", () => {
+    const cycle: TimeFilter[] = ["all", "today", "yesterday", "week", "last7d", "last30d"];
+    setTimeFilter((prev) => {
+      const idx = cycle.indexOf(prev);
+      return cycle[(idx + 1) % cycle.length];
+    });
+  }, { preventDefault: true });
 
   const filtered = useMemo(() => {
     let items = props.receiptItems;
