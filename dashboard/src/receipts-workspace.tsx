@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  HiMiniBookOpen,
+  HiMiniTag,
+  HiMiniComputerDesktop,
+  HiMiniChartBar,
+  HiOutlineArrowDownTray,
+  HiOutlineListBullet,
+  HiOutlineCalendarDays,
   HiMiniChevronDown,
   HiMiniChevronUp,
-  HiOutlineCalendarDays,
-  HiOutlineListBullet,
-  HiOutlineArrowDownTray,
 } from "react-icons/hi2";
 
 import {
@@ -16,20 +20,28 @@ import {
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
 import type { GuardReceipt } from "./guard-types";
 import { guardAwareHref } from "./guard-api";
-import { HistoryInsights, ActivityCalendar, TopActions } from "./history-analytics";
-import { exportReceiptsAsCsv, exportReceiptsAsJson, downloadBlob } from "./history-export";
 import { useKeyboardShortcut } from "./use-keyboard-shortcut";
-import { HistoryCharts } from "./history-charts";
-import { CompareTimePeriods } from "./compare-time-periods";
+import { exportReceiptsAsCsv, exportReceiptsAsJson, downloadBlob } from "./history-export";
+import { StoryTab, CategoryTab, AppTab, ExploreTab } from "./evidence";
+
+type TabKey = "story" | "category" | "app" | "explore";
+type TimeFilter = "all" | "today" | "yesterday" | "week" | "last7d" | "last30d";
+type DecisionFilter = "all" | "allow" | "block";
 
 type ReceiptsState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardReceipt[] };
 
-type TimeFilter = "all" | "today" | "yesterday" | "week" | "last7d" | "last30d";
-type DecisionFilter = "all" | "allow" | "block";
-type ViewMode = "list" | "calendar";
+const TIME_FILTER_VALUES: TimeFilter[] = ["all", "today", "yesterday", "week", "last7d", "last30d"];
+const DECISION_FILTER_VALUES: DecisionFilter[] = ["all", "allow", "block"];
+
+const TAB_CONFIG: { key: TabKey; label: string; icon: React.ElementType }[] = [
+  { key: "story", label: "Story", icon: HiMiniBookOpen },
+  { key: "category", label: "Category", icon: HiMiniTag },
+  { key: "app", label: "App", icon: HiMiniComputerDesktop },
+  { key: "explore", label: "Explore", icon: HiMiniChartBar },
+];
 
 export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
   if (props.receipts.kind === "loading") {
@@ -50,27 +62,24 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
   return <ReadyReceiptsWorkspace receiptItems={props.receipts.items} />;
 }
 
-const TIME_FILTER_VALUES: TimeFilter[] = ["all", "today", "yesterday", "week", "last7d", "last30d"];
-const DECISION_FILTER_VALUES: DecisionFilter[] = ["all", "allow", "block"];
-
 function readUrlParams(): {
   search: string;
   time: TimeFilter;
   decision: DecisionFilter;
   harness: string;
-  view: ViewMode;
+  tab: TabKey;
   day: string;
 } {
   const params = new URLSearchParams(window.location.search);
   const time = params.get("time") as TimeFilter;
   const decision = params.get("decision") as DecisionFilter;
-  const view = params.get("view") as ViewMode;
+  const tab = params.get("tab") as TabKey;
   return {
     search: params.get("search") ?? "",
     time: TIME_FILTER_VALUES.includes(time) ? time : "all",
     decision: DECISION_FILTER_VALUES.includes(decision) ? decision : "all",
     harness: params.get("harness") ?? "all",
-    view: view === "calendar" ? "calendar" : "list",
+    tab: TAB_CONFIG.some((t) => t.key === tab) ? tab : "story",
     day: params.get("day") ?? "",
   };
 }
@@ -80,7 +89,7 @@ function writeUrlParams(params: {
   time: TimeFilter;
   decision: DecisionFilter;
   harness: string;
-  view: ViewMode;
+  tab: TabKey;
   day: string;
 }) {
   const url = new URL(window.location.href);
@@ -89,7 +98,7 @@ function writeUrlParams(params: {
   if (params.time !== "all") url.searchParams.set("time", params.time);
   if (params.decision !== "all") url.searchParams.set("decision", params.decision);
   if (params.harness !== "all") url.searchParams.set("harness", params.harness);
-  if (params.view !== "list") url.searchParams.set("view", params.view);
+  if (params.tab !== "story") url.searchParams.set("tab", params.tab);
   if (params.day) url.searchParams.set("day", params.day);
   window.history.replaceState({}, "", url.toString());
 }
@@ -110,15 +119,13 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   const [search, setSearch] = useState(initial.search);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>(initial.time);
   const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>(initial.decision);
-  const [viewMode, setViewMode] = useState<ViewMode>(initial.view);
+  const [activeTab, setActiveTab] = useState<TabKey>(initial.tab);
   const [dayFilter, setDayFilter] = useState<string>(initial.day);
+  const [harnessFilter, setHarnessFilter] = useState<string>(initial.harness);
 
   const harnesses = useMemo(
     () => Array.from(new Set(props.receiptItems.map((r) => r.harness))).sort(),
     [props.receiptItems]
-  );
-  const [harnessFilter, setHarnessFilter] = useState<string>(
-    initial.harness !== "all" && harnesses.includes(initial.harness) ? initial.harness : "all"
   );
 
   useEffect(() => {
@@ -128,26 +135,8 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   }, [harnesses, harnessFilter]);
 
   useEffect(() => {
-    writeUrlParams({ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter, view: viewMode, day: dayFilter });
-  }, [search, timeFilter, decisionFilter, harnessFilter, viewMode, dayFilter]);
-
-  const searchRef = useRef<HTMLInputElement>(null);
-  useKeyboardShortcut("f", () => {
-    searchRef.current?.focus();
-  }, { preventDefault: true });
-  useKeyboardShortcut("e", () => {
-    handleExportCsv();
-  }, { preventDefault: true });
-  useKeyboardShortcut("g", () => {
-    setViewMode((prev) => (prev === "list" ? "calendar" : "list"));
-  }, { preventDefault: true });
-  useKeyboardShortcut("t", () => {
-    const cycle: TimeFilter[] = ["all", "today", "yesterday", "week", "last7d", "last30d"];
-    setTimeFilter((prev) => {
-      const idx = cycle.indexOf(prev);
-      return cycle[(idx + 1) % cycle.length];
-    });
-  }, { preventDefault: true });
+    writeUrlParams({ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter, tab: activeTab, day: dayFilter });
+  }, [search, timeFilter, decisionFilter, harnessFilter, activeTab, dayFilter]);
 
   const filtered = useMemo(() => {
     let items = props.receiptItems;
@@ -197,53 +186,10 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
     return items.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
   }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, search, dayFilter]);
 
-  const groups = useMemo(() => {
-    const today: GuardReceipt[] = [];
-    const yesterday: GuardReceipt[] = [];
-    const thisWeek: GuardReceipt[] = [];
-    const earlier: GuardReceipt[] = [];
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfYesterday = new Date(startOfToday);
-    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-    const startOfWeek = new Date(startOfToday);
-    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-
-    filtered.forEach((r) => {
-      const d = new Date(r.timestamp);
-      if (d >= startOfToday) today.push(r);
-      else if (d >= startOfYesterday) yesterday.push(r);
-      else if (d >= startOfWeek) thisWeek.push(r);
-      else earlier.push(r);
-    });
-    return { today, yesterday, thisWeek, earlier };
-  }, [filtered]);
-
-  const handleFilterHarness = useCallback((harness: string) => {
-    setHarnessFilter(harness);
-    setViewMode("list");
-  }, []);
-
   const handleFilterDay = useCallback((day: string) => {
     setDayFilter(day);
     setTimeFilter("all");
-    setViewMode("list");
   }, []);
-
-  const handleFilterAction = useCallback((name: string) => {
-    setSearch(name);
-    setViewMode("list");
-  }, []);
-
-  const handleExportCsv = useCallback(() => {
-    const { blob, filename } = exportReceiptsAsCsv(filtered, { search, time: timeFilter, decision: decisionFilter, harness: harnessFilter });
-    downloadBlob(blob, filename);
-  }, [filtered, search, timeFilter, decisionFilter, harnessFilter]);
-
-  const handleExportJson = useCallback(() => {
-    const { blob, filename } = exportReceiptsAsJson(filtered, { search, time: timeFilter, decision: decisionFilter, harness: harnessFilter });
-    downloadBlob(blob, filename);
-  }, [filtered, search, timeFilter, decisionFilter, harnessFilter]);
 
   const totalCount = props.receiptItems.length;
 
@@ -262,381 +208,92 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
       <GuardHero
         status="clear"
         headline="History"
-        subheadline="What Guard decided. Filter by time, app, or decision."
+        subheadline="What Guard decided."
         cta={<Badge tone="info">{totalCount} saved</Badge>}
       />
 
-      <HistoryInsights
-        receipts={props.receiptItems}
-        onFilterHarness={handleFilterHarness}
-        onFilterDay={handleFilterDay}
-      />
-
-      <HistoryCharts receipts={filtered} />
-
-      <CompareTimePeriods receipts={props.receiptItems} />
-
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <FilterChip
-            active={decisionFilter === "all"}
-            onClick={() => setDecisionFilter("all")}
-          >
-            All
-          </FilterChip>
-          <FilterChip
-            active={decisionFilter === "allow"}
-            onClick={() => setDecisionFilter("allow")}
-          >
-            Allowed
-          </FilterChip>
-          <FilterChip
-            active={decisionFilter === "block"}
-            onClick={() => setDecisionFilter("block")}
-          >
-            Blocked
-          </FilterChip>
-          <span className="mx-1 h-4 w-px bg-slate-200" />
-          <FilterChip
-            active={timeFilter === "all"}
-            onClick={() => setTimeFilter("all")}
-          >
-            All time
-          </FilterChip>
-          <FilterChip
-            active={timeFilter === "today"}
-            onClick={() => setTimeFilter("today")}
-          >
-            Today
-          </FilterChip>
-          <FilterChip
-            active={timeFilter === "yesterday"}
-            onClick={() => setTimeFilter("yesterday")}
-          >
-            Yesterday
-          </FilterChip>
-          <FilterChip
-            active={timeFilter === "week"}
-            onClick={() => setTimeFilter("week")}
-          >
-            This week
-          </FilterChip>
-          <FilterChip
-            active={timeFilter === "last7d"}
-            onClick={() => setTimeFilter("last7d")}
-          >
-            Last 7d
-          </FilterChip>
-          <FilterChip
-            active={timeFilter === "last30d"}
-            onClick={() => setTimeFilter("last30d")}
-          >
-            Last 30d
-          </FilterChip>
-          <span className="mx-1 h-4 w-px bg-slate-200" />
-          <select
-            value={harnessFilter}
-            onChange={(e) => setHarnessFilter(e.target.value)}
-            className="h-8 rounded-md border-0 bg-transparent px-2 py-1 text-xs font-medium text-brand-dark hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
-          >
-            <option value="all">All apps</option>
-            {harnesses.map((h) => (
-              <option key={h} value={h}>{harnessDisplayName(h)}</option>
-            ))}
-          </select>
-          <span className="mx-1 h-4 w-px bg-slate-200" />
-          <ViewToggleButton active={viewMode === "list"} onClick={() => setViewMode("list")} ariaLabel="List view">
-            <HiOutlineListBullet className="h-3.5 w-3.5" aria-hidden="true" />
-          </ViewToggleButton>
-          <ViewToggleButton active={viewMode === "calendar"} onClick={() => setViewMode("calendar")} ariaLabel="Calendar view">
-            <HiOutlineCalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
-          </ViewToggleButton>
-          <span className="mx-1 h-4 w-px bg-slate-200" />
+      {/* Category filter bar */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {(
+          [
+            { key: "all" as const, label: "All" },
+            { key: "secret" as const, label: "Secrets" },
+            { key: "network" as const, label: "Network" },
+            { key: "destructive" as const, label: "Destructive" },
+            { key: "hidden" as const, label: "Hidden" },
+            { key: "other" as const, label: "Other" },
+          ] as const
+        ).map((c) => (
           <button
-            onClick={handleExportCsv}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-brand-dark"
-            title="Export as CSV"
+            key={c.key}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+              search === c.key
+                ? "bg-brand-blue text-white shadow-sm"
+                : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
+            }`}
+            onClick={() => setSearch(search === c.key ? "" : c.key)}
           >
-            <HiOutlineArrowDownTray className="h-3.5 w-3.5" aria-hidden="true" />
-            CSV
+            {c.label}
           </button>
-          <button
-            onClick={handleExportJson}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-brand-dark"
-            title="Export as JSON"
-          >
-            <HiOutlineArrowDownTray className="h-3.5 w-3.5" aria-hidden="true" />
-            JSON
-          </button>
-        </div>
-        <input
-          ref={searchRef}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or app..."
-          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
-        />
-      </div>
-
-      {/* Active filter chips */}
-      {(search || decisionFilter !== "all" || timeFilter !== "all" || harnessFilter !== "all" || dayFilter) && (
-        <div className="flex flex-wrap items-center gap-2">
-          {search && (
-            <ActiveFilterChip onClick={() => setSearch("")}>
-              Search: {search}
-            </ActiveFilterChip>
-          )}
-          {decisionFilter !== "all" && (
-            <ActiveFilterChip onClick={() => setDecisionFilter("all")}>
-              {decisionFilter === "allow" ? "Allowed" : "Blocked"}
-            </ActiveFilterChip>
-          )}
-          {timeFilter !== "all" && (
-            <ActiveFilterChip onClick={() => setTimeFilter("all")}>
-              {timeFilterLabel(timeFilter)}
-            </ActiveFilterChip>
-          )}
-          {harnessFilter !== "all" && (
-            <ActiveFilterChip onClick={() => setHarnessFilter("all")}>
-              {harnessDisplayName(harnessFilter)}
-            </ActiveFilterChip>
-          )}
-          {dayFilter && (
-            <ActiveFilterChip onClick={() => setDayFilter("")}>
-              {dayFilter}
-            </ActiveFilterChip>
-          )}
-          <button
-            onClick={() => {
-              setSearch("");
-              setDecisionFilter("all");
-              setTimeFilter("all");
-              setHarnessFilter("all");
-              setDayFilter("");
-            }}
-            className="ml-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
-          >
-            Clear all
-          </button>
-        </div>
-      )}
-
-      {viewMode === "calendar" ? (
-        <ActivityCalendar
-          receipts={filtered}
-          onSelectDay={handleFilterDay}
-        />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          title="No matching history"
-          body="Try different filters or search terms."
-          tone="teach"
-        />
-      ) : (
-        <div className="space-y-6">
-          <ReceiptGroup title="Today" items={groups.today} />
-          <ReceiptGroup title="Yesterday" items={groups.yesterday} />
-          <ReceiptGroup title="This week" items={groups.thisWeek} />
-          <ReceiptGroup title="Earlier" items={groups.earlier} />
-        </div>
-      )}
-
-      {viewMode === "list" && (
-        <TopActions receipts={filtered} onFilterAction={handleFilterAction} />
-      )}
-    </div>
-  );
-}
-
-function ViewToggleButton({
-  active,
-  onClick,
-  children,
-  ariaLabel,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  ariaLabel: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label={ariaLabel}
-      className={`rounded-md p-1.5 transition-colors ${
-        active
-          ? "bg-brand-blue text-white"
-          : "text-slate-400 hover:bg-slate-100 hover:text-brand-dark"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-        active
-          ? "bg-brand-blue text-white"
-          : "text-slate-500 hover:bg-slate-100 hover:text-brand-dark"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function ActiveFilterChip({
-  onClick,
-  children,
-}: {
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="inline-flex items-center gap-1 rounded-full border border-brand-blue/30 bg-brand-blue/[0.08] px-3 py-1.5 text-xs font-medium text-brand-blue transition-all hover:bg-brand-blue/15"
-    >
-      {children}
-      <span className="ml-0.5 text-brand-blue/70">×</span>
-    </button>
-  );
-}
-
-function getGroupCollapsedKey(title: string): string {
-  return `guard-history-group-${title.toLowerCase().replace(/\s+/g, "-")}`;
-}
-
-function ReceiptGroup({ title, items }: { title: string; items: GuardReceipt[] }) {
-  const storageKey = getGroupCollapsedKey(title);
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem(storageKey) === "true";
-    } catch {
-      return false;
-    }
-  });
-  if (items.length === 0) return null;
-  const toggle = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(storageKey, String(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
-  };
-  return (
-    <div className="border-t border-slate-100 pt-4">
-      <button
-        onClick={toggle}
-        className="flex w-full items-center justify-between text-left group"
-        aria-expanded={!collapsed}
-      >
-        <div className="flex items-center gap-2">
-          <SectionLabel>{title}</SectionLabel>
-          <span className="text-xs text-slate-400">{items.length}</span>
-        </div>
-        {collapsed ? (
-          <HiMiniChevronDown className="h-4 w-4 text-slate-300 transition-colors group-hover:text-slate-500" aria-hidden="true" />
-        ) : (
-          <HiMiniChevronUp className="h-4 w-4 text-slate-300 transition-colors group-hover:text-slate-500" aria-hidden="true" />
-        )}
-      </button>
-      {!collapsed && (
-        <div className="mt-2 space-y-0">
-          {items.map((receipt) => (
-            <HistoryRow key={receipt.receipt_id} receipt={receipt} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function HistoryRow({ receipt }: { receipt: GuardReceipt }) {
-  const [expanded, setExpanded] = useState(false);
-  const decisionLabel = receipt.policy_decision === "allow" ? "Allowed" : "Blocked";
-  const decisionColor = receipt.policy_decision === "allow" ? "text-emerald-600" : "text-brand-attention";
-  const name = receipt.artifact_name ?? receipt.artifact_id;
-  const appHref = guardAwareHref(`/apps/${receipt.harness}`);
-  return (
-    <div className="border-b border-slate-100 py-2.5 transition-colors hover:bg-slate-50/50">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className={`text-xs font-medium ${decisionColor}`}>{decisionLabel}</span>
-            <span className="truncate font-mono text-xs text-slate-500">{name}</span>
-          </div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400">
-            <a
-              href={appHref}
-              className="text-brand-blue hover:text-brand-dark transition-colors"
-            >
-              {harnessDisplayName(receipt.harness)}
-            </a>
-            <span>·</span>
-            <span>{formatRelativeTime(receipt.timestamp)}</span>
-          </div>
-        </div>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="shrink-0 rounded p-1 text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-500"
-          aria-label={expanded ? "Hide details" : "Show details"}
-          aria-expanded={expanded}
+        ))}
+        <span className="mx-1 h-4 w-px bg-slate-200" />
+        <select
+          value={harnessFilter}
+          onChange={(e) => setHarnessFilter(e.target.value)}
+          className="h-8 rounded-md border-0 bg-transparent px-2 py-1 text-xs font-medium text-brand-dark hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
         >
-          {expanded ? (
-            <HiMiniChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
-          ) : (
-            <HiMiniChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-        </button>
+          <option value="all">All apps</option>
+          {harnesses.map((h) => (
+            <option key={h} value={h}>{harnessDisplayName(h)}</option>
+          ))}
+        </select>
       </div>
-      {expanded && (
-        <div className="guard-fade-in mt-2 pl-4 border-l-2 border-slate-200">
-          <dl className="grid grid-cols-1 gap-1.5 text-xs text-slate-500">
-            <div className="flex gap-2">
-              <dt className="w-20 shrink-0 text-slate-400">ID</dt>
-              <dd className="font-mono text-slate-600">{receipt.artifact_id}</dd>
-            </div>
-            {receipt.artifact_hash && (
-              <div className="flex gap-2">
-                <dt className="w-20 shrink-0 text-slate-400">Hash</dt>
-                <dd className="font-mono text-slate-600">{receipt.artifact_hash}</dd>
-              </div>
-            )}
-            {receipt.capabilities_summary && (
-              <div className="flex gap-2">
-                <dt className="w-20 shrink-0 text-slate-400">Capabilities</dt>
-                <dd className="text-slate-600">{receipt.capabilities_summary}</dd>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <dt className="w-20 shrink-0 text-slate-400">Time</dt>
-              <dd className="font-mono text-slate-600">{new Date(receipt.timestamp).toLocaleString()}</dd>
-            </div>
-          </dl>
-        </div>
-      )}
+
+      {/* Tabs */}
+      <div className="flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm">
+        {TAB_CONFIG.map((t) => {
+          const Icon = t.icon;
+          const isActive = activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
+                isActive
+                  ? "bg-brand-blue text-white shadow-sm"
+                  : "text-brand-dark hover:bg-slate-50"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{t.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab content */}
+      <div className="min-h-[300px]">
+        {activeTab === "story" && (
+          <StoryTab receipts={filtered} selectedDay={dayFilter} onSelectDay={handleFilterDay} />
+        )}
+        {activeTab === "category" && (
+          <CategoryTab receipts={filtered} onFilterCategory={(cat) => setSearch(cat)} />
+        )}
+        {activeTab === "app" && (
+          <AppTab receipts={filtered} onFilterApp={(app) => setHarnessFilter(app)} />
+        )}
+        {activeTab === "explore" && (
+          <ExploreTab
+            receipts={props.receiptItems}
+            filteredReceipts={filtered}
+            filters={{ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter }}
+            onFilterDay={handleFilterDay}
+          />
+        )}
+      </div>
     </div>
   );
 }
-
-
 
 export function filterReceiptItems(
   items: GuardReceipt[],
