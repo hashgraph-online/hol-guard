@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { j as jsxRuntimeExports, G as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, h as harnessDisplayName, i as HiMiniChevronRight, E as EmptyState, H as HiMiniCheckCircle, p as HiMiniExclamationCircle, q as HiMiniWrenchScrewdriver, s as HiMiniXCircle, r as reactExports, t as HiMiniClipboardDocumentCheck, u as HiMiniClipboard } from "../guard-dashboard.js";
-=======
-import { j as jsxRuntimeExports, G as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, h as harnessDisplayName, i as HiMiniChevronRight, E as EmptyState, H as HiMiniCheckCircle, o as HiMiniExclamationCircle, p as HiMiniWrenchScrewdriver, q as HiMiniXCircle } from "../guard-dashboard.js";
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
 function collectHarnesses(snapshot) {
   const harnesses = /* @__PURE__ */ new Set();
   for (const item of snapshot.items) harnesses.add(item.harness);
@@ -27,10 +23,10 @@ function StatusIcon({ status }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" });
 }
 function StatusBadge({ status }) {
-  if (status === "protected") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-emerald-600", children: "Protected" });
-  if (status === "found_unprotected") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-attention", children: "Found, not installed" });
-  if (status === "needs_repair") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-purple", children: "Repair needed" });
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "Not found" });
+  if (status === "protected") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-emerald-600", children: "Active" });
+  if (status === "found_unprotected") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-attention", children: "Needs setup" });
+  if (status === "needs_repair") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-attention", children: "Needs setup" });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "Inactive" });
 }
 function FleetWorkspace(props) {
   const harnesses = collectHarnesses(props.runtime);
@@ -142,7 +138,6 @@ function FleetWorkspace(props) {
           }
         )
       ] })
-<<<<<<< HEAD
     ] }),
     activeInstalls.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
       SetupGuide,
@@ -222,8 +217,6 @@ function SetupStep(props) {
           ]
         }
       )
-=======
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
     ] })
   ] });
 }

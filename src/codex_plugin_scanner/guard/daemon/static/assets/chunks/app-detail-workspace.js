@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import { r as reactExports, J as fetchApprovalPage, K as fetchPolicy, h as harnessDisplayName, j as jsxRuntimeExports, L as HiMiniArrowLeft, i as HiMiniChevronRight, G as GuardHero, A as ActionButton, P as ProofStrip, M as HiMiniHome, n as HiMiniBolt, N as HiMiniAdjustmentsHorizontal, S as SectionLabel, d as formatRelativeTime, m as HiMiniExclamationTriangle, T as Tag, B as Badge, E as EmptyState, O as HiMiniCloud, Q as HiMiniChartBar, l as HiMiniChevronDown } from "../guard-dashboard.js";
-=======
-import { r as reactExports, D as fetchApprovalPage, F as fetchPolicy, h as harnessDisplayName, j as jsxRuntimeExports, I as HiMiniArrowLeft, i as HiMiniChevronRight, G as GuardHero, A as ActionButton, P as ProofStrip, J as HiMiniHome, K as HiMiniBolt, L as HiMiniAdjustmentsHorizontal, S as SectionLabel, d as formatRelativeTime, m as HiMiniExclamationTriangle, T as Tag, B as Badge, E as EmptyState, M as HiMiniCloud, N as HiMiniChartBar, l as HiMiniChevronDown } from "../guard-dashboard.js";
->>>>>>> caba3931d0561139d5a66783684c5991a0e8f4fc
+import { r as reactExports, J as fetchApprovalPage, K as fetchPolicy, h as harnessDisplayName, j as jsxRuntimeExports, L as HiMiniArrowLeft, i as HiMiniChevronRight, G as GuardHero, A as ActionButton, P as ProofStrip, M as HiMiniHome, n as HiMiniBolt, N as HiMiniAdjustmentsHorizontal, S as SectionLabel, d as formatRelativeTime, m as HiMiniExclamationTriangle, T as Tag, O as detectCategory, Q as CATEGORIES, B as Badge, E as EmptyState, R as HiMiniCloud, U as HiMiniChartBar, l as HiMiniChevronDown } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
 const tabOrder = ["overview", "activity", "settings"];
 function readTabFromUrl() {
@@ -358,6 +354,7 @@ function AppOverviewTab(props) {
 function AppActivityTab(props) {
   const [filter, setFilter] = reactExports.useState("all");
   const [timeFilter, setTimeFilter] = reactExports.useState("all");
+  const [categoryFilter, setCategoryFilter] = reactExports.useState("");
   const [search, setSearch] = reactExports.useState("");
   const [selectedIds, setSelectedIds] = reactExports.useState(/* @__PURE__ */ new Set());
   reactExports.useEffect(() => {
@@ -390,6 +387,9 @@ function AppActivityTab(props) {
       start.setDate(start.getDate() - 7);
       items = items.filter((r) => new Date(r.timestamp) >= start);
     }
+    if (categoryFilter) {
+      items = items.filter((r) => detectCategory(r) === categoryFilter);
+    }
     if (search.trim()) {
       const q = search.toLowerCase();
       items = items.filter(
@@ -397,7 +397,7 @@ function AppActivityTab(props) {
       );
     }
     return items;
-  }, [props.harnessReceipts, filter, timeFilter, search]);
+  }, [props.harnessReceipts, filter, timeFilter, search, categoryFilter]);
   const groups = reactExports.useMemo(() => {
     const today = [];
     const yesterday = [];
@@ -469,6 +469,19 @@ function AppActivityTab(props) {
             children: c.label
           },
           c.key
+        )),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 h-4 w-px bg-slate-200" }),
+        CATEGORIES.slice(0, 5).map((cat) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => {
+              setCategoryFilter(categoryFilter === cat.key ? "" : cat.key);
+              clearSelection();
+            },
+            className: `rounded-full px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider transition-all ${categoryFilter === cat.key ? `${cat.color} bg-slate-50 shadow-sm` : "border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`,
+            children: cat.label
+          },
+          cat.key
         )),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "ml-auto flex gap-2", children: [
           { key: "all", label: "All time" },
