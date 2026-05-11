@@ -330,6 +330,62 @@ export function BlockReasonBreakdown({ receipts }: { receipts: GuardReceipt[] })
 }
 
 // ──────────────────────────────────────────
+// Time of Day Heatmap
+// ──────────────────────────────────────────
+
+export function TimeOfDayHeatmap({ receipts }: { receipts: GuardReceipt[] }) {
+  const hours = useMemo(() => {
+    const counts = Array.from({ length: 24 }, () => 0);
+    for (const r of receipts) {
+      const h = new Date(r.timestamp).getHours();
+      counts[h] += 1;
+    }
+    return counts;
+  }, [receipts]);
+
+  const maxCount = Math.max(1, ...hours);
+  const hasData = hours.some((c) => c > 0);
+  if (!hasData) return null;
+
+  const intensity = (count: number) => {
+    const ratio = count / maxCount;
+    if (ratio === 0) return "bg-white";
+    if (ratio < 0.33) return "bg-blue-100";
+    if (ratio < 0.66) return "bg-blue-300";
+    return "bg-blue-500";
+  };
+
+  const formatHour = (h: number) => {
+    if (h === 0) return "12am";
+    if (h < 12) return `${h}am`;
+    if (h === 12) return "12pm";
+    return `${h - 12}pm`;
+  };
+
+  return (
+    <div className="space-y-2">
+      <h4 className="text-xs font-semibold text-brand-dark">When Guard is most active</h4>
+      <div className="grid grid-cols-12 gap-0.5">
+        {hours.map((count, h) => (
+          <div
+            key={h}
+            className={`aspect-square rounded-sm ${intensity(count)}`}
+            title={`${formatHour(h)}: ${count} actions`}
+          />
+        ))}
+      </div>
+      <div className="flex justify-between text-[9px] text-slate-400">
+        <span>12am</span>
+        <span>6am</span>
+        <span>12pm</span>
+        <span>6pm</span>
+        <span>11pm</span>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────
 // Charts Section
 // ──────────────────────────────────────────
 
@@ -353,6 +409,9 @@ export function HistoryCharts({ receipts }: { receipts: GuardReceipt[] }) {
       </div>
       <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
         <BlockReasonBreakdown receipts={receipts} />
+      </div>
+      <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+        <TimeOfDayHeatmap receipts={receipts} />
       </div>
     </div>
   );
