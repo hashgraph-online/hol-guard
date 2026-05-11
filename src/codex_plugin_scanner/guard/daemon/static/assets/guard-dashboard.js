@@ -15944,11 +15944,16 @@ function ExportPanel({
 }
 const ExploreTab = reactExports.memo(ExploreTabRaw);
 function useMountedTabs(activeTab) {
-  const mountedRef = reactExports.useRef(/* @__PURE__ */ new Set([activeTab]));
+  const [mounted, setMounted] = reactExports.useState(/* @__PURE__ */ new Set([activeTab]));
   reactExports.useEffect(() => {
-    mountedRef.current.add(activeTab);
+    setMounted((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
   }, [activeTab]);
-  return mountedRef.current;
+  return mounted;
 }
 const TIME_FILTER_VALUES = ["all", "today", "yesterday", "week", "last7d", "last30d"];
 const DECISION_FILTER_VALUES = ["all", "allow", "block"];

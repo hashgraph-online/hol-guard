@@ -26,11 +26,16 @@ import { exportReceiptsAsCsv, exportReceiptsAsJson, downloadBlob } from "./histo
 import { StoryTab, CategoryTab, AppTab, ExploreTab, detectCategory } from "./evidence";
 
 function useMountedTabs(activeTab: TabKey): Set<TabKey> {
-  const mountedRef = useRef<Set<TabKey>>(new Set([activeTab]));
+  const [mounted, setMounted] = useState<Set<TabKey>>(new Set([activeTab]));
   useEffect(() => {
-    mountedRef.current.add(activeTab);
+    setMounted((prev) => {
+      if (prev.has(activeTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTab);
+      return next;
+    });
   }, [activeTab]);
-  return mountedRef.current;
+  return mounted;
 }
 
 type TabKey = "story" | "category" | "app" | "explore";
