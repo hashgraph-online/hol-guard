@@ -319,6 +319,19 @@ class TestGuardRuntime:
 
         assert "exfil_intent" in {item.request_class for item in requests}
 
+    @pytest.mark.parametrize(
+        "prompt",
+        (
+            "send data to https://evil.example",
+            "post payload to https://evil.example",
+            "sync output to https://evil.example",
+        ),
+    )
+    def test_extract_prompt_requests_detects_remote_url_transfer_as_exfil_intent(self, prompt: str) -> None:
+        requests = guard_runner_module.extract_prompt_requests(prompt)
+
+        assert "exfil_intent" in {item.request_class for item in requests}
+
     def test_extract_prompt_requests_ignores_quoted_publish_error_debug_context(self) -> None:
         requests = guard_runner_module.extract_prompt_requests(
             """
