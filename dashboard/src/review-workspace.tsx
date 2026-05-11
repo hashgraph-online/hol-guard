@@ -1,0 +1,814 @@
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  HiMiniCheckCircle,
+  HiMiniNoSymbol,
+  HiMiniShieldCheck,
+  HiMiniExclamationTriangle,
+  HiMiniInformationCircle,
+  HiMiniChevronLeft,
+  HiMiniBolt,
+  HiMiniDocumentText,
+  HiMiniArrowPath,
+  HiMiniChevronDown,
+  HiMiniChevronUp,
+  HiMiniArrowTopRightOnSquare,
+  HiMiniClipboard,
+  HiMiniClipboardDocumentCheck,
+} from "react-icons/hi2";
+import {
+  ActionButton,
+  Badge,
+  EmptyState,
+  SectionLabel,
+  Tag,
+  GuardHero,
+  ProofStrip,
+} from "./approval-center-primitives";
+import {
+  harnessDisplayName,
+  resolveStoppedCommandText,
+  resolveTerminalLabel,
+  resolveDecisionV2Detail,
+  resolveDecisionV2Title,
+  displayArtifactName,
+  buildPauseLine,
+  resolveEnvelopeDisplayText,
+  formatRelativeTime,
+} from "./approval-center-utils";
+import {
+  SkillRiskCard,
+  SupplyChainRiskCard,
+  DecodedLayerCard,
+} from "./risk-signal-cards";
+import { DataFlowEvidenceCard } from "./data-flow-evidence-card";
+import { ScannerEvidenceSection } from "./scanner-evidence-badge";
+import type {
+  GuardApprovalRequest,
+  GuardArtifactDiff,
+  GuardPolicyDecision,
+  GuardReceipt,
+  GuardRuntimeSnapshot,
+  DecisionScope,
+} from "./guard-types";
+
+export type ReviewViewModel = {
+  item: GuardApprovalRequest;
+  diff: GuardArtifactDiff | null;
+  receipt: GuardReceipt | null;
+  policy: GuardPolicyDecision[];
+};
+
+type ReviewWorkspaceProps = {
+  requests: GuardApprovalRequest[];
+  activeRequestId: string | null;
+  detail: ReviewViewModel | null;
+  runtime: GuardRuntimeSnapshot | null;
+  resolutionMessage: string | null;
+  onOpenRequest: (requestId: string) => void;
+  onResolve: (payload: {
+    requestId: string;
+    action: "allow" | "block";
+    scope: DecisionScope;
+    reason: string;
+  }) => Promise<void> | void;
+  onGoHome: () => void;
+};
+
+const scopeChoices = [
+  {
+    value: "artifact" as DecisionScope,
+    label: "Just this time",
+    description: "Allow only this exact action. Guard will ask again for anything different.",
+  },
+  {
+    value: "workspace" as DecisionScope,
+    label: "This project",
+    description: "Allow this action in the current workspace only.",
+  },
+  {
+    value: "publisher" as DecisionScope,
+    label: "This source",
+    description: "Allow actions from the same source or publisher.",
+  },
+  {
+    value: "harness" as DecisionScope,
+    label: "This app",
+    description: "Allow similar actions from this AI app everywhere.",
+  },
+  {
+    value: "global" as DecisionScope,
+    label: "Everywhere",
+    description: "Allow this action across all your projects. Use with care.",
+  },
+];
+
+export function ReviewWorkspace(props: ReviewWorkspaceProps) {
+  const { requests, activeRequestId, detail } = props;
+  const queueRef = useRef<HTMLDivElement>(null);
+
+  // Keyboard navigation for queue
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (requests.length === 0) return;
+      const activeIdx = requests.findIndex((r) => r.request_id === activeRequestId);
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        const nextIdx = Math.min(activeIdx + 1, requests.length - 1);
+        if (nextIdx !== activeIdx) props.onOpenRequest(requests[nextIdx].request_id);
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        const prevIdx = Math.max(activeIdx - 1, 0);
+        if (prevIdx !== activeIdx) props.onOpenRequest(requests[prevIdx].request_id);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [requests, activeRequestId, props.onOpenRequest]);
+
+  if (requests.length === 0) {
+    return <ReviewEmptyState runtime={props.runtime} resolutionMessage={props.resolutionMessage} />;
+  }
+
+  const activeItem = activeRequestId
+    ? requests.find((r) => r.request_id === activeRequestId) ?? requests[0]
+    : requests[0];
+
+  const progressIndex = requests.findIndex((r) => r.request_id === activeItem.request_id);
+  const progress = `${Math.max(0, progressIndex) + 1} of ${requests.length}`;
+
+  return (
+    <div className="space-y-6">
+      <ReviewHeader count={requests.length} progress={progress} activeHarness={activeItem.harness} />
+
+      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+        <ReviewQueueList
+          requests={requests}
+          activeRequestId={activeItem.request_id}
+          onOpenRequest={props.onOpenRequest}
+          ref={queueRef}
+        />
+        <ReviewDecisionCard
+          detail={detail}
+          onResolve={props.onResolve}
+          onGoHome={props.onGoHome}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ReviewHeader({ count, progress, activeHarness }: { count: number; progress: string; activeHarness: string }) {
+  return (
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-[-0.02em] text-brand-dark">Review</h1>
+        <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">
+          Guard paused these actions before they ran. Review each one and decide what should happen.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-xs text-muted-foreground">{progress}</span>
+        <Badge tone="info">{count} waiting</Badge>
+        <Tag tone="blue">{harnessDisplayName(activeHarness)}</Tag>
+      </div>
+    </div>
+  );
+}
+
+const ReviewQueueList = forwardRef<HTMLDivElement, {
+  requests: GuardApprovalRequest[];
+  activeRequestId: string | null;
+  onOpenRequest: (requestId: string) => void;
+}>(({ requests, activeRequestId, onOpenRequest }, ref) => {
+  return (
+    <aside className="space-y-3" ref={ref}>
+      <SectionLabel>Queue</SectionLabel>
+      <div
+        role="listbox"
+        aria-label="Review queue"
+        className="max-h-[70vh] space-y-2 overflow-y-auto rounded-[1.25rem] border border-slate-200/70 bg-white/60 p-2"
+      >
+        {requests.map((item, index) => (
+          <QueueItemRow
+            key={item.request_id}
+            item={item}
+            active={item.request_id === activeRequestId}
+            index={index}
+            onClick={() => onOpenRequest(item.request_id)}
+          />
+        ))}
+      </div>
+    </aside>
+  );
+});
+ReviewQueueList.displayName = "ReviewQueueList";
+
+function QueueItemRow({ item, active, index, onClick }: {
+  item: GuardApprovalRequest;
+  active: boolean;
+  index: number;
+  onClick: () => void;
+}) {
+  const title = item.artifact_name ?? item.artifact_id;
+  const isBlocked = item.policy_action === "block";
+  return (
+    <button
+      onClick={onClick}
+      role="option"
+      aria-selected={active}
+      aria-posinset={index + 1}
+      aria-setsize={/* parent will provide */ undefined}
+      tabIndex={active ? 0 : -1}
+      className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
+        active
+          ? "border-brand-blue bg-brand-blue/[0.06]"
+          : "border-transparent bg-white hover:bg-slate-50"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="truncate text-sm font-medium text-brand-dark">{title}</p>
+        {isBlocked ? (
+          <HiMiniNoSymbol className="h-3.5 w-3.5 shrink-0 text-brand-attention" aria-hidden="true" />
+        ) : (
+          <HiMiniBolt className="h-3.5 w-3.5 shrink-0 text-brand-blue" aria-hidden="true" />
+        )}
+      </div>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">
+        {harnessDisplayName(item.harness)}
+      </p>
+    </button>
+  );
+}
+
+function ReviewDecisionCard(props: {
+  detail: ReviewViewModel | null;
+  onResolve: ReviewWorkspaceProps["onResolve"];
+  onGoHome: () => void;
+}) {
+  const detail = props.detail;
+  const item = detail?.item ?? null;
+  const [scope, setScope] = useState<DecisionScope>(item?.recommended_scope ?? "artifact");
+  const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
+  const [resolved, setResolved] = useState<"allow" | "block" | null>(null);
+  const [showConsequences, setShowConsequences] = useState(false);
+  const [showEvidence, setShowEvidence] = useState(false);
+  const [confirmScope, setConfirmScope] = useState<DecisionScope | null>(null);
+  const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const allowButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (item) {
+      setScope(item.recommended_scope);
+      setResolved(null);
+      setSubmitting(null);
+      setConfirmScope(null);
+      setPendingAction(null);
+      setErrorMessage(null);
+    }
+  }, [item?.request_id]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (submitting !== null) return;
+      if (confirmScope !== null) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          handleConfirm();
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          handleCancelConfirm();
+        }
+        return;
+      }
+      const target = event.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+
+      if (event.key === "a" || event.key === "A") {
+        event.preventDefault();
+        handleRequestResolve("allow");
+      }
+      if (event.key === "b" || event.key === "B") {
+        event.preventDefault();
+        handleRequestResolve("block");
+      }
+      const scopeIndex = parseInt(event.key, 10);
+      if (scopeIndex >= 1 && scopeIndex <= 5) {
+        event.preventDefault();
+        setScope(scopeChoices[scopeIndex - 1].value);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [submitting, confirmScope, scope, item?.request_id]);
+
+  const handleResolve = useCallback(
+    async (action: "allow" | "block") => {
+      if (!item) return;
+      setSubmitting(action);
+      setErrorMessage(null);
+      try {
+        await props.onResolve({
+          requestId: item.request_id,
+          action,
+          scope,
+          reason: action === "allow" ? "approved in review" : "blocked in review",
+        });
+        setResolved(action);
+        timerRef.current = setTimeout(() => setResolved(null), 2000);
+      } catch (err) {
+        setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
+      } finally {
+        setSubmitting(null);
+        setConfirmScope(null);
+        setPendingAction(null);
+      }
+    },
+    [item?.request_id, scope, props.onResolve]
+  );
+
+  const handleRequestResolve = useCallback(
+    (action: "allow" | "block") => {
+      const broadScopes: DecisionScope[] = ["publisher", "harness", "global"];
+      if (broadScopes.includes(scope)) {
+        setConfirmScope(scope);
+        setPendingAction(action);
+      } else {
+        void handleResolve(action);
+      }
+    },
+    [scope, handleResolve]
+  );
+
+  const handleConfirm = useCallback(() => {
+    if (pendingAction !== null) {
+      void handleResolve(pendingAction);
+    }
+  }, [pendingAction, handleResolve]);
+
+  const handleCancelConfirm = useCallback(() => {
+    setConfirmScope(null);
+    setPendingAction(null);
+  }, []);
+
+  if (!detail || !item) {
+    return (
+      <EmptyState
+        title="Select an action"
+        body="Choose a paused action from the queue to review and decide."
+        tone="teach"
+      />
+    );
+  }
+
+  const title = item.artifact_name ?? item.artifact_id;
+  const harnessName = harnessDisplayName(item.harness);
+  const whatWouldHappen = buildWhatWouldHappen(item);
+  const hasEvidence = (item.risk_signals?.length ?? 0) > 0 || item.risk_summary || item.why_now;
+
+  return (
+    <div className="space-y-5">
+      {/* Success banner */}
+      {resolved && (
+        <div
+          className={`guard-fade-in flex items-center gap-3 rounded-2xl border px-4 py-3 transition-all ${
+            resolved === "allow"
+              ? "border-brand-green/25 bg-brand-green-bg/30"
+              : "border-brand-attention/25 bg-brand-attention/[0.04]"
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          <HiMiniCheckCircle
+            className={`h-5 w-5 shrink-0 ${resolved === "allow" ? "text-brand-green" : "text-brand-attention"}`}
+            aria-hidden="true"
+          />
+          <p className={`text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`}>
+            {resolved === "allow" ? "Approved — action can proceed" : "Blocked — action stopped"}
+          </p>
+        </div>
+      )}
+
+      {/* Confirm modal for broad scopes */}
+      {confirmScope !== null && pendingAction !== null && (
+        <div className="guard-fade-in rounded-[1.75rem] border border-brand-attention/25 bg-brand-attention/[0.04] p-5 shadow-sm" role="alertdialog" aria-modal="true">
+          <div className="flex items-start gap-3">
+            <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
+            <div>
+              <h3 className="text-sm font-semibold text-brand-dark">
+                {pendingAction === "allow" ? "Allow" : "Block"} for {scopeChoices.find((s) => s.value === confirmScope)?.label}?
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                This choice will apply {confirmScope === "global" ? "across all your projects" : "broadly"}. Are you sure?
+              </p>
+              <div className="mt-4 flex gap-3">
+                <ActionButton onClick={handleConfirm} data-primary="true">
+                  Yes, {pendingAction}
+                </ActionButton>
+                <ActionButton variant="outline" onClick={handleCancelConfirm}>
+                  Cancel
+                </ActionButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main decision card */}
+      <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <SectionLabel>Paused action</SectionLabel>
+            <h2 className="mt-2 text-lg font-semibold text-brand-dark">{title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              From {harnessName}
+            </p>
+          </div>
+          <Badge tone={item.policy_action === "block" ? "attention" : "info"}>
+            {item.policy_action === "block" ? "Blocked" : "Needs review"}
+          </Badge>
+        </div>
+
+        {/* Risk summary */}
+        {item.risk_summary && (
+          <div className="mt-5 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4">
+            <div className="flex items-start gap-2.5">
+              <HiMiniExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
+              <p className="text-sm text-brand-dark">{item.risk_summary}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Action content — what actually got flagged */}
+        <ActionContentCard item={item} />
+
+        {/* What would happen */}
+        {whatWouldHappen && (
+          <div className="mt-5">
+            <button
+              onClick={() => setShowConsequences(!showConsequences)}
+              className="flex items-center gap-2 text-sm font-medium text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2"
+              aria-expanded={showConsequences}
+            >
+              <HiMiniInformationCircle className="h-4 w-4" aria-hidden="true" />
+              What would happen without Guard?
+              {showConsequences ? (
+                <HiMiniChevronUp className="h-3 w-3" aria-hidden="true" />
+              ) : (
+                <HiMiniChevronDown className="h-3 w-3" aria-hidden="true" />
+              )}
+            </button>
+            {showConsequences && (
+              <div className="mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4">
+                <p className="text-sm text-brand-dark">{whatWouldHappen}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Scope selection */}
+        <div className="mt-6 space-y-2">
+          <SectionLabel>How long should this choice last?</SectionLabel>
+          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Scope selection">
+            {scopeChoices.map((choice) => (
+              <button
+                key={choice.value}
+                onClick={() => setScope(choice.value)}
+                role="radio"
+                aria-checked={scope === choice.value}
+                className={`rounded-xl border px-4 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-brand-blue/20 ${
+                  scope === choice.value
+                    ? "border-brand-blue bg-brand-blue/[0.06]"
+                    : "border-slate-200/70 bg-white hover:bg-slate-50"
+                }`}
+              >
+                <p className="text-sm font-medium text-brand-dark">{choice.label}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{choice.description}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Error state */}
+        {errorMessage && (
+          <div className="guard-fade-in mt-4 rounded-xl border border-brand-purple/25 bg-brand-purple/[0.05] p-4">
+            <div className="flex items-start gap-3">
+              <HiMiniExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-purple" aria-hidden="true" />
+              <div className="flex-1">
+                <p className="text-sm text-brand-purple">{errorMessage}</p>
+                <button
+                  onClick={() => {
+                    setErrorMessage(null);
+                    if (pendingAction) handleRequestResolve(pendingAction);
+                  }}
+                  className="mt-2 inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <ActionButton
+            ref={allowButtonRef}
+            variant="success"
+            onClick={() => handleRequestResolve("allow")}
+            disabled={submitting !== null}
+          >
+            {submitting === "allow" ? (
+              <span className="flex items-center gap-2">
+                <HiMiniArrowPath className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Approving…
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <HiMiniCheckCircle className="h-4 w-4" aria-hidden="true" />
+                Allow
+              </span>
+            )}
+          </ActionButton>
+          <ActionButton
+            variant="outline"
+            onClick={() => handleRequestResolve("block")}
+            disabled={submitting !== null}
+          >
+            {submitting === "block" ? (
+              <span className="flex items-center gap-2">
+                <HiMiniArrowPath className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Blocking…
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <HiMiniNoSymbol className="h-4 w-4" aria-hidden="true" />
+                Block
+              </span>
+            )}
+          </ActionButton>
+        </div>
+
+        {/* Keyboard hint */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <HiMiniDocumentText className="h-3.5 w-3.5" aria-hidden="true" />
+            Keyboard:
+          </span>
+          <span className="flex items-center gap-1"><kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono">A</kbd> allow</span>
+          <span className="flex items-center gap-1"><kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono">B</kbd> block</span>
+          <span className="flex items-center gap-1"><kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono">1</kbd>–<kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono">5</kbd> scope</span>
+          <span className="flex items-center gap-1"><kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono">?</kbd> help</span>
+        </div>
+      </div>
+
+      {/* Evidence section */}
+      {hasEvidence && (
+        <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+          <button
+            onClick={() => setShowEvidence(!showEvidence)}
+            className="flex w-full items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2"
+            aria-expanded={showEvidence}
+          >
+            <SectionLabel>Why Guard paused this</SectionLabel>
+            {showEvidence ? (
+              <HiMiniChevronUp className="h-4 w-4 text-slate-400" aria-hidden="true" />
+            ) : (
+              <HiMiniChevronDown className="h-4 w-4 text-slate-400" aria-hidden="true" />
+            )}
+          </button>
+          {showEvidence && (
+            <div className="mt-4 space-y-3">
+              <ScannerEvidenceSection signals={item.decision_v2_json?.signals ?? []} />
+              {item.why_now && (
+                <div className="rounded-xl border border-brand-purple/15 bg-brand-purple/[0.04] p-4">
+                  <p className="text-sm text-brand-dark">{item.why_now}</p>
+                </div>
+              )}
+              <DataFlowEvidenceCard item={item} />
+              <SkillRiskCard item={item} />
+              <SupplyChainRiskCard item={item} />
+              <DecodedLayerCard item={item} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Last time */}
+      {detail.receipt && (
+        <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+          <SectionLabel>Last time</SectionLabel>
+          <p className="mt-2 text-sm text-muted-foreground">
+            You previously {detail.receipt.policy_decision}d a similar action{" "}
+            {formatRelativeTime(detail.receipt.timestamp)}.
+          </p>
+          {detail.diff && detail.diff.changed_fields.length > 0 && (
+            <div className="mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4">
+              <p className="text-sm font-medium text-brand-dark">What changed since then:</p>
+              <ul className="mt-2 space-y-1">
+                {detail.diff.changed_fields.map((field) => (
+                  <li key={field} className="flex items-center gap-2 text-sm text-brand-dark">
+                    <HiMiniCheckCircle className="h-3.5 w-3.5 shrink-0 text-brand-blue" aria-hidden="true" />
+                    {field}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReviewEmptyState({ runtime, resolutionMessage }: { runtime: GuardRuntimeSnapshot | null; resolutionMessage: string | null }) {
+  const appsCount = runtime?.managed_installs?.filter((i) => i.active).length ?? 0;
+
+  return (
+    <div className="space-y-6">
+      <GuardHero
+        status="clear"
+        headline="Nothing to review"
+        subheadline="Guard is watching your AI work. No actions need your decision right now."
+      />
+
+      <ProofStrip
+        items={[
+          { label: "Status", value: "All clear", tone: "green" },
+          { label: "Apps protected", value: appsCount, tone: appsCount > 0 ? "green" : "slate" },
+        ]}
+      />
+
+      {resolutionMessage && (
+        <div className="flex items-start gap-3 rounded-2xl border border-brand-green/25 bg-brand-green-bg/30 px-4 py-3">
+          <HiMiniCheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
+          <p className="text-sm font-medium text-brand-green-text">{resolutionMessage}</p>
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-[1.75rem] border border-brand-green/15 bg-brand-green/[0.04] p-5 shadow-sm sm:p-6">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-green/10">
+              <HiMiniShieldCheck className="h-5 w-5 text-brand-green" aria-hidden="true" />
+            </span>
+            <div>
+              <SectionLabel>Protection active</SectionLabel>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Guard is running and will pause any risky actions from your AI apps. When something needs review, it will appear here.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+          <SectionLabel>What Guard does</SectionLabel>
+          <ul className="mt-3 space-y-2">
+            {[
+              "Pauses risky file reads and writes",
+              "Blocks commands that could delete data",
+              "Warns about new network connections",
+              "Stops credential sharing",
+            ].map((item) => (
+              <li key={item} className="flex items-start gap-2 text-sm text-brand-dark">
+                <HiMiniCheckCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-green" aria-hidden="true" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionContentCard({ item }: { item: GuardApprovalRequest }) {
+  const launchText = resolveStoppedCommandText(item);
+  const detailText = resolveDecisionV2Detail(item);
+  const pauseReason = buildPauseLine(item);
+  const envelope = item.action_envelope_json;
+  const isMcpTool = envelope?.action_type === "mcp_tool";
+  const mcpServer = isMcpTool ? (envelope?.mcp_server ?? null) : null;
+  const mcpTool = isMcpTool ? (envelope?.mcp_tool ?? null) : null;
+  const mcpInputSummary =
+    isMcpTool && envelope !== null && envelope.raw_payload_redacted
+      ? (() => {
+          const inputs = envelope.raw_payload_redacted.arguments ?? envelope.raw_payload_redacted.input ?? envelope.raw_payload_redacted.params ?? null;
+          if (inputs === null) return null;
+          try {
+            const serialized = JSON.stringify(inputs);
+            if (serialized.length <= 2) return null;
+            return serialized.length > 140 ? `${serialized.slice(0, 140)}…` : serialized;
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+  const terminalLabel = resolveTerminalLabel(item);
+
+  return (
+    <div className="mt-5 space-y-3">
+      {/* MCP badge */}
+      {isMcpTool && mcpServer !== null && mcpTool !== null && (
+        <div className="rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-3 py-2.5">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.15em] text-brand-blue">
+              MCP
+            </span>
+            <span className="font-mono text-sm font-medium text-brand-dark">
+              {mcpServer} → {mcpTool}
+            </span>
+          </div>
+          {mcpInputSummary !== null && (
+            <p className="mt-1 truncate font-mono text-xs text-brand-dark/60">
+              {mcpInputSummary}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Why it was paused */}
+      <p className="text-sm leading-relaxed text-brand-dark/80">
+        {pauseReason}
+      </p>
+      {detailText && (
+        <p className="text-sm leading-relaxed text-brand-dark/80">
+          {detailText}
+        </p>
+      )}
+
+      {/* Terminal display of actual content */}
+      <div className="overflow-hidden rounded-[1.25rem] bg-[#0f172a] shadow-lg">
+        <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-brand-purple" />
+          <span className="h-2.5 w-2.5 rounded-full bg-brand-blue" />
+          <span className="h-2.5 w-2.5 rounded-full bg-brand-green" />
+          <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45">
+            {terminalLabel}
+          </span>
+          <span className="ml-auto">
+            <CopyButton text={launchText} />
+          </span>
+        </div>
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90">
+          {launchText}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [text]);
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      aria-label="Copy to clipboard"
+      className="inline-flex items-center gap-1 rounded-full border border-white/20 bg-white/10 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+    >
+      {copied ? (
+        <HiMiniClipboardDocumentCheck className="h-3 w-3" aria-hidden="true" />
+      ) : (
+        <HiMiniClipboard className="h-3 w-3" aria-hidden="true" />
+      )}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
+function buildWhatWouldHappen(item: GuardApprovalRequest): string | null {
+  const type = item.artifact_type;
+  if (type?.includes("file_write") || type?.includes("file_read")) {
+    return `Without Guard, ${harnessDisplayName(item.harness)} would access "${item.artifact_name ?? item.artifact_id}" immediately. Guard paused it so you can review first.`;
+  }
+  if (type?.includes("shell") || type?.includes("command")) {
+    return `Without Guard, this shell command would run immediately. Guard paused it so you can review what it does first.`;
+  }
+  if (type?.includes("network") || type?.includes("request")) {
+    return `Without Guard, this request would go to the network immediately. Guard paused it so you can review the destination first.`;
+  }
+  if (type?.includes("mcp") || type?.includes("tool")) {
+    return `Without Guard, this tool would execute immediately. Guard paused it so you can review what data it accesses.`;
+  }
+  return `Without Guard, this action would run immediately. Guard paused it so you can review and decide.`;
+}
+
+
