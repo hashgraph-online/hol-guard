@@ -10,6 +10,9 @@ import {
   isReadOnlyQueueGroup,
   bulkApproveActionCount,
   bulkApprovePrimaryIds,
+  filterQueueByCategory,
+  queueCategoriesForItems,
+  resolveQueueCategory,
 } from "./queue-state";
 
 function assert(condition: boolean, message: string): void {
@@ -210,6 +213,44 @@ assert(emptyResults.length === 0, "T-QS-21: searchQueue returns empty array when
 const allResults = searchQueue([BASE_REQUEST, shellItem], "");
 assert(allResults.length === 2, "T-QS-22: searchQueue returns all items when search term is empty");
 
+const perlEditEnvelope: GuardActionEnvelope = {
+  ...shellEnvelope,
+  command: "perl -0pi -e 's/\\n\\z//' docs/guard-cloud-api-inventory.generated.md docs/guard-cloud-route-inventory.generated.md",
+};
+
+const perlEditItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-perl-edit",
+  artifact_name: "Bash destructive shell command",
+  action_envelope_json: perlEditEnvelope,
+  risk_summary: "Requests a sensitive native tool action: destructive shell command.",
+};
+
+assert(
+  resolveQueueCategory(perlEditItem).label === "File edit command",
+  "T-QS-23: perl -0pi in-place doc edit is categorized as File edit command, not destructive shell"
+);
+
+assert(
+  filterQueueByCategory([BASE_REQUEST, perlEditItem], "file_edit").map((item) => item.request_id).join(",") === "req-perl-edit",
+  "T-QS-24: filterQueueByCategory isolates file edit review items"
+);
+
+assert(
+  searchQueue([perlEditItem], "file edit").length === 1,
+  "T-QS-25: searchQueue matches semantic review category labels"
+);
+
+assert(
+  sortQueue([shellItem, perlEditItem], "category")[0].request_id === "req-perl-edit",
+  "T-QS-26: sortQueue can group review items by category"
+);
+
+assert(
+  queueCategoriesForItems([shellItem, perlEditItem]).some((category) => category.id === "file_edit"),
+  "T-QS-27: queueCategoriesForItems exposes specific category filters present in queue"
+);
+
 const mcpEnvelope: GuardActionEnvelope = {
   ...shellEnvelope,
   action_type: "mcp_tool",
@@ -225,67 +266,67 @@ const mcpItem: GuardApprovalRequest = {
 };
 
 const mcpResults = searchQueue([BASE_REQUEST, shellItem, mcpItem], "filesystem");
-assert(mcpResults.length === 1, "T-QS-23: searchQueue matches MCP server name");
-assert(mcpResults[0].request_id === "req-mcp", "T-QS-24: searchQueue returns correct item for MCP server search");
+assert(mcpResults.length === 1, "T-QS-28: searchQueue matches MCP server name");
+assert(mcpResults[0].request_id === "req-mcp", "T-QS-29: searchQueue returns correct item for MCP server search");
 
 assert(
   resolveStaleRequestRecovery("req-1", [BASE_REQUEST, req2]) === "req-1",
-  "T-QS-25: resolveStaleRequestRecovery returns active ID when request is still in queue"
+  "T-QS-30: resolveStaleRequestRecovery returns active ID when request is still in queue"
 );
 
 assert(
   resolveStaleRequestRecovery("req-gone", [req2, req3]) === "req-2",
-  "T-QS-26: resolveStaleRequestRecovery falls back to first queue item when active request is stale"
+  "T-QS-31: resolveStaleRequestRecovery falls back to first queue item when active request is stale"
 );
 
 assert(
   resolveStaleRequestRecovery("req-gone", []) === null,
-  "T-QS-27: resolveStaleRequestRecovery returns null when queue is empty and request is stale"
+  "T-QS-32: resolveStaleRequestRecovery returns null when queue is empty and request is stale"
 );
 
 assert(
   resolveStaleRequestRecovery(null, [BASE_REQUEST]) === null,
-  "T-QS-28: resolveStaleRequestRecovery returns null when activeRequestId is null"
+  "T-QS-33: resolveStaleRequestRecovery returns null when activeRequestId is null"
 );
 
 const needsDecision = buildHomePrimaryState(3, 2);
 assert(
   needsDecision.status === "needs_decision",
-  "T-QS-29: buildHomePrimaryState returns needs_decision status when pending count is greater than zero"
+  "T-QS-34: buildHomePrimaryState returns needs_decision status when pending count is greater than zero"
 );
 assert(
   needsDecision.copy.includes("3 actions"),
-  "T-QS-30: buildHomePrimaryState includes action count in copy when pending"
+  "T-QS-35: buildHomePrimaryState includes action count in copy when pending"
 );
 assert(
   needsDecision.ctaLabel === "Review blocked action",
-  "T-QS-31: buildHomePrimaryState CTA is 'Review blocked action' when pending"
+  "T-QS-36: buildHomePrimaryState CTA is 'Review blocked action' when pending"
 );
 
 const setupNeeded = buildHomePrimaryState(0, 0);
 assert(
   setupNeeded.status === "setup_needed",
-  "T-QS-32: buildHomePrimaryState returns setup_needed when no watched apps and no pending"
+  "T-QS-37: buildHomePrimaryState returns setup_needed when no watched apps and no pending"
 );
 assert(
   setupNeeded.ctaLabel === "Set up protection",
-  "T-QS-33: buildHomePrimaryState CTA is 'Set up protection' when no watched apps"
+  "T-QS-38: buildHomePrimaryState CTA is 'Set up protection' when no watched apps"
 );
 
 const protectedState = buildHomePrimaryState(0, 2);
 assert(
   protectedState.status === "protected",
-  "T-QS-34: buildHomePrimaryState returns protected status when guarded with apps present"
+  "T-QS-39: buildHomePrimaryState returns protected status when guarded with apps present"
 );
 assert(
   protectedState.copy.includes("protecting"),
-  "T-QS-35: buildHomePrimaryState copy mentions protecting when protected"
+  "T-QS-40: buildHomePrimaryState copy mentions protecting when protected"
 );
 
 const singlePending = buildHomePrimaryState(1, 1);
 assert(
   singlePending.copy.includes("1 action paused"),
-  "T-QS-36: buildHomePrimaryState uses singular 'action' when exactly one pending"
+  "T-QS-41: buildHomePrimaryState uses singular 'action' when exactly one pending"
 );
 
 const fileReadEnvelope: GuardActionEnvelope = {
