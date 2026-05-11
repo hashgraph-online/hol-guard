@@ -34,7 +34,7 @@ export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
   }
   if (props.receipts.kind === "error") {
     return (
-      <div className="rounded-[1.75rem] border border-brand-attention/15 bg-brand-attention/[0.04] p-6">
+      <div className="rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4">
         <p className="text-sm text-brand-dark">{props.receipts.message}</p>
       </div>
     );
@@ -164,8 +164,8 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
         cta={<Badge tone="info">{totalCount} saved</Badge>}
       />
 
-      <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-1.5">
           <FilterChip
             active={decisionFilter === "all"}
             onClick={() => setDecisionFilter("all")}
@@ -184,7 +184,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
           >
             Blocked
           </FilterChip>
-          <div className="mx-2 h-5 w-px bg-slate-200" />
+          <span className="mx-1 h-4 w-px bg-slate-200" />
           <FilterChip
             active={timeFilter === "all"}
             onClick={() => setTimeFilter("all")}
@@ -209,11 +209,11 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
           >
             This week
           </FilterChip>
-          <div className="mx-2 h-5 w-px bg-slate-200" />
+          <span className="mx-1 h-4 w-px bg-slate-200" />
           <select
             value={harnessFilter}
             onChange={(e) => setHarnessFilter(e.target.value)}
-            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            className="h-8 rounded-md border-0 bg-transparent px-2 py-1 text-xs font-medium text-brand-dark hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
           >
             <option value="all">All apps</option>
             {harnesses.map((h) => (
@@ -225,7 +225,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name or app..."
-          className="mt-3 w-full rounded-xl border border-slate-200/70 bg-white px-4 py-2.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
         />
       </div>
 
@@ -296,10 +296,10 @@ function FilterChip({
   return (
     <button
       onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
         active
-          ? "bg-brand-blue text-white shadow-sm"
-          : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
+          ? "bg-brand-blue text-white"
+          : "text-slate-500 hover:bg-slate-100 hover:text-brand-dark"
       }`}
     >
       {children}
@@ -351,24 +351,24 @@ function ReceiptGroup({ title, items }: { title: string; items: GuardReceipt[] }
     });
   };
   return (
-    <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6 transition-shadow duration-200 hover:shadow-md">
+    <div className="border-t border-slate-100 pt-4">
       <button
         onClick={toggle}
-        className="flex w-full items-center justify-between text-left"
+        className="flex w-full items-center justify-between text-left group"
         aria-expanded={!collapsed}
       >
-        <SectionLabel>{title}</SectionLabel>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">{items.length} events</span>
-          {collapsed ? (
-            <HiMiniChevronDown className="h-4 w-4 text-slate-400" aria-hidden="true" />
-          ) : (
-            <HiMiniChevronUp className="h-4 w-4 text-slate-400" aria-hidden="true" />
-          )}
+          <SectionLabel>{title}</SectionLabel>
+          <span className="text-xs text-slate-400">{items.length}</span>
         </div>
+        {collapsed ? (
+          <HiMiniChevronDown className="h-4 w-4 text-slate-300 transition-colors group-hover:text-slate-500" aria-hidden="true" />
+        ) : (
+          <HiMiniChevronUp className="h-4 w-4 text-slate-300 transition-colors group-hover:text-slate-500" aria-hidden="true" />
+        )}
       </button>
       {!collapsed && (
-        <div className="mt-4 space-y-3">
+        <div className="mt-2 space-y-0">
           {items.map((receipt) => (
             <HistoryRow key={receipt.receipt_id} receipt={receipt} />
           ))}
@@ -381,74 +381,63 @@ function ReceiptGroup({ title, items }: { title: string; items: GuardReceipt[] }
 function HistoryRow({ receipt }: { receipt: GuardReceipt }) {
   const [expanded, setExpanded] = useState(false);
   const decisionLabel = receipt.policy_decision === "allow" ? "Allowed" : "Blocked";
+  const decisionColor = receipt.policy_decision === "allow" ? "text-emerald-600" : "text-brand-attention";
   const name = receipt.artifact_name ?? receipt.artifact_id;
   const appHref = guardAwareHref(`/apps/${receipt.harness}`);
   return (
-    <div className="rounded-xl border border-slate-200/70 bg-white overflow-hidden">
-      <div className="flex items-start justify-between gap-3 px-4 py-3">
+    <div className="border-b border-slate-100 py-2.5 transition-colors hover:bg-slate-50/50">
+      <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm text-brand-dark">
-            <span className="font-medium">{decisionLabel}</span>{" "}
-            <span className="font-mono text-xs">{name}</span>
-            <span className="mx-1 text-slate-300">·</span>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs font-medium ${decisionColor}`}>{decisionLabel}</span>
+            <span className="truncate font-mono text-xs text-slate-500">{name}</span>
+          </div>
+          <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400">
             <a
               href={appHref}
-              className="text-xs text-brand-blue hover:text-brand-dark transition-colors"
+              className="text-brand-blue hover:text-brand-dark transition-colors"
             >
               {harnessDisplayName(receipt.harness)}
             </a>
-          </p>
-          {receipt.capabilities_summary && (
-            <p className="mt-1 text-xs text-muted-foreground">{receipt.capabilities_summary}</p>
+            <span>·</span>
+            <span>{formatRelativeTime(receipt.timestamp)}</span>
+          </div>
+        </div>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="shrink-0 rounded p-1 text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-500"
+          aria-label={expanded ? "Hide details" : "Show details"}
+          aria-expanded={expanded}
+        >
+          {expanded ? (
+            <HiMiniChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <HiMiniChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
           )}
-          <p className="mt-1 text-[11px] text-muted-foreground">{formatRelativeTime(receipt.timestamp)}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Tag tone={receipt.policy_decision === "allow" ? "green" : "attention"}>
-            {receipt.policy_decision}
-          </Tag>
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark"
-            aria-label={expanded ? "Hide details" : "Show details"}
-            aria-expanded={expanded}
-          >
-            {expanded ? (
-              <HiMiniChevronUp className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <HiMiniChevronDown className="h-4 w-4" aria-hidden="true" />
-            )}
-          </button>
-        </div>
+        </button>
       </div>
       {expanded && (
-        <div className="guard-fade-in border-t border-slate-200/70 bg-slate-50/60 px-4 py-3">
-          <dl className="grid grid-cols-1 gap-2 text-xs">
-            <div>
-              <dt className="text-muted-foreground">Action ID</dt>
-              <dd className="mt-0.5 font-mono text-brand-dark">{receipt.artifact_id}</dd>
+        <div className="guard-fade-in mt-2 pl-4 border-l-2 border-slate-200">
+          <dl className="grid grid-cols-1 gap-1.5 text-xs text-slate-500">
+            <div className="flex gap-2">
+              <dt className="w-20 shrink-0 text-slate-400">ID</dt>
+              <dd className="font-mono text-slate-600">{receipt.artifact_id}</dd>
             </div>
             {receipt.artifact_hash && (
-              <div>
-                <dt className="text-muted-foreground">Hash</dt>
-                <dd className="mt-0.5 font-mono text-brand-dark">{receipt.artifact_hash}</dd>
+              <div className="flex gap-2">
+                <dt className="w-20 shrink-0 text-slate-400">Hash</dt>
+                <dd className="font-mono text-slate-600">{receipt.artifact_hash}</dd>
               </div>
             )}
             {receipt.capabilities_summary && (
-              <div>
-                <dt className="text-muted-foreground">Capabilities</dt>
-                <dd className="mt-0.5 text-brand-dark">{receipt.capabilities_summary}</dd>
+              <div className="flex gap-2">
+                <dt className="w-20 shrink-0 text-slate-400">Capabilities</dt>
+                <dd className="text-slate-600">{receipt.capabilities_summary}</dd>
               </div>
             )}
-            {receipt.provenance_summary && (
-              <div>
-                <dt className="text-muted-foreground">Provenance</dt>
-                <dd className="mt-0.5 text-brand-dark">{receipt.provenance_summary}</dd>
-              </div>
-            )}
-            <div>
-              <dt className="text-muted-foreground">Time</dt>
-              <dd className="mt-0.5 font-mono text-brand-dark">{new Date(receipt.timestamp).toLocaleString()}</dd>
+            <div className="flex gap-2">
+              <dt className="w-20 shrink-0 text-slate-400">Time</dt>
+              <dd className="font-mono text-slate-600">{new Date(receipt.timestamp).toLocaleString()}</dd>
             </div>
           </dl>
         </div>
