@@ -11,7 +11,7 @@ export function SkillRiskCard(props: SkillRiskCardProps) {
   if (skillSignals.length === 0) return null;
   return (
     <div
-      className="rounded-xl border border-amber-200/60 bg-amber-50/60 p-4"
+      className="rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-4"
       aria-label="Skill risk details"
     >
       <SectionLabel>Skill risk</SectionLabel>
@@ -38,7 +38,7 @@ function SkillSignalRow(props: SkillSignalRowProps) {
         <p className="font-mono text-[11px] text-muted-foreground break-all">{signal.technical_detail}</p>
       ) : null}
       {signal.false_positive_hint !== null ? (
-        <p className="text-xs leading-5 text-amber-700/80">
+        <p className="text-xs leading-5 text-brand-dark/60">
           <span className="font-semibold">Might be safe if: </span>
           {signal.false_positive_hint}
         </p>
@@ -60,7 +60,7 @@ export function SupplyChainRiskCard(props: SupplyChainRiskCardProps) {
   if (scSignals.length === 0 && !isSupplyChainArtifact) return null;
   return (
     <div
-      className="rounded-xl border border-orange-200/60 bg-orange-50/60 p-4"
+      className="rounded-xl border border-brand-purple/20 bg-brand-purple/[0.04] p-4"
       aria-label="Supply-chain risk"
     >
       <SectionLabel>Supply-chain risk</SectionLabel>
@@ -93,7 +93,7 @@ function SupplyChainSignalRow(props: SupplyChainSignalRowProps) {
         <p className="font-mono text-[11px] text-brand-purple">{signal.advisory_id}</p>
       ) : null}
       {signal.false_positive_hint !== null ? (
-        <p className="text-xs leading-5 text-orange-700/80">
+        <p className="text-xs leading-5 text-brand-dark/60">
           <span className="font-semibold">Might be safe if: </span>
           {signal.false_positive_hint}
         </p>
@@ -116,7 +116,7 @@ export function DecodedLayerCard(props: DecodedLayerCardProps) {
   })());
   return (
     <div
-      className="rounded-xl border border-rose-200/60 bg-rose-50/60 p-4"
+      className="rounded-xl border border-brand-purple/20 bg-brand-purple/[0.04] p-4"
       aria-label="Decoded-layer evidence"
     >
       <SectionLabel>Encoded payload detected</SectionLabel>
@@ -127,7 +127,7 @@ export function DecodedLayerCard(props: DecodedLayerCardProps) {
         </p>
       ) : null}
       {primary.evidence_ref !== null ? (
-        <p className="mt-2 font-mono text-[11px] text-rose-700/70 break-all">{primary.evidence_ref}</p>
+        <p className="mt-2 font-mono text-[11px] text-brand-purple/70 break-all">{primary.evidence_ref}</p>
       ) : null}
       {extraCount > 0 ? (
         <p className="mt-1 text-xs text-muted-foreground">

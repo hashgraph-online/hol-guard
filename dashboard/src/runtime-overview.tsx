@@ -1,5 +1,5 @@
-import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag } from "./approval-center-primitives";
-import { harnessDisplayName } from "./approval-center-utils";
+import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag, ProofStrip } from "./approval-center-primitives";
+import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
 import type { GuardCloudSyncHealth, GuardInventoryItem, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
 const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw"] as const;
@@ -11,9 +11,9 @@ type RuntimeOverviewProps = {
   inventory?: GuardInventoryItem[];
 };
 
-function headlineTone(state: GuardRuntimeSnapshot["headline_state"]): "info" | "success" | "warning" | "destructive" {
+function headlineTone(state: GuardRuntimeSnapshot["headline_state"]): "info" | "success" | "attention" {
   if (state === "blocked") {
-    return "destructive";
+    return "attention";
   }
   if (state === "connected" || state === "local_only") {
     return "info";
@@ -21,7 +21,7 @@ function headlineTone(state: GuardRuntimeSnapshot["headline_state"]): "info" | "
   if (state === "protected") {
     return "success";
   }
-  return "warning";
+  return "info";
 }
 
 function remediationLine(snapshot: GuardRuntimeSnapshot): string {
@@ -37,7 +37,7 @@ function remediationLine(snapshot: GuardRuntimeSnapshot): string {
   if (snapshot.cloud_state === "local_only") {
     return "Stay local for now or connect this machine when you want shared queue memory and cross-device proof.";
   }
-  return "Open Guard Cloud for shared decisions, Watched Apps for local coverage, or the review queue when something needs your choice.";
+  return "Open Guard Cloud for shared decisions, Apps for local coverage, or the review queue when something needs your choice.";
 }
 
 export type ApprovalCenterHealthState = "ready" | "starting" | "stale" | "repair_needed";
@@ -142,10 +142,10 @@ function CloudSyncHealthCard(props: { health: GuardCloudSyncHealth }) {
   );
 }
 
-function approvalHealthTone(state: ApprovalCenterHealthState): "green" | "blue" | "slate" | "red" {
+function approvalHealthTone(state: ApprovalCenterHealthState): "green" | "blue" | "slate" | "attention" {
   if (state === "ready") return "green";
   if (state === "starting") return "blue";
-  if (state === "repair_needed") return "red";
+  if (state === "repair_needed") return "attention";
   return "slate";
 }
 
@@ -164,104 +164,30 @@ function ApprovalCenterHealthCard(props: { snapshot: GuardRuntimeSnapshot }) {
   );
 }
 
-function WatchedAppsCard(props: { inventory: GuardInventoryItem[] | undefined }) {
+function WatchedAppsList(props: { inventory: GuardInventoryItem[] | undefined }) {
   const inventory = props.inventory ?? [];
+  const foundHarnesses = WATCHED_HARNESSES.filter((h) => inventory.some((item) => item.harness === h));
   return (
-    <div className="rounded-xl border border-border bg-white px-5 py-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Watched apps</p>
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {WATCHED_HARNESSES.map((harness) => {
-          const found = inventory.some((item) => item.harness === harness);
-          return (
-            <WatchedHarnessChip key={harness} harness={harness} installed={found} />
-          );
-        })}
-      </div>
+    <div className="flex flex-wrap gap-2">
+      {WATCHED_HARNESSES.map((harness) => {
+        const found = inventory.some((item) => item.harness === harness);
+        return (
+          <span
+            key={harness}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+              found ? "border-brand-green/25 bg-brand-green-bg/50 text-brand-green-text" : "border-slate-200 bg-slate-50 text-slate-400"
+            }`}
+          >
+            {harnessDisplayName(harness)}
+            {found && <span className="h-1.5 w-1.5 rounded-full bg-brand-green" />}
+          </span>
+        );
+      })}
     </div>
   );
 }
 
-function WatchedHarnessChip(props: { harness: WatchedHarnessName; installed: boolean }) {
-  return (
-    <div className={"flex items-center justify-between gap-2 rounded-lg border px-3 py-2 " + (props.installed ? "border-green-200 bg-green-50" : "border-slate-200 bg-slate-50")}>
-      <span className="text-xs font-semibold text-brand-dark">{harnessDisplayName(props.harness)}</span>
-      <Tag tone={props.installed ? "green" : "slate"}>{props.installed ? "seen" : "—"}</Tag>
-    </div>
-  );
-}
 
-function ProtectionLevelCard(props: { securityLevel: "balanced" | "strict" | "custom" | "gentle" | "paranoid" | undefined }) {
-  const level = props.securityLevel ?? "balanced";
-  const copy = resolveProtectionLevelCopy(level);
-  const toneClass = level === "strict" ? "text-brand-purple" : level === "balanced" ? "text-brand-blue" : "text-slate-500";
-  return (
-    <div className="rounded-xl border border-border bg-white px-5 py-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Protection level</p>
-      <p className={"mt-2 text-base font-semibold capitalize " + toneClass}>{level}</p>
-      <p className="mt-1 text-sm leading-relaxed text-brand-dark/80">{copy}</p>
-    </div>
-  );
-}
-
-function RecentProtectionCard(props: { receipt: GuardReceipt | undefined }) {
-  if (!props.receipt) {
-    return (
-      <div className="rounded-xl border border-border bg-white px-5 py-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Recent protection</p>
-        <p className="mt-2 text-sm leading-relaxed text-brand-dark/60">No recent activity yet.</p>
-      </div>
-    );
-  }
-  const { receipt } = props;
-  const name = receipt.artifact_name ?? receipt.artifact_id;
-  const decisionTone = receipt.policy_decision === "allow" ? "green" : receipt.policy_decision === "block" ? "purple" : "blue";
-  const relativeTime = formatRelativeTime(receipt.timestamp);
-  return (
-    <div className="rounded-xl border border-border bg-white px-5 py-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Recent protection</p>
-        <Tag tone={decisionTone}>{receipt.policy_decision}</Tag>
-      </div>
-      <p className="mt-2 truncate text-sm font-semibold text-brand-dark">{name}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{relativeTime}</p>
-    </div>
-  );
-}
-
-function CloudIntelCard(props: { cloudState: "local_only" | "paired_waiting" | "paired_active"; connectUrl: string }) {
-  const copy = resolveCloudIntelCopy(props.cloudState);
-  const tone = props.cloudState === "paired_active" ? "green" : props.cloudState === "paired_waiting" ? "blue" : "slate";
-  return (
-    <div className="rounded-xl border border-border bg-white px-5 py-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">Cloud intel</p>
-        <Tag tone={tone}>{copy.label}</Tag>
-      </div>
-      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
-      {props.cloudState === "local_only" ? (
-        <div className="mt-3">
-          <ActionButton href={props.connectUrl} variant="secondary">Connect this machine</ActionButton>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function formatRelativeTime(timestamp: string): string {
-  const diffMs = Date.now() - new Date(timestamp).getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) {
-    return "just now";
-  }
-  if (diffMin < 60) {
-    return diffMin + "m ago";
-  }
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) {
-    return diffH + "h ago";
-  }
-  return Math.floor(diffH / 24) + "d ago";
-}
 
 export function RuntimeOverview(props: RuntimeOverviewProps) {
   const { snapshot, inventory } = props;
@@ -272,7 +198,7 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
 
   return (
     <Surface className="mb-6" tone="accent">
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -308,15 +234,19 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
           />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <WatchedAppsCard inventory={resolvedInventory} />
-          <ProtectionLevelCard securityLevel={securityLevel} />
-          <RecentProtectionCard receipt={latestReceipt} />
-          <CloudIntelCard cloudState={snapshot.cloud_state} connectUrl={snapshot.connect_url} />
-        </div>
+        <ProofStrip
+          items={[
+            { label: "Protection level", value: securityLevel ?? "balanced", tone: securityLevel === "strict" ? "purple" : "blue" },
+            { label: "Recent decision", value: latestReceipt ? (latestReceipt.policy_decision) : "None", tone: latestReceipt ? (latestReceipt.policy_decision === "allow" ? "green" : "purple") : "slate" },
+            { label: "Cloud state", value: snapshot.cloud_state === "local_only" ? "Local only" : "Syncing", tone: snapshot.cloud_state === "local_only" ? "slate" : "green" },
+            { label: "Apps seen", value: resolvedInventory.length, tone: resolvedInventory.length > 0 ? "green" : "slate" },
+          ]}
+        />
 
-        <CloudSyncHealthCard health={snapshot.cloud_sync_health} />
-        <ApprovalCenterHealthCard snapshot={snapshot} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <CloudSyncHealthCard health={snapshot.cloud_sync_health} />
+          <ApprovalCenterHealthCard snapshot={snapshot} />
+        </div>
 
         <div className="rounded-xl border border-border bg-white px-5 py-4">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
@@ -329,7 +259,7 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
               Review Queue
             </ActionButton>
             <ActionButton href={snapshot.fleet_url} variant="outline">
-              Watched Apps
+              Apps
             </ActionButton>
             {snapshot.cloud_state === "local_only" ? (
               <ActionButton href={snapshot.connect_url} variant="secondary">

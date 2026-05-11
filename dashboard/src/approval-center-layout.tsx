@@ -28,6 +28,7 @@ import {
 import { DataFlowEvidenceCard } from "./data-flow-evidence-card";
 import { SkillRiskCard, SupplyChainRiskCard, DecodedLayerCard } from "./risk-signal-cards";
 import { ReceiptsWorkspace } from "./receipts-workspace";
+import { ReviewWorkspace } from "./review-workspace";
 import { QueueChipFilter } from "./queue-chip-filter";
 import { ScannerEvidenceSection } from "./scanner-evidence-badge";
 import {
@@ -104,8 +105,10 @@ type RuntimeState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; snapshot: GuardRuntimeSnapshot };
+type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail";
+
 type LayoutProps = {
-  view: "home" | "inbox" | "fleet" | "evidence" | "settings";
+  view: AppView;
   requests: RequestState;
   detail: DetailState;
   receipts: ReceiptsState;
@@ -116,6 +119,7 @@ type LayoutProps = {
   homeContent: ReactNode;
   fleetContent: ReactNode;
   settingsContent: ReactNode;
+  appDetailContent: ReactNode;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
   onOpenRequest: (requestId: string) => void;
@@ -187,8 +191,26 @@ export function ApprovalCenterLayout(props: LayoutProps) {
               <ReceiptsWorkspace receipts={props.receipts} />
             ) : props.view === "fleet" ? (
               props.fleetContent
+            ) : props.view === "app-detail" ? (
+              props.appDetailContent
             ) : props.view === "settings" ? (
               props.settingsContent
+            ) : props.view === "inbox" ? (
+              <ReviewWorkspace
+                requests={props.requests.kind === "ready" ? props.requests.items : []}
+                activeRequestId={props.activeRequestId}
+                detail={props.detail.kind === "ready" ? {
+                  item: props.detail.item,
+                  diff: props.detail.diff,
+                  receipt: props.detail.receipt,
+                  policy: props.detail.policy,
+                } : null}
+                runtime={props.runtime.kind === "ready" ? props.runtime.snapshot : null}
+                resolutionMessage={props.resolutionMessage}
+                onOpenRequest={props.onOpenRequest}
+                onResolve={props.onResolve}
+                onGoHome={props.onGoHome}
+              />
             ) : (
               <QueueWorkspace
                 requests={props.requests}
@@ -237,7 +259,7 @@ function MobileQueueDrawer(props: {
             aria-label="Close queue"
             className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100"
           >
-            <HiMiniXMarkLayout className="h-5 w-5" />
+            <HiMiniXMarkLayout className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -382,7 +404,7 @@ function QueueWorkspace(props: {
             onClick={props.onGoHome}
             className="mb-3 flex items-center gap-1 text-sm font-medium text-brand-blue transition-colors hover:text-brand-blue/70 lg:hidden"
           >
-            <HiMiniChevronLeft className="h-4 w-4" />
+            <HiMiniChevronLeft className="h-4 w-4" aria-hidden="true" />
             Back to queue
           </button>
           <DecisionWorkspace
@@ -570,9 +592,9 @@ function QueueBrowser(props: {
             />
           ))
         ) : (
-          <p className="px-4 py-5 text-sm text-muted-foreground">
-            No waiting actions match those filters.
-          </p>
+          <div className="px-4 py-5">
+            <EmptyState title="No matches" body="Try a different search or filter to find waiting actions." />
+          </div>
         )}
       </div>
       <PaginationControls
@@ -866,7 +888,7 @@ function DecisionWorkspace(props: {
     );
   }
   if (props.detail.kind === "idle") {
-    return <EmptyState title="Select an item" body="Choose a blocked item from the list to review the evidence and make a decision." />;
+    return <EmptyState title="Select an item" body="Choose a blocked item from the list to review the evidence and make a decision." tone="teach" />;
   }
   const { item, diff, receipt, policy } = props.detail;
   const commonScopeOpts = scopeOptions.filter((option) => commonScopeValues.has(option.value));
@@ -1011,7 +1033,7 @@ function WhatChanged(props: { item: GuardApprovalRequest; diff: GuardArtifactDif
           <span className="text-brand-blue transition-transform duration-200 group-open:rotate-90">›</span>
           Technical details
         </span>
-        <Badge tone="warning">{artifactTypeLabel(item.artifact_type)}</Badge>
+        <Badge tone="attention">{artifactTypeLabel(item.artifact_type)}</Badge>
       </summary>
       <div className="mt-4 space-y-3 border-l-2 border-brand-blue/10 pl-4">
         <p className="text-sm leading-relaxed text-brand-dark/70">{buildStoppedReason(item, receipt)}</p>
@@ -1120,8 +1142,8 @@ function RuleBuilder(props: {
               <summary className="cursor-pointer select-none py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-brand-dark/70 [&::-webkit-details-marker]:hidden">
                 › Broader approval scopes
               </summary>
-              <div className="mt-2 rounded-[1rem] border border-amber-200/60 bg-amber-50/50 p-2 dark:border-amber-500/20 dark:bg-amber-900/10">
-                <p className="mb-2 px-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+              <div className="mt-2 rounded-[1rem] border border-brand-blue/20 bg-brand-blue/[0.04] p-2">
+                <p className="mb-2 px-1 text-[11px] font-medium text-brand-blue">
                   Broader scopes apply across more sessions. Use only when the narrower options are not enough.
                 </p>
                 <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
@@ -1510,12 +1532,12 @@ function ScopeOption(props: {
 
 function PolicyBadge(props: { action: string }) {
   if (props.action === "block") {
-    return <Badge tone="destructive">{policyActionLabel(props.action)}</Badge>;
+    return <Badge tone="attention">{policyActionLabel(props.action)}</Badge>;
   }
   if (props.action === "allow") {
     return <Badge tone="success">{policyActionLabel(props.action)}</Badge>;
   }
-  return <Badge tone="warning">{policyActionLabel(props.action)}</Badge>;
+  return <Badge tone="attention">{policyActionLabel(props.action)}</Badge>;
 }
 
 function simplifyRiskHeadline(headline: string, harness: string): string {

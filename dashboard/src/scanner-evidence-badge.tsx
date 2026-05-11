@@ -10,8 +10,8 @@ export function ScannerEvidenceBadge(props: ScannerEvidenceBadgeProps) {
     props.signal.category === "skill" || props.signal.category === "mcp";
   if (!isScannerCategory) return null;
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-      🔍 Scanner
+    <span className="inline-flex items-center gap-1 rounded-full border border-brand-blue/30 bg-brand-blue/[0.08] px-2 py-0.5 text-[10px] font-semibold text-brand-blue">
+      Scanner
     </span>
   );
 }
@@ -35,7 +35,7 @@ function ScannerSignalRow(props: ScannerSignalRowProps) {
         </p>
       ) : null}
       {signal.false_positive_hint !== null ? (
-        <p className="text-xs leading-5 text-amber-700/80">
+        <p className="text-xs leading-5 text-brand-dark/60">
           <span className="font-semibold">Might be safe if: </span>
           {signal.false_positive_hint}
         </p>
@@ -54,7 +54,7 @@ export function ScannerEvidenceSection(props: ScannerEvidenceSectionProps) {
   );
   if (scannerSignals.length === 0) return null;
   return (
-    <div className="rounded-xl border border-amber-200/60 bg-amber-50/60 p-4" aria-label="Scanner evidence">
+    <div className="rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-4" aria-label="Scanner evidence">
       <SectionLabel>Scanner evidence</SectionLabel>
       <ul className="mt-3 space-y-3">
         {scannerSignals.map((signal) => (

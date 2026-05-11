@@ -1,23 +1,27 @@
-import { useCallback } from "react";
-
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   HiMiniCheckCircle,
-  HiMiniExclamationCircle,
   HiMiniMinusCircle,
-  HiMiniArrowTopRightOnSquare,
+  HiMiniChevronRight,
+  HiMiniChevronDown,
+  HiMiniChevronUp,
+  HiMiniShieldCheck,
+  HiMiniFire,
+  HiMiniCalendarDays,
+  HiMiniSparkles,
+  HiMiniExclamationTriangle,
+  HiMiniXMark,
 } from "react-icons/hi2";
 import {
   ActionButton,
   Badge,
   EmptyState,
   SectionLabel,
-  Tag,
+  GuardHero,
+  ProofStrip,
 } from "./approval-center-primitives";
-import {
-  buildHomePrimaryState,
-  type HomeProtectionStatus,
-} from "./queue-state";
-import { harnessDisplayName } from "./approval-center-utils";
+import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
+import { useFocusTrap } from "./use-focus-trap";
 import type {
   GuardApprovalRequest,
   GuardManagedInstall,
@@ -41,80 +45,6 @@ type HomePolicyState =
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardPolicyDecision[] };
 
-function heroBackgroundClass(status: HomeProtectionStatus): string {
-  if (status === "needs_decision") {
-    return "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(245,158,11,0.08)_100%)]";
-  }
-  if (status === "setup_needed") {
-    return "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(85,153,254,0.06)_100%)]";
-  }
-  return "bg-[radial-gradient(circle_at_top_left,rgba(85,153,254,0.12),transparent_32%),linear-gradient(135deg,#ffffff_0%,#ffffff_58%,rgba(72,223,123,0.10)_100%)]";
-}
-
-const KNOWN_HARNESSES = [
-  "codex",
-  "claude-code",
-  "opencode",
-  "copilot",
-  "gemini",
-  "cursor",
-  "hermes",
-  "openclaw",
-] as const;
-
-type SetupSuggestionRowProps = {
-  harness: string;
-};
-
-function SetupSuggestionRow(props: SetupSuggestionRowProps) {
-  return (
-    <li className="flex items-center justify-between gap-3 border-b border-slate-200/70 px-4 py-3 last:border-b-0">
-      <p className="text-sm text-brand-dark">
-        Set up <span className="font-medium">{harnessDisplayName(props.harness)}</span> →{" "}
-        <span className="font-mono text-xs text-brand-blue">
-          hol-guard apps connect {props.harness}
-        </span>
-      </p>
-    </li>
-  );
-}
-
-type SetupSuggestionsSectionProps = {
-  configuredHarnesses: string[];
-};
-
-function SetupSuggestionsSection(props: SetupSuggestionsSectionProps) {
-  const unconfigured = KNOWN_HARNESSES.filter(
-    (h) => !props.configuredHarnesses.includes(h)
-  );
-  if (unconfigured.length === 0) return null;
-  return (
-    <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
-      <SectionLabel>Connect more apps</SectionLabel>
-      <ul className="mt-3 overflow-hidden rounded-[1.25rem] border border-slate-200/70">
-        {unconfigured.slice(0, 4).map((harness) => (
-          <SetupSuggestionRow key={harness} harness={harness} />
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function ClearHarnessButton(props: {
-  harness: string;
-  onClearPolicies: (scope: { harness?: string; all?: boolean }) => Promise<void>;
-}) {
-  const handleClick = useCallback(() => {
-    void props.onClearPolicies({ harness: props.harness });
-  }, [props.onClearPolicies, props.harness]);
-
-  return (
-    <ActionButton variant="ghost" onClick={handleClick}>
-      Clear {props.harness}
-    </ActionButton>
-  );
-}
-
 export function HomeWorkspace(props: {
   requests: HomeRequestState;
   runtime: HomeRuntimeState;
@@ -123,11 +53,70 @@ export function HomeWorkspace(props: {
   onOpenFleet: () => void;
   onOpenEvidence: () => void;
   onOpenSettings: () => void;
-  onClearPolicies: (scope: { harness?: string; all?: boolean }) => Promise<void>;
+  onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
+  onOpenAppDetail: (harness: string) => void;
+  clearConfirm: { harness?: string; all?: boolean } | null;
+  onConfirmClear: () => Promise<void>;
+  onCancelClear: () => void;
 }) {
-  const handleClearAll = useCallback(() => {
-    void props.onClearPolicies({ all: true });
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
+  const showToast = useCallback((message: string) => {
+    setToastMessage(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3000);
+  }, []);
+
+  const handleClearPolicies = useCallback((scope: { harness?: string; all?: boolean }) => {
+    props.onClearPolicies(scope);
   }, [props.onClearPolicies]);
+
+  // Compute all values with hooks before any conditional returns
+  const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
+  const queuedCount = props.requests.kind === "ready" ? props.requests.items.length : 0;
+  const policyItems = props.policies.kind === "ready" ? props.policies.items : [];
+  const managedInstalls = snapshot?.managed_installs ?? [];
+  const activeInstalls = managedInstalls.filter((item: GuardManagedInstall) => item.active);
+  const observedHarnesses = snapshot
+    ? Array.from(
+        new Set([
+          ...snapshot.items.map((item: GuardApprovalRequest) => item.harness),
+          ...snapshot.latest_receipts.map((receipt: GuardReceipt) => receipt.harness),
+          ...policyItems.map((policy: GuardPolicyDecision) => policy.harness),
+        ])
+      ).sort()
+    : [];
+  const clearHarnesses = activeInstalls.length > 0 ? activeInstalls.map((i: GuardManagedInstall) => i.harness) : observedHarnesses;
+  const watchedAppsCount = activeInstalls.length > 0 ? activeInstalls.length : observedHarnesses.length;
+
+  const state = useMemo(
+    () =>
+      deriveHomeState({
+        hasActiveInstalls: activeInstalls.length > 0,
+        hasObservedHarnesses: observedHarnesses.length > 0,
+        queuedCount,
+        watchedAppsCount,
+      }),
+    [activeInstalls.length, observedHarnesses.length, queuedCount, watchedAppsCount]
+  );
+
+  const dailyStory = useMemo(() => (snapshot ? buildDailyStory(snapshot.latest_receipts, queuedCount) : null), [snapshot, queuedCount]);
+  const streak = useMemo(() => (snapshot ? computeStreak(snapshot.latest_receipts) : 0), [snapshot]);
+  const weeklySummary = useMemo(() => (snapshot ? buildWeeklySummary(snapshot.latest_receipts) : null), [snapshot]);
+
+  const ctaAction =
+    state.ctaTarget === "inbox"
+      ? props.onOpenInbox
+      : state.ctaTarget === "fleet"
+      ? props.onOpenFleet
+      : props.onOpenEvidence;
 
   if (props.runtime.kind === "loading" || props.requests.kind === "loading") {
     return (
@@ -144,224 +133,451 @@ export function HomeWorkspace(props: {
         title="Guard is not connected"
         body={props.runtime.message}
         action={<ActionButton onClick={props.onOpenInbox}>Open review queue</ActionButton>}
+        tone="teach"
       />
     );
   }
 
-  const snapshot = props.runtime.snapshot;
-  const queuedCount = props.requests.kind === "ready" ? props.requests.items.length : 0;
-  const policyItems = props.policies.kind === "ready" ? props.policies.items : [];
-  const managedInstalls = snapshot.managed_installs ?? [];
-  const activeInstalls = managedInstalls.filter((item) => item.active);
-  const observedHarnesses = Array.from(
-    new Set([
-      ...snapshot.items.map((item) => item.harness),
-      ...snapshot.latest_receipts.map((receipt) => receipt.harness),
-      ...policyItems.map((policy) => policy.harness),
-    ])
-  ).sort();
-  const clearHarnesses =
-    activeInstalls.length > 0 ? activeInstalls.map((install) => install.harness) : observedHarnesses;
-  const watchedAppsCount = activeInstalls.length > 0 ? activeInstalls.length : observedHarnesses.length;
-  const primaryState = buildHomePrimaryState(queuedCount, watchedAppsCount);
+  if (!snapshot) return null;
 
   return (
     <div className="space-y-6">
-      <ProtectionHero
-        status={primaryState.status}
-        copy={primaryState.copy}
-        ctaLabel={primaryState.ctaLabel}
-        queuedCount={queuedCount}
-        syncConfigured={snapshot.sync_configured}
-        cloudState={snapshot.cloud_state}
-        connectUrl={snapshot.connect_url}
-        fleetUrl={snapshot.fleet_url}
-        onOpenInbox={props.onOpenInbox}
-        onOpenFleet={props.onOpenFleet}
-      />
-
-      <HomeStatusStrip
-        queuedCount={queuedCount}
-        watchedAppsCount={watchedAppsCount}
-        savedChoicesCount={policyItems.length}
-        onOpenEvidence={props.onOpenEvidence}
-        onOpenSettings={props.onOpenSettings}
-      />
-
-      <AppsProtectedSection
-        managedInstalls={managedInstalls}
-        observedHarnesses={observedHarnesses}
-      />
-
-      {primaryState.status === "setup_needed" && (
-        <SetupSuggestionsSection configuredHarnesses={observedHarnesses} />
+      {/* Toast */}
+      {toastMessage && (
+        <div className="guard-fade-in fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-[1.25rem] border border-brand-green/25 bg-brand-green-bg/90 px-4 py-3 shadow-lg backdrop-blur">
+          <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
+          <p className="text-sm font-medium text-brand-green-text">{toastMessage}</p>
+        </div>
       )}
 
-      {snapshot.latest_receipts.length > 0 && (
-        <RecentProtectionSection receipts={snapshot.latest_receipts} />
-      )}
+      <GuardHero
+        status={state.heroStatus}
+        headline={state.headline}
+        subheadline={state.subheadline}
+        cta={
+          <ActionButton onClick={ctaAction} data-primary="true">
+            {state.ctaLabel}
+          </ActionButton>
+        }
+      />
 
-      <section className="rounded-[1.75rem] border border-brand-blue/15 bg-brand-blue/[0.04] p-5 sm:p-6">
-        <details className="group">
-          <summary className="flex cursor-pointer select-none items-center justify-between gap-3 text-sm font-semibold text-brand-dark [&::-webkit-details-marker]:hidden">
-            <span>Reset remembered decisions</span>
-            <span className="text-brand-blue transition-transform group-open:rotate-90">›</span>
-          </summary>
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Clear remembered decisions when you want Guard to ask again next time. This does not remove your review history.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <ActionButton variant="outline" onClick={handleClearAll}>
-              Clear all remembered decisions
-            </ActionButton>
-            {clearHarnesses.slice(0, 3).map((harness) => (
-              <ClearHarnessButton
-                key={harness}
-                harness={harness}
-                onClearPolicies={props.onClearPolicies}
-              />
-            ))}
-          </div>
-        </details>
-      </section>
+      <ProofStrip
+        items={[
+          { label: "Needs your choice", value: queuedCount, tone: queuedCount > 0 ? "blue" : "slate", pulse: queuedCount > 0 },
+          { label: "Apps watched", value: watchedAppsCount, tone: watchedAppsCount > 0 ? "green" : "slate" },
+          { label: "Day streak", value: streak, tone: streak > 1 ? "purple" : "slate", icon: streak > 1 ? <HiMiniFire className="h-3.5 w-3.5 text-brand-purple" aria-hidden="true" /> : null, hint: streak > 0 ? "Consecutive days with Guard activity. Resets after 48h of inactivity." : "Guard activity streak" },
+        ]}
+      />
+
+      <StreakMilestoneBanner streak={streak} />
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
+        <section className="space-y-6">
+          <AppsAtAGlance
+            managedInstalls={managedInstalls}
+            observedHarnesses={observedHarnesses}
+            queuedItems={props.requests.kind === "ready" ? props.requests.items : []}
+            onOpenAppDetail={props.onOpenAppDetail}
+          />
+
+          {weeklySummary && (
+            <CollapsibleCard
+              id="weekly-summary"
+              icon={<HiMiniCalendarDays className="mt-0.5 h-5 w-5 shrink-0 text-brand-purple" aria-hidden="true" />}
+              label="This week"
+              defaultOpen={true}
+            >
+              <p className="text-sm text-muted-foreground">{weeklySummary.body}</p>
+              {weeklySummary.stats && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {weeklySummary.stats.map((s) => (
+                    <span
+                      key={s.label}
+                      className="rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-brand-dark"
+                    >
+                      {s.value} {s.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </CollapsibleCard>
+          )}
+
+          {dailyStory && (
+            <CollapsibleCard
+              id="daily-brief"
+              icon={<HiMiniShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-brand-green" aria-hidden="true" />}
+              label={dailyStory.title}
+              defaultOpen={true}
+            >
+              <p className="text-sm text-muted-foreground">{dailyStory.body}</p>
+              {dailyStory.stats && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {dailyStory.stats.map((s) => (
+                    <span
+                      key={s.label}
+                      className="rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-brand-dark"
+                    >
+                      {s.value} {s.label}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </CollapsibleCard>
+          )}
+        </section>
+
+        <section className="space-y-6">
+          {snapshot.latest_receipts.length > 0 && (
+            <RecentProtectionSection receipts={snapshot.latest_receipts} />
+          )}
+
+          {policyItems.length > 0 && (
+            <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+              <SectionLabel>Reset remembered decisions</SectionLabel>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Clear remembered decisions when you want Guard to ask again next time. This does not remove your history.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {clearHarnesses.slice(0, 4).map((harness: string) => (
+                  <ClearHarnessButton
+                    key={harness}
+                    harness={harness}
+                    onClearPolicies={handleClearPolicies}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Clear confirmation dialog */}
+      {props.clearConfirm && (
+        <ClearConfirmDialog
+          clearConfirm={props.clearConfirm}
+          onCancelClear={props.onCancelClear}
+          onConfirmClear={async () => {
+            const confirm = props.clearConfirm;
+            await props.onConfirmClear();
+            if (confirm?.harness) {
+              showToast(`Cleared for ${harnessDisplayName(confirm.harness)}`);
+            } else if (confirm?.all) {
+              showToast("Cleared all decisions");
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function ProtectionHero(props: {
-  status: HomeProtectionStatus;
-  copy: string;
-  ctaLabel: string;
-  queuedCount: number;
-  syncConfigured: boolean;
-  cloudState: "local_only" | "paired_waiting" | "paired_active";
-  connectUrl: string;
-  fleetUrl: string;
-  onOpenInbox: () => void;
-  onOpenFleet: () => void;
+function ClearConfirmDialog(props: {
+  clearConfirm: { harness?: string; all?: boolean };
+  onCancelClear: () => void;
+  onConfirmClear: () => Promise<void>;
 }) {
-  const handlePrimaryCta = useCallback(() => {
-    if (props.status === "setup_needed") {
-      props.onOpenFleet();
-    } else {
-      props.onOpenInbox();
-    }
-  }, [props.status, props.onOpenInbox, props.onOpenFleet]);
-
-  const heroBg = heroBackgroundClass(props.status);
-  const statusBadge =
-    props.status === "needs_decision" ? (
-      <Badge tone="default">{props.queuedCount} waiting</Badge>
-    ) : props.status === "setup_needed" ? (
-      <Badge tone="default">Setup needed</Badge>
-    ) : (
-      <Badge tone="success">Protected</Badge>
-    );
-
-  const showConnectCta =
-    props.cloudState === "local_only" && !props.syncConfigured;
-
-  const showGuardCloud = props.cloudState !== "local_only";
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(true, dialogRef);
 
   return (
-    <section
-      className={`guard-surface-in relative overflow-hidden rounded-[2rem] border border-brand-blue/15 ${heroBg} p-5 shadow-[0_20px_60px_rgba(63,65,116,0.08)] sm:p-6 lg:p-7`}
-      role="region"
-      aria-label="Protection status"
-    >
-      <div className="pointer-events-none absolute right-10 top-8 h-24 w-24 rounded-full bg-brand-blue/20 blur-3xl" />
-      <div className="relative space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <SectionLabel>Protection status</SectionLabel>
-          {statusBadge}
-          {props.cloudState !== "local_only" && <Tag tone="blue">Cloud backup up to date</Tag>}
+    <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Confirm clear decisions">
+      <div ref={dialogRef} className="guard-fade-in w-full max-w-md rounded-[1.75rem] border border-brand-attention/20 bg-white p-6 shadow-2xl">
+            <div className="flex items-start gap-3">
+              <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
+              <div>
+                <h3 className="text-lg font-semibold tracking-tight text-brand-dark">
+                  Clear remembered decisions?
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  This will remove {props.clearConfirm.all ? "all saved approvals" : `decisions for ${props.clearConfirm.harness ?? "this app"}`}. Guard will ask again next time matching actions run.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={props.onCancelClear}
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50"
+              >
+                Keep decisions
+              </button>
+              <button
+                type="button"
+                onClick={props.onConfirmClear}
+                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90"
+              >
+                Clear decisions
+              </button>
+            </div>
+          </div>
         </div>
-        <h2 className="text-xl font-semibold tracking-tight text-brand-dark">{props.copy}</h2>
-        <div className="flex flex-wrap gap-3">
-          <ActionButton onClick={handlePrimaryCta} data-primary="true" aria-label={props.ctaLabel}>
-            {props.ctaLabel}
-          </ActionButton>
-          {showConnectCta && props.status !== "needs_decision" && (
-            <ActionButton href={props.connectUrl} variant="secondary">
-              Connect this machine
-            </ActionButton>
-          )}
-        </div>
-        {showGuardCloud && (
-          <a
-            href={props.fleetUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-sm font-medium text-brand-blue transition-colors hover:text-brand-blue/70"
-          >
-            Open Guard Cloud
-            <HiMiniArrowTopRightOnSquare className="h-3.5 w-3.5" aria-hidden="true" />
-          </a>
-        )}
-      </div>
-    </section>
   );
 }
 
-function HomeStatusStrip(props: {
+function deriveHomeState(input: {
+  hasActiveInstalls: boolean;
+  hasObservedHarnesses: boolean;
   queuedCount: number;
   watchedAppsCount: number;
-  savedChoicesCount: number;
-  onOpenEvidence: () => void;
-  onOpenSettings: () => void;
+}): {
+  heroStatus: "clear" | "needs_review" | "setup_gap";
+  headline: string;
+  subheadline: string;
+  ctaLabel: string;
+  ctaTarget: "inbox" | "fleet" | "evidence";
+} {
+  const { hasActiveInstalls, hasObservedHarnesses, queuedCount, watchedAppsCount } = input;
+
+  if (queuedCount > 0) {
+    return {
+      heroStatus: "needs_review",
+      headline: queuedCount === 1 ? "1 action needs review" : `${queuedCount} actions need review`,
+      subheadline: "Guard stopped something. Review and decide whether to allow or block it.",
+      ctaLabel: "Review now",
+      ctaTarget: "inbox",
+    };
+  }
+
+  if (!hasActiveInstalls && !hasObservedHarnesses) {
+    return {
+      heroStatus: "setup_gap",
+      headline: "Guard is ready",
+      subheadline: "Connect your first AI app so Guard can start protecting it.",
+      ctaLabel: "Open Apps",
+      ctaTarget: "fleet",
+    };
+  }
+
+  if (!hasActiveInstalls && hasObservedHarnesses) {
+    return {
+      heroStatus: "setup_gap",
+      headline: "Finish setup",
+      subheadline: "Guard detected apps but they need setup to be fully protected.",
+      ctaLabel: "Open Apps",
+      ctaTarget: "fleet",
+    };
+  }
+
+  return {
+    heroStatus: "clear",
+    headline: "All clear",
+    subheadline: `Guard is watching your AI work. ${watchedAppsCount} app${watchedAppsCount !== 1 ? "s" : ""} protected. Nothing needs you right now.`,
+    ctaLabel: "View history",
+    ctaTarget: "evidence",
+  };
+}
+
+function buildDailyStory(
+  receipts: GuardReceipt[],
+  queuedCount: number
+): { title: string; body: string; stats?: { label: string; value: number }[] } | null {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayReceipts = receipts.filter((r) => new Date(r.timestamp) >= today);
+  const allowedToday = todayReceipts.filter((r) => r.policy_decision === "allow").length;
+  const blockedToday = todayReceipts.filter((r) => r.policy_decision === "block").length;
+
+  if (queuedCount > 0) {
+    return {
+      title: "Needs your attention",
+      body: `${queuedCount} action${queuedCount === 1 ? " is" : "s are"} waiting for review. Guard paused them to keep you safe.`,
+      stats: [{ label: "pending review", value: queuedCount }],
+    };
+  }
+
+  if (allowedToday + blockedToday > 0) {
+    return {
+      title: "Today so far",
+      body: `Guard allowed ${allowedToday} action${allowedToday !== 1 ? "s" : ""} and blocked ${blockedToday}.`,
+      stats: [
+        { label: "allowed", value: allowedToday },
+        { label: "blocked", value: blockedToday },
+      ],
+    };
+  }
+
+  if (receipts.length > 0) {
+    const last = receipts[0];
+    return {
+      title: "All quiet",
+      body: `No new activity today. Last decision was ${formatRelativeTime(last.timestamp)}.`,
+    };
+  }
+
+  return null;
+}
+
+function computeStreak(receipts: GuardReceipt[]): number {
+  if (receipts.length === 0) return 0;
+  const sortedByTime = [...receipts].sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
+  const mostRecent = new Date(sortedByTime[0].timestamp);
+  const now = new Date();
+  const diffHours = (now.getTime() - mostRecent.getTime()) / (1000 * 60 * 60);
+  // Reset streak if no activity in 48 hours
+  if (diffHours > 48) return 0;
+
+  const dates = new Set(receipts.map((r) => new Date(r.timestamp).toDateString()));
+  const sortedDates = Array.from(dates).sort((a, b) => +new Date(b) - +new Date(a));
+  let streak = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let checkDate = new Date(today);
+  for (const dateStr of sortedDates) {
+    const d = new Date(dateStr);
+    d.setHours(0, 0, 0, 0);
+    if (d.getTime() === checkDate.getTime()) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else if (d.getTime() < checkDate.getTime()) {
+      break;
+    }
+  }
+  return streak;
+}
+
+function buildWeeklySummary(
+  receipts: GuardReceipt[]
+): { body: string; stats: { label: string; value: number }[] } | null {
+  const now = new Date();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setHours(0, 0, 0, 0);
+  const weekReceipts = receipts.filter((r) => new Date(r.timestamp) >= startOfWeek);
+  if (weekReceipts.length === 0) return null;
+  const allowed = weekReceipts.filter((r) => r.policy_decision === "allow").length;
+  const blocked = weekReceipts.filter((r) => r.policy_decision === "block").length;
+  const uniqueApps = new Set(weekReceipts.map((r) => r.harness)).size;
+  return {
+    body: `Guard reviewed ${weekReceipts.length} actions across ${uniqueApps} app${uniqueApps !== 1 ? "s" : ""} this week.`,
+    stats: [
+      { label: "allowed", value: allowed },
+      { label: "blocked", value: blocked },
+      { label: "apps", value: uniqueApps },
+    ],
+  };
+}
+
+function AppsAtAGlance(props: {
+  managedInstalls: GuardManagedInstall[];
+  observedHarnesses: string[];
+  queuedItems: GuardApprovalRequest[];
+  onOpenAppDetail: (harness: string) => void;
 }) {
-  return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <HomeStatChip label="Needs your choice" value={props.queuedCount.toString()} />
-      <HomeStatChip label="Apps watched" value={props.watchedAppsCount.toString()} />
-      <details className="group rounded-[1.25rem] border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
-        <summary className="flex cursor-pointer select-none items-center justify-between [&::-webkit-details-marker]:hidden">
-          <div>
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Remembered decisions
-            </p>
-            <p className="mt-1 text-2xl font-semibold tracking-tight text-brand-dark">
-              {props.savedChoicesCount}
-            </p>
-          </div>
-          <span className="text-brand-blue transition-transform group-open:rotate-90">›</span>
-        </summary>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <ActionButton variant="ghost" onClick={props.onOpenEvidence}>
-            History
-          </ActionButton>
-          <ActionButton variant="ghost" onClick={props.onOpenSettings}>
-            Settings
-          </ActionButton>
-        </div>
-      </details>
-    </div>
-  );
-}
+  const pendingByHarness = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of props.queuedItems) {
+      map.set(item.harness, (map.get(item.harness) ?? 0) + 1);
+    }
+    return map;
+  }, [props.queuedItems]);
 
-function HomeStatChip(props: { label: string; value: string }) {
+  const sortedHarnesses = useMemo(() => {
+    const all = Array.from(
+      new Set([
+        ...props.managedInstalls.map((i) => i.harness),
+        ...props.observedHarnesses,
+      ])
+    );
+    return all.sort((a, b) => {
+      const aInstall = props.managedInstalls.find((i) => i.harness === a);
+      const bInstall = props.managedInstalls.find((i) => i.harness === b);
+      const aPending = pendingByHarness.get(a) ?? 0;
+      const bPending = pendingByHarness.get(b) ?? 0;
+      const aScore = (aInstall?.active ? 3 : aInstall !== undefined ? 2 : props.observedHarnesses.includes(a) ? 1 : 0) + (aPending > 0 ? 4 : 0);
+      const bScore = (bInstall?.active ? 3 : bInstall !== undefined ? 2 : props.observedHarnesses.includes(b) ? 1 : 0) + (bPending > 0 ? 4 : 0);
+      return bScore - aScore;
+    });
+  }, [props.managedInstalls, props.observedHarnesses, pendingByHarness]);
+
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent, index: number) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        const next = Math.min(index + 1, sortedHarnesses.length - 1);
+        setFocusedIndex(next);
+        const nextBtn = listRef.current?.querySelectorAll("button[data-app-item]")[next] as HTMLButtonElement | undefined;
+        nextBtn?.focus();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        const prev = Math.max(index - 1, 0);
+        setFocusedIndex(prev);
+        const prevBtn = listRef.current?.querySelectorAll("button[data-app-item]")[prev] as HTMLButtonElement | undefined;
+        prevBtn?.focus();
+      } else if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        props.onOpenAppDetail(sortedHarnesses[index]);
+      }
+    },
+    [sortedHarnesses, props.onOpenAppDetail]
+  );
+
+  if (sortedHarnesses.length === 0) {
+    return (
+      <EmptyState
+        title="No apps connected yet"
+        body="Connect an AI app so Guard can start protecting it. Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more."
+        tone="teach"
+      />
+    );
+  }
+
   return (
-    <div className="rounded-[1.25rem] border border-white/80 bg-white/80 px-4 py-3 shadow-sm">
-      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-        {props.label}
+    <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+      <SectionLabel>Apps at a glance</SectionLabel>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Guard is watching these apps on this machine.
       </p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight text-brand-dark">{props.value}</p>
+      <div ref={listRef} className="mt-4 space-y-2" role="list" aria-label="Apps at a glance">
+        {sortedHarnesses.map((harness, index) => {
+          const install = props.managedInstalls.find((i) => i.harness === harness);
+          const isObserved = props.observedHarnesses.includes(harness);
+          const pending = pendingByHarness.get(harness) ?? 0;
+          return (
+            <button
+              key={harness}
+              data-app-item
+              onClick={() => props.onOpenAppDetail(harness)}
+              onKeyDown={(e) => handleKeyDown(e, index)}
+              onFocus={() => setFocusedIndex(index)}
+              onBlur={() => setFocusedIndex(-1)}
+              className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-all duration-150 hover:bg-slate-50 hover:shadow-sm active:scale-[0.99] ${
+                focusedIndex === index
+                  ? "border-brand-blue/50 bg-brand-blue/[0.04] ring-1 ring-brand-blue/20"
+                  : "border-slate-200/70"
+              }`}
+              role="listitem"
+            >
+              <div className="flex min-w-0 items-center gap-2.5">
+                <AppStatusIcon install={install} isObserved={isObserved} />
+                <p className="truncate text-sm font-medium text-brand-dark">
+                  {harnessDisplayName(harness)}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {pending > 0 && (
+                  <Badge tone="info">{pending} pending</Badge>
+                )}
+                <AppStatusBadge install={install} isObserved={isObserved} />
+                <HiMiniChevronRight className="h-4 w-4 shrink-0 text-slate-300" aria-hidden="true" />
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
-
-type AppRowProps = {
-  harness: string;
-  install: GuardManagedInstall | undefined;
-  isObserved: boolean;
-};
 
 function AppStatusIcon(props: { install: GuardManagedInstall | undefined; isObserved: boolean }) {
   if (props.install?.active === true) {
     return <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />;
   }
   if (props.install !== undefined && !props.install.active) {
-    return <HiMiniExclamationCircle className="h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />;
+    return <HiMiniMinusCircle className="h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />;
   }
   if (props.isObserved) {
     return <HiMiniMinusCircle className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />;
@@ -374,7 +590,7 @@ function AppStatusBadge(props: { install: GuardManagedInstall | undefined; isObs
     return <Badge tone="success">Active</Badge>;
   }
   if (props.install !== undefined && !props.install.active) {
-    return <Badge tone="default">Needs setup</Badge>;
+    return <Badge tone="attention">Needs setup</Badge>;
   }
   if (props.isObserved) {
     return <Badge tone="default">Observed</Badge>;
@@ -382,79 +598,22 @@ function AppStatusBadge(props: { install: GuardManagedInstall | undefined; isObs
   return <Badge tone="default">Unknown</Badge>;
 }
 
-function AppRow(props: AppRowProps) {
+function ClearHarnessButton(props: {
+  harness: string;
+  onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
+}) {
+  const handleClick = useCallback(() => {
+    void props.onClearPolicies({ harness: props.harness });
+  }, [props.onClearPolicies, props.harness]);
+
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 px-4 py-3 last:border-b-0">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <AppStatusIcon install={props.install} isObserved={props.isObserved} />
-        <p className="truncate text-sm font-medium text-brand-dark">
-          {harnessDisplayName(props.harness)}
-        </p>
-      </div>
-      <AppStatusBadge install={props.install} isObserved={props.isObserved} />
-    </div>
+    <ActionButton variant="outline" onClick={handleClick}>
+      Clear {props.harness}
+    </ActionButton>
   );
 }
 
-type AppsProtectedSectionProps = {
-  managedInstalls: GuardManagedInstall[];
-  observedHarnesses: string[];
-};
 
-function AppsProtectedSection(props: AppsProtectedSectionProps) {
-  const allHarnesses = Array.from(
-    new Set([
-      ...props.managedInstalls.map((i) => i.harness),
-      ...props.observedHarnesses,
-    ])
-  ).sort();
-
-  if (allHarnesses.length === 0) {
-    return (
-      <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
-        <SectionLabel>Apps protected</SectionLabel>
-        <p className="mt-3 text-sm text-muted-foreground">
-          None yet. Connect an AI harness to start.
-        </p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
-      <SectionLabel>Apps protected</SectionLabel>
-      <div className="mt-3 overflow-hidden rounded-[1.25rem] border border-slate-200/70">
-        {allHarnesses.map((harness) => {
-          const install = props.managedInstalls.find((i) => i.harness === harness);
-          const isObserved = props.observedHarnesses.includes(harness);
-          return (
-            <AppRow
-              key={harness}
-              harness={harness}
-              install={install}
-              isObserved={isObserved}
-            />
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function formatReceiptTimestamp(timestamp: string): string {
-  try {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${Math.floor(diffHours / 24)}d ago`;
-  } catch {
-    return timestamp;
-  }
-}
 
 type RecentReceiptRowProps = {
   receipt: GuardReceipt;
@@ -474,7 +633,7 @@ function RecentReceiptRow(props: RecentReceiptRowProps) {
         </p>
       </div>
       <span className="shrink-0 text-[11px] text-muted-foreground">
-        {formatReceiptTimestamp(receipt.timestamp)}
+        {formatRelativeTime(receipt.timestamp)}
       </span>
     </div>
   );
@@ -489,11 +648,114 @@ function RecentProtectionSection(props: RecentProtectionSectionProps) {
   return (
     <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
       <SectionLabel>Recent protection</SectionLabel>
-      <div className="mt-3 overflow-hidden rounded-[1.25rem] border border-slate-200/70">
+      <p className="mt-2 text-sm text-muted-foreground">
+        What Guard stopped or allowed recently.
+      </p>
+      <div className="mt-4 overflow-hidden rounded-[1.25rem] border border-slate-200/70">
         {recent.map((receipt) => (
           <RecentReceiptRow key={receipt.receipt_id} receipt={receipt} />
         ))}
       </div>
     </section>
+  );
+}
+
+const MILESTONE_STREAKS = [7, 14, 30];
+
+function StreakMilestoneBanner({ streak }: { streak: number }) {
+  const milestone = MILESTONE_STREAKS.includes(streak) ? streak : null;
+  const storageKey = milestone ? `guard-streak-milestone-dismissed-${milestone}` : "";
+  const [dismissed, setDismissed] = useState(() => {
+    if (typeof window === "undefined" || !storageKey) return true;
+    return localStorage.getItem(storageKey) === "1";
+  });
+
+  const handleDismiss = useCallback(() => {
+    setDismissed(true);
+    if (storageKey) localStorage.setItem(storageKey, "1");
+  }, [storageKey]);
+
+  if (!milestone || dismissed) return null;
+
+  const messages: Record<number, string> = {
+    7: "One week of consistent protection! Guard is watching out for you every day.",
+    14: "Two weeks strong! Your security routine is paying off.",
+    30: "A full month of daily protection! You are building a great security habit.",
+  };
+
+  return (
+    <div className="guard-fade-in relative overflow-hidden rounded-[1.75rem] border border-brand-purple/20 bg-brand-purple/[0.04] p-5 shadow-sm sm:p-6">
+      <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-brand-purple/10" />
+      <div className="relative flex items-start gap-3">
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-purple/10">
+          <HiMiniSparkles className="h-5 w-5 text-brand-purple" aria-hidden="true" />
+        </span>
+        <div className="flex-1">
+          <SectionLabel>{streak} day streak!</SectionLabel>
+          <p className="mt-2 text-sm text-muted-foreground">{messages[milestone]}</p>
+        </div>
+        <button
+          onClick={handleDismiss}
+          className="shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-white/70 hover:text-brand-dark"
+          aria-label="Dismiss streak celebration"
+        >
+          <HiMiniXMark className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CollapsibleCard(props: {
+  id: string;
+  icon: ReactNode;
+  label: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const storageKey = `guard-collapsed-${props.id}`;
+  const [isOpen, setIsOpen] = useState(() => {
+    if (typeof window === "undefined") return props.defaultOpen ?? true;
+    const saved = localStorage.getItem(storageKey);
+    return saved === null ? (props.defaultOpen ?? true) : saved === "1";
+  });
+
+  const toggle = useCallback(() => {
+    setIsOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem(storageKey, next ? "1" : "0");
+      return next;
+    });
+  }, [storageKey]);
+
+  const borderClass =
+    props.id === "daily-brief"
+      ? "border-brand-green/15 bg-brand-green/[0.04]"
+      : "border-brand-purple/15 bg-brand-purple/[0.04]";
+
+  return (
+    <div className={`rounded-[1.75rem] border ${borderClass} p-5 shadow-sm sm:p-6`}>
+      <button
+        onClick={toggle}
+        className="flex w-full items-center gap-3 text-left"
+        aria-expanded={isOpen}
+        aria-controls={`collapsible-content-${props.id}`}
+      >
+        {props.icon}
+        <div className="flex-1">
+          <SectionLabel>{props.label}</SectionLabel>
+        </div>
+        {isOpen ? (
+          <HiMiniChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        ) : (
+          <HiMiniChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        )}
+      </button>
+      {isOpen && (
+        <div id={`collapsible-content-${props.id}`} className="mt-3 guard-fade-in">
+          {props.children}
+        </div>
+      )}
+    </div>
   );
 }
