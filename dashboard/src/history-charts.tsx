@@ -191,6 +191,145 @@ export function AppActivityBars({ receipts }: { receipts: GuardReceipt[] }) {
 }
 
 // ──────────────────────────────────────────
+// Decision Trend Line
+// ──────────────────────────────────────────
+
+export function DecisionTrendLine({ receipts }: { receipts: GuardReceipt[] }) {
+  const days = useMemo(() => {
+    const map = new Map<string, { allow: number; block: number }>();
+    const now = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      map.set(key, { allow: 0, block: 0 });
+    }
+    for (const r of receipts) {
+      const d = new Date(r.timestamp);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      if (map.has(key)) {
+        const existing = map.get(key)!;
+        if (r.policy_decision === "allow") existing.allow += 1;
+        if (r.policy_decision === "block") existing.block += 1;
+      }
+    }
+    return Array.from(map.entries()).map(([date, counts]) => ({ date, ...counts }));
+  }, [receipts]);
+
+  const hasData = days.some((d) => d.allow > 0 || d.block > 0);
+  if (!hasData) return null;
+
+  const width = 300;
+  const height = 60;
+  const padding = 4;
+  const chartWidth = width - padding * 2;
+  const chartHeight = height - padding * 2;
+  const totalMax = Math.max(1, ...days.map((d) => d.allow + d.block));
+
+  const allowPoints = days.map((day, i) => {
+    const x = padding + (i / (days.length - 1)) * chartWidth;
+    const y = padding + chartHeight - (day.allow / totalMax) * chartHeight;
+    return `${x},${y}`;
+  }).join(" ");
+
+  const blockPoints = days.map((day, i) => {
+    const x = padding + (i / (days.length - 1)) * chartWidth;
+    const y = padding + chartHeight - (day.block / totalMax) * chartHeight;
+    return `${x},${y}`;
+  }).join(" ");
+
+  return (
+    <div className="space-y-2">
+      <h4 className="text-xs font-semibold text-brand-dark">Decision trend (30 days)</h4>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
+        <polyline
+          fill="none"
+          stroke="#10b981"
+          strokeWidth="2"
+          points={allowPoints}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <polyline
+          fill="none"
+          stroke="#f59e0b"
+          strokeWidth="2"
+          points={blockPoints}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <div className="flex items-center gap-3 text-[10px] text-slate-400">
+        <span className="flex items-center gap-1">
+          <span className="h-1 w-4 rounded-full bg-emerald-400" />
+          Allowed
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-1 w-4 rounded-full bg-amber-400" />
+          Blocked
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────
+// Block Reason Breakdown
+// ──────────────────────────────────────────
+
+export function BlockReasonBreakdown({ receipts }: { receipts: GuardReceipt[] }) {
+  const reasons = useMemo(() => {
+    const blocked = receipts.filter((r) => r.policy_decision === "block");
+    const counts = new Map<string, number>();
+    for (const r of blocked) {
+      const name = (r.artifact_name ?? "").toLowerCase();
+      const caps = (r.capabilities_summary ?? "").toLowerCase();
+      if (name.includes(".env") || name.includes("secret") || caps.includes("secret")) {
+        counts.set("Secret access", (counts.get("Secret access") ?? 0) + 1);
+      } else if (caps.includes("network") || caps.includes("exfiltrat")) {
+        counts.set("Network/Exfiltration", (counts.get("Network/Exfiltration") ?? 0) + 1);
+      } else if (caps.includes("destructive") || caps.includes("rm ") || caps.includes("delete")) {
+        counts.set("Destructive", (counts.get("Destructive") ?? 0) + 1);
+      } else if (caps.includes("encoded") || caps.includes("decode")) {
+        counts.set("Encoded payload", (counts.get("Encoded payload") ?? 0) + 1);
+      } else {
+        counts.set("Other", (counts.get("Other") ?? 0) + 1);
+      }
+    }
+    return Array.from(counts.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [receipts]);
+
+  if (reasons.length === 0) return null;
+
+  const maxCount = Math.max(1, ...reasons.map((r) => r.count));
+  const colors = ["bg-amber-500", "bg-amber-400", "bg-amber-300", "bg-amber-200", "bg-slate-300"];
+
+  return (
+    <div className="space-y-2">
+      <h4 className="text-xs font-semibold text-brand-dark">Why Guard blocked</h4>
+      <div className="space-y-2">
+        {reasons.map((reason, i) => (
+          <div key={reason.label} className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-600">{reason.label}</span>
+              <span className="font-medium text-brand-dark">{reason.count}</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+              <div
+                className={`h-full rounded-full ${colors[i % colors.length]} transition-all`}
+                style={{ width: `${(reason.count / maxCount) * 100}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────
 // Charts Section
 // ──────────────────────────────────────────
 
@@ -208,6 +347,12 @@ export function HistoryCharts({ receipts }: { receipts: GuardReceipt[] }) {
       </div>
       <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
         <AppActivityBars receipts={receipts} />
+      </div>
+      <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+        <DecisionTrendLine receipts={receipts} />
+      </div>
+      <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+        <BlockReasonBreakdown receipts={receipts} />
       </div>
     </div>
   );
