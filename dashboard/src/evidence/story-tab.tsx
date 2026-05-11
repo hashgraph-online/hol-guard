@@ -58,7 +58,7 @@ export function StoryTab({ receipts, selectedDay, onSelectDay }: StoryTabProps) 
     onSelectDay(d.toISOString().split("T")[0]);
   };
 
-  // Calculate if there are receipts on adjacent days for navigation
+  // Calculate navigation bounds across all receipt dates
   const { hasPrev, hasNext } = useMemo(() => {
     if (!selectedDay) {
       // "Recently" view - check if there are receipts beyond the first 20
@@ -66,21 +66,18 @@ export function StoryTab({ receipts, selectedDay, onSelectDay }: StoryTabProps) 
     }
     const current = new Date(selectedDay);
     current.setHours(0, 0, 0, 0);
-    const prev = new Date(current);
-    prev.setDate(prev.getDate() - 1);
-    const next = new Date(current);
-    next.setDate(next.getDate() + 1);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const hasPrevDay = receipts.some((r) => {
-      const d = new Date(r.timestamp);
-      return d >= prev && d < current;
-    });
-    const hasNextDay = next <= today && receipts.some((r) => {
-      const d = new Date(r.timestamp);
-      return d >= next && d < new Date(next.getTime() + 24 * 60 * 60 * 1000);
-    });
+    // Allow prev if there are any receipts older than current day
+    const oldestReceipt = receipts.length > 0
+      ? new Date(receipts[receipts.length - 1].timestamp)
+      : null;
+    const hasPrevDay = oldestReceipt !== null && oldestReceipt < current;
+
+    // Allow next if current day is before today
+    const hasNextDay = current < today;
+
     return { hasPrev: hasPrevDay, hasNext: hasNextDay };
   }, [receipts, selectedDay]);
 

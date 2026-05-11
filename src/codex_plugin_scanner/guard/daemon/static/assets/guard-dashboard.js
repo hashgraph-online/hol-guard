@@ -14570,20 +14570,11 @@ function StoryTab({ receipts, selectedDay, onSelectDay }) {
     }
     const current = new Date(selectedDay);
     current.setHours(0, 0, 0, 0);
-    const prev = new Date(current);
-    prev.setDate(prev.getDate() - 1);
-    const next = new Date(current);
-    next.setDate(next.getDate() + 1);
     const today = /* @__PURE__ */ new Date();
     today.setHours(0, 0, 0, 0);
-    const hasPrevDay = receipts.some((r) => {
-      const d = new Date(r.timestamp);
-      return d >= prev && d < current;
-    });
-    const hasNextDay = next <= today && receipts.some((r) => {
-      const d = new Date(r.timestamp);
-      return d >= next && d < new Date(next.getTime() + 24 * 60 * 60 * 1e3);
-    });
+    const oldestReceipt = receipts.length > 0 ? new Date(receipts[receipts.length - 1].timestamp) : null;
+    const hasPrevDay = oldestReceipt !== null && oldestReceipt < current;
+    const hasNextDay = current < today;
     return { hasPrev: hasPrevDay, hasNext: hasNextDay };
   }, [receipts, selectedDay]);
   if (dayReceipts.length === 0) {
@@ -16054,6 +16045,18 @@ function ReadyReceiptsWorkspace(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All apps" }),
             harnesses.map((h) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: h, children: harnessDisplayName(h) }, h))
           ]
+        }
+      ),
+      (search || categoryFilter || harnessFilter !== "all") && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => {
+            setSearch("");
+            setCategoryFilter("");
+            setHarnessFilter("all");
+          },
+          className: "ml-auto text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
+          children: "Clear filters"
         }
       )
     ] }),

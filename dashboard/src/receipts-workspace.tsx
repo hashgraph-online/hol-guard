@@ -255,6 +255,14 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
             <option key={h} value={h}>{harnessDisplayName(h)}</option>
           ))}
         </select>
+        {(search || categoryFilter || harnessFilter !== "all") && (
+          <button
+            onClick={() => { setSearch(""); setCategoryFilter(""); setHarnessFilter("all"); }}
+            className="ml-auto text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
