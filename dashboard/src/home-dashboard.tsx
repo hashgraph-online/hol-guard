@@ -20,7 +20,7 @@ import {
   GuardHero,
   ProofStrip,
 } from "./approval-center-primitives";
-import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
+import { harnessDisplayName, formatRelativeTime, formatNumber } from "./approval-center-utils";
 import { useFocusTrap } from "./use-focus-trap";
 import type {
   GuardApprovalRequest,
@@ -144,7 +144,7 @@ export function HomeWorkspace(props: {
     <div className="space-y-6">
       {/* Toast */}
       {toastMessage && (
-        <div className="guard-fade-in fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-[1.25rem] border border-brand-green/25 bg-brand-green-bg/90 px-4 py-3 shadow-lg backdrop-blur">
+        <div className="guard-fade-in fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-brand-green/25 bg-brand-green-bg/90 px-4 py-3 shadow-lg backdrop-blur">
           <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
           <p className="text-sm font-medium text-brand-green-text">{toastMessage}</p>
         </div>
@@ -163,10 +163,10 @@ export function HomeWorkspace(props: {
 
       <ProofStrip
         items={[
-          { label: "Pending", value: queuedCount, tone: queuedCount > 0 ? "blue" : "slate" },
-          { label: "Apps", value: watchedAppsCount, tone: watchedAppsCount > 0 ? "green" : "slate" },
-          { label: "Streak", value: streak, tone: streak > 1 ? "purple" : "slate", icon: streak > 1 ? <HiMiniFire className="h-3.5 w-3.5 text-brand-purple" aria-hidden="true" /> : null, hint: streak > 0 ? "Consecutive days with Guard activity. Resets after 48h of inactivity." : "Guard activity streak" },
-          { label: "History", value: snapshot?.receipt_count ?? 0, tone: "purple" },
+          { label: "Pending", value: formatNumber(queuedCount), tone: queuedCount > 0 ? "blue" : "slate" },
+          { label: "Apps", value: formatNumber(watchedAppsCount), tone: watchedAppsCount > 0 ? "green" : "slate" },
+          { label: "Streak", value: formatNumber(streak), tone: streak > 1 ? "purple" : "slate", icon: streak > 1 ? <HiMiniFire className="h-3.5 w-3.5 text-brand-purple" aria-hidden="true" /> : null, hint: streak > 0 ? "Consecutive days with Guard activity. Resets after 48h of inactivity." : "Guard activity streak" },
+          { label: "History", value: formatNumber(snapshot?.receipt_count ?? 0), tone: "purple" },
         ]}
       />
 
@@ -283,7 +283,7 @@ function ClearConfirmDialog(props: {
 
   return (
     <div className="guard-fade-in fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Confirm clear decisions">
-      <div ref={dialogRef} className="guard-fade-in w-full max-w-md rounded-[1.75rem] border border-brand-attention/20 bg-white p-6 shadow-2xl">
+      <div ref={dialogRef} className="guard-fade-in w-full max-w-md rounded-2xl border border-brand-attention/20 bg-white p-6 shadow-2xl">
             <div className="flex items-start gap-3">
               <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
               <div>
@@ -649,12 +649,12 @@ type RecentProtectionSectionProps = {
 function RecentProtectionSection(props: RecentProtectionSectionProps) {
   const recent = props.receipts.slice(0, 3);
   return (
-    <section className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+    <section className="rounded-2xl border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
       <SectionLabel>Recent protection</SectionLabel>
       <p className="mt-2 text-sm text-muted-foreground">
         What Guard stopped or allowed recently.
       </p>
-      <div className="mt-4 overflow-hidden rounded-[1.25rem] border border-slate-200/70">
+      <div className="mt-4 overflow-hidden rounded-xl border border-slate-200/70">
         {recent.map((receipt) => (
           <RecentReceiptRow key={receipt.receipt_id} receipt={receipt} />
         ))}
@@ -687,7 +687,7 @@ function StreakMilestoneBanner({ streak }: { streak: number }) {
   };
 
   return (
-    <div className="guard-fade-in relative overflow-hidden rounded-[1.75rem] border border-brand-purple/20 bg-brand-purple/[0.04] p-5 shadow-sm sm:p-6">
+    <div className="guard-fade-in relative overflow-hidden rounded-2xl border border-brand-purple/20 bg-brand-purple/[0.04] p-5 shadow-sm sm:p-6">
       <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-brand-purple/10" />
       <div className="relative flex items-start gap-3">
         <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-purple/10">
@@ -737,7 +737,7 @@ function CollapsibleCard(props: {
       : "border-brand-purple/15 bg-brand-purple/[0.04]";
 
   return (
-    <div className={`rounded-[1.75rem] border ${borderClass} p-5 shadow-sm sm:p-6`}>
+    <div className={`rounded-2xl border ${borderClass} p-5 shadow-sm sm:p-6`}>
       <button
         onClick={toggle}
         className="flex w-full items-center gap-3 text-left"
