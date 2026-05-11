@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   HiMiniCheckCircle,
   HiMiniNoSymbol,
@@ -6,7 +6,6 @@ import {
   HiMiniExclamationTriangle,
   HiMiniInformationCircle,
   HiMiniChevronLeft,
-  HiMiniBolt,
   HiMiniDocumentText,
   HiMiniArrowPath,
   HiMiniChevronDown,
@@ -14,6 +13,16 @@ import {
   HiMiniArrowTopRightOnSquare,
   HiMiniClipboard,
   HiMiniClipboardDocumentCheck,
+  HiMiniCodeBracket,
+  HiMiniCommandLine,
+  HiMiniCog6Tooth,
+  HiMiniCube,
+  HiMiniDocumentMagnifyingGlass,
+  HiMiniDocumentPlus,
+  HiMiniGlobeAlt,
+  HiMiniKey,
+  HiMiniPencilSquare,
+  HiMiniServerStack,
 } from "react-icons/hi2";
 import {
   ActionButton,
@@ -50,6 +59,16 @@ import type {
   GuardRuntimeSnapshot,
   DecisionScope,
 } from "./guard-types";
+import {
+  filterQueueByCategory,
+  queueCategoriesForItems,
+  resolveQueueCategory,
+  searchQueue,
+  sortQueue,
+  type QueueCategory,
+  type QueueCategoryId,
+  type QueueSortDirection,
+} from "./queue-state";
 
 export type ReviewViewModel = {
   item: GuardApprovalRequest;
@@ -105,46 +124,86 @@ const scopeChoices = [
 export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const { requests, activeRequestId, detail } = props;
   const queueRef = useRef<HTMLDivElement>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<QueueCategoryId | "all">("all");
+  const [sortDirection, setSortDirection] = useState<QueueSortDirection>("newest");
+
+  const filteredRequests = useMemo(() => {
+    const byCategory = filterQueueByCategory(requests, categoryFilter);
+    const searched = searchQueue(byCategory, searchTerm);
+    return sortQueue(searched, sortDirection);
+  }, [categoryFilter, requests, searchTerm, sortDirection]);
+
+  const categoryOptions = useMemo(() => queueCategoriesForItems(requests), [requests]);
+
+  const activeRequest =
+    activeRequestId !== null
+      ? requests.find((r) => r.request_id === activeRequestId) ?? null
+      : null;
 
   // Keyboard navigation for queue
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (requests.length === 0) return;
-      const activeIdx = requests.findIndex((r) => r.request_id === activeRequestId);
+      if (filteredRequests.length === 0) return;
+      const activeIdx = filteredRequests.findIndex((r) => r.request_id === activeRequestId);
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        const nextIdx = Math.min(activeIdx + 1, requests.length - 1);
-        if (nextIdx !== activeIdx) props.onOpenRequest(requests[nextIdx].request_id);
+        const nextIdx = Math.min(activeIdx + 1, filteredRequests.length - 1);
+        if (nextIdx !== activeIdx) props.onOpenRequest(filteredRequests[nextIdx].request_id);
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
         const prevIdx = Math.max(activeIdx - 1, 0);
-        if (prevIdx !== activeIdx) props.onOpenRequest(requests[prevIdx].request_id);
+        if (prevIdx !== activeIdx) props.onOpenRequest(filteredRequests[prevIdx].request_id);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [requests, activeRequestId, props.onOpenRequest]);
+  }, [filteredRequests, activeRequestId, props.onOpenRequest]);
+
+  useEffect(() => {
+    if (filteredRequests.length === 0) {
+      return;
+    }
+    if (activeRequestId === null || !filteredRequests.some((item) => item.request_id === activeRequestId)) {
+      props.onOpenRequest(filteredRequests[0].request_id);
+    }
+  }, [activeRequestId, filteredRequests, props.onOpenRequest]);
 
   if (requests.length === 0) {
     return <ReviewEmptyState runtime={props.runtime} resolutionMessage={props.resolutionMessage} />;
   }
 
-  const activeItem = activeRequestId
-    ? requests.find((r) => r.request_id === activeRequestId) ?? requests[0]
-    : requests[0];
+  const activeItem = activeRequest ?? filteredRequests[0] ?? requests[0];
 
-  const progressIndex = requests.findIndex((r) => r.request_id === activeItem.request_id);
-  const progress = `${Math.max(0, progressIndex) + 1} of ${requests.length}`;
+  const progressIndex = filteredRequests.findIndex((r) => r.request_id === activeItem.request_id);
+  const progress =
+    filteredRequests.length > 0
+      ? `${Math.max(0, progressIndex) + 1} of ${filteredRequests.length}`
+      : `0 of ${requests.length}`;
 
   return (
     <div className="space-y-6">
-      <ReviewHeader count={requests.length} progress={progress} activeHarness={activeItem.harness} />
+      <ReviewHeader
+        count={requests.length}
+        filteredCount={filteredRequests.length}
+        progress={progress}
+        activeHarness={activeItem.harness}
+        activeCategory={resolveQueueCategory(activeItem)}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <ReviewQueueList
-          requests={requests}
+          requests={filteredRequests}
+          totalCount={requests.length}
           activeRequestId={activeItem.request_id}
+          categoryOptions={categoryOptions}
+          categoryFilter={categoryFilter}
+          searchTerm={searchTerm}
+          sortDirection={sortDirection}
+          onCategoryFilterChange={setCategoryFilter}
+          onSearchTermChange={setSearchTerm}
+          onSortDirectionChange={setSortDirection}
           onOpenRequest={props.onOpenRequest}
           ref={queueRef}
         />
@@ -158,7 +217,19 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   );
 }
 
-function ReviewHeader({ count, progress, activeHarness }: { count: number; progress: string; activeHarness: string }) {
+function ReviewHeader({
+  count,
+  filteredCount,
+  progress,
+  activeHarness,
+  activeCategory,
+}: {
+  count: number;
+  filteredCount: number;
+  progress: string;
+  activeHarness: string;
+  activeCategory: QueueCategory;
+}) {
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div>
@@ -170,7 +241,9 @@ function ReviewHeader({ count, progress, activeHarness }: { count: number; progr
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-xs text-muted-foreground">{progress}</span>
         <Badge tone="info">{count} waiting</Badge>
+        {filteredCount !== count ? <Tag tone="slate">{filteredCount} shown</Tag> : null}
         <Tag tone="blue">{harnessDisplayName(activeHarness)}</Tag>
+        <Tag tone="slate">{activeCategory.shortLabel}</Tag>
       </div>
     </div>
   );
@@ -178,43 +251,128 @@ function ReviewHeader({ count, progress, activeHarness }: { count: number; progr
 
 const ReviewQueueList = forwardRef<HTMLDivElement, {
   requests: GuardApprovalRequest[];
+  totalCount: number;
   activeRequestId: string | null;
+  categoryOptions: QueueCategory[];
+  categoryFilter: QueueCategoryId | "all";
+  searchTerm: string;
+  sortDirection: QueueSortDirection;
+  onCategoryFilterChange: (category: QueueCategoryId | "all") => void;
+  onSearchTermChange: (term: string) => void;
+  onSortDirectionChange: (direction: QueueSortDirection) => void;
   onOpenRequest: (requestId: string) => void;
-}>(({ requests, activeRequestId, onOpenRequest }, ref) => {
+}>(({
+  requests,
+  totalCount,
+  activeRequestId,
+  categoryOptions,
+  categoryFilter,
+  searchTerm,
+  sortDirection,
+  onCategoryFilterChange,
+  onSearchTermChange,
+  onSortDirectionChange,
+  onOpenRequest,
+}, ref) => {
+  const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    onSearchTermChange(event.target.value);
+  }, [onSearchTermChange]);
+  const handleCategoryChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    onCategoryFilterChange(event.target.value as QueueCategoryId | "all");
+  }, [onCategoryFilterChange]);
+  const handleSortChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    onSortDirectionChange(event.target.value as QueueSortDirection);
+  }, [onSortDirectionChange]);
+
   return (
     <aside className="space-y-3" ref={ref}>
-      <SectionLabel>Queue</SectionLabel>
+      <div className="flex items-center justify-between gap-3">
+        <SectionLabel>Queue</SectionLabel>
+        <span className="font-mono text-[11px] font-semibold text-muted-foreground">
+          {requests.length}/{totalCount}
+        </span>
+      </div>
+      <div className="space-y-2 rounded-xl border border-slate-100 bg-white p-3">
+        <label className="block">
+          <span className="sr-only">Search review queue</span>
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={handleSearchChange}
+            placeholder="Search command, category, host..."
+            className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          />
+        </label>
+        <label className="block">
+          <span className="sr-only">Review category</span>
+          <select
+            value={categoryFilter}
+            onChange={handleCategoryChange}
+            className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          >
+            <option value="all">All categories</option>
+            {categoryOptions.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="sr-only">Sort review queue</span>
+          <select
+            value={sortDirection}
+            onChange={handleSortChange}
+            className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="category">Category</option>
+          </select>
+        </label>
+      </div>
       <div
         role="listbox"
         aria-label="Review queue"
         className="max-h-[70vh] space-y-2 overflow-y-auto rounded-lg border border-slate-100 bg-white p-1.5"
       >
-        {requests.map((item, index) => (
-          <QueueItemRow
-            key={item.request_id}
-            item={item}
-            active={item.request_id === activeRequestId}
-            index={index}
-            onClick={() => onOpenRequest(item.request_id)}
-          />
-        ))}
+        {requests.length > 0 ? (
+          requests.map((item, index) => (
+            <QueueItemRow
+              key={item.request_id}
+              item={item}
+              active={item.request_id === activeRequestId}
+              index={index}
+              onOpenRequest={onOpenRequest}
+            />
+          ))
+        ) : (
+          <div className="px-3 py-5">
+            <EmptyState title="No matching actions" body="Try a different category, search, or sort mode." tone="teach" />
+          </div>
+        )}
       </div>
     </aside>
   );
 });
 ReviewQueueList.displayName = "ReviewQueueList";
 
-function QueueItemRow({ item, active, index, onClick }: {
+function QueueItemRow({ item, active, index, onOpenRequest }: {
   item: GuardApprovalRequest;
   active: boolean;
   index: number;
-  onClick: () => void;
+  onOpenRequest: (requestId: string) => void;
 }) {
-  const title = item.artifact_name ?? item.artifact_id;
   const isBlocked = item.policy_action === "block";
+  const category = resolveQueueCategory(item);
+  const CategoryIcon = iconForQueueCategory(category.id);
+  const preview = queueItemPreview(item);
+  const handleClick = useCallback(() => {
+    onOpenRequest(item.request_id);
+  }, [item.request_id, onOpenRequest]);
   return (
     <button
-      onClick={onClick}
+      onClick={handleClick}
       role="option"
       aria-selected={active}
       aria-posinset={index + 1}
@@ -227,17 +385,68 @@ function QueueItemRow({ item, active, index, onClick }: {
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="truncate text-sm font-medium text-brand-dark">{title}</p>
-        {isBlocked ? (
-          <HiMiniNoSymbol className="h-3.5 w-3.5 shrink-0 text-brand-attention" aria-hidden="true" />
-        ) : (
-          <HiMiniBolt className="h-3.5 w-3.5 shrink-0 text-brand-blue" aria-hidden="true" />
-        )}
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+              active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
+            }`}
+          >
+            <CategoryIcon className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <p className="truncate text-sm font-medium text-brand-dark">{category.label}</p>
+        </div>
+        {isBlocked ? <HiMiniNoSymbol className="h-3.5 w-3.5 shrink-0 text-brand-attention" aria-hidden="true" /> : null}
       </div>
-      <p className="mt-0.5 text-[11px] text-muted-foreground">
-        {harnessDisplayName(item.harness)}
+      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+        {harnessDisplayName(item.harness)} · {preview}
       </p>
     </button>
+  );
+}
+
+function iconForQueueCategory(categoryId: QueueCategoryId) {
+  switch (categoryId) {
+    case "secret_access":
+      return HiMiniKey;
+    case "data_exfiltration":
+      return HiMiniArrowTopRightOnSquare;
+    case "file_edit":
+      return HiMiniPencilSquare;
+    case "file_read":
+      return HiMiniDocumentMagnifyingGlass;
+    case "destructive_shell":
+      return HiMiniNoSymbol;
+    case "encoded_shell":
+      return HiMiniCodeBracket;
+    case "network":
+      return HiMiniGlobeAlt;
+    case "mcp_tool":
+      return HiMiniServerStack;
+    case "package_script":
+      return HiMiniCube;
+    case "prompt_instruction":
+      return HiMiniInformationCircle;
+    case "config_change":
+      return HiMiniCog6Tooth;
+    case "browser_action":
+      return HiMiniArrowTopRightOnSquare;
+    case "harness_start":
+      return HiMiniShieldCheck;
+    case "shell_command":
+      return HiMiniCommandLine;
+    case "other":
+      return HiMiniDocumentPlus;
+  }
+}
+
+function queueItemPreview(item: GuardApprovalRequest): string {
+  const envelope = item.action_envelope_json;
+  return (
+    envelope?.command ??
+    envelope?.mcp_tool ??
+    envelope?.prompt_excerpt ??
+    envelope?.package_name ??
+    displayArtifactName(item)
   );
 }
 
@@ -810,5 +1019,3 @@ function buildWhatWouldHappen(item: GuardApprovalRequest): string | null {
   }
   return `Without Guard, this action would run immediately. Guard paused it so you can review and decide.`;
 }
-
-
