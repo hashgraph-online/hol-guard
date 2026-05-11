@@ -12,6 +12,8 @@
   --brand-green-text: #0d7a3a;
   --brand-green-bg: #dcfce7;
   --brand-purple: #b56cff;
+  --brand-attention: #7c8cfd;
+  --brand-attention-bg: #eef0ff;
   --border: 230 20% 91%;
   --input: 230 20% 91%;
   --ring: 263 85% 64%;
@@ -48,6 +50,8 @@
   --color-brand-green-text: var(--brand-green-text);
   --color-brand-green-bg: var(--brand-green-bg);
   --color-brand-purple: var(--brand-purple);
+  --color-brand-attention: var(--brand-attention);
+  --color-brand-attention-bg: var(--brand-attention-bg);
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -115,6 +119,28 @@ body {
   }
 }
 
+@keyframes guard-tab-enter {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes guard-tab-enter-reverse {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .guard-surface-in {
   animation: guard-enter 320ms var(--ease-out-quint) both;
 }
@@ -128,6 +154,18 @@ body {
 
 .guard-fade-in {
   animation: guard-fade-scale 250ms var(--ease-out-quart) both;
+}
+
+.guard-tab-enter {
+  animation: guard-tab-enter 280ms var(--ease-out-quint) both;
+}
+
+.guard-tab-enter-reverse {
+  animation: guard-tab-enter-reverse 280ms var(--ease-out-quint) both;
+}
+
+.guard-story-strip {
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 60%, rgba(85,153,254,0.04) 100%);
 }
 
 a,
@@ -149,9 +187,41 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
+@keyframes guard-fade-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes guard-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(85, 153, 254, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(85, 153, 254, 0);
+  }
+}
+
+.guard-fade-out {
+  animation: guard-fade-out 250ms var(--ease-out-quart) both;
+}
+
+.guard-pulse {
+  animation: guard-pulse 2s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .guard-surface-in,
-  .guard-fade-in {
+  .guard-fade-in,
+  .guard-fade-out,
+  .guard-tab-enter,
+  .guard-tab-enter-reverse,
+  .guard-pulse {
     animation: none !important;
   }
 

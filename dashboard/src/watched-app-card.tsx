@@ -31,6 +31,7 @@ type WatchedAppCardProps = {
   onConnect: (harness: string) => void;
   onTest: (harness: string) => void;
   onRepair: (harness: string) => void;
+  onOpenDetail?: (harness: string) => void;
 };
 
 function resolveAppStatus(
@@ -55,7 +56,7 @@ function StatusIcon(props: StatusIconProps) {
     return <HiMiniCheckCircle className="h-5 w-5 text-brand-green" aria-hidden="true" />;
   }
   if (props.status === "found_unprotected") {
-    return <HiMiniExclamationCircle className="h-5 w-5 text-amber-500" aria-hidden="true" />;
+    return <HiMiniExclamationCircle className="h-5 w-5 text-brand-attention" aria-hidden="true" />;
   }
   if (props.status === "needs_repair") {
     return <HiMiniWrenchScrewdriver className="h-5 w-5 text-brand-purple" aria-hidden="true" />;
@@ -75,10 +76,10 @@ function StatusBadge(props: StatusBadgeProps) {
     return <Badge tone="success">Protected</Badge>;
   }
   if (props.status === "found_unprotected") {
-    return <Badge tone="warning">Found, protection not installed</Badge>;
+    return <Badge tone="attention">Found, protection not installed</Badge>;
   }
   if (props.status === "needs_repair") {
-    return <Badge tone="warning">Repair needed</Badge>;
+    return <Badge tone="attention">Repair needed</Badge>;
   }
   if (props.status === "not_found") {
     return <Badge tone="default">Not found</Badge>;
@@ -142,9 +143,32 @@ function CardAction(props: CardActionProps) {
 export function WatchedAppCard(props: WatchedAppCardProps) {
   const hasInventory = props.harnessInventory.length > 0;
   const status = resolveAppStatus(props.install, hasInventory, props.hasReceipts);
+  const isClickable = props.onOpenDetail !== undefined;
+
+  const handleOpenDetail = useCallback(() => {
+    props.onOpenDetail?.(props.harness);
+  }, [props.onOpenDetail, props.harness]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-sm">
+    <div
+      className={`overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80 shadow-sm ${
+        isClickable ? "cursor-pointer transition-shadow hover:shadow-md" : ""
+      }`}
+      onClick={isClickable ? handleOpenDetail : undefined}
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      aria-label={isClickable ? `Open details for ${harnessDisplayName(props.harness)}` : undefined}
+      onKeyDown={
+        isClickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleOpenDetail();
+              }
+            }
+          : undefined
+      }
+    >
       <div className="flex items-start justify-between gap-3 p-4">
         <div className="flex min-w-0 items-start gap-3">
           <StatusIcon status={status} />
@@ -167,7 +191,7 @@ export function WatchedAppCard(props: WatchedAppCardProps) {
         </p>
       </div>
 
-      <div className="border-t border-slate-200/70 px-4 py-3">
+      <div className="border-t border-slate-200/70 px-4 py-3" onClick={(e) => e.stopPropagation()}>
         <CardAction
           harness={props.harness}
           status={status}
