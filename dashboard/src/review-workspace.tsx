@@ -187,7 +187,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
       <div
         role="listbox"
         aria-label="Review queue"
-        className="max-h-[70vh] space-y-2 overflow-y-auto rounded-[1.25rem] border border-slate-200/70 bg-white/60 p-2"
+        className="max-h-[70vh] space-y-2 overflow-y-auto rounded-lg border border-slate-100 bg-white p-1.5"
       >
         {requests.map((item, index) => (
           <QueueItemRow
@@ -220,7 +220,7 @@ function QueueItemRow({ item, active, index, onClick }: {
       aria-posinset={index + 1}
       aria-setsize={/* parent will provide */ undefined}
       tabIndex={active ? 0 : -1}
-      className={`w-full rounded-xl border px-3 py-2.5 text-left transition-all ${
+      className={`w-full rounded-lg py-2.5 text-left transition-all ${
         active
           ? "border-brand-blue bg-brand-blue/[0.06]"
           : "border-transparent bg-white hover:bg-slate-50"
@@ -381,7 +381,7 @@ function ReviewDecisionCard(props: {
       {/* Success banner */}
       {resolved && (
         <div
-          className={`guard-fade-in flex items-center gap-3 rounded-2xl border px-4 py-3 transition-all ${
+          className={`guard-fade-in flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
             resolved === "allow"
               ? "border-brand-green/25 bg-brand-green-bg/30"
               : "border-brand-attention/25 bg-brand-attention/[0.04]"
@@ -401,7 +401,7 @@ function ReviewDecisionCard(props: {
 
       {/* Confirm modal for broad scopes */}
       {confirmScope !== null && pendingAction !== null && (
-        <div className="guard-fade-in rounded-[1.75rem] border border-brand-attention/25 bg-brand-attention/[0.04] p-5 shadow-sm" role="alertdialog" aria-modal="true">
+        <div className="guard-fade-in rounded-xl border border-brand-attention/15 bg-brand-attention/[0.03] p-4" role="alertdialog" aria-modal="true">
           <div className="flex items-start gap-3">
             <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
             <div>
@@ -425,7 +425,7 @@ function ReviewDecisionCard(props: {
       )}
 
       {/* Main decision card */}
-      <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+      <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <SectionLabel>Paused action</SectionLabel>
@@ -574,7 +574,7 @@ function ReviewDecisionCard(props: {
 
       {/* Evidence section */}
       {hasEvidence && (
-        <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+        <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <button
             onClick={() => setShowEvidence(!showEvidence)}
             className="flex w-full items-center justify-between text-left focus:outline-none focus:ring-2 focus:ring-brand-blue/20 rounded-lg px-2 py-1 -ml-2"
@@ -606,7 +606,7 @@ function ReviewDecisionCard(props: {
 
       {/* Last time */}
       {detail.receipt && (
-        <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+        <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <SectionLabel>Last time</SectionLabel>
           <p className="mt-2 text-sm text-muted-foreground">
             You previously {detail.receipt.policy_decision}d a similar action{" "}
@@ -657,7 +657,7 @@ function ReviewEmptyState({ runtime, resolutionMessage }: { runtime: GuardRuntim
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-[1.75rem] border border-brand-green/15 bg-brand-green/[0.04] p-5 shadow-sm sm:p-6">
+        <div className="rounded-xl border border-emerald-200/60 bg-emerald-50/30 p-4 sm:p-5">
           <div className="flex items-start gap-3">
             <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-green/10">
               <HiMiniShieldCheck className="h-5 w-5 text-brand-green" aria-hidden="true" />
@@ -671,7 +671,7 @@ function ReviewEmptyState({ runtime, resolutionMessage }: { runtime: GuardRuntim
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6">
+        <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <SectionLabel>What Guard does</SectionLabel>
           <ul className="mt-3 space-y-2">
             {[
@@ -748,7 +748,7 @@ function ActionContentCard({ item }: { item: GuardApprovalRequest }) {
       )}
 
       {/* Terminal display of actual content */}
-      <div className="overflow-hidden rounded-[1.25rem] bg-[#0f172a] shadow-lg">
+      <div className="overflow-hidden rounded-xl bg-[#0f172a]">
         <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
           <span className="h-2.5 w-2.5 rounded-full bg-brand-purple" />
           <span className="h-2.5 w-2.5 rounded-full bg-brand-blue" />
