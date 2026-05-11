@@ -2683,6 +2683,7 @@ def _looks_like_safe_graphql_query_file_workflow(command_text: str) -> bool:
         not target_path.endswith(".graphql")
         or _path_text_looks_sensitive(target_path)
         or _contains_shell_expansion(target_path)
+        or not _looks_like_temporary_pr_threads_query_path(target_path)
     ):
         return False
     body = match.group("body").strip()
@@ -2725,6 +2726,23 @@ def _strip_shell_quotes(value: str) -> str:
 
 def _contains_shell_expansion(value: str) -> bool:
     return "$(" in value or "`" in value or "${" in value
+
+
+def _looks_like_temporary_pr_threads_query_path(path_text: str) -> bool:
+    normalized = path_text.replace("\\", "/")
+    basename = os.path.basename(normalized)
+    if basename != "pr-threads-query.graphql":
+        return False
+    lowered = normalized.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "/tmp/",
+            "/var/folders/",
+            "/.copilot/session-state/",
+            "/.cache/",
+        )
+    )
 
 
 def _path_text_looks_sensitive(path_text: str) -> bool:
