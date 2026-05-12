@@ -17,7 +17,7 @@ import urllib.parse
 import webbrowser
 from collections.abc import Mapping
 from contextlib import suppress
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TextIO
@@ -5142,6 +5142,82 @@ _CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
     }
 )
 _CODEX_SED_PRINT_SCRIPT_PATTERN = re.compile(r"^\s*(?:\$|\d+)?(?:\s*,\s*(?:\$|\d+))?p\s*$")
+_CODEX_GIT_DIFF_VALUE_OPTIONS = frozenset(
+    {
+        "--color",
+        "--color-moved",
+        "--diff-filter",
+        "--find-renames",
+        "--find-copies",
+        "--ignore-submodules",
+        "--inter-hunk-context",
+        "--line-prefix",
+        "--output-indicator-context",
+        "--output-indicator-new",
+        "--output-indicator-old",
+        "--src-prefix",
+        "--dst-prefix",
+        "--stat-width",
+        "--stat-name-width",
+        "--stat-graph-width",
+        "--unified",
+        "-G",
+        "-S",
+        "-U",
+        "--word-diff",
+        "--word-diff-regex",
+    }
+)
+_CODEX_GIT_DIFF_BOOLEAN_OPTIONS = frozenset(
+    {
+        "--binary",
+        "--cached",
+        "--check",
+        "--compact-summary",
+        "--exit-code",
+        "--find-copies-harder",
+        "--full-index",
+        "--ignore-all-space",
+        "--ignore-blank-lines",
+        "--ignore-cr-at-eol",
+        "--ignore-space-at-eol",
+        "--ignore-space-change",
+        "--minimal",
+        "--name-only",
+        "--name-status",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--numstat",
+        "--patch",
+        "--patch-with-raw",
+        "--pickaxe-all",
+        "--pickaxe-regex",
+        "--raw",
+        "--relative",
+        "--shortstat",
+        "--stat",
+        "--submodule",
+        "--summary",
+    }
+)
+_CODEX_GIT_DIFF_DISALLOWED_OPTIONS = frozenset({"--ext-diff", "--no-index", "--output", "--textconv"})
+_CODEX_SAFE_GIT_GLOBAL_BOOLEAN_FLAGS = frozenset(
+    {
+        "--bare",
+        "--glob-pathspecs",
+        "--literal-pathspecs",
+        "--no-literal-pathspecs",
+        "--no-pager",
+        "--noglob-pathspecs",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _CodexSedReadOnlyArgs:
+    scripts: tuple[str, ...]
+    targets: tuple[str, ...]
+    saw_print_suppression: bool
 
 
 def _codex_source_inspection_can_skip_secret_output(
@@ -5522,6 +5598,29 @@ def _parse_codex_head_tail_args(args: list[str]) -> tuple[list[str], bool, bool]
 
 
 def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path | None) -> bool:
+    parsed = _parse_codex_sed_read_only_args(args)
+    if parsed is None:
+        return False
+    return (
+        bool(parsed.targets)
+        and parsed.saw_print_suppression
+        and all(_CODEX_SED_PRINT_SCRIPT_PATTERN.fullmatch(script.strip()) for script in parsed.scripts)
+        and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in parsed.targets)
+    )
+
+
+def _codex_sed_args_are_bounded_filter(args: list[str]) -> bool:
+    parsed = _parse_codex_sed_read_only_args(args)
+    if parsed is None:
+        return False
+    return (
+        not parsed.targets
+        and parsed.saw_print_suppression
+        and all(_CODEX_SED_PRINT_SCRIPT_PATTERN.fullmatch(script.strip()) for script in parsed.scripts)
+    )
+
+
+def _parse_codex_sed_read_only_args(args: list[str]) -> _CodexSedReadOnlyArgs | None:
     scripts: list[str] = []
     targets: list[str] = []
     skip_next_script = False
@@ -5559,56 +5658,12 @@ def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path |
             scripts.append(arg)
             continue
         targets.append(arg)
-    if skip_next_script or not scripts or not targets:
-        return False
-    if not saw_print_suppression:
-        return False
-    if not all(_CODEX_SED_PRINT_SCRIPT_PATTERN.fullmatch(script.strip()) for script in scripts):
-        return False
-    return all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
-
-
-def _codex_sed_args_are_bounded_filter(args: list[str]) -> bool:
-    scripts: list[str] = []
-    skip_next_script = False
-    after_option_terminator = False
-    saw_print_suppression = False
-    for arg in args:
-        if skip_next_script:
-            skip_next_script = False
-            scripts.append(arg)
-            continue
-        if after_option_terminator:
-            return False
-        if arg == "--":
-            after_option_terminator = True
-            continue
-        if arg in {"-i", "--in-place"} or arg.startswith(("-i", "--in-place=")):
-            return False
-        if arg == "-n" or arg == "--quiet" or arg == "--silent":
-            saw_print_suppression = True
-            continue
-        if arg == "-e" or arg == "--expression":
-            skip_next_script = True
-            continue
-        if arg.startswith("-e") and len(arg) > 2:
-            scripts.append(arg[2:])
-            continue
-        if arg.startswith("--expression="):
-            _, script = arg.split("=", 1)
-            scripts.append(script)
-            continue
-        if arg.startswith("-"):
-            return False
-        if not scripts:
-            scripts.append(arg)
-            continue
-        return False
-    return (
-        not skip_next_script
-        and saw_print_suppression
-        and bool(scripts)
-        and all(_CODEX_SED_PRINT_SCRIPT_PATTERN.fullmatch(script.strip()) for script in scripts)
+    if skip_next_script or not scripts:
+        return None
+    return _CodexSedReadOnlyArgs(
+        scripts=tuple(scripts),
+        targets=tuple(targets),
+        saw_print_suppression=saw_print_suppression,
     )
 
 
@@ -5629,14 +5684,7 @@ def _git_grep_search_args(args: list[str]) -> list[str] | None:
         if any(arg.startswith(f"{flag}=") for flag in _CODEX_GIT_GLOBAL_VALUE_FLAGS):
             index += 1
             continue
-        if arg in {
-            "--no-pager",
-            "--bare",
-            "--literal-pathspecs",
-            "--no-literal-pathspecs",
-            "--glob-pathspecs",
-            "--noglob-pathspecs",
-        }:
+        if arg in _CODEX_SAFE_GIT_GLOBAL_BOOLEAN_FLAGS:
             index += 1
             continue
         return None
@@ -5648,7 +5696,11 @@ def _codex_git_diff_targets_are_source_like(args: list[str], *, cwd: Path | None
     if diff_args is None:
         return False
     targets = _git_diff_path_args(diff_args)
-    return bool(targets) and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+    return (
+        bool(targets)
+        and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+        and _git_diff_external_helpers_are_disabled_or_unconfigured(diff_args, cwd=cwd)
+    )
 
 
 def _git_diff_args(args: list[str]) -> list[str] | None:
@@ -5657,13 +5709,7 @@ def _git_diff_args(args: list[str]) -> list[str] | None:
         arg = args[index]
         if arg == "diff":
             return args[index + 1 :]
-        if arg in _CODEX_GIT_GLOBAL_VALUE_FLAGS:
-            index += 2
-            continue
-        if any(arg.startswith(f"{flag}=") for flag in _CODEX_GIT_GLOBAL_VALUE_FLAGS):
-            index += 1
-            continue
-        if arg in {"--no-pager", "--literal-pathspecs", "--no-literal-pathspecs"}:
+        if arg in _CODEX_SAFE_GIT_GLOBAL_BOOLEAN_FLAGS:
             index += 1
             continue
         return None
@@ -5674,64 +5720,6 @@ def _git_diff_path_args(args: list[str]) -> list[str]:
     paths: list[str] = []
     index = 0
     after_path_separator = False
-    value_options = {
-        "--color",
-        "--color-moved",
-        "--diff-filter",
-        "--find-renames",
-        "--find-copies",
-        "--ignore-submodules",
-        "--inter-hunk-context",
-        "--line-prefix",
-        "--output-indicator-context",
-        "--output-indicator-new",
-        "--output-indicator-old",
-        "--src-prefix",
-        "--dst-prefix",
-        "--stat-width",
-        "--stat-name-width",
-        "--stat-graph-width",
-        "--unified",
-        "-G",
-        "-S",
-        "-U",
-        "--word-diff",
-        "--word-diff-regex",
-    }
-    boolean_options = {
-        "--binary",
-        "--cached",
-        "--check",
-        "--compact-summary",
-        "--exit-code",
-        "--find-copies-harder",
-        "--full-index",
-        "--ignore-all-space",
-        "--ignore-blank-lines",
-        "--ignore-cr-at-eol",
-        "--ignore-space-at-eol",
-        "--ignore-space-change",
-        "--minimal",
-        "--name-only",
-        "--name-status",
-        "--numstat",
-        "--patch",
-        "--patch-with-raw",
-        "--pickaxe-all",
-        "--pickaxe-regex",
-        "--raw",
-        "--relative",
-        "--shortstat",
-        "--stat",
-        "--submodule",
-        "--summary",
-    }
-    disallowed_options = {
-        "--ext-diff",
-        "--no-index",
-        "--textconv",
-        "--output",
-    }
     while index < len(args):
         arg = args[index]
         if after_path_separator:
@@ -5742,15 +5730,17 @@ def _git_diff_path_args(args: list[str]) -> list[str]:
             after_path_separator = True
             index += 1
             continue
-        if arg in disallowed_options or any(arg.startswith(f"{option}=") for option in disallowed_options):
+        if arg in _CODEX_GIT_DIFF_DISALLOWED_OPTIONS or any(
+            arg.startswith(f"{option}=") for option in _CODEX_GIT_DIFF_DISALLOWED_OPTIONS
+        ):
             return []
-        if arg in value_options:
+        if arg in _CODEX_GIT_DIFF_VALUE_OPTIONS:
             index += 2
             continue
-        if any(arg.startswith(f"{option}=") for option in value_options):
+        if any(arg.startswith(f"{option}=") for option in _CODEX_GIT_DIFF_VALUE_OPTIONS):
             index += 1
             continue
-        if arg in boolean_options:
+        if arg in _CODEX_GIT_DIFF_BOOLEAN_OPTIONS:
             index += 1
             continue
         if re.fullmatch(r"-U\d{1,6}", arg):
@@ -5760,11 +5750,89 @@ def _git_diff_path_args(args: list[str]) -> list[str]:
             index += 1
             continue
         if arg.startswith("-"):
-            index += 1
-            continue
+            return []
         paths.append(arg)
         index += 1
     return paths
+
+
+def _git_diff_external_helpers_are_disabled_or_unconfigured(args: list[str], *, cwd: Path | None) -> bool:
+    has_no_ext_diff = "--no-ext-diff" in args
+    has_no_textconv = "--no-textconv" in args
+    if has_no_ext_diff and has_no_textconv:
+        return True
+    return _git_repo_diff_helpers_are_unconfigured(cwd)
+
+
+def _git_repo_diff_helpers_are_unconfigured(cwd: Path | None) -> bool:
+    if cwd is None:
+        return False
+    config_paths = _git_repo_config_paths(cwd)
+    if not config_paths:
+        return True
+    for config_path in config_paths:
+        if not config_path.is_file():
+            continue
+        try:
+            config_text = config_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return False
+        if _git_config_enables_diff_helper(config_text):
+            return False
+    return True
+
+
+def _git_repo_config_paths(cwd: Path) -> tuple[Path, ...]:
+    current = cwd.resolve()
+    if current.is_file():
+        current = current.parent
+    for candidate in (current, *current.parents):
+        git_path = candidate / ".git"
+        if git_path.is_dir():
+            return (git_path / "config", git_path / "config.worktree")
+        if git_path.is_file():
+            git_dir = _git_dir_from_file(git_path)
+            if git_dir is None:
+                return ()
+            common_dir = _git_common_dir(git_dir)
+            paths = [git_dir / "config", git_dir / "config.worktree"]
+            if common_dir != git_dir:
+                paths.extend([common_dir / "config", common_dir / "config.worktree"])
+            return tuple(paths)
+    return ()
+
+
+def _git_dir_from_file(git_file: Path) -> Path | None:
+    try:
+        content = git_file.read_text(encoding="utf-8", errors="ignore").strip()
+    except OSError:
+        return None
+    prefix = "gitdir:"
+    if not content.lower().startswith(prefix):
+        return None
+    raw_path = content[len(prefix) :].strip()
+    git_dir = Path(raw_path)
+    if not git_dir.is_absolute():
+        git_dir = (git_file.parent / git_dir).resolve()
+    return git_dir
+
+
+def _git_common_dir(git_dir: Path) -> Path:
+    common_dir_file = git_dir / "commondir"
+    if not common_dir_file.is_file():
+        return git_dir
+    try:
+        raw_path = common_dir_file.read_text(encoding="utf-8", errors="ignore").strip()
+    except OSError:
+        return git_dir
+    common_dir = Path(raw_path)
+    if not common_dir.is_absolute():
+        common_dir = (git_dir / common_dir).resolve()
+    return common_dir
+
+
+def _git_config_enables_diff_helper(config_text: str) -> bool:
+    return bool(re.search(r"(?im)^\s*(?:external|textconv)\s*=", config_text))
 
 
 def _git_grep_uses_external_execution(args: list[str]) -> bool:

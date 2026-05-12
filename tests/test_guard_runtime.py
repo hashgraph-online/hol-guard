@@ -13433,6 +13433,82 @@ def test_codex_read_only_source_inspection_rejects_git_diff_secret_path(tmp_path
     )
 
 
+def test_codex_read_only_source_inspection_rejects_git_diff_external_config(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+    _write_text(
+        workspace_dir / ".git" / "config",
+        """
+[diff]
+    external = /tmp/guard-helper
+""".strip(),
+    )
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
+def test_codex_read_only_source_inspection_rejects_git_diff_textconv_config(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+    _write_text(
+        workspace_dir / ".git" / "config",
+        """
+[diff "guard"]
+    textconv = /tmp/guard-textconv
+""".strip(),
+    )
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
+def test_codex_read_only_source_inspection_allows_git_diff_with_external_helpers_disabled(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+    _write_text(
+        workspace_dir / ".git" / "config",
+        """
+[diff "guard"]
+    textconv = /tmp/guard-textconv
+""".strip(),
+    )
+
+    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff --no-ext-diff --no-textconv -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
+def test_codex_read_only_source_inspection_rejects_git_config_injection(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git -c diff.external=/tmp/guard-helper diff -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
+def test_codex_read_only_source_inspection_rejects_unknown_git_diff_option(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff --mystery -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
 def test_codex_read_only_source_inspection_rejects_unbounded_sed_filter(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace"
     source_file = workspace_dir / "src" / "safe.ts"
