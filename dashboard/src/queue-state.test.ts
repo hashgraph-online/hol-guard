@@ -696,3 +696,18 @@ assert(
   resolveQueueCategory(curlJsonPostItem).label === "Network request",
   "T-QS-71: curl JSON posts classify as network requests, not file uploads"
 );
+
+const curlDeleteItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-curl-delete",
+  action_envelope_json: {
+    ...shellEnvelope,
+    command: "curl -X DELETE https://api.example.invalid/events/1",
+    network_hosts: ["api.example.invalid"],
+  },
+};
+
+assert(
+  resolveQueueCategory(curlDeleteItem).label === "Network request",
+  "T-QS-72: HTTP DELETE requests classify as network, not local destructive shell"
+);

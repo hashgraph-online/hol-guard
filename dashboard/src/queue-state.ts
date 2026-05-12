@@ -422,7 +422,7 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
     return "source_edit";
   }
 
-  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete", "wipe", "force-clean", "git clean -fd", "truncate"])) {
+  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
     return "destructive_shell";
   }
 
