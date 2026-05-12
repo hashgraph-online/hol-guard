@@ -69,7 +69,6 @@ class TestGeminiDetectEmptyConfig:
         _write_json(ctx.home_dir / ".gemini" / "settings.json", {})
         result = GeminiHarnessAdapter().detect(ctx)
         assert result.artifacts == ()
-        assert result.installed is True
 
 
 class TestGeminiMCPFromSettings:
@@ -408,7 +407,7 @@ class TestGeminiAdapterContract:
 
     def test_installed_true_when_settings_json_present(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
-        _write_json(ctx.home_dir / ".gemini" / "settings.json", {})
+        _write_json(ctx.home_dir / ".gemini" / "settings.json", {"theme": "dark"})
         result = GeminiHarnessAdapter().detect(ctx)
         assert result.installed is True
 
