@@ -50,6 +50,7 @@ import {
   resolveTerminalLabel,
   scopeLabel,
   STALE_REQUEST_COPY,
+  isDisplayableHarness,
 } from "./approval-center-utils";
 import {
   WhyThisPaused,
@@ -477,7 +478,7 @@ function QueueBrowser(props: {
   const [sortDirection, setSortDirection] = useState<QueueSortDirection>("newest");
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
-  const harnesses = Array.from(new Set(props.items.map((item) => item.harness))).sort();
+  const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
 
   const filteredItems = useMemo(() => {
     const byHarness =
