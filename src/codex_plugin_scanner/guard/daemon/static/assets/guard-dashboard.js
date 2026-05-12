@@ -16483,7 +16483,7 @@ function resolveQueueCategoryId(item) {
   const text = queueCategoryText(item);
   const isPromptReview = envelope?.action_type === "prompt" || decisionCategories.includes("prompt");
   const isWriteReview = envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command);
-  if (hasSecretSignal(decisionCategories, text) && hasExternalSink(text, command)) {
+  if (hasSecretSignal(decisionCategories, text) && hasExternalSink(text, command, !isWriteReview)) {
     return "secret_exfiltration";
   }
   if (textIncludesAny(text, ["credential-looking output", "contains credential-looking", "exposes token", "exposes key"])) {
@@ -16627,8 +16627,8 @@ function readCommand(command) {
 function hasSecretPathText(text) {
   return textIncludesAny(text, [".env", "token", "secret", "credential", "password", "private key", "api key"]);
 }
-function hasExternalSink(text, command) {
-  return fileUploadCommand(command) || outboundNetworkCommand(command, text) || textIncludesAny(text, ["exfiltrat", "upload", "copy-out", "external sink", "clipboard", "pastebin"]);
+function hasExternalSink(text, command, allowTextHints) {
+  return fileUploadCommand(command) || outboundNetworkCommand(command, text) || allowTextHints && textIncludesAny(text, ["exfiltrat", "clipboard", "pastebin"]);
 }
 function outboundNetworkCommand(command, text) {
   return networkCommand(command, text) && !inboundCopyCommand(command);

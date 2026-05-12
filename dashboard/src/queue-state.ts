@@ -336,7 +336,7 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
   const isPromptReview = envelope?.action_type === "prompt" || decisionCategories.includes("prompt");
   const isWriteReview = envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command);
 
-  if (hasSecretSignal(decisionCategories, text) && hasExternalSink(text, command)) {
+  if (hasSecretSignal(decisionCategories, text) && hasExternalSink(text, command, !isWriteReview)) {
     return "secret_exfiltration";
   }
 
@@ -523,11 +523,11 @@ function hasSecretPathText(text: string): boolean {
   return textIncludesAny(text, [".env", "token", "secret", "credential", "password", "private key", "api key"]);
 }
 
-function hasExternalSink(text: string, command: string): boolean {
+function hasExternalSink(text: string, command: string, allowTextHints: boolean): boolean {
   return (
     fileUploadCommand(command, text) ||
     outboundNetworkCommand(command, text) ||
-    textIncludesAny(text, ["exfiltrat", "upload", "copy-out", "external sink", "clipboard", "pastebin"])
+    (allowTextHints && textIncludesAny(text, ["exfiltrat", "clipboard", "pastebin"]))
   );
 }
 

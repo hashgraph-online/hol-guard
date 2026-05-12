@@ -966,3 +966,20 @@ assert(
   resolveQueueCategory(uploadGuideDocsWriteItem).label === "Documentation edit",
   "T-QS-93: docs writes mentioning upload do not classify as file upload without transfer evidence"
 );
+
+const tokenUploadDocsWriteItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-token-upload-docs-write",
+  action_envelope_json: {
+    ...shellEnvelope,
+    action_type: "file_write",
+    command: null,
+    target_paths: ["docs/token-upload-procedures.md"],
+  },
+  risk_summary: "Documents token upload procedures for operator training.",
+};
+
+assert(
+  resolveQueueCategory(tokenUploadDocsWriteItem).label === "Documentation edit",
+  "T-QS-94: docs writes mentioning token upload do not classify as secret exfiltration without transfer evidence"
+);
