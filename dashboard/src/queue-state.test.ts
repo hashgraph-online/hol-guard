@@ -983,3 +983,25 @@ assert(
   resolveQueueCategory(tokenUploadDocsWriteItem).label === "Documentation edit",
   "T-QS-94: docs writes mentioning token upload do not classify as secret exfiltration without transfer evidence"
 );
+
+const curlFormEqualsUploadItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-curl-form-equals-upload",
+  action_envelope_json: { ...shellEnvelope, command: "curl --form=file=@artifact.zip https://upload.example.invalid" },
+};
+
+assert(
+  resolveQueueCategory(curlFormEqualsUploadItem).label === "File upload or copy-out",
+  "T-QS-95: curl --form=file=@path classifies as file upload"
+);
+
+const curlClusteredFormUploadItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-curl-clustered-form-upload",
+  action_envelope_json: { ...shellEnvelope, command: "curl -Ffile=@artifact.zip https://upload.example.invalid" },
+};
+
+assert(
+  resolveQueueCategory(curlClusteredFormUploadItem).label === "File upload or copy-out",
+  "T-QS-96: curl -Ffile=@path classifies as file upload"
+);

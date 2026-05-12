@@ -549,7 +549,7 @@ function fileUploadCommand(command: string, text: string): boolean {
   const normalized = command.toLowerCase();
   return (
     outboundCopyCommand(normalized) ||
-    /\bcurl\b[\s\S]*(?:--upload-file|\s-t\s+\S+|--form\s+\S*@|-f\s+\S*@|--data(?:-binary|-raw|-urlencode)?\s+@)/.test(normalized)
+    /\bcurl\b[\s\S]*(?:--upload-file(?:=|\s+)\S+|(?:^|\s)-T(?:\S+|\s+\S+)|--form(?:=|\s+)\S*@|-F(?:\S*@|\s+\S*@)|--data(?:-binary|-raw|-urlencode)?(?:=|\s+)@\S+)/.test(command)
   );
 }
 
