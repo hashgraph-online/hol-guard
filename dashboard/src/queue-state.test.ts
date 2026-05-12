@@ -839,3 +839,14 @@ assert(
   resolveQueueCategory(scpUploadWithPortItem).label === "File upload or copy-out",
   "T-QS-83: scp option values are ignored when inferring upload direction"
 );
+
+const inboundSecretCopyItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-inbound-secret-copy",
+  action_envelope_json: { ...shellEnvelope, command: "scp host:/tmp/.env ./.env" },
+};
+
+assert(
+  resolveQueueCategory(inboundSecretCopyItem).label === "Network request",
+  "T-QS-84: inbound secret-named copies do not classify as secret exfiltration"
+);

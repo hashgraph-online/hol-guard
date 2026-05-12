@@ -16616,7 +16616,7 @@ function hasSecretSignal(decisionCategories, text) {
   ]);
 }
 function hasExternalSink(text, command) {
-  return networkCommand(command, text) || fileUploadCommand(command, text) || textIncludesAny(text, ["clipboard", "pastebin"]);
+  return fileUploadCommand(command, text) || textIncludesAny(text, ["exfiltrat", "upload", "copy-out", "external sink", "clipboard", "pastebin"]);
 }
 function networkCommand(command, text) {
   const normalized = command.toLowerCase();

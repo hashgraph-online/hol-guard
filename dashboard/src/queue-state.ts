@@ -505,7 +505,10 @@ function hasSecretSignal(decisionCategories: string[], text: string): boolean {
 }
 
 function hasExternalSink(text: string, command: string): boolean {
-  return networkCommand(command, text) || fileUploadCommand(command, text) || textIncludesAny(text, ["clipboard", "pastebin"]);
+  return (
+    fileUploadCommand(command, text) ||
+    textIncludesAny(text, ["exfiltrat", "upload", "copy-out", "external sink", "clipboard", "pastebin"])
+  );
 }
 
 function networkCommand(command: string, text: string): boolean {
