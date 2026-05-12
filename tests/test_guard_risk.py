@@ -3011,9 +3011,10 @@ def test_risk_helpers_detect_encoded_download_and_bypass_patterns():
 def test_extract_network_hosts_tolerates_bracketed_regex_in_url():
     regex_pattern = r"https://[^:]*:\([^@]*\)@.*|\1|"
     hosts = extract_network_hosts(f"credential strip using {regex_pattern}")
-    assert isinstance(hosts, set)
+    assert hosts == set()
 
 
 def test_normalized_url_indicator_tolerates_bracketed_regex():
-    result = _normalized_url_indicator(r"https://[^:]*:\([^@]*\)@.*|\1|")
-    assert isinstance(result, str)
+    raw = r"https://[^:]*:\([^@]*\)@.*|\1|"
+    result = _normalized_url_indicator(raw)
+    assert result == raw
