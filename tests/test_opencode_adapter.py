@@ -3,16 +3,12 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
-
-import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter
 from codex_plugin_scanner.guard.adapters.opencode_artifacts import (
     CONFIG_FILENAMES,
-    config_paths,
     runtime_config_path,
 )
 
@@ -334,7 +330,6 @@ class TestOpenCodeUninstall:
     def test_uninstall_removes_file_when_no_prior_config_existed(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         OpenCodeHarnessAdapter().install(ctx)
-        target = Path(OpenCodeHarnessAdapter().install.__doc__ or "") or OpenCodeHarnessAdapter._target_config_path(ctx)
         target = OpenCodeHarnessAdapter._target_config_path(ctx)
         OpenCodeHarnessAdapter().uninstall(ctx)
         assert not target.is_file()
