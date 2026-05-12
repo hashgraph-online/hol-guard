@@ -8,6 +8,7 @@ import {
 } from "react-icons/hi2";
 
 import { EmptyState } from "./approval-center-primitives";
+import { isDisplayableHarness, normalizeHarnessFilter } from "./approval-center-utils";
 import type { GuardReceipt } from "./guard-types";
 import type { EvidenceFilterState, EvidenceView } from "./evidence/evidence-types";
 import { filterEvidence } from "./evidence/evidence-filters";
@@ -202,7 +203,10 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
   const urlSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const harnesses = useMemo(
-    () => Array.from(new Set(receiptItems.map((r) => r.harness))).sort(),
+    () =>
+      Array.from(
+        new Set(receiptItems.map((r) => r.harness).filter(isDisplayableHarness))
+      ).sort(),
     [receiptItems]
   );
 
@@ -463,16 +467,15 @@ export function filterReceiptItems(
   dateRange: string
 ): GuardReceipt[] {
   const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+  const activeHarnessFilter = normalizeHarnessFilter(harnessFilter);
   const now = Date.now();
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayStartMs = todayStart.getTime();
   const last7Start = now - 7 * 24 * 60 * 60 * 1000;
   return items.filter((receipt) => {
-    const matchesHarness =
-      harnessFilter === "all" || receipt.harness === harnessFilter;
-    const matchesDecision =
-      decisionFilter === "all" || receipt.policy_decision === decisionFilter;
+    const matchesHarness = activeHarnessFilter === "all" || receipt.harness === activeHarnessFilter;
+    const matchesDecision = decisionFilter === "all" || receipt.policy_decision === decisionFilter;
     if (!matchesHarness || !matchesDecision) {
       return false;
     }
