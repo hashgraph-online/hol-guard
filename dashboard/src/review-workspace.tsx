@@ -229,7 +229,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[260px_1fr] lg:grid-cols-[280px_1fr] xl:grid-cols-[300px_1fr] items-start">
+      <div className="grid gap-4 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)] items-start">
         <div className={`${mobileQueueOpen ? "block" : "hidden"} md:block`}>
           <ReviewQueueList
             requests={filteredRequests}
@@ -426,7 +426,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
       <div
         role="listbox"
         aria-label="Review queue"
-        className="max-h-[70vh] space-y-2 overflow-y-auto rounded-lg border border-slate-100 bg-white p-1.5"
+        className="space-y-2 overscroll-contain rounded-lg border border-slate-100 bg-white p-1.5"
       >
         {requests.length > 0 ? (
           requests.map((item, index) => (
@@ -836,7 +836,7 @@ function ReviewDecisionCard(props: {
         {/* Scope selection */}
         <div className="mt-6 space-y-2">
           <SectionLabel>How long should this choice last?</SectionLabel>
-          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Scope selection">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Scope selection">
             {availableScopeChoices.map((choice) => (
               <button
                 key={choice.value}
@@ -878,7 +878,7 @@ function ReviewDecisionCard(props: {
         )}
 
         {/* Action buttons */}
-        <div className="mt-6 grid grid-cols-2 gap-3">
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <ActionButton
             ref={allowButtonRef}
             variant="success"
@@ -1106,7 +1106,7 @@ function ActionContentCard({ item }: { item: GuardApprovalRequest }) {
             <CopyButton text={launchText} />
           </span>
         </div>
-        <pre className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90">
+        <pre className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90 [scrollbar-gutter:stable]">
           {launchText}
         </pre>
       </div>

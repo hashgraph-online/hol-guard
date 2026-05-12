@@ -17319,7 +17319,7 @@ function ReviewWorkspace(props) {
         ]
       }
     ) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 md:grid-cols-[260px_1fr] lg:grid-cols-[280px_1fr] xl:grid-cols-[300px_1fr] items-start", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)] items-start", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `${mobileQueueOpen ? "block" : "hidden"} md:block`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         ReviewQueueList,
         {
@@ -17498,7 +17498,7 @@ const ReviewQueueList = reactExports.forwardRef(({
       {
         role: "listbox",
         "aria-label": "Review queue",
-        className: "max-h-[70vh] space-y-2 overflow-y-auto rounded-lg border border-slate-100 bg-white p-1.5",
+        className: "space-y-2 overscroll-contain rounded-lg border border-slate-100 bg-white p-1.5",
         children: requests.length > 0 ? requests.map((item, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           QueueItemRow,
           {
@@ -17844,7 +17844,7 @@ function ReviewDecisionCard(props) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "How long should this choice last?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 sm:grid-cols-2", role: "radiogroup", "aria-label": "Scope selection", children: availableScopeChoices.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Scope selection", children: availableScopeChoices.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
             onClick: () => setScope(choice.value),
@@ -17876,7 +17876,7 @@ function ReviewDecisionCard(props) {
           )
         ] })
       ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-2 gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           ActionButton,
           {
@@ -18041,7 +18041,7 @@ function ActionContentCard({ item }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45", children: terminalLabel }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CopyButton, { text: launchText }) })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90", children: launchText })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90 [scrollbar-gutter:stable]", children: launchText })
     ] })
   ] });
 }
@@ -19832,18 +19832,18 @@ export {
   GuardHero as G,
   HiMiniCheckCircle as H,
   HiMiniCog6Tooth as I,
-  fetchApprovalPage as J,
-  fetchPolicy as K,
-  HiMiniArrowLeft as L,
-  HiMiniHome as M,
-  HiMiniAdjustmentsHorizontal as N,
-  detectCategory as O,
+  HiMiniChartBar as J,
+  detectCategory as K,
+  CATEGORIES as L,
+  HiMiniCloud as M,
+  fetchApprovalPage as N,
+  fetchPolicy as O,
   ProofStrip as P,
-  CATEGORIES as Q,
-  HiMiniCloud as R,
+  HiMiniArrowLeft as Q,
+  HiMiniHome as R,
   SectionLabel as S,
   Tag as T,
-  HiMiniChartBar as U,
+  HiMiniAdjustmentsHorizontal as U,
   HiMiniCommandLine as V,
   HiMiniQuestionMarkCircle as W,
   HiMiniFire as a,
