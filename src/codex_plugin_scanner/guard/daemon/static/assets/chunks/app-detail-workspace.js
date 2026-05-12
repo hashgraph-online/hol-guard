@@ -198,7 +198,8 @@ function AppDetailWorkspace(props) {
                 harnessReceipts,
                 harnessInventory,
                 pendingItems,
-                onOpenRequest: props.onOpenRequest
+                onOpenRequest: props.onOpenRequest,
+                onManagedInstallChanged: props.onManagedInstallChanged
               }
             ),
             activeTab === "activity" && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -261,8 +262,23 @@ function AppStatusBadge({ status }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Unknown" });
 }
 function AppOverviewTab(props) {
+  const showFirstRunGuide = shouldShowFirstRunGuide({
+    status: props.status,
+    totalActions: props.totalActions,
+    inventoryCount: props.harnessInventory.length,
+    pendingCount: props.pendingItems.length
+  });
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
+      showFirstRunGuide && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        FirstRunGuide,
+        {
+          harness: props.harness,
+          install: props.install,
+          status: props.status,
+          onManagedInstallChanged: props.onManagedInstallChanged
+        }
+      ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -322,7 +338,7 @@ function AppOverviewTab(props) {
       ] })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
-      props.harnessReceipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+      props.harnessReceipts.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent events" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "What Guard decided recently." }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: props.harnessReceipts.slice(0, 5).map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -343,7 +359,16 @@ function AppOverviewTab(props) {
           },
           receipt.receipt_id
         )) })
-      ] }),
+      ] }) : showFirstRunGuide ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "What happens next" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: firstRunSteps(props.harness).map((step) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3 rounded-xl border border-white/70 bg-white/80 p-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue", children: step.index }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: step.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-muted-foreground", children: step.body })
+          ] })
+        ] }, step.title)) })
+      ] }) : null,
       props.harnessInventory.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Discovered items" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "Tools and plugins Guard found in this app." }),
@@ -361,6 +386,74 @@ function AppOverviewTab(props) {
       ] })
     ] })
   ] });
+}
+function shouldShowFirstRunGuide(input) {
+  return input.status !== "active" && input.totalActions === 0 && input.inventoryCount === 0 && input.pendingCount === 0;
+}
+function FirstRunGuide(props) {
+  const displayName = harnessDisplayName(props.harness);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden rounded-[1.35rem] border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.10] via-white to-brand-green/[0.06] shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col justify-between gap-6 p-5 sm:p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(SectionLabel, { children: [
+          "Start protecting ",
+          displayName
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "mt-3 max-w-xl text-2xl font-semibold leading-tight text-brand-dark", children: [
+          "Connect ",
+          displayName,
+          ", restart it once, then let Guard pause risky actions before they run."
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground", children: firstRunIntro(props.harness) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-3 sm:grid-cols-3 lg:grid-cols-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(GuidePill, { label: "No terminal copy", value: "Dashboard action" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(GuidePill, { label: "Local only", value: "Daemon managed" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(GuidePill, { label: "First proof", value: "Appears here" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t border-white/70 bg-white/72 p-4 sm:p-5 lg:border-l lg:border-t-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      HarnessSetupPanel,
+      {
+        harness: props.harness,
+        install: props.install,
+        status: props.status,
+        onManagedInstallChanged: props.onManagedInstallChanged
+      }
+    ) })
+  ] }) });
+}
+function GuidePill(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-white/80 bg-white/70 p-3 shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-widest text-brand-blue", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm font-semibold text-brand-dark", children: props.value })
+  ] });
+}
+function firstRunIntro(harness) {
+  if (harness === "cursor") {
+    return "Guard writes the Cursor-specific local configuration through the daemon. After connecting, restart Cursor so the protected hooks load before your next agent run.";
+  }
+  return `Guard writes the ${harnessDisplayName(harness)} local configuration through the daemon. After connecting, restart the app so protected hooks load before your next agent run.`;
+}
+function firstRunSteps(harness) {
+  const displayName = harnessDisplayName(harness);
+  return [
+    {
+      index: 1,
+      title: `Connect ${displayName}`,
+      body: "Use the dashboard action. Guard asks the local daemon to write only managed app configuration."
+    },
+    {
+      index: 2,
+      title: `Restart ${displayName}`,
+      body: "Restart the app once so the new hooks and wrappers load in the next session."
+    },
+    {
+      index: 3,
+      title: "Run your agent flow",
+      body: "When a risky command, prompt, or tool action appears, Guard pauses it and sends the decision to Review."
+    }
+  ];
 }
 function AppActivityTab(props) {
   const [filter, setFilter] = reactExports.useState("all");
@@ -1182,5 +1275,6 @@ function StatCard({
   ] });
 }
 export {
-  AppDetailWorkspace
+  AppDetailWorkspace,
+  shouldShowFirstRunGuide
 };

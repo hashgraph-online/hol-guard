@@ -319,6 +319,7 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
                 harnessInventory={harnessInventory}
                 pendingItems={pendingItems}
                 onOpenRequest={props.onOpenRequest}
+                onManagedInstallChanged={props.onManagedInstallChanged}
               />
             )}
             {activeTab === "activity" && (
@@ -396,10 +397,27 @@ function AppOverviewTab(props: {
   harnessInventory: GuardInventoryItem[];
   pendingItems: GuardApprovalRequest[];
   onOpenRequest: (requestId: string) => void;
+  onManagedInstallChanged?: () => Promise<void>;
 }) {
+  const showFirstRunGuide = shouldShowFirstRunGuide({
+    status: props.status,
+    totalActions: props.totalActions,
+    inventoryCount: props.harnessInventory.length,
+    pendingCount: props.pendingItems.length,
+  });
+
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
       <section className="space-y-6">
+        {showFirstRunGuide && (
+          <FirstRunGuide
+            harness={props.harness}
+            install={props.install}
+            status={props.status}
+            onManagedInstallChanged={props.onManagedInstallChanged}
+          />
+        )}
+
         <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -480,7 +498,7 @@ function AppOverviewTab(props: {
       </section>
 
       <section className="space-y-6">
-        {props.harnessReceipts.length > 0 && (
+        {props.harnessReceipts.length > 0 ? (
           <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
             <SectionLabel>Recent events</SectionLabel>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -510,7 +528,24 @@ function AppOverviewTab(props: {
               ))}
             </div>
           </div>
-        )}
+        ) : showFirstRunGuide ? (
+          <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5">
+            <SectionLabel>What happens next</SectionLabel>
+            <div className="mt-4 space-y-3">
+              {firstRunSteps(props.harness).map((step) => (
+                <div key={step.title} className="flex gap-3 rounded-xl border border-white/70 bg-white/80 p-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue">
+                    {step.index}
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-brand-dark">{step.title}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{step.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {props.harnessInventory.length > 0 && (
           <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
@@ -534,6 +569,91 @@ function AppOverviewTab(props: {
       </section>
     </div>
   );
+}
+
+export function shouldShowFirstRunGuide(input: {
+  status: "active" | "needs_setup" | "observed" | "unknown";
+  totalActions: number;
+  inventoryCount: number;
+  pendingCount: number;
+}): boolean {
+  return input.status !== "active" && input.totalActions === 0 && input.inventoryCount === 0 && input.pendingCount === 0;
+}
+
+function FirstRunGuide(props: {
+  harness: string;
+  install: GuardManagedInstall | undefined;
+  status: "active" | "needs_setup" | "observed" | "unknown";
+  onManagedInstallChanged?: () => Promise<void>;
+}) {
+  const displayName = harnessDisplayName(props.harness);
+  return (
+    <div className="overflow-hidden rounded-[1.35rem] border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.10] via-white to-brand-green/[0.06] shadow-sm">
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+        <div className="flex flex-col justify-between gap-6 p-5 sm:p-6">
+          <div>
+            <SectionLabel>Start protecting {displayName}</SectionLabel>
+            <h2 className="mt-3 max-w-xl text-2xl font-semibold leading-tight text-brand-dark">
+              Connect {displayName}, restart it once, then let Guard pause risky actions before they run.
+            </h2>
+            <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
+              {firstRunIntro(props.harness)}
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <GuidePill label="No terminal copy" value="Dashboard action" />
+            <GuidePill label="Local only" value="Daemon managed" />
+            <GuidePill label="First proof" value="Appears here" />
+          </div>
+        </div>
+        <div className="border-t border-white/70 bg-white/72 p-4 sm:p-5 lg:border-l lg:border-t-0">
+          <HarnessSetupPanel
+            harness={props.harness}
+            install={props.install}
+            status={props.status}
+            onManagedInstallChanged={props.onManagedInstallChanged}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GuidePill(props: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/80 bg-white/70 p-3 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-brand-blue">{props.label}</p>
+      <p className="mt-1 text-sm font-semibold text-brand-dark">{props.value}</p>
+    </div>
+  );
+}
+
+function firstRunIntro(harness: string): string {
+  if (harness === "cursor") {
+    return "Guard writes the Cursor-specific local configuration through the daemon. After connecting, restart Cursor so the protected hooks load before your next agent run.";
+  }
+  return `Guard writes the ${harnessDisplayName(harness)} local configuration through the daemon. After connecting, restart the app so protected hooks load before your next agent run.`;
+}
+
+function firstRunSteps(harness: string): { index: number; title: string; body: string }[] {
+  const displayName = harnessDisplayName(harness);
+  return [
+    {
+      index: 1,
+      title: `Connect ${displayName}`,
+      body: "Use the dashboard action. Guard asks the local daemon to write only managed app configuration.",
+    },
+    {
+      index: 2,
+      title: `Restart ${displayName}`,
+      body: "Restart the app once so the new hooks and wrappers load in the next session.",
+    },
+    {
+      index: 3,
+      title: "Run your agent flow",
+      body: "When a risky command, prompt, or tool action appears, Guard pauses it and sends the decision to Review.",
+    },
+  ];
 }
 
 function AppActivityTab(props: {
