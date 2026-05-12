@@ -5144,12 +5144,7 @@ _CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
 _CODEX_SED_PRINT_SCRIPT_PATTERN = re.compile(r"^\s*(?:\$|\d+)?(?:\s*,\s*(?:\$|\d+))?p\s*$")
 _CODEX_GIT_DIFF_VALUE_OPTIONS = frozenset(
     {
-        "--color",
-        "--color-moved",
         "--diff-filter",
-        "--find-renames",
-        "--find-copies",
-        "--ignore-submodules",
         "--inter-hunk-context",
         "--line-prefix",
         "--output-indicator-context",
@@ -5164,8 +5159,18 @@ _CODEX_GIT_DIFF_VALUE_OPTIONS = frozenset(
         "-G",
         "-S",
         "-U",
-        "--word-diff",
         "--word-diff-regex",
+    }
+)
+_CODEX_GIT_DIFF_OPTIONAL_VALUE_OPTIONS = frozenset(
+    {
+        "--color",
+        "--color-moved",
+        "--find-copies",
+        "--find-renames",
+        "--ignore-submodules",
+        "--submodule",
+        "--word-diff",
     }
 )
 _CODEX_GIT_DIFF_BOOLEAN_OPTIONS = frozenset(
@@ -5196,7 +5201,6 @@ _CODEX_GIT_DIFF_BOOLEAN_OPTIONS = frozenset(
         "--relative",
         "--shortstat",
         "--stat",
-        "--submodule",
         "--summary",
     }
 )
@@ -5734,7 +5738,15 @@ def _git_diff_path_args(args: list[str]) -> list[str]:
             arg.startswith(f"{option}=") for option in _CODEX_GIT_DIFF_DISALLOWED_OPTIONS
         ):
             return []
+        if arg in _CODEX_GIT_DIFF_OPTIONAL_VALUE_OPTIONS:
+            index += 1
+            continue
+        if any(arg.startswith(f"{option}=") for option in _CODEX_GIT_DIFF_OPTIONAL_VALUE_OPTIONS):
+            index += 1
+            continue
         if arg in _CODEX_GIT_DIFF_VALUE_OPTIONS:
+            if index + 1 >= len(args) or args[index + 1].startswith("-"):
+                return []
             index += 2
             continue
         if any(arg.startswith(f"{option}=") for option in _CODEX_GIT_DIFF_VALUE_OPTIONS):
