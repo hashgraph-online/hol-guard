@@ -584,39 +584,72 @@ function encodedCommand(text: string): boolean {
 }
 
 function outboundCopyCommand(command: string): boolean {
-  const tokens = shellTokens(command);
-  const awsIndex = findSequence(tokens, ["aws", "s3", "cp"]);
-  if (awsIndex >= 0) {
-    return isOutboundCopy(tokens[awsIndex + 3], tokens[awsIndex + 4]);
-  }
-  const gsutilIndex = findSequence(tokens, ["gsutil", "cp"]);
-  if (gsutilIndex >= 0) {
-    return isOutboundCopy(tokens[gsutilIndex + 2], tokens[gsutilIndex + 3]);
-  }
-  const copyIndex = tokens.findIndex((token) => token === "scp" || token === "rsync");
-  if (copyIndex >= 0) {
-    const args = tokens.slice(copyIndex + 1).filter((token) => !token.startsWith("-"));
-    return isOutboundCopy(args[0], args[1]);
-  }
-  return false;
+  const operands = copyOperands(command);
+  return isOutboundCopy(operands?.source, operands?.destination);
 }
 
 function inboundCopyCommand(command: string): boolean {
-  const tokens = shellTokens(command);
+  const operands = copyOperands(command);
+  return isInboundCopy(operands?.source, operands?.destination);
+}
+
+function copyOperands(command: string): { source: string; destination: string } | null {
+  const tokens = stripOptionTokens(shellTokens(command));
   const awsIndex = findSequence(tokens, ["aws", "s3", "cp"]);
   if (awsIndex >= 0) {
-    return isInboundCopy(tokens[awsIndex + 3], tokens[awsIndex + 4]);
+    return positionalPair(tokens.slice(awsIndex + 3));
   }
   const gsutilIndex = findSequence(tokens, ["gsutil", "cp"]);
   if (gsutilIndex >= 0) {
-    return isInboundCopy(tokens[gsutilIndex + 2], tokens[gsutilIndex + 3]);
+    return positionalPair(tokens.slice(gsutilIndex + 2));
   }
   const copyIndex = tokens.findIndex((token) => token === "scp" || token === "rsync");
   if (copyIndex >= 0) {
-    const args = tokens.slice(copyIndex + 1).filter((token) => !token.startsWith("-"));
-    return isInboundCopy(args[0], args[1]);
+    return positionalPair(tokens.slice(copyIndex + 1));
   }
-  return false;
+  return null;
+}
+
+function positionalPair(tokens: string[]): { source: string; destination: string } | null {
+  const positional = tokens.filter((token) => !token.startsWith("-"));
+  if (positional.length < 2) {
+    return null;
+  }
+  return { source: positional[positional.length - 2], destination: positional[positional.length - 1] };
+}
+
+function stripOptionTokens(tokens: string[]): string[] {
+  const optionsWithValues = new Set([
+    "--profile",
+    "--region",
+    "--endpoint-url",
+    "--source-region",
+    "--exclude",
+    "--include",
+    "--acl",
+    "--storage-class",
+    "--sse",
+    "--rsh",
+    "-P",
+    "-i",
+    "-o",
+    "-F",
+    "-S",
+    "-e",
+  ]);
+  const stripped: string[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token.startsWith("-")) {
+      stripped.push(token);
+      continue;
+    }
+    const optionName = token.includes("=") ? token.slice(0, token.indexOf("=")) : token;
+    if (optionsWithValues.has(optionName) && !token.includes("=")) {
+      index += 1;
+    }
+  }
+  return stripped;
 }
 
 function shellTokens(command: string): string[] {

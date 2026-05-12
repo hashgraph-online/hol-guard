@@ -806,3 +806,36 @@ assert(
   resolveQueueCategory(evalSetupItem).label === "Shell command",
   "T-QS-80: normal eval setup snippets do not classify as encoded shell"
 );
+
+const recursiveCloudUploadItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-recursive-cloud-upload",
+  action_envelope_json: { ...shellEnvelope, command: "aws s3 cp --recursive ./dist s3://audit-bucket/dist/" },
+};
+
+assert(
+  resolveQueueCategory(recursiveCloudUploadItem).label === "File upload or copy-out",
+  "T-QS-81: aws s3 cp with options still classifies outbound copy as upload"
+);
+
+const profileCloudUploadItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-profile-cloud-upload",
+  action_envelope_json: { ...shellEnvelope, command: "aws --profile prod s3 cp ./dist/app.js s3://audit-bucket/app.js" },
+};
+
+assert(
+  resolveQueueCategory(profileCloudUploadItem).label === "File upload or copy-out",
+  "T-QS-82: aws global options do not hide outbound copy direction"
+);
+
+const scpUploadWithPortItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-scp-upload-port",
+  action_envelope_json: { ...shellEnvelope, command: "scp -P 2222 ./log host:/tmp/log" },
+};
+
+assert(
+  resolveQueueCategory(scpUploadWithPortItem).label === "File upload or copy-out",
+  "T-QS-83: scp option values are ignored when inferring upload direction"
+);
