@@ -5120,9 +5120,9 @@ _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
     fake[_-]?(?:credential|secret|token)
     \s*[:=]\s*
     (?:
-        "[^\r\n"]*"         # double-quoted value
-        |'[^\r\n']*'        # single-quoted value
-        |[^\s"']+           # unquoted token (no overlap with quoted branches)
+        "(?:\\.|[^"\r\n\\])*"   # double-quoted value (handles escaped chars)
+        |'(?:\\.|[^'\r\n\\])*'  # single-quoted value (handles escaped chars)
+        |[^\s"',}]+             # unquoted token (excludes delimiters ,})
     )
     \s*"""
 )
