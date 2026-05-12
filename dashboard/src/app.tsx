@@ -15,6 +15,7 @@ import {
   resolveRequestWithQueueResult,
 } from "./guard-api";
 import { ApprovalCenterLayout } from "./approval-center-layout";
+import { normalizeHarnessSlug } from "./approval-center-utils";
 import { ErrorBoundary } from "./error-boundary";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
@@ -109,16 +110,24 @@ function parseRequestId(pathname: string): string | null {
 
 type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail";
 
-function parseAppDetail(pathname: string): string | null {
-  if (pathname.startsWith("/apps/")) {
-    return pathname.slice("/apps/".length);
+export function parseAppDetail(pathname: string): string | null {
+  if (!pathname.startsWith("/apps/")) {
+    return null;
   }
-  return null;
+  const rawSlug = pathname.slice("/apps/".length);
+  try {
+    return normalizeHarnessSlug(decodeURIComponent(rawSlug));
+  } catch {
+    return null;
+  }
 }
 
-function resolveView(pathname: string): AppView {
-  if (pathname.startsWith("/apps/")) {
+export function resolveView(pathname: string): AppView {
+  if (parseAppDetail(pathname) !== null) {
     return "app-detail";
+  }
+  if (pathname.startsWith("/apps/")) {
+    return "fleet";
   }
   if (pathname === "/settings") {
     return "settings";
@@ -328,7 +337,10 @@ export function App() {
     navigate(`/requests/${nextRequestId}`);
   }, []);
   const handleOpenAppDetail = useCallback((harness: string) => {
-    navigate(`/apps/${harness}`);
+    const slug = normalizeHarnessSlug(harness);
+    if (slug !== null) {
+      navigate(`/apps/${encodeURIComponent(slug)}`);
+    }
   }, []);
 
   const refreshStateAfterAction = useCallback(async () => {
@@ -491,15 +503,24 @@ export function App() {
   }, []);
 
   const handleConnectHarness = useCallback((harness: string) => {
-    navigate(`/apps/${encodeURIComponent(harness)}?tab=settings`);
+    const slug = normalizeHarnessSlug(harness);
+    if (slug !== null) {
+      navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
+    }
   }, []);
 
   const handleTestHarness = useCallback((harness: string) => {
-    navigate(`/apps/${encodeURIComponent(harness)}?tab=settings`);
+    const slug = normalizeHarnessSlug(harness);
+    if (slug !== null) {
+      navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
+    }
   }, []);
 
   const handleRepairHarness = useCallback((harness: string) => {
-    navigate(`/apps/${encodeURIComponent(harness)}?tab=settings`);
+    const slug = normalizeHarnessSlug(harness);
+    if (slug !== null) {
+      navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
+    }
   }, []);
 
   const appDetailContent = useMemo(() => {

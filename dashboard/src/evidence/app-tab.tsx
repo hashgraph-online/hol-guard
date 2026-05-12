@@ -5,7 +5,7 @@ import {
   HiMiniNoSymbol,
 } from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
-import { harnessDisplayName } from "../approval-center-utils";
+import { harnessDisplayName, isDisplayableHarness } from "../approval-center-utils";
 import { plainEnglishDescription } from "./plain-english";
 import { formatRelativeTime } from "../approval-center-utils";
 import { guardAwareHref } from "../guard-api";
@@ -35,10 +35,11 @@ function harnessColor(harness: string): string {
 function AppTabRaw({ receipts }: AppTabProps) {
   const [selectedApp, setSelectedApp] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const appReceipts = useMemo(() => receipts.filter((receipt) => isDisplayableHarness(receipt.harness)), [receipts]);
 
   const apps = useMemo(() => {
     const map = new Map<string, GuardReceipt[]>();
-    for (const receipt of receipts) {
+    for (const receipt of appReceipts) {
       if (!map.has(receipt.harness)) map.set(receipt.harness, []);
       map.get(receipt.harness)!.push(receipt);
     }
@@ -46,7 +47,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
       items.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
     }
     return Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length);
-  }, [receipts]);
+  }, [appReceipts]);
 
   const filteredApps = useMemo(() => {
     if (!searchTerm.trim()) return apps;
@@ -58,7 +59,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
     setSearchTerm(e.target.value);
   }, []);
 
-  if (receipts.length === 0) {
+  if (appReceipts.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-100 bg-white/60 p-8 text-center">
         <p className="text-sm text-slate-500">No activity yet.</p>
