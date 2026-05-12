@@ -135,8 +135,17 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<QueueCategoryId | "all">("all");
   const [sortDirection, setSortDirection] = useState<QueueSortDirection>("newest");
-
   const [semanticFilter, setSemanticFilter] = useState<SemanticGroupId>("all");
+  const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
+
+  const handleOpenRequest = useCallback((id: string) => {
+    props.onOpenRequest(id);
+    setMobileQueueOpen(false);
+  }, [props.onOpenRequest]);
+
+  const handleToggleMobileQueue = useCallback(() => {
+    setMobileQueueOpen((v) => !v);
+  }, []);
 
   const filteredRequests = useMemo(() => {
     let items = requests;
@@ -209,23 +218,36 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         activeHarness={activeItem.harness}
       />
 
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-        <ReviewQueueList
-          requests={filteredRequests}
-          totalCount={requests.length}
-          activeRequestId={activeItem.request_id}
-          categoryOptions={categoryOptions}
-          categoryFilter={categoryFilter}
-          searchTerm={searchTerm}
-          sortDirection={sortDirection}
-          semanticFilter={semanticFilter}
-          onCategoryFilterChange={setCategoryFilter}
-          onSearchTermChange={setSearchTerm}
-          onSortDirectionChange={setSortDirection}
-          onSemanticFilterChange={setSemanticFilter}
-          onOpenRequest={props.onOpenRequest}
-          ref={queueRef}
-        />
+      {/* Mobile queue toggle */}
+      <div className="md:hidden">
+        <button
+          onClick={handleToggleMobileQueue}
+          className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark"
+        >
+          <span>Queue ({filteredRequests.length})</span>
+          <HiMiniChevronDown className={`h-4 w-4 transition-transform ${mobileQueueOpen ? "rotate-180" : ""}`} />
+        </button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-[260px_1fr] lg:grid-cols-[280px_1fr] xl:grid-cols-[300px_1fr] items-start">
+        <div className={`${mobileQueueOpen ? "block" : "hidden"} md:block`}>
+          <ReviewQueueList
+            requests={filteredRequests}
+            totalCount={requests.length}
+            activeRequestId={activeItem.request_id}
+            categoryOptions={categoryOptions}
+            categoryFilter={categoryFilter}
+            searchTerm={searchTerm}
+            sortDirection={sortDirection}
+            semanticFilter={semanticFilter}
+            onCategoryFilterChange={setCategoryFilter}
+            onSearchTermChange={setSearchTerm}
+            onSortDirectionChange={setSortDirection}
+            onSemanticFilterChange={setSemanticFilter}
+            onOpenRequest={handleOpenRequest}
+            ref={queueRef}
+          />
+        </div>
         <ReviewDecisionCard
           detail={detail}
           onResolve={props.onResolve}
@@ -1084,7 +1106,7 @@ function ActionContentCard({ item }: { item: GuardApprovalRequest }) {
             <CopyButton text={launchText} />
           </span>
         </div>
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90">
+        <pre className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90">
           {launchText}
         </pre>
       </div>
