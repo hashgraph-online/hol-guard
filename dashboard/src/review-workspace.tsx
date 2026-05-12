@@ -235,7 +235,10 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
             onSearchTermChange={setSearchTerm}
             onSortDirectionChange={setSortDirection}
             onSemanticFilterChange={setSemanticFilter}
-            onOpenRequest={props.onOpenRequest}
+            onOpenRequest={(id) => {
+              props.onOpenRequest(id);
+              setMobileQueueOpen(false);
+            }}
             ref={queueRef}
           />
         </div>
@@ -1097,7 +1100,7 @@ function ActionContentCard({ item }: { item: GuardApprovalRequest }) {
             <CopyButton text={launchText} />
           </span>
         </div>
-        <pre className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-all px-3 py-3 font-mono text-sm leading-6 text-white/90">
+        <pre className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90">
           {launchText}
         </pre>
       </div>

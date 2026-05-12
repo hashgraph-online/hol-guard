@@ -17328,7 +17328,10 @@ function ReviewWorkspace(props) {
           onSearchTermChange: setSearchTerm,
           onSortDirectionChange: setSortDirection,
           onSemanticFilterChange: setSemanticFilter,
-          onOpenRequest: props.onOpenRequest,
+          onOpenRequest: (id) => {
+            props.onOpenRequest(id);
+            setMobileQueueOpen(false);
+          },
           ref: queueRef
         }
       ) }),
@@ -18034,7 +18037,7 @@ function ActionContentCard({ item }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45", children: terminalLabel }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CopyButton, { text: launchText }) })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-all px-3 py-3 font-mono text-sm leading-6 text-white/90", children: launchText })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90", children: launchText })
     ] })
   ] });
 }
