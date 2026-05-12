@@ -1,5 +1,5 @@
 import { parseAppDetail, resolveView } from "./app";
-import { harnessDisplayName, isDisplayableHarness, normalizeHarnessSlug } from "./approval-center-utils";
+import { harnessDisplayName, isDisplayableHarness, normalizeHarnessFilter, normalizeHarnessSlug } from "./approval-center-utils";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -22,6 +22,9 @@ assert(resolveView("/apps/%2A") === "fleet", "encoded wildcard app route falls b
 assert(normalizeHarnessSlug(" OpenCode ") === "opencode", "normalizer trims and lowercases app slugs");
 assert(normalizeHarnessSlug("*") === null, "normalizer rejects wildcard pseudo-harness");
 assert(normalizeHarnessSlug("global") === null, "normalizer rejects global pseudo-harness");
+assert(normalizeHarnessSlug("cursor-") === null, "normalizer rejects trailing separators");
+assert(normalizeHarnessFilter("cursor") === "cursor", "filter normalizer keeps valid app harness");
+assert(normalizeHarnessFilter("*") === "all", "filter normalizer maps wildcard pseudo-harness to all apps");
 assert(isDisplayableHarness("codex"), "real app harness is displayable");
 assert(!isDisplayableHarness("*"), "wildcard pseudo-harness is not displayable");
 assert(harnessDisplayName("*") === "All apps", "wildcard pseudo-harness never renders as raw star");
