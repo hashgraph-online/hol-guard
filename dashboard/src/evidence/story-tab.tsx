@@ -1,5 +1,10 @@
 import { useMemo, memo } from "react";
-import { HiMiniChevronLeft, HiMiniChevronRight, HiMiniCheckCircle, HiMiniNoSymbol, HiMiniQuestionMarkCircle } from "react-icons/hi2";
+import {
+  HiMiniChevronLeft,
+  HiMiniChevronRight,
+  HiMiniCheckCircle,
+  HiMiniNoSymbol,
+} from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { detectCategory, getCategoryInfo } from "./categories";
@@ -12,9 +17,28 @@ interface StoryTabProps {
 }
 
 function StoryTabRaw({ receipts, selectedDay, onSelectDay }: StoryTabProps) {
+  // Build a set of all days that have receipts
+  const daysWithData = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of receipts) {
+      const d = new Date(r.timestamp);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      set.add(key);
+    }
+    return set;
+  }, [receipts]);
+
+  // Default selectedDay to most recent day with data if not set
+  const effectiveDay = useMemo(() => {
+    if (selectedDay) return selectedDay;
+    if (daysWithData.size === 0) return "";
+    const sorted = Array.from(daysWithData).sort();
+    return sorted[sorted.length - 1];
+  }, [selectedDay, daysWithData]);
+
   const dayReceipts = useMemo(() => {
-    if (!selectedDay) return receipts.slice(0, 20);
-    const start = new Date(selectedDay);
+    if (!effectiveDay) return [];
+    const start = new Date(effectiveDay);
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
@@ -22,7 +46,7 @@ function StoryTabRaw({ receipts, selectedDay, onSelectDay }: StoryTabProps) {
       const d = new Date(r.timestamp);
       return d >= start && d < end;
     });
-  }, [receipts, selectedDay]);
+  }, [receipts, effectiveDay]);
 
   const summary = useMemo(() => {
     const allowed = dayReceipts.filter((r) => r.policy_decision === "allow").length;
@@ -31,62 +55,49 @@ function StoryTabRaw({ receipts, selectedDay, onSelectDay }: StoryTabProps) {
   }, [dayReceipts]);
 
   const dayLabel = useMemo(() => {
-    if (!selectedDay) return "Recently";
-    const d = new Date(selectedDay);
+    if (!effectiveDay) return "No data";
+    const d = new Date(effectiveDay);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const diff = Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
     if (diff === 0) return "Today";
     if (diff === 1) return "Yesterday";
     return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
-  }, [selectedDay]);
+  }, [effectiveDay]);
+
+  // Find prev/next day that actually has data
+  const sortedDays = useMemo(() => Array.from(daysWithData).sort(), [daysWithData]);
+
+  const currentIndex = useMemo(() => sortedDays.indexOf(effectiveDay), [sortedDays, effectiveDay]);
 
   const handlePrevDay = () => {
-    if (!selectedDay) return;
-    const d = new Date(selectedDay);
-    d.setDate(d.getDate() - 1);
-    onSelectDay(d.toISOString().split("T")[0]);
+    if (currentIndex <= 0) return;
+    onSelectDay(sortedDays[currentIndex - 1]);
   };
 
   const handleNextDay = () => {
-    if (!selectedDay) return;
-    const d = new Date(selectedDay);
-    d.setDate(d.getDate() + 1);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (d > today) return;
-    onSelectDay(d.toISOString().split("T")[0]);
+    if (currentIndex < 0 || currentIndex >= sortedDays.length - 1) return;
+    onSelectDay(sortedDays[currentIndex + 1]);
   };
 
-  // Calculate navigation bounds across all receipt dates
-  const { hasPrev, hasNext } = useMemo(() => {
-    if (!selectedDay) {
-      // "Recently" view - check if there are receipts beyond the first 20
-      return { hasPrev: receipts.length > 20, hasNext: false };
-    }
-    const current = new Date(selectedDay);
-    current.setHours(0, 0, 0, 0);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex >= 0 && currentIndex < sortedDays.length - 1;
 
-    // Allow prev if there are any receipts older than current day
-    const oldestReceipt = receipts.length > 0
-      ? new Date(receipts[receipts.length - 1].timestamp)
-      : null;
-    const hasPrevDay = oldestReceipt !== null && oldestReceipt < current;
-
-    // Allow next if current day is before today
-    const hasNextDay = current < today;
-
-    return { hasPrev: hasPrevDay, hasNext: hasNextDay };
-  }, [receipts, selectedDay]);
+  if (receipts.length === 0) {
+    return (
+      <div className="rounded-2xl border border-slate-100 bg-white/60 p-8 text-center">
+        <p className="text-sm text-slate-500">All quiet. Guard is watching.</p>
+        <p className="mt-1 text-xs text-slate-400">Saved decisions will appear here.</p>
+      </div>
+    );
+  }
 
   if (dayReceipts.length === 0) {
     return (
       <div className="space-y-6">
         <DayHeader dayLabel={dayLabel} onPrev={handlePrevDay} onNext={handleNextDay} hasPrev={hasPrev} hasNext={hasNext} />
         <div className="rounded-2xl border border-slate-100 bg-white/60 p-8 text-center">
-          <p className="text-sm text-slate-500">All quiet. Guard is watching.</p>
+          <p className="text-sm text-slate-500">No decisions on this day.</p>
         </div>
       </div>
     );
@@ -100,7 +111,7 @@ function StoryTabRaw({ receipts, selectedDay, onSelectDay }: StoryTabProps) {
         <p className="text-sm text-brand-dark">
           Guard reviewed {summary.total} action{summary.total !== 1 ? "s" : ""}.{" "}
           {summary.allowed > 0 && (
-            <span className="text-emerald-600">Allowed {summary.allowed}.</span>
+            <span className="text-brand-green">Allowed {summary.allowed}.</span>
           )}{" "}
           {summary.blocked > 0 && (
             <span className="text-brand-attention">Stopped {summary.blocked}.</span>
@@ -164,8 +175,8 @@ function StoryCard({ receipt }: { receipt: GuardReceipt }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-50 text-xs ${catInfo.color}`}>
-              {catInfo.label[0]}
+            <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-50 ${catInfo.color}`}>
+              {catInfo.icon}
             </span>
             <span className="text-xs font-medium text-slate-500">{harnessDisplayName(receipt.harness)}</span>
             <span className="text-xs text-slate-400">·</span>
