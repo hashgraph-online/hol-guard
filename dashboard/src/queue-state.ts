@@ -507,8 +507,13 @@ function hasSecretSignal(decisionCategories: string[], text: string): boolean {
 function hasExternalSink(text: string, command: string): boolean {
   return (
     fileUploadCommand(command, text) ||
+    outboundNetworkCommand(command, text) ||
     textIncludesAny(text, ["exfiltrat", "upload", "copy-out", "external sink", "clipboard", "pastebin"])
   );
+}
+
+function outboundNetworkCommand(command: string, text: string): boolean {
+  return networkCommand(command, text) && !inboundCopyCommand(command);
 }
 
 function networkCommand(command: string, text: string): boolean {
@@ -618,7 +623,7 @@ function positionalPair(tokens: string[]): { source: string; destination: string
   if (positional.length < 2) {
     return null;
   }
-  return { source: positional[positional.length - 2], destination: positional[positional.length - 1] };
+  return { source: positional[0], destination: positional[1] };
 }
 
 function stripOptionTokens(tokens: string[]): string[] {
@@ -634,10 +639,13 @@ function stripOptionTokens(tokens: string[]): string[] {
     "--sse",
     "--rsh",
     "-P",
+    "-p",
     "-i",
     "-o",
     "-F",
+    "-f",
     "-S",
+    "-s",
     "-e",
   ]);
   const stripped: string[] = [];

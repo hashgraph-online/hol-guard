@@ -16616,7 +16616,10 @@ function hasSecretSignal(decisionCategories, text) {
   ]);
 }
 function hasExternalSink(text, command) {
-  return fileUploadCommand(command, text) || textIncludesAny(text, ["exfiltrat", "upload", "copy-out", "external sink", "clipboard", "pastebin"]);
+  return fileUploadCommand(command, text) || outboundNetworkCommand(command, text) || textIncludesAny(text, ["exfiltrat", "upload", "copy-out", "external sink", "clipboard", "pastebin"]);
+}
+function outboundNetworkCommand(command, text) {
+  return networkCommand(command, text) && !inboundCopyCommand(command);
 }
 function networkCommand(command, text) {
   const normalized = command.toLowerCase();
@@ -16700,7 +16703,7 @@ function positionalPair(tokens) {
   if (positional.length < 2) {
     return null;
   }
-  return { source: positional[positional.length - 2], destination: positional[positional.length - 1] };
+  return { source: positional[0], destination: positional[1] };
 }
 function stripOptionTokens(tokens) {
   const optionsWithValues = /* @__PURE__ */ new Set([
@@ -16715,10 +16718,13 @@ function stripOptionTokens(tokens) {
     "--sse",
     "--rsh",
     "-P",
+    "-p",
     "-i",
     "-o",
     "-F",
+    "-f",
     "-S",
+    "-s",
     "-e"
   ]);
   const stripped = [];
