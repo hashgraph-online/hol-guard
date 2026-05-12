@@ -949,3 +949,20 @@ assert(
   resolveQueueCategory(npmAliasInstallItem).label === "Package install",
   "T-QS-92: npm i alias classifies as package install"
 );
+
+const uploadGuideDocsWriteItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-upload-guide-docs-write",
+  action_envelope_json: {
+    ...shellEnvelope,
+    action_type: "file_write",
+    command: null,
+    target_paths: ["docs/upload-guide.md"],
+  },
+  risk_summary: "Updates documentation for the upload guide.",
+};
+
+assert(
+  resolveQueueCategory(uploadGuideDocsWriteItem).label === "Documentation edit",
+  "T-QS-93: docs writes mentioning upload do not classify as file upload without transfer evidence"
+);

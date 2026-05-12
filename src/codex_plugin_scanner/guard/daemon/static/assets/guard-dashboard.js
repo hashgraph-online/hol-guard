@@ -16513,7 +16513,7 @@ function resolveQueueCategoryId(item) {
   if (gitOperationCommand(command)) {
     return "git_operation";
   }
-  if (fileUploadCommand(command, text)) {
+  if (fileUploadCommand(command)) {
     return "file_upload";
   }
   if (inboundCopyCommand(command)) {
@@ -16628,7 +16628,7 @@ function hasSecretPathText(text) {
   return textIncludesAny(text, [".env", "token", "secret", "credential", "password", "private key", "api key"]);
 }
 function hasExternalSink(text, command) {
-  return fileUploadCommand(command, text) || outboundNetworkCommand(command, text) || textIncludesAny(text, ["exfiltrat", "upload", "copy-out", "external sink", "clipboard", "pastebin"]);
+  return fileUploadCommand(command) || outboundNetworkCommand(command, text) || textIncludesAny(text, ["exfiltrat", "upload", "copy-out", "external sink", "clipboard", "pastebin"]);
 }
 function outboundNetworkCommand(command, text) {
   return networkCommand(command, text) && !inboundCopyCommand(command);
@@ -16639,7 +16639,7 @@ function networkCommand(command, text) {
 }
 function fileUploadCommand(command, text) {
   const normalized = command.toLowerCase();
-  return outboundCopyCommand(normalized) || /\bcurl\b[\s\S]*(?:--upload-file|\s-t\s+\S+|--form\s+\S*@|-f\s+\S*@|--data(?:-binary|-raw|-urlencode)?\s+@)/.test(normalized) || textIncludesAny(text, ["upload", "copy-out", "external sink"]);
+  return outboundCopyCommand(normalized) || /\bcurl\b[\s\S]*(?:--upload-file|\s-t\s+\S+|--form\s+\S*@|-f\s+\S*@|--data(?:-binary|-raw|-urlencode)?\s+@)/.test(normalized);
 }
 function systemPromptAccessText(text) {
   return textIncludesAny(text, [
