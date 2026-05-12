@@ -1472,7 +1472,7 @@ class TestGuardApprovals:
 
     @pytest.mark.parametrize("action", ["approve", "block"])
     @pytest.mark.parametrize("scope", ["artifact", "workspace", "publisher", "harness", "global"])
-    def test_guard_daemon_resolution_route_accepts_all_scope_kinds(self, tmp_path, action, scope):
+    def test_guard_daemon_resolution_route_accepts_all_scope_kinds_without_clearing_queue(self, tmp_path, action, scope):
         store = GuardStore(tmp_path / "guard-home")
         workspace = tmp_path / "workspace"
         request_id = f"req-{action}-{scope}"
@@ -1494,6 +1494,25 @@ class TestGuardApprovals:
                 approval_url="http://127.0.0.1/pending",
             ),
             "2026-04-11T00:00:00+00:00",
+        )
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id=f"{request_id}-other",
+                harness="codex",
+                artifact_id=f"codex:project:{scope}-other",
+                artifact_name=f"{scope} other action",
+                artifact_hash=f"hash-{action}-{scope}-other",
+                publisher="codex-local",
+                policy_action="require-reapproval",
+                recommended_scope="artifact",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(workspace / ".codex" / "config.toml"),
+                workspace=str(workspace),
+                review_command=f"hol-guard approvals {action} {request_id}-other",
+                approval_url="http://127.0.0.1/pending-other",
+            ),
+            "2026-04-11T00:01:00+00:00",
         )
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -1518,6 +1537,9 @@ class TestGuardApprovals:
         assert payload["resolved"] is True
         assert payload["resolved_request"]["resolution_action"] == ("allow" if action == "approve" else "block")
         assert payload["resolved_request"]["resolution_scope"] == scope
+        assert payload["remaining_pending_count"] == 1
+        assert payload["next_selectable_request_id"] == f"{request_id}-other"
+        assert store.get_approval_request(f"{request_id}-other")["status"] == "pending"
 
     def test_guard_daemon_approve_route_requires_auth_token(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

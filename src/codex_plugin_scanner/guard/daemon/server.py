@@ -449,7 +449,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 workspace=self._optional_string(payload.get("workspace")),
                 reason=self._optional_string(payload.get("reason")),
                 return_queue_result=True,
-                resolve_scope_matches=True,
+                resolve_scope_matches=False,
             )
         except ApprovalRequestNotFoundError:
             self._write_json(
