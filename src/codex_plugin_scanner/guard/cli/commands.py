@@ -5763,8 +5763,7 @@ def _git_diff_path_args(args: list[str]) -> list[str]:
             continue
         if arg.startswith("-"):
             return []
-        paths.append(arg)
-        index += 1
+        return []
     return paths
 
 
