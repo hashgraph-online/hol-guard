@@ -166,9 +166,7 @@ export function EvidenceAnalyticsPanel({
   onFilterCategory,
 }: EvidenceAnalyticsPanelProps) {
   const maxBucketTotal = Math.max(
-    ...metrics.trendBuckets.map(
-      (b) => b.allowed + b.blocked + b.reviewed
-    ),
+    ...metrics.trendBuckets.map((b) => b.allowed + b.blocked),
     1
   );
 
