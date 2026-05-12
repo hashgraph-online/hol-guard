@@ -21,7 +21,7 @@ import {
   GuardHero,
   ProofStrip,
 } from "./approval-center-primitives";
-import { harnessDisplayName, formatRelativeTime, formatNumber } from "./approval-center-utils";
+import { harnessDisplayName, formatRelativeTime, formatNumber, isDisplayableHarness } from "./approval-center-utils";
 import { useFocusTrap } from "./use-focus-trap";
 import type {
   GuardApprovalRequest,
@@ -83,7 +83,7 @@ export function HomeWorkspace(props: {
   const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
   const queuedCount = props.requests.kind === "ready" ? props.requests.items.length : 0;
   const policyItems = props.policies.kind === "ready" ? props.policies.items : [];
-  const managedInstalls = snapshot?.managed_installs ?? [];
+  const managedInstalls = (snapshot?.managed_installs ?? []).filter((item: GuardManagedInstall) => isDisplayableHarness(item.harness));
   const activeInstalls = managedInstalls.filter((item: GuardManagedInstall) => item.active);
   const observedHarnesses = snapshot
     ? Array.from(
@@ -91,7 +91,7 @@ export function HomeWorkspace(props: {
           ...snapshot.items.map((item: GuardApprovalRequest) => item.harness),
           ...snapshot.latest_receipts.map((receipt: GuardReceipt) => receipt.harness),
           ...policyItems.map((policy: GuardPolicyDecision) => policy.harness),
-        ])
+        ].filter(isDisplayableHarness))
       ).sort()
     : [];
   const clearHarnesses = activeInstalls.length > 0 ? activeInstalls.map((i: GuardManagedInstall) => i.harness) : observedHarnesses;
@@ -457,7 +457,7 @@ function buildWeeklySummary(
   if (weekReceipts.length === 0) return null;
   const allowed = weekReceipts.filter((r) => r.policy_decision === "allow").length;
   const blocked = weekReceipts.filter((r) => r.policy_decision === "block").length;
-  const uniqueApps = new Set(weekReceipts.map((r) => r.harness)).size;
+  const uniqueApps = new Set(weekReceipts.map((r) => r.harness).filter(isDisplayableHarness)).size;
   return {
     body: `Guard reviewed ${weekReceipts.length} actions across ${uniqueApps} app${uniqueApps !== 1 ? "s" : ""} this week.`,
     stats: [

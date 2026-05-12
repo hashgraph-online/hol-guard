@@ -1,8 +1,12 @@
-import { j as jsxRuntimeExports, G as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, h as harnessDisplayName, i as HiMiniChevronRight, E as EmptyState, H as HiMiniCheckCircle, p as HiMiniExclamationCircle, q as HiMiniWrenchScrewdriver, s as HiMiniXCircle, r as reactExports, t as HiMiniClipboardDocumentCheck, u as HiMiniClipboard } from "../guard-dashboard.js";
+import { i as isDisplayableHarness, j as jsxRuntimeExports, G as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, h as harnessDisplayName, k as HiMiniChevronRight, E as EmptyState, H as HiMiniCheckCircle, q as HiMiniExclamationCircle, s as HiMiniWrenchScrewdriver, t as HiMiniXCircle, r as reactExports, u as HiMiniClipboardDocumentCheck, v as HiMiniClipboard } from "../guard-dashboard.js";
 function collectHarnesses(snapshot) {
   const harnesses = /* @__PURE__ */ new Set();
-  for (const item of snapshot.items) harnesses.add(item.harness);
-  for (const receipt of snapshot.latest_receipts) harnesses.add(receipt.harness);
+  for (const item of snapshot.items) {
+    if (isDisplayableHarness(item.harness)) harnesses.add(item.harness);
+  }
+  for (const receipt of snapshot.latest_receipts) {
+    if (isDisplayableHarness(receipt.harness)) harnesses.add(receipt.harness);
+  }
   return Array.from(harnesses).sort((a, b) => a.localeCompare(b));
 }
 function renderReceiptContext(receipt) {
@@ -30,19 +34,19 @@ function StatusBadge({ status }) {
 }
 function FleetWorkspace(props) {
   const harnesses = collectHarnesses(props.runtime);
-  const managedInstalls = props.runtime.managed_installs ?? [];
+  const managedInstalls = (props.runtime.managed_installs ?? []).filter((i) => isDisplayableHarness(i.harness));
   const activeInstalls = managedInstalls.filter((i) => i.active);
-  const inventory = props.inventory.kind === "ready" ? props.inventory.items : [];
+  const inventory = props.inventory.kind === "ready" ? props.inventory.items.filter((i) => isDisplayableHarness(i.harness)) : [];
   const visibleHarnesses = Array.from(
-    /* @__PURE__ */ new Set([
+    new Set([
       ...managedInstalls.map((i) => i.harness),
       ...harnesses,
       ...inventory.map((i) => i.harness),
       ...props.policies.map((p) => p.harness)
-    ])
+    ].filter(isDisplayableHarness))
   ).sort((a, b) => a.localeCompare(b));
   const runtimeState = props.runtime.runtime_state;
-  const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness));
+  const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isDisplayableHarness));
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardHero,

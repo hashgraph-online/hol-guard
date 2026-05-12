@@ -37,6 +37,9 @@ const codexOnly = filterReceiptItems(receipts500, "", "codex", "all", "all");
 assert(codexOnly.length > 0, "T520: filtering by codex should return results");
 assert(codexOnly.every((r) => r.harness === "codex"), "T520: codex filter should only return codex receipts");
 
+const wildcardHarnessFilter = filterReceiptItems(receipts500, "", "*", "all", "all");
+assert(wildcardHarnessFilter.length === 500, "T521: wildcard pseudo-harness filter is ignored instead of creating a star app");
+
 const blockedOnly = filterReceiptItems(receipts500, "", "all", "block", "all");
 assert(blockedOnly.length > 0, "T520: filtering by block decision should return results");
 assert(blockedOnly.every((r) => r.policy_decision === "block"), "T520: decision filter should only return matching receipts");
