@@ -16529,7 +16529,7 @@ function resolveQueueCategoryId(item) {
   if (packageInstallCommand(command)) {
     return "package_install";
   }
-  if (hasSecretSignal(decisionCategories, text)) {
+  if (secretReadAction(item, command, text) && hasSecretSignal(decisionCategories, text)) {
     return "secret_file_read";
   }
   if (envelope?.action_type === "mcp_tool") {
@@ -16615,6 +16615,16 @@ function hasSecretSignal(decisionCategories, text) {
     "github_token"
   ]);
 }
+function secretReadAction(item, command, text) {
+  const envelope = item.action_envelope_json;
+  return envelope?.action_type === "file_read" || item.artifact_type === "file_read_request" || readCommand(command) && hasSecretPathText(text);
+}
+function readCommand(command) {
+  return /\b(?:cat|grep|rg|sed\s+-n|awk|less|more|head|tail)\b/.test(command.toLowerCase());
+}
+function hasSecretPathText(text) {
+  return textIncludesAny(text, [".env", "token", "secret", "credential", "password", "private key", "api key"]);
+}
 function hasExternalSink(text, command) {
   return fileUploadCommand(command, text) || outboundNetworkCommand(command, text) || textIncludesAny(text, ["exfiltrat", "upload", "copy-out", "external sink", "clipboard", "pastebin"]);
 }
@@ -16663,7 +16673,8 @@ function guardBypassText(text) {
 }
 function persistenceCommand(command, text) {
   const normalized = command.toLowerCase();
-  return /\b(?:crontab|schtasks|at)\b/.test(normalized) || /\bsystemctl\s+(?:enable|disable|preset|link)\b/.test(normalized) || /\blaunchctl\s+(?:load|unload|bootstrap|bootout)\b/.test(normalized) || /(?:\.zshrc|\.bashrc|\.bash_profile|\.profile|launchagents|launchdaemons|systemd|login item)/.test(normalized) || textIncludesAny(text, ["persistence", "startup item", "scheduled task", "launch agent"]);
+  const mutatesPersistenceFile = commandLooksLikeFileEdit(command) || text.includes("file_write");
+  return /\|\s*crontab\b/.test(normalized) || /\bcrontab\s+-(?!l\b)/.test(normalized) || /\b(?:schtasks|at)\b/.test(normalized) || /\bsystemctl\s+(?:enable|disable|preset|link)\b/.test(normalized) || /\blaunchctl\s+(?:load|unload|bootstrap|bootout)\b/.test(normalized) || mutatesPersistenceFile && /(?:\.zshrc|\.bashrc|\.bash_profile|\.profile|launchagents|launchdaemons|systemd|login item)/.test(normalized) || textIncludesAny(text, ["persistence", "startup item", "scheduled task", "launch agent"]);
 }
 function encodedCommand(text) {
   return textIncludesAny(text, [
@@ -16699,7 +16710,7 @@ function copyOperands(command) {
   return null;
 }
 function positionalPair(tokens) {
-  const positional = tokens.filter((token) => !token.startsWith("-"));
+  const positional = tokens.filter((token) => token === "-" || !token.startsWith("-"));
   if (positional.length < 2) {
     return null;
   }
@@ -16730,6 +16741,10 @@ function stripOptionTokens(tokens) {
   const stripped = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
+    if (token === "-") {
+      stripped.push(token);
+      continue;
+    }
     if (!token.startsWith("-")) {
       stripped.push(token);
       continue;

@@ -398,7 +398,7 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
     return "package_install";
   }
 
-  if (hasSecretSignal(decisionCategories, text)) {
+  if (secretReadAction(item, command, text) && hasSecretSignal(decisionCategories, text)) {
     return "secret_file_read";
   }
 
@@ -504,6 +504,23 @@ function hasSecretSignal(decisionCategories: string[], text: string): boolean {
   );
 }
 
+function secretReadAction(item: GuardApprovalRequest, command: string, text: string): boolean {
+  const envelope = item.action_envelope_json;
+  return (
+    envelope?.action_type === "file_read" ||
+    item.artifact_type === "file_read_request" ||
+    (readCommand(command) && hasSecretPathText(text))
+  );
+}
+
+function readCommand(command: string): boolean {
+  return /\b(?:cat|grep|rg|sed\s+-n|awk|less|more|head|tail)\b/.test(command.toLowerCase());
+}
+
+function hasSecretPathText(text: string): boolean {
+  return textIncludesAny(text, [".env", "token", "secret", "credential", "password", "private key", "api key"]);
+}
+
 function hasExternalSink(text: string, command: string): boolean {
   return (
     fileUploadCommand(command, text) ||
@@ -572,11 +589,14 @@ function guardBypassText(text: string): boolean {
 
 function persistenceCommand(command: string, text: string): boolean {
   const normalized = command.toLowerCase();
+  const mutatesPersistenceFile = commandLooksLikeFileEdit(command) || text.includes("file_write");
   return (
-    /\b(?:crontab|schtasks|at)\b/.test(normalized) ||
+    /\|\s*crontab\b/.test(normalized) ||
+    /\bcrontab\s+-(?!l\b)/.test(normalized) ||
+    /\b(?:schtasks|at)\b/.test(normalized) ||
     /\bsystemctl\s+(?:enable|disable|preset|link)\b/.test(normalized) ||
     /\blaunchctl\s+(?:load|unload|bootstrap|bootout)\b/.test(normalized) ||
-    /(?:\.zshrc|\.bashrc|\.bash_profile|\.profile|launchagents|launchdaemons|systemd|login item)/.test(normalized) ||
+    (mutatesPersistenceFile && /(?:\.zshrc|\.bashrc|\.bash_profile|\.profile|launchagents|launchdaemons|systemd|login item)/.test(normalized)) ||
     textIncludesAny(text, ["persistence", "startup item", "scheduled task", "launch agent"])
   );
 }
@@ -619,7 +639,7 @@ function copyOperands(command: string): { source: string; destination: string } 
 }
 
 function positionalPair(tokens: string[]): { source: string; destination: string } | null {
-  const positional = tokens.filter((token) => !token.startsWith("-"));
+  const positional = tokens.filter((token) => token === "-" || !token.startsWith("-"));
   if (positional.length < 2) {
     return null;
   }
@@ -651,6 +671,10 @@ function stripOptionTokens(tokens: string[]): string[] {
   const stripped: string[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
+    if (token === "-") {
+      stripped.push(token);
+      continue;
+    }
     if (!token.startsWith("-")) {
       stripped.push(token);
       continue;

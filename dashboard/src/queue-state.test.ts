@@ -880,3 +880,37 @@ assert(
   resolveQueueCategory(cloudUploadTrailingOptionItem).label === "File upload or copy-out",
   "T-QS-86: trailing cloud copy option values do not hide outbound upload direction"
 );
+
+const tokenDocsWriteItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-token-docs-write",
+  action_envelope_json: { ...shellEnvelope, action_type: "file_write", command: null, target_paths: ["docs/token-rotation.md"] },
+  risk_summary: "Updates documentation about token rotation.",
+};
+
+assert(
+  resolveQueueCategory(tokenDocsWriteItem).label === "Documentation edit",
+  "T-QS-87: docs writes mentioning token do not classify as secret file reads"
+);
+
+const profileReadItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-profile-read",
+  action_envelope_json: { ...shellEnvelope, command: "cat ~/.profile" },
+};
+
+assert(
+  resolveQueueCategory(profileReadItem).label === "Shell command",
+  "T-QS-88: read-only profile inspection does not classify as persistence change"
+);
+
+const stdinCloudUploadItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-stdin-cloud-upload",
+  action_envelope_json: { ...shellEnvelope, command: "aws s3 cp - s3://audit-bucket/stdin.txt" },
+};
+
+assert(
+  resolveQueueCategory(stdinCloudUploadItem).label === "File upload or copy-out",
+  "T-QS-89: stdin stream operands are preserved for outbound cloud uploads"
+);
