@@ -13382,6 +13382,68 @@ def test_codex_read_only_source_inspection_preserves_pipelines_in_safe_chains(tm
     )
 
 
+def test_codex_read_only_source_inspection_allows_git_diff_with_bounded_sed(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    source_paths = [
+        workspace_dir / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "server.py",
+        workspace_dir / "dashboard" / "src" / "approval-center-layout.tsx",
+        workspace_dir / "dashboard" / "src" / "review-workspace.tsx",
+        workspace_dir / "tests" / "test_guard_approvals.py",
+    ]
+    for path in source_paths:
+        _write_text(path, "TOKEN_LABEL = 'credential-looking output text only'\n")
+
+    command = (
+        "git diff -- "
+        "src/codex_plugin_scanner/guard/daemon/server.py "
+        "dashboard/src/approval-center-layout.tsx "
+        "dashboard/src/review-workspace.tsx "
+        "tests/test_guard_approvals.py | sed -n '1,260p'"
+    )
+
+    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+        command,
+        cwd=workspace_dir,
+    )
+    artifact = guard_commands_module._codex_post_tool_output_artifact(
+        payload={
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "tool_response": {
+                "stdout": (
+                    "+TOKEN_LABEL = 'credential-looking output text only'\n"
+                    "+request_summary = 'credential-looking output reached Codex'\n"
+                )
+            },
+        },
+        config_path=str(workspace_dir / ".codex" / "config.toml"),
+        source_scope="workspace",
+        cwd=workspace_dir,
+    )
+    assert artifact is None
+
+
+def test_codex_read_only_source_inspection_rejects_git_diff_secret_path(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    _write_text(workspace_dir / ".env", "TOKEN_LABEL=value\n")
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- .env | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
+def test_codex_read_only_source_inspection_rejects_unbounded_sed_filter(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- src/safe.ts | sed 's/token/value/'",
+        cwd=workspace_dir,
+    )
+
+
 def test_codex_read_only_source_inspection_rejects_malformed_chains(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace"
     source_file = workspace_dir / "src" / "safe.ts"

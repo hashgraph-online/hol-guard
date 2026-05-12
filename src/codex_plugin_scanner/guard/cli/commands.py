@@ -5048,7 +5048,7 @@ def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
 
 _CODEX_READ_ONLY_SEARCH_COMMANDS = frozenset({"rg", "grep", "egrep", "fgrep"})
 _CODEX_READ_ONLY_VIEW_COMMANDS = frozenset({"cat", "head", "tail", "sed"})
-_CODEX_READ_ONLY_PIPE_FILTERS = frozenset({"head", "tail"})
+_CODEX_READ_ONLY_PIPE_FILTERS = frozenset({"head", "tail", "sed"})
 _CODEX_READ_ONLY_SEARCH_WRAPPERS = frozenset({"bash", "sh", "zsh"})
 _CODEX_SEARCH_PATTERN_VALUE_FLAGS = frozenset({"-e", "--regexp", "-f", "--file"})
 _CODEX_SEARCH_OPTION_VALUE_FLAGS = frozenset(
@@ -5391,6 +5391,8 @@ def _codex_command_is_bounded_read_only_filter(command_text: str) -> bool:
     executable = Path(parts[0]).name
     if executable not in _CODEX_READ_ONLY_PIPE_FILTERS:
         return False
+    if executable == "sed":
+        return _codex_sed_args_are_bounded_filter(parts[1:])
     return _codex_head_tail_args_are_bounded_filter(parts[1:])
 
 
@@ -5410,7 +5412,7 @@ def _codex_command_is_read_only_source_view(command_text: str, *, cwd: Path | No
         return False
     executable = Path(parts[0]).name
     if executable not in _CODEX_READ_ONLY_VIEW_COMMANDS:
-        return False
+        return executable == "git" and _codex_git_diff_targets_are_source_like(parts[1:], cwd=cwd)
     if executable == "sed":
         return _codex_sed_targets_are_read_only_source_like(parts[1:], cwd=cwd)
     if executable in {"head", "tail"}:
@@ -5566,6 +5568,50 @@ def _codex_sed_targets_are_read_only_source_like(args: list[str], *, cwd: Path |
     return all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
 
 
+def _codex_sed_args_are_bounded_filter(args: list[str]) -> bool:
+    scripts: list[str] = []
+    skip_next_script = False
+    after_option_terminator = False
+    saw_print_suppression = False
+    for arg in args:
+        if skip_next_script:
+            skip_next_script = False
+            scripts.append(arg)
+            continue
+        if after_option_terminator:
+            return False
+        if arg == "--":
+            after_option_terminator = True
+            continue
+        if arg in {"-i", "--in-place"} or arg.startswith(("-i", "--in-place=")):
+            return False
+        if arg == "-n" or arg == "--quiet" or arg == "--silent":
+            saw_print_suppression = True
+            continue
+        if arg == "-e" or arg == "--expression":
+            skip_next_script = True
+            continue
+        if arg.startswith("-e") and len(arg) > 2:
+            scripts.append(arg[2:])
+            continue
+        if arg.startswith("--expression="):
+            _, script = arg.split("=", 1)
+            scripts.append(script)
+            continue
+        if arg.startswith("-"):
+            return False
+        if not scripts:
+            scripts.append(arg)
+            continue
+        return False
+    return (
+        not skip_next_script
+        and saw_print_suppression
+        and bool(scripts)
+        and all(_CODEX_SED_PRINT_SCRIPT_PATTERN.fullmatch(script.strip()) for script in scripts)
+    )
+
+
 def _codex_count_arg_is_bounded(value: str) -> bool:
     normalized = value.strip()
     return bool(re.fullmatch(r"\d{1,6}", normalized))
@@ -5595,6 +5641,130 @@ def _git_grep_search_args(args: list[str]) -> list[str] | None:
             continue
         return None
     return None
+
+
+def _codex_git_diff_targets_are_source_like(args: list[str], *, cwd: Path | None) -> bool:
+    diff_args = _git_diff_args(args)
+    if diff_args is None:
+        return False
+    targets = _git_diff_path_args(diff_args)
+    return bool(targets) and all(_codex_search_target_is_source_like(target, cwd=cwd) for target in targets)
+
+
+def _git_diff_args(args: list[str]) -> list[str] | None:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "diff":
+            return args[index + 1 :]
+        if arg in _CODEX_GIT_GLOBAL_VALUE_FLAGS:
+            index += 2
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in _CODEX_GIT_GLOBAL_VALUE_FLAGS):
+            index += 1
+            continue
+        if arg in {"--no-pager", "--literal-pathspecs", "--no-literal-pathspecs"}:
+            index += 1
+            continue
+        return None
+    return None
+
+
+def _git_diff_path_args(args: list[str]) -> list[str]:
+    paths: list[str] = []
+    index = 0
+    after_path_separator = False
+    value_options = {
+        "--color",
+        "--color-moved",
+        "--diff-filter",
+        "--find-renames",
+        "--find-copies",
+        "--ignore-submodules",
+        "--inter-hunk-context",
+        "--line-prefix",
+        "--output-indicator-context",
+        "--output-indicator-new",
+        "--output-indicator-old",
+        "--src-prefix",
+        "--dst-prefix",
+        "--stat-width",
+        "--stat-name-width",
+        "--stat-graph-width",
+        "--unified",
+        "-G",
+        "-S",
+        "-U",
+        "--word-diff",
+        "--word-diff-regex",
+    }
+    boolean_options = {
+        "--binary",
+        "--cached",
+        "--check",
+        "--compact-summary",
+        "--exit-code",
+        "--find-copies-harder",
+        "--full-index",
+        "--ignore-all-space",
+        "--ignore-blank-lines",
+        "--ignore-cr-at-eol",
+        "--ignore-space-at-eol",
+        "--ignore-space-change",
+        "--minimal",
+        "--name-only",
+        "--name-status",
+        "--numstat",
+        "--patch",
+        "--patch-with-raw",
+        "--pickaxe-all",
+        "--pickaxe-regex",
+        "--raw",
+        "--relative",
+        "--shortstat",
+        "--stat",
+        "--submodule",
+        "--summary",
+    }
+    disallowed_options = {
+        "--ext-diff",
+        "--no-index",
+        "--textconv",
+        "--output",
+    }
+    while index < len(args):
+        arg = args[index]
+        if after_path_separator:
+            paths.append(arg)
+            index += 1
+            continue
+        if arg == "--":
+            after_path_separator = True
+            index += 1
+            continue
+        if arg in disallowed_options or any(arg.startswith(f"{option}=") for option in disallowed_options):
+            return []
+        if arg in value_options:
+            index += 2
+            continue
+        if any(arg.startswith(f"{option}=") for option in value_options):
+            index += 1
+            continue
+        if arg in boolean_options:
+            index += 1
+            continue
+        if re.fullmatch(r"-U\d{1,6}", arg):
+            index += 1
+            continue
+        if re.fullmatch(r"(?:-G|-S).+", arg):
+            index += 1
+            continue
+        if arg.startswith("-"):
+            index += 1
+            continue
+        paths.append(arg)
+        index += 1
+    return paths
 
 
 def _git_grep_uses_external_execution(args: list[str]) -> bool:
