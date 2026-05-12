@@ -12763,7 +12763,13 @@ async function refreshGuardToken() {
   if (!response.ok) {
     return null;
   }
-  const authToken = parseAuthToken(await response.json());
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    return null;
+  }
+  const authToken = parseAuthToken(payload);
   if (authToken !== null) {
     saveGuardToken(authToken);
   }
