@@ -13529,6 +13529,9 @@ function HiMiniCodeBracket(props) {
 function HiMiniCloud(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M1 12.5A4.5 4.5 0 0 0 5.5 17H15a4 4 0 0 0 1.866-7.539 3.504 3.504 0 0 0-4.504-4.272A4.5 4.5 0 0 0 4.06 8.235 4.502 4.502 0 0 0 1 12.5Z" }, "child": [] }] })(props);
 }
+function HiMiniClock(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniClipboard(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M13.887 3.182c.396.037.79.08 1.183.128C16.194 3.45 17 4.414 17 5.517V16.75A2.25 2.25 0 0 1 14.75 19h-9.5A2.25 2.25 0 0 1 3 16.75V5.517c0-1.103.806-2.068 1.93-2.207.393-.048.787-.09 1.183-.128A3.001 3.001 0 0 1 9 1h2c1.373 0 2.531.923 2.887 2.182ZM7.5 4A1.5 1.5 0 0 1 9 2.5h2A1.5 1.5 0 0 1 12.5 4v.5h-5V4Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -13541,10 +13544,10 @@ function HiMiniCircleStack(props) {
 function HiMiniChevronUp(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
-function HiMiniChevronRight$1(props) {
+function HiMiniChevronRight(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
-function HiMiniChevronLeft$1(props) {
+function HiMiniChevronLeft(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniChevronDown(props) {
@@ -14690,7 +14693,7 @@ function DayHeader({
         disabled: !hasPrev,
         className: "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent",
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft$1, { className: "h-4 w-4", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft, { className: "h-4 w-4", "aria-hidden": "true" }),
           "Previous"
         ]
       }
@@ -14704,7 +14707,7 @@ function DayHeader({
         className: "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent",
         children: [
           "Next",
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight$1, { className: "h-4 w-4", "aria-hidden": "true" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4", "aria-hidden": "true" })
         ]
       }
     )
@@ -14827,7 +14830,7 @@ function CategoryTabRaw({ receipts, onFilterCategory }) {
                 ] })
               ] })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight$1, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" })
           ]
         },
         cat.key
@@ -14920,7 +14923,7 @@ function AppTabRaw({ receipts }) {
                 ] })
               ] })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight$1, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" })
           ]
         },
         harness
@@ -15119,7 +15122,7 @@ function ActivityCalendar({
             onClick: handlePrevMonth,
             className: "rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark",
             "aria-label": "Previous month",
-            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft$1, { className: "h-4 w-4", "aria-hidden": "true" })
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft, { className: "h-4 w-4", "aria-hidden": "true" })
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "min-w-[120px] text-center text-xs font-medium text-brand-dark", children: monthName }),
@@ -15129,7 +15132,7 @@ function ActivityCalendar({
             onClick: handleNextMonth,
             className: "rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark",
             "aria-label": "Next month",
-            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight$1, { className: "h-4 w-4", "aria-hidden": "true" })
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4", "aria-hidden": "true" })
           }
         ),
         monthOffset !== 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -16219,28 +16222,118 @@ function ScannerEvidenceSection(props) {
 }
 const QUEUE_CATEGORIES = [
   {
-    id: "secret_access",
-    label: "Secret or credential access",
-    shortLabel: "Secrets",
-    description: "Reads or exposes local credentials, tokens, keys, or secret files."
+    id: "credential_output",
+    label: "Credential-looking output",
+    shortLabel: "Credential output",
+    description: "Command output appears to expose tokens, keys, passwords, or secret-looking values."
   },
   {
-    id: "data_exfiltration",
-    label: "Data exfiltration path",
-    shortLabel: "Exfiltration",
-    description: "Moves local sensitive data toward a network host, upload, clipboard, or external sink."
-  },
-  {
-    id: "file_edit",
-    label: "File edit command",
-    shortLabel: "File edit",
-    description: "Changes local files in place without matching a delete or wipe pattern."
+    id: "secret_file_read",
+    label: "Secret file read",
+    shortLabel: "Secret read",
+    description: "Reads local credential stores, environment files, tokens, keys, or other secret paths."
   },
   {
     id: "file_read",
-    label: "Sensitive file read",
+    label: "File read",
     shortLabel: "File read",
     description: "Requests local file contents, paths, or read-only filesystem access."
+  },
+  {
+    id: "secret_exfiltration",
+    label: "Secret exfiltration path",
+    shortLabel: "Secret exfil",
+    description: "Moves local secret material toward a network host, upload, clipboard, or external sink."
+  },
+  {
+    id: "system_prompt_access",
+    label: "System prompt access",
+    shortLabel: "System prompt",
+    description: "Attempts to reveal hidden system, developer, policy, or harness instructions."
+  },
+  {
+    id: "prompt_injection",
+    label: "Prompt injection attempt",
+    shortLabel: "Prompt injection",
+    description: "Prompt content tries to override instructions, ignore policy, or redirect tool behavior."
+  },
+  {
+    id: "guard_bypass",
+    label: "Guard bypass attempt",
+    shortLabel: "Bypass",
+    description: "Attempts to disable, evade, suppress, or work around Guard policy checks."
+  },
+  {
+    id: "generated_inventory_edit",
+    label: "Generated inventory edit",
+    shortLabel: "Inventory edit",
+    description: "Updates generated API, route, or cloud inventory documentation."
+  },
+  {
+    id: "docs_edit",
+    label: "Documentation edit",
+    shortLabel: "Docs edit",
+    description: "Changes markdown, docs, runbooks, guides, or generated prose files."
+  },
+  {
+    id: "source_edit",
+    label: "Source code edit",
+    shortLabel: "Source edit",
+    description: "Changes application, script, test, or source-controlled code files."
+  },
+  {
+    id: "config_change",
+    label: "Configuration change",
+    shortLabel: "Config",
+    description: "Modifies Guard, harness, project, CI, package, or tool configuration."
+  },
+  {
+    id: "file_upload",
+    label: "File upload or copy-out",
+    shortLabel: "Upload",
+    description: "Copies local files to a remote host, bucket, paste service, or external destination."
+  },
+  {
+    id: "file_delete_cleanup",
+    label: "File delete or cleanup",
+    shortLabel: "Delete",
+    description: "Deletes, wipes, truncates, force-cleans, or otherwise risks local data loss."
+  },
+  {
+    id: "git_operation",
+    label: "Git workspace operation",
+    shortLabel: "Git",
+    description: "Mutates repository state through git add, commit, merge, rebase, push, pull, reset, or checkout."
+  },
+  {
+    id: "process_control",
+    label: "Process control",
+    shortLabel: "Process",
+    description: "Starts, stops, kills, reloads, or restarts local services and processes."
+  },
+  {
+    id: "container_or_deploy",
+    label: "Container or deploy command",
+    shortLabel: "Deploy",
+    description: "Runs Docker, Kubernetes, Helm, cloud, deployment, or infrastructure commands."
+  },
+  {
+    id: "persistence_change",
+    label: "Persistence change",
+    shortLabel: "Persistence",
+    description: "Changes cron, launch agents, services, shell profiles, startup items, or scheduled jobs."
+  },
+  {
+    id: "package_install",
+    label: "Package install",
+    shortLabel: "Install",
+    description: "Installs, removes, upgrades, or publishes dependencies and packages."
+  },
+  {
+    id: "package_script",
+    label: "Package script",
+    shortLabel: "Package script",
+    description: "Runs install, postinstall, build, test, or package-manager scripts."
   },
   {
     id: "destructive_shell",
@@ -16256,7 +16349,7 @@ const QUEUE_CATEGORIES = [
   },
   {
     id: "network",
-    label: "Network access",
+    label: "Network request",
     shortLabel: "Network",
     description: "Contacts hosts, downloads, calls APIs, or opens network destinations."
   },
@@ -16265,24 +16358,6 @@ const QUEUE_CATEGORIES = [
     label: "MCP tool call",
     shortLabel: "MCP",
     description: "Invokes an MCP server or tool with sensitive arguments."
-  },
-  {
-    id: "package_script",
-    label: "Package script",
-    shortLabel: "Package",
-    description: "Runs install, postinstall, build, or package-manager scripts."
-  },
-  {
-    id: "prompt_instruction",
-    label: "Prompt instruction",
-    shortLabel: "Prompt",
-    description: "User or model prompt asks the harness to perform a sensitive action."
-  },
-  {
-    id: "config_change",
-    label: "Configuration change",
-    shortLabel: "Config",
-    description: "Modifies Guard, harness, project, or tool configuration."
   },
   {
     id: "browser_action",
@@ -16404,30 +16479,58 @@ function queueCategoriesForItems(items) {
 function resolveQueueCategoryId(item) {
   const envelope = item.action_envelope_json;
   const decisionCategories = item.decision_v2_json?.signals.map((signal) => signal.category) ?? [];
+  const command = envelope?.command ?? item.launch_target ?? "";
   const text = queueCategoryText(item);
-  if (decisionCategories.includes("network") || textIncludesAny(text, ["network host", "outbound", "webhook", "https://", "http://"]) || /\bcurl\b/.test(text)) {
-    if (textIncludesAny(text, ["secret", "credential", "token", "api key", "upload", "exfiltrat"])) {
-      return "data_exfiltration";
-    }
-    return "network";
+  if (hasSecretSignal(decisionCategories, text) && hasExternalSink(text, command)) {
+    return "secret_exfiltration";
   }
-  if (decisionCategories.includes("secret") || textIncludesAny(text, ["credential-looking", "secret", ".env", "token", "api key", "password", "private key"])) {
-    return "secret_access";
+  if (textIncludesAny(text, ["credential-looking output", "contains credential-looking", "exposes token", "exposes key"])) {
+    return "credential_output";
   }
-  if (textIncludesAny(text, ["encoded or encrypted shell command", "base64", "openssl enc", "xxd -r", "decode-and-exec"])) {
+  if (systemPromptAccessText(text)) {
+    return "system_prompt_access";
+  }
+  if (decisionCategories.includes("prompt") || promptInjectionText(text)) {
+    return "prompt_injection";
+  }
+  if (decisionCategories.includes("bypass") || guardBypassText(text)) {
+    return "guard_bypass";
+  }
+  if (decisionCategories.includes("persistence") || persistenceCommand(command, text)) {
+    return "persistence_change";
+  }
+  if (decisionCategories.includes("encoded") || encodedCommand(text)) {
     return "encoded_shell";
   }
-  if (envelope?.action_type === "file_read" || item.artifact_type === "file_read_request") {
-    return "file_read";
+  if (generatedInventoryEdit(command, text)) {
+    return "generated_inventory_edit";
+  }
+  if (fileDeleteOrCleanupCommand(command, text)) {
+    return "file_delete_cleanup";
+  }
+  if (gitOperationCommand(command)) {
+    return "git_operation";
+  }
+  if (processControlCommand(command)) {
+    return "process_control";
+  }
+  if (containerOrDeployCommand(command)) {
+    return "container_or_deploy";
+  }
+  if (packageInstallCommand(command) || decisionCategories.includes("supply_chain") && textIncludesAny(text, ["install", "dependency", "package"])) {
+    return "package_install";
+  }
+  if (fileUploadCommand(command, text)) {
+    return "file_upload";
+  }
+  if (hasSecretSignal(decisionCategories, text)) {
+    return "secret_file_read";
   }
   if (envelope?.action_type === "mcp_tool") {
     return "mcp_tool";
   }
   if (envelope?.action_type === "package_script") {
     return "package_script";
-  }
-  if (envelope?.action_type === "prompt") {
-    return "prompt_instruction";
   }
   if (envelope?.action_type === "config_change") {
     return "config_change";
@@ -16438,11 +16541,20 @@ function resolveQueueCategoryId(item) {
   if (envelope?.action_type === "harness_start") {
     return "harness_start";
   }
-  if (envelope?.action_type === "file_write" || commandLooksLikeFileEdit(envelope?.command ?? item.launch_target ?? "")) {
-    return "file_edit";
+  if (envelope?.action_type === "file_read" || item.artifact_type === "file_read_request") {
+    return "file_read";
+  }
+  if (docsEditCommand(command, text)) {
+    return "docs_edit";
+  }
+  if (sourceEditCommand(command, text) || envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command)) {
+    return "source_edit";
   }
   if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete", "wipe", "force-clean", "git clean -fd", "truncate"])) {
     return "destructive_shell";
+  }
+  if (networkCommand(command, text) || decisionCategories.includes("network")) {
+    return "network";
   }
   if (envelope?.action_type === "shell_command" || item.artifact_type === "command" || text.includes("shell command")) {
     return "shell_command";
@@ -16484,6 +16596,110 @@ function commandLooksLikeFileEdit(command) {
     return false;
   }
   return /\bperl\b[\s\S]*\s-[\w-]*i\b/.test(normalized) || /\bsed\b[\s\S]*\s-[\w-]*i\b/.test(normalized) || /\bpython(?:3)?\b[\s\S]*(?:write_text|open\([^)]*,\s*['"]w|path\.write)/.test(normalized) || /\btee\s+-a?\b/.test(normalized) || /\bapply_patch\b/.test(normalized);
+}
+function hasSecretSignal(decisionCategories, text) {
+  return decisionCategories.includes("secret") || textIncludesAny(text, [
+    "credential",
+    "secret",
+    ".env",
+    "token",
+    "api key",
+    "apikey",
+    "password",
+    "private key",
+    "ssh key",
+    "aws_access_key",
+    "github_token"
+  ]);
+}
+function hasExternalSink(text, command) {
+  return networkCommand(command, text) || fileUploadCommand(command, text) || textIncludesAny(text, ["clipboard", "pastebin"]);
+}
+function networkCommand(command, text) {
+  const normalized = command.toLowerCase();
+  return /\b(?:curl|wget|httpie|nc|netcat|ssh|scp|rsync|ftp|sftp)\b/.test(normalized) || /https?:\/\//.test(normalized) || textIncludesAny(text, ["network host", "outbound", "webhook", "https://", "http://"]);
+}
+function fileUploadCommand(command, text) {
+  const normalized = command.toLowerCase();
+  return /\b(?:scp|rsync|sftp|ftp)\b/.test(normalized) || /\bcurl\b[\s\S]*(?:--upload-file|-t|-f|--form|-x\s+post|--data|--data-binary)/.test(normalized) || /\baws\s+s3\s+cp\b/.test(normalized) || /\bgsutil\s+cp\b/.test(normalized) || textIncludesAny(text, ["upload", "copy-out", "external sink"]);
+}
+function systemPromptAccessText(text) {
+  return textIncludesAny(text, [
+    "system prompt",
+    "developer instructions",
+    "hidden instruction",
+    "hidden prompt",
+    "reveal the prompt",
+    "show the prompt"
+  ]);
+}
+function promptInjectionText(text) {
+  return textIncludesAny(text, [
+    "prompt injection",
+    "ignore previous",
+    "ignore all previous",
+    "disregard previous",
+    "override instruction",
+    "jailbreak",
+    "act as"
+  ]);
+}
+function guardBypassText(text) {
+  return textIncludesAny(text, [
+    "bypass guard",
+    "disable guard",
+    "skip approval",
+    "ignore approval",
+    "without approval",
+    "guard_bypass",
+    "no guard"
+  ]);
+}
+function persistenceCommand(command, text) {
+  const normalized = command.toLowerCase();
+  return /\b(?:crontab|launchctl|systemctl|schtasks|at)\b/.test(normalized) || /(?:\.zshrc|\.bashrc|\.bash_profile|\.profile|launchagents|launchdaemons|systemd|login item)/.test(normalized) || textIncludesAny(text, ["persistence", "startup item", "scheduled task", "launch agent"]);
+}
+function encodedCommand(text) {
+  return textIncludesAny(text, [
+    "encoded or encrypted shell command",
+    "base64",
+    "openssl enc",
+    "xxd -r",
+    "decode-and-exec",
+    "eval"
+  ]);
+}
+function generatedInventoryEdit(command, text) {
+  const haystack = `${command} ${text}`.toLowerCase();
+  return /docs\/.*(?:api|route|cloud).*inventory\.generated\.(?:md|json|txt)/.test(haystack);
+}
+function fileDeleteOrCleanupCommand(command, text) {
+  const normalized = command.toLowerCase();
+  return /\b(?:rm|unlink|rmdir|shred)\b/.test(normalized) || /\btruncate\s+-s\s+0\b/.test(normalized) || /\bgit\s+(?:clean|reset\s+--hard|checkout\s+--|restore\s+--staged)\b/.test(normalized) || textIncludesAny(text, ["force-clean", "delete files", "wipe files"]);
+}
+function gitOperationCommand(command) {
+  const normalized = command.toLowerCase();
+  return /\bgit\s+(?:add|commit|push|pull|merge|rebase|reset|checkout|restore|clean|stash|tag)\b/.test(normalized);
+}
+function processControlCommand(command) {
+  const normalized = command.toLowerCase();
+  return /\b(?:kill|pkill|killall|launchctl|systemctl|service|pm2|supervisorctl)\b/.test(normalized);
+}
+function containerOrDeployCommand(command) {
+  const normalized = command.toLowerCase();
+  return /\b(?:docker|docker-compose|kubectl|helm|terraform|pulumi|flyctl|vercel|netlify|gcloud|aws|az)\b/.test(normalized);
+}
+function packageInstallCommand(command) {
+  const normalized = command.toLowerCase();
+  return /\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|poetry|brew|cargo|gem|go)\s+(?:add|install|remove|uninstall|update|upgrade|publish)\b/.test(normalized);
+}
+function docsEditCommand(command, text) {
+  const haystack = `${command} ${text}`.toLowerCase();
+  return commandLooksLikeFileEdit(command) && /(?:^|\s)(?:docs\/|readme|changelog|\.md\b|\.mdx\b)/.test(haystack);
+}
+function sourceEditCommand(command, text) {
+  const haystack = `${command} ${text}`.toLowerCase();
+  return commandLooksLikeFileEdit(command) && /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|swift|rb|php|css|scss|html|json|yaml|yml|toml)\b/.test(haystack);
 }
 function sortQueue(items, direction) {
   const categoryLabels = direction === "category" ? new Map(items.map((item) => [item.request_id, resolveQueueCategory(item).label])) : null;
@@ -16831,14 +17047,44 @@ function QueueItemRow({ item, active, index, onOpenRequest }) {
 }
 function iconForQueueCategory(categoryId) {
   switch (categoryId) {
-    case "secret_access":
+    case "credential_output":
       return HiMiniKey;
-    case "data_exfiltration":
-      return HiMiniArrowTopRightOnSquare;
-    case "file_edit":
-      return HiMiniPencilSquare;
+    case "secret_file_read":
+      return HiMiniDocumentMagnifyingGlass;
     case "file_read":
       return HiMiniDocumentMagnifyingGlass;
+    case "secret_exfiltration":
+      return HiMiniArrowTopRightOnSquare;
+    case "system_prompt_access":
+      return HiMiniInformationCircle;
+    case "prompt_injection":
+      return HiMiniExclamationTriangle;
+    case "guard_bypass":
+      return HiMiniNoSymbol;
+    case "generated_inventory_edit":
+      return HiMiniClipboardDocumentCheck;
+    case "docs_edit":
+      return HiMiniDocumentText;
+    case "source_edit":
+      return HiMiniPencilSquare;
+    case "config_change":
+      return HiMiniCog6Tooth;
+    case "file_upload":
+      return HiMiniArrowTopRightOnSquare;
+    case "file_delete_cleanup":
+      return HiMiniNoSymbol;
+    case "git_operation":
+      return HiMiniCodeBracket;
+    case "process_control":
+      return HiMiniArrowPath;
+    case "container_or_deploy":
+      return HiMiniServerStack;
+    case "persistence_change":
+      return HiMiniClock;
+    case "package_install":
+      return HiMiniCube;
+    case "package_script":
+      return HiMiniCommandLine;
     case "destructive_shell":
       return HiMiniNoSymbol;
     case "encoded_shell":
@@ -16847,12 +17093,6 @@ function iconForQueueCategory(categoryId) {
       return HiMiniGlobeAlt;
     case "mcp_tool":
       return HiMiniServerStack;
-    case "package_script":
-      return HiMiniCube;
-    case "prompt_instruction":
-      return HiMiniInformationCircle;
-    case "config_change":
-      return HiMiniCog6Tooth;
     case "browser_action":
       return HiMiniArrowTopRightOnSquare;
     case "harness_start":
@@ -17707,7 +17947,7 @@ function QueueWorkspace(props) {
           onClick: props.onGoHome,
           className: "mb-3 flex items-center gap-1 text-sm font-medium text-brand-blue transition-colors hover:text-brand-blue/70 lg:hidden",
           children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft$1, { className: "h-4 w-4", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft, { className: "h-4 w-4", "aria-hidden": "true" }),
             "Back to queue"
           ]
         }
@@ -18685,11 +18925,11 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
     }
   }, [view, mainSelector]);
 }
-const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1]) : void 0));
-const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? [] : void 0));
-const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? [] : void 0));
-const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([2,1]) : void 0));
-const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? __vite__mapDeps([3,1]) : void 0));
+const HomeWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const AppDetailWorkspace = reactExports.lazy(() => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([2,1]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = reactExports.lazy(() => __vitePreload(() => import("./chunks/help-modal.js"), true ? __vite__mapDeps([3,1]) : void 0).then((m) => ({ default: m.HelpModal })));
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
 }
@@ -19164,7 +19404,7 @@ export {
   formatNumber as f,
   HiMiniXMark as g,
   harnessDisplayName as h,
-  HiMiniChevronRight$1 as i,
+  HiMiniChevronRight as i,
   jsxRuntimeExports as j,
   HiMiniChevronUp as k,
   HiMiniChevronDown as l,

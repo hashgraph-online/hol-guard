@@ -11,6 +11,7 @@ import {
   HiMiniChevronDown,
   HiMiniChevronUp,
   HiMiniArrowTopRightOnSquare,
+  HiMiniClock,
   HiMiniClipboard,
   HiMiniClipboardDocumentCheck,
   HiMiniCodeBracket,
@@ -407,14 +408,44 @@ function QueueItemRow({ item, active, index, onOpenRequest }: {
 
 function iconForQueueCategory(categoryId: QueueCategoryId) {
   switch (categoryId) {
-    case "secret_access":
+    case "credential_output":
       return HiMiniKey;
-    case "data_exfiltration":
-      return HiMiniArrowTopRightOnSquare;
-    case "file_edit":
-      return HiMiniPencilSquare;
+    case "secret_file_read":
+      return HiMiniDocumentMagnifyingGlass;
     case "file_read":
       return HiMiniDocumentMagnifyingGlass;
+    case "secret_exfiltration":
+      return HiMiniArrowTopRightOnSquare;
+    case "system_prompt_access":
+      return HiMiniInformationCircle;
+    case "prompt_injection":
+      return HiMiniExclamationTriangle;
+    case "guard_bypass":
+      return HiMiniNoSymbol;
+    case "generated_inventory_edit":
+      return HiMiniClipboardDocumentCheck;
+    case "docs_edit":
+      return HiMiniDocumentText;
+    case "source_edit":
+      return HiMiniPencilSquare;
+    case "config_change":
+      return HiMiniCog6Tooth;
+    case "file_upload":
+      return HiMiniArrowTopRightOnSquare;
+    case "file_delete_cleanup":
+      return HiMiniNoSymbol;
+    case "git_operation":
+      return HiMiniCodeBracket;
+    case "process_control":
+      return HiMiniArrowPath;
+    case "container_or_deploy":
+      return HiMiniServerStack;
+    case "persistence_change":
+      return HiMiniClock;
+    case "package_install":
+      return HiMiniCube;
+    case "package_script":
+      return HiMiniCommandLine;
     case "destructive_shell":
       return HiMiniNoSymbol;
     case "encoded_shell":
@@ -423,12 +454,6 @@ function iconForQueueCategory(categoryId: QueueCategoryId) {
       return HiMiniGlobeAlt;
     case "mcp_tool":
       return HiMiniServerStack;
-    case "package_script":
-      return HiMiniCube;
-    case "prompt_instruction":
-      return HiMiniInformationCircle;
-    case "config_change":
-      return HiMiniCog6Tooth;
     case "browser_action":
       return HiMiniArrowTopRightOnSquare;
     case "harness_start":
