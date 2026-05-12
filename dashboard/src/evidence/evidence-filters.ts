@@ -23,6 +23,9 @@ export function filterByTime(
     const parts = day.split("-").map(Number);
     const dayStart = new Date(parts[0], parts[1] - 1, parts[2]);
     const dayEnd = new Date(parts[0], parts[1] - 1, parts[2] + 1);
+    if (isNaN(dayStart.getTime()) || isNaN(dayEnd.getTime())) {
+      return receipts;
+    }
     return receipts.filter((r) => {
       const d = new Date(r.timestamp);
       return d >= dayStart && d < dayEnd;
