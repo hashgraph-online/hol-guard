@@ -394,9 +394,9 @@ cisco-ai-skill-scanner==2.0.11 \
     --hash=sha256:0275af93b1ad2d6c663aabd8d77527bf83678f55f640b7d021a40188b48393f0 \
     --hash=sha256:9e0f2fd30150ab455005b9b1b288ab2047e89bf22056f7a68e9b8155c420edbe
     # via hol-guard (pyproject.toml)
-click==8.1.8 \
-    --hash=sha256:63c132bbbed01578a06712a2d1f497bb62d9c1c0d329b7903a866228027263b2 \
-    --hash=sha256:ed53c9d8990d83c2a27deae68e4ee337473f6330c040a31d4225c9574d16096a
+click==8.3.3 \
+    --hash=sha256:398329ad4837b2ff7cbe1dd166a4c0f8900c3ca3a218de04466f38f6497f18a2 \
+    --hash=sha256:a2bf429bb3033c89fa4936ffb35d5cb471e3719e1f3c8a7c3fff0b8314305613
     # via
     #   --override (workspace)
     #   litellm
@@ -944,9 +944,9 @@ jiter==0.14.0 \
     # via
     #   anthropic
     #   openai
-jsonschema==4.23.0 \
-    --hash=sha256:d71497fef26351a33265337fa77ffeb82423f3ea21283cd9467bb03999266bc4 \
-    --hash=sha256:fbadb6f8b144a8f8cf9f0b89ba94501d143e50411a1278633f56a7acf7fd5566
+jsonschema==4.26.0 \
+    --hash=sha256:0c26707e2efad8aa1bfc5b7ce170f3fccc2e4918ff85989ba9ffa9facb2be326 \
+    --hash=sha256:d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce
     # via
     #   --override (workspace)
     #   litellm
@@ -959,9 +959,9 @@ linkify-it-py==2.1.0 \
     --hash=sha256:0d252c1594ecba2ecedc444053db5d3a9b7ec1b0dd929c8f1d74dce89f86c05e \
     --hash=sha256:43360231720999c10e9328dc3691160e27a718e280673d444c38d7d3aaa3b98b
     # via markdown-it-py
-litellm==1.83.0 \
-    --hash=sha256:860bebc76c4bb27b4cf90b4a77acd66dba25aced37e3db98750de8a1766bfb7a \
-    --hash=sha256:88c536d339248f3987571493015784671ba3f193a328e1ea6780dbebaa2094a8
+litellm==1.83.14 \
+    --hash=sha256:24aef9b47cdc424c833e32f3727f411741c690832cd1fe4405e0077144fe09c9 \
+    --hash=sha256:92b11ba2a32cf80707ddf388d18526696c7999a21b418c5e3b6eda1243d2cfdb
     # via
     #   --override (workspace)
     #   cisco-ai-mcp-scanner
@@ -1349,9 +1349,9 @@ onnxruntime==1.26.0 \
     --hash=sha256:ee1109ef4ef27cad90e823399e61e03b3c6c7bfe0fb820b4baf3678c15be8b3c \
     --hash=sha256:f5fc48a91a046a6a5c9b147f83fb41d65d24d24923373b222cdd248f0f4f4aac
     # via magika
-openai==2.30.0 \
-    --hash=sha256:92f7661c990bda4b22a941806c83eabe4896c3094465030dd882a71abe80c885 \
-    --hash=sha256:9a5ae616888eb2748ec5e0c5b955a51592e0b201a11f4262db920f2a78c5231d
+openai==2.36.0 \
+    --hash=sha256:139dea0edd2f1b30c33d46ae1a6929e03906254140318e4608e98fe8c566f2e7 \
+    --hash=sha256:143f6194b548dbc2c921af1f1b03b9f14c85fed8a75b5b516f5bcc11a2a50c63
     # via
     #   --override (workspace)
     #   cisco-ai-skill-scanner
