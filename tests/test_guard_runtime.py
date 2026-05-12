@@ -13669,6 +13669,21 @@ def test_codex_read_only_source_inspection_rejects_unbounded_sed_filter(
     )
 
 
+def test_codex_read_only_source_inspection_rejects_invalid_sed_without_crashing(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+
+    for command in (
+        "sed -i 's/safe/unsafe/' src/safe.ts",
+        "sed --unknown -n '1,40p' src/safe.ts",
+    ):
+        assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+            command,
+            cwd=workspace_dir,
+        )
+
+
 def test_codex_read_only_source_inspection_rejects_malformed_chains(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace"
     source_file = workspace_dir / "src" / "safe.ts"

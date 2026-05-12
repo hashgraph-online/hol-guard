@@ -5642,7 +5642,7 @@ def _parse_codex_sed_read_only_args(args: list[str]) -> _CodexSedReadOnlyArgs | 
             after_option_terminator = True
             continue
         if arg in {"-i", "--in-place"} or arg.startswith(("-i", "--in-place=")):
-            return False
+            return None
         if arg == "-n" or arg == "--quiet" or arg == "--silent":
             saw_print_suppression = True
             continue
@@ -5657,7 +5657,7 @@ def _parse_codex_sed_read_only_args(args: list[str]) -> _CodexSedReadOnlyArgs | 
             scripts.append(script)
             continue
         if arg.startswith("-"):
-            return False
+            return None
         if not scripts:
             scripts.append(arg)
             continue
