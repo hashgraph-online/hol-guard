@@ -78,6 +78,9 @@ function writeTabToUrl(tab: TabKey) {
   const url = new URL(window.location.href);
   if (tab === "overview") {
     url.searchParams.delete("tab");
+    if (url.hash === "#activity" || url.hash === "#settings" || url.hash === "#overview") {
+      url.hash = "";
+    }
   } else {
     url.searchParams.set("tab", tab);
   }
@@ -1128,6 +1131,8 @@ function HarnessSetupPanel(props: {
     const phrase =
       setupState.kind === "error" && setupState.confirmationPhrase
         ? setupState.confirmationPhrase
+        : setupState.kind === "success" && setupState.result.confirmation_phrase
+        ? setupState.result.confirmation_phrase
         : `disconnect-${props.harness}`;
     void runAction("uninstall", { dryRun: false, confirmationPhrase: phrase });
   }, [props.harness, runAction, setupState]);
@@ -1577,4 +1582,3 @@ function StatCard({
     </div>
   );
 }
-

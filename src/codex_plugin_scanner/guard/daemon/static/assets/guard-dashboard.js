@@ -19669,8 +19669,13 @@ function App() {
     }
     if (inventoryResult.status === "fulfilled") {
       setInventory({ kind: "ready", items: inventoryResult.value });
+    } else {
+      setInventory({
+        kind: "error",
+        message: inventoryResult.reason instanceof Error ? inventoryResult.reason.message : "Unable to load watched app inventory."
+      });
     }
-  }, [setRuntime, setRequests, setReceipts, setPolicies]);
+  }, [setRuntime, setRequests, setReceipts, setPolicies, setInventory]);
   const handleClearPolicies = reactExports.useCallback(async (scope) => {
     setClearConfirm(scope);
   }, []);

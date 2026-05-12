@@ -12,6 +12,9 @@ function writeTabToUrl(tab) {
   const url = new URL(window.location.href);
   if (tab === "overview") {
     url.searchParams.delete("tab");
+    if (url.hash === "#activity" || url.hash === "#settings" || url.hash === "#overview") {
+      url.hash = "";
+    }
   } else {
     url.searchParams.set("tab", tab);
   }
@@ -855,7 +858,7 @@ function HarnessSetupPanel(props) {
     void runAction("uninstall", { dryRun: true });
   }, [runAction]);
   const handleConfirmDisconnect = reactExports.useCallback(() => {
-    const phrase = setupState.kind === "error" && setupState.confirmationPhrase ? setupState.confirmationPhrase : `disconnect-${props.harness}`;
+    const phrase = setupState.kind === "error" && setupState.confirmationPhrase ? setupState.confirmationPhrase : setupState.kind === "success" && setupState.result.confirmation_phrase ? setupState.result.confirmation_phrase : `disconnect-${props.harness}`;
     void runAction("uninstall", { dryRun: false, confirmationPhrase: phrase });
   }, [props.harness, runAction, setupState]);
   const handleCancelDisconnect = reactExports.useCallback(() => {
