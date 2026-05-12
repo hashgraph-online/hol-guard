@@ -16482,6 +16482,7 @@ function resolveQueueCategoryId(item) {
   const command = envelope?.command ?? item.launch_target ?? "";
   const text = queueCategoryText(item);
   const isPromptReview = envelope?.action_type === "prompt" || decisionCategories.includes("prompt");
+  const isWriteReview = envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command);
   if (hasSecretSignal(decisionCategories, text) && hasExternalSink(text, command)) {
     return "secret_exfiltration";
   }
@@ -16494,7 +16495,7 @@ function resolveQueueCategoryId(item) {
   if (isPromptReview && promptInjectionText(text)) {
     return "prompt_injection";
   }
-  if (decisionCategories.includes("bypass") || guardBypassText(text)) {
+  if (decisionCategories.includes("bypass") || !isWriteReview && guardBypassText(text)) {
     return "guard_bypass";
   }
   if (decisionCategories.includes("persistence") || persistenceCommand(command, text)) {
@@ -16794,7 +16795,7 @@ function containerOrDeployCommand(command) {
 }
 function packageInstallCommand(command) {
   const normalized = command.toLowerCase();
-  return /\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|poetry|brew|cargo|gem|go)\s+(?:add|install|remove|uninstall|update|upgrade|publish)\b/.test(normalized);
+  return /\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|poetry|brew|cargo|gem|go)\s+(?:add|i|install|remove|uninstall|update|upgrade|publish)\b/.test(normalized);
 }
 function docsEditCommand(command, text) {
   const haystack = `${command} ${text}`.toLowerCase();

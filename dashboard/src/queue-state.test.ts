@@ -926,3 +926,26 @@ assert(
   resolveQueueCategory(promptDocsWriteItem).label === "Documentation edit",
   "T-QS-90: docs writes discussing prompt security do not classify as prompt security events"
 );
+
+const bypassDocsWriteItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-bypass-docs-write",
+  action_envelope_json: { ...shellEnvelope, action_type: "file_write", command: null, target_paths: ["docs/guard-bypass-testing.md"] },
+  risk_summary: "Documents how to test bypass guard protections.",
+};
+
+assert(
+  resolveQueueCategory(bypassDocsWriteItem).label === "Documentation edit",
+  "T-QS-91: docs writes discussing bypass testing do not classify as guard bypass attempts"
+);
+
+const npmAliasInstallItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-npm-i",
+  action_envelope_json: { ...shellEnvelope, command: "npm i lodash", package_manager: "npm", package_name: "lodash" },
+};
+
+assert(
+  resolveQueueCategory(npmAliasInstallItem).label === "Package install",
+  "T-QS-92: npm i alias classifies as package install"
+);

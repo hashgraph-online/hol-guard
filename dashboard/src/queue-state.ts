@@ -334,6 +334,7 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
   const command = envelope?.command ?? item.launch_target ?? "";
   const text = queueCategoryText(item);
   const isPromptReview = envelope?.action_type === "prompt" || decisionCategories.includes("prompt");
+  const isWriteReview = envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command);
 
   if (hasSecretSignal(decisionCategories, text) && hasExternalSink(text, command)) {
     return "secret_exfiltration";
@@ -351,7 +352,7 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
     return "prompt_injection";
   }
 
-  if (decisionCategories.includes("bypass") || guardBypassText(text)) {
+  if (decisionCategories.includes("bypass") || (!isWriteReview && guardBypassText(text))) {
     return "guard_bypass";
   }
 
@@ -746,7 +747,7 @@ function containerOrDeployCommand(command: string): boolean {
 
 function packageInstallCommand(command: string): boolean {
   const normalized = command.toLowerCase();
-  return /\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|poetry|brew|cargo|gem|go)\s+(?:add|install|remove|uninstall|update|upgrade|publish)\b/.test(normalized);
+  return /\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|poetry|brew|cargo|gem|go)\s+(?:add|i|install|remove|uninstall|update|upgrade|publish)\b/.test(normalized);
 }
 
 function docsEditCommand(command: string, text: string): boolean {
