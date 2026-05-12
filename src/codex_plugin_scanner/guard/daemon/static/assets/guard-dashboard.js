@@ -16621,7 +16621,7 @@ function networkCommand(command, text) {
 }
 function fileUploadCommand(command, text) {
   const normalized = command.toLowerCase();
-  return /\b(?:scp|rsync|sftp|ftp)\b/.test(normalized) || /\bcurl\b[\s\S]*(?:--upload-file|-t|--form\s+\S*@|-f\s+\S*@|--data(?:-binary|-raw|-urlencode)?\s+@)/.test(normalized) || /\baws\s+s3\s+cp\b/.test(normalized) || /\bgsutil\s+cp\b/.test(normalized) || textIncludesAny(text, ["upload", "copy-out", "external sink"]);
+  return /\b(?:scp|rsync|sftp|ftp)\b/.test(normalized) || /\bcurl\b[\s\S]*(?:--upload-file|\s-t\s+\S+|--form\s+\S*@|-f\s+\S*@|--data(?:-binary|-raw|-urlencode)?\s+@)/.test(normalized) || /\baws\s+s3\s+cp\b/.test(normalized) || /\bgsutil\s+cp\b/.test(normalized) || textIncludesAny(text, ["upload", "copy-out", "external sink"]);
 }
 function systemPromptAccessText(text) {
   return textIncludesAny(text, [
@@ -16683,7 +16683,7 @@ function gitOperationCommand(command) {
 }
 function processControlCommand(command) {
   const normalized = command.toLowerCase();
-  return /\b(?:kill|pkill|killall|launchctl|systemctl|service|pm2|supervisorctl)\b/.test(normalized);
+  return /\b(?:kill|pkill|killall|launchctl|systemctl|pm2|supervisorctl)\b/.test(normalized) || /\bservice\s+\S+\s+(?:start|stop|restart|reload|status)\b/.test(normalized);
 }
 function containerOrDeployCommand(command) {
   const normalized = command.toLowerCase();

@@ -711,3 +711,40 @@ assert(
   resolveQueueCategory(curlDeleteItem).label === "Network request",
   "T-QS-72: HTTP DELETE requests classify as network, not local destructive shell"
 );
+
+const curlTlsItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-curl-tls",
+  action_envelope_json: {
+    ...shellEnvelope,
+    command: "curl --tlsv1.2 https://example.invalid/status",
+    network_hosts: ["example.invalid"],
+  },
+};
+
+assert(
+  resolveQueueCategory(curlTlsItem).label === "Network request",
+  "T-QS-73: curl --tls flags do not trigger file upload classification"
+);
+
+const kubectlServiceItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-kubectl-service",
+  action_envelope_json: { ...shellEnvelope, command: "kubectl get service guard-api" },
+};
+
+assert(
+  resolveQueueCategory(kubectlServiceItem).label === "Container or deploy command",
+  "T-QS-74: kubectl service commands classify as deploy/container, not process control"
+);
+
+const initServiceItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-init-service",
+  action_envelope_json: { ...shellEnvelope, command: "service nginx restart" },
+};
+
+assert(
+  resolveQueueCategory(initServiceItem).label === "Process control",
+  "T-QS-75: init service-manager commands still classify as process control"
+);
