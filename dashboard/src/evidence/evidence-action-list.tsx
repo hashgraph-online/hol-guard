@@ -97,6 +97,7 @@ function ActionRow({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (e.target !== e.currentTarget) return;
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         onSelect(receipt.receipt_id);

@@ -236,7 +236,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
 
   useEffect(() => {
     setPage(0);
-  }, [filters, debouncedSearch]);
+  }, [debouncedSearch, filters.harness, filters.decision, filters.time, filters.day, filters.category, filters.sourceScope]);
 
   const effectiveFilters = useMemo(
     () => ({ ...filters, search: debouncedSearch }),
