@@ -190,7 +190,6 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         filteredCount={filteredRequests.length}
         progress={progress}
         activeHarness={activeItem.harness}
-        activeCategory={resolveQueueCategory(activeItem)}
       />
 
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
@@ -223,14 +222,13 @@ function ReviewHeader({
   filteredCount,
   progress,
   activeHarness,
-  activeCategory,
 }: {
   count: number;
   filteredCount: number;
   progress: string;
   activeHarness: string;
-  activeCategory: QueueCategory;
 }) {
+  const isFiltered = filteredCount !== count;
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <div>
@@ -239,15 +237,29 @@ function ReviewHeader({
           Guard paused these actions before they ran. Review each one and decide what should happen.
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-xs text-muted-foreground">{progress}</span>
-        <Badge tone="info">{count} waiting</Badge>
-        {filteredCount !== count ? <Tag tone="slate">{filteredCount} shown</Tag> : null}
-        <Tag tone="blue">{harnessDisplayName(activeHarness)}</Tag>
-        <Tag tone="slate">{activeCategory.shortLabel}</Tag>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        {progress}{isFiltered ? ` · ${filteredCount} of ${count} shown` : ""} · from {harnessDisplayName(activeHarness)}
+      </p>
     </div>
   );
+}
+
+type SemanticGroupId = "all" | "files" | "shell" | "network" | "tools" | "other";
+
+const SEMANTIC_GROUPS: { id: SemanticGroupId; label: string; matches: QueueCategoryId[] }[] = [
+  { id: "all", label: "All", matches: [] },
+  { id: "files", label: "Files", matches: ["file_read", "file_edit"] },
+  { id: "shell", label: "Shell", matches: ["shell_command", "destructive_shell", "encoded_shell"] },
+  { id: "network", label: "Network & Data", matches: ["network", "data_exfiltration", "secret_access"] },
+  { id: "tools", label: "Tools & Apps", matches: ["mcp_tool", "package_script", "harness_start", "browser_action"] },
+  { id: "other", label: "Other", matches: ["prompt_instruction", "config_change", "other"] },
+];
+
+function resolveSemanticGroup(categoryId: QueueCategoryId): SemanticGroupId {
+  for (const group of SEMANTIC_GROUPS) {
+    if (group.matches.includes(categoryId)) return group.id;
+  }
+  return "other";
 }
 
 const ReviewQueueList = forwardRef<HTMLDivElement, {
@@ -275,6 +287,9 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   onSortDirectionChange,
   onOpenRequest,
 }, ref) => {
+  const [showFilters, setShowFilters] = useState(false);
+  const [semanticFilter, setSemanticFilter] = useState<SemanticGroupId>("all");
+
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     onSearchTermChange(event.target.value);
   }, [onSearchTermChange]);
@@ -284,6 +299,31 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   const handleSortChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     onSortDirectionChange(event.target.value as QueueSortDirection);
   }, [onSortDirectionChange]);
+
+  // Sync semantic filter to underlying category filter
+  useEffect(() => {
+    if (semanticFilter === "all") {
+      onCategoryFilterChange("all");
+    } else {
+      const group = SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
+      if (group && group.matches.length > 0) {
+        onCategoryFilterChange(group.matches[0]);
+      }
+    }
+  }, [semanticFilter, onCategoryFilterChange]);
+
+  const activeSemanticGroup = categoryFilter === "all" ? "all" : resolveSemanticGroup(categoryFilter);
+
+  // Only show groups that have items
+  const visibleGroups = useMemo(() => {
+    const available = new Set<SemanticGroupId>();
+    for (const item of requests) {
+      available.add(resolveSemanticGroup(resolveQueueCategory(item).id));
+    }
+    return SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
+  }, [requests]);
+
+  const isFiltered = searchTerm || categoryFilter !== "all" || sortDirection !== "newest";
 
   return (
     <aside className="space-y-3" ref={ref}>
@@ -304,33 +344,52 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
             className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           />
         </label>
-        <label className="block">
-          <span className="sr-only">Review category</span>
-          <select
-            value={categoryFilter}
-            onChange={handleCategoryChange}
-            className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          >
-            <option value="all">All categories</option>
-            {categoryOptions.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="sr-only">Sort review queue</span>
-          <select
-            value={sortDirection}
-            onChange={handleSortChange}
-            className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="category">Category</option>
-          </select>
-        </label>
+        <button
+          onClick={() => setShowFilters((v) => !v)}
+          className="flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
+        >
+          {showFilters ? "Hide filters" : "Show filters"}
+          {isFiltered && !showFilters && <span className="ml-1 h-1.5 w-1.5 rounded-full bg-brand-attention" />}
+        </button>
+        {showFilters && (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-1">
+              {visibleGroups.map((group) => (
+                <button
+                  key={group.id}
+                  onClick={() => setSemanticFilter(group.id)}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
+                    activeSemanticGroup === group.id
+                      ? "bg-brand-blue text-white"
+                      : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
+                  }`}
+                >
+                  {group.label}
+                </button>
+              ))}
+            </div>
+            <label className="block">
+              <span className="sr-only">Sort review queue</span>
+              <select
+                value={sortDirection}
+                onChange={handleSortChange}
+                className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="category">Category</option>
+              </select>
+            </label>
+            {isFiltered && (
+              <button
+                onClick={() => { onSearchTermChange(""); onCategoryFilterChange("all"); onSortDirectionChange("newest"); setSemanticFilter("all"); }}
+                className="text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
+        )}
       </div>
       <div
         role="listbox"
@@ -349,7 +408,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
           ))
         ) : (
           <div className="px-3 py-5">
-            <EmptyState title="No matching actions" body="Try a different category, search, or sort mode." tone="teach" />
+            <EmptyState title="No matching actions" body="Try a different search or filter." tone="teach" />
           </div>
         )}
       </div>
@@ -379,7 +438,7 @@ function QueueItemRow({ item, active, index, onOpenRequest }: {
       aria-posinset={index + 1}
       aria-setsize={/* parent will provide */ undefined}
       tabIndex={active ? 0 : -1}
-      className={`w-full rounded-lg py-2.5 text-left transition-all ${
+      className={`w-full rounded-lg py-2.5 px-2 text-left transition-all ${
         active
           ? "border-brand-blue bg-brand-blue/[0.06]"
           : "border-transparent bg-white hover:bg-slate-50"
@@ -388,19 +447,26 @@ function QueueItemRow({ item, active, index, onOpenRequest }: {
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <span
-            className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-              active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
+            className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+              isBlocked ? "bg-brand-attention" : "bg-emerald-400"
             }`}
-          >
-            <CategoryIcon className="h-4 w-4" aria-hidden="true" />
-          </span>
-          <p className="truncate text-sm font-medium text-brand-dark">{category.label}</p>
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-brand-dark">{preview}</p>
+            <p className="truncate text-[11px] text-muted-foreground">
+              {harnessDisplayName(item.harness)} · {category.shortLabel}
+            </p>
+          </div>
         </div>
-        {isBlocked ? <HiMiniNoSymbol className="h-3.5 w-3.5 shrink-0 text-brand-attention" aria-hidden="true" /> : null}
+        <span
+          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+            active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
+          }`}
+        >
+          <CategoryIcon className="h-4 w-4" aria-hidden="true" />
+        </span>
       </div>
-      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-        {harnessDisplayName(item.harness)} · {preview}
-      </p>
     </button>
   );
 }
@@ -463,7 +529,7 @@ function ReviewDecisionCard(props: {
   const [resolved, setResolved] = useState<"allow" | "block" | null>(null);
   const [showConsequences, setShowConsequences] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
-  const [showTechnical, setShowTechnical] = useState(false);
+  const [showTechnical, setShowTechnical] = useState(true);
   const [confirmScope, setConfirmScope] = useState<DecisionScope | null>(null);
   const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -790,17 +856,6 @@ function ReviewDecisionCard(props: {
           </ActionButton>
         </div>
 
-        {/* Keyboard hint */}
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <HiMiniDocumentText className="h-3.5 w-3.5" aria-hidden="true" />
-            Keyboard:
-          </span>
-          <span className="flex items-center gap-1"><kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono">A</kbd> allow</span>
-          <span className="flex items-center gap-1"><kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono">B</kbd> block</span>
-          <span className="flex items-center gap-1"><kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono">1</kbd>–<kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono">5</kbd> scope</span>
-          <span className="flex items-center gap-1"><kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono">?</kbd> help</span>
-        </div>
       </div>
 
       {/* Evidence section */}
