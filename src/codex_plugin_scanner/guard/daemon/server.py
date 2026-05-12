@@ -347,7 +347,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path != "/v1/connect/complete" and not self._origin_is_allowed_for_request(parsed.path, path_parts):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
-        if self._requires_header_token(parsed.path, path_parts) and not self._header_token_is_valid():
+        if (
+            self._requires_header_token(parsed.path, path_parts)
+            and not self._header_token_is_valid()
+            and not self._same_origin_request_resolution_allowed(parsed.path, path_parts)
+        ):
             if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
                 host = self.server.server_address[0]  # type: ignore[attr-defined]
                 port = self.server.server_address[1]  # type: ignore[attr-defined]
@@ -1047,6 +1051,21 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         token = self.headers.get("X-Guard-Token")
         return self._tokens_match(token)
 
+    def _same_origin_request_resolution_allowed(self, path: str, path_parts: list[str]) -> bool:
+        if not self._is_request_resolution_path(path, path_parts):
+            return False
+        origin = self.headers.get("Origin")
+        if origin is None:
+            return False
+        normalized_origin = self._normalize_origin(origin)
+        if normalized_origin is None:
+            return False
+        parsed = urlparse(normalized_origin)
+        if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+            return False
+        server_port = self.server.server_address[1]  # type: ignore[attr-defined]
+        return parsed.port == server_port
+
     def _tokens_match(self, token: object) -> bool:
         if not isinstance(token, str):
             return False
@@ -1354,6 +1373,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         ):
             return True
         return len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision"
+
+    @staticmethod
+    def _is_request_resolution_path(path: str, path_parts: list[str]) -> bool:
+        return (
+            len(path_parts) == 4
+            and path_parts[:2] == ["v1", "requests"]
+            and path_parts[3] in {"approve", "block"}
+        ) or (len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision")
 
     def _write_json(
         self,
