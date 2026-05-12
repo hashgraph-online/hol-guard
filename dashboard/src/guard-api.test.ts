@@ -589,7 +589,7 @@ assert(resolution.remaining_pending_summaries[0].request_id === "req-next", "L07
 assert(resolution.resolved_request?.status === "resolved", "L077: resolveRequestWithQueueResult normalizes resolved request");
 assert(resolution.resolved_duplicate_ids[0] === "req-dupe", "L077: resolveRequestWithQueueResult returns duplicate ids");
 
-installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+installGuardWindow("?guard-token=stale-resolve-token&guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
 const recoveryCalls: RecordedFetch[] = [];
 globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const url = input instanceof Request ? input.url : String(input);
@@ -633,6 +633,10 @@ const recoveredResolution = await resolveRequestWithQueueResult({
 });
 assert(recoveredResolution.resolved === true, "L077b: resolve retries after refreshing stale local token");
 assert(recoveryCalls.length === 3, "L077b: resolve retry makes approve, initialize, approve calls");
+assert(
+  headerValue(recoveryCalls[0].init, "X-Guard-Token") === "stale-resolve-token",
+  "L077b: first resolve attempt uses token from current URL"
+);
 assert(new URL(recoveryCalls[1].url).pathname === "/v1/initialize", "L077b: stale token recovery calls initialize");
 assert(
   headerValue(recoveryCalls[2].init, "X-Guard-Token") === "fresh-resolve-token",
