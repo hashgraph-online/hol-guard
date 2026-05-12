@@ -135,6 +135,43 @@ def test_daemon_install_endpoint_defaults_to_dry_run(tmp_path: Path) -> None:
     assert payload["action"] == "install"
     assert payload["contract"]["harness"] == "codex"
     assert store.get_managed_install("codex") is None
+    command = payload["steps"][0]["command"]
+    assert command == ["hol-guard", "apps", "connect", "codex"]
+
+
+def test_daemon_install_endpoint_runs_managed_install_without_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home)
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/harnesses/opencode/install",
+                token=daemon._server.auth_token,
+                payload={"dry_run": False},
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 200
+    assert payload["dry_run"] is False
+    assert payload["action"] == "install"
+    managed = payload["managed_install"]
+    assert isinstance(managed, dict)
+    assert managed["harness"] == "opencode"
+    assert managed["active"] is True
+    assert store.get_managed_install("opencode") is not None
+    config_path = home / ".config" / "opencode" / "opencode.json"
+    assert config_path.exists()
+    assert "npx" not in json.dumps(payload)
 
 
 def test_daemon_verify_endpoint_runs_safe_local_detection(tmp_path: Path) -> None:
@@ -180,6 +217,47 @@ def test_daemon_uninstall_requires_confirmation_token(tmp_path: Path) -> None:
     assert payload["error"] == "confirmation_required"
     assert payload["confirmation_phrase"] == "disconnect-codex"
     assert payload["confirm_command"] == "hol-guard apps disconnect codex --confirm disconnect-codex"
+
+
+def test_daemon_uninstall_endpoint_runs_managed_disconnect_with_confirmation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home)
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        install_status, _install_payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/harnesses/opencode/install",
+                token=daemon._server.auth_token,
+                payload={"dry_run": False},
+            )
+        )
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/harnesses/opencode/uninstall",
+                token=daemon._server.auth_token,
+                payload={"dry_run": False, "confirmation_phrase": "disconnect-opencode"},
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert install_status == 200
+    assert status == 200
+    managed = payload["managed_install"]
+    assert isinstance(managed, dict)
+    assert managed["harness"] == "opencode"
+    assert managed["active"] is False
+    stored = store.get_managed_install("opencode")
+    assert stored is not None
+    assert stored["active"] is False
 
 
 def test_apps_alias_lists_harnesses_as_plain_inventory(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

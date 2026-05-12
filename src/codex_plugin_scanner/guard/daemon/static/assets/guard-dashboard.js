@@ -12709,6 +12709,16 @@ async function readJson(input, init) {
   }
   return await response.json();
 }
+class GuardHarnessActionError extends Error {
+  status;
+  payload;
+  constructor(status, payload) {
+    super(payload?.error ?? `Harness action failed with ${status}`);
+    this.name = "GuardHarnessActionError";
+    this.status = status;
+    this.payload = payload;
+  }
+}
 function guardParams() {
   const params = new URLSearchParams(window.location.search);
   const fragment = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
@@ -12814,6 +12824,9 @@ function isNonNegativeNumber(value) {
 }
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+function isGuardHarnessActionErrorPayload(value) {
+  return isRecord(value) && isNonEmptyString(value["error"]);
 }
 function isApprovalPageStatus(value) {
   return value === "pending" || value === "resolved" || value === "all";
@@ -13226,6 +13239,49 @@ async function clearPolicy(input) {
     })
   });
 }
+function formatHarnessCommand(command) {
+  return command.map((part) => /\s/.test(part) ? JSON.stringify(part) : part).join(" ");
+}
+async function runHarnessAction(input) {
+  if (isGuardDemoMode()) {
+    return {
+      harness: input.harness,
+      action: input.action,
+      dry_run: input.action === "verify" ? false : input.dryRun ?? true,
+      safe: input.action === "verify" ? true : void 0,
+      steps: [],
+      managed_install: input.action === "install" || input.action === "repair" ? {
+        harness: input.harness,
+        active: true,
+        workspace: null,
+        manifest: { notes: ["Demo mode only."] },
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      } : void 0
+    };
+  }
+  const response = await fetchGuardApi(
+    `/v1/harnesses/${encodeURIComponent(input.harness)}/${input.action}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeaders()
+      },
+      body: JSON.stringify({
+        dry_run: input.dryRun ?? input.action !== "verify",
+        confirmation_phrase: input.confirmationPhrase
+      })
+    }
+  );
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payload) ? payload : null
+    );
+  }
+  return payload;
+}
 async function fetchDiff(artifactId, harness) {
   if (isGuardDemoMode()) {
     return getDemoDiff(artifactId, harness);
@@ -13448,6 +13504,9 @@ function HiMiniXCircle(props) {
 function HiMiniWrenchScrewdriver(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M14.5 10a4.5 4.5 0 0 0 4.284-5.882c-.105-.324-.51-.391-.752-.15L15.34 6.66a.454.454 0 0 1-.493.11 3.01 3.01 0 0 1-1.618-1.616.455.455 0 0 1 .11-.494l2.694-2.692c.24-.241.174-.647-.15-.752a4.5 4.5 0 0 0-5.873 4.575c.055.873-.128 1.808-.8 2.368l-7.23 6.024a2.724 2.724 0 1 0 3.837 3.837l6.024-7.23c.56-.672 1.495-.855 2.368-.8.096.007.193.01.291.01ZM5 16a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "M14.5 11.5c.173 0 .345-.007.514-.022l3.754 3.754a2.5 2.5 0 0 1-3.536 3.536l-4.41-4.41 2.172-2.607c.052-.063.147-.138.342-.196.202-.06.469-.087.777-.067.128.008.257.012.387.012ZM6 4.586l2.33 2.33a.452.452 0 0 1-.08.09L6.8 8.214 4.586 6H3.309a.5.5 0 0 1-.447-.276l-1.7-3.402a.5.5 0 0 1 .093-.577l.49-.49a.5.5 0 0 1 .577-.094l3.402 1.7A.5.5 0 0 1 6 3.31v1.277Z" }, "child": [] }] })(props);
 }
+function HiMiniTrash(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniTag(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A2.5 2.5 0 0 0 2 4.5v3.879a2.5 2.5 0 0 0 .732 1.767l7.5 7.5a2.5 2.5 0 0 0 3.536 0l3.878-3.878a2.5 2.5 0 0 0 0-3.536l-7.5-7.5A2.5 2.5 0 0 0 8.38 2H4.5ZM5 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -13459,6 +13518,9 @@ function HiMiniShieldCheck(props) {
 }
 function HiMiniServerStack(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M4.464 3.162A2 2 0 0 1 6.28 2h7.44a2 2 0 0 1 1.816 1.162l1.154 2.5c.067.145.115.291.145.438A3.508 3.508 0 0 0 16 6H4c-.288 0-.568.035-.835.1.03-.147.078-.293.145-.438l1.154-2.5Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 9.5a2 2 0 0 1 2-2h12a2 2 0 1 1 0 4H4a2 2 0 0 1-2-2Zm13.24 0a.75.75 0 0 1 .75-.75H16a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75h-.01a.75.75 0 0 1-.75-.75V9.5Zm-2.25-.75a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75H13a.75.75 0 0 0 .75-.75V9.5a.75.75 0 0 0-.75-.75h-.01ZM2 15a2 2 0 0 1 2-2h12a2 2 0 1 1 0 4H4a2 2 0 0 1-2-2Zm13.24 0a.75.75 0 0 1 .75-.75H16a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75h-.01a.75.75 0 0 1-.75-.75V15Zm-2.25-.75a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75H13a.75.75 0 0 0 .75-.75V15a.75.75 0 0 0-.75-.75h-.01Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniRocketLaunch(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.606 12.97a.75.75 0 0 1-.134 1.051 2.494 2.494 0 0 0-.93 2.437 2.494 2.494 0 0 0 2.437-.93.75.75 0 1 1 1.186.918 3.995 3.995 0 0 1-4.482 1.332.75.75 0 0 1-.461-.461 3.994 3.994 0 0 1 1.332-4.482.75.75 0 0 1 1.052.134Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.752 12A13.07 13.07 0 0 0 8 14.248v4.002c0 .414.336.75.75.75a5 5 0 0 0 4.797-6.414 12.984 12.984 0 0 0 5.45-10.848.75.75 0 0 0-.735-.735 12.984 12.984 0 0 0-10.849 5.45A5 5 0 0 0 1 11.25c.001.414.337.75.751.75h4.002ZM13 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniQuestionMarkCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.94 6.94a.75.75 0 1 1-1.061-1.061 3 3 0 1 1 2.871 5.026v.345a.75.75 0 0 1-1.5 0v-.5c0-.72.57-1.172 1.081-1.287A1.5 1.5 0 1 0 8.94 6.94ZM10 15a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -19602,10 +19664,11 @@ function App() {
     navigate(`/apps/${harness}`);
   }, []);
   const refreshStateAfterAction = reactExports.useCallback(async () => {
-    const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([
+    const [snapshotResult, receiptsResult, policiesResult, inventoryResult] = await Promise.allSettled([
       fetchRuntimeSnapshot(),
       fetchReceipts(),
-      fetchPolicies()
+      fetchPolicies(),
+      fetchInventory()
     ]);
     if (snapshotResult.status === "fulfilled") {
       setRuntime({ kind: "ready", snapshot: snapshotResult.value });
@@ -19627,7 +19690,15 @@ function App() {
         message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load remembered decisions."
       });
     }
-  }, [setRuntime, setRequests, setReceipts, setPolicies]);
+    if (inventoryResult.status === "fulfilled") {
+      setInventory({ kind: "ready", items: inventoryResult.value });
+    } else {
+      setInventory({
+        kind: "error",
+        message: inventoryResult.reason instanceof Error ? inventoryResult.reason.message : "Unable to load watched app inventory."
+      });
+    }
+  }, [setRuntime, setRequests, setReceipts, setPolicies, setInventory]);
   const handleClearPolicies = reactExports.useCallback(async (scope) => {
     setClearConfirm(scope);
   }, []);
@@ -19723,14 +19794,14 @@ function App() {
       setRequests({ kind: "error", message });
     });
   }, []);
-  const handleConnectHarness = reactExports.useCallback((_harness) => {
-    navigate("/settings");
+  const handleConnectHarness = reactExports.useCallback((harness) => {
+    navigate(`/apps/${encodeURIComponent(harness)}?tab=settings`);
   }, []);
-  const handleTestHarness = reactExports.useCallback((_harness) => {
-    navigate("/inbox");
+  const handleTestHarness = reactExports.useCallback((harness) => {
+    navigate(`/apps/${encodeURIComponent(harness)}?tab=settings`);
   }, []);
-  const handleRepairHarness = reactExports.useCallback((_harness) => {
-    navigate("/settings");
+  const handleRepairHarness = reactExports.useCallback((harness) => {
+    navigate(`/apps/${encodeURIComponent(harness)}?tab=settings`);
   }, []);
   const appDetailContent = reactExports.useMemo(() => {
     if (view !== "app-detail" || !appDetailHarness || runtime.kind !== "ready") {
@@ -19747,10 +19818,11 @@ function App() {
         requests: requests.kind === "ready" ? requests.items : [],
         onGoHome: handleGoHome,
         onOpenRequest: handleOpenRequest,
-        onClearAppPolicies: handleClearAppPolicies
+        onClearAppPolicies: handleClearAppPolicies,
+        onManagedInstallChanged: refreshStateAfterAction
       }
     );
-  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies]);
+  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, refreshStateAfterAction]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "a",
@@ -19823,6 +19895,7 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
+  HiMiniCommandLine as $,
   ActionButton as A,
   Badge as B,
   exportDiagnostics as C,
@@ -19844,9 +19917,14 @@ export {
   SectionLabel as S,
   Tag as T,
   HiMiniChartBar as U,
-  HiMiniCommandLine as V,
-  HiMiniQuestionMarkCircle as W,
+  runHarnessAction as V,
+  GuardHarnessActionError as W,
+  HiMiniRocketLaunch as X,
+  HiMiniArrowPath as Y,
+  HiMiniTrash as Z,
+  formatHarnessCommand as _,
   HiMiniFire as a,
+  HiMiniQuestionMarkCircle as a0,
   HiMiniCalendarDays as b,
   HiMiniShieldCheck as c,
   formatRelativeTime as d,

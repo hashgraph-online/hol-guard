@@ -282,6 +282,69 @@ export type GuardManagedInstall = {
   updated_at: string;
 };
 
+export type GuardHarnessAction = "install" | "verify" | "repair" | "uninstall";
+
+export type GuardHarnessSetupStep = {
+  step_id: string;
+  title: string;
+  body: string;
+  command: string[];
+  writes_config: boolean;
+  requires_confirmation: boolean;
+};
+
+export type GuardHarnessCoverage = {
+  native_hooks: boolean;
+  browser_fallback: boolean;
+  mcp_proxy: boolean;
+  prompt_hooks: boolean;
+  blind_spots: string[];
+};
+
+export type GuardHarnessSetupContract = {
+  harness: string;
+  display_name: string;
+  install_aliases: string[];
+  setup_steps: GuardHarnessSetupStep[];
+  verify_steps: GuardHarnessSetupStep[];
+  repair_steps: GuardHarnessSetupStep[];
+  coverage: GuardHarnessCoverage;
+};
+
+export type GuardHarnessVerification = {
+  checked: boolean;
+  writes_config: boolean;
+  installed: boolean;
+  command_available: boolean;
+  config_paths: string[];
+  artifact_count: number;
+  warnings: string[];
+  steps: GuardHarnessSetupStep[];
+};
+
+export type GuardHarnessActionResult = {
+  harness: string;
+  action?: GuardHarnessAction;
+  dry_run?: boolean;
+  safe?: boolean;
+  contract?: GuardHarnessSetupContract;
+  steps?: GuardHarnessSetupStep[];
+  workspace?: string | null;
+  verification?: GuardHarnessVerification;
+  managed_install?: GuardManagedInstall;
+  managed_installs?: GuardManagedInstall[];
+  auto_detected?: boolean;
+  confirmation_phrase?: string;
+  confirm_command?: string;
+};
+
+export type GuardHarnessActionErrorPayload = {
+  error: string;
+  harness?: string;
+  confirmation_phrase?: string;
+  confirm_command?: string;
+};
+
 export type GuardInventoryItem = {
   artifact_id: string;
   harness: string;
