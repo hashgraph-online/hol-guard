@@ -187,16 +187,23 @@ function computeInsights(
       return d >= prevWeekStart && d < weekAgo;
     });
     const prevBlockedCount = prevWeekReceipts.filter((r) => r.policy_decision === "block").length;
-    const prevBlockRate = prevWeekReceipts.length > 0
+    const hasPrevWeek = prevWeekReceipts.length > 0;
+    const prevBlockRate = hasPrevWeek
       ? Math.round((prevBlockedCount / prevWeekReceipts.length) * 100)
       : 0;
-    const change = blockRate - prevBlockRate;
-    const value = change === 0
-      ? `${blockRate}% (flat)`
-      : `${blockRate}% (${change > 0 ? "+" : ""}${change}%)`;
+    const change = hasPrevWeek ? blockRate - prevBlockRate : 0;
+    const value = !hasPrevWeek
+      ? `${blockRate}%`
+      : change === 0
+        ? `${blockRate}% (flat)`
+        : `${blockRate}% (${change > 0 ? "+" : ""}${change}%)`;
     insights.push({
       id: "block-rate",
-      icon: change > 0 ? <HiOutlineArrowTrendingUp className="h-4 w-4" /> : <HiOutlineArrowTrendingDown className="h-4 w-4" />,
+      icon: !hasPrevWeek || change === 0
+        ? <HiOutlineArrowTrendingUp className="h-4 w-4" />
+        : change > 0
+          ? <HiOutlineArrowTrendingUp className="h-4 w-4" />
+          : <HiOutlineArrowTrendingDown className="h-4 w-4" />,
       label: "Block rate this week",
       value,
       tone: change > 0 ? "attention" : "green",
