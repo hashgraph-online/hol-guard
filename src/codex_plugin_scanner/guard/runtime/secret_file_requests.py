@@ -2745,14 +2745,14 @@ def _looks_like_temporary_pr_threads_query_path(path_text: str) -> bool:
         return False
     if os.path.exists(normalized):
         return False
-    _TEMP_GROUPS: tuple[frozenset[str], ...] = (
+    _temp_groups: tuple[frozenset[str], ...] = (
         frozenset({"/tmp/", "/private/tmp/"}),
         frozenset({"/var/tmp/", "/private/var/tmp/"}),
         frozenset({"/var/folders/", "/private/var/folders/"}),
     )
 
     def _temp_group_index(lowered: str) -> int:
-        for idx, group in enumerate(_TEMP_GROUPS):
+        for idx, group in enumerate(_temp_groups):
             if any(lowered.startswith(prefix) for prefix in group):
                 return idx
         return -1
