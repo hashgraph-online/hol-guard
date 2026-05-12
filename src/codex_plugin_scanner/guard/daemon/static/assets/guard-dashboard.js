@@ -12733,10 +12733,41 @@ function guardParam(name) {
 function readGuardToken() {
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+    saveGuardToken(guardToken);
     return guardToken;
   }
   return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
+}
+function saveGuardToken(guardToken) {
+  window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+}
+function parseAuthToken(payload) {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  const authToken = payload["auth_token"];
+  return typeof authToken === "string" && authToken.trim() ? authToken : null;
+}
+async function refreshGuardToken() {
+  const response = await fetch(guardApiInput("/v1/initialize"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_name: "guard-dashboard",
+      client_title: "HOL Guard dashboard",
+      surface: "dashboard",
+      capabilities: ["approval-resolution"],
+      supported_protocol_versions: [1]
+    })
+  });
+  if (!response.ok) {
+    return null;
+  }
+  const authToken = parseAuthToken(await response.json());
+  if (authToken !== null) {
+    saveGuardToken(authToken);
+  }
+  return authToken;
 }
 function readGuardDaemonOrigin() {
   const rawDaemonUrl = guardParam(GUARD_DAEMON_PARAM);
@@ -13316,7 +13347,8 @@ async function resolveRequestWithQueueResult(input) {
     };
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
-  const payload = await readJson(`/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`, {
+  const path = `/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`;
+  const init = () => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -13329,6 +13361,14 @@ async function resolveRequestWithQueueResult(input) {
       reason: input.reason || void 0
     })
   });
+  let response = await fetchGuardApi(path, init());
+  if (response.status === 401 && await refreshGuardToken() !== null) {
+    response = await fetchGuardApi(path, init());
+  }
+  if (!response.ok) {
+    throw new Error(`Request failed with ${response.status}`);
+  }
+  const payload = await response.json();
   return normalizeQueueResolution(payload);
 }
 async function clearEvidence() {
