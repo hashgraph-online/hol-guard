@@ -2745,16 +2745,23 @@ def _looks_like_temporary_pr_threads_query_path(path_text: str) -> bool:
         return False
     if os.path.exists(normalized):
         return False
-    lowered = os.path.realpath(normalized).replace("\\", "/").lower()
-    return lowered.startswith(
-        (
-            "/tmp/",
-            "/var/tmp/",
-            "/private/tmp/",
-            "/var/folders/",
-            "/private/var/folders/",
-        )
+    _TEMP_GROUPS: tuple[frozenset[str], ...] = (
+        frozenset({"/tmp/", "/private/tmp/"}),
+        frozenset({"/var/tmp/", "/private/var/tmp/"}),
+        frozenset({"/var/folders/", "/private/var/folders/"}),
     )
+
+    def _temp_group_index(lowered: str) -> int:
+        for idx, group in enumerate(_TEMP_GROUPS):
+            if any(lowered.startswith(prefix) for prefix in group):
+                return idx
+        return -1
+
+    literal_group = _temp_group_index(normalized.lower())
+    if literal_group == -1:
+        return False
+    resolved_lowered = os.path.realpath(normalized).replace("\\", "/").lower()
+    return _temp_group_index(resolved_lowered) == literal_group
 
 
 def _path_text_looks_sensitive(path_text: str) -> bool:
