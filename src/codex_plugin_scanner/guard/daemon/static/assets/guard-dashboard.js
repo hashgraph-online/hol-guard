@@ -17239,6 +17239,14 @@ function ReviewWorkspace(props) {
   const [categoryFilter, setCategoryFilter] = reactExports.useState("all");
   const [sortDirection, setSortDirection] = reactExports.useState("newest");
   const [semanticFilter, setSemanticFilter] = reactExports.useState("all");
+  const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
+  const handleOpenRequest = reactExports.useCallback((id) => {
+    props.onOpenRequest(id);
+    setMobileQueueOpen(false);
+  }, [props.onOpenRequest]);
+  const handleToggleMobileQueue = reactExports.useCallback(() => {
+    setMobileQueueOpen((v) => !v);
+  }, []);
   const filteredRequests = reactExports.useMemo(() => {
     let items = requests;
     if (semanticFilter !== "all") {
@@ -17296,8 +17304,23 @@ function ReviewWorkspace(props) {
         activeHarness: activeItem.harness
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[320px_1fr]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "md:hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        onClick: handleToggleMobileQueue,
+        className: "flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+            "Queue (",
+            filteredRequests.length,
+            ")"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: `h-4 w-4 transition-transform ${mobileQueueOpen ? "rotate-180" : ""}` })
+        ]
+      }
+    ) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 md:grid-cols-[260px_1fr] lg:grid-cols-[280px_1fr] xl:grid-cols-[300px_1fr] items-start", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `${mobileQueueOpen ? "block" : "hidden"} md:block`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         ReviewQueueList,
         {
           requests: filteredRequests,
@@ -17312,10 +17335,10 @@ function ReviewWorkspace(props) {
           onSearchTermChange: setSearchTerm,
           onSortDirectionChange: setSortDirection,
           onSemanticFilterChange: setSemanticFilter,
-          onOpenRequest: props.onOpenRequest,
+          onOpenRequest: handleOpenRequest,
           ref: queueRef
         }
-      ),
+      ) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         ReviewDecisionCard,
         {
@@ -18018,7 +18041,7 @@ function ActionContentCard({ item }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45", children: terminalLabel }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CopyButton, { text: launchText }) })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "overflow-x-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90", children: launchText })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "max-h-[50vh] overflow-y-auto whitespace-pre-wrap break-words px-3 py-3 font-mono text-sm leading-6 text-white/90", children: launchText })
     ] })
   ] });
 }
@@ -18234,7 +18257,7 @@ function ApprovalCenterLayout(props) {
         onBulkApprove: props.onBulkApprove
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-6 lg:p-10", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ReviewWorkspace,
       {
         requests: props.requests.kind === "ready" ? props.requests.items : [],
