@@ -341,11 +341,6 @@ export function harnessDisplayName(harness: string): string {
   }
 
   switch (normalized) {
-    case "*":
-    case "all":
-    case "any":
-    case "global":
-      return "All apps";
     case "claude-code":
       return "Claude Code";
     case "copilot":

@@ -13894,11 +13894,6 @@ function harnessDisplayName(harness) {
     }
   }
   switch (normalized) {
-    case "*":
-    case "all":
-    case "any":
-    case "global":
-      return "All apps";
     case "claude-code":
       return "Claude Code";
     case "copilot":
