@@ -121,7 +121,7 @@ def test_js_atob_payload_extracted() -> None:
     js_code = f"eval(atob('{encoded}'))"
     result = decode_layers(js_code)
     assert any(layer.encoding == "js-atob" for layer in result.layers)
-    assert "evil.example.com" in result.final_text
+    assert result.final_text == inner
 
 
 def test_decoded_layer_has_content_hash() -> None:
@@ -173,7 +173,7 @@ def test_malicious_encoded_exfil_fixture() -> None:
     encoded = _b64(malicious)
     result = decode_layers(encoded)
     assert len(result.layers) >= 1
-    assert result.exec_signals or result.eval_signals or "evil.example.com" in result.final_text
+    assert result.final_text == malicious
 
 
 def test_plain_alphanumeric_word_not_decoded_as_base64() -> None:
