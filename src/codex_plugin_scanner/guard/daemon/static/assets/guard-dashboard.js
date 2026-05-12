@@ -12702,6 +12702,8 @@ function getDemoDiff(artifactId, harness) {
 }
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
+let guardTokenOverride = null;
+let guardTokenLocationKey = null;
 async function readJson(input, init) {
   const response = await fetch(guardApiInput(input), withGuardAuth(init));
   if (!response.ok) {
@@ -12731,14 +12733,23 @@ function guardParam(name) {
   return guardParams().get(name);
 }
 function readGuardToken() {
+  const locationKey = `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (guardTokenLocationKey !== locationKey) {
+    guardTokenOverride = null;
+    guardTokenLocationKey = locationKey;
+  }
+  if (guardTokenOverride !== null) {
+    return guardTokenOverride;
+  }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    saveGuardToken(guardToken);
+    window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
     return guardToken;
   }
   return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
 }
 function saveGuardToken(guardToken) {
+  guardTokenOverride = guardToken;
   window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
 }
 function parseAuthToken(payload) {

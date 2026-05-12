@@ -622,6 +622,24 @@ globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise
       headers: { "Content-Type": "application/json" }
     });
   }
+  if (path === "/v1/requests/req-next-after-refresh/approve") {
+    const token = headerValue(init, "X-Guard-Token");
+    return new Response(JSON.stringify({
+      resolved: token === "fresh-resolve-token",
+      item: null,
+      resolved_request: null,
+      remaining_pending_count: 0,
+      next_selectable_request_id: null,
+      remaining_pending_summaries: [],
+      resolved_duplicate_ids: [],
+      resolution_summary: "Decision saved.",
+      retry_hint: null,
+      copy: null
+    }), {
+      status: token === "fresh-resolve-token" ? 200 : 401,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
   return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
 };
 
@@ -641,6 +659,16 @@ assert(new URL(recoveryCalls[1].url).pathname === "/v1/initialize", "L077b: stal
 assert(
   headerValue(recoveryCalls[2].init, "X-Guard-Token") === "fresh-resolve-token",
   "L077b: retry uses refreshed Guard token"
+);
+await resolveRequestWithQueueResult({
+  requestId: "req-next-after-refresh",
+  action: "allow",
+  scope: "global",
+  reason: "reviewed"
+});
+assert(
+  headerValue(recoveryCalls[3].init, "X-Guard-Token") === "fresh-resolve-token",
+  "L077b: later requests keep using refreshed Guard token instead of stale URL token"
 );
 
 installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
