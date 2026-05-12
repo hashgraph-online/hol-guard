@@ -137,7 +137,10 @@ def _endpoint_indicator_matches(values: object, source_url: str | None) -> bool:
 def _normalized_url_indicator(value: str | None) -> str:
     if value is None:
         return ""
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return normalize_identity_value(value)
     if not parsed.scheme or not parsed.netloc:
         return normalize_identity_value(value)
     path = parsed.path.rstrip("/")

@@ -15,6 +15,7 @@ import {
   resolveRequestWithQueueResult,
 } from "./guard-api";
 import { ApprovalCenterLayout } from "./approval-center-layout";
+import { normalizeHarnessSlug } from "./approval-center-utils";
 import { ErrorBoundary } from "./error-boundary";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
@@ -109,16 +110,24 @@ function parseRequestId(pathname: string): string | null {
 
 type AppView = "home" | "inbox" | "fleet" | "evidence" | "settings" | "app-detail";
 
-function parseAppDetail(pathname: string): string | null {
-  if (pathname.startsWith("/apps/")) {
-    return pathname.slice("/apps/".length);
+export function parseAppDetail(pathname: string): string | null {
+  if (!pathname.startsWith("/apps/")) {
+    return null;
   }
-  return null;
+  const rawSlug = pathname.slice("/apps/".length);
+  try {
+    return normalizeHarnessSlug(decodeURIComponent(rawSlug));
+  } catch {
+    return null;
+  }
 }
 
-function resolveView(pathname: string): AppView {
-  if (pathname.startsWith("/apps/")) {
+export function resolveView(pathname: string): AppView {
+  if (parseAppDetail(pathname) !== null) {
     return "app-detail";
+  }
+  if (pathname.startsWith("/apps/")) {
+    return "fleet";
   }
   if (pathname === "/settings") {
     return "settings";
@@ -328,14 +337,18 @@ export function App() {
     navigate(`/requests/${nextRequestId}`);
   }, []);
   const handleOpenAppDetail = useCallback((harness: string) => {
-    navigate(`/apps/${harness}`);
+    const slug = normalizeHarnessSlug(harness);
+    if (slug !== null) {
+      navigate(`/apps/${encodeURIComponent(slug)}`);
+    }
   }, []);
 
   const refreshStateAfterAction = useCallback(async () => {
-    const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([
+    const [snapshotResult, receiptsResult, policiesResult, inventoryResult] = await Promise.allSettled([
       fetchRuntimeSnapshot(),
       fetchReceipts(),
       fetchPolicies(),
+      fetchInventory(),
     ]);
     if (snapshotResult.status === "fulfilled") {
       setRuntime({ kind: "ready", snapshot: snapshotResult.value });
@@ -357,7 +370,15 @@ export function App() {
         message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load remembered decisions.",
       });
     }
-  }, [setRuntime, setRequests, setReceipts, setPolicies]);
+    if (inventoryResult.status === "fulfilled") {
+      setInventory({ kind: "ready", items: inventoryResult.value });
+    } else {
+      setInventory({
+        kind: "error",
+        message: inventoryResult.reason instanceof Error ? inventoryResult.reason.message : "Unable to load watched app inventory.",
+      });
+    }
+  }, [setRuntime, setRequests, setReceipts, setPolicies, setInventory]);
 
   const handleClearPolicies = useCallback(async (scope: { harness?: string; all?: boolean }) => {
     setClearConfirm(scope);
@@ -402,6 +423,10 @@ export function App() {
       });
     }
   }, [setRuntime, setRequests, setPolicies]);
+
+  const handleClearEvidence = useCallback(() => {
+    setReceipts({ kind: "ready", items: [] });
+  }, [setReceipts]);
 
   const handleResolve = useCallback(async (payload: {
     requestId: string;
@@ -477,16 +502,25 @@ export function App() {
       });
   }, []);
 
-  const handleConnectHarness = useCallback((_harness: string) => {
-    navigate("/settings");
+  const handleConnectHarness = useCallback((harness: string) => {
+    const slug = normalizeHarnessSlug(harness);
+    if (slug !== null) {
+      navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
+    }
   }, []);
 
-  const handleTestHarness = useCallback((_harness: string) => {
-    navigate("/inbox");
+  const handleTestHarness = useCallback((harness: string) => {
+    const slug = normalizeHarnessSlug(harness);
+    if (slug !== null) {
+      navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
+    }
   }, []);
 
-  const handleRepairHarness = useCallback((_harness: string) => {
-    navigate("/settings");
+  const handleRepairHarness = useCallback((harness: string) => {
+    const slug = normalizeHarnessSlug(harness);
+    if (slug !== null) {
+      navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
+    }
   }, []);
 
   const appDetailContent = useMemo(() => {
@@ -504,9 +538,10 @@ export function App() {
         onGoHome={handleGoHome}
         onOpenRequest={handleOpenRequest}
         onClearAppPolicies={handleClearAppPolicies}
+        onManagedInstallChanged={refreshStateAfterAction}
       />
     );
-  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies]);
+  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, refreshStateAfterAction]);
 
   return (
     <>
@@ -553,6 +588,7 @@ export function App() {
       onBulkApprove={handleBulkApprove}
       onRetry={handleRetry}
       onRepair={handleRepair}
+      onClearEvidence={handleClearEvidence}
       fleetContent={
         runtime.kind === "ready" ? (
           <Suspense fallback={<LazyFallback />}>
