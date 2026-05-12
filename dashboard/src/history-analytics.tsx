@@ -13,6 +13,7 @@ import {
 
 import type { GuardReceipt } from "./guard-types";
 import { harnessDisplayName } from "./approval-center-utils";
+import { detectCategory } from "./evidence/categories";
 
 // ──────────────────────────────────────────
 // Types
@@ -26,7 +27,7 @@ interface InsightCard {
   label: string;
   value: string;
   tone: "blue" | "green" | "purple" | "attention";
-  action?: { label: string; href: string };
+  action?: { label: string; onClick: () => void };
 }
 
 // ──────────────────────────────────────────
@@ -42,24 +43,48 @@ export function HistoryInsights({
   onFilterHarness?: (harness: string) => void;
   onFilterDay?: (date: string) => void;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const insights = useMemo(() => {
-    return computeInsights(receipts);
-  }, [receipts]);
+    return computeInsights(receipts, onFilterHarness, onFilterDay);
+  }, [receipts, onFilterHarness, onFilterDay]);
 
-  if (insights.length === 0) return null;
+  if (insights.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-100 bg-white p-4 text-center">
+        <p className="text-sm text-slate-500">No insights yet.</p>
+        <p className="mt-1 text-xs text-slate-400">More activity will reveal patterns.</p>
+      </div>
+    );
+  }
+
+  const visible = showAll ? insights : insights.slice(0, 3);
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-brand-dark">Insights</h3>
+        {insights.length > 3 && (
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            className="flex items-center gap-1 text-xs font-medium text-brand-blue transition-colors hover:text-brand-dark"
+          >
+            {showAll ? (
+              <>
+                <HiMiniChevronUp className="h-3 w-3" aria-hidden="true" />
+                Show less
+              </>
+            ) : (
+              <>
+                <HiMiniChevronDown className="h-3 w-3" aria-hidden="true" />
+                Show all ({insights.length})
+              </>
+            )}
+          </button>
+        )}
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {insights.map((insight) => (
-          <InsightCardComponent
-            key={insight.id}
-            insight={insight}
-            onFilterHarness={onFilterHarness}
-          />
+        {visible.map((insight) => (
+          <InsightCardComponent key={insight.id} insight={insight} />
         ))}
       </div>
     </div>
@@ -68,10 +93,8 @@ export function HistoryInsights({
 
 function InsightCardComponent({
   insight,
-  onFilterHarness,
 }: {
   insight: InsightCard;
-  onFilterHarness?: (harness: string) => void;
 }) {
   const toneClasses = {
     blue: "bg-blue-50/60 border-blue-200/40 text-blue-700",
@@ -79,13 +102,6 @@ function InsightCardComponent({
     purple: "bg-purple-50/60 border-purple-200/40 text-purple-700",
     attention: "bg-amber-50/60 border-amber-200/40 text-amber-700",
   };
-
-  const handleClick = useCallback(() => {
-    if (insight.action && insight.action.href.startsWith("/apps/")) {
-      const harness = insight.action.href.slice("/apps/".length);
-      onFilterHarness?.(harness);
-    }
-  }, [insight.action, onFilterHarness]);
 
   return (
     <div
@@ -98,7 +114,7 @@ function InsightCardComponent({
           <p className="mt-0.5 text-sm font-semibold">{insight.value}</p>
           {insight.action && (
             <button
-              onClick={handleClick}
+              onClick={insight.action.onClick}
               className="mt-1 text-xs underline opacity-70 transition-opacity hover:opacity-100"
             >
               {insight.action.label}
@@ -110,7 +126,11 @@ function InsightCardComponent({
   );
 }
 
-function computeInsights(receipts: GuardReceipt[]): InsightCard[] {
+function computeInsights(
+  receipts: GuardReceipt[],
+  onFilterHarness?: (harness: string) => void,
+  onFilterDay?: (date: string) => void
+): InsightCard[] {
   const now = new Date();
   const weekAgo = new Date(now);
   weekAgo.setDate(weekAgo.getDate() - 7);
@@ -150,20 +170,26 @@ function computeInsights(receipts: GuardReceipt[]): InsightCard[] {
       label: "Most active app",
       value: harnessDisplayName(topApp[0]),
       tone: "purple",
-      action: { label: "View", href: `/apps/${topApp[0]}` },
+      action: {
+        label: "Filter",
+        onClick: () => onFilterHarness?.(topApp[0]),
+      },
     });
   }
 
   // Block rate
   if (weekReceipts.length >= 5) {
     const blockRate = Math.round((blockedWeek.length / weekReceipts.length) * 100);
+    const prevWeekStart = new Date(weekAgo);
+    prevWeekStart.setDate(prevWeekStart.getDate() - 7);
     const prevWeekReceipts = receipts.filter((r) => {
       const d = new Date(r.timestamp);
-      return d >= new Date(weekAgo.getTime() - 7 * 24 * 60 * 60 * 1000) && d < weekAgo;
+      return d >= prevWeekStart && d < weekAgo;
     });
+    const prevBlockedCount = prevWeekReceipts.filter((r) => r.policy_decision === "block").length;
     const prevBlockRate = prevWeekReceipts.length > 0
-      ? Math.round((prevWeekReceipts.filter((r) => r.policy_decision === "block").length / prevWeekReceipts.length) * 100)
-      : blockRate;
+      ? Math.round((prevBlockedCount / prevWeekReceipts.length) * 100)
+      : 0;
     const change = blockRate - prevBlockRate;
     const value = change === 0
       ? `${blockRate}% (flat)`
@@ -178,10 +204,12 @@ function computeInsights(receipts: GuardReceipt[]): InsightCard[] {
   }
 
   // Secret reads stopped
-  const secretReads = monthReceipts.filter((r) =>
-    (r.artifact_name ?? "").match(/\.(env|secrets?|key|token|password|credential)/i) !== null ||
-    (r.capabilities_summary ?? "").toLowerCase().includes("secret")
-  );
+  const secretReads = monthReceipts.filter((r) => {
+    const name = (r.artifact_name ?? "").toLowerCase();
+    return /\.env(\.[a-z]+)?$/.test(name) ||
+      /\.(secrets?|key|token|password|credential)/i.test(name) ||
+      (r.capabilities_summary ?? "").toLowerCase().includes("secret");
+  });
   if (secretReads.length > 0) {
     insights.push({
       id: "secret-reads",
@@ -192,29 +220,34 @@ function computeInsights(receipts: GuardReceipt[]): InsightCard[] {
     });
   }
 
-  // New app detected
+  // New app detected — only show if the app has few total receipts (truly new)
   const harnessFirstSeen = new Map<string, Date>();
+  const harnessTotalCount = new Map<string, number>();
   for (const r of receipts) {
     const d = new Date(r.timestamp);
     const existing = harnessFirstSeen.get(r.harness);
     if (!existing || d < existing) {
       harnessFirstSeen.set(r.harness, d);
     }
+    harnessTotalCount.set(r.harness, (harnessTotalCount.get(r.harness) ?? 0) + 1);
   }
   for (const [harness, firstSeen] of harnessFirstSeen.entries()) {
-    if (firstSeen >= weekAgo) {
+    if (firstSeen >= weekAgo && (harnessTotalCount.get(harness) ?? 0) <= 10) {
       insights.push({
         id: `new-app-${harness}`,
         icon: <HiOutlineFire className="h-4 w-4" />,
         label: "New app detected",
         value: harnessDisplayName(harness),
         tone: "purple",
-        action: { label: "Set up", href: `/apps/${harness}` },
+        action: {
+          label: "Filter",
+          onClick: () => onFilterHarness?.(harness),
+        },
       });
     }
   }
 
-  return insights.slice(0, 3);
+  return insights;
 }
 
 // ──────────────────────────────────────────
@@ -230,16 +263,16 @@ export function ActivityCalendar({
 }) {
   const [monthOffset, setMonthOffset] = useState(0);
 
-  const { year, month, days } = useMemo(() => {
+  const { year, month, days, startOffset } = useMemo(() => {
     const now = new Date();
     const target = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
     const y = target.getFullYear();
     const m = target.getMonth();
     const firstDay = new Date(y, m, 1);
     const lastDay = new Date(y, m + 1, 0);
-    const startOffset = firstDay.getDay(); // 0 = Sunday
+    const so = firstDay.getDay(); // 0 = Sunday
     const totalDays = lastDay.getDate();
-    return { year: y, month: m, days: totalDays, startOffset };
+    return { year: y, month: m, days: totalDays, startOffset: so };
   }, [monthOffset]);
 
   const activityByDay = useMemo(() => {
@@ -261,6 +294,10 @@ export function ActivityCalendar({
 
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  // Calculate total cells needed: startOffset + days, rounded up to 42 (6 weeks)
+  const totalCells = Math.ceil((startOffset + days) / 7) * 7;
+  const cells = Math.max(42, totalCells);
 
   return (
     <div className="space-y-3">
@@ -299,7 +336,7 @@ export function ActivityCalendar({
             {d}
           </div>
         ))}
-        {Array.from({ length: 35 }, (_, i) => {
+        {Array.from({ length: cells }, (_, i) => {
           const dayIndex = i - startOffset + 1;
           if (dayIndex < 1 || dayIndex > days) {
             return <div key={i} className="aspect-square" />;
@@ -370,7 +407,13 @@ export function TopActions({
 
   const toggleExpanded = useCallback(() => setExpanded((p) => !p), []);
 
-  if (aggregated.length === 0) return null;
+  if (aggregated.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-100 bg-white p-4 text-center">
+        <p className="text-sm text-slate-500">No top actions yet.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
