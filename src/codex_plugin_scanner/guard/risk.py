@@ -286,7 +286,10 @@ def extract_network_hosts(text: str) -> set[str]:
 
     hosts: set[str] = set()
     for value in _URL_PATTERN.findall(text):
-        parsed = urlsplit(value)
+        try:
+            parsed = urlsplit(value)
+        except ValueError:
+            continue
         if parsed.hostname:
             hosts.add(parsed.hostname.lower())
     for match in _HOST_PATTERN.finditer(text):
