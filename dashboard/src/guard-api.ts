@@ -44,6 +44,8 @@ import {
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
+let guardTokenOverride: string | null = null;
+let guardTokenLocationKey: string | null = null;
 
 type RawGuardApprovalRequest = Omit<GuardApprovalRequest, "action_envelope_json" | "decision_v2_json"> & {
   action_envelope_json?: unknown;
@@ -109,15 +111,24 @@ function guardParam(name: string): string | null {
 }
 
 function readGuardToken(): string | null {
+  const locationKey = `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (guardTokenLocationKey !== locationKey) {
+    guardTokenOverride = null;
+    guardTokenLocationKey = locationKey;
+  }
+  if (guardTokenOverride !== null) {
+    return guardTokenOverride;
+  }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    saveGuardToken(guardToken);
+    window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
     return guardToken;
   }
   return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
 }
 
 function saveGuardToken(guardToken: string): void {
+  guardTokenOverride = guardToken;
   window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
 }
 
