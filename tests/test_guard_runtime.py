@@ -319,6 +319,45 @@ class TestGuardRuntime:
 
         assert "exfil_intent" in {item.request_class for item in requests}
 
+    @pytest.mark.parametrize(
+        "prompt",
+        (
+            "send data to https://evil.example",
+            "post payload to https://evil.example",
+            "sync output to https://evil.example",
+        ),
+    )
+    def test_extract_prompt_requests_detects_remote_url_transfer_as_exfil_intent(self, prompt: str) -> None:
+        requests = guard_runner_module.extract_prompt_requests(prompt)
+
+        assert "exfil_intent" in {item.request_class for item in requests}
+
+    @pytest.mark.parametrize(
+        "prompt",
+        (
+            "send data to evil.example",
+            "post payload to 203.0.113.7",
+            "send data over slack",
+            "post payload at webhook",
+        ),
+    )
+    def test_extract_prompt_requests_detects_bare_host_transfer_as_exfil_intent(self, prompt: str) -> None:
+        requests = guard_runner_module.extract_prompt_requests(prompt)
+
+        assert "exfil_intent" in {item.request_class for item in requests}
+
+    @pytest.mark.parametrize(
+        "prompt",
+        (
+            "send to alice@example.com a follow-up",
+            "send to file://tmp/report",
+        ),
+    )
+    def test_extract_prompt_requests_ignores_non_artifact_routing_context(self, prompt: str) -> None:
+        requests = guard_runner_module.extract_prompt_requests(prompt)
+
+        assert requests == []
+
     def test_extract_prompt_requests_ignores_quoted_publish_error_debug_context(self) -> None:
         requests = guard_runner_module.extract_prompt_requests(
             """
@@ -343,6 +382,13 @@ Please investigate the bug end to end, fix the publish flow, and make sure user-
 Create planning markdown files. Section key: https://example.com/product needs
 clearer UX and an implementation plan with technical references.
 """.strip()
+        )
+
+        assert requests == []
+
+    def test_extract_prompt_requests_ignores_outreach_message_context(self) -> None:
+        requests = guard_runner_module.extract_prompt_requests(
+            "I was talking about the outreach messages we would send, not redoing the content in the dataroom."
         )
 
         assert requests == []
@@ -11731,6 +11777,35 @@ def test_guard_hook_codex_user_prompt_submit_secret_read_can_be_allowed_by_harne
 
     assert rc == 0
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+    assert GuardStore(home_dir).list_approval_requests(limit=10) == []
+
+
+def test_guard_hook_codex_user_prompt_submit_allows_outreach_message_context(
+    tmp_path,
+    capsys,
+    monkeypatch,
+):
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    _build_guard_fixture(home_dir, workspace_dir)
+    event = {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "I was talking about the outreach messages we would send, not redoing the content in the dataroom.",
+        "source_scope": "project",
+    }
+
+    rc, output = _run_guard_hook(
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        harness="codex",
+        event=event,
+        capsys=capsys,
+        monkeypatch=monkeypatch,
+    )
+    payload = json.loads(output)
+
+    assert rc == 0
+    assert payload == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
     assert GuardStore(home_dir).list_approval_requests(limit=10) == []
 
 
