@@ -1,4 +1,13 @@
 import type { GuardReceipt } from "../guard-types";
+import {
+  HiMiniLockClosed,
+  HiMiniGlobeAlt,
+  HiMiniExclamationTriangle,
+  HiMiniEyeSlash,
+  HiMiniDocumentText,
+  HiMiniWrenchScrewdriver,
+  HiMiniCircleStack,
+} from "react-icons/hi2";
 
 export type ReceiptCategory =
   | "secret"
@@ -12,7 +21,7 @@ export type ReceiptCategory =
 export interface CategoryInfo {
   key: ReceiptCategory;
   label: string;
-  icon: string; // lucide icon name
+  icon: React.ReactNode;
   color: string;
   description: string;
 }
@@ -21,49 +30,49 @@ export const CATEGORIES: CategoryInfo[] = [
   {
     key: "secret",
     label: "Secret read",
-    icon: "Lock",
-    color: "text-amber-600",
+    icon: <HiMiniLockClosed className="h-5 w-5" aria-hidden="true" />,
+    color: "text-brand-attention",
     description: "Reading files that contain passwords or keys",
   },
   {
     key: "network",
     label: "Network",
-    icon: "Globe",
-    color: "text-sky-600",
+    icon: <HiMiniGlobeAlt className="h-5 w-5" aria-hidden="true" />,
+    color: "text-brand-blue",
     description: "Connecting to websites or external services",
   },
   {
     key: "destructive",
     label: "Destructive",
-    icon: "Bomb",
-    color: "text-rose-600",
+    icon: <HiMiniExclamationTriangle className="h-5 w-5" aria-hidden="true" />,
+    color: "text-brand-purple",
     description: "Commands that delete or overwrite files",
   },
   {
     key: "hidden",
     label: "Hidden script",
-    icon: "Mask",
-    color: "text-violet-600",
+    icon: <HiMiniEyeSlash className="h-5 w-5" aria-hidden="true" />,
+    color: "text-brand-attention",
     description: "Encoded or obfuscated code",
   },
   {
     key: "file-write",
     label: "File write",
-    icon: "FileEdit",
-    color: "text-emerald-600",
+    icon: <HiMiniDocumentText className="h-5 w-5" aria-hidden="true" />,
+    color: "text-brand-green",
     description: "Writing or modifying files",
   },
   {
     key: "tool-call",
     label: "Tool call",
-    icon: "Wrench",
-    color: "text-indigo-600",
+    icon: <HiMiniWrenchScrewdriver className="h-5 w-5" aria-hidden="true" />,
+    color: "text-brand-blue",
     description: "Using external tools or MCP servers",
   },
   {
     key: "other",
     label: "Other",
-    icon: "CircleDot",
+    icon: <HiMiniCircleStack className="h-5 w-5" aria-hidden="true" />,
     color: "text-slate-500",
     description: "Other actions",
   },
@@ -71,6 +80,8 @@ export const CATEGORIES: CategoryInfo[] = [
 
 const SECRET_PATTERNS = [
   /\.env/i,
+  /\.env\.local/i,
+  /\.env\.production/i,
   /\.npmrc/i,
   /\.netrc/i,
   /id_rsa/i,

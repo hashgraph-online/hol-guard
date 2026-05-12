@@ -14,6 +14,7 @@ export function exportReceiptsAsCsv(
 ): { blob: Blob; filename: string } {
   const headers = [
     "timestamp",
+    "date_iso",
     "harness",
     "artifact_id",
     "artifact_name",
@@ -26,6 +27,7 @@ export function exportReceiptsAsCsv(
 
   const rows = receipts.map((r) => [
     r.timestamp,
+    formatDateIso(new Date(r.timestamp)),
     r.harness,
     r.artifact_id,
     r.artifact_name ?? "",
@@ -38,9 +40,10 @@ export function exportReceiptsAsCsv(
 
   const csv = [headers.join(","), ...rows.map((row) => row.map(escapeCsvCell).join(","))].join("\n");
 
+  const today = formatDateIso(new Date());
   const fromDate = receipts.length > 0 ? formatDateIso(new Date(receipts[receipts.length - 1].timestamp)) : "all";
   const toDate = receipts.length > 0 ? formatDateIso(new Date(receipts[0].timestamp)) : "all";
-  const filename = `guard-history-${fromDate}-to-${toDate}.csv`;
+  const filename = `guard-history-${today}-${fromDate}-to-${toDate}.csv`;
 
   return { blob: new Blob([csv], { type: "text/csv;charset=utf-8;" }), filename };
 }
@@ -49,16 +52,22 @@ export function exportReceiptsAsJson(
   receipts: GuardReceipt[],
   filters?: ExportFilters
 ): { blob: Blob; filename: string } {
-  const payload = {
+  const payload: {
+    exported_at: string;
+    filter_summary: ExportFilters | Record<string, never>;
+    total_rows: number;
+    items: GuardReceipt[];
+  } = {
     exported_at: new Date().toISOString(),
     filter_summary: filters ?? {},
     total_rows: receipts.length,
     items: receipts,
   };
 
+  const today = formatDateIso(new Date());
   const fromDate = receipts.length > 0 ? formatDateIso(new Date(receipts[receipts.length - 1].timestamp)) : "all";
   const toDate = receipts.length > 0 ? formatDateIso(new Date(receipts[0].timestamp)) : "all";
-  const filename = `guard-history-${fromDate}-to-${toDate}.json`;
+  const filename = `guard-history-${today}-${fromDate}-to-${toDate}.json`;
 
   return { blob: new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }), filename };
 }

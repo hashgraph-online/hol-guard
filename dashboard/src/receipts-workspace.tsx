@@ -4,11 +4,6 @@ import {
   HiMiniTag,
   HiMiniComputerDesktop,
   HiMiniChartBar,
-  HiOutlineArrowDownTray,
-  HiOutlineListBullet,
-  HiOutlineCalendarDays,
-  HiMiniChevronDown,
-  HiMiniChevronUp,
 } from "react-icons/hi2";
 
 import {
@@ -19,10 +14,6 @@ import {
 } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
 import type { GuardReceipt } from "./guard-types";
-import { guardAwareHref } from "./guard-api";
-import { useKeyboardShortcut } from "./use-keyboard-shortcut";
-import { useDebounce } from "./use-debounce";
-import { exportReceiptsAsCsv, exportReceiptsAsJson, downloadBlob } from "./history-export";
 import { StoryTab, CategoryTab, AppTab, ExploreTab, detectCategory } from "./evidence";
 
 function useMountedTabs(activeTab: TabKey): Set<TabKey> {
@@ -55,6 +46,15 @@ const TAB_CONFIG: { key: TabKey; label: string; icon: React.ElementType }[] = [
   { key: "category", label: "Category", icon: HiMiniTag },
   { key: "app", label: "App", icon: HiMiniComputerDesktop },
   { key: "explore", label: "Explore", icon: HiMiniChartBar },
+];
+
+const CATEGORY_CONFIG: { key: string; label: string; value: string }[] = [
+  { key: "all", label: "All", value: "" },
+  { key: "secret", label: "Secrets", value: "secret" },
+  { key: "network", label: "Network", value: "network" },
+  { key: "destructive", label: "Destructive", value: "destructive" },
+  { key: "hidden", label: "Hidden", value: "hidden" },
+  { key: "other", label: "Other", value: "other" },
 ];
 
 export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
@@ -121,11 +121,28 @@ function timeFilterLabel(filter: TimeFilter): string {
   switch (filter) {
     case "today": return "Today";
     case "yesterday": return "Yesterday";
-    case "week": return "This week";
+    case "week": return "Since Sunday";
     case "last7d": return "Last 7 days";
     case "last30d": return "Last 30 days";
     default: return "All time";
   }
+}
+
+function decisionFilterLabel(filter: DecisionFilter): string {
+  switch (filter) {
+    case "allow": return "Allowed";
+    case "block": return "Stopped";
+    default: return "All decisions";
+  }
+}
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debouncedValue;
 }
 
 function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
@@ -137,11 +154,37 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
   const [activeTab, setActiveTab] = useState<TabKey>(initial.tab);
   const [dayFilter, setDayFilter] = useState<string>(initial.day);
   const [harnessFilter, setHarnessFilter] = useState<string>(initial.harness);
+  const [isFiltering, setIsFiltering] = useState(false);
+
+  const debouncedSearch = useDebounce(search, 300);
 
   const harnesses = useMemo(
     () => Array.from(new Set(props.receiptItems.map((r) => r.harness))).sort(),
     [props.receiptItems]
   );
+
+  // URL sync with debounce to avoid races
+  const urlSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (urlSyncTimerRef.current) {
+      clearTimeout(urlSyncTimerRef.current);
+    }
+    urlSyncTimerRef.current = setTimeout(() => {
+      writeUrlParams({
+        search: debouncedSearch,
+        time: timeFilter,
+        decision: decisionFilter,
+        harness: harnessFilter,
+        tab: activeTab,
+        day: dayFilter,
+      });
+    }, 100);
+    return () => {
+      if (urlSyncTimerRef.current) {
+        clearTimeout(urlSyncTimerRef.current);
+      }
+    };
+  }, [debouncedSearch, timeFilter, decisionFilter, harnessFilter, activeTab, dayFilter]);
 
   useEffect(() => {
     if (harnessFilter !== "all" && !harnesses.includes(harnessFilter)) {
@@ -149,15 +192,8 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
     }
   }, [harnesses, harnessFilter]);
 
-  useEffect(() => {
-    writeUrlParams({ search, time: timeFilter, decision: decisionFilter, harness: harnessFilter, tab: activeTab, day: dayFilter });
-  }, [search, timeFilter, decisionFilter, harnessFilter, activeTab, dayFilter]);
-
-  const clearCategoryFilter = useCallback(() => {
-    setCategoryFilter("");
-  }, []);
-
   const filtered = useMemo(() => {
+    setIsFiltering(true);
     let items = props.receiptItems;
     if (decisionFilter !== "all") {
       items = items.filter((r) => r.policy_decision === decisionFilter);
@@ -198,22 +234,56 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
     if (categoryFilter) {
       items = items.filter((r) => detectCategory(r) === categoryFilter);
     }
-    if (search.trim() && !categoryFilter) {
-      const q = search.toLowerCase();
+    if (debouncedSearch.trim()) {
+      const q = debouncedSearch.toLowerCase();
       items = items.filter((r) =>
         (r.artifact_name ?? r.artifact_id).toLowerCase().includes(q) ||
         r.harness.toLowerCase().includes(q)
       );
     }
-    return items.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-  }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, search, dayFilter, categoryFilter]);
+    const result = items.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
+    // Clear filtering flag after computation
+    setTimeout(() => setIsFiltering(false), 0);
+    return result;
+  }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, debouncedSearch, dayFilter, categoryFilter]);
 
   const handleFilterDay = useCallback((day: string) => {
     setDayFilter(day);
     setTimeFilter("all");
   }, []);
 
+  const handleTabChange = useCallback((tab: TabKey) => {
+    setActiveTab(tab);
+    // Reset scroll on tab change
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
   const totalCount = props.receiptItems.length;
+
+  // Category counts
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of props.receiptItems) {
+      const cat = detectCategory(r);
+      counts.set(cat, (counts.get(cat) ?? 0) + 1);
+    }
+    return counts;
+  }, [props.receiptItems]);
+
+  // Tab counts
+  const tabCounts = useMemo(() => {
+    const counts: Record<TabKey, number> = { story: 0, category: 0, app: 0, explore: 0 };
+    // Story and explore show all filtered
+    counts.story = filtered.length;
+    counts.explore = filtered.length;
+    // Category shows unique categories
+    const cats = new Set(filtered.map((r) => detectCategory(r)));
+    counts.category = cats.size;
+    // App shows unique apps
+    const apps = new Set(filtered.map((r) => r.harness));
+    counts.app = apps.size;
+    return counts;
+  }, [filtered]);
 
   if (totalCount === 0) {
     return (
@@ -225,6 +295,8 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
     );
   }
 
+  const hasActiveFilters = debouncedSearch || categoryFilter || harnessFilter !== "all" || timeFilter !== "all" || decisionFilter !== "all" || dayFilter;
+
   return (
     <div className="space-y-6">
       <GuardHero
@@ -234,49 +306,89 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
         cta={<Badge tone="info">{totalCount} saved</Badge>}
       />
 
-      {/* Category filter bar */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {(
-          [
-            { key: "all" as const, label: "All", value: "" },
-            { key: "secret" as const, label: "Secrets", value: "secret" },
-            { key: "network" as const, label: "Network", value: "network" },
-            { key: "destructive" as const, label: "Destructive", value: "destructive" },
-            { key: "hidden" as const, label: "Hidden", value: "hidden" },
-            { key: "other" as const, label: "Other", value: "other" },
-          ] as const
-        ).map((c) => (
-          <button
-            key={c.key}
-            aria-pressed={categoryFilter === c.value}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-              categoryFilter === c.value
-                ? "bg-brand-blue text-white shadow-sm"
-                : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
-            }`}
-            onClick={() => setCategoryFilter(categoryFilter === c.value ? "" : c.value)}
+      {/* Search and filters */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="relative block flex-1 min-w-[200px]">
+            <span className="sr-only">Search history</span>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search command, file, app..."
+              className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            />
+          </label>
+          <select
+            value={timeFilter}
+            onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}
+            className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           >
-            {c.label}
-          </button>
-        ))}
-        <span className="mx-1 h-4 w-px bg-slate-200" />
-        <select
-          value={harnessFilter}
-          onChange={(e) => setHarnessFilter(e.target.value)}
-          className="h-8 rounded-md border-0 bg-transparent px-2 py-1 text-xs font-medium text-brand-dark hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
-        >
-          <option value="all">All apps</option>
-          {harnesses.map((h) => (
-            <option key={h} value={h}>{harnessDisplayName(h)}</option>
-          ))}
-        </select>
-        {(search || categoryFilter || harnessFilter !== "all") && (
-          <button
-            onClick={() => { setSearch(""); setCategoryFilter(""); setHarnessFilter("all"); }}
-            className="ml-auto text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
+            {TIME_FILTER_VALUES.map((t) => (
+              <option key={t} value={t}>{timeFilterLabel(t)}</option>
+            ))}
+          </select>
+          <select
+            value={decisionFilter}
+            onChange={(e) => setDecisionFilter(e.target.value as DecisionFilter)}
+            className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           >
-            Clear filters
-          </button>
+            {DECISION_FILTER_VALUES.map((d) => (
+              <option key={d} value={d}>{decisionFilterLabel(d)}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Category filter bar */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {CATEGORY_CONFIG.map((c) => {
+            const count = c.value ? categoryCounts.get(c.value) ?? 0 : totalCount;
+            const isActive = categoryFilter === c.value;
+            if (c.value && count === 0) return null;
+            return (
+              <button
+                key={c.key}
+                aria-pressed={isActive}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+                  isActive
+                    ? "bg-brand-blue text-white shadow-sm"
+                    : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
+                }`}
+                onClick={() => setCategoryFilter(isActive ? "" : c.value)}
+              >
+                {c.label} {count > 0 && <span className="opacity-70">({count})</span>}
+              </button>
+            );
+          })}
+          <span className="mx-1 h-4 w-px bg-slate-200" />
+          <select
+            value={harnessFilter}
+            onChange={(e) => setHarnessFilter(e.target.value)}
+            className="h-8 rounded-md border-0 bg-transparent px-2 py-1 text-xs font-medium text-brand-dark hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+          >
+            <option value="all">All apps</option>
+            {harnesses.map((h) => (
+              <option key={h} value={h}>{harnessDisplayName(h)}</option>
+            ))}
+          </select>
+          {hasActiveFilters && (
+            <button
+              onClick={() => { setSearch(""); setCategoryFilter(""); setHarnessFilter("all"); setTimeFilter("all"); setDecisionFilter("all"); setDayFilter(""); }}
+              className="ml-auto text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
+        {/* Results count */}
+        {isFiltering ? (
+          <div className="guard-skeleton h-4 w-48" />
+        ) : (
+          <p className="text-xs text-slate-500">
+            Showing {filtered.length} of {totalCount} decisions
+            {filtered.length !== totalCount && hasActiveFilters ? " (filtered)" : ""}
+          </p>
         )}
       </div>
 
@@ -285,6 +397,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
         {TAB_CONFIG.map((t) => {
           const Icon = t.icon;
           const isActive = activeTab === t.key;
+          const count = tabCounts[t.key];
           return (
             <button
               key={t.key}
@@ -292,7 +405,7 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
               aria-selected={isActive}
               aria-controls={`tabpanel-${t.key}`}
               id={`tab-${t.key}`}
-              onClick={() => setActiveTab(t.key)}
+              onClick={() => handleTabChange(t.key)}
               className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
                 isActive
                   ? "bg-brand-blue text-white shadow-sm"
@@ -301,13 +414,26 @@ function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
             >
               <Icon className="h-4 w-4" aria-hidden="true" />
               <span className="hidden sm:inline">{t.label}</span>
+              <span className="text-[10px] opacity-70">({count})</span>
             </button>
           );
         })}
       </div>
 
       {/* Tab content */}
-      <TabPanels activeTab={activeTab} filtered={filtered} receiptItems={props.receiptItems} dayFilter={dayFilter} handleFilterDay={handleFilterDay} harnessFilter={harnessFilter} setHarnessFilter={setHarnessFilter} setSearch={setSearch} search={search} timeFilter={timeFilter} decisionFilter={decisionFilter} />
+      <TabPanels
+        activeTab={activeTab}
+        filtered={filtered}
+        receiptItems={props.receiptItems}
+        dayFilter={dayFilter}
+        handleFilterDay={handleFilterDay}
+        harnessFilter={harnessFilter}
+        setHarnessFilter={setHarnessFilter}
+        setSearch={setSearch}
+        search={search}
+        timeFilter={timeFilter}
+        decisionFilter={decisionFilter}
+      />
     </div>
   );
 }
