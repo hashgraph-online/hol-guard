@@ -57,6 +57,7 @@ def _isolate_git_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
     monkeypatch.delenv("GIT_CONFIG_COUNT", raising=False)
+    monkeypatch.delenv("GIT_CONFIG_PARAMETERS", raising=False)
     monkeypatch.delenv("GIT_EXTERNAL_DIFF", raising=False)
 
 
@@ -13521,6 +13522,22 @@ def test_codex_read_only_source_inspection_rejects_git_external_diff_env(
 ) -> None:
     _isolate_git_config(monkeypatch)
     monkeypatch.setenv("GIT_EXTERNAL_DIFF", "/tmp/guard-helper")
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
+def test_codex_read_only_source_inspection_rejects_git_config_parameters_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
+    monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "'diff.external=/tmp/guard-helper'")
     workspace_dir = tmp_path / "workspace"
     source_file = workspace_dir / "src" / "safe.ts"
     _write_text(source_file, "export const safe = true;\n")

@@ -5779,7 +5779,7 @@ def _git_diff_external_helpers_are_disabled_or_unconfigured(args: list[str], *, 
 def _git_repo_diff_helpers_are_unconfigured(cwd: Path | None) -> bool:
     if cwd is None:
         return False
-    if os.environ.get("GIT_EXTERNAL_DIFF") or os.environ.get("GIT_CONFIG_COUNT"):
+    if os.environ.get("GIT_EXTERNAL_DIFF") or os.environ.get("GIT_CONFIG_COUNT") or os.environ.get("GIT_CONFIG_PARAMETERS"):
         return False
     config_paths = _git_repo_config_paths(cwd)
     if not config_paths:
