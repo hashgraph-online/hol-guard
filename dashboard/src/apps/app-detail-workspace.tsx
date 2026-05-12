@@ -13,6 +13,10 @@ import {
   HiMiniChartBar,
   HiMiniXMark,
   HiMiniChevronDown,
+  HiMiniShieldCheck,
+  HiMiniRocketLaunch,
+  HiMiniArrowPath,
+  HiMiniTrash,
 } from "react-icons/hi2";
 import {
   ActionButton,
@@ -26,6 +30,9 @@ import {
 import {
   fetchApprovalPage,
   fetchPolicy,
+  formatHarnessCommand,
+  GuardHarnessActionError,
+  runHarnessAction,
 } from "../guard-api";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
 import { useFocusTrap } from "../use-focus-trap";
@@ -37,6 +44,9 @@ import type {
   GuardReceipt,
   GuardRuntimeSnapshot,
   GuardManagedInstall,
+  GuardHarnessAction,
+  GuardHarnessActionResult,
+  GuardHarnessSetupStep,
 } from "../guard-types";
 
 type TabKey = "overview" | "activity" | "settings";
@@ -53,9 +63,12 @@ type AppDetailWorkspaceProps = {
   onGoHome: () => void;
   onOpenRequest: (requestId: string) => void;
   onClearAppPolicies?: (harness: string) => Promise<void>;
+  onManagedInstallChanged?: () => Promise<void>;
 };
 
 function readTabFromUrl(): TabKey {
+  const queryTab = new URLSearchParams(window.location.search).get("tab");
+  if (queryTab === "overview" || queryTab === "activity" || queryTab === "settings") return queryTab;
   const hash = window.location.hash.replace("#", "");
   if (hash === "activity" || hash === "settings") return hash;
   return "overview";
@@ -63,14 +76,21 @@ function readTabFromUrl(): TabKey {
 
 function writeTabToUrl(tab: TabKey) {
   const url = new URL(window.location.href);
-  url.hash = tab;
+  if (tab === "overview") {
+    url.searchParams.delete("tab");
+    if (url.hash === "#activity" || url.hash === "#settings" || url.hash === "#overview") {
+      url.hash = "";
+    }
+  } else {
+    url.searchParams.set("tab", tab);
+  }
   window.history.replaceState({}, "", url.toString());
 }
 
 export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<TabKey>(readTabFromUrl);
   const [tabDirection, setTabDirection] = useState<"left" | "right">("right");
-  const touchStartX = useRef<number | null>(null);
+  const tabRefs = useRef<Record<TabKey, HTMLButtonElement | null>>({ overview: null, activity: null, settings: null });
 
   useEffect(() => {
     function handleHashChange() {
@@ -239,8 +259,13 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
         ]}
       />
 
-      <div className="space-y-2">
-        <div className="flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm">
+      <div
+        className="relative"
+        role="tablist"
+        aria-label="App detail tabs"
+        onKeyDown={handleTabKeyDown}
+      >
+        <div className="flex gap-1 border-b border-slate-200/70">
           {(
             [
               { key: "overview" as TabKey, label: "Overview", icon: HiMiniHome },
@@ -249,32 +274,40 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
             ] as const
           ).map((t) => {
             const Icon = t.icon;
-            const isActive = activeTab === t.key;
+            const isActiveTab = activeTab === t.key;
             return (
               <button
                 key={t.key}
+                ref={(el) => { if (el) tabRefs.current[t.key] = el; }}
+                role="tab"
+                aria-selected={isActiveTab}
+                aria-label={t.label}
+                aria-controls={`tabpanel-${t.key}`}
+                id={`tab-${t.key}`}
+                tabIndex={isActiveTab ? 0 : -1}
                 onClick={() => handleTabChange(t.key)}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-                  isActive
-                    ? "bg-brand-blue text-white shadow-sm"
-                    : "text-brand-dark hover:bg-slate-50"
+                className={`group relative flex min-w-[44px] items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                  isActiveTab
+                    ? "text-brand-blue"
+                    : "text-brand-dark hover:text-brand-blue"
                 }`}
               >
-                <Icon className="h-4 w-4" />
-                {t.label}
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">{t.label}</span>
+                {isActiveTab && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-blue" />
+                )}
               </button>
             );
           })}
         </div>
-        <p className="px-1 text-[11px] text-muted-foreground lg:hidden">
-          Swipe or tap tabs to switch views
-        </p>
       </div>
 
       <div
         className="min-h-[300px]"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
+        role="tabpanel"
+        id={`tabpanel-${activeTab}`}
+        aria-labelledby={`tab-${activeTab}`}
       >
         {isLoading && (
           <div className="space-y-4">
@@ -299,6 +332,7 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
                 harnessInventory={harnessInventory}
                 pendingItems={pendingItems}
                 onOpenRequest={props.onOpenRequest}
+                onManagedInstallChanged={props.onManagedInstallChanged}
               />
             )}
             {activeTab === "activity" && (
@@ -315,8 +349,10 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
               <AppSettingsTab
                 harness={harness}
                 status={status}
+                install={install}
                 harnessPolicies={harnessPolicies}
                 onClearAppPolicies={props.onClearAppPolicies}
+                onManagedInstallChanged={props.onManagedInstallChanged}
                 policyError={policyError}
                 onRetry={loadTabData}
               />
@@ -335,22 +371,24 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
     writeTabToUrl(next);
   }
 
-  function handleTouchStart(e: React.TouchEvent) {
-    touchStartX.current = e.changedTouches[0].screenX;
-  }
+  function handleTabKeyDown(e: React.KeyboardEvent) {
+    const focused = document.activeElement as HTMLElement | null;
+    const focusedTab = focused?.getAttribute("role") === "tab" ? (focused.id.replace("tab-", "") as TabKey) : activeTab;
+    const currentIndex = tabOrder.indexOf(focusedTab);
+    let nextIndex = -1;
 
-  function handleTouchEnd(e: React.TouchEvent) {
-    if (touchStartX.current === null) return;
-    const endX = e.changedTouches[0].screenX;
-    const diff = touchStartX.current - endX;
-    const threshold = 50;
-    const currentIndex = tabOrder.indexOf(activeTab);
-    if (diff > threshold && currentIndex < tabOrder.length - 1) {
-      handleTabChange(tabOrder[currentIndex + 1]);
-    } else if (diff < -threshold && currentIndex > 0) {
-      handleTabChange(tabOrder[currentIndex - 1]);
+    if (e.key === "ArrowRight") nextIndex = Math.min(currentIndex + 1, tabOrder.length - 1);
+    else if (e.key === "ArrowLeft") nextIndex = Math.max(currentIndex - 1, 0);
+    else if (e.key === "Home") nextIndex = 0;
+    else if (e.key === "End") nextIndex = tabOrder.length - 1;
+
+    if (nextIndex >= 0 && nextIndex < tabOrder.length) {
+      e.preventDefault();
+      const nextTab = tabOrder[nextIndex];
+      handleTabChange(nextTab);
+      const nextEl = tabRefs.current[nextTab];
+      if (nextEl) nextEl.focus();
     }
-    touchStartX.current = null;
   }
 }
 
@@ -359,6 +397,27 @@ function AppStatusBadge({ status }: { status: "active" | "needs_setup" | "observ
   if (status === "needs_setup") return <Badge tone="attention">Needs setup</Badge>;
   if (status === "observed") return <Badge tone="default">Observed</Badge>;
   return <Badge tone="default">Unknown</Badge>;
+}
+
+function firstRunSteps(harness: string): { index: number; title: string; body: string }[] {
+  const displayName = harnessDisplayName(harness);
+  return [
+    {
+      index: 1,
+      title: `Connect ${displayName}`,
+      body: "Use the dashboard action. Guard asks the local daemon to write only managed app configuration.",
+    },
+    {
+      index: 2,
+      title: `Restart ${displayName}`,
+      body: "Restart the app once so the new hooks and wrappers load in the next session.",
+    },
+    {
+      index: 3,
+      title: "Run your agent flow",
+      body: "When a risky command, prompt, or tool action appears, Guard pauses it and sends the decision to Review.",
+    },
+  ];
 }
 
 function AppOverviewTab(props: {
@@ -374,10 +433,27 @@ function AppOverviewTab(props: {
   harnessInventory: GuardInventoryItem[];
   pendingItems: GuardApprovalRequest[];
   onOpenRequest: (requestId: string) => void;
+  onManagedInstallChanged?: () => Promise<void>;
 }) {
+  const showFirstRunGuide = shouldShowFirstRunGuide({
+    status: props.status,
+    totalActions: props.totalActions,
+    inventoryCount: props.harnessInventory.length,
+    pendingCount: props.pendingItems.length,
+  });
+
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
       <section className="space-y-6">
+        {showFirstRunGuide && (
+          <FirstRunGuide
+            harness={props.harness}
+            install={props.install}
+            status={props.status}
+            onManagedInstallChanged={props.onManagedInstallChanged}
+          />
+        )}
+
         <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -458,7 +534,7 @@ function AppOverviewTab(props: {
       </section>
 
       <section className="space-y-6">
-        {props.harnessReceipts.length > 0 && (
+        {props.harnessReceipts.length > 0 ? (
           <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
             <SectionLabel>Recent events</SectionLabel>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -488,7 +564,24 @@ function AppOverviewTab(props: {
               ))}
             </div>
           </div>
-        )}
+        ) : showFirstRunGuide ? (
+          <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5">
+            <SectionLabel>What happens next</SectionLabel>
+            <div className="mt-4 space-y-3">
+              {firstRunSteps(props.harness).map((step) => (
+                <div key={step.title} className="flex gap-3 rounded-xl border border-white/70 bg-white/80 p-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-xs font-semibold text-brand-blue">
+                    {step.index}
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-brand-dark">{step.title}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{step.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {props.harnessInventory.length > 0 && (
           <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
@@ -512,6 +605,70 @@ function AppOverviewTab(props: {
       </section>
     </div>
   );
+}
+
+export function shouldShowFirstRunGuide(input: {
+  status: "active" | "needs_setup" | "observed" | "unknown";
+  totalActions: number;
+  inventoryCount: number;
+  pendingCount: number;
+}): boolean {
+  return input.status !== "active" && input.totalActions === 0 && input.inventoryCount === 0 && input.pendingCount === 0;
+}
+
+function FirstRunGuide(props: {
+  harness: string;
+  install: GuardManagedInstall | undefined;
+  status: "active" | "needs_setup" | "observed" | "unknown";
+  onManagedInstallChanged?: () => Promise<void>;
+}) {
+  const displayName = harnessDisplayName(props.harness);
+  return (
+    <div className="overflow-hidden rounded-[1.35rem] border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.10] via-white to-brand-green/[0.06] shadow-sm">
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+        <div className="flex flex-col justify-between gap-6 p-5 sm:p-6">
+          <div>
+            <SectionLabel>Start protecting {displayName}</SectionLabel>
+            <h2 className="mt-3 max-w-xl text-2xl font-semibold leading-tight text-brand-dark">
+              Connect {displayName}, restart it once, then let Guard pause risky actions before they run.
+            </h2>
+            <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
+              {firstRunIntro(props.harness)}
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <GuidePill label="No terminal copy" value="Dashboard action" />
+            <GuidePill label="Local only" value="Daemon managed" />
+            <GuidePill label="First proof" value="Appears here" />
+          </div>
+        </div>
+        <div className="border-t border-white/70 bg-white/72 p-4 sm:p-5 lg:border-l lg:border-t-0">
+          <HarnessSetupPanel
+            harness={props.harness}
+            install={props.install}
+            status={props.status}
+            onManagedInstallChanged={props.onManagedInstallChanged}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GuidePill(props: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/80 bg-white/70 p-3 shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-brand-blue">{props.label}</p>
+      <p className="mt-1 text-sm font-semibold text-brand-dark">{props.value}</p>
+    </div>
+  );
+}
+
+function firstRunIntro(harness: string): string {
+  if (harness === "cursor") {
+    return "Guard writes the Cursor-specific local configuration through the daemon. After connecting, restart Cursor so the protected hooks load before your next agent run.";
+  }
+  return `Guard writes the ${harnessDisplayName(harness)} local configuration through the daemon. After connecting, restart the app so protected hooks load before your next agent run.`;
 }
 
 function AppActivityTab(props: {
@@ -863,8 +1020,10 @@ function ExpandableReceiptRow({ receipt, selected, onToggle }: { receipt: GuardR
 function AppSettingsTab(props: {
   harness: string;
   status: "active" | "needs_setup" | "observed" | "unknown";
+  install: GuardManagedInstall | undefined;
   harnessPolicies: GuardPolicyDecision[];
   onClearAppPolicies?: (harness: string) => Promise<void>;
+  onManagedInstallChanged?: () => Promise<void>;
   policyError: string | null;
   onRetry: () => void;
 }) {
@@ -884,6 +1043,13 @@ function AppSettingsTab(props: {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
       <div className="space-y-6">
+        <HarnessSetupPanel
+          harness={props.harness}
+          install={props.install}
+          status={props.status}
+          onManagedInstallChanged={props.onManagedInstallChanged}
+        />
+
         {props.policyError && (
           <div className="guard-fade-in rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5">
             <div className="flex items-start gap-3">
@@ -996,26 +1162,388 @@ function AppSettingsTab(props: {
         )}
       </div>
 
-      <div className="space-y-6">
-        {props.status === "needs_setup" && (
-          <div className="rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5">
-            <div className="flex items-start gap-3">
-              <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" />
-              <div>
-                <SectionLabel>Setup needed</SectionLabel>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  This app is detected but not active. Run Guard with this app once to complete setup.
-                </p>
-                <div className="mt-4 rounded-xl bg-white/60 p-4">
-                  <p className="font-mono text-xs text-brand-dark">{`npx @hol/guard install ${props.harness}`}</p>
-                </div>
-              </div>
+      <HarnessCoverageAside status={props.status} install={props.install} />
+    </div>
+  );
+}
+
+type HarnessSetupState =
+  | { kind: "idle" }
+  | { kind: "loading"; action: GuardHarnessAction }
+  | { kind: "ready"; plan: GuardHarnessActionResult }
+  | { kind: "success"; action: GuardHarnessAction; result: GuardHarnessActionResult }
+  | { kind: "error"; action: GuardHarnessAction; message: string; confirmationPhrase?: string; confirmCommand?: string };
+
+function HarnessSetupPanel(props: {
+  harness: string;
+  install: GuardManagedInstall | undefined;
+  status: "active" | "needs_setup" | "observed" | "unknown";
+  onManagedInstallChanged?: () => Promise<void>;
+}) {
+  const [setupState, setSetupState] = useState<HarnessSetupState>({ kind: "idle" });
+  const [disconnectArmed, setDisconnectArmed] = useState(false);
+  const active = props.install?.active === true;
+  const displayName = harnessDisplayName(props.harness);
+
+  const refreshAfterMutation = useCallback(async () => {
+    await props.onManagedInstallChanged?.();
+  }, [props.onManagedInstallChanged]);
+
+  const loadPlan = useCallback(async () => {
+    setSetupState({ kind: "loading", action: active ? "verify" : "install" });
+    try {
+      const result = active
+        ? await runHarnessAction({ harness: props.harness, action: "verify" })
+        : await runHarnessAction({ harness: props.harness, action: "install", dryRun: true });
+      setSetupState({ kind: "ready", plan: result });
+    } catch (error) {
+      setSetupState({
+        kind: "error",
+        action: active ? "verify" : "install",
+        message: error instanceof Error ? error.message : "Unable to load setup plan.",
+      });
+    }
+  }, [active, props.harness]);
+
+  useEffect(() => {
+    void loadPlan();
+  }, [loadPlan]);
+
+  const runAction = useCallback(
+    async (action: GuardHarnessAction, options: { dryRun?: boolean; confirmationPhrase?: string } = {}) => {
+      setSetupState({ kind: "loading", action });
+      try {
+        const result = await runHarnessAction({
+          harness: props.harness,
+          action,
+          dryRun: options.dryRun,
+          confirmationPhrase: options.confirmationPhrase,
+        });
+        setDisconnectArmed(false);
+        setSetupState({ kind: "success", action, result });
+        if (action !== "verify" && options.dryRun !== true) {
+          await refreshAfterMutation();
+        }
+      } catch (error) {
+        if (error instanceof GuardHarnessActionError) {
+          setSetupState({
+            kind: "error",
+            action,
+            message: setupActionErrorMessage(error),
+            confirmationPhrase: error.payload?.confirmation_phrase,
+            confirmCommand: error.payload?.confirm_command,
+          });
+        } else {
+          setSetupState({
+            kind: "error",
+            action,
+            message: error instanceof Error ? error.message : "Harness action failed.",
+          });
+        }
+      }
+    },
+    [props.harness, refreshAfterMutation]
+  );
+
+  const handleConnect = useCallback(() => {
+    void runAction("install", { dryRun: false });
+  }, [runAction]);
+
+  const handleVerify = useCallback(() => {
+    void runAction("verify");
+  }, [runAction]);
+
+  const handleRepair = useCallback(() => {
+    void runAction("repair", { dryRun: false });
+  }, [runAction]);
+
+  const handleRequestDisconnect = useCallback(() => {
+    setDisconnectArmed(true);
+    void runAction("uninstall", { dryRun: true });
+  }, [runAction]);
+
+  const handleConfirmDisconnect = useCallback(() => {
+    const phrase =
+      setupState.kind === "error" && setupState.confirmationPhrase
+        ? setupState.confirmationPhrase
+        : setupState.kind === "success" && setupState.result.confirmation_phrase
+        ? setupState.result.confirmation_phrase
+        : `disconnect-${props.harness}`;
+    void runAction("uninstall", { dryRun: false, confirmationPhrase: phrase });
+  }, [props.harness, runAction, setupState]);
+
+  const handleCancelDisconnect = useCallback(() => {
+    setDisconnectArmed(false);
+    void loadPlan();
+  }, [loadPlan]);
+
+  const busy = setupState.kind === "loading";
+  const currentPlan =
+    setupState.kind === "ready"
+      ? setupState.plan
+      : setupState.kind === "success"
+      ? setupState.result
+      : null;
+  const steps = setupStepsFor(currentPlan, active);
+  const notes = setupNotesFor(currentPlan);
+
+  return (
+    <div className="rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <SectionLabel>Local harness install</SectionLabel>
+          <h3 className="mt-2 text-lg font-semibold text-brand-dark">
+            {active ? `${displayName} is managed by Guard` : `Connect ${displayName} from this dashboard`}
+          </h3>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            {active
+              ? "Run safe checks, repair managed hooks, or disconnect this app without leaving the dashboard."
+              : "Guard will install the local managed hooks through the daemon. No copied shell command required."}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {!active && (
+            <ActionButton onClick={handleConnect} disabled={busy} data-primary="true">
+              <HiMiniRocketLaunch className="h-4 w-4" aria-hidden="true" />
+              {busy && setupState.kind === "loading" && setupState.action === "install" ? "Connecting..." : "Connect app"}
+            </ActionButton>
+          )}
+          {active && (
+            <>
+              <ActionButton onClick={handleVerify} disabled={busy} variant="outline">
+                <HiMiniShieldCheck className="h-4 w-4" aria-hidden="true" />
+                Test
+              </ActionButton>
+              <ActionButton onClick={handleRepair} disabled={busy} variant="outline">
+                <HiMiniArrowPath className="h-4 w-4" aria-hidden="true" />
+                Repair
+              </ActionButton>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <SetupMetric label="Install state" value={active ? "Protected" : props.status === "observed" ? "Observed" : "Not connected"} active={active} />
+        <SetupMetric label="Config source" value={props.install?.workspace ?? "Local machine"} />
+        <SetupMetric label="Last changed" value={props.install ? formatRelativeTime(props.install.updated_at) : "Not yet"} />
+      </div>
+
+      {setupState.kind === "error" && (
+        <div className="mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4">
+          <div className="flex items-start gap-3">
+            <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-brand-dark">Could not finish {setupActionLabel(setupState.action)}</p>
+              <p className="mt-1 break-words text-sm text-muted-foreground">{setupState.message}</p>
+              {setupState.confirmCommand && (
+                <code className="mt-3 block overflow-x-auto rounded-lg bg-white/80 px-3 py-2 font-mono text-xs text-brand-dark">
+                  {setupState.confirmCommand}
+                </code>
+              )}
             </div>
           </div>
+        </div>
+      )}
+
+      {setupState.kind === "success" && (
+        <div className="mt-4 rounded-xl border border-brand-green/20 bg-brand-green/[0.045] p-4">
+          <div className="flex items-start gap-3">
+            <HiMiniCheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-brand-green" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-brand-dark">{setupSuccessTitle(setupState.action, displayName)}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {setupState.action === "verify"
+                  ? "Safe local check completed. No app config was changed."
+                  : "Dashboard action completed through the local Guard daemon."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {steps.length > 0 && (
+        <div className="mt-5 space-y-2">
+          {steps.map((step) => (
+            <HarnessSetupStepRow key={step.step_id} step={step} />
+          ))}
+        </div>
+      )}
+
+      {notes.length > 0 && (
+        <div className="mt-4 rounded-xl border border-slate-200/70 bg-white/80 p-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">What changed</p>
+          <ul className="mt-2 space-y-1.5">
+            {notes.slice(0, 4).map((note) => (
+              <li key={note} className="break-words text-xs leading-relaxed text-muted-foreground">
+                {note}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200/70 pt-4">
+        <button
+          onClick={() => void loadPlan()}
+          disabled={busy}
+          className="inline-flex min-h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50"
+        >
+          Refresh setup
+        </button>
+        {active && !disconnectArmed && (
+          <button
+            onClick={handleRequestDisconnect}
+            disabled={busy}
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-brand-attention/20 bg-white px-3 text-sm font-medium text-brand-attention transition-colors hover:bg-brand-attention/[0.04] disabled:opacity-50"
+          >
+            <HiMiniTrash className="h-4 w-4" aria-hidden="true" />
+            Disconnect
+          </button>
+        )}
+        {active && disconnectArmed && (
+          <>
+            <button
+              onClick={handleConfirmDisconnect}
+              disabled={busy}
+              className="inline-flex min-h-10 items-center rounded-lg bg-brand-attention px-3 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-50"
+            >
+              {busy && setupState.kind === "loading" && setupState.action === "uninstall" ? "Disconnecting..." : "Confirm disconnect"}
+            </button>
+            <button
+              onClick={handleCancelDisconnect}
+              disabled={busy}
+              className="inline-flex min-h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50"
+            >
+              Keep connected
+            </button>
+          </>
         )}
       </div>
     </div>
   );
+}
+
+function HarnessSetupStepRow({ step }: { step: GuardHarnessSetupStep }) {
+  const commandText = formatHarnessCommand(step.command);
+  return (
+    <div className="rounded-xl border border-slate-200/70 bg-white/80 p-3">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-brand-blue">
+          {step.writes_config ? <HiMiniAdjustmentsHorizontal className="h-3.5 w-3.5" aria-hidden="true" /> : <HiMiniCheckCircle className="h-3.5 w-3.5" aria-hidden="true" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-brand-dark">{step.title}</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{step.body}</p>
+          {commandText && (
+            <code className="mt-2 block overflow-x-auto rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark">
+              {commandText}
+            </code>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HarnessCoverageAside(props: {
+  status: "active" | "needs_setup" | "observed" | "unknown";
+  install: GuardManagedInstall | undefined;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
+        <SectionLabel>Protection model</SectionLabel>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Dashboard actions call the local Guard daemon directly. CLI commands are shown only as fallback copy for terminals or automation.
+        </p>
+        <div className="mt-4 space-y-2 text-xs text-muted-foreground">
+          <p>Runs locally on this machine.</p>
+          <p>Requires the one-time Guard token in this dashboard session.</p>
+          <p>Writes only the harness-managed Guard config for this app.</p>
+        </div>
+      </div>
+      {props.install?.manifest ? (
+        <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
+          <SectionLabel>Managed files</SectionLabel>
+          <ManifestPathList manifest={props.install.manifest} />
+        </div>
+      ) : props.status !== "active" ? (
+        <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5">
+          <SectionLabel>First run</SectionLabel>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Connect this app here first. Then launch the app normally through the Guard wrapper so risky actions pause for review.
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ManifestPathList({ manifest }: { manifest: Record<string, unknown> }) {
+  const pathEntries = Object.entries(manifest).filter(
+    ([key, value]) => key.endsWith("_path") && typeof value === "string" && value.length > 0
+  );
+  if (pathEntries.length === 0) {
+    return <p className="mt-2 text-sm text-muted-foreground">Guard has no managed file paths to show for this app yet.</p>;
+  }
+  return (
+    <dl className="mt-3 space-y-2">
+      {pathEntries.slice(0, 5).map(([key, value]) => (
+        <div key={key} className="min-w-0">
+          <dt className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{key.replace(/_/g, " ")}</dt>
+          <dd className="mt-0.5 break-all font-mono text-xs text-brand-dark">{String(value)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function SetupMetric(props: { label: string; value: string; active?: boolean }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-slate-200/70 bg-white/80 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{props.label}</p>
+      <p className={`mt-1 truncate text-sm font-semibold ${props.active ? "text-brand-green" : "text-brand-dark"}`}>
+        {props.value}
+      </p>
+    </div>
+  );
+}
+
+function setupStepsFor(result: GuardHarnessActionResult | null, active: boolean): GuardHarnessSetupStep[] {
+  if (!result) return [];
+  if (Array.isArray(result.steps) && result.steps.length > 0) return result.steps;
+  if (result.verification?.steps) return result.verification.steps;
+  if (!active && result.contract?.setup_steps) return result.contract.setup_steps;
+  if (active && result.contract?.verify_steps) return result.contract.verify_steps;
+  return [];
+}
+
+function setupNotesFor(result: GuardHarnessActionResult | null): string[] {
+  const manifest = result?.managed_install?.manifest;
+  const notes = manifest?.["notes"];
+  return Array.isArray(notes) ? notes.filter((note): note is string => typeof note === "string") : [];
+}
+
+function setupActionLabel(action: GuardHarnessAction): string {
+  if (action === "install") return "connect";
+  if (action === "verify") return "test";
+  if (action === "repair") return "repair";
+  return "disconnect";
+}
+
+function setupActionErrorMessage(error: GuardHarnessActionError): string {
+  if (error.payload?.error === "confirmation_required") {
+    return "Disconnect requires confirmation so accidental clicks cannot remove local protection.";
+  }
+  return error.payload?.error ?? error.message;
+}
+
+function setupSuccessTitle(action: GuardHarnessAction, displayName: string): string {
+  if (action === "install") return `${displayName} connected`;
+  if (action === "verify") return `${displayName} test complete`;
+  if (action === "repair") return `${displayName} repaired`;
+  return `${displayName} disconnected`;
 }
 
 function ActivitySparkline({ receipts }: { receipts: GuardReceipt[] }) {
@@ -1189,5 +1717,3 @@ function StatCard({
     </div>
   );
 }
-
-

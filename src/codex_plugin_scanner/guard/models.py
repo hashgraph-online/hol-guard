@@ -25,7 +25,10 @@ SEVERITY_RANK: dict[str, int] = {"info": 0, "low": 1, "medium": 2, "high": 3, "c
 def _redact_url(value: str | None) -> str | None:
     if value is None:
         return None
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return value
     if not parsed.query:
         return value
     redacted_pairs = []

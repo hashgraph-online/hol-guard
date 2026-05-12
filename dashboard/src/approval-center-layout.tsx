@@ -50,6 +50,7 @@ import {
   resolveTerminalLabel,
   scopeLabel,
   STALE_REQUEST_COPY,
+  isDisplayableHarness,
 } from "./approval-center-utils";
 import {
   WhyThisPaused,
@@ -138,6 +139,7 @@ type LayoutProps = {
   }) => void;
   onBulkApprove?: (ids: string[]) => void;
   onRepair?: () => Promise<void>;
+  onClearEvidence?: () => void;
 };
 
 const scopeOptions: Array<{ value: DecisionScope; label: string; description: string }> = [
@@ -211,7 +213,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
             {props.view === "home" ? (
               props.homeContent
             ) : props.view === "evidence" ? (
-              <ReceiptsWorkspace receipts={props.receipts} />
+              <ReceiptsWorkspace receipts={props.receipts} onClearEvidence={props.onClearEvidence} />
             ) : props.view === "fleet" ? (
               props.fleetContent
             ) : props.view === "app-detail" ? (
@@ -476,7 +478,7 @@ function QueueBrowser(props: {
   const [sortDirection, setSortDirection] = useState<QueueSortDirection>("newest");
   const [page, setPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
-  const harnesses = Array.from(new Set(props.items.map((item) => item.harness))).sort();
+  const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
 
   const filteredItems = useMemo(() => {
     const byHarness =
