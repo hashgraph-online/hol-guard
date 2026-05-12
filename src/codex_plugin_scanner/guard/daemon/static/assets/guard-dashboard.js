@@ -16520,7 +16520,10 @@ function resolveQueueCategoryId(item) {
   if (containerOrDeployCommand(command)) {
     return "container_or_deploy";
   }
-  if (packageInstallCommand(command) || decisionCategories.includes("supply_chain") && textIncludesAny(text, ["install", "dependency", "package"])) {
+  if (envelope?.action_type === "package_script") {
+    return "package_script";
+  }
+  if (packageInstallCommand(command)) {
     return "package_install";
   }
   if (hasSecretSignal(decisionCategories, text)) {
@@ -16528,9 +16531,6 @@ function resolveQueueCategoryId(item) {
   }
   if (envelope?.action_type === "mcp_tool") {
     return "mcp_tool";
-  }
-  if (envelope?.action_type === "package_script") {
-    return "package_script";
   }
   if (envelope?.action_type === "config_change") {
     return "config_change";
@@ -16621,7 +16621,7 @@ function networkCommand(command, text) {
 }
 function fileUploadCommand(command, text) {
   const normalized = command.toLowerCase();
-  return /\b(?:scp|rsync|sftp|ftp)\b/.test(normalized) || /\bcurl\b[\s\S]*(?:--upload-file|-t|--form|-x\s+post|--data|--data-binary)/.test(normalized) || /\baws\s+s3\s+cp\b/.test(normalized) || /\bgsutil\s+cp\b/.test(normalized) || textIncludesAny(text, ["upload", "copy-out", "external sink"]);
+  return /\b(?:scp|rsync|sftp|ftp)\b/.test(normalized) || /\bcurl\b[\s\S]*(?:--upload-file|-t|--form\s+\S*@|-f\s+\S*@|--data(?:-binary|-raw|-urlencode)?\s+@)/.test(normalized) || /\baws\s+s3\s+cp\b/.test(normalized) || /\bgsutil\s+cp\b/.test(normalized) || textIncludesAny(text, ["upload", "copy-out", "external sink"]);
 }
 function systemPromptAccessText(text) {
   return textIncludesAny(text, [

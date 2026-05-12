@@ -637,3 +637,62 @@ assert(
   resolveQueueCategory(structuredSourceWriteItem).label === "Source code edit",
   "T-QS-69: structured source file_write actions classify as source code edits"
 );
+
+const supplyChainScriptItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-supply-chain-script",
+  action_envelope_json: {
+    ...shellEnvelope,
+    action_type: "package_script",
+    command: "pnpm run build",
+    package_manager: "pnpm",
+    script_name: "build",
+  },
+  decision_v2_json: {
+    action: "ask",
+    reason: "Package script can execute project code.",
+    user_title: "Review package script",
+    user_body: "Package script requested.",
+    harness_message: "Guard paused package script.",
+    dashboard_primary_detail: "Package script",
+    approval_scopes: ["artifact"],
+    retry_instruction: null,
+    confidence: "likely",
+    signals: [
+      {
+        signal_id: "sig-supply-chain",
+        category: "supply_chain",
+        severity: "medium",
+        confidence: "likely",
+        detector: "package-script",
+        title: "Package script",
+        plain_reason: "Package script can execute project code.",
+        technical_detail: null,
+        evidence_ref: null,
+        redaction_level: "none",
+        false_positive_hint: null,
+        advisory_id: null,
+      },
+    ],
+  },
+};
+
+assert(
+  resolveQueueCategory(supplyChainScriptItem).label === "Package script",
+  "T-QS-70: supply-chain package_script items stay package scripts, not package installs"
+);
+
+const curlJsonPostItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-curl-json-post",
+  action_envelope_json: {
+    ...shellEnvelope,
+    command: "curl -X POST --data '{\"ok\":true}' https://api.example.invalid/events",
+    network_hosts: ["api.example.invalid"],
+  },
+};
+
+assert(
+  resolveQueueCategory(curlJsonPostItem).label === "Network request",
+  "T-QS-71: curl JSON posts classify as network requests, not file uploads"
+);
