@@ -77,11 +77,11 @@ export function filterBySearch(
     const id = r.artifact_id.toLowerCase();
     const harness = r.harness.toLowerCase();
     const caps = (r.capabilities_summary ?? "").toLowerCase();
-    const changed = r.changed_capabilities.join(" ").toLowerCase();
+    const changed = (r.changed_capabilities ?? []).join(" ").toLowerCase();
     const provenance = (r.provenance_summary ?? "").toLowerCase();
     const scope = (r.source_scope ?? "").toLowerCase();
-    const decision = r.policy_decision.toLowerCase();
-    const hashPrefix = r.artifact_hash.toLowerCase().slice(0, 12);
+    const decision = (r.policy_decision ?? "").toLowerCase();
+    const hashPrefix = (r.artifact_hash ?? "").toLowerCase().slice(0, 12);
     return (
       name.includes(q) ||
       id.includes(q) ||

@@ -14578,11 +14578,11 @@ function filterBySearch(receipts, search) {
     const id = r.artifact_id.toLowerCase();
     const harness = r.harness.toLowerCase();
     const caps = (r.capabilities_summary ?? "").toLowerCase();
-    const changed = r.changed_capabilities.join(" ").toLowerCase();
+    const changed = (r.changed_capabilities ?? []).join(" ").toLowerCase();
     const provenance = (r.provenance_summary ?? "").toLowerCase();
     const scope = (r.source_scope ?? "").toLowerCase();
-    const decision = r.policy_decision.toLowerCase();
-    const hashPrefix = r.artifact_hash.toLowerCase().slice(0, 12);
+    const decision = (r.policy_decision ?? "").toLowerCase();
+    const hashPrefix = (r.artifact_hash ?? "").toLowerCase().slice(0, 12);
     return name.includes(q) || id.includes(q) || harness.includes(q) || caps.includes(q) || changed.includes(q) || provenance.includes(q) || scope.includes(q) || decision.includes(q) || hashPrefix.startsWith(q);
   });
 }
@@ -15517,17 +15517,17 @@ function TechnicalSection({ receipt }) {
         DetailRow,
         {
           label: "Hash",
-          value: receipt.artifact_hash.slice(0, 16) + "…",
+          value: (receipt.artifact_hash ?? "").slice(0, 16) + "…",
           mono: true
         }
       ),
       receipt.source_scope && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Source scope", value: receipt.source_scope }),
       receipt.provenance_summary && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Provenance", value: receipt.provenance_summary }),
-      receipt.changed_capabilities.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      (receipt.changed_capabilities ?? []).length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
         DetailRow,
         {
           label: "Changed capabilities",
-          value: receipt.changed_capabilities.join(", ")
+          value: (receipt.changed_capabilities ?? []).join(", ")
         }
       ),
       receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Capabilities", value: receipt.capabilities_summary })
@@ -16387,13 +16387,14 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
     [filtered, filters.sort]
   );
   const metrics = reactExports.useMemo(
-    () => computeMetrics(receiptItems),
-    [receiptItems]
+    () => computeMetrics(filtered),
+    [filtered]
   );
-  const selectedReceipt = reactExports.useMemo(
-    () => receiptItems.find((r) => r.receipt_id === filters.selectedId) ?? null,
-    [receiptItems, filters.selectedId]
-  );
+  const selectedReceipt = reactExports.useMemo(() => {
+    if (!filters.selectedId) return null;
+    const found = filtered.find((r) => r.receipt_id === filters.selectedId);
+    return found ?? null;
+  }, [filtered, filters.selectedId]);
   const handleFilterChange = reactExports.useCallback((patch) => {
     setFilters((prev) => ({ ...prev, ...patch }));
   }, []);

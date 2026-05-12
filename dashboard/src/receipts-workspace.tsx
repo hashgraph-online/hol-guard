@@ -254,14 +254,15 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
   );
 
   const metrics = useMemo(
-    () => computeMetrics(receiptItems),
-    [receiptItems]
+    () => computeMetrics(filtered),
+    [filtered]
   );
 
-  const selectedReceipt = useMemo(
-    () => receiptItems.find((r) => r.receipt_id === filters.selectedId) ?? null,
-    [receiptItems, filters.selectedId]
-  );
+  const selectedReceipt = useMemo(() => {
+    if (!filters.selectedId) return null;
+    const found = filtered.find((r) => r.receipt_id === filters.selectedId);
+    return found ?? null;
+  }, [filtered, filters.selectedId]);
 
   const handleFilterChange = useCallback((patch: Partial<EvidenceFilterState>) => {
     setFilters((prev) => ({ ...prev, ...patch }));

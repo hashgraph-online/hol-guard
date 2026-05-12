@@ -80,7 +80,7 @@ function TechnicalSection({ receipt }: TechnicalSectionProps) {
           <DetailRow label="Artifact ID" value={receipt.artifact_id} mono />
           <DetailRow
             label="Hash"
-            value={receipt.artifact_hash.slice(0, 16) + "…"}
+            value={(receipt.artifact_hash ?? "").slice(0, 16) + "…"}
             mono
           />
           {receipt.source_scope && (
@@ -89,10 +89,10 @@ function TechnicalSection({ receipt }: TechnicalSectionProps) {
           {receipt.provenance_summary && (
             <DetailRow label="Provenance" value={receipt.provenance_summary} />
           )}
-          {receipt.changed_capabilities.length > 0 && (
+          {(receipt.changed_capabilities ?? []).length > 0 && (
             <DetailRow
               label="Changed capabilities"
-              value={receipt.changed_capabilities.join(", ")}
+              value={(receipt.changed_capabilities ?? []).join(", ")}
             />
           )}
           {receipt.capabilities_summary && (
