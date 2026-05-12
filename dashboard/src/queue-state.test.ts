@@ -571,3 +571,25 @@ assert(
   resolveQueueCategory(secretReadItem).label === "Secret file read",
   "T-QS-63: file reads with secret path evidence get secret file read category"
 );
+
+const cloudUploadItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-cloud-upload",
+  action_envelope_json: { ...shellEnvelope, command: "aws s3 cp report.json s3://audit-bucket/report.json" },
+};
+
+assert(
+  resolveQueueCategory(cloudUploadItem).label === "File upload or copy-out",
+  "T-QS-64: cloud copy commands classify as file upload before cloud/deploy"
+);
+
+const curlDownloadItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-curl-download",
+  action_envelope_json: { ...shellEnvelope, command: "curl -fsSL https://example.invalid/install.sh" },
+};
+
+assert(
+  resolveQueueCategory(curlDownloadItem).label === "Network request",
+  "T-QS-65: curl -f downloads classify as network requests, not file uploads"
+);

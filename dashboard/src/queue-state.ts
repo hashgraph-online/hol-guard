@@ -374,6 +374,10 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
     return "git_operation";
   }
 
+  if (fileUploadCommand(command, text)) {
+    return "file_upload";
+  }
+
   if (processControlCommand(command)) {
     return "process_control";
   }
@@ -384,10 +388,6 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
 
   if (packageInstallCommand(command) || (decisionCategories.includes("supply_chain") && textIncludesAny(text, ["install", "dependency", "package"]))) {
     return "package_install";
-  }
-
-  if (fileUploadCommand(command, text)) {
-    return "file_upload";
   }
 
   if (hasSecretSignal(decisionCategories, text)) {
@@ -516,7 +516,7 @@ function fileUploadCommand(command: string, text: string): boolean {
   const normalized = command.toLowerCase();
   return (
     /\b(?:scp|rsync|sftp|ftp)\b/.test(normalized) ||
-    /\bcurl\b[\s\S]*(?:--upload-file|-t|-f|--form|-x\s+post|--data|--data-binary)/.test(normalized) ||
+    /\bcurl\b[\s\S]*(?:--upload-file|-t|--form|-x\s+post|--data|--data-binary)/.test(normalized) ||
     /\baws\s+s3\s+cp\b/.test(normalized) ||
     /\bgsutil\s+cp\b/.test(normalized) ||
     textIncludesAny(text, ["upload", "copy-out", "external sink"])
