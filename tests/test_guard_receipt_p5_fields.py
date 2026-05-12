@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.receipts.manager import build_receipt, _auto_diff_summary
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.consumer.service import _build_diff_summary
+from codex_plugin_scanner.guard.mcp_tool_calls import _map_approval_source
 
 
 def _make_store(tmp_path: Path) -> GuardStore:
@@ -207,3 +208,21 @@ class TestReceiptFieldRoundtrip:
         assert len(receipts) == 1
         assert receipts[0]["diff_summary"] == "1 change(s): removed"
         assert receipts[0]["approval_source"] == "policy"
+
+
+class TestMapApprovalSource:
+    @pytest.mark.parametrize("decision_source,expected", [
+        ("inline-approved", "inline"),
+        ("inline-denied", "inline"),
+        ("policy-allow", "policy"),
+        ("policy-block", "policy"),
+        ("policy_allow", "policy"),
+        ("heuristic-allow", "policy"),
+        ("heuristic_block", "policy"),
+        ("auto-allow", "policy"),
+        ("pending-approval", "approval_center"),
+        ("approval-center-allow", "approval_center"),
+        ("unknown-source", "approval_center"),
+    ])
+    def test_decision_source_mapped_correctly(self, decision_source: str, expected: str) -> None:
+        assert _map_approval_source(decision_source) == expected

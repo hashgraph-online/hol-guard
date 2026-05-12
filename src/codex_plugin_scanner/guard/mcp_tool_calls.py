@@ -536,6 +536,31 @@ def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
     return f"{signals[0].capitalize()}, and it also {', and it also '.join(signals[1:])}."
 
 
+_INLINE_SOURCES = frozenset({"inline-approved", "inline-denied"})
+_POLICY_SOURCES = frozenset(
+    {
+        "policy-allow",
+        "policy-block",
+        "policy_allow",
+        "policy_block",
+        "heuristic-allow",
+        "heuristic-block",
+        "heuristic_allow",
+        "heuristic_block",
+        "auto-allow",
+        "auto-block",
+    }
+)
+
+
+def _map_approval_source(decision_source: str) -> str:
+    if decision_source in _INLINE_SOURCES:
+        return "inline"
+    if decision_source in _POLICY_SOURCES or decision_source.startswith("policy"):
+        return "policy"
+    return "approval_center"
+
+
 def allow_tool_call(
     *,
     store: GuardStore,
@@ -580,7 +605,7 @@ def allow_tool_call(
         artifact_name=artifact.name,
         source_scope=artifact.source_scope,
         user_override="inline-approve" if decision_source == "inline-approved" else None,
-        approval_source="inline" if decision_source == "inline-approved" else "approval_center",
+        approval_source=_map_approval_source(decision_source),
     )
     store.add_receipt(receipt)
     store.add_event(
@@ -626,7 +651,7 @@ def block_tool_call(
         artifact_name=artifact.name,
         source_scope=artifact.source_scope,
         user_override="inline-deny" if decision_source == "inline-denied" else None,
-        approval_source="inline" if decision_source == "inline-denied" else "approval_center",
+        approval_source=_map_approval_source(decision_source),
     )
     store.add_receipt(receipt)
     store.add_event(
