@@ -144,7 +144,13 @@ async function refreshGuardToken(): Promise<string | null> {
   if (!response.ok) {
     return null;
   }
-  const authToken = parseAuthToken(await response.json());
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return null;
+  }
+  const authToken = parseAuthToken(payload);
   if (authToken !== null) {
     saveGuardToken(authToken);
   }

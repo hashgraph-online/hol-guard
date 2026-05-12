@@ -638,3 +638,32 @@ assert(
   headerValue(recoveryCalls[2].init, "X-Guard-Token") === "fresh-resolve-token",
   "L077b: retry uses refreshed Guard token"
 );
+
+installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const malformedRefreshCalls: RecordedFetch[] = [];
+globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  malformedRefreshCalls.push({ url, init });
+  const path = new URL(url, "http://127.0.0.1:4174").pathname;
+  if (path === "/v1/initialize") {
+    return new Response("<html>not json</html>", {
+      status: 200,
+      headers: { "Content-Type": "text/html" }
+    });
+  }
+  return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+};
+
+try {
+  await resolveRequestWithQueueResult({
+    requestId: "req-malformed-refresh",
+    action: "allow",
+    scope: "global",
+    reason: "reviewed"
+  });
+  throw new Error("expected malformed token refresh to preserve the 401 failure");
+} catch (error) {
+  assert(error instanceof Error, "L077c: malformed refresh returns an Error");
+  assert(error.message.includes("401"), "L077c: malformed refresh preserves original 401 status");
+}
+assert(malformedRefreshCalls.length === 2, "L077c: malformed refresh does not retry without a parsed token");
