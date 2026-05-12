@@ -16657,7 +16657,7 @@ function guardBypassText(text) {
 }
 function persistenceCommand(command, text) {
   const normalized = command.toLowerCase();
-  return /\b(?:crontab|launchctl|systemctl|schtasks|at)\b/.test(normalized) || /(?:\.zshrc|\.bashrc|\.bash_profile|\.profile|launchagents|launchdaemons|systemd|login item)/.test(normalized) || textIncludesAny(text, ["persistence", "startup item", "scheduled task", "launch agent"]);
+  return /\b(?:crontab|schtasks|at)\b/.test(normalized) || /\bsystemctl\s+(?:enable|disable|preset|link)\b/.test(normalized) || /\blaunchctl\s+(?:load|unload|bootstrap|bootout)\b/.test(normalized) || /(?:\.zshrc|\.bashrc|\.bash_profile|\.profile|launchagents|launchdaemons|systemd|login item)/.test(normalized) || textIncludesAny(text, ["persistence", "startup item", "scheduled task", "launch agent"]);
 }
 function encodedCommand(text) {
   return textIncludesAny(text, [
@@ -16695,11 +16695,11 @@ function packageInstallCommand(command) {
 }
 function docsEditCommand(command, text) {
   const haystack = `${command} ${text}`.toLowerCase();
-  return commandLooksLikeFileEdit(command) && /(?:^|\s)(?:docs\/|readme|changelog|\.md\b|\.mdx\b)/.test(haystack);
+  return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /(?:^|\s)(?:docs\/|readme|changelog|\.md\b|\.mdx\b)/.test(haystack);
 }
 function sourceEditCommand(command, text) {
   const haystack = `${command} ${text}`.toLowerCase();
-  return commandLooksLikeFileEdit(command) && /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|swift|rb|php|css|scss|html|json|yaml|yml|toml)\b/.test(haystack);
+  return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|swift|rb|php|css|scss|html|json|yaml|yml|toml)\b/.test(haystack);
 }
 function sortQueue(items, direction) {
   const categoryLabels = direction === "category" ? new Map(items.map((item) => [item.request_id, resolveQueueCategory(item).label])) : null;

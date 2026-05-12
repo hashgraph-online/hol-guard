@@ -593,3 +593,47 @@ assert(
   resolveQueueCategory(curlDownloadItem).label === "Network request",
   "T-QS-65: curl -f downloads classify as network requests, not file uploads"
 );
+
+const serviceRestartItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-service-restart",
+  action_envelope_json: { ...shellEnvelope, command: "systemctl restart guard-daemon" },
+};
+
+assert(
+  resolveQueueCategory(serviceRestartItem).label === "Process control",
+  "T-QS-66: routine systemctl restart classifies as process control"
+);
+
+const serviceEnableItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-service-enable",
+  action_envelope_json: { ...shellEnvelope, command: "systemctl enable guard-daemon" },
+};
+
+assert(
+  resolveQueueCategory(serviceEnableItem).label === "Persistence change",
+  "T-QS-67: systemctl enable still classifies as persistence"
+);
+
+const structuredDocsWriteItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-structured-docs-write",
+  action_envelope_json: { ...shellEnvelope, action_type: "file_write", command: null, target_paths: ["docs/guard.md"] },
+};
+
+assert(
+  resolveQueueCategory(structuredDocsWriteItem).label === "Documentation edit",
+  "T-QS-68: structured docs file_write actions classify as documentation edits"
+);
+
+const structuredSourceWriteItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-structured-source-write",
+  action_envelope_json: { ...shellEnvelope, action_type: "file_write", command: null, target_paths: ["src/guard.ts"] },
+};
+
+assert(
+  resolveQueueCategory(structuredSourceWriteItem).label === "Source code edit",
+  "T-QS-69: structured source file_write actions classify as source code edits"
+);
