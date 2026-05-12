@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import PurePath
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 from .models import GuardArtifact
 from .types import CapabilityDelta, CapabilitySet, TransportKind
@@ -286,15 +286,21 @@ def _combined_text(artifact: GuardArtifact) -> str:
     return " ".join(value for value in values if value)
 
 
+def _safe_urlsplit(value: str) -> SplitResult | None:
+    try:
+        return urlsplit(value)
+    except ValueError:
+        return None
+
+
 def _extract_network_hosts(text: str, url: str | None) -> set[str]:
     hosts: set[str] = set()
+    candidates: list[str] = list(_URL_PATTERN.findall(text))
     if url:
-        parsed = urlsplit(url)
-        if parsed.hostname:
-            hosts.add(parsed.hostname.lower())
-    for candidate in _URL_PATTERN.findall(text):
-        parsed = urlsplit(candidate)
-        if parsed.hostname:
+        candidates.append(url)
+    for candidate in candidates:
+        parsed = _safe_urlsplit(candidate)
+        if parsed is not None and parsed.hostname:
             hosts.add(parsed.hostname.lower())
     for candidate in _HOST_PATTERN.findall(text):
         if candidate.count(".") < 1:
@@ -309,13 +315,12 @@ def _extract_network_hosts(text: str, url: str | None) -> set[str]:
 
 def _extract_network_schemes(text: str, url: str | None) -> set[str]:
     schemes: set[str] = set()
+    candidates: list[str] = list(_URL_PATTERN.findall(text))
     if url:
-        parsed = urlsplit(url)
-        if parsed.scheme:
-            schemes.add(parsed.scheme.lower())
-    for candidate in _URL_PATTERN.findall(text):
-        parsed = urlsplit(candidate)
-        if parsed.scheme:
+        candidates.append(url)
+    for candidate in candidates:
+        parsed = _safe_urlsplit(candidate)
+        if parsed is not None and parsed.scheme:
             schemes.add(parsed.scheme.lower())
     if "ssh " in text.lower() or "scp " in text.lower():
         schemes.add("ssh")
