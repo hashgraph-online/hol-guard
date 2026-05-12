@@ -69,6 +69,11 @@ import {
   bulkApprovePrimaryIds,
   type QueueSortDirection,
 } from "./queue-state";
+import {
+  buildDecisionPayload,
+  filterScopeChoicesForRequest,
+  normalizeDecisionScope,
+} from "./approval-scopes";
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
@@ -744,7 +749,7 @@ function DecisionWorkspace(props: {
           bannerTimerRef.current = null;
         }
       }
-      setScope(props.detail.item.recommended_scope);
+      setScope(normalizeDecisionScope(props.detail.item, props.detail.item.recommended_scope));
       setErrorMessage(null);
       setSubmitting(null);
     }
@@ -759,21 +764,19 @@ function DecisionWorkspace(props: {
   }, []);
 
   const readyItem = props.detail.kind === "ready" ? props.detail.item : null;
-  const readyRequestId = readyItem?.request_id ?? "";
-  const readyWorkspace = readyItem?.workspace ?? undefined;
 
   const handleResolve = useCallback(
     async (action: "allow" | "block") => {
+      if (readyItem === null) return;
       setSubmitting(action);
       setErrorMessage(null);
       try {
-        await props.onResolve({
-          requestId: readyRequestId,
+        await props.onResolve(buildDecisionPayload({
+          item: readyItem,
           action,
           scope,
           reason,
-          workspace: scope === "workspace" ? readyWorkspace : undefined,
-        });
+        }));
         setResolvedState("decided");
         setResolvedBanner(action);
         bannerTimerRef.current = setTimeout(() => {
@@ -784,7 +787,7 @@ function DecisionWorkspace(props: {
         setSubmitting(null);
       }
     },
-    [props.onResolve, readyRequestId, readyWorkspace, reason, scope]
+    [props.onResolve, readyItem, reason, scope]
   );
 
   const handleRequestResolve = useCallback(
@@ -890,8 +893,9 @@ function DecisionWorkspace(props: {
     return <EmptyState title="Select an item" body="Choose a blocked item from the list to review the evidence and make a decision." tone="teach" />;
   }
   const { item, diff, receipt, policy } = props.detail;
-  const commonScopeOpts = scopeOptions.filter((option) => commonScopeValues.has(option.value));
-  const broadScopeOpts = scopeOptions.filter((option) => !commonScopeValues.has(option.value));
+  const availableScopeOptions = filterScopeChoicesForRequest(item, scopeOptions);
+  const commonScopeOpts = availableScopeOptions.filter((option) => commonScopeValues.has(option.value));
+  const broadScopeOpts = availableScopeOptions.filter((option) => !commonScopeValues.has(option.value));
   const isAlreadyDecided = item.resolution_action !== null;
   const decidedLabel =
     item.resolution_action === "allow" ? "allow" : item.resolution_action === "block" ? "block" : item.resolution_action ?? "decided";
