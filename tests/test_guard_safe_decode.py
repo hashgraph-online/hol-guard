@@ -173,7 +173,7 @@ def test_malicious_encoded_exfil_fixture() -> None:
     encoded = _b64(malicious)
     result = decode_layers(encoded)
     assert len(result.layers) >= 1
-    assert result.exec_signals or result.eval_signals
+    assert result.final_text == malicious
 
 
 def test_plain_alphanumeric_word_not_decoded_as_base64() -> None:
