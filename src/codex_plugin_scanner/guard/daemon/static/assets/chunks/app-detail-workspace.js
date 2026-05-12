@@ -23,7 +23,7 @@ function writeTabToUrl(tab) {
 function AppDetailWorkspace(props) {
   const [activeTab, setActiveTab] = reactExports.useState(readTabFromUrl);
   const [tabDirection, setTabDirection] = reactExports.useState("right");
-  const touchStartX = reactExports.useRef(null);
+  const tabRefs = reactExports.useRef({ overview: null, activity: null, settings: null });
   reactExports.useEffect(() => {
     function handleHashChange() {
       setActiveTab(readTabFromUrl());
@@ -148,35 +148,52 @@ function AppDetailWorkspace(props) {
         ]
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm", children: [
-        { key: "overview", label: "Overview", icon: HiMiniHome },
-        { key: "activity", label: "Activity", icon: HiMiniBolt },
-        { key: "settings", label: "Settings", icon: HiMiniAdjustmentsHorizontal }
-      ].map((t) => {
-        const Icon = t.icon;
-        const isActive2 = activeTab === t.key;
-        return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
-          {
-            onClick: () => handleTabChange(t.key),
-            className: `flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${isActive2 ? "bg-brand-blue text-white shadow-sm" : "text-brand-dark hover:bg-slate-50"}`,
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4" }),
-              t.label
-            ]
-          },
-          t.key
-        );
-      }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "px-1 text-[11px] text-muted-foreground lg:hidden", children: "Swipe or tap tabs to switch views" })
-    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "relative",
+        role: "tablist",
+        "aria-label": "App detail tabs",
+        onKeyDown: handleTabKeyDown,
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 border-b border-slate-200/70", children: [
+          { key: "overview", label: "Overview", icon: HiMiniHome },
+          { key: "activity", label: "Activity", icon: HiMiniBolt },
+          { key: "settings", label: "Settings", icon: HiMiniAdjustmentsHorizontal }
+        ].map((t) => {
+          const Icon = t.icon;
+          const isActiveTab = activeTab === t.key;
+          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              ref: (el) => {
+                if (el) tabRefs.current[t.key] = el;
+              },
+              role: "tab",
+              "aria-selected": isActiveTab,
+              "aria-label": t.label,
+              "aria-controls": `tabpanel-${t.key}`,
+              id: `tab-${t.key}`,
+              tabIndex: isActiveTab ? 0 : -1,
+              onClick: () => handleTabChange(t.key),
+              className: `group relative flex min-w-[44px] items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${isActiveTab ? "text-brand-blue" : "text-brand-dark hover:text-brand-blue"}`,
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4", "aria-hidden": "true" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: t.label }),
+                isActiveTab && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "absolute bottom-0 left-0 right-0 h-0.5 bg-brand-blue" })
+              ]
+            },
+            t.key
+          );
+        }) })
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
         className: "min-h-[300px]",
-        onTouchStart: handleTouchStart,
-        onTouchEnd: handleTouchEnd,
+        role: "tabpanel",
+        id: `tabpanel-${activeTab}`,
+        "aria-labelledby": `tab-${activeTab}`,
         children: [
           isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-36 w-full" }),
@@ -238,21 +255,22 @@ function AppDetailWorkspace(props) {
     setActiveTab(next);
     writeTabToUrl(next);
   }
-  function handleTouchStart(e) {
-    touchStartX.current = e.changedTouches[0].screenX;
-  }
-  function handleTouchEnd(e) {
-    if (touchStartX.current === null) return;
-    const endX = e.changedTouches[0].screenX;
-    const diff = touchStartX.current - endX;
-    const threshold = 50;
-    const currentIndex = tabOrder.indexOf(activeTab);
-    if (diff > threshold && currentIndex < tabOrder.length - 1) {
-      handleTabChange(tabOrder[currentIndex + 1]);
-    } else if (diff < -threshold && currentIndex > 0) {
-      handleTabChange(tabOrder[currentIndex - 1]);
+  function handleTabKeyDown(e) {
+    const focused = document.activeElement;
+    const focusedTab = focused?.getAttribute("role") === "tab" ? focused.id.replace("tab-", "") : activeTab;
+    const currentIndex = tabOrder.indexOf(focusedTab);
+    let nextIndex = -1;
+    if (e.key === "ArrowRight") nextIndex = Math.min(currentIndex + 1, tabOrder.length - 1);
+    else if (e.key === "ArrowLeft") nextIndex = Math.max(currentIndex - 1, 0);
+    else if (e.key === "Home") nextIndex = 0;
+    else if (e.key === "End") nextIndex = tabOrder.length - 1;
+    if (nextIndex >= 0 && nextIndex < tabOrder.length) {
+      e.preventDefault();
+      const nextTab = tabOrder[nextIndex];
+      handleTabChange(nextTab);
+      const nextEl = tabRefs.current[nextTab];
+      if (nextEl) nextEl.focus();
     }
-    touchStartX.current = null;
   }
 }
 function AppStatusBadge({ status }) {
