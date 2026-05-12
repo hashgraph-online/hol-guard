@@ -92,3 +92,42 @@ def test_normalize_artifact_capabilities_ignores_common_local_file_suffixes_as_h
     capabilities = normalize_artifact_capabilities(artifact)
 
     assert capabilities.network_hosts == ()
+
+
+def test_normalize_artifact_capabilities_tolerates_bracketed_regex_in_command():
+    artifact = GuardArtifact(
+        artifact_id="hermes:project:regex-tool",
+        name="regex-tool",
+        harness="hermes",
+        artifact_type="allowed_tool",
+        source_scope="project",
+        config_path="/home/user/.hermes/config.json",
+        command=".*|\\1|",
+        args=(),
+        transport="stdio",
+    )
+
+    capabilities = normalize_artifact_capabilities(artifact)
+
+    assert capabilities.network_hosts == ()
+    assert capabilities.network_schemes == ()
+
+
+def test_normalize_artifact_capabilities_tolerates_bracketed_regex_in_url():
+    artifact = GuardArtifact(
+        artifact_id="hermes:project:regex-url-tool",
+        name="regex-url-tool",
+        harness="hermes",
+        artifact_type="allowed_tool",
+        source_scope="project",
+        config_path="/home/user/.hermes/config.json",
+        command="echo",
+        args=(),
+        transport="stdio",
+        url="[.*|\\1|]",
+    )
+
+    capabilities = normalize_artifact_capabilities(artifact)
+
+    assert capabilities.network_hosts == ()
+    assert capabilities.network_schemes == ()

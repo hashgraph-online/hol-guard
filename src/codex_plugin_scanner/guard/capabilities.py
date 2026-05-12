@@ -289,13 +289,19 @@ def _combined_text(artifact: GuardArtifact) -> str:
 def _extract_network_hosts(text: str, url: str | None) -> set[str]:
     hosts: set[str] = set()
     if url:
-        parsed = urlsplit(url)
-        if parsed.hostname:
-            hosts.add(parsed.hostname.lower())
+        try:
+            parsed = urlsplit(url)
+            if parsed.hostname:
+                hosts.add(parsed.hostname.lower())
+        except ValueError:
+            pass
     for candidate in _URL_PATTERN.findall(text):
-        parsed = urlsplit(candidate)
-        if parsed.hostname:
-            hosts.add(parsed.hostname.lower())
+        try:
+            parsed = urlsplit(candidate)
+            if parsed.hostname:
+                hosts.add(parsed.hostname.lower())
+        except ValueError:
+            pass
     for candidate in _HOST_PATTERN.findall(text):
         if candidate.count(".") < 1:
             continue
@@ -310,13 +316,19 @@ def _extract_network_hosts(text: str, url: str | None) -> set[str]:
 def _extract_network_schemes(text: str, url: str | None) -> set[str]:
     schemes: set[str] = set()
     if url:
-        parsed = urlsplit(url)
-        if parsed.scheme:
-            schemes.add(parsed.scheme.lower())
+        try:
+            parsed = urlsplit(url)
+            if parsed.scheme:
+                schemes.add(parsed.scheme.lower())
+        except ValueError:
+            pass
     for candidate in _URL_PATTERN.findall(text):
-        parsed = urlsplit(candidate)
-        if parsed.scheme:
-            schemes.add(parsed.scheme.lower())
+        try:
+            parsed = urlsplit(candidate)
+            if parsed.scheme:
+                schemes.add(parsed.scheme.lower())
+        except ValueError:
+            pass
     if "ssh " in text.lower() or "scp " in text.lower():
         schemes.add("ssh")
     return schemes
