@@ -5893,7 +5893,7 @@ def _git_config_include_paths(config_text: str, *, base_dir: Path) -> tuple[Path
 
 
 def _git_config_enables_diff_helper(config_text: str) -> bool:
-    return bool(re.search(r"(?im)^\s*(?:external|textconv)\s*=", config_text))
+    return bool(re.search(r"(?im)^\s*(?:command|external|textconv)\s*=", config_text))
 
 
 def _git_grep_uses_external_execution(args: list[str]) -> bool:
