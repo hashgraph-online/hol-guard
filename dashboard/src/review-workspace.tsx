@@ -586,8 +586,7 @@ function ReviewDecisionCard(props: {
   const [showConsequences, setShowConsequences] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
   const [showTechnical, setShowTechnical] = useState(true);
-  const [confirmScope, setConfirmScope] = useState<DecisionScope | null>(null);
-  const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
+  const [lastAction, setLastAction] = useState<"allow" | "block" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allowButtonRef = useRef<HTMLButtonElement>(null);
@@ -601,8 +600,7 @@ function ReviewDecisionCard(props: {
       setScope(normalizeDecisionScope(item, item.recommended_scope));
       setResolved(null);
       setSubmitting(null);
-      setConfirmScope(null);
-      setPendingAction(null);
+      setLastAction(null);
       setErrorMessage(null);
     }
   }, [item?.request_id]);
@@ -617,17 +615,6 @@ function ReviewDecisionCard(props: {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (submitting !== null) return;
-      if (confirmScope !== null) {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          handleConfirm();
-        }
-        if (event.key === "Escape") {
-          event.preventDefault();
-          handleCancelConfirm();
-        }
-        return;
-      }
       const target = event.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
@@ -647,7 +634,7 @@ function ReviewDecisionCard(props: {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [submitting, confirmScope, scope, item?.request_id, availableScopeChoices]);
+  }, [submitting, scope, item?.request_id, availableScopeChoices]);
 
   const handleResolve = useCallback(
     async (action: "allow" | "block") => {
@@ -667,8 +654,6 @@ function ReviewDecisionCard(props: {
         setErrorMessage(err instanceof Error ? err.message : "Something went wrong. Try again.");
       } finally {
         setSubmitting(null);
-        setConfirmScope(null);
-        setPendingAction(null);
       }
     },
     [item, scope, props.onResolve]
@@ -676,27 +661,11 @@ function ReviewDecisionCard(props: {
 
   const handleRequestResolve = useCallback(
     (action: "allow" | "block") => {
-      const broadScopes: DecisionScope[] = ["publisher", "harness", "global"];
-      if (broadScopes.includes(scope)) {
-        setConfirmScope(scope);
-        setPendingAction(action);
-      } else {
-        void handleResolve(action);
-      }
+      setLastAction(action);
+      void handleResolve(action);
     },
-    [scope, handleResolve]
+    [handleResolve]
   );
-
-  const handleConfirm = useCallback(() => {
-    if (pendingAction !== null) {
-      void handleResolve(pendingAction);
-    }
-  }, [pendingAction, handleResolve]);
-
-  const handleCancelConfirm = useCallback(() => {
-    setConfirmScope(null);
-    setPendingAction(null);
-  }, []);
 
   if (!detail || !item) {
     return (
@@ -734,31 +703,6 @@ function ReviewDecisionCard(props: {
           <p className={`text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`}>
             {resolved === "allow" ? "Approved — action can proceed" : "Blocked — action stopped"}
           </p>
-        </div>
-      )}
-
-      {/* Confirm modal for broad scopes */}
-      {confirmScope !== null && pendingAction !== null && (
-        <div className="guard-fade-in rounded-xl border border-brand-attention/15 bg-brand-attention/[0.03] p-4" role="alertdialog" aria-modal="true">
-          <div className="flex items-start gap-3">
-            <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
-            <div>
-              <h3 className="text-sm font-semibold text-brand-dark">
-                {pendingAction === "allow" ? "Allow" : "Block"} for {availableScopeChoices.find((s) => s.value === confirmScope)?.label}?
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                This choice will apply {confirmScope === "global" ? "across all your projects" : "broadly"}. Are you sure?
-              </p>
-              <div className="mt-4 flex gap-3">
-                <ActionButton onClick={handleConfirm} data-primary="true">
-                  Yes, {pendingAction}
-                </ActionButton>
-                <ActionButton variant="outline" onClick={handleCancelConfirm}>
-                  Cancel
-                </ActionButton>
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
@@ -866,7 +810,7 @@ function ReviewDecisionCard(props: {
                 <button
                   onClick={() => {
                     setErrorMessage(null);
-                    if (pendingAction) handleRequestResolve(pendingAction);
+                    if (lastAction) handleRequestResolve(lastAction);
                   }}
                   className="mt-2 inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50"
                 >
