@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, E as EmptyState, A as ActionButton, H as HiMiniCheckCircle, G as GuardHero, P as ProofStrip, f as formatNumber, a as HiMiniFire, b as HiMiniCalendarDays, c as HiMiniShieldCheck, S as SectionLabel, h as harnessDisplayName, d as formatRelativeTime, e as HiMiniSparkles, g as HiMiniXMark, B as Badge, i as HiMiniChevronRight, k as HiMiniChevronUp, l as HiMiniChevronDown, m as HiMiniExclamationTriangle, n as HiMiniBolt, o as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { r as reactExports, i as isDisplayableHarness, j as jsxRuntimeExports, E as EmptyState, A as ActionButton, H as HiMiniCheckCircle, G as GuardHero, P as ProofStrip, f as formatNumber, a as HiMiniFire, b as HiMiniCalendarDays, c as HiMiniShieldCheck, S as SectionLabel, h as harnessDisplayName, d as formatRelativeTime, e as HiMiniSparkles, g as HiMiniXMark, B as Badge, k as HiMiniChevronRight, l as HiMiniChevronUp, m as HiMiniChevronDown, n as HiMiniExclamationTriangle, o as HiMiniBolt, p as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
 function HomeWorkspace(props) {
   const [toastMessage, setToastMessage] = reactExports.useState(null);
@@ -19,14 +19,14 @@ function HomeWorkspace(props) {
   const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
   const queuedCount = props.requests.kind === "ready" ? props.requests.items.length : 0;
   const policyItems = props.policies.kind === "ready" ? props.policies.items : [];
-  const managedInstalls = snapshot?.managed_installs ?? [];
+  const managedInstalls = (snapshot?.managed_installs ?? []).filter((item) => isDisplayableHarness(item.harness));
   const activeInstalls = managedInstalls.filter((item) => item.active);
   const observedHarnesses = snapshot ? Array.from(
-    /* @__PURE__ */ new Set([
+    new Set([
       ...snapshot.items.map((item) => item.harness),
       ...snapshot.latest_receipts.map((receipt) => receipt.harness),
       ...policyItems.map((policy) => policy.harness)
-    ])
+    ].filter(isDisplayableHarness))
   ).sort() : [];
   const clearHarnesses = activeInstalls.length > 0 ? activeInstalls.map((i) => i.harness) : observedHarnesses;
   const watchedAppsCount = activeInstalls.length > 0 ? activeInstalls.length : observedHarnesses.length;
@@ -331,7 +331,7 @@ function buildWeeklySummary(receipts) {
   if (weekReceipts.length === 0) return null;
   const allowed = weekReceipts.filter((r) => r.policy_decision === "allow").length;
   const blocked = weekReceipts.filter((r) => r.policy_decision === "block").length;
-  const uniqueApps = new Set(weekReceipts.map((r) => r.harness)).size;
+  const uniqueApps = new Set(weekReceipts.map((r) => r.harness).filter(isDisplayableHarness)).size;
   return {
     body: `Guard reviewed ${weekReceipts.length} actions across ${uniqueApps} app${uniqueApps !== 1 ? "s" : ""} this week.`,
     stats: [
@@ -536,8 +536,7 @@ function StreakMilestoneBanner({ streak }) {
   ] });
 }
 function NewAppDiscoveryBanner(props) {
-  const activeHarnesses = new Set(props.managedInstalls.map((i) => i.harness));
-  const discovered = props.observedHarnesses.filter((h) => !activeHarnesses.has(h));
+  const discovered = resolveNewAppDiscoveries(props.managedInstalls, props.observedHarnesses);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: discovered.map((harness) => /* @__PURE__ */ jsxRuntimeExports.jsx(
     NewAppBanner,
     {
@@ -546,6 +545,10 @@ function NewAppDiscoveryBanner(props) {
     },
     harness
   )) });
+}
+function resolveNewAppDiscoveries(managedInstalls, observedHarnesses) {
+  const activeHarnesses = new Set(managedInstalls.filter((i) => isDisplayableHarness(i.harness)).map((i) => i.harness));
+  return observedHarnesses.filter((h) => isDisplayableHarness(h) && !activeHarnesses.has(h));
 }
 function NewAppBanner(props) {
   const storageKey = `guard-new-app-dismissed-${props.harness}`;
@@ -621,5 +624,6 @@ function CollapsibleCard(props) {
   ] });
 }
 export {
-  HomeWorkspace
+  HomeWorkspace,
+  resolveNewAppDiscoveries
 };

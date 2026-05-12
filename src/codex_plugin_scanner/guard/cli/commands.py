@@ -5115,7 +5115,16 @@ _CODEX_SOURCE_SEARCH_EXTENSIONS = frozenset(
 )
 _CODEX_BENIGN_SOURCE_DOTFILES = frozenset({".nvmrc"})
 _CODEX_BENIGN_SECRET_FIXTURE_ASSIGNMENT_PATTERN = re.compile(
-    r"(?i)\s*fake[_-]?(?:credential|secret|token)\s*[:=]\s*(?:\"[^\r\n\"]+\"|'[^\r\n']+'|[^\s\"',}]+)\s*"
+    r"""(?ix)
+    \s*
+    fake[_-]?(?:credential|secret|token)
+    \s*[:=]\s*
+    (?:
+        "[^\r\n"]*"             # double-quoted value
+        |'[^\r\n']*'            # single-quoted value
+        |[^\s"',}]+             # unquoted token (excludes delimiters ,})
+    )
+    \s*"""
 )
 _CODEX_SENSITIVE_SEARCH_BASENAMES = frozenset(
     {

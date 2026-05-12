@@ -3,6 +3,8 @@ import {
   type HomePrimaryState,
 } from "./queue-state";
 import { harnessDisplayName } from "./approval-center-utils";
+import { resolveNewAppDiscoveries } from "./home-dashboard";
+import type { GuardManagedInstall } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -164,6 +166,28 @@ assert(
 assert(
   appsProtectedCopy === "Apps protected",
   'L142: "Apps protected" section label appears exactly once — verified by constant'
+);
+
+const managedDiscoveryInstalls: GuardManagedInstall[] = [
+  {
+    harness: "cursor",
+    active: true,
+    workspace: null,
+    manifest: {},
+    updated_at: "2026-05-12T00:00:00Z",
+  },
+];
+
+const newAppDiscoveries = resolveNewAppDiscoveries(managedDiscoveryInstalls, [
+  "cursor",
+  "opencode",
+  "Ce2b7ac2ccab4fab9902347b033bf25e",
+  "d75ba142-bf53-4f27-aebc-4884278c421a",
+]);
+
+assert(
+  newAppDiscoveries.length === 1 && newAppDiscoveries[0] === "opencode",
+  `Discovery banner should show only real unprotected apps — got: ${newAppDiscoveries.join(", ")}`
 );
 
 const [setupCopy, pendingCopy, protectedCopy] = [

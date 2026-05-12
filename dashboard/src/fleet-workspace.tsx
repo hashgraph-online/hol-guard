@@ -16,7 +16,7 @@ import {
   GuardHero,
   ProofStrip,
 } from "./approval-center-primitives";
-import { harnessDisplayName } from "./approval-center-utils";
+import { harnessDisplayName, isDisplayableHarness } from "./approval-center-utils";
 import type { GuardInventoryItem, GuardPolicyDecision, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
 
 type FleetWorkspaceProps = {
@@ -35,8 +35,12 @@ type FleetWorkspaceProps = {
 
 function collectHarnesses(snapshot: GuardRuntimeSnapshot): string[] {
   const harnesses = new Set<string>();
-  for (const item of snapshot.items) harnesses.add(item.harness);
-  for (const receipt of snapshot.latest_receipts) harnesses.add(receipt.harness);
+  for (const item of snapshot.items) {
+    if (isDisplayableHarness(item.harness)) harnesses.add(item.harness);
+  }
+  for (const receipt of snapshot.latest_receipts) {
+    if (isDisplayableHarness(receipt.harness)) harnesses.add(receipt.harness);
+  }
   return Array.from(harnesses).sort((a, b) => a.localeCompare(b));
 }
 
@@ -75,19 +79,19 @@ function StatusBadge({ status }: { status: AppStatus }) {
 
 export function FleetWorkspace(props: FleetWorkspaceProps) {
   const harnesses = collectHarnesses(props.runtime);
-  const managedInstalls = props.runtime.managed_installs ?? [];
+  const managedInstalls = (props.runtime.managed_installs ?? []).filter((i) => isDisplayableHarness(i.harness));
   const activeInstalls = managedInstalls.filter((i) => i.active);
-  const inventory = props.inventory.kind === "ready" ? props.inventory.items : [];
+  const inventory = props.inventory.kind === "ready" ? props.inventory.items.filter((i) => isDisplayableHarness(i.harness)) : [];
   const visibleHarnesses = Array.from(
     new Set([
       ...managedInstalls.map((i) => i.harness),
       ...harnesses,
       ...inventory.map((i) => i.harness),
       ...props.policies.map((p) => p.harness),
-    ])
+    ].filter(isDisplayableHarness))
   ).sort((a, b) => a.localeCompare(b));
   const runtimeState = props.runtime.runtime_state;
-  const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness));
+  const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isDisplayableHarness));
 
   return (
     <div className="space-y-8">
