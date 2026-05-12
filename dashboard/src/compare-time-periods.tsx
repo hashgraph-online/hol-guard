@@ -10,7 +10,6 @@ type Period = "7d" | "30d" | "90d";
 
 function getPeriodDates(period: Period): { start: Date; end: Date; label: string } {
   const end = new Date();
-  end.setHours(0, 0, 0, 0);
   const start = new Date(end);
   switch (period) {
     case "7d":

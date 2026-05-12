@@ -129,11 +129,21 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const [categoryFilter, setCategoryFilter] = useState<QueueCategoryId | "all">("all");
   const [sortDirection, setSortDirection] = useState<QueueSortDirection>("newest");
 
+  const [semanticFilter, setSemanticFilter] = useState<SemanticGroupId>("all");
+
   const filteredRequests = useMemo(() => {
-    const byCategory = filterQueueByCategory(requests, categoryFilter);
-    const searched = searchQueue(byCategory, searchTerm);
+    let items = requests;
+    if (semanticFilter !== "all") {
+      const group = SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
+      if (group && group.matches.length > 0) {
+        items = items.filter((item) => group.matches.includes(resolveQueueCategory(item).id));
+      }
+    } else if (categoryFilter !== "all") {
+      items = filterQueueByCategory(items, categoryFilter);
+    }
+    const searched = searchQueue(items, searchTerm);
     return sortQueue(searched, sortDirection);
-  }, [categoryFilter, requests, searchTerm, sortDirection]);
+  }, [categoryFilter, requests, searchTerm, sortDirection, semanticFilter]);
 
   const categoryOptions = useMemo(() => queueCategoriesForItems(requests), [requests]);
 
@@ -201,9 +211,11 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
           categoryFilter={categoryFilter}
           searchTerm={searchTerm}
           sortDirection={sortDirection}
+          semanticFilter={semanticFilter}
           onCategoryFilterChange={setCategoryFilter}
           onSearchTermChange={setSearchTerm}
           onSortDirectionChange={setSortDirection}
+          onSemanticFilterChange={setSemanticFilter}
           onOpenRequest={props.onOpenRequest}
           ref={queueRef}
         />
@@ -270,9 +282,11 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   categoryFilter: QueueCategoryId | "all";
   searchTerm: string;
   sortDirection: QueueSortDirection;
+  semanticFilter: SemanticGroupId;
   onCategoryFilterChange: (category: QueueCategoryId | "all") => void;
   onSearchTermChange: (term: string) => void;
   onSortDirectionChange: (direction: QueueSortDirection) => void;
+  onSemanticFilterChange: (group: SemanticGroupId) => void;
   onOpenRequest: (requestId: string) => void;
 }>(({
   requests,
@@ -282,13 +296,14 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   categoryFilter,
   searchTerm,
   sortDirection,
+  semanticFilter,
   onCategoryFilterChange,
   onSearchTermChange,
   onSortDirectionChange,
+  onSemanticFilterChange,
   onOpenRequest,
 }, ref) => {
   const [showFilters, setShowFilters] = useState(false);
-  const [semanticFilter, setSemanticFilter] = useState<SemanticGroupId>("all");
 
   const handleSearchChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     onSearchTermChange(event.target.value);
@@ -300,19 +315,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
     onSortDirectionChange(event.target.value as QueueSortDirection);
   }, [onSortDirectionChange]);
 
-  // Sync semantic filter to underlying category filter
-  useEffect(() => {
-    if (semanticFilter === "all") {
-      onCategoryFilterChange("all");
-    } else {
-      const group = SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
-      if (group && group.matches.length > 0) {
-        onCategoryFilterChange(group.matches[0]);
-      }
-    }
-  }, [semanticFilter, onCategoryFilterChange]);
-
-  const activeSemanticGroup = categoryFilter === "all" ? "all" : resolveSemanticGroup(categoryFilter);
+  const activeSemanticGroup = semanticFilter;
 
   // Only show groups that have items
   const visibleGroups = useMemo(() => {
@@ -323,7 +326,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
     return SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
   }, [requests]);
 
-  const isFiltered = searchTerm || categoryFilter !== "all" || sortDirection !== "newest";
+  const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest";
 
   return (
     <aside className="space-y-3" ref={ref}>
@@ -357,7 +360,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
               {visibleGroups.map((group) => (
                 <button
                   key={group.id}
-                  onClick={() => setSemanticFilter(group.id)}
+                  onClick={() => onSemanticFilterChange(group.id)}
                   className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
                     activeSemanticGroup === group.id
                       ? "bg-brand-blue text-white"
@@ -382,7 +385,7 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
             </label>
             {isFiltered && (
               <button
-                onClick={() => { onSearchTermChange(""); onCategoryFilterChange("all"); onSortDirectionChange("newest"); setSemanticFilter("all"); }}
+                onClick={() => { onSearchTermChange(""); onCategoryFilterChange("all"); onSortDirectionChange("newest"); onSemanticFilterChange("all"); }}
                 className="text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
               >
                 Clear all filters
