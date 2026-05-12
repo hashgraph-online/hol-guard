@@ -13839,6 +13839,18 @@ function capitalizeHarness(harness) {
   }
   return `${harness.charAt(0).toUpperCase()}${harness.slice(1)}`;
 }
+const HARNESS_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/;
+const NON_APP_HARNESS_SLUGS = /* @__PURE__ */ new Set(["*", "all", "any", "global"]);
+function normalizeHarnessSlug(harness) {
+  const slug = typeof harness === "string" ? harness.trim().toLowerCase() : "";
+  if (slug.length === 0 || NON_APP_HARNESS_SLUGS.has(slug) || !HARNESS_SLUG_PATTERN.test(slug)) {
+    return null;
+  }
+  return slug;
+}
+function isDisplayableHarness(harness) {
+  return normalizeHarnessSlug(harness) !== null;
+}
 function resolveDecisionV2Title(item) {
   const title = item.decision_v2_json?.user_title;
   return title !== void 0 && title.trim().length > 0 ? title : null;
@@ -13868,6 +13880,11 @@ function resolveStoppedCommandText(item) {
 }
 function harnessDisplayName(harness) {
   switch (harness) {
+    case "*":
+    case "all":
+    case "any":
+    case "global":
+      return "All apps";
     case "claude-code":
       return "Claude Code";
     case "copilot":
@@ -14542,10 +14559,12 @@ function filterByTime(receipts, time, day, now2) {
     const parts = day.split("-").map(Number);
     const dayStart = new Date(parts[0], parts[1] - 1, parts[2]);
     const dayEnd = new Date(parts[0], parts[1] - 1, parts[2] + 1);
-    return receipts.filter((r) => {
-      const d = new Date(r.timestamp);
-      return d >= dayStart && d < dayEnd;
-    });
+    if (!isNaN(dayStart.getTime()) && !isNaN(dayEnd.getTime())) {
+      return receipts.filter((r) => {
+        const d = new Date(r.timestamp);
+        return d >= dayStart && d < dayEnd;
+      });
+    }
   }
   if (time === "all") return receipts;
   return receipts.filter((r) => {
@@ -15345,13 +15364,25 @@ function ActionRow({
     },
     [category, onFilterCategory]
   );
+  const handleKeyDown = reactExports.useCallback(
+    (e) => {
+      if (e.target !== e.currentTarget) return;
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onSelect(receipt.receipt_id);
+      }
+    },
+    [receipt.receipt_id, onSelect]
+  );
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
+    "div",
     {
-      type: "button",
+      role: "button",
+      tabIndex: 0,
       onClick: handleClick,
+      onKeyDown: handleKeyDown,
       "aria-selected": isSelected,
-      className: `w-full text-left flex items-center gap-3 px-4 py-3 transition-colors border-b border-slate-100 last:border-0 hover:bg-slate-50 focus:outline-none focus:bg-slate-50 ${isSelected ? "bg-brand-blue/5 border-l-2 border-l-brand-blue" : ""}`,
+      className: `w-full text-left flex items-center gap-3 px-4 py-3 transition-colors border-b border-slate-100 last:border-0 hover:bg-slate-50 focus:outline-none focus:bg-slate-50 cursor-pointer ${isSelected ? "bg-brand-blue/5 border-l-2 border-l-brand-blue" : ""}`,
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "span",
@@ -15668,6 +15699,7 @@ function TrendBar({ bucket, maxTotal }) {
   const total = bucket.allowed + bucket.blocked + bucket.reviewed;
   const heightPct = maxTotal > 0 ? Math.max(4, total / maxTotal * 100) : 4;
   const blockedPct = total > 0 ? bucket.blocked / total * 100 : 0;
+  const allowedPct = total > 0 ? bucket.allowed / total * 100 : 0;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-1 flex-1", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
@@ -15680,7 +15712,7 @@ function TrendBar({ bucket, maxTotal }) {
             "div",
             {
               className: "w-full bg-green-300 transition-all",
-              style: { height: `${heightPct * (1 - blockedPct / 100)}%` },
+              style: { height: `${heightPct * (allowedPct / 100)}%` },
               "aria-hidden": "true"
             }
           ),
@@ -15783,9 +15815,7 @@ function EvidenceAnalyticsPanel({
   onFilterCategory
 }) {
   const maxBucketTotal = Math.max(
-    ...metrics.trendBuckets.map(
-      (b) => b.allowed + b.blocked + b.reviewed
-    ),
+    ...metrics.trendBuckets.map((b) => b.allowed + b.blocked),
     1
   );
   const sortedHarnesses = Array.from(metrics.byHarness.entries()).sort(
@@ -16344,7 +16374,9 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
   const [clearOpen, setClearOpen] = reactExports.useState(false);
   const urlSyncTimerRef = reactExports.useRef(null);
   const harnesses = reactExports.useMemo(
-    () => Array.from(new Set(receiptItems.map((r) => r.harness))).sort(),
+    () => Array.from(
+      new Set(receiptItems.map((r) => r.harness).filter(isDisplayableHarness))
+    ).sort(),
     [receiptItems]
   );
   const searchTimerRef = reactExports.useRef(null);
@@ -16373,7 +16405,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
   }, [harnesses, filters.harness]);
   reactExports.useEffect(() => {
     setPage(0);
-  }, [filters, debouncedSearch]);
+  }, [debouncedSearch, filters.harness, filters.decision, filters.time, filters.day, filters.category, filters.sourceScope]);
   const effectiveFilters = reactExports.useMemo(
     () => ({ ...filters, search: debouncedSearch }),
     [filters, debouncedSearch]
@@ -16459,7 +16491,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       EvidenceFilterBar,
       {
-        filters: effectiveFilters,
+        filters,
         onChange: handleFilterChange,
         totalCount: receiptItems.length,
         filteredCount: filtered.length,
@@ -16585,7 +16617,7 @@ function ReceiptsWorkspace(props) {
   if (props.receipts.kind === "error") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceErrorState, { message: props.receipts.message });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceWorkbench, { receiptItems: props.receipts.items });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceWorkbench, { receiptItems: props.receipts.items, onClearEvidence: props.onClearEvidence });
 }
 function ScannerEvidenceBadge(props) {
   const isScannerCategory = props.signal.category === "skill" || props.signal.category === "mcp";
@@ -18342,7 +18374,7 @@ function ApprovalCenterLayout(props) {
         onBulkApprove: props.onBulkApprove
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts, onClearEvidence: props.onClearEvidence }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ReviewWorkspace,
       {
         requests: props.requests.kind === "ready" ? props.requests.items : [],
@@ -18553,7 +18585,7 @@ function QueueBrowser(props) {
   const [sortDirection, setSortDirection] = reactExports.useState("newest");
   const [page, setPage] = reactExports.useState(1);
   const [showFilters, setShowFilters] = reactExports.useState(false);
-  const harnesses = Array.from(new Set(props.items.map((item) => item.harness))).sort();
+  const harnesses = Array.from(new Set(props.items.map((item) => item.harness).filter(isDisplayableHarness))).sort();
   const filteredItems = reactExports.useMemo(() => {
     const byHarness = harnessFilter === "all" ? props.items : props.items.filter((item) => item.harness === harnessFilter);
     const searched = searchQueue(byHarness, searchTerm);
@@ -19491,14 +19523,22 @@ function parseRequestId(pathname) {
   return null;
 }
 function parseAppDetail(pathname) {
-  if (pathname.startsWith("/apps/")) {
-    return pathname.slice("/apps/".length);
+  if (!pathname.startsWith("/apps/")) {
+    return null;
   }
-  return null;
+  const rawSlug = pathname.slice("/apps/".length);
+  try {
+    return normalizeHarnessSlug(decodeURIComponent(rawSlug));
+  } catch {
+    return null;
+  }
 }
 function resolveView(pathname) {
-  if (pathname.startsWith("/apps/")) {
+  if (parseAppDetail(pathname) !== null) {
     return "app-detail";
+  }
+  if (pathname.startsWith("/apps/")) {
+    return "fleet";
   }
   if (pathname === "/settings") {
     return "settings";
@@ -19684,7 +19724,10 @@ function App() {
     navigate(`/requests/${nextRequestId}`);
   }, []);
   const handleOpenAppDetail = reactExports.useCallback((harness) => {
-    navigate(`/apps/${harness}`);
+    const slug = normalizeHarnessSlug(harness);
+    if (slug !== null) {
+      navigate(`/apps/${encodeURIComponent(slug)}`);
+    }
   }, []);
   const refreshStateAfterAction = reactExports.useCallback(async () => {
     const [snapshotResult, receiptsResult, policiesResult, inventoryResult] = await Promise.allSettled([
@@ -19762,6 +19805,9 @@ function App() {
       });
     }
   }, [setRuntime, setRequests, setPolicies]);
+  const handleClearEvidence = reactExports.useCallback(() => {
+    setReceipts({ kind: "ready", items: [] });
+  }, [setReceipts]);
   const handleResolve = reactExports.useCallback(async (payload) => {
     resolutionInFlight.current = true;
     const queuedItemsSnapshot = requests.kind === "ready" ? requests.items : [];
@@ -19818,13 +19864,22 @@ function App() {
     });
   }, []);
   const handleConnectHarness = reactExports.useCallback((harness) => {
-    navigate(`/apps/${encodeURIComponent(harness)}?tab=settings`);
+    const slug = normalizeHarnessSlug(harness);
+    if (slug !== null) {
+      navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
+    }
   }, []);
   const handleTestHarness = reactExports.useCallback((harness) => {
-    navigate(`/apps/${encodeURIComponent(harness)}?tab=settings`);
+    const slug = normalizeHarnessSlug(harness);
+    if (slug !== null) {
+      navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
+    }
   }, []);
   const handleRepairHarness = reactExports.useCallback((harness) => {
-    navigate(`/apps/${encodeURIComponent(harness)}?tab=settings`);
+    const slug = normalizeHarnessSlug(harness);
+    if (slug !== null) {
+      navigate(`/apps/${encodeURIComponent(slug)}?tab=settings`);
+    }
   }, []);
   const appDetailContent = reactExports.useMemo(() => {
     if (view !== "app-detail" || !appDetailHarness || runtime.kind !== "ready") {
@@ -19891,6 +19946,7 @@ function App() {
         onBulkApprove: handleBulkApprove,
         onRetry: handleRetry,
         onRepair: handleRepair,
+        onClearEvidence: handleClearEvidence,
         fleetContent: runtime.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           FleetWorkspace,
           {
@@ -19918,36 +19974,37 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  HiMiniCommandLine as $,
+  formatHarnessCommand as $,
   ActionButton as A,
   Badge as B,
-  exportDiagnostics as C,
-  repairApprovalCenter as D,
+  clearEvidence as C,
+  exportDiagnostics as D,
   EmptyState as E,
-  HiMiniLockClosed as F,
+  repairApprovalCenter as F,
   GuardHero as G,
   HiMiniCheckCircle as H,
-  HiMiniCog6Tooth as I,
-  fetchApprovalPage as J,
-  fetchPolicy as K,
-  HiMiniArrowLeft as L,
-  HiMiniHome as M,
-  HiMiniAdjustmentsHorizontal as N,
-  detectCategory as O,
+  HiMiniLockClosed as I,
+  HiMiniCog6Tooth as J,
+  fetchApprovalPage as K,
+  fetchPolicy as L,
+  HiMiniArrowLeft as M,
+  HiMiniHome as N,
+  HiMiniAdjustmentsHorizontal as O,
   ProofStrip as P,
-  CATEGORIES as Q,
-  HiMiniCloud as R,
+  detectCategory as Q,
+  CATEGORIES as R,
   SectionLabel as S,
   Tag as T,
-  HiMiniChartBar as U,
-  runHarnessAction as V,
-  GuardHarnessActionError as W,
-  HiMiniRocketLaunch as X,
-  HiMiniArrowPath as Y,
-  HiMiniTrash as Z,
-  formatHarnessCommand as _,
+  HiMiniCloud as U,
+  HiMiniChartBar as V,
+  runHarnessAction as W,
+  GuardHarnessActionError as X,
+  HiMiniRocketLaunch as Y,
+  HiMiniArrowPath as Z,
+  HiMiniTrash as _,
   HiMiniFire as a,
-  HiMiniQuestionMarkCircle as a0,
+  HiMiniCommandLine as a0,
+  HiMiniQuestionMarkCircle as a1,
   HiMiniCalendarDays as b,
   HiMiniShieldCheck as c,
   formatRelativeTime as d,
@@ -19955,22 +20012,22 @@ export {
   formatNumber as f,
   HiMiniXMark as g,
   harnessDisplayName as h,
-  HiMiniChevronRight as i,
+  isDisplayableHarness as i,
   jsxRuntimeExports as j,
-  HiMiniChevronUp as k,
-  HiMiniChevronDown as l,
-  HiMiniExclamationTriangle as m,
-  HiMiniBolt as n,
-  HiMiniMinusCircle as o,
-  HiMiniExclamationCircle as p,
-  HiMiniWrenchScrewdriver as q,
+  HiMiniChevronRight as k,
+  HiMiniChevronUp as l,
+  HiMiniChevronDown as m,
+  HiMiniExclamationTriangle as n,
+  HiMiniBolt as o,
+  HiMiniMinusCircle as p,
+  HiMiniExclamationCircle as q,
   reactExports as r,
-  HiMiniXCircle as s,
-  HiMiniClipboardDocumentCheck as t,
-  HiMiniClipboard as u,
-  fetchSettings as v,
-  fetchRuntimeSnapshot as w,
-  updateSettings as x,
-  clearPolicy as y,
-  clearEvidence as z
+  HiMiniWrenchScrewdriver as s,
+  HiMiniXCircle as t,
+  HiMiniClipboardDocumentCheck as u,
+  HiMiniClipboard as v,
+  fetchSettings as w,
+  fetchRuntimeSnapshot as x,
+  updateSettings as y,
+  clearPolicy as z
 };
