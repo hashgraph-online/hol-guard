@@ -13840,10 +13840,12 @@ function capitalizeHarness(harness) {
   return `${harness.charAt(0).toUpperCase()}${harness.slice(1)}`;
 }
 const HARNESS_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/;
+const HEX_TOKEN_HARNESS_PATTERN = /^[a-f0-9]{16,64}$/;
+const UUID_HARNESS_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const NON_APP_HARNESS_SLUGS = /* @__PURE__ */ new Set(["*", "all", "any", "global"]);
 function normalizeHarnessSlug(harness) {
   const slug = typeof harness === "string" ? harness.trim().toLowerCase() : "";
-  if (slug.length === 0 || NON_APP_HARNESS_SLUGS.has(slug) || !HARNESS_SLUG_PATTERN.test(slug)) {
+  if (slug.length === 0 || NON_APP_HARNESS_SLUGS.has(slug) || HEX_TOKEN_HARNESS_PATTERN.test(slug) || UUID_HARNESS_PATTERN.test(slug) || !HARNESS_SLUG_PATTERN.test(slug)) {
     return null;
   }
   return slug;
@@ -13879,7 +13881,19 @@ function resolveStoppedCommandText(item) {
   return item.artifact_name.trim() || item.artifact_id;
 }
 function harnessDisplayName(harness) {
-  switch (harness) {
+  const normalized = normalizeHarnessSlug(harness);
+  if (normalized === null) {
+    switch (harness.trim().toLowerCase()) {
+      case "*":
+      case "all":
+      case "any":
+      case "global":
+        return "All apps";
+      default:
+        return "Unknown app";
+    }
+  }
+  switch (normalized) {
     case "*":
     case "all":
     case "any":
@@ -13902,7 +13916,7 @@ function harnessDisplayName(harness) {
     case "openclaw":
       return "OpenClaw";
     default:
-      return capitalizeHarness(harness);
+      return capitalizeHarness(normalized);
   }
 }
 function displayArtifactName(item) {

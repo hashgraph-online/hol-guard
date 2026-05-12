@@ -536,8 +536,7 @@ function StreakMilestoneBanner({ streak }) {
   ] });
 }
 function NewAppDiscoveryBanner(props) {
-  const activeHarnesses = new Set(props.managedInstalls.map((i) => i.harness));
-  const discovered = props.observedHarnesses.filter((h) => !activeHarnesses.has(h));
+  const discovered = resolveNewAppDiscoveries(props.managedInstalls, props.observedHarnesses);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: discovered.map((harness) => /* @__PURE__ */ jsxRuntimeExports.jsx(
     NewAppBanner,
     {
@@ -546,6 +545,10 @@ function NewAppDiscoveryBanner(props) {
     },
     harness
   )) });
+}
+function resolveNewAppDiscoveries(managedInstalls, observedHarnesses) {
+  const activeHarnesses = new Set(managedInstalls.filter((i) => isDisplayableHarness(i.harness)).map((i) => i.harness));
+  return observedHarnesses.filter((h) => isDisplayableHarness(h) && !activeHarnesses.has(h));
 }
 function NewAppBanner(props) {
   const storageKey = `guard-new-app-dismissed-${props.harness}`;
@@ -621,5 +624,6 @@ function CollapsibleCard(props) {
   ] });
 }
 export {
-  HomeWorkspace
+  HomeWorkspace,
+  resolveNewAppDiscoveries
 };
