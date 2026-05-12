@@ -16638,8 +16638,7 @@ function networkCommand(command, text) {
   return /(?:^|\s)(?:curl|wget|httpie|nc|netcat|scp|rsync|ftp|sftp)(?:\s|$)/.test(normalized) || /(?:^|\s)ssh\s+/.test(normalized) || /https?:\/\//.test(normalized) || textIncludesAny(text, ["network host", "outbound", "webhook", "https://", "http://"]);
 }
 function fileUploadCommand(command, text) {
-  const normalized = command.toLowerCase();
-  return outboundCopyCommand(normalized) || /\bcurl\b[\s\S]*(?:--upload-file(?:=|\s+)\S+|(?:^|\s)-T(?:\S+|\s+\S+)|--form(?:=|\s+)\S*@|-F(?:\S*@|\s+\S*@)|--data(?:-binary|-raw|-urlencode)?(?:=|\s+)@\S+)/.test(command);
+  return outboundCopyCommand(command) || /\bcurl\b[\s\S]*(?:--upload-file(?:=|\s+)\S+|(?:^|\s)-T(?:\S+|\s+\S+)|--form(?:=|\s+)\S*@|-F(?:\S*@|\s+\S*@)|--data(?:-binary|-raw|-urlencode)?(?:=|\s+)@\S+)/.test(command);
 }
 function systemPromptAccessText(text) {
   return textIncludesAny(text, [
@@ -16731,7 +16730,6 @@ function stripOptionTokens(tokens) {
     "--sse",
     "--rsh",
     "-P",
-    "-p",
     "-i",
     "-o",
     "-F",

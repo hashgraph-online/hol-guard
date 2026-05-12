@@ -1005,3 +1005,14 @@ assert(
   resolveQueueCategory(curlClusteredFormUploadItem).label === "File upload or copy-out",
   "T-QS-96: curl -Ffile=@path classifies as file upload"
 );
+
+const scpPreserveUploadItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-scp-preserve-upload",
+  action_envelope_json: { ...shellEnvelope, command: "scp -p ./artifact host:/tmp/artifact" },
+};
+
+assert(
+  resolveQueueCategory(scpPreserveUploadItem).label === "File upload or copy-out",
+  "T-QS-97: scp -p preserve-mode flag does not consume the local upload operand"
+);

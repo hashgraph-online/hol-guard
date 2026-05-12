@@ -546,9 +546,8 @@ function networkCommand(command: string, text: string): boolean {
 }
 
 function fileUploadCommand(command: string, text: string): boolean {
-  const normalized = command.toLowerCase();
   return (
-    outboundCopyCommand(normalized) ||
+    outboundCopyCommand(command) ||
     /\bcurl\b[\s\S]*(?:--upload-file(?:=|\s+)\S+|(?:^|\s)-T(?:\S+|\s+\S+)|--form(?:=|\s+)\S*@|-F(?:\S*@|\s+\S*@)|--data(?:-binary|-raw|-urlencode)?(?:=|\s+)@\S+)/.test(command)
   );
 }
@@ -660,7 +659,6 @@ function stripOptionTokens(tokens: string[]): string[] {
     "--sse",
     "--rsh",
     "-P",
-    "-p",
     "-i",
     "-o",
     "-F",
