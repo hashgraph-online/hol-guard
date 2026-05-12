@@ -580,6 +580,7 @@ def allow_tool_call(
         artifact_name=artifact.name,
         source_scope=artifact.source_scope,
         user_override="inline-approve" if decision_source == "inline-approved" else None,
+        approval_source="inline" if decision_source == "inline-approved" else "approval_center",
     )
     store.add_receipt(receipt)
     store.add_event(
@@ -625,6 +626,7 @@ def block_tool_call(
         artifact_name=artifact.name,
         source_scope=artifact.source_scope,
         user_override="inline-deny" if decision_source == "inline-denied" else None,
+        approval_source="inline" if decision_source == "inline-denied" else "approval_center",
     )
     store.add_receipt(receipt)
     store.add_event(
