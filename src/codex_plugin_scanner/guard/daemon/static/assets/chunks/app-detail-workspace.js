@@ -1,14 +1,20 @@
-import { r as reactExports, J as fetchApprovalPage, K as fetchPolicy, h as harnessDisplayName, j as jsxRuntimeExports, L as HiMiniArrowLeft, i as HiMiniChevronRight, G as GuardHero, A as ActionButton, P as ProofStrip, M as HiMiniHome, n as HiMiniBolt, N as HiMiniAdjustmentsHorizontal, S as SectionLabel, d as formatRelativeTime, m as HiMiniExclamationTriangle, T as Tag, O as detectCategory, Q as CATEGORIES, B as Badge, E as EmptyState, R as HiMiniCloud, U as HiMiniChartBar, l as HiMiniChevronDown } from "../guard-dashboard.js";
+import { r as reactExports, J as fetchApprovalPage, K as fetchPolicy, h as harnessDisplayName, j as jsxRuntimeExports, L as HiMiniArrowLeft, i as HiMiniChevronRight, G as GuardHero, A as ActionButton, P as ProofStrip, M as HiMiniHome, n as HiMiniBolt, N as HiMiniAdjustmentsHorizontal, S as SectionLabel, d as formatRelativeTime, m as HiMiniExclamationTriangle, T as Tag, O as detectCategory, Q as CATEGORIES, B as Badge, E as EmptyState, R as HiMiniCloud, U as HiMiniChartBar, V as runHarnessAction, W as GuardHarnessActionError, X as HiMiniRocketLaunch, c as HiMiniShieldCheck, Y as HiMiniArrowPath, H as HiMiniCheckCircle, Z as HiMiniTrash, l as HiMiniChevronDown, _ as formatHarnessCommand } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
 const tabOrder = ["overview", "activity", "settings"];
 function readTabFromUrl() {
+  const queryTab = new URLSearchParams(window.location.search).get("tab");
+  if (queryTab === "overview" || queryTab === "activity" || queryTab === "settings") return queryTab;
   const hash = window.location.hash.replace("#", "");
   if (hash === "activity" || hash === "settings") return hash;
   return "overview";
 }
 function writeTabToUrl(tab) {
   const url = new URL(window.location.href);
-  url.hash = tab;
+  if (tab === "overview") {
+    url.searchParams.delete("tab");
+  } else {
+    url.searchParams.set("tab", tab);
+  }
   window.history.replaceState({}, "", url.toString());
 }
 function AppDetailWorkspace(props) {
@@ -208,8 +214,10 @@ function AppDetailWorkspace(props) {
               {
                 harness,
                 status,
+                install,
                 harnessPolicies,
                 onClearAppPolicies: props.onClearAppPolicies,
+                onManagedInstallChanged: props.onManagedInstallChanged,
                 policyError,
                 onRetry: loadTabData
               }
@@ -658,6 +666,15 @@ function AppSettingsTab(props) {
   }, [props.onClearAppPolicies, props.harness]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HarnessSetupPanel,
+        {
+          harness: props.harness,
+          install: props.install,
+          status: props.status,
+          onManagedInstallChanged: props.onManagedInstallChanged
+        }
+      ),
       props.policyError && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
@@ -762,15 +779,269 @@ function AppSettingsTab(props) {
         }
       )
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-6", children: props.status === "needs_setup" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Setup needed" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "This app is detected but not active. Run Guard with this app once to complete setup." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl bg-white/60 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs text-brand-dark", children: `npx @hol/guard install ${props.harness}` }) })
-      ] })
-    ] }) }) })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HarnessCoverageAside, { status: props.status, install: props.install })
   ] });
+}
+function HarnessSetupPanel(props) {
+  const [setupState, setSetupState] = reactExports.useState({ kind: "idle" });
+  const [disconnectArmed, setDisconnectArmed] = reactExports.useState(false);
+  const active = props.install?.active === true;
+  const displayName = harnessDisplayName(props.harness);
+  const refreshAfterMutation = reactExports.useCallback(async () => {
+    await props.onManagedInstallChanged?.();
+  }, [props.onManagedInstallChanged]);
+  const loadPlan = reactExports.useCallback(async () => {
+    setSetupState({ kind: "loading", action: active ? "verify" : "install" });
+    try {
+      const result = active ? await runHarnessAction({ harness: props.harness, action: "verify" }) : await runHarnessAction({ harness: props.harness, action: "install", dryRun: true });
+      setSetupState({ kind: "ready", plan: result });
+    } catch (error) {
+      setSetupState({
+        kind: "error",
+        action: active ? "verify" : "install",
+        message: error instanceof Error ? error.message : "Unable to load setup plan."
+      });
+    }
+  }, [active, props.harness]);
+  reactExports.useEffect(() => {
+    void loadPlan();
+  }, [loadPlan]);
+  const runAction = reactExports.useCallback(
+    async (action, options = {}) => {
+      setSetupState({ kind: "loading", action });
+      try {
+        const result = await runHarnessAction({
+          harness: props.harness,
+          action,
+          dryRun: options.dryRun,
+          confirmationPhrase: options.confirmationPhrase
+        });
+        setDisconnectArmed(false);
+        setSetupState({ kind: "success", action, result });
+        if (action !== "verify" && options.dryRun !== true) {
+          await refreshAfterMutation();
+        }
+      } catch (error) {
+        if (error instanceof GuardHarnessActionError) {
+          setSetupState({
+            kind: "error",
+            action,
+            message: setupActionErrorMessage(error),
+            confirmationPhrase: error.payload?.confirmation_phrase,
+            confirmCommand: error.payload?.confirm_command
+          });
+        } else {
+          setSetupState({
+            kind: "error",
+            action,
+            message: error instanceof Error ? error.message : "Harness action failed."
+          });
+        }
+      }
+    },
+    [props.harness, refreshAfterMutation]
+  );
+  const handleConnect = reactExports.useCallback(() => {
+    void runAction("install", { dryRun: false });
+  }, [runAction]);
+  const handleVerify = reactExports.useCallback(() => {
+    void runAction("verify");
+  }, [runAction]);
+  const handleRepair = reactExports.useCallback(() => {
+    void runAction("repair", { dryRun: false });
+  }, [runAction]);
+  const handleRequestDisconnect = reactExports.useCallback(() => {
+    setDisconnectArmed(true);
+    void runAction("uninstall", { dryRun: true });
+  }, [runAction]);
+  const handleConfirmDisconnect = reactExports.useCallback(() => {
+    const phrase = setupState.kind === "error" && setupState.confirmationPhrase ? setupState.confirmationPhrase : `disconnect-${props.harness}`;
+    void runAction("uninstall", { dryRun: false, confirmationPhrase: phrase });
+  }, [props.harness, runAction, setupState]);
+  const handleCancelDisconnect = reactExports.useCallback(() => {
+    setDisconnectArmed(false);
+    void loadPlan();
+  }, [loadPlan]);
+  const busy = setupState.kind === "loading";
+  const currentPlan = setupState.kind === "ready" ? setupState.plan : setupState.kind === "success" ? setupState.result : null;
+  const steps = setupStepsFor(currentPlan, active);
+  const notes = setupNotesFor(currentPlan);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/15 bg-gradient-to-br from-brand-blue/[0.055] via-white to-brand-dark/[0.025] p-4 shadow-sm sm:p-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Local harness install" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "mt-2 text-lg font-semibold text-brand-dark", children: active ? `${displayName} is managed by Guard` : `Connect ${displayName} from this dashboard` }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm text-muted-foreground", children: active ? "Run safe checks, repair managed hooks, or disconnect this app without leaving the dashboard." : "Guard will install the local managed hooks through the daemon. No copied shell command required." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap gap-2", children: [
+        !active && /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleConnect, disabled: busy, "data-primary": "true", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniRocketLaunch, { className: "h-4 w-4", "aria-hidden": "true" }),
+          busy && setupState.kind === "loading" && setupState.action === "install" ? "Connecting..." : "Connect app"
+        ] }),
+        active && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleVerify, disabled: busy, variant: "outline", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4", "aria-hidden": "true" }),
+            "Test"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: handleRepair, disabled: busy, variant: "outline", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4", "aria-hidden": "true" }),
+            "Repair"
+          ] })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 grid gap-3 md:grid-cols-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Install state", value: active ? "Protected" : props.status === "observed" ? "Observed" : "Not connected", active }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Config source", value: props.install?.workspace ?? "Local machine" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SetupMetric, { label: "Last changed", value: props.install ? formatRelativeTime(props.install.updated_at) : "Not yet" })
+    ] }),
+    setupState.kind === "error" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
+          "Could not finish ",
+          setupActionLabel(setupState.action)
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 break-words text-sm text-muted-foreground", children: setupState.message }),
+        setupState.confirmCommand && /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-3 block overflow-x-auto rounded-lg bg-white/80 px-3 py-2 font-mono text-xs text-brand-dark", children: setupState.confirmCommand })
+      ] })
+    ] }) }),
+    setupState.kind === "success" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 rounded-xl border border-brand-green/20 bg-brand-green/[0.045] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-green", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: setupSuccessTitle(setupState.action, displayName) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: setupState.action === "verify" ? "Safe local check completed. No app config was changed." : "Dashboard action completed through the local Guard daemon." })
+      ] })
+    ] }) }),
+    steps.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 space-y-2", children: steps.map((step) => /* @__PURE__ */ jsxRuntimeExports.jsx(HarnessSetupStepRow, { step }, step.step_id)) }),
+    notes.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-xl border border-slate-200/70 bg-white/80 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-widest text-slate-400", children: "What changed" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1.5", children: notes.slice(0, 4).map((note) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "break-words text-xs leading-relaxed text-muted-foreground", children: note }, note)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200/70 pt-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => void loadPlan(),
+          disabled: busy,
+          className: "inline-flex min-h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
+          children: "Refresh setup"
+        }
+      ),
+      active && !disconnectArmed && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          onClick: handleRequestDisconnect,
+          disabled: busy,
+          className: "inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-brand-attention/20 bg-white px-3 text-sm font-medium text-brand-attention transition-colors hover:bg-brand-attention/[0.04] disabled:opacity-50",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-4 w-4", "aria-hidden": "true" }),
+            "Disconnect"
+          ]
+        }
+      ),
+      active && disconnectArmed && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: handleConfirmDisconnect,
+            disabled: busy,
+            className: "inline-flex min-h-10 items-center rounded-lg bg-brand-attention px-3 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-50",
+            children: busy && setupState.kind === "loading" && setupState.action === "uninstall" ? "Disconnecting..." : "Confirm disconnect"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: handleCancelDisconnect,
+            disabled: busy,
+            className: "inline-flex min-h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
+            children: "Keep connected"
+          }
+        )
+      ] })
+    ] })
+  ] });
+}
+function HarnessSetupStepRow({ step }) {
+  const commandText = formatHarnessCommand(step.command);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-200/70 bg-white/80 p-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-blue/10 text-brand-blue", children: step.writes_config ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: step.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs leading-relaxed text-muted-foreground", children: step.body }),
+      commandText && /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-2 block overflow-x-auto rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-brand-dark", children: commandText })
+    ] })
+  ] }) });
+}
+function HarnessCoverageAside(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Protection model" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "Dashboard actions call the local Guard daemon directly. CLI commands are shown only as fallback copy for terminals or automation." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-2 text-xs text-muted-foreground", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Runs locally on this machine." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Requires the one-time Guard token in this dashboard session." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Writes only the harness-managed Guard config for this app." })
+      ] })
+    ] }),
+    props.install?.manifest ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Managed files" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ManifestPathList, { manifest: props.install.manifest })
+    ] }) : props.status !== "active" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 sm:p-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "First run" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "Connect this app here first. Then launch the app normally through the Guard wrapper so risky actions pause for review." })
+    ] }) : null
+  ] });
+}
+function ManifestPathList({ manifest }) {
+  const pathEntries = Object.entries(manifest).filter(
+    ([key, value]) => key.endsWith("_path") && typeof value === "string" && value.length > 0
+  );
+  if (pathEntries.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "Guard has no managed file paths to show for this app yet." });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-3 space-y-2", children: pathEntries.slice(0, 5).map(([key, value]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[10px] font-semibold uppercase tracking-widest text-slate-400", children: key.replace(/_/g, " ") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 break-all font-mono text-xs text-brand-dark", children: String(value) })
+  ] }, key)) });
+}
+function SetupMetric(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 rounded-xl border border-slate-200/70 bg-white/80 p-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[10px] font-semibold uppercase tracking-widest text-slate-400", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 truncate text-sm font-semibold ${props.active ? "text-brand-green" : "text-brand-dark"}`, children: props.value })
+  ] });
+}
+function setupStepsFor(result, active) {
+  if (!result) return [];
+  if (Array.isArray(result.steps) && result.steps.length > 0) return result.steps;
+  if (result.verification?.steps) return result.verification.steps;
+  if (!active && result.contract?.setup_steps) return result.contract.setup_steps;
+  if (active && result.contract?.verify_steps) return result.contract.verify_steps;
+  return [];
+}
+function setupNotesFor(result) {
+  const manifest = result?.managed_install?.manifest;
+  const notes = manifest?.["notes"];
+  return Array.isArray(notes) ? notes.filter((note) => typeof note === "string") : [];
+}
+function setupActionLabel(action) {
+  if (action === "install") return "connect";
+  if (action === "verify") return "test";
+  if (action === "repair") return "repair";
+  return "disconnect";
+}
+function setupActionErrorMessage(error) {
+  if (error.payload?.error === "confirmation_required") {
+    return "Disconnect requires confirmation so accidental clicks cannot remove local protection.";
+  }
+  return error.payload?.error ?? error.message;
+}
+function setupSuccessTitle(action, displayName) {
+  if (action === "install") return `${displayName} connected`;
+  if (action === "verify") return `${displayName} test complete`;
+  if (action === "repair") return `${displayName} repaired`;
+  return `${displayName} disconnected`;
 }
 function ActivitySparkline({ receipts }) {
   const days = 7;
