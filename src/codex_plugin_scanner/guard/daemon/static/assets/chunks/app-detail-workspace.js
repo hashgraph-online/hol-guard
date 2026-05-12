@@ -261,6 +261,26 @@ function AppStatusBadge({ status }) {
   if (status === "observed") return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Observed" });
   return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Unknown" });
 }
+function firstRunSteps(harness) {
+  const displayName = harnessDisplayName(harness);
+  return [
+    {
+      index: 1,
+      title: `Connect ${displayName}`,
+      body: "Use the dashboard action. Guard asks the local daemon to write only managed app configuration."
+    },
+    {
+      index: 2,
+      title: `Restart ${displayName}`,
+      body: "Restart the app once so the new hooks and wrappers load in the next session."
+    },
+    {
+      index: 3,
+      title: "Run your agent flow",
+      body: "When a risky command, prompt, or tool action appears, Guard pauses it and sends the decision to Review."
+    }
+  ];
+}
 function AppOverviewTab(props) {
   const showFirstRunGuide = shouldShowFirstRunGuide({
     status: props.status,
@@ -434,26 +454,6 @@ function firstRunIntro(harness) {
     return "Guard writes the Cursor-specific local configuration through the daemon. After connecting, restart Cursor so the protected hooks load before your next agent run.";
   }
   return `Guard writes the ${harnessDisplayName(harness)} local configuration through the daemon. After connecting, restart the app so protected hooks load before your next agent run.`;
-}
-function firstRunSteps(harness) {
-  const displayName = harnessDisplayName(harness);
-  return [
-    {
-      index: 1,
-      title: `Connect ${displayName}`,
-      body: "Use the dashboard action. Guard asks the local daemon to write only managed app configuration."
-    },
-    {
-      index: 2,
-      title: `Restart ${displayName}`,
-      body: "Restart the app once so the new hooks and wrappers load in the next session."
-    },
-    {
-      index: 3,
-      title: "Run your agent flow",
-      body: "When a risky command, prompt, or tool action appears, Guard pauses it and sends the decision to Review."
-    }
-  ];
 }
 function AppActivityTab(props) {
   const [filter, setFilter] = reactExports.useState("all");
