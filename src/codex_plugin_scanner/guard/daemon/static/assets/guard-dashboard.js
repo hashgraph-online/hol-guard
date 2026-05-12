@@ -17240,6 +17240,13 @@ function ReviewWorkspace(props) {
   const [sortDirection, setSortDirection] = reactExports.useState("newest");
   const [semanticFilter, setSemanticFilter] = reactExports.useState("all");
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
+  const handleOpenRequest = reactExports.useCallback((id) => {
+    props.onOpenRequest(id);
+    setMobileQueueOpen(false);
+  }, [props.onOpenRequest]);
+  const handleToggleMobileQueue = reactExports.useCallback(() => {
+    setMobileQueueOpen((v) => !v);
+  }, []);
   const filteredRequests = reactExports.useMemo(() => {
     let items = requests;
     if (semanticFilter !== "all") {
@@ -17300,7 +17307,7 @@ function ReviewWorkspace(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "md:hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
-        onClick: () => setMobileQueueOpen((v) => !v),
+        onClick: handleToggleMobileQueue,
         className: "flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark",
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
@@ -17328,10 +17335,7 @@ function ReviewWorkspace(props) {
           onSearchTermChange: setSearchTerm,
           onSortDirectionChange: setSortDirection,
           onSemanticFilterChange: setSemanticFilter,
-          onOpenRequest: (id) => {
-            props.onOpenRequest(id);
-            setMobileQueueOpen(false);
-          },
+          onOpenRequest: handleOpenRequest,
           ref: queueRef
         }
       ) }),

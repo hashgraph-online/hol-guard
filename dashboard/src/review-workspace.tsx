@@ -138,6 +138,15 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const [semanticFilter, setSemanticFilter] = useState<SemanticGroupId>("all");
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
 
+  const handleOpenRequest = useCallback((id: string) => {
+    props.onOpenRequest(id);
+    setMobileQueueOpen(false);
+  }, [props.onOpenRequest]);
+
+  const handleToggleMobileQueue = useCallback(() => {
+    setMobileQueueOpen((v) => !v);
+  }, []);
+
   const filteredRequests = useMemo(() => {
     let items = requests;
     if (semanticFilter !== "all") {
@@ -212,7 +221,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       {/* Mobile queue toggle */}
       <div className="md:hidden">
         <button
-          onClick={() => setMobileQueueOpen((v) => !v)}
+          onClick={handleToggleMobileQueue}
           className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark"
         >
           <span>Queue ({filteredRequests.length})</span>
@@ -235,10 +244,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
             onSearchTermChange={setSearchTerm}
             onSortDirectionChange={setSortDirection}
             onSemanticFilterChange={setSemanticFilter}
-            onOpenRequest={(id) => {
-              props.onOpenRequest(id);
-              setMobileQueueOpen(false);
-            }}
+            onOpenRequest={handleOpenRequest}
             ref={queueRef}
           />
         </div>
