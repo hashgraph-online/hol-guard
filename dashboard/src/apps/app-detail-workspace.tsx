@@ -90,7 +90,7 @@ function writeTabToUrl(tab: TabKey) {
 export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<TabKey>(readTabFromUrl);
   const [tabDirection, setTabDirection] = useState<"left" | "right">("right");
-  const touchStartX = useRef<number | null>(null);
+  const tabRefs = useRef<Record<TabKey, HTMLButtonElement | null>>({ overview: null, activity: null, settings: null });
 
   useEffect(() => {
     function handleHashChange() {
@@ -259,8 +259,13 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
         ]}
       />
 
-      <div className="space-y-2">
-        <div className="flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm">
+      <div
+        className="relative"
+        role="tablist"
+        aria-label="App detail tabs"
+        onKeyDown={handleTabKeyDown}
+      >
+        <div className="flex gap-1 border-b border-slate-200/70">
           {(
             [
               { key: "overview" as TabKey, label: "Overview", icon: HiMiniHome },
@@ -269,32 +274,40 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
             ] as const
           ).map((t) => {
             const Icon = t.icon;
-            const isActive = activeTab === t.key;
+            const isActiveTab = activeTab === t.key;
             return (
               <button
                 key={t.key}
+                ref={(el) => { if (el) tabRefs.current[t.key] = el; }}
+                role="tab"
+                aria-selected={isActiveTab}
+                aria-label={t.label}
+                aria-controls={`tabpanel-${t.key}`}
+                id={`tab-${t.key}`}
+                tabIndex={isActiveTab ? 0 : -1}
                 onClick={() => handleTabChange(t.key)}
-                className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-                  isActive
-                    ? "bg-brand-blue text-white shadow-sm"
-                    : "text-brand-dark hover:bg-slate-50"
+                className={`group relative flex min-w-[44px] items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                  isActiveTab
+                    ? "text-brand-blue"
+                    : "text-brand-dark hover:text-brand-blue"
                 }`}
               >
-                <Icon className="h-4 w-4" />
-                {t.label}
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">{t.label}</span>
+                {isActiveTab && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-blue" />
+                )}
               </button>
             );
           })}
         </div>
-        <p className="px-1 text-[11px] text-muted-foreground lg:hidden">
-          Swipe or tap tabs to switch views
-        </p>
       </div>
 
       <div
         className="min-h-[300px]"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
+        role="tabpanel"
+        id={`tabpanel-${activeTab}`}
+        aria-labelledby={`tab-${activeTab}`}
       >
         {isLoading && (
           <div className="space-y-4">
@@ -358,22 +371,24 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
     writeTabToUrl(next);
   }
 
-  function handleTouchStart(e: React.TouchEvent) {
-    touchStartX.current = e.changedTouches[0].screenX;
-  }
+  function handleTabKeyDown(e: React.KeyboardEvent) {
+    const focused = document.activeElement as HTMLElement | null;
+    const focusedTab = focused?.getAttribute("role") === "tab" ? (focused.id.replace("tab-", "") as TabKey) : activeTab;
+    const currentIndex = tabOrder.indexOf(focusedTab);
+    let nextIndex = -1;
 
-  function handleTouchEnd(e: React.TouchEvent) {
-    if (touchStartX.current === null) return;
-    const endX = e.changedTouches[0].screenX;
-    const diff = touchStartX.current - endX;
-    const threshold = 50;
-    const currentIndex = tabOrder.indexOf(activeTab);
-    if (diff > threshold && currentIndex < tabOrder.length - 1) {
-      handleTabChange(tabOrder[currentIndex + 1]);
-    } else if (diff < -threshold && currentIndex > 0) {
-      handleTabChange(tabOrder[currentIndex - 1]);
+    if (e.key === "ArrowRight") nextIndex = Math.min(currentIndex + 1, tabOrder.length - 1);
+    else if (e.key === "ArrowLeft") nextIndex = Math.max(currentIndex - 1, 0);
+    else if (e.key === "Home") nextIndex = 0;
+    else if (e.key === "End") nextIndex = tabOrder.length - 1;
+
+    if (nextIndex >= 0 && nextIndex < tabOrder.length) {
+      e.preventDefault();
+      const nextTab = tabOrder[nextIndex];
+      handleTabChange(nextTab);
+      const nextEl = tabRefs.current[nextTab];
+      if (nextEl) nextEl.focus();
     }
-    touchStartX.current = null;
   }
 }
 
