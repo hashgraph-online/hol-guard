@@ -13572,6 +13572,32 @@ def test_codex_read_only_source_inspection_rejects_git_diff_global_textconv_conf
     )
 
 
+def test_codex_read_only_source_inspection_rejects_git_diff_included_config_with_comment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
+    included_config = tmp_path / "included-gitconfig"
+    _write_text(
+        included_config,
+        """
+[diff "guard"]
+    textconv = /tmp/guard-textconv
+""".strip(),
+    )
+    global_config = tmp_path / "global-gitconfig"
+    _write_text(global_config, f"[include]\n    path = {included_config} # required by local tools\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
 def test_codex_read_only_source_inspection_allows_git_diff_with_external_helpers_disabled(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

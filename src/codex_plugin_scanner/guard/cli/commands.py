@@ -5900,11 +5900,37 @@ def _git_config_include_paths(config_text: str, *, base_dir: Path) -> tuple[Path
         key_match = re.match(r"(?i)^path\s*=\s*(.+)$", line)
         if key_match is None:
             continue
-        include_path = Path(key_match.group(1).strip().strip("'\"")).expanduser()
+        include_path = Path(_git_config_value_without_inline_comment(key_match.group(1))).expanduser()
         if not include_path.is_absolute():
             include_path = (base_dir / include_path).resolve()
         paths.append(include_path)
     return tuple(paths)
+
+
+def _git_config_value_without_inline_comment(raw_value: str) -> str:
+    value = raw_value.strip()
+    if not value:
+        return value
+    quote = value[0] if value[0] in {"'", '"'} else None
+    if quote is not None:
+        escaped = False
+        parsed: list[str] = []
+        for char in value[1:]:
+            if escaped:
+                parsed.append(char)
+                escaped = False
+                continue
+            if char == "\\":
+                escaped = True
+                continue
+            if char == quote:
+                return "".join(parsed)
+            parsed.append(char)
+        return "".join(parsed)
+    for index, char in enumerate(value):
+        if char in {"#", ";"} and (index == 0 or value[index - 1].isspace()):
+            return value[:index].strip()
+    return value
 
 
 def _git_config_enables_diff_helper(config_text: str) -> bool:
