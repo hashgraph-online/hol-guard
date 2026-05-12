@@ -338,7 +338,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
       <EvidenceInsightStrip metrics={metrics} />
 
       <EvidenceFilterBar
-        filters={effectiveFilters}
+        filters={filters}
         onChange={handleFilterChange}
         totalCount={receiptItems.length}
         filteredCount={filtered.length}

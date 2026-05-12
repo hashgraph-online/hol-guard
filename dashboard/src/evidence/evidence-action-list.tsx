@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import type React from "react";
 import {
   HiMiniShieldCheck,
   HiMiniNoSymbol,
@@ -94,12 +95,24 @@ function ActionRow({
     [category, onFilterCategory]
   );
 
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        onSelect(receipt.receipt_id);
+      }
+    },
+    [receipt.receipt_id, onSelect]
+  );
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={handleClick}
+      onKeyDown={handleKeyDown}
       aria-selected={isSelected}
-      className={`w-full text-left flex items-center gap-3 px-4 py-3 transition-colors border-b border-slate-100 last:border-0 hover:bg-slate-50 focus:outline-none focus:bg-slate-50 ${
+      className={`w-full text-left flex items-center gap-3 px-4 py-3 transition-colors border-b border-slate-100 last:border-0 hover:bg-slate-50 focus:outline-none focus:bg-slate-50 cursor-pointer ${
         isSelected ? "bg-brand-blue/5 border-l-2 border-l-brand-blue" : ""
       }`}
     >
@@ -142,7 +155,7 @@ function ActionRow({
           </span>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
