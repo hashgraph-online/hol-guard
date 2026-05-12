@@ -649,7 +649,7 @@ function ReviewDecisionCard(props: {
         setPendingAction(null);
       }
     },
-    [item?.request_id, scope, props.onResolve]
+    [item, scope, props.onResolve]
   );
 
   const handleRequestResolve = useCallback(
