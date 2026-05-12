@@ -16514,6 +16514,9 @@ function resolveQueueCategoryId(item) {
   if (fileUploadCommand(command, text)) {
     return "file_upload";
   }
+  if (inboundCopyCommand(command)) {
+    return "network";
+  }
   if (processControlCommand(command)) {
     return "process_control";
   }
@@ -16617,11 +16620,11 @@ function hasExternalSink(text, command) {
 }
 function networkCommand(command, text) {
   const normalized = command.toLowerCase();
-  return /\b(?:curl|wget|httpie|nc|netcat|ssh|scp|rsync|ftp|sftp)\b/.test(normalized) || /https?:\/\//.test(normalized) || textIncludesAny(text, ["network host", "outbound", "webhook", "https://", "http://"]);
+  return /(?:^|\s)(?:curl|wget|httpie|nc|netcat|scp|rsync|ftp|sftp)(?:\s|$)/.test(normalized) || /(?:^|\s)ssh\s+/.test(normalized) || /https?:\/\//.test(normalized) || textIncludesAny(text, ["network host", "outbound", "webhook", "https://", "http://"]);
 }
 function fileUploadCommand(command, text) {
   const normalized = command.toLowerCase();
-  return /\b(?:scp|rsync|sftp|ftp)\b/.test(normalized) || /\bcurl\b[\s\S]*(?:--upload-file|\s-t\s+\S+|--form\s+\S*@|-f\s+\S*@|--data(?:-binary|-raw|-urlencode)?\s+@)/.test(normalized) || /\baws\s+s3\s+cp\b/.test(normalized) || /\bgsutil\s+cp\b/.test(normalized) || textIncludesAny(text, ["upload", "copy-out", "external sink"]);
+  return outboundCopyCommand(normalized) || /\bcurl\b[\s\S]*(?:--upload-file|\s-t\s+\S+|--form\s+\S*@|-f\s+\S*@|--data(?:-binary|-raw|-urlencode)?\s+@)/.test(normalized) || textIncludesAny(text, ["upload", "copy-out", "external sink"]);
 }
 function systemPromptAccessText(text) {
   return textIncludesAny(text, [
@@ -16665,9 +16668,57 @@ function encodedCommand(text) {
     "base64",
     "openssl enc",
     "xxd -r",
-    "decode-and-exec",
-    "eval"
+    "decode-and-exec"
   ]);
+}
+function outboundCopyCommand(command) {
+  const tokens = shellTokens(command);
+  const awsIndex = findSequence(tokens, ["aws", "s3", "cp"]);
+  if (awsIndex >= 0) {
+    return isOutboundCopy(tokens[awsIndex + 3], tokens[awsIndex + 4]);
+  }
+  const gsutilIndex = findSequence(tokens, ["gsutil", "cp"]);
+  if (gsutilIndex >= 0) {
+    return isOutboundCopy(tokens[gsutilIndex + 2], tokens[gsutilIndex + 3]);
+  }
+  const copyIndex = tokens.findIndex((token) => token === "scp" || token === "rsync");
+  if (copyIndex >= 0) {
+    const args = tokens.slice(copyIndex + 1).filter((token) => !token.startsWith("-"));
+    return isOutboundCopy(args[0], args[1]);
+  }
+  return false;
+}
+function inboundCopyCommand(command) {
+  const tokens = shellTokens(command);
+  const awsIndex = findSequence(tokens, ["aws", "s3", "cp"]);
+  if (awsIndex >= 0) {
+    return isInboundCopy(tokens[awsIndex + 3], tokens[awsIndex + 4]);
+  }
+  const gsutilIndex = findSequence(tokens, ["gsutil", "cp"]);
+  if (gsutilIndex >= 0) {
+    return isInboundCopy(tokens[gsutilIndex + 2], tokens[gsutilIndex + 3]);
+  }
+  const copyIndex = tokens.findIndex((token) => token === "scp" || token === "rsync");
+  if (copyIndex >= 0) {
+    const args = tokens.slice(copyIndex + 1).filter((token) => !token.startsWith("-"));
+    return isInboundCopy(args[0], args[1]);
+  }
+  return false;
+}
+function shellTokens(command) {
+  return (command.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((token) => token.replace(/^['"]|['"]$/g, ""));
+}
+function findSequence(tokens, sequence) {
+  return tokens.findIndex((_, index) => sequence.every((part, offset) => tokens[index + offset] === part));
+}
+function isOutboundCopy(source, destination) {
+  return source !== void 0 && destination !== void 0 && !remotePath(source) && remotePath(destination);
+}
+function isInboundCopy(source, destination) {
+  return source !== void 0 && destination !== void 0 && remotePath(source) && !remotePath(destination);
+}
+function remotePath(value) {
+  return /^(?:s3|gs):\/\//.test(value) || /^[\w.-]+@?[\w.-]+:/.test(value);
 }
 function generatedInventoryEdit(command, text) {
   const haystack = `${command} ${text}`.toLowerCase();

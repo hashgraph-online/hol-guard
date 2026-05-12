@@ -773,3 +773,36 @@ assert(
   resolveQueueCategory(gitRestoreStagedItem).label === "Git workspace operation",
   "T-QS-77: git restore --staged classifies as git operation, not file delete"
 );
+
+const cloudDownloadItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-cloud-download",
+  action_envelope_json: { ...shellEnvelope, command: "aws s3 cp s3://audit-bucket/report.json ./report.json" },
+};
+
+assert(
+  resolveQueueCategory(cloudDownloadItem).label === "Network request",
+  "T-QS-78: cloud remote-to-local copy classifies as network, not upload"
+);
+
+const scpDownloadItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-scp-download",
+  action_envelope_json: { ...shellEnvelope, command: "scp host:/tmp/log ./log" },
+};
+
+assert(
+  resolveQueueCategory(scpDownloadItem).label === "Network request",
+  "T-QS-79: scp remote-to-local copy classifies as network, not upload"
+);
+
+const evalSetupItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-eval-setup",
+  action_envelope_json: { ...shellEnvelope, command: "eval \"$(ssh-agent -s)\"" },
+};
+
+assert(
+  resolveQueueCategory(evalSetupItem).label === "Shell command",
+  "T-QS-80: normal eval setup snippets do not classify as encoded shell"
+);
