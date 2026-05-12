@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash as compute_artifact_hash
 from codex_plugin_scanner.guard.consumer import evaluate_detection
@@ -71,7 +69,11 @@ class TestDecideAction:
         assert result == "allow"
 
     def test_changed_triggers_changed_hash_action_when_no_configured_policy(self) -> None:
-        config = GuardConfig(guard_home=Path("/tmp/test-guard"), workspace=None, changed_hash_action="require-reapproval")
+        config = GuardConfig(
+            guard_home=Path("/tmp/test-guard"),
+            workspace=None,
+            changed_hash_action="require-reapproval",
+        )
         result = decide_action(
             configured_action=None,
             default_action="allow",
@@ -81,7 +83,11 @@ class TestDecideAction:
         assert result == "require-reapproval"
 
     def test_configured_allow_beats_changed_flag(self) -> None:
-        config = GuardConfig(guard_home=Path("/tmp/test-guard"), workspace=None, changed_hash_action="require-reapproval")
+        config = GuardConfig(
+            guard_home=Path("/tmp/test-guard"),
+            workspace=None,
+            changed_hash_action="require-reapproval",
+        )
         result = decide_action(
             configured_action="allow",
             default_action="allow",
@@ -111,7 +117,11 @@ class TestDecideAction:
         assert result == "block"
 
     def test_no_policy_uses_config_default(self) -> None:
-        config = GuardConfig(guard_home=Path("/tmp/test-guard"), workspace=None, default_action="warn")
+        config = GuardConfig(
+            guard_home=Path("/tmp/test-guard"),
+            workspace=None,
+            default_action="warn",
+        )
         result = decide_action(
             configured_action=None,
             default_action=None,
@@ -121,7 +131,11 @@ class TestDecideAction:
         assert result == "warn"
 
     def test_explicit_default_action_overrides_config(self) -> None:
-        config = GuardConfig(guard_home=Path("/tmp/test-guard"), workspace=None, default_action="warn")
+        config = GuardConfig(
+            guard_home=Path("/tmp/test-guard"),
+            workspace=None,
+            default_action="warn",
+        )
         result = decide_action(
             configured_action=None,
             default_action="allow",
