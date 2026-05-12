@@ -69,6 +69,11 @@ import {
   bulkApprovePrimaryIds,
   type QueueSortDirection,
 } from "./queue-state";
+import {
+  buildDecisionPayload,
+  filterScopeChoicesForRequest,
+  normalizeDecisionScope,
+} from "./approval-scopes";
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
@@ -201,8 +206,8 @@ export function ApprovalCenterLayout(props: LayoutProps) {
         />
       )}
       <div className={`flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`}>
-        <main id="main-content" className="flex-1 p-6 lg:p-10" tabIndex={-1}>
-          <div className="mx-auto max-w-6xl">
+        <main id="main-content" className="flex-1 p-4 sm:p-6 lg:p-8" tabIndex={-1}>
+          <div className={props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl"}>
             {props.view === "home" ? (
               props.homeContent
             ) : props.view === "evidence" ? (
@@ -395,7 +400,6 @@ function QueueWorkspace(props: {
         activeRequestId={props.activeRequestId}
         requests={props.requests.items}
         progressCopy={progressCopy}
-        runtime={props.runtime}
       />
       {showSideBySide ? (
         <div className="grid gap-6 lg:grid-cols-[300px_1fr] lg:items-start">
@@ -440,10 +444,8 @@ function QueueHeader(props: {
   activeRequestId: string | null;
   requests: GuardApprovalRequest[];
   progressCopy: string;
-  runtime: RuntimeState;
 }) {
   const activeItem = props.requests.find((item) => item.request_id === props.activeRequestId) ?? props.requests[0] ?? null;
-  const runtimeLabel = props.runtime.kind === "ready" ? props.runtime.snapshot.cloud_state_label : "Local runtime";
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
       <div className="space-y-1">
@@ -454,19 +456,11 @@ function QueueHeader(props: {
           HOL Guard paused this before it ran. Review what was stopped, then approve or block it.
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {props.progressCopy.length > 0 && (
-          <span
-            className="font-mono text-xs font-semibold text-muted-foreground"
-            aria-label={`Queue position: ${props.progressCopy}`}
-          >
-            {props.progressCopy}
-          </span>
-        )}
-        <Badge tone="default">{props.requests.length} waiting</Badge>
-        {activeItem ? <Tag tone="blue">{harnessDisplayName(activeItem.harness)}</Tag> : null}
-        <Tag tone="slate">{runtimeLabel}</Tag>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        {props.progressCopy.length > 0 ? `${props.progressCopy} · ` : ""}
+        {props.requests.length} waiting
+        {activeItem ? ` · from ${harnessDisplayName(activeItem.harness)}` : ""}
+      </p>
     </div>
   );
 }
@@ -481,6 +475,7 @@ function QueueBrowser(props: {
   const [harnessFilter, setHarnessFilter] = useState("all");
   const [sortDirection, setSortDirection] = useState<QueueSortDirection>("newest");
   const [page, setPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
   const harnesses = Array.from(new Set(props.items.map((item) => item.harness))).sort();
 
   const filteredItems = useMemo(() => {
@@ -497,14 +492,6 @@ function QueueBrowser(props: {
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * queuePageSize;
   const visibleGroups = groups.slice(pageStart, pageStart + queuePageSize);
-
-  const allGroups = useMemo(() => groupDuplicates(props.items), [props.items]);
-  const nextUpItem = useMemo(() => {
-    if (allGroups.length < 2 || props.activeRequestId === null) return null;
-    const activeIdx = allGroups.findIndex((g) => g.primary.request_id === props.activeRequestId);
-    if (activeIdx < 0 || activeIdx >= allGroups.length - 1) return null;
-    return allGroups[activeIdx + 1]?.primary ?? null;
-  }, [allGroups, props.activeRequestId]);
 
   useEffect(() => {
     setPage(1);
@@ -575,24 +562,45 @@ function QueueBrowser(props: {
             className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           />
         </label>
-        {harnesses.length >= 2 && (
-          <QueueChipFilter
-            harnesses={harnesses}
-            activeFilter={harnessFilter}
-            onFilterChange={setHarnessFilter}
-          />
+        <button
+          onClick={() => setShowFilters((v) => !v)}
+          className="flex items-center gap-1 text-xs font-medium text-brand-blue transition-colors hover:text-brand-dark"
+        >
+          {showFilters ? "Hide filters" : "Show filters"}
+          {(searchTerm || harnessFilter !== "all" || sortDirection !== "newest") && !showFilters && (
+            <span className="ml-1 h-1.5 w-1.5 rounded-full bg-brand-attention" />
+          )}
+        </button>
+        {showFilters && (
+          <div className="space-y-2">
+            {harnesses.length >= 2 && (
+              <QueueChipFilter
+                harnesses={harnesses}
+                activeFilter={harnessFilter}
+                onFilterChange={setHarnessFilter}
+              />
+            )}
+            <label className="block">
+              <span className="sr-only">Sort order</span>
+              <select
+                value={sortDirection}
+                onChange={handleSortChange}
+                className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+              </select>
+            </label>
+            {(searchTerm || harnessFilter !== "all" || sortDirection !== "newest") && (
+              <button
+                onClick={() => { setSearchTerm(""); setHarnessFilter("all"); setSortDirection("newest"); }}
+                className="text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
         )}
-        <label className="block">
-          <span className="sr-only">Sort order</span>
-          <select
-            value={sortDirection}
-            onChange={handleSortChange}
-            className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-          </select>
-        </label>
       </div>
       <div className="divide-y divide-slate-200/70 overflow-hidden rounded-2xl border border-slate-200/70 bg-white/75 shadow-sm">
         {visibleGroups.length > 0 ? (
@@ -601,11 +609,6 @@ function QueueBrowser(props: {
               key={group.primary.request_id}
               group={group}
               activeRequestId={props.activeRequestId}
-              nextUpItem={
-                nextUpItem !== null && group.primary.request_id === props.activeRequestId
-                  ? nextUpItem
-                  : null
-              }
               onOpenRequest={props.onOpenRequest}
             />
           ))
@@ -631,7 +634,6 @@ function QueueBrowser(props: {
 function QueueCardRow(props: {
   group: ReturnType<typeof groupDuplicates>[number];
   activeRequestId: string | null;
-  nextUpItem: GuardApprovalRequest | null;
   onOpenRequest: (requestId: string) => void;
 }) {
   const handleClick = useCallback(() => {
@@ -639,22 +641,12 @@ function QueueCardRow(props: {
   }, [props.onOpenRequest, props.group.primary.request_id]);
 
   return (
-    <div>
-      <QueueCard
-        item={props.group.primary}
-        duplicateCount={props.group.duplicateCount}
-        active={props.group.primary.request_id === props.activeRequestId}
-        onClick={handleClick}
-      />
-      {props.nextUpItem !== null && (
-        <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-2">
-          <p className="truncate text-[11px] text-muted-foreground">
-            <span className="font-semibold">Next:</span>{" "}
-            {buildNextUpChipText(props.nextUpItem)}
-          </p>
-        </div>
-      )}
-    </div>
+    <QueueCard
+      item={props.group.primary}
+      duplicateCount={props.group.duplicateCount}
+      active={props.group.primary.request_id === props.activeRequestId}
+      onClick={handleClick}
+    />
   );
 }
 
@@ -682,23 +674,17 @@ function QueueCard(props: { item: GuardApprovalRequest; duplicateCount: number; 
            />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-brand-dark">{actionDisplayTitle(props.item)}</p>
-            <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
-              {displayArtifactName(props.item)}
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {harnessDisplayName(props.item.harness)} · {summary}
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <PolicyBadge action={props.item.policy_action} />
-          {props.duplicateCount > 0 && (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
-              +{props.duplicateCount} repeat{props.duplicateCount !== 1 ? "s" : ""} collapsed
-            </span>
-          )}
-        </div>
+        {props.duplicateCount > 0 && (
+          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
+            +{props.duplicateCount}
+          </span>
+        )}
       </div>
-      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-        {harnessDisplayName(props.item.harness)} · {summary}
-      </p>
     </button>
   );
 }
@@ -763,7 +749,7 @@ function DecisionWorkspace(props: {
           bannerTimerRef.current = null;
         }
       }
-      setScope(props.detail.item.recommended_scope);
+      setScope(normalizeDecisionScope(props.detail.item, props.detail.item.recommended_scope));
       setErrorMessage(null);
       setSubmitting(null);
     }
@@ -778,21 +764,19 @@ function DecisionWorkspace(props: {
   }, []);
 
   const readyItem = props.detail.kind === "ready" ? props.detail.item : null;
-  const readyRequestId = readyItem?.request_id ?? "";
-  const readyWorkspace = readyItem?.workspace ?? undefined;
 
   const handleResolve = useCallback(
     async (action: "allow" | "block") => {
+      if (readyItem === null) return;
       setSubmitting(action);
       setErrorMessage(null);
       try {
-        await props.onResolve({
-          requestId: readyRequestId,
+        await props.onResolve(buildDecisionPayload({
+          item: readyItem,
           action,
           scope,
           reason,
-          workspace: scope === "workspace" ? readyWorkspace : undefined,
-        });
+        }));
         setResolvedState("decided");
         setResolvedBanner(action);
         bannerTimerRef.current = setTimeout(() => {
@@ -803,7 +787,7 @@ function DecisionWorkspace(props: {
         setSubmitting(null);
       }
     },
-    [props.onResolve, readyRequestId, readyWorkspace, reason, scope]
+    [props.onResolve, readyItem, reason, scope]
   );
 
   const handleRequestResolve = useCallback(
@@ -909,8 +893,9 @@ function DecisionWorkspace(props: {
     return <EmptyState title="Select an item" body="Choose a blocked item from the list to review the evidence and make a decision." tone="teach" />;
   }
   const { item, diff, receipt, policy } = props.detail;
-  const commonScopeOpts = scopeOptions.filter((option) => commonScopeValues.has(option.value));
-  const broadScopeOpts = scopeOptions.filter((option) => !commonScopeValues.has(option.value));
+  const availableScopeOptions = filterScopeChoicesForRequest(item, scopeOptions);
+  const commonScopeOpts = availableScopeOptions.filter((option) => commonScopeValues.has(option.value));
+  const broadScopeOpts = availableScopeOptions.filter((option) => !commonScopeValues.has(option.value));
   const isAlreadyDecided = item.resolution_action !== null;
   const decidedLabel =
     item.resolution_action === "allow" ? "allow" : item.resolution_action === "block" ? "block" : item.resolution_action ?? "decided";
@@ -1129,8 +1114,7 @@ function RuleBuilder(props: {
         />
       </div>
 
-      <DecisionSteps activeStep={props.submitting === null ? 1 : 3} />
-      <KeyboardHints />
+      {/* Decision steps and keyboard hints removed for calmer UX */}
 
       <div className="relative mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)] xl:items-start">
         <BlockedActionCard item={props.item} />
@@ -1225,7 +1209,7 @@ function DecisionActionPanel(props: {
         <ActionButton variant="success" onClick={props.onAllow} disabled={props.submitting !== null}>
           {allowText}
         </ActionButton>
-        <ActionButton variant="danger" onClick={props.onBlock} disabled={props.submitting !== null}>
+        <ActionButton variant="outline" onClick={props.onBlock} disabled={props.submitting !== null}>
           {blockText}
         </ActionButton>
       </div>

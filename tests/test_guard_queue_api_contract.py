@@ -20,6 +20,7 @@ def _request(
     harness: str = "codex",
     command: str = "cat ~/.npmrc",
     artifact_id: str | None = None,
+    publisher: str | None = None,
     prompt_excerpt: str | None = None,
     mcp_server: str | None = None,
     mcp_tool: str | None = None,
@@ -41,6 +42,7 @@ def _request(
         artifact_id=artifact_id or f"{harness}:project:{request_id}",
         artifact_name=request_id,
         artifact_hash=f"hash-{request_id}",
+        publisher=publisher,
         policy_action="require-reapproval",
         recommended_scope="artifact",
         changed_fields=("args",),
@@ -195,7 +197,7 @@ def test_resolving_duplicate_group_reports_collapsed_ids(tmp_path: Path) -> None
     assert payload["next_selectable_request_id"] == "req-unrelated"
 
 
-def test_broad_scope_resolution_refreshes_queue_envelope(tmp_path: Path) -> None:
+def test_broad_scope_resolution_keeps_other_reviews_pending(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _populate(store, [_request("req-active"), _request("req-covered", command="cat ~/.pypirc")])
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -211,12 +213,16 @@ def test_broad_scope_resolution_refreshes_queue_envelope(tmp_path: Path) -> None
     finally:
         daemon.stop()
 
-    assert payload["remaining_pending_count"] == 0
-    assert payload["next_selectable_request_id"] is None
-    assert payload["resolved_scope_ids"] == ["req-covered"]
+    assert payload["remaining_pending_count"] == 1
+    assert payload["next_selectable_request_id"] == "req-covered"
+    assert payload.get("resolved_scope_ids") in (None, [])
+    assert store.get_approval_request("req-covered")["status"] == "pending"
+    decisions = store.list_policy_decisions("codex")
+    assert len(decisions) == 1
+    assert decisions[0]["scope"] == "harness"
 
 
-def test_artifact_scope_resolution_refreshes_queue_envelope(tmp_path: Path) -> None:
+def test_artifact_scope_resolution_keeps_same_artifact_review_pending(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     shared_artifact = "codex:project:shared-tool"
     _populate(
@@ -240,9 +246,10 @@ def test_artifact_scope_resolution_refreshes_queue_envelope(tmp_path: Path) -> N
     finally:
         daemon.stop()
 
-    assert payload["remaining_pending_count"] == 1
+    assert payload["remaining_pending_count"] == 2
     assert payload["next_selectable_request_id"] == "req-unrelated"
-    assert payload["resolved_scope_ids"] == ["req-covered"]
+    assert payload.get("resolved_scope_ids") in (None, [])
+    assert store.get_approval_request("req-covered")["status"] == "pending"
 
 
 def test_resolving_stale_item_returns_recovery_payload(tmp_path: Path) -> None:

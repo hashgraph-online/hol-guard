@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { GuardReceipt } from "./guard-types";
 import { harnessDisplayName } from "./approval-center-utils";
+import { detectCategory } from "./evidence/categories";
 
 // ──────────────────────────────────────────
-// Decision Pie Chart (SVG)
+// Decision Pie Chart (SVG donut)
 // ──────────────────────────────────────────
 
 export function DecisionPieChart({ receipts }: { receipts: GuardReceipt[] }) {
@@ -13,7 +14,13 @@ export function DecisionPieChart({ receipts }: { receipts: GuardReceipt[] }) {
     return { allow, block, total: receipts.length };
   }, [receipts]);
 
-  if (total === 0) return null;
+  if (total === 0) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <p className="text-xs text-slate-400">No decisions to chart</p>
+      </div>
+    );
+  }
 
   const allowPct = Math.round((allow / total) * 100);
   const blockPct = Math.round((block / total) * 100);
@@ -24,7 +31,7 @@ export function DecisionPieChart({ receipts }: { receipts: GuardReceipt[] }) {
   const blockDash = (block / total) * circumference;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" aria-label={`Decision breakdown: ${allowPct}% allowed, ${blockPct}% blocked`}>
       <h4 className="text-xs font-semibold text-brand-dark">Decisions</h4>
       <div className="flex items-center gap-4">
         <svg viewBox="0 0 100 100" className="h-20 w-20 -rotate-90">
@@ -101,23 +108,32 @@ export function ActivityBarChart({ receipts }: { receipts: GuardReceipt[] }) {
 
   const maxTotal = Math.max(1, ...days.map((d) => d.allow + d.block));
 
-  if (days.every((d) => d.allow === 0 && d.block === 0)) return null;
+  if (days.every((d) => d.allow === 0 && d.block === 0)) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <p className="text-xs text-slate-400">No activity to chart</p>
+      </div>
+    );
+  }
 
   const formatDayLabel = (date: string) => {
     const d = new Date(date);
     return `${d.getMonth() + 1}/${d.getDate()}`;
   };
 
+  const showEvery = days.length > 14 ? Math.ceil(days.length / 14) : 1;
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" aria-label="Activity bar chart showing allowed and blocked decisions over time">
       <h4 className="text-xs font-semibold text-brand-dark">Activity (last 30 days)</h4>
       <div className="flex h-32 items-end gap-0.5">
-        {days.map((day) => {
+        {days.map((day, idx) => {
           const total = day.allow + day.block;
           const heightPct = total > 0 ? (total / maxTotal) * 100 : 0;
           const allowPctOfTotal = total > 0 ? (day.allow / total) * 100 : 0;
+          const label = formatDayLabel(day.date);
           return (
-            <div key={day.date} className="group relative flex flex-1 flex-col justify-end" title={`${formatDayLabel(day.date)}: ${total} actions`}>
+            <div key={day.date} className="group relative flex flex-1 flex-col justify-end" title={`${label}: ${total} actions`}>
               <div className="flex w-full flex-col-reverse overflow-hidden rounded-t-sm" style={{ height: `${heightPct}%` }}>
                 {day.allow > 0 && (
                   <div className="bg-emerald-400 transition-all" style={{ height: `${allowPctOfTotal}%`, minHeight: day.allow > 0 ? 1 : 0 }} />
@@ -126,9 +142,11 @@ export function ActivityBarChart({ receipts }: { receipts: GuardReceipt[] }) {
                   <div className="bg-amber-400 transition-all" style={{ height: `${100 - allowPctOfTotal}%`, minHeight: day.block > 0 ? 1 : 0 }} />
                 )}
               </div>
-              <span className="mt-0.5 text-center text-[8px] text-slate-300 opacity-0 transition-opacity group-hover:opacity-100">
-                {formatDayLabel(day.date)}
-              </span>
+              {idx % showEvery === 0 && (
+                <span className="mt-0.5 text-center text-[8px] text-slate-400">
+                  {label}
+                </span>
+              )}
             </div>
           );
         })}
@@ -152,6 +170,7 @@ export function ActivityBarChart({ receipts }: { receipts: GuardReceipt[] }) {
 // ──────────────────────────────────────────
 
 export function AppActivityBars({ receipts }: { receipts: GuardReceipt[] }) {
+  const [showAll, setShowAll] = useState(false);
   const apps = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of receipts) {
@@ -159,19 +178,35 @@ export function AppActivityBars({ receipts }: { receipts: GuardReceipt[] }) {
     }
     return Array.from(map.entries())
       .map(([harness, count]) => ({ harness, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
+      .sort((a, b) => b.count - a.count);
   }, [receipts]);
 
+  const visibleApps = showAll ? apps : apps.slice(0, 5);
   const maxCount = Math.max(1, ...apps.map((a) => a.count));
 
-  if (apps.length === 0) return null;
+  if (apps.length === 0) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <p className="text-xs text-slate-400">No app activity to chart</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-2">
-      <h4 className="text-xs font-semibold text-brand-dark">Top apps</h4>
+    <div className="space-y-2" aria-label="Top apps by activity count">
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-semibold text-brand-dark">Top apps</h4>
+        {apps.length > 5 && (
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            className="text-[10px] font-medium text-brand-blue hover:text-brand-dark transition-colors"
+          >
+            {showAll ? "Show less" : `Show all (${apps.length})`}
+          </button>
+        )}
+      </div>
       <div className="space-y-2">
-        {apps.map((app) => (
+        {visibleApps.map((app) => (
           <div key={app.harness} className="space-y-1">
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-600">{harnessDisplayName(app.harness)}</span>
@@ -217,31 +252,49 @@ export function DecisionTrendLine({ receipts }: { receipts: GuardReceipt[] }) {
   }, [receipts]);
 
   const hasData = days.some((d) => d.allow > 0 || d.block > 0);
-  if (!hasData) return null;
+  if (!hasData) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <p className="text-xs text-slate-400">No trend data to chart</p>
+      </div>
+    );
+  }
 
   const width = 300;
-  const height = 60;
-  const padding = 4;
-  const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2;
+  const height = 80;
+  const padding = { top: 4, right: 4, bottom: 16, left: 20 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
   const totalMax = Math.max(1, ...days.map((d) => d.allow + d.block));
 
   const allowPoints = days.map((day, i) => {
-    const x = padding + (i / (days.length - 1)) * chartWidth;
-    const y = padding + chartHeight - (day.allow / totalMax) * chartHeight;
+    const x = padding.left + (i / (days.length - 1)) * chartWidth;
+    const y = padding.top + chartHeight - (day.allow / totalMax) * chartHeight;
     return `${x},${y}`;
   }).join(" ");
 
   const blockPoints = days.map((day, i) => {
-    const x = padding + (i / (days.length - 1)) * chartWidth;
-    const y = padding + chartHeight - (day.block / totalMax) * chartHeight;
+    const x = padding.left + (i / (days.length - 1)) * chartWidth;
+    const y = padding.top + chartHeight - (day.block / totalMax) * chartHeight;
     return `${x},${y}`;
   }).join(" ");
 
+  const yTicks = [0, Math.round(totalMax / 2), totalMax];
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" aria-label="Decision trend line chart showing allowed and blocked over 30 days">
       <h4 className="text-xs font-semibold text-brand-dark">Decision trend (30 days)</h4>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none">
+        {/* Y axis ticks */}
+        {yTicks.map((tick, i) => {
+          const y = padding.top + chartHeight - (tick / totalMax) * chartHeight;
+          return (
+            <g key={i}>
+              <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#e2e8f0" strokeWidth="0.5" />
+              <text x={padding.left - 2} y={y + 3} textAnchor="end" fontSize="8" fill="#94a3b8">{tick}</text>
+            </g>
+          );
+        })}
         <polyline
           fill="none"
           stroke="#10b981"
@@ -282,33 +335,35 @@ export function BlockReasonBreakdown({ receipts }: { receipts: GuardReceipt[] })
     const blocked = receipts.filter((r) => r.policy_decision === "block");
     const counts = new Map<string, number>();
     for (const r of blocked) {
-      const name = (r.artifact_name ?? "").toLowerCase();
-      const caps = (r.capabilities_summary ?? "").toLowerCase();
-      if (name.includes(".env") || name.includes("secret") || caps.includes("secret")) {
-        counts.set("Secret access", (counts.get("Secret access") ?? 0) + 1);
-      } else if (caps.includes("network") || caps.includes("exfiltrat")) {
-        counts.set("Network/Exfiltration", (counts.get("Network/Exfiltration") ?? 0) + 1);
-      } else if (caps.includes("destructive") || caps.includes("rm ") || caps.includes("delete")) {
-        counts.set("Destructive", (counts.get("Destructive") ?? 0) + 1);
-      } else if (caps.includes("encoded") || caps.includes("decode")) {
-        counts.set("Encoded payload", (counts.get("Encoded payload") ?? 0) + 1);
-      } else {
-        counts.set("Other", (counts.get("Other") ?? 0) + 1);
-      }
+      const cat = detectCategory(r);
+      const label = cat === "secret" ? "Secret access" :
+        cat === "network" ? "Network/Exfiltration" :
+        cat === "destructive" ? "Destructive" :
+        cat === "hidden" ? "Encoded payload" :
+        cat === "file-write" ? "File write" :
+        cat === "tool-call" ? "Tool call" :
+        "Other";
+      counts.set(label, (counts.get(label) ?? 0) + 1);
     }
     return Array.from(counts.entries())
       .map(([label, count]) => ({ label, count }))
       .sort((a, b) => b.count - a.count);
   }, [receipts]);
 
-  if (reasons.length === 0) return null;
+  if (reasons.length === 0) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <p className="text-xs text-slate-400">No blocked decisions to analyze</p>
+      </div>
+    );
+  }
 
   const maxCount = Math.max(1, ...reasons.map((r) => r.count));
   const colors = ["bg-amber-500", "bg-amber-400", "bg-amber-300", "bg-amber-200", "bg-slate-300"];
 
   return (
-    <div className="space-y-2">
-      <h4 className="text-xs font-semibold text-brand-dark">Why Guard blocked</h4>
+    <div className="space-y-2" aria-label="Breakdown of why Guard blocked actions">
+      <h4 className="text-xs font-semibold text-brand-dark">Why Guard stopped</h4>
       <div className="space-y-2">
         {reasons.map((reason, i) => (
           <div key={reason.label} className="space-y-1">
@@ -345,7 +400,13 @@ export function TimeOfDayHeatmap({ receipts }: { receipts: GuardReceipt[] }) {
 
   const maxCount = Math.max(1, ...hours);
   const hasData = hours.some((c) => c > 0);
-  if (!hasData) return null;
+  if (!hasData) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <p className="text-xs text-slate-400">No time-of-day data to chart</p>
+      </div>
+    );
+  }
 
   const intensity = (count: number) => {
     const ratio = count / maxCount;
@@ -362,24 +423,47 @@ export function TimeOfDayHeatmap({ receipts }: { receipts: GuardReceipt[] }) {
     return `${h - 12}pm`;
   };
 
+  const topRow = hours.slice(0, 12);
+  const bottomRow = hours.slice(12, 24);
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" aria-label="Heatmap showing when Guard is most active by hour of day">
       <h4 className="text-xs font-semibold text-brand-dark">When Guard is most active</h4>
-      <div className="grid grid-cols-12 gap-0.5">
-        {hours.map((count, h) => (
-          <div
-            key={h}
-            className={`aspect-square rounded-sm ${intensity(count)}`}
-            title={`${formatHour(h)}: ${count} actions`}
-          />
+      <div className="space-y-1">
+        <div className="grid grid-cols-12 gap-0.5">
+          {topRow.map((count, h) => (
+            <div
+              key={h}
+              className={`aspect-[2/1] rounded-sm ${intensity(count)}`}
+              title={`${formatHour(h)}: ${count} actions`}
+            />
+          ))}
+        </div>
+        <div className="grid grid-cols-12 gap-0.5">
+          {bottomRow.map((count, h) => (
+            <div
+              key={h + 12}
+              className={`aspect-[2/1] rounded-sm ${intensity(count)}`}
+              title={`${formatHour(h + 12)}: ${count} actions`}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-12 gap-0.5 text-[8px] text-slate-400">
+        {hours.map((_, h) => (
+          <div key={h} className="text-center">
+            {h % 3 === 0 ? formatHour(h) : ""}
+          </div>
         ))}
       </div>
-      <div className="flex justify-between text-[9px] text-slate-400">
-        <span>12am</span>
-        <span>6am</span>
-        <span>12pm</span>
-        <span>6pm</span>
-        <span>11pm</span>
+      <div className="flex items-center gap-3 text-[10px] text-slate-400">
+        <span>No activity</span>
+        <span className="h-2.5 w-2.5 rounded-sm bg-blue-100" />
+        <span>Light</span>
+        <span className="h-2.5 w-2.5 rounded-sm bg-blue-300" />
+        <span>Medium</span>
+        <span className="h-2.5 w-2.5 rounded-sm bg-blue-500" />
+        <span>Heavy</span>
       </div>
     </div>
   );
@@ -391,7 +475,14 @@ export function TimeOfDayHeatmap({ receipts }: { receipts: GuardReceipt[] }) {
 
 export function HistoryCharts({ receipts }: { receipts: GuardReceipt[] }) {
   const hasData = receipts.length > 0;
-  if (!hasData) return null;
+  if (!hasData) {
+    return (
+      <div className="rounded-xl border border-slate-100 bg-white p-8 text-center">
+        <p className="text-sm text-slate-500">No data to visualize.</p>
+        <p className="mt-1 text-xs text-slate-400">Charts will appear after more activity.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
