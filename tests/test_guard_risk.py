@@ -28,7 +28,9 @@ from codex_plugin_scanner.guard.risk import (
     detect_encoded_command,
     detect_guard_bypass,
     detect_staged_download,
+    extract_network_hosts,
 )
+from codex_plugin_scanner.guard.advisory_model import _normalized_url_indicator
 from codex_plugin_scanner.guard.runtime.actions import normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     _path_text_is_within_root_text,
@@ -3004,3 +3006,14 @@ def test_risk_helpers_detect_encoded_download_and_bypass_patterns():
     assert encoded_signals
     assert staged_signals
     assert bypass_signals
+
+
+def test_extract_network_hosts_tolerates_bracketed_regex_in_url():
+    regex_pattern = r"https://[^:]*:\([^@]*\)@.*|\1|"
+    hosts = extract_network_hosts(f"credential strip using {regex_pattern}")
+    assert isinstance(hosts, set)
+
+
+def test_normalized_url_indicator_tolerates_bracketed_regex():
+    result = _normalized_url_indicator(r"https://[^:]*:\([^@]*\)@.*|\1|")
+    assert isinstance(result, str)
