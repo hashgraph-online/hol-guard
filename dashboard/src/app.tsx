@@ -332,10 +332,11 @@ export function App() {
   }, []);
 
   const refreshStateAfterAction = useCallback(async () => {
-    const [snapshotResult, receiptsResult, policiesResult] = await Promise.allSettled([
+    const [snapshotResult, receiptsResult, policiesResult, inventoryResult] = await Promise.allSettled([
       fetchRuntimeSnapshot(),
       fetchReceipts(),
       fetchPolicies(),
+      fetchInventory(),
     ]);
     if (snapshotResult.status === "fulfilled") {
       setRuntime({ kind: "ready", snapshot: snapshotResult.value });
@@ -357,7 +358,15 @@ export function App() {
         message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load remembered decisions.",
       });
     }
-  }, [setRuntime, setRequests, setReceipts, setPolicies]);
+    if (inventoryResult.status === "fulfilled") {
+      setInventory({ kind: "ready", items: inventoryResult.value });
+    } else {
+      setInventory({
+        kind: "error",
+        message: inventoryResult.reason instanceof Error ? inventoryResult.reason.message : "Unable to load watched app inventory.",
+      });
+    }
+  }, [setRuntime, setRequests, setReceipts, setPolicies, setInventory]);
 
   const handleClearPolicies = useCallback(async (scope: { harness?: string; all?: boolean }) => {
     setClearConfirm(scope);
@@ -477,16 +486,16 @@ export function App() {
       });
   }, []);
 
-  const handleConnectHarness = useCallback((_harness: string) => {
-    navigate("/settings");
+  const handleConnectHarness = useCallback((harness: string) => {
+    navigate(`/apps/${encodeURIComponent(harness)}?tab=settings`);
   }, []);
 
-  const handleTestHarness = useCallback((_harness: string) => {
-    navigate("/inbox");
+  const handleTestHarness = useCallback((harness: string) => {
+    navigate(`/apps/${encodeURIComponent(harness)}?tab=settings`);
   }, []);
 
-  const handleRepairHarness = useCallback((_harness: string) => {
-    navigate("/settings");
+  const handleRepairHarness = useCallback((harness: string) => {
+    navigate(`/apps/${encodeURIComponent(harness)}?tab=settings`);
   }, []);
 
   const appDetailContent = useMemo(() => {
@@ -504,9 +513,10 @@ export function App() {
         onGoHome={handleGoHome}
         onOpenRequest={handleOpenRequest}
         onClearAppPolicies={handleClearAppPolicies}
+        onManagedInstallChanged={refreshStateAfterAction}
       />
     );
-  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies]);
+  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, refreshStateAfterAction]);
 
   return (
     <>

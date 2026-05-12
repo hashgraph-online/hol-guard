@@ -16,6 +16,9 @@ import type {
   GuardArtifactDiff,
   GuardDecisionV2,
   GuardInventoryItem,
+  GuardHarnessAction,
+  GuardHarnessActionErrorPayload,
+  GuardHarnessActionResult,
   GuardPolicyDecision,
   GuardQueueResolutionCopy,
   GuardQueueResolutionResult,
@@ -78,6 +81,18 @@ async function readJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
     throw new Error(`Request failed with ${response.status}`);
   }
   return (await response.json()) as T;
+}
+
+export class GuardHarnessActionError extends Error {
+  readonly status: number;
+  readonly payload: GuardHarnessActionErrorPayload | null;
+
+  constructor(status: number, payload: GuardHarnessActionErrorPayload | null) {
+    super(payload?.error ?? `Harness action failed with ${status}`);
+    this.name = "GuardHarnessActionError";
+    this.status = status;
+    this.payload = payload;
+  }
 }
 
 function guardParams(): URLSearchParams {
@@ -201,6 +216,10 @@ function isNonNegativeNumber(value: unknown): value is number {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isGuardHarnessActionErrorPayload(value: unknown): value is GuardHarnessActionErrorPayload {
+  return isRecord(value) && isNonEmptyString(value["error"]);
 }
 
 function isApprovalPageStatus(value: unknown): value is GuardApprovalPageStatus {
@@ -719,6 +738,61 @@ export async function clearPolicy(input: {
       source: input.source
     })
   });
+}
+
+export function formatHarnessCommand(command: string[]): string {
+  return command
+    .map((part) => (/\s/.test(part) ? JSON.stringify(part) : part))
+    .join(" ");
+}
+
+export async function runHarnessAction(input: {
+  harness: string;
+  action: GuardHarnessAction;
+  dryRun?: boolean;
+  confirmationPhrase?: string;
+}): Promise<GuardHarnessActionResult> {
+  if (isGuardDemoMode()) {
+    return {
+      harness: input.harness,
+      action: input.action,
+      dry_run: input.action === "verify" ? false : input.dryRun ?? true,
+      safe: input.action === "verify" ? true : undefined,
+      steps: [],
+      managed_install:
+        input.action === "install" || input.action === "repair"
+          ? {
+              harness: input.harness,
+              active: true,
+              workspace: null,
+              manifest: { notes: ["Demo mode only."] },
+              updated_at: new Date().toISOString()
+            }
+          : undefined
+    };
+  }
+  const response = await fetchGuardApi(
+    `/v1/harnesses/${encodeURIComponent(input.harness)}/${input.action}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeaders()
+      },
+      body: JSON.stringify({
+        dry_run: input.dryRun ?? input.action !== "verify",
+        confirmation_phrase: input.confirmationPhrase
+      })
+    }
+  );
+  const payload = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    throw new GuardHarnessActionError(
+      response.status,
+      isGuardHarnessActionErrorPayload(payload) ? payload : null
+    );
+  }
+  return payload as GuardHarnessActionResult;
 }
 
 export async function fetchDiff(
