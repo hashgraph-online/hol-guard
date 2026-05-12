@@ -199,7 +199,9 @@ function withGuardAuth(init?: RequestInit): RequestInit | undefined {
     return init;
   }
   const headers = new Headers(init?.headers);
-  headers.set("X-Guard-Token", guardToken);
+  if (!headers.has("X-Guard-Token")) {
+    headers.set("X-Guard-Token", guardToken);
+  }
   return {
     ...init,
     headers
@@ -208,6 +210,10 @@ function withGuardAuth(init?: RequestInit): RequestInit | undefined {
 
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
+  return guardToken ? { "X-Guard-Token": guardToken } : {};
+}
+
+function guardAuthHeadersForToken(guardToken: string | null): HeadersInit {
   return guardToken ? { "X-Guard-Token": guardToken } : {};
 }
 
@@ -891,11 +897,11 @@ export async function resolveRequestWithQueueResult(input: {
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
   const path = `/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`;
-  const init = (): RequestInit => ({
+  const init = (guardToken: string | null = readGuardToken()): RequestInit => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...guardAuthHeaders()
+      ...guardAuthHeadersForToken(guardToken)
     },
     body: JSON.stringify({
       action: input.action,
@@ -905,8 +911,11 @@ export async function resolveRequestWithQueueResult(input: {
     })
   });
   let response = await fetchGuardApi(path, init());
-  if (response.status === 401 && (await refreshGuardToken()) !== null) {
-    response = await fetchGuardApi(path, init());
+  if (response.status === 401) {
+    const refreshedToken = await refreshGuardToken();
+    if (refreshedToken !== null) {
+      response = await fetchGuardApi(path, init(refreshedToken));
+    }
   }
   if (!response.ok) {
     throw new Error(`Request failed with ${response.status}`);
