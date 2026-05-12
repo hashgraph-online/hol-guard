@@ -52,6 +52,11 @@ import {
 } from "./risk-signal-cards";
 import { DataFlowEvidenceCard } from "./data-flow-evidence-card";
 import { ScannerEvidenceSection } from "./scanner-evidence-badge";
+import {
+  buildDecisionPayload,
+  filterScopeChoicesForRequest,
+  normalizeDecisionScope,
+} from "./approval-scopes";
 import type {
   GuardApprovalRequest,
   GuardArtifactDiff,
@@ -90,6 +95,7 @@ type ReviewWorkspaceProps = {
     requestId: string;
     action: "allow" | "block";
     scope: DecisionScope;
+    workspace?: string;
     reason: string;
   }) => Promise<void> | void;
   onGoHome: () => void;
@@ -563,10 +569,14 @@ function ReviewDecisionCard(props: {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allowButtonRef = useRef<HTMLButtonElement>(null);
+  const availableScopeChoices = useMemo(
+    () => (item ? filterScopeChoicesForRequest(item, scopeChoices) : scopeChoices),
+    [item]
+  );
 
   useEffect(() => {
     if (item) {
-      setScope(item.recommended_scope);
+      setScope(normalizeDecisionScope(item, item.recommended_scope));
       setResolved(null);
       setSubmitting(null);
       setConfirmScope(null);
@@ -608,14 +618,14 @@ function ReviewDecisionCard(props: {
         handleRequestResolve("block");
       }
       const scopeIndex = parseInt(event.key, 10);
-      if (scopeIndex >= 1 && scopeIndex <= 5) {
+      if (scopeIndex >= 1 && scopeIndex <= availableScopeChoices.length) {
         event.preventDefault();
-        setScope(scopeChoices[scopeIndex - 1].value);
+        setScope(availableScopeChoices[scopeIndex - 1].value);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [submitting, confirmScope, scope, item?.request_id]);
+  }, [submitting, confirmScope, scope, item?.request_id, availableScopeChoices]);
 
   const handleResolve = useCallback(
     async (action: "allow" | "block") => {
@@ -623,12 +633,12 @@ function ReviewDecisionCard(props: {
       setSubmitting(action);
       setErrorMessage(null);
       try {
-        await props.onResolve({
-          requestId: item.request_id,
+        await props.onResolve(buildDecisionPayload({
+          item,
           action,
           scope,
           reason: action === "allow" ? "approved in review" : "blocked in review",
-        });
+        }));
         setResolved(action);
         timerRef.current = setTimeout(() => setResolved(null), 2000);
       } catch (err) {
@@ -639,7 +649,7 @@ function ReviewDecisionCard(props: {
         setPendingAction(null);
       }
     },
-    [item?.request_id, scope, props.onResolve]
+    [item, scope, props.onResolve]
   );
 
   const handleRequestResolve = useCallback(
@@ -712,7 +722,7 @@ function ReviewDecisionCard(props: {
             <HiMiniExclamationTriangle className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
             <div>
               <h3 className="text-sm font-semibold text-brand-dark">
-                {pendingAction === "allow" ? "Allow" : "Block"} for {scopeChoices.find((s) => s.value === confirmScope)?.label}?
+                {pendingAction === "allow" ? "Allow" : "Block"} for {availableScopeChoices.find((s) => s.value === confirmScope)?.label}?
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 This choice will apply {confirmScope === "global" ? "across all your projects" : "broadly"}. Are you sure?
@@ -805,7 +815,7 @@ function ReviewDecisionCard(props: {
         <div className="mt-6 space-y-2">
           <SectionLabel>How long should this choice last?</SectionLabel>
           <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Scope selection">
-            {scopeChoices.map((choice) => (
+            {availableScopeChoices.map((choice) => (
               <button
                 key={choice.value}
                 onClick={() => setScope(choice.value)}

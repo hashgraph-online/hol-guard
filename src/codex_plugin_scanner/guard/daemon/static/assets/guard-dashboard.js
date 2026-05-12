@@ -15175,15 +15175,16 @@ function computeInsights(receipts, onFilterHarness, onFilterDay) {
       return d >= prevWeekStart && d < weekAgo;
     });
     const prevBlockedCount = prevWeekReceipts.filter((r) => r.policy_decision === "block").length;
-    const prevBlockRate = prevWeekReceipts.length > 0 ? Math.round(prevBlockedCount / prevWeekReceipts.length * 100) : 0;
-    const change = blockRate - prevBlockRate;
-    const value = change === 0 ? `${blockRate}% (flat)` : `${blockRate}% (${change > 0 ? "+" : ""}${change}%)`;
+    const hasPrevWeekData = prevWeekReceipts.length > 0;
+    const prevBlockRate = hasPrevWeekData ? Math.round(prevBlockedCount / prevWeekReceipts.length * 100) : 0;
+    const change = hasPrevWeekData ? blockRate - prevBlockRate : 0;
+    const value = !hasPrevWeekData ? `${blockRate}%` : change === 0 ? `${blockRate}% (flat)` : `${blockRate}% (${change > 0 ? "+" : ""}${change}%)`;
     insights.push({
       id: "block-rate",
-      icon: change > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineArrowTrendingUp, { className: "h-4 w-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineArrowTrendingDown, { className: "h-4 w-4" }),
+      icon: change < 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineArrowTrendingDown, { className: "h-4 w-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineArrowTrendingUp, { className: "h-4 w-4" }),
       label: "Block rate this week",
       value,
-      tone: change > 0 ? "attention" : "green"
+      tone: !hasPrevWeekData ? "blue" : change > 0 ? "attention" : "green"
     });
   }
   const secretReads = monthReceipts.filter((r) => {
@@ -15829,7 +15830,6 @@ function HistoryCharts({ receipts }) {
 }
 function getPeriodDates(period) {
   const end = /* @__PURE__ */ new Date();
-  end.setHours(0, 0, 0, 0);
   const start = new Date(end);
   switch (period) {
     case "7d":
@@ -16532,6 +16532,38 @@ function ScannerEvidenceSection(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scannerSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerSignalRow, { signal }, signal.signal_id)) })
   ] });
 }
+function requestSupportsScope(item, scope) {
+  if (scope === "workspace") {
+    return typeof item.workspace === "string" && item.workspace.trim().length > 0;
+  }
+  if (scope === "publisher") {
+    return typeof item.publisher === "string" && item.publisher.trim().length > 0;
+  }
+  return true;
+}
+function filterScopeChoicesForRequest(item, choices) {
+  return choices.filter((choice) => requestSupportsScope(item, choice.value));
+}
+function normalizeDecisionScope(item, scope) {
+  if (requestSupportsScope(item, scope)) {
+    return scope;
+  }
+  if (requestSupportsScope(item, item.recommended_scope)) {
+    return item.recommended_scope;
+  }
+  return "artifact";
+}
+function buildDecisionPayload(input) {
+  const normalizedScope = normalizeDecisionScope(input.item, input.scope);
+  const workspace = normalizedScope === "workspace" && typeof input.item.workspace === "string" ? input.item.workspace : void 0;
+  return {
+    requestId: input.item.request_id,
+    action: input.action,
+    scope: normalizedScope,
+    workspace,
+    reason: input.reason
+  };
+}
 const QUEUE_CATEGORIES = [
   {
     id: "credential_output",
@@ -17206,11 +17238,20 @@ function ReviewWorkspace(props) {
   const [searchTerm, setSearchTerm] = reactExports.useState("");
   const [categoryFilter, setCategoryFilter] = reactExports.useState("all");
   const [sortDirection, setSortDirection] = reactExports.useState("newest");
+  const [semanticFilter, setSemanticFilter] = reactExports.useState("all");
   const filteredRequests = reactExports.useMemo(() => {
-    const byCategory = filterQueueByCategory(requests, categoryFilter);
-    const searched = searchQueue(byCategory, searchTerm);
+    let items = requests;
+    if (semanticFilter !== "all") {
+      const group = SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
+      if (group && group.matches.length > 0) {
+        items = items.filter((item) => group.matches.includes(resolveQueueCategory(item).id));
+      }
+    } else if (categoryFilter !== "all") {
+      items = filterQueueByCategory(items, categoryFilter);
+    }
+    const searched = searchQueue(items, searchTerm);
     return sortQueue(searched, sortDirection);
-  }, [categoryFilter, requests, searchTerm, sortDirection]);
+  }, [categoryFilter, requests, searchTerm, sortDirection, semanticFilter]);
   const categoryOptions = reactExports.useMemo(() => queueCategoriesForItems(requests), [requests]);
   const activeRequest = activeRequestId !== null ? requests.find((r) => r.request_id === activeRequestId) ?? null : null;
   reactExports.useEffect(() => {
@@ -17266,9 +17307,11 @@ function ReviewWorkspace(props) {
           categoryFilter,
           searchTerm,
           sortDirection,
+          semanticFilter,
           onCategoryFilterChange: setCategoryFilter,
           onSearchTermChange: setSearchTerm,
           onSortDirectionChange: setSortDirection,
+          onSemanticFilterChange: setSemanticFilter,
           onOpenRequest: props.onOpenRequest,
           ref: queueRef
         }
@@ -17326,13 +17369,14 @@ const ReviewQueueList = reactExports.forwardRef(({
   categoryFilter,
   searchTerm,
   sortDirection,
+  semanticFilter,
   onCategoryFilterChange,
   onSearchTermChange,
   onSortDirectionChange,
+  onSemanticFilterChange,
   onOpenRequest
 }, ref) => {
   const [showFilters, setShowFilters] = reactExports.useState(false);
-  const [semanticFilter, setSemanticFilter] = reactExports.useState("all");
   const handleSearchChange = reactExports.useCallback((event) => {
     onSearchTermChange(event.target.value);
   }, [onSearchTermChange]);
@@ -17342,17 +17386,7 @@ const ReviewQueueList = reactExports.forwardRef(({
   const handleSortChange = reactExports.useCallback((event) => {
     onSortDirectionChange(event.target.value);
   }, [onSortDirectionChange]);
-  reactExports.useEffect(() => {
-    if (semanticFilter === "all") {
-      onCategoryFilterChange("all");
-    } else {
-      const group = SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
-      if (group && group.matches.length > 0) {
-        onCategoryFilterChange(group.matches[0]);
-      }
-    }
-  }, [semanticFilter, onCategoryFilterChange]);
-  const activeSemanticGroup = categoryFilter === "all" ? "all" : resolveSemanticGroup(categoryFilter);
+  const activeSemanticGroup = semanticFilter;
   const visibleGroups = reactExports.useMemo(() => {
     const available = /* @__PURE__ */ new Set();
     for (const item of requests) {
@@ -17360,7 +17394,7 @@ const ReviewQueueList = reactExports.forwardRef(({
     }
     return SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
   }, [requests]);
-  const isFiltered = searchTerm || categoryFilter !== "all" || sortDirection !== "newest";
+  const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-3", ref, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Queue" }),
@@ -17399,7 +17433,7 @@ const ReviewQueueList = reactExports.forwardRef(({
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-1", children: visibleGroups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
-            onClick: () => setSemanticFilter(group.id),
+            onClick: () => onSemanticFilterChange(group.id),
             className: `rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${activeSemanticGroup === group.id ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
             children: group.label
           },
@@ -17428,7 +17462,7 @@ const ReviewQueueList = reactExports.forwardRef(({
               onSearchTermChange("");
               onCategoryFilterChange("all");
               onSortDirectionChange("newest");
-              setSemanticFilter("all");
+              onSemanticFilterChange("all");
             },
             className: "text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
             children: "Clear all filters"
@@ -17583,9 +17617,13 @@ function ReviewDecisionCard(props) {
   const [errorMessage, setErrorMessage] = reactExports.useState(null);
   const timerRef = reactExports.useRef(null);
   const allowButtonRef = reactExports.useRef(null);
+  const availableScopeChoices = reactExports.useMemo(
+    () => item ? filterScopeChoicesForRequest(item, scopeChoices) : scopeChoices,
+    [item]
+  );
   reactExports.useEffect(() => {
     if (item) {
-      setScope(item.recommended_scope);
+      setScope(normalizeDecisionScope(item, item.recommended_scope));
       setResolved(null);
       setSubmitting(null);
       setConfirmScope(null);
@@ -17623,26 +17661,26 @@ function ReviewDecisionCard(props) {
         handleRequestResolve("block");
       }
       const scopeIndex = parseInt(event.key, 10);
-      if (scopeIndex >= 1 && scopeIndex <= 5) {
+      if (scopeIndex >= 1 && scopeIndex <= availableScopeChoices.length) {
         event.preventDefault();
-        setScope(scopeChoices[scopeIndex - 1].value);
+        setScope(availableScopeChoices[scopeIndex - 1].value);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [submitting, confirmScope, scope, item?.request_id]);
+  }, [submitting, confirmScope, scope, item?.request_id, availableScopeChoices]);
   const handleResolve = reactExports.useCallback(
     async (action) => {
       if (!item) return;
       setSubmitting(action);
       setErrorMessage(null);
       try {
-        await props.onResolve({
-          requestId: item.request_id,
+        await props.onResolve(buildDecisionPayload({
+          item,
           action,
           scope,
           reason: action === "allow" ? "approved in review" : "blocked in review"
-        });
+        }));
         setResolved(action);
         timerRef.current = setTimeout(() => setResolved(null), 2e3);
       } catch (err) {
@@ -17653,7 +17691,7 @@ function ReviewDecisionCard(props) {
         setPendingAction(null);
       }
     },
-    [item?.request_id, scope, props.onResolve]
+    [item, scope, props.onResolve]
   );
   const handleRequestResolve = reactExports.useCallback(
     (action) => {
@@ -17716,7 +17754,7 @@ function ReviewDecisionCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-sm font-semibold text-brand-dark", children: [
           pendingAction === "allow" ? "Allow" : "Block",
           " for ",
-          scopeChoices.find((s) => s.value === confirmScope)?.label,
+          availableScopeChoices.find((s) => s.value === confirmScope)?.label,
           "?"
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-muted-foreground", children: [
@@ -17783,7 +17821,7 @@ function ReviewDecisionCard(props) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "How long should this choice last?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 sm:grid-cols-2", role: "radiogroup", "aria-label": "Scope selection", children: scopeChoices.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 sm:grid-cols-2", role: "radiogroup", "aria-label": "Scope selection", children: availableScopeChoices.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
             onClick: () => setScope(choice.value),
@@ -18639,7 +18677,7 @@ function DecisionWorkspace(props) {
           bannerTimerRef.current = null;
         }
       }
-      setScope(props.detail.item.recommended_scope);
+      setScope(normalizeDecisionScope(props.detail.item, props.detail.item.recommended_scope));
       setErrorMessage(null);
       setSubmitting(null);
     }
@@ -18652,20 +18690,18 @@ function DecisionWorkspace(props) {
     };
   }, []);
   const readyItem = props.detail.kind === "ready" ? props.detail.item : null;
-  const readyRequestId = readyItem?.request_id ?? "";
-  const readyWorkspace = readyItem?.workspace ?? void 0;
   const handleResolve = reactExports.useCallback(
     async (action) => {
+      if (readyItem === null) return;
       setSubmitting(action);
       setErrorMessage(null);
       try {
-        await props.onResolve({
-          requestId: readyRequestId,
+        await props.onResolve(buildDecisionPayload({
+          item: readyItem,
           action,
           scope,
-          reason,
-          workspace: scope === "workspace" ? readyWorkspace : void 0
-        });
+          reason
+        }));
         setResolvedState("decided");
         setResolvedBanner(action);
         bannerTimerRef.current = setTimeout(() => {
@@ -18676,7 +18712,7 @@ function DecisionWorkspace(props) {
         setSubmitting(null);
       }
     },
-    [props.onResolve, readyRequestId, readyWorkspace, reason, scope]
+    [props.onResolve, readyItem, reason, scope]
   );
   const handleRequestResolve = reactExports.useCallback(
     (action) => {
@@ -18763,8 +18799,9 @@ function DecisionWorkspace(props) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "Select an item", body: "Choose a blocked item from the list to review the evidence and make a decision.", tone: "teach" });
   }
   const { item, diff, receipt, policy } = props.detail;
-  const commonScopeOpts = scopeOptions.filter((option) => commonScopeValues.has(option.value));
-  const broadScopeOpts = scopeOptions.filter((option) => !commonScopeValues.has(option.value));
+  const availableScopeOptions = filterScopeChoicesForRequest(item, scopeOptions);
+  const commonScopeOpts = availableScopeOptions.filter((option) => commonScopeValues.has(option.value));
+  const broadScopeOpts = availableScopeOptions.filter((option) => !commonScopeValues.has(option.value));
   const isAlreadyDecided = item.resolution_action !== null;
   const decidedLabel = item.resolution_action === "allow" ? "allow" : item.resolution_action === "block" ? "block" : item.resolution_action ?? "decided";
   const allowLabel = scope === "artifact" ? "Approve once" : "Approve and remember";
