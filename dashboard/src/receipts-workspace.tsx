@@ -445,14 +445,14 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
   );
 }
 
-export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
+export function ReceiptsWorkspace(props: { receipts: ReceiptsState; onClearEvidence?: () => void }) {
   if (props.receipts.kind === "loading") {
     return <EvidenceLoadingState />;
   }
   if (props.receipts.kind === "error") {
     return <EvidenceErrorState message={props.receipts.message} />;
   }
-  return <EvidenceWorkbench receiptItems={props.receipts.items} />;
+  return <EvidenceWorkbench receiptItems={props.receipts.items} onClearEvidence={props.onClearEvidence} />;
 }
 
 export function filterReceiptItems(

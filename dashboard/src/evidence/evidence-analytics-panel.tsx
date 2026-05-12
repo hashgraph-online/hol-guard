@@ -19,6 +19,7 @@ function TrendBar({ bucket, maxTotal }: TrendBarProps) {
   const total = bucket.allowed + bucket.blocked + bucket.reviewed;
   const heightPct = maxTotal > 0 ? Math.max(4, (total / maxTotal) * 100) : 4;
   const blockedPct = total > 0 ? (bucket.blocked / total) * 100 : 0;
+  const allowedPct = total > 0 ? (bucket.allowed / total) * 100 : 0;
 
   return (
     <div className="flex flex-col items-center gap-1 flex-1">
@@ -29,7 +30,7 @@ function TrendBar({ bucket, maxTotal }: TrendBarProps) {
       >
         <div
           className="w-full bg-green-300 transition-all"
-          style={{ height: `${heightPct * (1 - blockedPct / 100)}%` }}
+          style={{ height: `${heightPct * (allowedPct / 100)}%` }}
           aria-hidden="true"
         />
         {bucket.blocked > 0 && (
