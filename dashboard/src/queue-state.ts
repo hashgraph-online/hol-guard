@@ -333,6 +333,7 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
   const decisionCategories = item.decision_v2_json?.signals.map((signal) => signal.category) ?? [];
   const command = envelope?.command ?? item.launch_target ?? "";
   const text = queueCategoryText(item);
+  const isPromptReview = envelope?.action_type === "prompt" || decisionCategories.includes("prompt");
 
   if (hasSecretSignal(decisionCategories, text) && hasExternalSink(text, command)) {
     return "secret_exfiltration";
@@ -342,11 +343,11 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
     return "credential_output";
   }
 
-  if (systemPromptAccessText(text)) {
+  if (isPromptReview && systemPromptAccessText(text)) {
     return "system_prompt_access";
   }
 
-  if (decisionCategories.includes("prompt") || promptInjectionText(text)) {
+  if (isPromptReview && promptInjectionText(text)) {
     return "prompt_injection";
   }
 

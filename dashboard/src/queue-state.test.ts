@@ -914,3 +914,15 @@ assert(
   resolveQueueCategory(stdinCloudUploadItem).label === "File upload or copy-out",
   "T-QS-89: stdin stream operands are preserved for outbound cloud uploads"
 );
+
+const promptDocsWriteItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-prompt-docs-write",
+  action_envelope_json: { ...shellEnvelope, action_type: "file_write", command: null, target_paths: ["docs/prompt-injection.md"] },
+  risk_summary: "Documents how to test system prompt access and prompt injection defenses.",
+};
+
+assert(
+  resolveQueueCategory(promptDocsWriteItem).label === "Documentation edit",
+  "T-QS-90: docs writes discussing prompt security do not classify as prompt security events"
+);
