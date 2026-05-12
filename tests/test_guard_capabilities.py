@@ -124,7 +124,7 @@ def test_normalize_artifact_capabilities_tolerates_bracketed_regex_in_url():
         command="echo",
         args=(),
         transport="stdio",
-        url="[.*|\\1|]",
+        url="http://[.*|\\1|]",
     )
 
     capabilities = normalize_artifact_capabilities(artifact)
