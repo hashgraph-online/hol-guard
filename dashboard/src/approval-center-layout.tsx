@@ -138,6 +138,7 @@ type LayoutProps = {
   }) => void;
   onBulkApprove?: (ids: string[]) => void;
   onRepair?: () => Promise<void>;
+  onClearEvidence?: () => void;
 };
 
 const scopeOptions: Array<{ value: DecisionScope; label: string; description: string }> = [
@@ -211,7 +212,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
             {props.view === "home" ? (
               props.homeContent
             ) : props.view === "evidence" ? (
-              <ReceiptsWorkspace receipts={props.receipts} />
+              <ReceiptsWorkspace receipts={props.receipts} onClearEvidence={props.onClearEvidence} />
             ) : props.view === "fleet" ? (
               props.fleetContent
             ) : props.view === "app-detail" ? (

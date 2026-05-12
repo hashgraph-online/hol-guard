@@ -412,6 +412,10 @@ export function App() {
     }
   }, [setRuntime, setRequests, setPolicies]);
 
+  const handleClearEvidence = useCallback(() => {
+    setReceipts({ kind: "ready", items: [] });
+  }, [setReceipts]);
+
   const handleResolve = useCallback(async (payload: {
     requestId: string;
     action: "allow" | "block";
@@ -563,6 +567,7 @@ export function App() {
       onBulkApprove={handleBulkApprove}
       onRetry={handleRetry}
       onRepair={handleRepair}
+      onClearEvidence={handleClearEvidence}
       fleetContent={
         runtime.kind === "ready" ? (
           <Suspense fallback={<LazyFallback />}>
