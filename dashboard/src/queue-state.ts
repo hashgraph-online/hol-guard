@@ -4,17 +4,29 @@ import type { GuardApprovalRequest, GuardQueueResolutionResult } from "./guard-t
 export type QueueSortDirection = "newest" | "oldest" | "category";
 
 export type QueueCategoryId =
-  | "secret_access"
-  | "data_exfiltration"
-  | "file_edit"
+  | "credential_output"
+  | "secret_file_read"
   | "file_read"
+  | "secret_exfiltration"
+  | "system_prompt_access"
+  | "prompt_injection"
+  | "guard_bypass"
+  | "generated_inventory_edit"
+  | "docs_edit"
+  | "source_edit"
+  | "config_change"
+  | "file_upload"
+  | "file_delete_cleanup"
+  | "git_operation"
+  | "process_control"
+  | "container_or_deploy"
+  | "persistence_change"
+  | "package_install"
+  | "package_script"
   | "destructive_shell"
   | "encoded_shell"
   | "network"
   | "mcp_tool"
-  | "package_script"
-  | "prompt_instruction"
-  | "config_change"
   | "browser_action"
   | "harness_start"
   | "shell_command"
@@ -29,28 +41,118 @@ export type QueueCategory = {
 
 export const QUEUE_CATEGORIES: QueueCategory[] = [
   {
-    id: "secret_access",
-    label: "Secret or credential access",
-    shortLabel: "Secrets",
-    description: "Reads or exposes local credentials, tokens, keys, or secret files.",
+    id: "credential_output",
+    label: "Credential-looking output",
+    shortLabel: "Credential output",
+    description: "Command output appears to expose tokens, keys, passwords, or secret-looking values.",
   },
   {
-    id: "data_exfiltration",
-    label: "Data exfiltration path",
-    shortLabel: "Exfiltration",
-    description: "Moves local sensitive data toward a network host, upload, clipboard, or external sink.",
-  },
-  {
-    id: "file_edit",
-    label: "File edit command",
-    shortLabel: "File edit",
-    description: "Changes local files in place without matching a delete or wipe pattern.",
+    id: "secret_file_read",
+    label: "Secret file read",
+    shortLabel: "Secret read",
+    description: "Reads local credential stores, environment files, tokens, keys, or other secret paths.",
   },
   {
     id: "file_read",
-    label: "Sensitive file read",
+    label: "File read",
     shortLabel: "File read",
     description: "Requests local file contents, paths, or read-only filesystem access.",
+  },
+  {
+    id: "secret_exfiltration",
+    label: "Secret exfiltration path",
+    shortLabel: "Secret exfil",
+    description: "Moves local secret material toward a network host, upload, clipboard, or external sink.",
+  },
+  {
+    id: "system_prompt_access",
+    label: "System prompt access",
+    shortLabel: "System prompt",
+    description: "Attempts to reveal hidden system, developer, policy, or harness instructions.",
+  },
+  {
+    id: "prompt_injection",
+    label: "Prompt injection attempt",
+    shortLabel: "Prompt injection",
+    description: "Prompt content tries to override instructions, ignore policy, or redirect tool behavior.",
+  },
+  {
+    id: "guard_bypass",
+    label: "Guard bypass attempt",
+    shortLabel: "Bypass",
+    description: "Attempts to disable, evade, suppress, or work around Guard policy checks.",
+  },
+  {
+    id: "generated_inventory_edit",
+    label: "Generated inventory edit",
+    shortLabel: "Inventory edit",
+    description: "Updates generated API, route, or cloud inventory documentation.",
+  },
+  {
+    id: "docs_edit",
+    label: "Documentation edit",
+    shortLabel: "Docs edit",
+    description: "Changes markdown, docs, runbooks, guides, or generated prose files.",
+  },
+  {
+    id: "source_edit",
+    label: "Source code edit",
+    shortLabel: "Source edit",
+    description: "Changes application, script, test, or source-controlled code files.",
+  },
+  {
+    id: "config_change",
+    label: "Configuration change",
+    shortLabel: "Config",
+    description: "Modifies Guard, harness, project, CI, package, or tool configuration.",
+  },
+  {
+    id: "file_upload",
+    label: "File upload or copy-out",
+    shortLabel: "Upload",
+    description: "Copies local files to a remote host, bucket, paste service, or external destination.",
+  },
+  {
+    id: "file_delete_cleanup",
+    label: "File delete or cleanup",
+    shortLabel: "Delete",
+    description: "Deletes, wipes, truncates, force-cleans, or otherwise risks local data loss.",
+  },
+  {
+    id: "git_operation",
+    label: "Git workspace operation",
+    shortLabel: "Git",
+    description: "Mutates repository state through git add, commit, merge, rebase, push, pull, reset, or checkout.",
+  },
+  {
+    id: "process_control",
+    label: "Process control",
+    shortLabel: "Process",
+    description: "Starts, stops, kills, reloads, or restarts local services and processes.",
+  },
+  {
+    id: "container_or_deploy",
+    label: "Container or deploy command",
+    shortLabel: "Deploy",
+    description: "Runs Docker, Kubernetes, Helm, cloud, deployment, or infrastructure commands.",
+  },
+  {
+    id: "persistence_change",
+    label: "Persistence change",
+    shortLabel: "Persistence",
+    description: "Changes cron, launch agents, services, shell profiles, startup items, or scheduled jobs.",
+  },
+  {
+    id: "package_install",
+    label: "Package install",
+    shortLabel: "Install",
+    description: "Installs, removes, upgrades, or publishes dependencies and packages.",
+  },
+  {
+    id: "package_script",
+    label: "Package script",
+    shortLabel: "Package script",
+    description: "Runs install, postinstall, build, test, or package-manager scripts.",
   },
   {
     id: "destructive_shell",
@@ -66,7 +168,7 @@ export const QUEUE_CATEGORIES: QueueCategory[] = [
   },
   {
     id: "network",
-    label: "Network access",
+    label: "Network request",
     shortLabel: "Network",
     description: "Contacts hosts, downloads, calls APIs, or opens network destinations.",
   },
@@ -75,24 +177,6 @@ export const QUEUE_CATEGORIES: QueueCategory[] = [
     label: "MCP tool call",
     shortLabel: "MCP",
     description: "Invokes an MCP server or tool with sensitive arguments.",
-  },
-  {
-    id: "package_script",
-    label: "Package script",
-    shortLabel: "Package",
-    description: "Runs install, postinstall, build, or package-manager scripts.",
-  },
-  {
-    id: "prompt_instruction",
-    label: "Prompt instruction",
-    shortLabel: "Prompt",
-    description: "User or model prompt asks the harness to perform a sensitive action.",
-  },
-  {
-    id: "config_change",
-    label: "Configuration change",
-    shortLabel: "Config",
-    description: "Modifies Guard, harness, project, or tool configuration.",
   },
   {
     id: "browser_action",
@@ -247,35 +331,81 @@ export function queueCategoriesForItems(items: GuardApprovalRequest[]): QueueCat
 function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
   const envelope = item.action_envelope_json;
   const decisionCategories = item.decision_v2_json?.signals.map((signal) => signal.category) ?? [];
+  const command = envelope?.command ?? item.launch_target ?? "";
   const text = queueCategoryText(item);
+  const isPromptReview = envelope?.action_type === "prompt" || decisionCategories.includes("prompt");
+  const isWriteReview = envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command);
 
-  if (
-    decisionCategories.includes("network") ||
-    textIncludesAny(text, ["network host", "outbound", "webhook", "https://", "http://"]) ||
-    /\bcurl\b/.test(text)
-  ) {
-    if (textIncludesAny(text, ["secret", "credential", "token", "api key", "upload", "exfiltrat"])) {
-      return "data_exfiltration";
-    }
-    return "network";
+  if (hasSecretSignal(decisionCategories, text) && hasExternalSink(text, command, !isWriteReview)) {
+    return "secret_exfiltration";
   }
-  if (decisionCategories.includes("secret") || textIncludesAny(text, ["credential-looking", "secret", ".env", "token", "api key", "password", "private key"])) {
-    return "secret_access";
+
+  if (textIncludesAny(text, ["credential-looking output", "contains credential-looking", "exposes token", "exposes key"])) {
+    return "credential_output";
   }
-  if (textIncludesAny(text, ["encoded or encrypted shell command", "base64", "openssl enc", "xxd -r", "decode-and-exec"])) {
+
+  if (isPromptReview && systemPromptAccessText(text)) {
+    return "system_prompt_access";
+  }
+
+  if (isPromptReview && promptInjectionText(text)) {
+    return "prompt_injection";
+  }
+
+  if (decisionCategories.includes("bypass") || (!isWriteReview && guardBypassText(text))) {
+    return "guard_bypass";
+  }
+
+  if (decisionCategories.includes("persistence") || persistenceCommand(command, text)) {
+    return "persistence_change";
+  }
+
+  if (decisionCategories.includes("encoded") || encodedCommand(text)) {
     return "encoded_shell";
   }
-  if (envelope?.action_type === "file_read" || item.artifact_type === "file_read_request") {
-    return "file_read";
+
+  if (generatedInventoryEdit(command, text)) {
+    return "generated_inventory_edit";
   }
-  if (envelope?.action_type === "mcp_tool") {
-    return "mcp_tool";
+
+  if (fileDeleteOrCleanupCommand(command, text)) {
+    return "file_delete_cleanup";
   }
+
+  if (gitOperationCommand(command)) {
+    return "git_operation";
+  }
+
+  if (fileUploadCommand(command, text)) {
+    return "file_upload";
+  }
+
+  if (inboundCopyCommand(command)) {
+    return "network";
+  }
+
+  if (processControlCommand(command)) {
+    return "process_control";
+  }
+
+  if (containerOrDeployCommand(command)) {
+    return "container_or_deploy";
+  }
+
   if (envelope?.action_type === "package_script") {
     return "package_script";
   }
-  if (envelope?.action_type === "prompt") {
-    return "prompt_instruction";
+
+  if (packageInstallCommand(command)) {
+    return "package_install";
+  }
+
+  if (secretReadAction(item, command, text) && hasSecretSignal(decisionCategories, text)) {
+    return "secret_file_read";
+  }
+
+  if (envelope?.action_type === "mcp_tool") {
+    return "mcp_tool";
   }
   if (envelope?.action_type === "config_change") {
     return "config_change";
@@ -286,12 +416,26 @@ function resolveQueueCategoryId(item: GuardApprovalRequest): QueueCategoryId {
   if (envelope?.action_type === "harness_start") {
     return "harness_start";
   }
-  if (envelope?.action_type === "file_write" || commandLooksLikeFileEdit(envelope?.command ?? item.launch_target ?? "")) {
-    return "file_edit";
+  if (envelope?.action_type === "file_read" || item.artifact_type === "file_read_request") {
+    return "file_read";
   }
-  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete", "wipe", "force-clean", "git clean -fd", "truncate"])) {
+
+  if (docsEditCommand(command, text)) {
+    return "docs_edit";
+  }
+
+  if (sourceEditCommand(command, text) || envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command)) {
+    return "source_edit";
+  }
+
+  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
     return "destructive_shell";
   }
+
+  if (networkCommand(command, text) || decisionCategories.includes("network")) {
+    return "network";
+  }
+
   if (envelope?.action_type === "shell_command" || item.artifact_type === "command" || text.includes("shell command")) {
     return "shell_command";
   }
@@ -340,6 +484,282 @@ function commandLooksLikeFileEdit(command: string): boolean {
     /\bpython(?:3)?\b[\s\S]*(?:write_text|open\([^)]*,\s*['"]w|path\.write)/.test(normalized) ||
     /\btee\s+-a?\b/.test(normalized) ||
     /\bapply_patch\b/.test(normalized)
+  );
+}
+
+function hasSecretSignal(decisionCategories: string[], text: string): boolean {
+  return (
+    decisionCategories.includes("secret") ||
+    textIncludesAny(text, [
+      "credential",
+      "secret",
+      ".env",
+      "token",
+      "api key",
+      "apikey",
+      "password",
+      "private key",
+      "ssh key",
+      "aws_access_key",
+      "github_token",
+    ])
+  );
+}
+
+function secretReadAction(item: GuardApprovalRequest, command: string, text: string): boolean {
+  const envelope = item.action_envelope_json;
+  return (
+    envelope?.action_type === "file_read" ||
+    item.artifact_type === "file_read_request" ||
+    (readCommand(command) && hasSecretPathText(text))
+  );
+}
+
+function readCommand(command: string): boolean {
+  return /\b(?:cat|grep|rg|sed\s+-n|awk|less|more|head|tail)\b/.test(command.toLowerCase());
+}
+
+function hasSecretPathText(text: string): boolean {
+  return textIncludesAny(text, [".env", "token", "secret", "credential", "password", "private key", "api key"]);
+}
+
+function hasExternalSink(text: string, command: string, allowTextHints: boolean): boolean {
+  return (
+    fileUploadCommand(command, text) ||
+    outboundNetworkCommand(command, text) ||
+    (allowTextHints && textIncludesAny(text, ["exfiltrat", "clipboard", "pastebin"]))
+  );
+}
+
+function outboundNetworkCommand(command: string, text: string): boolean {
+  return networkCommand(command, text) && !inboundCopyCommand(command);
+}
+
+function networkCommand(command: string, text: string): boolean {
+  const normalized = command.toLowerCase();
+  return (
+    /(?:^|\s)(?:curl|wget|httpie|nc|netcat|scp|rsync|ftp|sftp)(?:\s|$)/.test(normalized) ||
+    /(?:^|\s)ssh\s+/.test(normalized) ||
+    /https?:\/\//.test(normalized) ||
+    textIncludesAny(text, ["network host", "outbound", "webhook", "https://", "http://"])
+  );
+}
+
+function fileUploadCommand(command: string, text: string): boolean {
+  return (
+    outboundCopyCommand(command) ||
+    /\bcurl\b[\s\S]*(?:--upload-file(?:=|\s+)\S+|(?:^|\s)-T(?:\S+|\s+\S+)|--form(?:=|\s+)\S*@|-F(?:\S*@|\s+\S*@)|--data(?:-binary|-raw|-urlencode)?(?:=|\s+)@\S+)/.test(command)
+  );
+}
+
+function systemPromptAccessText(text: string): boolean {
+  return textIncludesAny(text, [
+    "system prompt",
+    "developer instructions",
+    "hidden instruction",
+    "hidden prompt",
+    "reveal the prompt",
+    "show the prompt",
+  ]);
+}
+
+function promptInjectionText(text: string): boolean {
+  return textIncludesAny(text, [
+    "prompt injection",
+    "ignore previous",
+    "ignore all previous",
+    "disregard previous",
+    "override instruction",
+    "jailbreak",
+    "act as",
+  ]);
+}
+
+function guardBypassText(text: string): boolean {
+  return textIncludesAny(text, [
+    "bypass guard",
+    "disable guard",
+    "skip approval",
+    "ignore approval",
+    "without approval",
+    "guard_bypass",
+    "no guard",
+  ]);
+}
+
+function persistenceCommand(command: string, text: string): boolean {
+  const normalized = command.toLowerCase();
+  const mutatesPersistenceFile = commandLooksLikeFileEdit(command) || text.includes("file_write");
+  return (
+    /\|\s*crontab\b/.test(normalized) ||
+    /\bcrontab\s+-(?!l\b)/.test(normalized) ||
+    /\b(?:schtasks|at)\b/.test(normalized) ||
+    /\bsystemctl\s+(?:enable|disable|preset|link)\b/.test(normalized) ||
+    /\blaunchctl\s+(?:load|unload|bootstrap|bootout)\b/.test(normalized) ||
+    (mutatesPersistenceFile && /(?:\.zshrc|\.bashrc|\.bash_profile|\.profile|launchagents|launchdaemons|systemd|login item)/.test(normalized)) ||
+    textIncludesAny(text, ["persistence", "startup item", "scheduled task", "launch agent"])
+  );
+}
+
+function encodedCommand(text: string): boolean {
+  return textIncludesAny(text, [
+    "encoded or encrypted shell command",
+    "base64",
+    "openssl enc",
+    "xxd -r",
+    "decode-and-exec",
+  ]);
+}
+
+function outboundCopyCommand(command: string): boolean {
+  const operands = copyOperands(command);
+  return isOutboundCopy(operands?.source, operands?.destination);
+}
+
+function inboundCopyCommand(command: string): boolean {
+  const operands = copyOperands(command);
+  return isInboundCopy(operands?.source, operands?.destination);
+}
+
+function copyOperands(command: string): { source: string; destination: string } | null {
+  const tokens = stripOptionTokens(shellTokens(command));
+  const awsIndex = findSequence(tokens, ["aws", "s3", "cp"]);
+  if (awsIndex >= 0) {
+    return positionalPair(tokens.slice(awsIndex + 3));
+  }
+  const gsutilIndex = findSequence(tokens, ["gsutil", "cp"]);
+  if (gsutilIndex >= 0) {
+    return positionalPair(tokens.slice(gsutilIndex + 2));
+  }
+  const copyIndex = tokens.findIndex((token) => token === "scp" || token === "rsync");
+  if (copyIndex >= 0) {
+    return positionalPair(tokens.slice(copyIndex + 1));
+  }
+  return null;
+}
+
+function positionalPair(tokens: string[]): { source: string; destination: string } | null {
+  const positional = tokens.filter((token) => token === "-" || !token.startsWith("-"));
+  if (positional.length < 2) {
+    return null;
+  }
+  return { source: positional[0], destination: positional[1] };
+}
+
+function stripOptionTokens(tokens: string[]): string[] {
+  const optionsWithValues = new Set([
+    "--profile",
+    "--region",
+    "--endpoint-url",
+    "--source-region",
+    "--exclude",
+    "--include",
+    "--acl",
+    "--storage-class",
+    "--sse",
+    "--rsh",
+    "-P",
+    "-i",
+    "-o",
+    "-F",
+    "-f",
+    "-S",
+    "-s",
+    "-e",
+  ]);
+  const stripped: string[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === "-") {
+      stripped.push(token);
+      continue;
+    }
+    if (!token.startsWith("-")) {
+      stripped.push(token);
+      continue;
+    }
+    const optionName = token.includes("=") ? token.slice(0, token.indexOf("=")) : token;
+    if (optionsWithValues.has(optionName) && !token.includes("=")) {
+      index += 1;
+    }
+  }
+  return stripped;
+}
+
+function shellTokens(command: string): string[] {
+  return (command.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((token) => token.replace(/^['"]|['"]$/g, ""));
+}
+
+function findSequence(tokens: string[], sequence: string[]): number {
+  return tokens.findIndex((_, index) => sequence.every((part, offset) => tokens[index + offset] === part));
+}
+
+function isOutboundCopy(source: string | undefined, destination: string | undefined): boolean {
+  return source !== undefined && destination !== undefined && !remotePath(source) && remotePath(destination);
+}
+
+function isInboundCopy(source: string | undefined, destination: string | undefined): boolean {
+  return source !== undefined && destination !== undefined && remotePath(source) && !remotePath(destination);
+}
+
+function remotePath(value: string): boolean {
+  return /^(?:s3|gs):\/\//.test(value) || /^[\w.-]+@?[\w.-]+:/.test(value);
+}
+
+function generatedInventoryEdit(command: string, text: string): boolean {
+  const haystack = `${command} ${text}`.toLowerCase();
+  return (
+    (commandLooksLikeFileEdit(command) || text.includes("file_write")) &&
+    /docs\/.*(?:api|route|cloud).*inventory\.generated\.(?:md|json|txt)/.test(haystack)
+  );
+}
+
+function fileDeleteOrCleanupCommand(command: string, text: string): boolean {
+  const normalized = command.toLowerCase();
+  return (
+    /\b(?:rm|unlink|rmdir|shred)\b/.test(normalized) ||
+    /\btruncate\s+-s\s+0\b/.test(normalized) ||
+    /\bgit\s+(?:clean|reset\s+--hard|checkout\s+--)\b/.test(normalized) ||
+    textIncludesAny(text, ["force-clean", "delete files", "wipe files"])
+  );
+}
+
+function gitOperationCommand(command: string): boolean {
+  const normalized = command.toLowerCase();
+  return /\bgit\s+(?:add|commit|push|pull|merge|rebase|reset|checkout|restore|clean|stash|tag)\b/.test(normalized);
+}
+
+function processControlCommand(command: string): boolean {
+  const normalized = command.toLowerCase();
+  return (
+    /\b(?:kill|pkill|killall|launchctl|systemctl|pm2|supervisorctl)\b/.test(normalized) ||
+    /\bservice\s+\S+\s+(?:start|stop|restart|reload|status)\b/.test(normalized)
+  );
+}
+
+function containerOrDeployCommand(command: string): boolean {
+  const normalized = command.toLowerCase();
+  return /\b(?:docker|docker-compose|kubectl|helm|terraform|pulumi|flyctl|vercel|netlify|gcloud|aws|az)\b/.test(normalized);
+}
+
+function packageInstallCommand(command: string): boolean {
+  const normalized = command.toLowerCase();
+  return /\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|poetry|brew|cargo|gem|go)\s+(?:add|i|install|remove|uninstall|update|upgrade|publish)\b/.test(normalized);
+}
+
+function docsEditCommand(command: string, text: string): boolean {
+  const haystack = `${command} ${text}`.toLowerCase();
+  return (
+    (commandLooksLikeFileEdit(command) || text.includes("file_write")) &&
+    /(?:^|\s)(?:docs\/|readme|changelog|\.md\b|\.mdx\b)/.test(haystack)
+  );
+}
+
+function sourceEditCommand(command: string, text: string): boolean {
+  const haystack = `${command} ${text}`.toLowerCase();
+  return (
+    (commandLooksLikeFileEdit(command) || text.includes("file_write")) &&
+    /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|swift|rb|php|css|scss|html|json|yaml|yml|toml)\b/.test(haystack)
   );
 }
 

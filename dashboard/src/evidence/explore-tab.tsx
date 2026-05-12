@@ -1,11 +1,16 @@
 import { useState, memo } from "react";
-import { HiMiniChevronDown, HiMiniChevronUp, HiMiniChartBar, HiMiniCalendarDays, HiMiniArrowPathRoundedSquare, HiOutlineArrowDownTray } from "react-icons/hi2";
+import {
+  HiMiniChartBar,
+  HiMiniCalendarDays,
+  HiMiniArrowPathRoundedSquare,
+  HiOutlineArrowDownTray,
+} from "react-icons/hi2";
 import type { GuardReceipt } from "../guard-types";
 import { HistoryInsights, ActivityCalendar, TopActions } from "../history-analytics";
 import { HistoryCharts } from "../history-charts";
 import { CompareTimePeriods } from "../compare-time-periods";
 import { exportReceiptsAsCsv, exportReceiptsAsJson, downloadBlob } from "../history-export";
-import { EmptyState, SectionLabel } from "../approval-center-primitives";
+import { SectionLabel } from "../approval-center-primitives";
 
 type SubTab = "overview" | "calendar" | "compare" | "export";
 
@@ -23,41 +28,29 @@ interface ExploreTabProps {
   onFilterAction: (name: string) => void;
 }
 
+const SUB_TABS: { key: SubTab; label: string; icon: React.ElementType }[] = [
+  { key: "overview", label: "Overview", icon: HiMiniChartBar },
+  { key: "calendar", label: "Calendar", icon: HiMiniCalendarDays },
+  { key: "compare", label: "Compare", icon: HiMiniArrowPathRoundedSquare },
+  { key: "export", label: "Export", icon: HiOutlineArrowDownTray },
+];
+
 function ExploreTabRaw({ receipts, filteredReceipts, filters, onFilterDay, onFilterHarness, onFilterAction }: ExploreTabProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>("overview");
-  const [showAnalytics, setShowAnalytics] = useState(false);
-
-  if (!showAnalytics) {
-    return (
-      <div className="space-y-6">
-        <button
-          onClick={() => setShowAnalytics(true)}
-          className="w-full rounded-2xl border border-dashed border-brand-blue/30 bg-brand-blue/[0.03] p-6 text-center transition-colors hover:bg-brand-blue/[0.06]"
-        >
-          <HiMiniChartBar className="mx-auto h-6 w-6 text-brand-blue" aria-hidden="true" />
-          <p className="mt-2 text-sm font-medium text-brand-dark">Show analytics</p>
-          <p className="mt-1 text-xs text-slate-500">Charts, comparisons, and exports</p>
-        </button>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
-        {(
-          [
-            { key: "overview" as SubTab, label: "Overview", icon: HiMiniChartBar },
-            { key: "calendar" as SubTab, label: "Calendar", icon: HiMiniCalendarDays },
-            { key: "compare" as SubTab, label: "Compare", icon: HiMiniArrowPathRoundedSquare },
-            { key: "export" as SubTab, label: "Export", icon: HiOutlineArrowDownTray },
-          ] as const
-        ).map((t) => {
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Analytics views">
+        {SUB_TABS.map((t) => {
           const Icon = t.icon;
           const isActive = activeSubTab === t.key;
           return (
             <button
               key={t.key}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`subtabpanel-${t.key}`}
+              id={`subtab-${t.key}`}
               onClick={() => setActiveSubTab(t.key)}
               className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
                 isActive
@@ -73,7 +66,7 @@ function ExploreTabRaw({ receipts, filteredReceipts, filters, onFilterDay, onFil
       </div>
 
       {activeSubTab === "overview" && (
-        <div className="space-y-6">
+        <div id="subtabpanel-overview" role="tabpanel" aria-labelledby="subtab-overview" className="space-y-6">
           <HistoryInsights
             receipts={receipts}
             onFilterHarness={onFilterHarness}
@@ -85,15 +78,21 @@ function ExploreTabRaw({ receipts, filteredReceipts, filters, onFilterDay, onFil
       )}
 
       {activeSubTab === "calendar" && (
-        <ActivityCalendar receipts={filteredReceipts} onSelectDay={onFilterDay} />
+        <div id="subtabpanel-calendar" role="tabpanel" aria-labelledby="subtab-calendar">
+          <ActivityCalendar receipts={filteredReceipts} onSelectDay={onFilterDay} />
+        </div>
       )}
 
       {activeSubTab === "compare" && (
-        <CompareTimePeriods receipts={receipts} />
+        <div id="subtabpanel-compare" role="tabpanel" aria-labelledby="subtab-compare">
+          <CompareTimePeriods receipts={receipts} />
+        </div>
       )}
 
       {activeSubTab === "export" && (
-        <ExportPanel receipts={filteredReceipts} filters={filters} />
+        <div id="subtabpanel-export" role="tabpanel" aria-labelledby="subtab-export">
+          <ExportPanel receipts={filteredReceipts} filters={filters} />
+        </div>
       )}
     </div>
   );

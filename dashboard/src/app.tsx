@@ -19,11 +19,11 @@ import { ErrorBoundary } from "./error-boundary";
 import { selectNextAfterResolution } from "./queue-state";
 import { useRouteFocus } from "./use-route-focus";
 
-const HomeWorkspace = lazy(() => import("./home-dashboard"));
-const FleetWorkspace = lazy(() => import("./fleet-workspace"));
-const SettingsWorkspace = lazy(() => import("./settings-workspace"));
-const AppDetailWorkspace = lazy(() => import("./apps/app-detail-workspace"));
-const HelpModal = lazy(() => import("./help-modal"));
+const HomeWorkspace = lazy(() => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazy(() => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazy(() => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
+const AppDetailWorkspace = lazy(() => import("./apps/app-detail-workspace").then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazy(() => import("./help-modal").then((m) => ({ default: m.HelpModal })));
 
 function LazyFallback() {
   return (
