@@ -111,10 +111,44 @@ function guardParam(name: string): string | null {
 function readGuardToken(): string | null {
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
-    window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+    saveGuardToken(guardToken);
     return guardToken;
   }
   return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
+}
+
+function saveGuardToken(guardToken: string): void {
+  window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+}
+
+function parseAuthToken(payload: unknown): string | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  const authToken = payload["auth_token"];
+  return typeof authToken === "string" && authToken.trim() ? authToken : null;
+}
+
+async function refreshGuardToken(): Promise<string | null> {
+  const response = await fetch(guardApiInput("/v1/initialize"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_name: "guard-dashboard",
+      client_title: "HOL Guard dashboard",
+      surface: "dashboard",
+      capabilities: ["approval-resolution"],
+      supported_protocol_versions: [1]
+    })
+  });
+  if (!response.ok) {
+    return null;
+  }
+  const authToken = parseAuthToken(await response.json());
+  if (authToken !== null) {
+    saveGuardToken(authToken);
+  }
+  return authToken;
 }
 
 function readGuardDaemonOrigin(): string | null {
@@ -850,7 +884,8 @@ export async function resolveRequestWithQueueResult(input: {
     };
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
-  const payload = await readJson<QueueResolutionPayload>(`/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`, {
+  const path = `/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`;
+  const init = (): RequestInit => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -863,6 +898,14 @@ export async function resolveRequestWithQueueResult(input: {
       reason: input.reason || undefined
     })
   });
+  let response = await fetchGuardApi(path, init());
+  if (response.status === 401 && (await refreshGuardToken()) !== null) {
+    response = await fetchGuardApi(path, init());
+  }
+  if (!response.ok) {
+    throw new Error(`Request failed with ${response.status}`);
+  }
+  const payload = (await response.json()) as QueueResolutionPayload;
   return normalizeQueueResolution(payload);
 }
 

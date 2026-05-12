@@ -588,3 +588,53 @@ assert(resolution.next_selectable_request_id === "req-next", "L077: resolveReque
 assert(resolution.remaining_pending_summaries[0].request_id === "req-next", "L077: resolveRequestWithQueueResult normalizes remaining summaries");
 assert(resolution.resolved_request?.status === "resolved", "L077: resolveRequestWithQueueResult normalizes resolved request");
 assert(resolution.resolved_duplicate_ids[0] === "req-dupe", "L077: resolveRequestWithQueueResult returns duplicate ids");
+
+installGuardWindow("?guardDaemon=http%3A%2F%2F127.0.0.1%3A4781");
+const recoveryCalls: RecordedFetch[] = [];
+globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const url = input instanceof Request ? input.url : String(input);
+  recoveryCalls.push({ url, init });
+  const path = new URL(url, "http://127.0.0.1:4174").pathname;
+  if (path === "/v1/initialize") {
+    return new Response(JSON.stringify({ auth_token: "fresh-resolve-token" }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  if (path === "/v1/requests/req-stale-token/approve") {
+    const token = headerValue(init, "X-Guard-Token");
+    if (token !== "fresh-resolve-token") {
+      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    }
+    return new Response(JSON.stringify({
+      resolved: true,
+      item: null,
+      resolved_request: null,
+      remaining_pending_count: 0,
+      next_selectable_request_id: null,
+      remaining_pending_summaries: [],
+      resolved_duplicate_ids: [],
+      resolution_summary: "Decision saved.",
+      retry_hint: null,
+      copy: null
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+  return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+};
+
+const recoveredResolution = await resolveRequestWithQueueResult({
+  requestId: "req-stale-token",
+  action: "allow",
+  scope: "global",
+  reason: "reviewed"
+});
+assert(recoveredResolution.resolved === true, "L077b: resolve retries after refreshing stale local token");
+assert(recoveryCalls.length === 3, "L077b: resolve retry makes approve, initialize, approve calls");
+assert(new URL(recoveryCalls[1].url).pathname === "/v1/initialize", "L077b: stale token recovery calls initialize");
+assert(
+  headerValue(recoveryCalls[2].init, "X-Guard-Token") === "fresh-resolve-token",
+  "L077b: retry uses refreshed Guard token"
+);
