@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.consumer import artifact_hash as compute_artifact_hash
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.models import (
     GuardArtifact,
@@ -325,9 +326,7 @@ class TestEvaluateDetectionScopePersistence:
         artifact_v1 = _make_artifact(args=("-m", "my_tool", "--port", "8000"))
         artifact_v2 = _make_artifact(args=("-m", "my_tool", "--port", "9999"))
 
-        from codex_plugin_scanner.guard.consumer import artifact_hash as compute_hash
-
-        v1_hash = compute_hash(artifact_v1)
+        v1_hash = compute_artifact_hash(artifact_v1)
         store.upsert_policy(
             PolicyDecision(
                 harness="codex",
@@ -359,6 +358,7 @@ class TestEvaluateDetectionScopePersistence:
 
         artifact_result = result["artifacts"][0]
         assert artifact_result["policy_action"] in {"require-reapproval", "block", "sandbox-required"}
+        assert result["blocked"] is True
 
 
 class TestBuildReceipt:
