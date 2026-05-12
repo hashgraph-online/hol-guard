@@ -44,6 +44,8 @@ import {
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
+let guardTokenOverride: string | null = null;
+let guardTokenLocationKey: string | null = null;
 
 type RawGuardApprovalRequest = Omit<GuardApprovalRequest, "action_envelope_json" | "decision_v2_json"> & {
   action_envelope_json?: unknown;
@@ -109,12 +111,61 @@ function guardParam(name: string): string | null {
 }
 
 function readGuardToken(): string | null {
+  const locationKey = `${window.location.origin}${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (guardTokenLocationKey !== locationKey) {
+    guardTokenOverride = null;
+    guardTokenLocationKey = locationKey;
+  }
+  if (guardTokenOverride !== null) {
+    return guardTokenOverride;
+  }
   const guardToken = guardParam(GUARD_TOKEN_PARAM);
   if (guardToken) {
     window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
     return guardToken;
   }
   return window.sessionStorage.getItem(GUARD_TOKEN_PARAM);
+}
+
+function saveGuardToken(guardToken: string): void {
+  guardTokenOverride = guardToken;
+  window.sessionStorage.setItem(GUARD_TOKEN_PARAM, guardToken);
+}
+
+function parseAuthToken(payload: unknown): string | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  const authToken = payload["auth_token"];
+  return typeof authToken === "string" && authToken.trim() ? authToken : null;
+}
+
+async function refreshGuardToken(): Promise<string | null> {
+  const response = await fetch(guardApiInput("/v1/initialize"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_name: "guard-dashboard",
+      client_title: "HOL Guard dashboard",
+      surface: "dashboard",
+      capabilities: ["approval-resolution"],
+      supported_protocol_versions: [1]
+    })
+  });
+  if (!response.ok) {
+    return null;
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return null;
+  }
+  const authToken = parseAuthToken(payload);
+  if (authToken !== null) {
+    saveGuardToken(authToken);
+  }
+  return authToken;
 }
 
 function readGuardDaemonOrigin(): string | null {
@@ -159,7 +210,9 @@ function withGuardAuth(init?: RequestInit): RequestInit | undefined {
     return init;
   }
   const headers = new Headers(init?.headers);
-  headers.set("X-Guard-Token", guardToken);
+  if (!headers.has("X-Guard-Token")) {
+    headers.set("X-Guard-Token", guardToken);
+  }
   return {
     ...init,
     headers
@@ -168,6 +221,10 @@ function withGuardAuth(init?: RequestInit): RequestInit | undefined {
 
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
+  return guardToken ? { "X-Guard-Token": guardToken } : {};
+}
+
+function guardAuthHeadersForToken(guardToken: string | null): HeadersInit {
   return guardToken ? { "X-Guard-Token": guardToken } : {};
 }
 
@@ -850,11 +907,12 @@ export async function resolveRequestWithQueueResult(input: {
     };
   }
   const actionPath = input.action === "allow" ? "approve" : "block";
-  const payload = await readJson<QueueResolutionPayload>(`/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`, {
+  const path = `/v1/requests/${encodeURIComponent(input.requestId)}/${actionPath}`;
+  const init = (guardToken: string | null = readGuardToken()): RequestInit => ({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...guardAuthHeaders()
+      ...guardAuthHeadersForToken(guardToken)
     },
     body: JSON.stringify({
       action: input.action,
@@ -863,6 +921,17 @@ export async function resolveRequestWithQueueResult(input: {
       reason: input.reason || undefined
     })
   });
+  let response = await fetchGuardApi(path, init());
+  if (response.status === 401) {
+    const refreshedToken = await refreshGuardToken();
+    if (refreshedToken !== null) {
+      response = await fetchGuardApi(path, init(refreshedToken));
+    }
+  }
+  if (!response.ok) {
+    throw new Error(`Request failed with ${response.status}`);
+  }
+  const payload = (await response.json()) as QueueResolutionPayload;
   return normalizeQueueResolution(payload);
 }
 
