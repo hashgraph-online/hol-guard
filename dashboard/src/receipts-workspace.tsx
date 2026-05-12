@@ -1,488 +1,458 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  HiMiniBookOpen,
-  HiMiniTag,
-  HiMiniComputerDesktop,
+  HiMiniListBullet,
   HiMiniChartBar,
+  HiMiniComputerDesktop,
+  HiMiniArrowDownTray,
+  HiMiniClock,
 } from "react-icons/hi2";
 
-import {
-  Badge,
-  EmptyState,
-  SectionLabel,
-  GuardHero,
-} from "./approval-center-primitives";
-import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
+import { EmptyState } from "./approval-center-primitives";
 import type { GuardReceipt } from "./guard-types";
-import { StoryTab, CategoryTab, AppTab, ExploreTab, detectCategory } from "./evidence";
+import type { EvidenceFilterState, EvidenceView } from "./evidence/evidence-types";
+import { filterEvidence } from "./evidence/evidence-filters";
+import { sortEvidence } from "./evidence/evidence-sort";
+import { computeMetrics } from "./evidence/evidence-metrics";
+import {
+  readEvidenceUrlState,
+  writeEvidenceUrlState,
+  DEFAULT_FILTER_STATE,
+} from "./evidence/evidence-url-state";
+import { EvidenceFilterBar } from "./evidence/evidence-filter-bar";
+import { EvidenceActionList } from "./evidence/evidence-action-list";
+import { EvidenceActionDetail } from "./evidence/evidence-action-detail";
+import { EvidenceInsightStrip } from "./evidence/evidence-insight-strip";
+import { EvidenceAnalyticsPanel } from "./evidence/evidence-analytics-panel";
+import { EvidenceExportDrawer } from "./evidence/evidence-export-drawer";
+import { EvidenceClearModal } from "./evidence/evidence-clear-modal";
 
-function useMountedTabs(activeTab: TabKey): Set<TabKey> {
-  const [mounted, setMounted] = useState<Set<TabKey>>(new Set([activeTab]));
-  useEffect(() => {
-    setMounted((prev) => {
-      if (prev.has(activeTab)) return prev;
-      const next = new Set(prev);
-      next.add(activeTab);
-      return next;
-    });
-  }, [activeTab]);
-  return mounted;
-}
-
-type TabKey = "story" | "category" | "app" | "explore";
-type TimeFilter = "all" | "today" | "yesterday" | "week" | "last7d" | "last30d";
-type DecisionFilter = "all" | "allow" | "block";
-
-type ReceiptsState =
+export type ReceiptsState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "ready"; items: GuardReceipt[] };
 
-const TIME_FILTER_VALUES: TimeFilter[] = ["all", "today", "yesterday", "week", "last7d", "last30d"];
-const DECISION_FILTER_VALUES: DecisionFilter[] = ["all", "allow", "block"];
+const PAGE_SIZE = 50;
 
-const TAB_CONFIG: { key: TabKey; label: string; icon: React.ElementType }[] = [
-  { key: "story", label: "Story", icon: HiMiniBookOpen },
-  { key: "category", label: "Category", icon: HiMiniTag },
-  { key: "app", label: "App", icon: HiMiniComputerDesktop },
-  { key: "explore", label: "Explore", icon: HiMiniChartBar },
+const VIEW_TABS: { key: EvidenceView; label: string; icon: React.ElementType }[] = [
+  { key: "actions", label: "All actions", icon: HiMiniListBullet },
+  { key: "insights", label: "Insights", icon: HiMiniChartBar },
+  { key: "apps", label: "Apps", icon: HiMiniComputerDesktop },
+  { key: "export", label: "Export", icon: HiMiniArrowDownTray },
 ];
 
-const CATEGORY_CONFIG: { key: string; label: string; value: string }[] = [
-  { key: "all", label: "All", value: "" },
-  { key: "secret", label: "Secrets", value: "secret" },
-  { key: "network", label: "Network", value: "network" },
-  { key: "destructive", label: "Destructive", value: "destructive" },
-  { key: "hidden", label: "Hidden", value: "hidden" },
-  { key: "other", label: "Other", value: "other" },
-];
+function EvidenceLoadingState() {
+  return (
+    <div className="space-y-4" aria-busy="true" aria-label="Loading evidence">
+      <div className="guard-skeleton h-8 w-64" />
+      <div className="guard-skeleton h-32 w-full" />
+    </div>
+  );
+}
 
-export function ReceiptsWorkspace(props: { receipts: ReceiptsState }) {
-  if (props.receipts.kind === "loading") {
-    return (
-      <div className="space-y-4">
-        <div className="guard-skeleton h-8 w-64" />
-        <div className="guard-skeleton h-32 w-full" />
+function EvidenceErrorState({ message }: { message: string }) {
+  return (
+    <div className="rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4">
+      <p className="text-sm text-brand-dark">{message}</p>
+    </div>
+  );
+}
+
+interface EvidenceHeaderProps {
+  totalCount: number;
+  lastActivityAt: string | null;
+  onExport: () => void;
+  onClear?: () => void;
+}
+
+function EvidenceHeader({
+  totalCount,
+  lastActivityAt,
+  onExport,
+  onClear,
+}: EvidenceHeaderProps) {
+  const lastActivityLabel = lastActivityAt
+    ? new Date(lastActivityAt).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
+
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="space-y-1 min-w-0">
+        <h1 className="text-xl font-bold text-brand-dark">Evidence</h1>
+        <p className="text-sm text-slate-500">
+          See every action HOL Guard reviewed on this machine.
+        </p>
+        {lastActivityLabel && (
+          <p className="flex items-center gap-1 text-xs text-slate-400">
+            <HiMiniClock className="h-3.5 w-3.5" aria-hidden="true" />
+            Last activity: {lastActivityLabel}
+          </p>
+        )}
       </div>
-    );
-  }
-  if (props.receipts.kind === "error") {
-    return (
-      <div className="rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4">
-        <p className="text-sm text-brand-dark">{props.receipts.message}</p>
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={onExport}
+          aria-label="Export evidence"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors"
+        >
+          <HiMiniArrowDownTray className="h-4 w-4" aria-hidden="true" />
+          Export
+        </button>
+        {onClear && totalCount > 0 && (
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label="Clear all evidence"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-brand-attention transition-colors"
+          >
+            Clear
+          </button>
+        )}
       </div>
-    );
-  }
-  return <ReadyReceiptsWorkspace receiptItems={props.receipts.items} />;
+    </div>
+  );
 }
 
-function readUrlParams(): {
-  search: string;
-  time: TimeFilter;
-  decision: DecisionFilter;
-  harness: string;
-  tab: TabKey;
-  day: string;
-} {
-  const params = new URLSearchParams(window.location.search);
-  const time = params.get("time") as TimeFilter;
-  const decision = params.get("decision") as DecisionFilter;
-  const tab = params.get("tab") as TabKey;
-  return {
-    search: params.get("search") ?? "",
-    time: TIME_FILTER_VALUES.includes(time) ? time : "all",
-    decision: DECISION_FILTER_VALUES.includes(decision) ? decision : "all",
-    harness: params.get("harness") ?? "all",
-    tab: TAB_CONFIG.some((t) => t.key === tab) ? tab : "story",
-    day: params.get("day") ?? "",
-  };
+interface ViewTabBarProps {
+  view: EvidenceView;
+  onViewChange: (view: EvidenceView) => void;
 }
 
-function writeUrlParams(params: {
-  search: string;
-  time: TimeFilter;
-  decision: DecisionFilter;
-  harness: string;
-  tab: TabKey;
-  day: string;
-}) {
-  const url = new URL(window.location.href);
-  url.search = "";
-  if (params.search) url.searchParams.set("search", params.search);
-  if (params.time !== "all") url.searchParams.set("time", params.time);
-  if (params.decision !== "all") url.searchParams.set("decision", params.decision);
-  if (params.harness !== "all") url.searchParams.set("harness", params.harness);
-  if (params.tab !== "story") url.searchParams.set("tab", params.tab);
-  if (params.day) url.searchParams.set("day", params.day);
-  window.history.replaceState({}, "", url.toString());
+function ViewTabBar({ view, onViewChange }: ViewTabBarProps) {
+  return (
+    <div
+      className="flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm"
+      role="tablist"
+      aria-label="Evidence views"
+    >
+      {VIEW_TABS.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = view === tab.key;
+        return (
+          <ViewTabButton
+            key={tab.key}
+            tabKey={tab.key}
+            label={tab.label}
+            icon={Icon}
+            isActive={isActive}
+            onSelect={onViewChange}
+          />
+        );
+      })}
+    </div>
+  );
 }
 
-function timeFilterLabel(filter: TimeFilter): string {
-  switch (filter) {
-    case "today": return "Today";
-    case "yesterday": return "Yesterday";
-    case "week": return "Since Sunday";
-    case "last7d": return "Last 7 days";
-    case "last30d": return "Last 30 days";
-    default: return "All time";
-  }
+interface ViewTabButtonProps {
+  tabKey: EvidenceView;
+  label: string;
+  icon: React.ElementType;
+  isActive: boolean;
+  onSelect: (key: EvidenceView) => void;
 }
 
-function decisionFilterLabel(filter: DecisionFilter): string {
-  switch (filter) {
-    case "allow": return "Allowed";
-    case "block": return "Stopped";
-    default: return "All decisions";
-  }
+function ViewTabButton({
+  tabKey,
+  label,
+  icon: Icon,
+  isActive,
+  onSelect,
+}: ViewTabButtonProps) {
+  const handleClick = useCallback(() => {
+    onSelect(tabKey);
+  }, [tabKey, onSelect]);
+
+  return (
+    <button
+      key={tabKey}
+      role="tab"
+      aria-selected={isActive}
+      aria-controls={`tabpanel-${tabKey}`}
+      id={`tab-${tabKey}`}
+      onClick={handleClick}
+      className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
+        isActive
+          ? "bg-brand-blue text-white shadow-sm"
+          : "text-brand-dark hover:bg-slate-50"
+      }`}
+    >
+      <Icon className="h-4 w-4" aria-hidden="true" />
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  );
 }
 
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-  return debouncedValue;
+interface EvidenceWorkbenchProps {
+  receiptItems: GuardReceipt[];
+  onClearEvidence?: () => void;
 }
 
-function ReadyReceiptsWorkspace(props: { receiptItems: GuardReceipt[] }) {
-  const initial = useMemo(() => readUrlParams(), []);
-  const [search, setSearch] = useState(initial.search);
-  const [categoryFilter, setCategoryFilter] = useState<string>("");
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>(initial.time);
-  const [decisionFilter, setDecisionFilter] = useState<DecisionFilter>(initial.decision);
-  const [activeTab, setActiveTab] = useState<TabKey>(initial.tab);
-  const [dayFilter, setDayFilter] = useState<string>(initial.day);
-  const [harnessFilter, setHarnessFilter] = useState<string>(initial.harness);
-  const [isFiltering, setIsFiltering] = useState(false);
+function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchProps) {
+  const initial = useMemo(() => readEvidenceUrlState(), []);
+  const [filters, setFilters] = useState<EvidenceFilterState>(initial);
+  const [debouncedSearch, setDebouncedSearch] = useState(initial.search);
+  const [page, setPage] = useState(0);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
 
-  const debouncedSearch = useDebounce(search, 300);
+  const urlSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const harnesses = useMemo(
-    () => Array.from(new Set(props.receiptItems.map((r) => r.harness))).sort(),
-    [props.receiptItems]
+    () => Array.from(new Set(receiptItems.map((r) => r.harness))).sort(),
+    [receiptItems]
   );
 
-  // URL sync with debounce to avoid races
-  const urlSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    if (urlSyncTimerRef.current) {
-      clearTimeout(urlSyncTimerRef.current);
-    }
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(filters.search);
+    }, 300);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [filters.search]);
+
+  useEffect(() => {
+    if (urlSyncTimerRef.current) clearTimeout(urlSyncTimerRef.current);
     urlSyncTimerRef.current = setTimeout(() => {
-      writeUrlParams({
-        search: debouncedSearch,
-        time: timeFilter,
-        decision: decisionFilter,
-        harness: harnessFilter,
-        tab: activeTab,
-        day: dayFilter,
-      });
+      writeEvidenceUrlState({ ...filters, search: debouncedSearch });
     }, 100);
     return () => {
-      if (urlSyncTimerRef.current) {
-        clearTimeout(urlSyncTimerRef.current);
-      }
+      if (urlSyncTimerRef.current) clearTimeout(urlSyncTimerRef.current);
     };
-  }, [debouncedSearch, timeFilter, decisionFilter, harnessFilter, activeTab, dayFilter]);
+  }, [filters, debouncedSearch]);
 
   useEffect(() => {
-    if (harnessFilter !== "all" && !harnesses.includes(harnessFilter)) {
-      setHarnessFilter("all");
+    if (filters.harness !== "all" && !harnesses.includes(filters.harness)) {
+      setFilters((prev) => ({ ...prev, harness: "all" }));
     }
-  }, [harnesses, harnessFilter]);
+  }, [harnesses, filters.harness]);
 
-  const filtered = useMemo(() => {
-    setIsFiltering(true);
-    let items = props.receiptItems;
-    if (decisionFilter !== "all") {
-      items = items.filter((r) => r.policy_decision === decisionFilter);
-    }
-    if (harnessFilter !== "all") {
-      items = items.filter((r) => r.harness === harnessFilter);
-    }
-    if (timeFilter !== "all") {
-      const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const startOfYesterday = new Date(startOfToday);
-      startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-      const startOfWeek = new Date(startOfToday);
-      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-      const startOfLast7d = new Date(startOfToday);
-      startOfLast7d.setDate(startOfLast7d.getDate() - 7);
-      const startOfLast30d = new Date(startOfToday);
-      startOfLast30d.setDate(startOfLast30d.getDate() - 30);
-      items = items.filter((r) => {
-        const d = new Date(r.timestamp);
-        if (timeFilter === "today") return d >= startOfToday;
-        if (timeFilter === "yesterday") return d >= startOfYesterday && d < startOfToday;
-        if (timeFilter === "week") return d >= startOfWeek;
-        if (timeFilter === "last7d") return d >= startOfLast7d;
-        if (timeFilter === "last30d") return d >= startOfLast30d;
-        return true;
-      });
-    }
-    if (dayFilter) {
-      const dayStart = new Date(dayFilter);
-      const dayEnd = new Date(dayStart);
-      dayEnd.setDate(dayEnd.getDate() + 1);
-      items = items.filter((r) => {
-        const d = new Date(r.timestamp);
-        return d >= dayStart && d < dayEnd;
-      });
-    }
-    if (categoryFilter) {
-      items = items.filter((r) => detectCategory(r) === categoryFilter);
-    }
-    if (debouncedSearch.trim()) {
-      const q = debouncedSearch.toLowerCase();
-      items = items.filter((r) =>
-        (r.artifact_name ?? r.artifact_id).toLowerCase().includes(q) ||
-        r.harness.toLowerCase().includes(q)
-      );
-    }
-    const result = items.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-    // Clear filtering flag after computation
-    setTimeout(() => setIsFiltering(false), 0);
-    return result;
-  }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, debouncedSearch, dayFilter, categoryFilter]);
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, filters.harness, filters.decision, filters.time, filters.day, filters.category, filters.sourceScope]);
 
-  const handleFilterDay = useCallback((day: string) => {
-    setDayFilter(day);
-    setTimeFilter("all");
+  const effectiveFilters = useMemo(
+    () => ({ ...filters, search: debouncedSearch }),
+    [filters, debouncedSearch]
+  );
+
+  const filtered = useMemo(
+    () => filterEvidence(receiptItems, effectiveFilters),
+    [receiptItems, effectiveFilters]
+  );
+
+  const sorted = useMemo(
+    () => sortEvidence(filtered, filters.sort),
+    [filtered, filters.sort]
+  );
+
+  const metrics = useMemo(
+    () => computeMetrics(filtered),
+    [filtered]
+  );
+
+  const selectedReceipt = useMemo(() => {
+    if (!filters.selectedId) return null;
+    const found = filtered.find((r) => r.receipt_id === filters.selectedId);
+    return found ?? null;
+  }, [filtered, filters.selectedId]);
+
+  const handleFilterChange = useCallback((patch: Partial<EvidenceFilterState>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
   }, []);
 
-  const handleTabChange = useCallback((tab: TabKey) => {
-    setActiveTab(tab);
-    // Reset scroll on tab change
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  const handleSelectId = useCallback((id: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      selectedId: prev.selectedId === id ? "" : id,
+    }));
   }, []);
 
-  const totalCount = props.receiptItems.length;
+  const handleCloseDetail = useCallback(() => {
+    setFilters((prev) => ({ ...prev, selectedId: "" }));
+  }, []);
 
-  // Category counts
-  const categoryCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const r of props.receiptItems) {
-      const cat = detectCategory(r);
-      counts.set(cat, (counts.get(cat) ?? 0) + 1);
-    }
-    return counts;
-  }, [props.receiptItems]);
+  const handleFilterHarness = useCallback((harness: string) => {
+    setFilters((prev) => ({ ...prev, harness }));
+  }, []);
 
-  // Tab counts
-  const tabCounts = useMemo(() => {
-    const counts: Record<TabKey, number> = { story: 0, category: 0, app: 0, explore: 0 };
-    // Story and explore show all filtered
-    counts.story = filtered.length;
-    counts.explore = filtered.length;
-    // Category shows unique categories
-    const cats = new Set(filtered.map((r) => detectCategory(r)));
-    counts.category = cats.size;
-    // App shows unique apps
-    const apps = new Set(filtered.map((r) => r.harness));
-    counts.app = apps.size;
-    return counts;
-  }, [filtered]);
+  const handleFilterCategory = useCallback((category: string) => {
+    setFilters((prev) => ({ ...prev, category }));
+  }, []);
 
-  if (totalCount === 0) {
+  const handleLoadMore = useCallback(() => {
+    setPage((prev) => prev + 1);
+  }, []);
+
+  const handleViewChange = useCallback((view: EvidenceView) => {
+    setFilters((prev) => ({ ...prev, view }));
+  }, []);
+
+  const handleOpenExport = useCallback(() => {
+    setExportOpen(true);
+  }, []);
+
+  const handleCloseExport = useCallback(() => {
+    setExportOpen(false);
+  }, []);
+
+  const handleOpenClear = useCallback(() => {
+    setClearOpen(true);
+  }, []);
+
+  const handleCloseClear = useCallback(() => {
+    setClearOpen(false);
+  }, []);
+
+  const handleConfirmClear = useCallback(() => {
+    setFilters(DEFAULT_FILTER_STATE);
+    if (onClearEvidence) onClearEvidence();
+  }, [onClearEvidence]);
+
+  if (receiptItems.length === 0) {
     return (
       <EmptyState
-        title="No history yet"
+        title="No evidence yet"
         body="Saved choices appear here after HOL Guard reviews or blocks an action."
         tone="teach"
       />
     );
   }
 
-  const hasActiveFilters = debouncedSearch || categoryFilter || harnessFilter !== "all" || timeFilter !== "all" || decisionFilter !== "all" || dayFilter;
-
   return (
-    <div className="space-y-6">
-      <GuardHero
-        status="clear"
-        headline="History"
-        subheadline="What Guard decided."
-        cta={<Badge tone="info">{totalCount} saved</Badge>}
+    <div className="space-y-4">
+      <EvidenceHeader
+        totalCount={receiptItems.length}
+        lastActivityAt={metrics.lastActivityAt}
+        onExport={handleOpenExport}
+        onClear={handleOpenClear}
       />
 
-      {/* Search and filters */}
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="relative block flex-1 min-w-[200px]">
-            <span className="sr-only">Search history</span>
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search command, file, app..."
-              className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      <EvidenceInsightStrip metrics={metrics} />
+
+      <EvidenceFilterBar
+        filters={filters}
+        onChange={handleFilterChange}
+        totalCount={receiptItems.length}
+        filteredCount={filtered.length}
+        harnesses={harnesses}
+      />
+
+      <ViewTabBar view={filters.view} onViewChange={handleViewChange} />
+
+      <div className="min-h-[300px]">
+        {filters.view === "actions" && (
+          <div
+            id="tabpanel-actions"
+            role="tabpanel"
+            aria-labelledby="tab-actions"
+            className={selectedReceipt ? "grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]" : ""}
+          >
+            <EvidenceActionList
+              receipts={sorted}
+              selectedId={filters.selectedId}
+              onSelectId={handleSelectId}
+              onFilterHarness={handleFilterHarness}
+              onFilterCategory={handleFilterCategory}
+              sort={filters.sort}
+              onSortChange={(sort) => handleFilterChange({ sort })}
+              page={page}
+              pageSize={PAGE_SIZE}
+              onLoadMore={handleLoadMore}
             />
-          </label>
-          <select
-            value={timeFilter}
-            onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}
-            className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          >
-            {TIME_FILTER_VALUES.map((t) => (
-              <option key={t} value={t}>{timeFilterLabel(t)}</option>
-            ))}
-          </select>
-          <select
-            value={decisionFilter}
-            onChange={(e) => setDecisionFilter(e.target.value as DecisionFilter)}
-            className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-          >
-            {DECISION_FILTER_VALUES.map((d) => (
-              <option key={d} value={d}>{decisionFilterLabel(d)}</option>
-            ))}
-          </select>
-        </div>
+            {selectedReceipt && (
+              <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                <EvidenceActionDetail
+                  receipt={selectedReceipt}
+                  onClose={handleCloseDetail}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
-        {/* Category filter bar */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {CATEGORY_CONFIG.map((c) => {
-            const count = c.value ? categoryCounts.get(c.value) ?? 0 : totalCount;
-            const isActive = categoryFilter === c.value;
-            if (c.value && count === 0) return null;
-            return (
-              <button
-                key={c.key}
-                aria-pressed={isActive}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-                  isActive
-                    ? "bg-brand-blue text-white shadow-sm"
-                    : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"
-                }`}
-                onClick={() => setCategoryFilter(isActive ? "" : c.value)}
-              >
-                {c.label} {count > 0 && <span className="opacity-70">({count})</span>}
-              </button>
-            );
-          })}
-          <span className="mx-1 h-4 w-px bg-slate-200" />
-          <select
-            value={harnessFilter}
-            onChange={(e) => setHarnessFilter(e.target.value)}
-            className="h-8 rounded-md border-0 bg-transparent px-2 py-1 text-xs font-medium text-brand-dark hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+        {filters.view === "insights" && (
+          <div
+            id="tabpanel-insights"
+            role="tabpanel"
+            aria-labelledby="tab-insights"
           >
-            <option value="all">All apps</option>
-            {harnesses.map((h) => (
-              <option key={h} value={h}>{harnessDisplayName(h)}</option>
-            ))}
-          </select>
-          {hasActiveFilters && (
+            <EvidenceAnalyticsPanel
+              metrics={metrics}
+              onFilterHarness={handleFilterHarness}
+              onFilterCategory={handleFilterCategory}
+            />
+          </div>
+        )}
+
+        {filters.view === "apps" && (
+          <div
+            id="tabpanel-apps"
+            role="tabpanel"
+            aria-labelledby="tab-apps"
+          >
+            <EvidenceAnalyticsPanel
+              metrics={metrics}
+              onFilterHarness={handleFilterHarness}
+              onFilterCategory={handleFilterCategory}
+            />
+          </div>
+        )}
+
+        {filters.view === "export" && (
+          <div
+            id="tabpanel-export"
+            role="tabpanel"
+            aria-labelledby="tab-export"
+            className="rounded-xl border border-slate-200 bg-white p-6"
+          >
+            <p className="text-sm text-slate-500 mb-4">
+              Download your evidence records as CSV or JSON.
+            </p>
             <button
-              onClick={() => { setSearch(""); setCategoryFilter(""); setHarnessFilter("all"); setTimeFilter("all"); setDecisionFilter("all"); setDayFilter(""); }}
-              className="ml-auto text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors"
+              type="button"
+              onClick={handleOpenExport}
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-blue/90 transition-colors"
             >
-              Clear filters
+              <HiMiniArrowDownTray className="h-4 w-4" aria-hidden="true" />
+              Open export options
             </button>
-          )}
-        </div>
-
-        {/* Results count */}
-        {isFiltering ? (
-          <div className="guard-skeleton h-4 w-48" />
-        ) : (
-          <p className="text-xs text-slate-500">
-            Showing {filtered.length} of {totalCount} decisions
-            {filtered.length !== totalCount && hasActiveFilters ? " (filtered)" : ""}
-          </p>
+          </div>
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm" role="tablist" aria-label="History views">
-        {TAB_CONFIG.map((t) => {
-          const Icon = t.icon;
-          const isActive = activeTab === t.key;
-          const count = tabCounts[t.key];
-          return (
-            <button
-              key={t.key}
-              role="tab"
-              aria-selected={isActive}
-              aria-controls={`tabpanel-${t.key}`}
-              id={`tab-${t.key}`}
-              onClick={() => handleTabChange(t.key)}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-                isActive
-                  ? "bg-brand-blue text-white shadow-sm"
-                  : "text-brand-dark hover:bg-slate-50"
-              }`}
-            >
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">{t.label}</span>
-              <span className="text-[10px] opacity-70">({count})</span>
-            </button>
-          );
-        })}
-      </div>
+      <EvidenceExportDrawer
+        receipts={sorted}
+        filters={effectiveFilters}
+        isOpen={exportOpen}
+        onClose={handleCloseExport}
+      />
 
-      {/* Tab content */}
-      <TabPanels
-        activeTab={activeTab}
-        filtered={filtered}
-        receiptItems={props.receiptItems}
-        dayFilter={dayFilter}
-        handleFilterDay={handleFilterDay}
-        harnessFilter={harnessFilter}
-        setHarnessFilter={setHarnessFilter}
-        setSearch={setSearch}
-        search={search}
-        timeFilter={timeFilter}
-        decisionFilter={decisionFilter}
+      <EvidenceClearModal
+        count={receiptItems.length}
+        isOpen={clearOpen}
+        onClose={handleCloseClear}
+        onCleared={handleConfirmClear}
       />
     </div>
   );
 }
 
-function TabPanels(props: {
-  activeTab: TabKey;
-  filtered: GuardReceipt[];
-  receiptItems: GuardReceipt[];
-  dayFilter: string;
-  handleFilterDay: (day: string) => void;
-  harnessFilter: string;
-  setHarnessFilter: (h: string) => void;
-  setSearch: (s: string) => void;
-  search: string;
-  timeFilter: TimeFilter;
-  decisionFilter: DecisionFilter;
-}) {
-  const mounted = useMountedTabs(props.activeTab);
-  return (
-    <div className="min-h-[300px]">
-      {mounted.has("story") && (
-        <div id="tabpanel-story" role="tabpanel" aria-labelledby="tab-story" hidden={props.activeTab !== "story"}>
-          <StoryTab receipts={props.filtered} selectedDay={props.dayFilter} onSelectDay={props.handleFilterDay} />
-        </div>
-      )}
-      {mounted.has("category") && (
-        <div id="tabpanel-category" role="tabpanel" aria-labelledby="tab-category" hidden={props.activeTab !== "category"}>
-          <CategoryTab receipts={props.filtered} />
-        </div>
-      )}
-      {mounted.has("app") && (
-        <div id="tabpanel-app" role="tabpanel" aria-labelledby="tab-app" hidden={props.activeTab !== "app"}>
-          <AppTab receipts={props.filtered} />
-        </div>
-      )}
-      {mounted.has("explore") && (
-        <div id="tabpanel-explore" role="tabpanel" aria-labelledby="tab-explore" hidden={props.activeTab !== "explore"}>
-          <ExploreTab
-            receipts={props.receiptItems}
-            filteredReceipts={props.filtered}
-            filters={{ search: props.search, time: props.timeFilter, decision: props.decisionFilter, harness: props.harnessFilter }}
-            onFilterDay={props.handleFilterDay}
-            onFilterHarness={(harness) => props.setHarnessFilter(harness)}
-            onFilterAction={(name) => props.setSearch(name)}
-          />
-        </div>
-      )}
-    </div>
-  );
+export function ReceiptsWorkspace(props: { receipts: ReceiptsState; onClearEvidence?: () => void }) {
+  if (props.receipts.kind === "loading") {
+    return <EvidenceLoadingState />;
+  }
+  if (props.receipts.kind === "error") {
+    return <EvidenceErrorState message={props.receipts.message} />;
+  }
+  return <EvidenceWorkbench receiptItems={props.receipts.items} onClearEvidence={props.onClearEvidence} />;
 }
 
 export function filterReceiptItems(
@@ -499,8 +469,10 @@ export function filterReceiptItems(
   const todayStartMs = todayStart.getTime();
   const last7Start = now - 7 * 24 * 60 * 60 * 1000;
   return items.filter((receipt) => {
-    const matchesHarness = harnessFilter === "all" || receipt.harness === harnessFilter;
-    const matchesDecision = decisionFilter === "all" || receipt.policy_decision === decisionFilter;
+    const matchesHarness =
+      harnessFilter === "all" || receipt.harness === harnessFilter;
+    const matchesDecision =
+      decisionFilter === "all" || receipt.policy_decision === decisionFilter;
     if (!matchesHarness || !matchesDecision) {
       return false;
     }

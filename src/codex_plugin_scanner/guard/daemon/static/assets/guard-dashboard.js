@@ -13471,29 +13471,11 @@ function IconBase(props) {
   };
   return IconContext !== void 0 ? /* @__PURE__ */ React.createElement(IconContext.Consumer, null, (conf) => elem(conf)) : elem(DefaultContext);
 }
+function HiFunnel(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3.792 2.938A49.069 49.069 0 0 1 12 2.25c2.797 0 5.54.236 8.209.688a1.857 1.857 0 0 1 1.541 1.836v1.044a3 3 0 0 1-.879 2.121l-6.182 6.182a1.5 1.5 0 0 0-.439 1.061v2.927a3 3 0 0 1-1.658 2.684l-1.757.878A.75.75 0 0 1 9.75 21v-5.818a1.5 1.5 0 0 0-.44-1.06L3.13 7.938a3 3 0 0 1-.879-2.121V4.774c0-.897.64-1.683 1.542-1.836Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiBars3(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 24 24", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiOutlineShieldCheck(props) {
-  return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" }, "child": [] }] })(props);
-}
-function HiOutlineNoSymbol(props) {
-  return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" }, "child": [] }] })(props);
-}
-function HiOutlineMinus(props) {
-  return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M5 12h14" }, "child": [] }] })(props);
-}
-function HiOutlineFire(props) {
-  return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z" }, "child": [] }, { "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z" }, "child": [] }] })(props);
-}
-function HiOutlineArrowTrendingUp(props) {
-  return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" }, "child": [] }] })(props);
-}
-function HiOutlineArrowTrendingDown(props) {
-  return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M2.25 6 9 12.75l4.286-4.286a11.948 11.948 0 0 1 4.306 6.43l.776 2.898m0 0 3.182-5.511m-3.182 5.51-5.511-3.181" }, "child": [] }] })(props);
-}
-function HiOutlineArrowDownTray(props) {
-  return GenIcon({ "attr": { "fill": "none", "viewBox": "0 0 24 24", "strokeWidth": "1.5", "stroke": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "strokeLinecap": "round", "strokeLinejoin": "round", "d": "M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" }, "child": [] }] })(props);
 }
 function HiMiniXMark(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" }, "child": [] }] })(props);
@@ -13506,9 +13488,6 @@ function HiMiniWrenchScrewdriver(props) {
 }
 function HiMiniTrash(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniTag(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A2.5 2.5 0 0 0 2 4.5v3.879a2.5 2.5 0 0 0 .732 1.767l7.5 7.5a2.5 2.5 0 0 0 3.536 0l3.878-3.878a2.5 2.5 0 0 0 0-3.536l-7.5-7.5A2.5 2.5 0 0 0 8.38 2H4.5ZM5 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniSparkles(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.238a1 1 0 0 0 0 1.962l1.192.238a1 1 0 0 1 .785.785l.238 1.192a1 1 0 0 0 1.962 0l.238-1.192a1 1 0 0 1 .785-.785l1.192-.238a1 1 0 0 0 0-1.962l-1.192-.238a1 1 0 0 1-.785-.785l-.238-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.684a1 1 0 0 1 .633.632l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.683a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.95 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.184.551a1 1 0 0 1-.632.633l-.551.183a1 1 0 0 0 0 1.898l.551.183a1 1 0 0 1 .633.633l.183.551a1 1 0 0 0 1.898 0l.184-.551a1 1 0 0 1 .632-.633l.551-.183a1 1 0 0 0 0-1.898l-.551-.184a1 1 0 0 1-.633-.632l-.183-.551Z" }, "child": [] }] })(props);
@@ -13534,8 +13513,14 @@ function HiMiniNoSymbol(props) {
 function HiMiniMinusCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM6.75 9.25a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniMagnifyingGlass(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniLockClosed(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniListBullet(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6 4.75A.75.75 0 0 1 6.75 4h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 4.75ZM6 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 10Zm0 5.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75ZM1.99 4.75a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 15.25a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1v-.01ZM1.99 10a1 1 0 0 1 1-1H3a1 1 0 0 1 1 1v.01a1 1 0 0 1-1 1h-.01a1 1 0 0 1-1-1V10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniKey(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M8 7a5 5 0 1 1 3.61 4.804l-1.903 1.903A1 1 0 0 1 9 14H8v1a1 1 0 0 1-1 1H6v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-2a1 1 0 0 1 .293-.707L8.196 8.39A5.002 5.002 0 0 1 8 7Zm5-3a.75.75 0 0 0 0 1.5A1.5 1.5 0 0 1 14.5 7 .75.75 0 0 0 16 7a3 3 0 0 0-3-3Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -13597,6 +13582,9 @@ function HiMiniClock(props) {
 function HiMiniClipboard(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M13.887 3.182c.396.037.79.08 1.183.128C16.194 3.45 17 4.414 17 5.517V16.75A2.25 2.25 0 0 1 14.75 19h-9.5A2.25 2.25 0 0 1 3 16.75V5.517c0-1.103.806-2.068 1.93-2.207.393-.048.787-.09 1.183-.128A3.001 3.001 0 0 1 9 1h2c1.373 0 2.531.923 2.887 2.182ZM7.5 4A1.5 1.5 0 0 1 9 2.5h2A1.5 1.5 0 0 1 12.5 4v.5h-5V4Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniClipboardDocument(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M15.988 3.012A2.25 2.25 0 0 1 18 5.25v6.5A2.25 2.25 0 0 1 15.75 14H13.5v-3.379a3 3 0 0 0-.879-2.121l-3.12-3.121a3 3 0 0 0-1.402-.791 2.252 2.252 0 0 1 1.913-1.576A2.25 2.25 0 0 1 12.25 1h1.5a2.25 2.25 0 0 1 2.238 2.012ZM11.5 3.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.25h-3v-.25Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 6A1.5 1.5 0 0 0 2 7.5v9A1.5 1.5 0 0 0 3.5 18h7a1.5 1.5 0 0 0 1.5-1.5v-5.879a1.5 1.5 0 0 0-.44-1.06L8.44 6.439A1.5 1.5 0 0 0 7.378 6H3.5Z" }, "child": [] }] })(props);
+}
 function HiMiniClipboardDocumentCheck(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 5.25a2.25 2.25 0 0 0-2.012-2.238A2.25 2.25 0 0 0 13.75 1h-1.5a2.25 2.25 0 0 0-2.238 2.012c-.875.092-1.6.686-1.884 1.488H11A2.5 2.5 0 0 1 13.5 7v7h2.25A2.25 2.25 0 0 0 18 11.75v-6.5ZM12.25 2.5a.75.75 0 0 0-.75.75v.25h3v-.25a.75.75 0 0 0-.75-.75h-1.5Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3 6a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H3Zm6.874 4.166a.75.75 0 1 0-1.248-.832l-2.493 3.739-.853-.853a.75.75 0 0 0-1.06 1.06l1.5 1.5a.75.75 0 0 0 1.154-.114l3-4.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -13627,9 +13615,6 @@ function HiMiniChartBar(props) {
 function HiMiniCalendarDays(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M5.25 12a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H6a.75.75 0 0 1-.75-.75V12ZM6 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H6ZM7.25 12a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H8a.75.75 0 0 1-.75-.75V12ZM8 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H8ZM9.25 10a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H10a.75.75 0 0 1-.75-.75V10ZM10 11.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V12a.75.75 0 0 0-.75-.75H10ZM9.25 14a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H10a.75.75 0 0 1-.75-.75V14ZM12 9.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V10a.75.75 0 0 0-.75-.75H12ZM11.25 12a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H12a.75.75 0 0 1-.75-.75V12ZM12 13.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V14a.75.75 0 0 0-.75-.75H12ZM13.25 10a.75.75 0 0 1 .75-.75h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H14a.75.75 0 0 1-.75-.75V10ZM14 11.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V12a.75.75 0 0 0-.75-.75H14Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M5.75 2a.75.75 0 0 1 .75.75V4h7V2.75a.75.75 0 0 1 1.5 0V4h.25A2.75 2.75 0 0 1 18 6.75v8.5A2.75 2.75 0 0 1 15.25 18H4.75A2.75 2.75 0 0 1 2 15.25v-8.5A2.75 2.75 0 0 1 4.75 4H5V2.75A.75.75 0 0 1 5.75 2Zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
-function HiMiniBookOpen(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10.75 16.82A7.462 7.462 0 0 1 15 15.5c.71 0 1.396.098 2.046.282A.75.75 0 0 0 18 15.06v-11a.75.75 0 0 0-.546-.721A9.006 9.006 0 0 0 15 3a8.963 8.963 0 0 0-4.25 1.065V16.82ZM9.25 4.065A8.963 8.963 0 0 0 5 3c-.85 0-1.673.118-2.454.339A.75.75 0 0 0 2 4.06v11a.75.75 0 0 0 .954.721A7.506 7.506 0 0 1 5 15.5c1.579 0 3.042.487 4.25 1.32V4.065Z" }, "child": [] }] })(props);
-}
 function HiMiniBolt(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M11.983 1.907a.75.75 0 0 0-1.292-.657l-8.5 9.5A.75.75 0 0 0 2.75 12h6.572l-1.305 6.093a.75.75 0 0 0 1.292.657l8.5-9.5A.75.75 0 0 0 17.25 8h-6.572l1.305-6.093Z" }, "child": [] }] })(props);
 }
@@ -13639,11 +13624,11 @@ function HiMiniArrowTopRightOnSquare(props) {
 function HiMiniArrowPath(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0V5.36l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
-function HiMiniArrowPathRoundedSquare(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 4.5c1.215 0 2.417.055 3.604.162a.68.68 0 0 1 .615.597c.124 1.038.208 2.088.25 3.15l-1.689-1.69a.75.75 0 0 0-1.06 1.061l2.999 3a.75.75 0 0 0 1.06 0l3.001-3a.75.75 0 1 0-1.06-1.06l-1.748 1.747a41.31 41.31 0 0 0-.264-3.386 2.18 2.18 0 0 0-1.97-1.913 41.512 41.512 0 0 0-7.477 0 2.18 2.18 0 0 0-1.969 1.913 41.16 41.16 0 0 0-.16 1.61.75.75 0 1 0 1.495.12c.041-.52.093-1.038.154-1.552a.68.68 0 0 1 .615-.597A40.012 40.012 0 0 1 10 4.5ZM5.281 9.22a.75.75 0 0 0-1.06 0l-3.001 3a.75.75 0 1 0 1.06 1.06l1.748-1.747c.042 1.141.13 2.27.264 3.386a2.18 2.18 0 0 0 1.97 1.913 41.533 41.533 0 0 0 7.477 0 2.18 2.18 0 0 0 1.969-1.913c.064-.534.117-1.071.16-1.61a.75.75 0 1 0-1.495-.12c-.041.52-.093 1.037-.154 1.552a.68.68 0 0 1-.615.597 40.013 40.013 0 0 1-7.208 0 .68.68 0 0 1-.615-.597 39.785 39.785 0 0 1-.25-3.15l1.689 1.69a.75.75 0 0 0 1.06-1.061l-2.999-3Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
 function HiMiniArrowLeft(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniArrowDownTray(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" }, "child": [] }] })(props);
 }
 function HiMiniAdjustmentsHorizontal(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 3.75a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM17.25 4.5a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0 0 1.5h5.5ZM5 3.75a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5a.75.75 0 0 1 .75.75ZM4.25 17a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM17.25 17a.75.75 0 0 0 0-1.5h-5.5a.75.75 0 0 0 0 1.5h5.5ZM9 10a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1 0-1.5h5.5A.75.75 0 0 1 9 10ZM17.25 10.75a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0 0 1.5h1.5ZM14 10a2 2 0 1 0-4 0 2 2 0 0 0 4 0ZM10 16.25a2 2 0 1 0-4 0 2 2 0 0 0 4 0Z" }, "child": [] }] })(props);
@@ -14542,14 +14527,669 @@ function detectCategory(receipt) {
 function getCategoryInfo(key) {
   return CATEGORIES.find((c) => c.key === key) ?? CATEGORIES[CATEGORIES.length - 1];
 }
-function groupByCategory(receipts) {
-  const map = /* @__PURE__ */ new Map();
-  for (const receipt of receipts) {
-    const cat = detectCategory(receipt);
-    if (!map.has(cat)) map.set(cat, []);
-    map.get(cat).push(receipt);
+function filterByTime(receipts, time, day, now2) {
+  const base = /* @__PURE__ */ new Date();
+  const startOfToday = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+  const startOfWeek = new Date(startOfToday);
+  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+  const startOfLast7d = new Date(startOfToday);
+  startOfLast7d.setDate(startOfLast7d.getDate() - 7);
+  const startOfLast30d = new Date(startOfToday);
+  startOfLast30d.setDate(startOfLast30d.getDate() - 30);
+  if (day) {
+    const parts = day.split("-").map(Number);
+    const dayStart = new Date(parts[0], parts[1] - 1, parts[2]);
+    const dayEnd = new Date(parts[0], parts[1] - 1, parts[2] + 1);
+    return receipts.filter((r) => {
+      const d = new Date(r.timestamp);
+      return d >= dayStart && d < dayEnd;
+    });
   }
-  return map;
+  if (time === "all") return receipts;
+  return receipts.filter((r) => {
+    const d = new Date(r.timestamp);
+    if (time === "today") return d >= startOfToday;
+    if (time === "yesterday") return d >= startOfYesterday && d < startOfToday;
+    if (time === "week") return d >= startOfWeek;
+    if (time === "last7d") return d >= startOfLast7d;
+    if (time === "last30d") return d >= startOfLast30d;
+    return true;
+  });
+}
+function filterByDecision(receipts, decision) {
+  if (decision === "all") return receipts;
+  return receipts.filter((r) => r.policy_decision === decision);
+}
+function filterByHarness(receipts, harness) {
+  if (harness === "all") return receipts;
+  return receipts.filter((r) => r.harness === harness);
+}
+function filterByCategory(receipts, category) {
+  if (!category) return receipts;
+  return receipts.filter((r) => detectCategory(r) === category);
+}
+function filterBySearch(receipts, search) {
+  const q = search.trim().toLowerCase();
+  if (!q) return receipts;
+  return receipts.filter((r) => {
+    const name = (r.artifact_name ?? r.artifact_id ?? "").toLowerCase();
+    const id = r.artifact_id.toLowerCase();
+    const harness = r.harness.toLowerCase();
+    const caps = (r.capabilities_summary ?? "").toLowerCase();
+    const changed = (r.changed_capabilities ?? []).join(" ").toLowerCase();
+    const provenance = (r.provenance_summary ?? "").toLowerCase();
+    const scope = (r.source_scope ?? "").toLowerCase();
+    const decision = (r.policy_decision ?? "").toLowerCase();
+    const hashPrefix = (r.artifact_hash ?? "").toLowerCase().slice(0, 12);
+    return name.includes(q) || id.includes(q) || harness.includes(q) || caps.includes(q) || changed.includes(q) || provenance.includes(q) || scope.includes(q) || decision.includes(q) || hashPrefix.startsWith(q);
+  });
+}
+function filterBySourceScope(receipts, sourceScope) {
+  if (!sourceScope) return receipts;
+  return receipts.filter((r) => r.source_scope === sourceScope);
+}
+function filterEvidence(receipts, filters, now2) {
+  let items = receipts;
+  items = filterByDecision(items, filters.decision);
+  items = filterByHarness(items, filters.harness);
+  items = filterByCategory(items, filters.category);
+  items = filterBySourceScope(items, filters.sourceScope);
+  items = filterByTime(items, filters.time, filters.day);
+  items = filterBySearch(items, filters.search);
+  return items;
+}
+function stableCompare(a, b, primary) {
+  if (primary !== 0) return primary;
+  return a.receipt_id < b.receipt_id ? -1 : a.receipt_id > b.receipt_id ? 1 : 0;
+}
+function sortEvidence(receipts, key) {
+  const copy = [...receipts];
+  if (key === "newest") {
+    copy.sort(
+      (a, b) => stableCompare(a, b, +new Date(b.timestamp) - +new Date(a.timestamp))
+    );
+    return copy;
+  }
+  if (key === "oldest") {
+    copy.sort(
+      (a, b) => stableCompare(a, b, +new Date(a.timestamp) - +new Date(b.timestamp))
+    );
+    return copy;
+  }
+  if (key === "app") {
+    copy.sort(
+      (a, b) => stableCompare(
+        a,
+        b,
+        harnessDisplayName(a.harness).localeCompare(harnessDisplayName(b.harness))
+      )
+    );
+    return copy;
+  }
+  if (key === "decision") {
+    copy.sort(
+      (a, b) => stableCompare(a, b, a.policy_decision.localeCompare(b.policy_decision))
+    );
+    return copy;
+  }
+  if (key === "category") {
+    copy.sort(
+      (a, b) => stableCompare(a, b, detectCategory(a).localeCompare(detectCategory(b)))
+    );
+    return copy;
+  }
+  if (key === "artifact") {
+    copy.sort((a, b) => {
+      const nameA = (a.artifact_name ?? a.artifact_id).toLowerCase();
+      const nameB = (b.artifact_name ?? b.artifact_id).toLowerCase();
+      return stableCompare(a, b, nameA.localeCompare(nameB));
+    });
+    return copy;
+  }
+  return copy;
+}
+function formatDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+function shortDateLabel(date) {
+  return date.toLocaleDateString(void 0, { month: "short", day: "numeric" });
+}
+function computeTrendBuckets(receipts, days, now2) {
+  const base = /* @__PURE__ */ new Date();
+  const startOfToday = new Date(
+    base.getFullYear(),
+    base.getMonth(),
+    base.getDate()
+  );
+  const buckets = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(startOfToday);
+    d.setDate(d.getDate() - i);
+    buckets.push({
+      label: shortDateLabel(d),
+      dateKey: formatDateKey(d),
+      allowed: 0,
+      blocked: 0,
+      reviewed: 0
+    });
+  }
+  const bucketMap = new Map(buckets.map((b) => [b.dateKey, b]));
+  for (const r of receipts) {
+    try {
+      const d = new Date(r.timestamp);
+      const key = formatDateKey(d);
+      const bucket = bucketMap.get(key);
+      if (!bucket) continue;
+      if (r.policy_decision === "allow") bucket.allowed++;
+      else if (r.policy_decision === "block") bucket.blocked++;
+      else bucket.reviewed++;
+    } catch {
+    }
+  }
+  return buckets;
+}
+function computeMetrics(receipts, now2) {
+  let allowed = 0;
+  let blocked = 0;
+  let reviewed = 0;
+  let lastActivityAt = null;
+  const byHarness = /* @__PURE__ */ new Map();
+  const byCategory = /* @__PURE__ */ new Map();
+  const recurringMap = /* @__PURE__ */ new Map();
+  for (const r of receipts) {
+    try {
+      new Date(r.timestamp).toISOString();
+    } catch {
+      continue;
+    }
+    if (r.policy_decision === "allow") allowed++;
+    else if (r.policy_decision === "block") blocked++;
+    else reviewed++;
+    if (!lastActivityAt || r.timestamp > lastActivityAt) {
+      lastActivityAt = r.timestamp;
+    }
+    const harness = r.harness;
+    const hEntry = byHarness.get(harness) ?? {
+      total: 0,
+      blocked: 0,
+      allowed: 0
+    };
+    hEntry.total++;
+    if (r.policy_decision === "block") hEntry.blocked++;
+    if (r.policy_decision === "allow") hEntry.allowed++;
+    byHarness.set(harness, hEntry);
+    const cat = detectCategory(r);
+    const cEntry = byCategory.get(cat) ?? { total: 0, blocked: 0 };
+    cEntry.total++;
+    if (r.policy_decision === "block") cEntry.blocked++;
+    byCategory.set(cat, cEntry);
+    const name = r.artifact_name ?? r.artifact_id;
+    const rEntry = recurringMap.get(name) ?? {
+      total: 0,
+      blocked: 0,
+      allowed: 0
+    };
+    rEntry.total++;
+    if (r.policy_decision === "block") rEntry.blocked++;
+    if (r.policy_decision === "allow") rEntry.allowed++;
+    recurringMap.set(name, rEntry);
+  }
+  const total = allowed + blocked + reviewed;
+  const topRecurring = Array.from(recurringMap.entries()).map(([name, counts]) => ({ name, ...counts })).sort((a, b) => b.total - a.total).slice(0, 10);
+  const trendBuckets = computeTrendBuckets(receipts, 7);
+  const insights = buildInsights(
+    total,
+    allowed,
+    blocked,
+    byHarness,
+    byCategory
+  );
+  return {
+    total,
+    allowed,
+    blocked,
+    reviewed,
+    byHarness,
+    byCategory,
+    trendBuckets,
+    topRecurring,
+    insights,
+    lastActivityAt
+  };
+}
+function buildInsights(total, allowed, blocked, byHarness, byCategory) {
+  const insights = [];
+  insights.push({
+    id: "total",
+    label: "Total actions",
+    value: String(total),
+    tone: "blue"
+  });
+  if (blocked > 0) {
+    insights.push({
+      id: "blocked",
+      label: "Stopped",
+      value: String(blocked),
+      tone: "attention",
+      filterKey: "decision",
+      filterValue: "block"
+    });
+  }
+  if (allowed > 0) {
+    insights.push({
+      id: "allowed",
+      label: "Allowed",
+      value: String(allowed),
+      tone: "green",
+      filterKey: "decision",
+      filterValue: "allow"
+    });
+  }
+  const topHarness = Array.from(byHarness.entries()).sort(
+    (a, b) => b[1].total - a[1].total
+  )[0];
+  if (topHarness) {
+    insights.push({
+      id: "top-app",
+      label: "Most active app",
+      value: harnessDisplayName(topHarness[0]),
+      tone: "purple",
+      filterKey: "harness",
+      filterValue: topHarness[0]
+    });
+  }
+  const topCat = Array.from(byCategory.entries()).sort(
+    (a, b) => b[1].total - a[1].total
+  )[0];
+  if (topCat) {
+    insights.push({
+      id: "top-category",
+      label: "Top category",
+      value: topCat[0],
+      tone: "blue",
+      filterKey: "category",
+      filterValue: topCat[0]
+    });
+  }
+  return insights;
+}
+const DEFAULT_FILTER_STATE = {
+  search: "",
+  time: "all",
+  decision: "all",
+  harness: "all",
+  category: "",
+  sourceScope: "",
+  day: "",
+  sort: "newest",
+  view: "actions",
+  selectedId: ""
+};
+const VALID_TIME = [
+  "all",
+  "today",
+  "yesterday",
+  "week",
+  "last7d",
+  "last30d"
+];
+const VALID_DECISION = ["all", "allow", "block", "ask"];
+const VALID_SORT = [
+  "newest",
+  "oldest",
+  "app",
+  "decision",
+  "category",
+  "artifact"
+];
+const VALID_VIEW = ["actions", "insights", "apps", "export"];
+function parseEvidenceUrlState(params) {
+  const time = params.get("time");
+  const decision = params.get("decision");
+  const sort = params.get("sort");
+  const view = params.get("view");
+  return {
+    search: params.get("search") ?? DEFAULT_FILTER_STATE.search,
+    time: VALID_TIME.includes(time) ? time : DEFAULT_FILTER_STATE.time,
+    decision: VALID_DECISION.includes(decision) ? decision : DEFAULT_FILTER_STATE.decision,
+    harness: params.get("harness") ?? DEFAULT_FILTER_STATE.harness,
+    category: params.get("category") ?? DEFAULT_FILTER_STATE.category,
+    sourceScope: params.get("sourceScope") ?? DEFAULT_FILTER_STATE.sourceScope,
+    day: params.get("day") ?? DEFAULT_FILTER_STATE.day,
+    sort: VALID_SORT.includes(sort) ? sort : DEFAULT_FILTER_STATE.sort,
+    view: VALID_VIEW.includes(view) ? view : DEFAULT_FILTER_STATE.view,
+    selectedId: params.get("selected") ?? DEFAULT_FILTER_STATE.selectedId
+  };
+}
+function serializeEvidenceUrlState(state) {
+  const params = new URLSearchParams();
+  if (state.search) params.set("search", state.search);
+  if (state.time !== DEFAULT_FILTER_STATE.time) params.set("time", state.time);
+  if (state.decision !== DEFAULT_FILTER_STATE.decision)
+    params.set("decision", state.decision);
+  if (state.harness !== DEFAULT_FILTER_STATE.harness)
+    params.set("harness", state.harness);
+  if (state.category) params.set("category", state.category);
+  if (state.sourceScope) params.set("sourceScope", state.sourceScope);
+  if (state.day) params.set("day", state.day);
+  if (state.sort !== DEFAULT_FILTER_STATE.sort) params.set("sort", state.sort);
+  if (state.view !== DEFAULT_FILTER_STATE.view) params.set("view", state.view);
+  if (state.selectedId) params.set("selected", state.selectedId);
+  return params;
+}
+function readEvidenceUrlState(params) {
+  const p = new URLSearchParams(window.location.search);
+  return parseEvidenceUrlState(p);
+}
+function writeEvidenceUrlState(state) {
+  const params = serializeEvidenceUrlState(state);
+  const url = new URL(window.location.href);
+  url.search = params.toString();
+  window.history.replaceState({}, "", url.toString());
+}
+const EVIDENCE_SORT_OPTIONS = [
+  { key: "newest", label: "Newest first" },
+  { key: "oldest", label: "Oldest first" },
+  { key: "app", label: "App" },
+  { key: "decision", label: "Decision" },
+  { key: "category", label: "Category" },
+  { key: "artifact", label: "Artifact" }
+];
+const EVIDENCE_TIME_LABELS = {
+  all: "All time",
+  today: "Today",
+  yesterday: "Yesterday",
+  week: "Since Sunday",
+  last7d: "Last 7 days",
+  last30d: "Last 30 days"
+};
+const EVIDENCE_DECISION_LABELS = {
+  all: "All decisions",
+  allow: "Allowed",
+  block: "Stopped",
+  ask: "Reviewed"
+};
+const CATEGORY_OPTIONS = [
+  { value: "", label: "All categories" },
+  { value: "secret", label: "Secrets" },
+  { value: "network", label: "Network" },
+  { value: "destructive", label: "Destructive" },
+  { value: "hidden", label: "Hidden" },
+  { value: "file-write", label: "File write" },
+  { value: "tool-call", label: "Tool call" },
+  { value: "other", label: "Other" }
+];
+function ActiveChip({ label, onRemove }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full bg-brand-blue/10 px-2.5 py-1 text-xs font-medium text-brand-blue", children: [
+    label,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: onRemove,
+        "aria-label": `Remove filter: ${label}`,
+        className: "flex h-4 w-4 items-center justify-center rounded-full hover:bg-brand-blue/20 transition-colors",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-3 w-3", "aria-hidden": "true" })
+      }
+    )
+  ] });
+}
+function SearchInput({ value, onChange }) {
+  const handleChange = reactExports.useCallback(
+    (e) => {
+      onChange(e.target.value);
+    },
+    [onChange]
+  );
+  const handleClear = reactExports.useCallback(() => {
+    onChange("");
+  }, [onChange]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative flex flex-1 min-w-[180px] items-center", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search evidence" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      HiMiniMagnifyingGlass,
+      {
+        className: "absolute left-3 h-4 w-4 text-slate-400 pointer-events-none",
+        "aria-hidden": "true"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: "search",
+        value,
+        onChange: handleChange,
+        placeholder: "Search artifact, app, capability...",
+        className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-8 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+      }
+    ),
+    value && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: handleClear,
+        "aria-label": "Clear search",
+        className: "absolute right-2 flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 transition-colors",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4", "aria-hidden": "true" })
+      }
+    )
+  ] });
+}
+function EvidenceFilterBar({
+  filters,
+  onChange,
+  totalCount,
+  filteredCount,
+  harnesses
+}) {
+  const [showMore, setShowMore] = reactExports.useState(false);
+  const handleSearchChange = reactExports.useCallback(
+    (value) => {
+      onChange({ search: value });
+    },
+    [onChange]
+  );
+  const handleTimeChange = reactExports.useCallback(
+    (e) => {
+      onChange({ time: e.target.value, day: "" });
+    },
+    [onChange]
+  );
+  const handleDecisionChange = reactExports.useCallback(
+    (e) => {
+      onChange({ decision: e.target.value });
+    },
+    [onChange]
+  );
+  const handleHarnessChange = reactExports.useCallback(
+    (e) => {
+      onChange({ harness: e.target.value });
+    },
+    [onChange]
+  );
+  const handleCategoryChange = reactExports.useCallback(
+    (e) => {
+      onChange({ category: e.target.value });
+    },
+    [onChange]
+  );
+  const handleSourceScopeChange = reactExports.useCallback(
+    (e) => {
+      onChange({ sourceScope: e.target.value });
+    },
+    [onChange]
+  );
+  const handleClearAll = reactExports.useCallback(() => {
+    onChange({
+      search: "",
+      time: "all",
+      decision: "all",
+      harness: "all",
+      category: "",
+      sourceScope: "",
+      day: ""
+    });
+  }, [onChange]);
+  const handleRemoveSearch = reactExports.useCallback(() => {
+    onChange({ search: "" });
+  }, [onChange]);
+  const handleRemoveTime = reactExports.useCallback(() => {
+    onChange({ time: "all", day: "" });
+  }, [onChange]);
+  const handleRemoveDecision = reactExports.useCallback(() => {
+    onChange({ decision: "all" });
+  }, [onChange]);
+  const handleRemoveHarness = reactExports.useCallback(() => {
+    onChange({ harness: "all" });
+  }, [onChange]);
+  const handleRemoveCategory = reactExports.useCallback(() => {
+    onChange({ category: "" });
+  }, [onChange]);
+  const handleRemoveSourceScope = reactExports.useCallback(() => {
+    onChange({ sourceScope: "" });
+  }, [onChange]);
+  const handleToggleMore = reactExports.useCallback(() => {
+    setShowMore((prev) => !prev);
+  }, []);
+  const hasActiveFilters = filters.search || filters.time !== "all" || filters.decision !== "all" || filters.harness !== "all" || filters.category || filters.sourceScope || filters.day;
+  const isFiltered = filteredCount !== totalCount;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", "aria-label": "Evidence filters", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SearchInput, { value: filters.search, onChange: handleSearchChange }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "select",
+        {
+          value: filters.time,
+          onChange: handleTimeChange,
+          "aria-label": "Time period",
+          className: "min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          children: Object.entries(EVIDENCE_TIME_LABELS).map(
+            ([val, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: val, children: label }, val)
+          )
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "select",
+        {
+          value: filters.decision,
+          onChange: handleDecisionChange,
+          "aria-label": "Decision filter",
+          className: "min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          children: Object.entries(EVIDENCE_DECISION_LABELS).map(
+            ([val, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: val, children: label }, val)
+          )
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "select",
+        {
+          value: filters.harness,
+          onChange: handleHarnessChange,
+          "aria-label": "App filter",
+          className: "min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All apps" }),
+            harnesses.map((h) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: h, children: harnessDisplayName(h) }, h))
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "select",
+        {
+          value: filters.category,
+          onChange: handleCategoryChange,
+          "aria-label": "Category filter",
+          className: "min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          children: CATEGORY_OPTIONS.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: opt.value, children: opt.label }, opt.value))
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: handleToggleMore,
+          "aria-expanded": showMore,
+          "aria-label": "Toggle more filters",
+          className: "inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiFunnel, { className: "h-4 w-4", "aria-hidden": "true" }),
+            "More",
+            showMore ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+          ]
+        }
+      )
+    ] }),
+    showMore && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/80 p-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-sm text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-xs font-medium text-slate-500", children: "Source scope:" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "text",
+            value: filters.sourceScope,
+            onChange: handleSourceScopeChange,
+            placeholder: "e.g. workspace, global",
+            className: "min-h-9 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+          }
+        )
+      ] }),
+      filters.day && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-slate-500", children: [
+        "Filtered by day: ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: filters.day })
+      ] })
+    ] }),
+    hasActiveFilters && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
+      filters.search && /* @__PURE__ */ jsxRuntimeExports.jsx(ActiveChip, { label: `"${filters.search}"`, onRemove: handleRemoveSearch }),
+      filters.time !== "all" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveChip,
+        {
+          label: EVIDENCE_TIME_LABELS[filters.time],
+          onRemove: handleRemoveTime
+        }
+      ),
+      filters.day && /* @__PURE__ */ jsxRuntimeExports.jsx(ActiveChip, { label: `Day: ${filters.day}`, onRemove: handleRemoveTime }),
+      filters.decision !== "all" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveChip,
+        {
+          label: EVIDENCE_DECISION_LABELS[filters.decision],
+          onRemove: handleRemoveDecision
+        }
+      ),
+      filters.harness !== "all" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveChip,
+        {
+          label: harnessDisplayName(filters.harness),
+          onRemove: handleRemoveHarness
+        }
+      ),
+      filters.category && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveChip,
+        {
+          label: CATEGORY_OPTIONS.find((c) => c.value === filters.category)?.label ?? filters.category,
+          onRemove: handleRemoveCategory
+        }
+      ),
+      filters.sourceScope && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveChip,
+        {
+          label: `Scope: ${filters.sourceScope}`,
+          onRemove: handleRemoveSourceScope
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: handleClearAll,
+          className: "ml-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
+          children: "Clear all"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: isFiltered ? `Showing ${filteredCount} of ${totalCount} actions (filtered)` : `Showing all ${totalCount} actions` })
+  ] });
 }
 function humanFileName(artifactName) {
   if (!artifactName) return "a file";
@@ -14657,1351 +15297,585 @@ function whyPaused(request) {
       return "Guard paused this so you can review it first.";
   }
 }
-function StoryTabRaw({ receipts, selectedDay, onSelectDay }) {
-  const daysWithData = reactExports.useMemo(() => {
-    const set = /* @__PURE__ */ new Set();
-    for (const r of receipts) {
-      const d = new Date(r.timestamp);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      set.add(key);
-    }
-    return set;
-  }, [receipts]);
-  const effectiveDay = reactExports.useMemo(() => {
-    if (selectedDay) return selectedDay;
-    if (daysWithData.size === 0) return "";
-    const sorted = Array.from(daysWithData).sort();
-    return sorted[sorted.length - 1];
-  }, [selectedDay, daysWithData]);
-  const dayReceipts = reactExports.useMemo(() => {
-    if (!effectiveDay) return [];
-    const start = new Date(effectiveDay);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    return receipts.filter((r) => {
-      const d = new Date(r.timestamp);
-      return d >= start && d < end;
-    });
-  }, [receipts, effectiveDay]);
-  const summary = reactExports.useMemo(() => {
-    const allowed = dayReceipts.filter((r) => r.policy_decision === "allow").length;
-    const blocked = dayReceipts.filter((r) => r.policy_decision === "block").length;
-    return { allowed, blocked, total: dayReceipts.length };
-  }, [dayReceipts]);
-  const dayLabel = reactExports.useMemo(() => {
-    if (!effectiveDay) return "No data";
-    const d = new Date(effectiveDay);
-    const today = /* @__PURE__ */ new Date();
-    today.setHours(0, 0, 0, 0);
-    const diff = Math.floor((today.getTime() - d.getTime()) / (1e3 * 60 * 60 * 24));
-    if (diff === 0) return "Today";
-    if (diff === 1) return "Yesterday";
-    return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
-  }, [effectiveDay]);
-  const sortedDays = reactExports.useMemo(() => Array.from(daysWithData).sort(), [daysWithData]);
-  const currentIndex = reactExports.useMemo(() => sortedDays.indexOf(effectiveDay), [sortedDays, effectiveDay]);
-  const handlePrevDay = () => {
-    if (currentIndex <= 0) return;
-    onSelectDay(sortedDays[currentIndex - 1]);
-  };
-  const handleNextDay = () => {
-    if (currentIndex < 0 || currentIndex >= sortedDays.length - 1) return;
-    onSelectDay(sortedDays[currentIndex + 1]);
-  };
-  const hasPrev = currentIndex > 0;
-  const hasNext = currentIndex >= 0 && currentIndex < sortedDays.length - 1;
-  if (receipts.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "All quiet. Guard is watching." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-400", children: "Saved decisions will appear here." })
-    ] });
-  }
-  if (dayReceipts.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(DayHeader, { dayLabel, onPrev: handlePrevDay, onNext: handleNextDay, hasPrev, hasNext }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No decisions on this day." }) })
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(DayHeader, { dayLabel, onPrev: handlePrevDay, onNext: handleNextDay, hasPrev, hasNext }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
-      "Guard reviewed ",
-      summary.total,
-      " action",
-      summary.total !== 1 ? "s" : "",
-      ".",
-      " ",
-      summary.allowed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-brand-green", children: [
-        "Allowed ",
-        summary.allowed,
-        "."
-      ] }),
-      " ",
-      summary.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-brand-attention", children: [
-        "Stopped ",
-        summary.blocked,
-        "."
-      ] })
-    ] }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: dayReceipts.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx(StoryCard, { receipt }, receipt.receipt_id)) })
-  ] });
+function hasMore(page, pageSize, total) {
+  return (page + 1) * pageSize < total;
 }
-function DayHeader({
-  dayLabel,
-  onPrev,
-  onNext,
-  hasPrev,
-  hasNext
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        onClick: onPrev,
-        disabled: !hasPrev,
-        className: "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent",
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft, { className: "h-4 w-4", "aria-hidden": "true" }),
-          "Previous"
-        ]
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: dayLabel }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        onClick: onNext,
-        disabled: !hasNext,
-        className: "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent",
-        children: [
-          "Next",
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4", "aria-hidden": "true" })
-        ]
-      }
-    )
-  ] });
-}
-function StoryCard({ receipt }) {
-  const category = detectCategory(receipt);
-  const catInfo = getCategoryInfo(category);
-  const description = plainEnglishDescription(receipt);
-  const isAllowed = receipt.policy_decision === "allow";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-all hover:shadow-md", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-50 ${catInfo.color}`, children: catInfo.icon }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: harnessDisplayName(receipt.harness) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "·" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: formatRelativeTime(receipt.timestamp) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark", children: description })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionBadge, { allowed: isAllowed })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex items-center gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${catInfo.color} bg-slate-50`, children: catInfo.label }) })
-  ] });
-}
-function DecisionBadge({ allowed }) {
-  if (allowed) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+function DecisionChip({ decision }) {
+  if (decision === "allow") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex shrink-0 items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-700 ring-1 ring-green-200", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-3 w-3", "aria-hidden": "true" }),
       "Allowed"
     ] });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-brand-dark", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-    "Stopped"
-  ] });
-}
-const StoryTab = reactExports.memo(StoryTabRaw);
-const ICON_MAP = {
-  secret: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "h-5 w-5", "aria-hidden": "true" }),
-  network: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniGlobeAlt, { className: "h-5 w-5", "aria-hidden": "true" }),
-  destructive: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-5 w-5", "aria-hidden": "true" }),
-  hidden: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEyeSlash, { className: "h-5 w-5", "aria-hidden": "true" }),
-  "file-write": /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniDocumentText, { className: "h-5 w-5", "aria-hidden": "true" }),
-  "tool-call": /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-5 w-5", "aria-hidden": "true" }),
-  other: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCircleStack, { className: "h-5 w-5", "aria-hidden": "true" })
-};
-function CategoryTabRaw({ receipts, onFilterCategory }) {
-  const [selectedCategory, setSelectedCategory] = reactExports.useState(null);
-  const groups = reactExports.useMemo(() => groupByCategory(receipts), [receipts]);
-  if (selectedCategory) {
-    const items = groups.get(selectedCategory) ?? [];
-    const info = getCategoryInfo(selectedCategory);
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          onClick: () => setSelectedCategory(null),
-          className: "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100",
-          children: "← Back to categories"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 ${info.color}`, children: ICON_MAP[selectedCategory] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: info.label }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: info.description })
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-4 text-sm text-brand-dark", children: [
-          items.length,
-          " action",
-          items.length !== 1 ? "s" : "",
-          " in this category"
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: items.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "div",
-        {
-          className: "rounded-2xl border border-slate-100 bg-white p-4 shadow-sm",
-          children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: plainEnglishDescription(receipt) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-slate-400", children: [
-                harnessDisplayName(receipt.harness),
-                " · ",
-                formatRelativeTime(receipt.timestamp)
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `shrink-0 text-xs font-medium ${receipt.policy_decision === "allow" ? "text-emerald-600" : "text-brand-attention"}`, children: receipt.policy_decision === "allow" ? "Allowed" : "Stopped" })
-          ] })
-        },
-        receipt.receipt_id
-      )) })
+  if (decision === "block") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-3 w-3", "aria-hidden": "true" }),
+      "Stopped"
     ] });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-    CATEGORIES.map((cat) => {
-      const items = groups.get(cat.key) ?? [];
-      if (items.length === 0) return null;
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          onClick: () => {
-            setSelectedCategory(cat.key);
-            onFilterCategory?.(cat.key);
-          },
-          className: "flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:shadow-md",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 ${cat.color}`, children: ICON_MAP[cat.key] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: cat.label }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-                  items.length,
-                  " action",
-                  items.length !== 1 ? "s" : ""
-                ] })
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" })
-          ]
-        },
-        cat.key
-      );
-    }),
-    Array.from(groups.values()).every((items) => items.length === 0) && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No activity yet." }) })
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex shrink-0 items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 ring-1 ring-blue-200", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniQuestionMarkCircle, { className: "h-3 w-3", "aria-hidden": "true" }),
+    "Reviewed"
   ] });
 }
-const CategoryTab = reactExports.memo(CategoryTabRaw);
-function hashString(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-const HUE_PALETTE = [210, 160, 45, 280, 340, 120, 190, 25, 260, 80];
-function harnessColor(harness) {
-  const hash = hashString(harness);
-  const hue = HUE_PALETTE[hash % HUE_PALETTE.length];
-  return `hsl(${hue} 70% 45%)`;
-}
-function AppTabRaw({ receipts }) {
-  const [selectedApp, setSelectedApp] = reactExports.useState(null);
-  const [searchTerm, setSearchTerm] = reactExports.useState("");
-  const apps = reactExports.useMemo(() => {
-    const map = /* @__PURE__ */ new Map();
-    for (const receipt of receipts) {
-      if (!map.has(receipt.harness)) map.set(receipt.harness, []);
-      map.get(receipt.harness).push(receipt);
-    }
-    for (const [, items] of map) {
-      items.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-    }
-    return Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length);
-  }, [receipts]);
-  const filteredApps = reactExports.useMemo(() => {
-    if (!searchTerm.trim()) return apps;
-    const q = searchTerm.toLowerCase();
-    return apps.filter(([harness]) => harnessDisplayName(harness).toLowerCase().includes(q));
-  }, [apps, searchTerm]);
-  const handleSearchChange = reactExports.useCallback((e) => {
-    setSearchTerm(e.target.value);
-  }, []);
-  if (receipts.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No activity yet." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-400", children: "App activity will appear here after Guard makes decisions." })
-    ] });
-  }
-  if (selectedApp) {
-    const items = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
-    const allowed = items.filter((r) => r.policy_decision === "allow").length;
-    const blocked = items.filter((r) => r.policy_decision === "block").length;
-    const color = harnessColor(selectedApp);
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: () => setSelectedApp(null),
-            className: "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100",
-            children: "← Back to apps"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "a",
-          {
-            href: guardAwareHref(`/apps/${encodeURIComponent(selectedApp)}`),
-            className: "ml-auto text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
-            target: "_blank",
-            rel: "noopener noreferrer",
-            children: "Open app detail →"
-          }
-        )
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+function ActionRow({
+  receipt,
+  isSelected,
+  onSelect,
+  onFilterHarness,
+  onFilterCategory
+}) {
+  const category = detectCategory(receipt);
+  const catInfo = getCategoryInfo(category);
+  const artifactLabel = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
+  const handleClick = reactExports.useCallback(() => {
+    onSelect(receipt.receipt_id);
+  }, [receipt.receipt_id, onSelect]);
+  const handleHarnessClick = reactExports.useCallback(
+    (e) => {
+      e.stopPropagation();
+      onFilterHarness(receipt.harness);
+    },
+    [receipt.harness, onFilterHarness]
+  );
+  const handleCategoryClick = reactExports.useCallback(
+    (e) => {
+      e.stopPropagation();
+      onFilterCategory(category);
+    },
+    [category, onFilterCategory]
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick: handleClick,
+      "aria-selected": isSelected,
+      className: `w-full text-left flex items-center gap-3 px-4 py-3 transition-colors border-b border-slate-100 last:border-0 hover:bg-slate-50 focus:outline-none focus:bg-slate-50 ${isSelected ? "bg-brand-blue/5 border-l-2 border-l-brand-blue" : ""}`,
+      children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "span",
           {
-            className: "inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white",
-            style: { backgroundColor: color },
-            children: selectedApp[0]?.toUpperCase()
+            className: `shrink-0 ${catInfo.color}`,
+            "aria-hidden": "true",
+            children: catInfo.icon
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: harnessDisplayName(selectedApp) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-500", children: [
-            items.length,
-            " action",
-            items.length !== 1 ? "s" : "",
-            " · ",
-            allowed,
-            " allowed · ",
-            blocked,
-            " stopped"
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0 space-y-0.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 flex-wrap", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark truncate", children: artifactLabel }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionChip, { decision: receipt.policy_decision })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 flex-wrap", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: handleHarnessClick,
+                "aria-label": `Filter by app ${harnessDisplayName(receipt.harness)}`,
+                className: "text-[11px] font-medium text-brand-blue hover:underline shrink-0",
+                children: harnessDisplayName(receipt.harness)
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-300 text-[11px]", children: "·" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: handleCategoryClick,
+                "aria-label": `Filter by category ${catInfo.label}`,
+                className: "text-[11px] text-slate-500 hover:text-brand-dark shrink-0",
+                children: catInfo.label
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-300 text-[11px]", children: "·" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] text-slate-400 shrink-0", children: formatRelativeTime(receipt.timestamp) })
           ] })
         ] })
-      ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(AppSparkline, { items }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: items.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "div",
-        {
-          className: "rounded-2xl border border-slate-100 bg-white p-4 shadow-sm",
-          children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: plainEnglishDescription(receipt) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-400", children: formatRelativeTime(receipt.timestamp) })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `shrink-0 text-xs font-medium ${receipt.policy_decision === "allow" ? "text-brand-green" : "text-brand-attention"}`, children: receipt.policy_decision === "allow" ? "Allowed" : "Stopped" })
-          ] })
-        },
-        receipt.receipt_id
-      )) })
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search apps" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          type: "search",
-          value: searchTerm,
-          onChange: handleSearchChange,
-          placeholder: "Search apps...",
-          className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-        }
-      )
-    ] }),
-    filteredApps.map(([harness, items]) => {
-      const allowed = items.filter((r) => r.policy_decision === "allow").length;
-      const blocked = items.filter((r) => r.policy_decision === "block").length;
-      const lastActive = items[0]?.timestamp;
-      const color = harnessColor(harness);
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          onClick: () => {
-            setSelectedApp(harness);
-          },
-          className: "flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-4 text-left shadow-sm transition-all hover:shadow-md",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "span",
-                {
-                  className: "inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white",
-                  style: { backgroundColor: color },
-                  children: harness[0]?.toUpperCase()
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: harnessDisplayName(harness) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-                  items.length,
-                  " actions · ",
-                  allowed,
-                  " allowed · ",
-                  blocked,
-                  " stopped"
-                ] }),
-                lastActive && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-400", children: [
-                  "Last active ",
-                  formatRelativeTime(lastActive)
-                ] })
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" })
-          ]
-        },
-        harness
-      );
-    }),
-    filteredApps.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white/60 p-8 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No apps match your search." }) })
-  ] });
-}
-function AppSparkline({ items }) {
-  const buckets = reactExports.useMemo(() => {
-    const days = 7;
-    const now2 = /* @__PURE__ */ new Date();
-    const counts = new Array(days).fill(0);
-    for (const item of items) {
-      const d = new Date(item.timestamp);
-      const diff = Math.floor((now2.getTime() - d.getTime()) / (1e3 * 60 * 60 * 24));
-      if (diff >= 0 && diff < days) {
-        counts[days - 1 - diff] += 1;
-      }
-    }
-    return counts;
-  }, [items]);
-  const max = Math.max(...buckets, 1);
-  const width = 200;
-  const height = 40;
-  const barWidth = width / buckets.length;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-slate-500", children: "Last 7 days" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: `0 0 ${width} ${height}`, className: "mt-2 h-10 w-full", preserveAspectRatio: "none", children: buckets.map((count, i) => {
-      const barHeight = count / max * height;
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "rect",
-        {
-          x: i * barWidth + 1,
-          y: height - barHeight,
-          width: barWidth - 2,
-          height: barHeight,
-          rx: 2,
-          fill: "currentColor",
-          className: "text-brand-blue/30"
-        },
-        i
-      );
-    }) })
-  ] });
-}
-const AppTab = reactExports.memo(AppTabRaw);
-function HistoryInsights({
-  receipts,
-  onFilterHarness,
-  onFilterDay
-}) {
-  const [showAll, setShowAll] = reactExports.useState(false);
-  const insights = reactExports.useMemo(() => {
-    return computeInsights(receipts, onFilterHarness);
-  }, [receipts, onFilterHarness, onFilterDay]);
-  if (insights.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-4 text-center", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No insights yet." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-400", children: "More activity will reveal patterns." })
-    ] });
-  }
-  const visible = showAll ? insights : insights.slice(0, 3);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Insights" }),
-      insights.length > 3 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          onClick: () => setShowAll((v) => !v),
-          className: "flex items-center gap-1 text-xs font-medium text-brand-blue transition-colors hover:text-brand-dark",
-          children: showAll ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3 w-3", "aria-hidden": "true" }),
-            "Show less"
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3", "aria-hidden": "true" }),
-            "Show all (",
-            insights.length,
-            ")"
-          ] })
-        }
-      )
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3", children: visible.map((insight) => /* @__PURE__ */ jsxRuntimeExports.jsx(InsightCardComponent, { insight }, insight.id)) })
-  ] });
-}
-function InsightCardComponent({
-  insight
-}) {
-  const toneClasses = {
-    blue: "bg-blue-50/60 border-blue-200/40 text-blue-700",
-    green: "bg-emerald-50/60 border-emerald-200/40 text-emerald-700",
-    purple: "bg-purple-50/60 border-purple-200/40 text-purple-700",
-    attention: "bg-amber-50/60 border-amber-200/40 text-amber-700"
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      className: `rounded-xl border p-3 transition-colors hover:bg-opacity-80 ${toneClasses[insight.tone]}`,
-      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2.5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-0.5 shrink-0 opacity-70", children: insight.icon }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs opacity-80", children: insight.label }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm font-semibold", children: insight.value }),
-          insight.action && /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              onClick: insight.action.onClick,
-              className: "mt-1 text-xs underline opacity-70 transition-opacity hover:opacity-100",
-              children: insight.action.label
-            }
-          )
-        ] })
-      ] })
+      ]
     }
   );
 }
-function computeInsights(receipts, onFilterHarness, onFilterDay) {
-  const now2 = /* @__PURE__ */ new Date();
-  const weekAgo = new Date(now2);
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  const monthAgo = new Date(now2);
-  monthAgo.setDate(monthAgo.getDate() - 30);
-  const weekReceipts = receipts.filter((r) => new Date(r.timestamp) >= weekAgo);
-  const monthReceipts = receipts.filter((r) => new Date(r.timestamp) >= monthAgo);
-  const insights = [];
-  const blockedWeek = weekReceipts.filter((r) => r.policy_decision === "block");
-  if (blockedWeek.length > 0) {
-    const topBlocked = aggregateByAction(blockedWeek)[0];
-    if (topBlocked) {
-      insights.push({
-        id: "top-blocked-week",
-        icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineNoSymbol, { className: "h-4 w-4" }),
-        label: "Most blocked this week",
-        value: topBlocked.name,
-        tone: "attention"
-      });
-    }
-  }
-  const appActivity = /* @__PURE__ */ new Map();
-  for (const r of weekReceipts) {
-    appActivity.set(r.harness, (appActivity.get(r.harness) ?? 0) + 1);
-  }
-  const topApp = Array.from(appActivity.entries()).sort((a, b) => b[1] - a[1])[0];
-  if (topApp) {
-    insights.push({
-      id: "top-app-week",
-      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineFire, { className: "h-4 w-4" }),
-      label: "Most active app",
-      value: harnessDisplayName(topApp[0]),
-      tone: "purple",
-      action: {
-        label: "Filter",
-        onClick: () => onFilterHarness?.(topApp[0])
-      }
-    });
-  }
-  if (weekReceipts.length >= 5) {
-    const blockRate = Math.round(blockedWeek.length / weekReceipts.length * 100);
-    const prevWeekStart = new Date(weekAgo);
-    prevWeekStart.setDate(prevWeekStart.getDate() - 7);
-    const prevWeekReceipts = receipts.filter((r) => {
-      const d = new Date(r.timestamp);
-      return d >= prevWeekStart && d < weekAgo;
-    });
-    const prevBlockedCount = prevWeekReceipts.filter((r) => r.policy_decision === "block").length;
-    const hasPrevWeekData = prevWeekReceipts.length > 0;
-    const prevBlockRate = hasPrevWeekData ? Math.round(prevBlockedCount / prevWeekReceipts.length * 100) : 0;
-    const change = hasPrevWeekData ? blockRate - prevBlockRate : 0;
-    const value = !hasPrevWeekData ? `${blockRate}%` : change === 0 ? `${blockRate}% (flat)` : `${blockRate}% (${change > 0 ? "+" : ""}${change}%)`;
-    insights.push({
-      id: "block-rate",
-      icon: change < 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineArrowTrendingDown, { className: "h-4 w-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineArrowTrendingUp, { className: "h-4 w-4" }),
-      label: "Block rate this week",
-      value,
-      tone: !hasPrevWeekData ? "blue" : change > 0 ? "attention" : "green"
-    });
-  }
-  const secretReads = monthReceipts.filter((r) => {
-    const name = (r.artifact_name ?? "").toLowerCase();
-    return /\.env(\.[a-z]+)?$/.test(name) || /\.(secrets?|key|token|password|credential)/i.test(name) || (r.capabilities_summary ?? "").toLowerCase().includes("secret");
-  });
-  if (secretReads.length > 0) {
-    insights.push({
-      id: "secret-reads",
-      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineShieldCheck, { className: "h-4 w-4" }),
-      label: "Secret reads stopped this month",
-      value: String(secretReads.length),
-      tone: "blue"
-    });
-  }
-  const harnessFirstSeen = /* @__PURE__ */ new Map();
-  const harnessTotalCount = /* @__PURE__ */ new Map();
-  for (const r of receipts) {
-    const d = new Date(r.timestamp);
-    const existing = harnessFirstSeen.get(r.harness);
-    if (!existing || d < existing) {
-      harnessFirstSeen.set(r.harness, d);
-    }
-    harnessTotalCount.set(r.harness, (harnessTotalCount.get(r.harness) ?? 0) + 1);
-  }
-  for (const [harness, firstSeen] of harnessFirstSeen.entries()) {
-    if (firstSeen >= weekAgo && (harnessTotalCount.get(harness) ?? 0) <= 10) {
-      insights.push({
-        id: `new-app-${harness}`,
-        icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineFire, { className: "h-4 w-4" }),
-        label: "New app detected",
-        value: harnessDisplayName(harness),
-        tone: "purple",
-        action: {
-          label: "Filter",
-          onClick: () => onFilterHarness?.(harness)
-        }
-      });
-    }
-  }
-  return insights;
-}
-function ActivityCalendar({
+function EvidenceActionList({
   receipts,
-  onSelectDay
+  selectedId,
+  onSelectId,
+  onFilterHarness,
+  onFilterCategory,
+  sort,
+  onSortChange,
+  page,
+  pageSize,
+  onLoadMore
 }) {
-  const [monthOffset, setMonthOffset] = reactExports.useState(0);
-  const { year, month, days, startOffset } = reactExports.useMemo(() => {
-    const now2 = /* @__PURE__ */ new Date();
-    const target = new Date(now2.getFullYear(), now2.getMonth() + monthOffset, 1);
-    const y = target.getFullYear();
-    const m = target.getMonth();
-    const firstDay = new Date(y, m, 1);
-    const lastDay = new Date(y, m + 1, 0);
-    const so = firstDay.getDay();
-    const totalDays = lastDay.getDate();
-    return { year: y, month: m, days: totalDays, startOffset: so };
-  }, [monthOffset]);
-  const activityByDay = reactExports.useMemo(() => {
-    const map = /* @__PURE__ */ new Map();
-    for (const r of receipts) {
-      const d = new Date(r.timestamp);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      map.set(key, (map.get(key) ?? 0) + 1);
-    }
-    return map;
-  }, [receipts]);
-  const handlePrevMonth = reactExports.useCallback(() => setMonthOffset((o) => o - 1), []);
-  const handleNextMonth = reactExports.useCallback(() => setMonthOffset((o) => o + 1), []);
-  const handleToday = reactExports.useCallback(() => setMonthOffset(0), []);
-  const monthName = new Date(year, month).toLocaleDateString(void 0, { month: "long", year: "numeric" });
-  const weekDays = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-  const today = /* @__PURE__ */ new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  const totalCells = Math.ceil((startOffset + days) / 7) * 7;
-  const cells = Math.max(42, totalCells);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Activity" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1", children: [
+  const handleSortChange = reactExports.useCallback(
+    (e) => {
+      onSortChange(e.target.value);
+    },
+    [onSortChange]
+  );
+  const visible = receipts.slice(0, (page + 1) * pageSize);
+  const showLoadMore = hasMore(page, pageSize, receipts.length);
+  if (receipts.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center py-16 text-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "No actions match" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Try adjusting the filters above." })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between px-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs font-medium text-slate-500", children: [
+        receipts.length,
+        " action",
+        receipts.length !== 1 ? "s" : ""
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-1.5 text-xs text-slate-500", children: [
+        "Sort by:",
         /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
+          "select",
           {
-            onClick: handlePrevMonth,
-            className: "rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark",
-            "aria-label": "Previous month",
-            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronLeft, { className: "h-4 w-4", "aria-hidden": "true" })
+            value: sort,
+            onChange: handleSortChange,
+            "aria-label": "Sort actions",
+            className: "rounded-md border-0 bg-transparent py-0.5 text-xs font-medium text-brand-dark focus:outline-none focus:ring-1 focus:ring-brand-blue/30",
+            children: EVIDENCE_SORT_OPTIONS.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: opt.key, children: opt.label }, opt.key))
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "min-w-[120px] text-center text-xs font-medium text-brand-dark", children: monthName }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: handleNextMonth,
-            className: "rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-brand-dark",
-            "aria-label": "Next month",
-            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4", "aria-hidden": "true" })
-          }
-        ),
-        monthOffset !== 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: handleToday,
-            className: "ml-1 rounded-md px-2 py-0.5 text-xs font-medium text-brand-blue hover:bg-blue-50",
-            children: "Today"
-          }
-        )
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3 text-slate-400 pointer-events-none", "aria-hidden": "true" })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-7 gap-1", children: [
-      weekDays.map((d) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-center text-[10px] font-medium text-slate-400", children: d }, d)),
-      Array.from({ length: cells }, (_, i) => {
-        const dayIndex = i - startOffset + 1;
-        if (dayIndex < 1 || dayIndex > days) {
-          return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "aspect-square" }, i);
-        }
-        const dateKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayIndex).padStart(2, "0")}`;
-        const count = activityByDay.get(dateKey) ?? 0;
-        const isToday = dateKey === todayKey;
-        const intensity = count === 0 ? 0 : count <= 2 ? 1 : count <= 5 ? 2 : 3;
-        const intensityClasses = [
-          "bg-white text-slate-300 hover:bg-slate-50",
-          "bg-blue-100 text-blue-700 hover:bg-blue-200",
-          "bg-blue-300 text-white hover:bg-blue-400",
-          "bg-blue-500 text-white hover:bg-blue-600"
-        ];
-        return /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "rounded-xl border border-slate-200 bg-white overflow-hidden",
+        role: "list",
+        "aria-label": "Evidence actions",
+        children: visible.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "listitem", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActionRow,
           {
-            onClick: () => count > 0 && onSelectDay?.(dateKey),
-            disabled: count === 0,
-            className: `aspect-square rounded-md text-[10px] font-medium transition-colors ${intensityClasses[intensity]} ${isToday ? "ring-2 ring-brand-blue ring-offset-1" : ""} ${count === 0 ? "cursor-default" : "cursor-pointer"}`,
-            "aria-label": `${dateKey}: ${count} actions`,
-            children: dayIndex
-          },
-          i
-        );
-      })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 text-[10px] text-slate-400", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "No activity" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-sm bg-blue-100" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Light" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-sm bg-blue-300" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Medium" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-sm bg-blue-500" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Heavy" })
+            receipt,
+            isSelected: selectedId === receipt.receipt_id,
+            onSelect: onSelectId,
+            onFilterHarness,
+            onFilterCategory
+          }
+        ) }, receipt.receipt_id))
+      }
+    ),
+    showLoadMore && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center pt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: onLoadMore,
+        className: "rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors",
+        children: "Load more"
+      }
+    ) })
+  ] });
+}
+function DecisionBadge({ decision }) {
+  if (decision === "allow") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 ring-1 ring-green-200", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+      "Allowed"
+    ] });
+  }
+  if (decision === "block") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-brand-attention ring-1 ring-amber-200", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+      "Stopped"
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-brand-blue ring-1 ring-blue-200", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniQuestionMarkCircle, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+    "Reviewed"
+  ] });
+}
+function TechnicalSection({ receipt }) {
+  const [open, setOpen] = reactExports.useState(false);
+  const handleToggle = reactExports.useCallback(() => {
+    setOpen((prev) => !prev);
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-200", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        onClick: handleToggle,
+        "aria-expanded": open,
+        className: "flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-brand-dark hover:bg-slate-50 rounded-lg transition-colors",
+        children: [
+          "Technical details",
+          open ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" })
+        ]
+      }
+    ),
+    open && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-4 py-3 space-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Receipt ID", value: receipt.receipt_id, mono: true }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Artifact ID", value: receipt.artifact_id, mono: true }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        DetailRow,
+        {
+          label: "Hash",
+          value: (receipt.artifact_hash ?? "").slice(0, 16) + "…",
+          mono: true
+        }
+      ),
+      receipt.source_scope && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Source scope", value: receipt.source_scope }),
+      receipt.provenance_summary && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Provenance", value: receipt.provenance_summary }),
+      (receipt.changed_capabilities ?? []).length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        DetailRow,
+        {
+          label: "Changed capabilities",
+          value: (receipt.changed_capabilities ?? []).join(", ")
+        }
+      ),
+      receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsx(DetailRow, { label: "Capabilities", value: receipt.capabilities_summary })
     ] })
   ] });
 }
-function TopActions({
-  receipts,
-  onFilterAction
-}) {
-  const [period, setPeriod] = reactExports.useState("7d");
-  const [expanded, setExpanded] = reactExports.useState(false);
-  const periodReceipts = reactExports.useMemo(() => {
-    if (period === "all") return receipts;
-    const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
-    const cutoff = /* @__PURE__ */ new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    return receipts.filter((r) => new Date(r.timestamp) >= cutoff);
-  }, [receipts, period]);
-  const aggregated = reactExports.useMemo(() => aggregateByAction(periodReceipts), [periodReceipts]);
-  const topTotal = aggregated.slice(0, 10);
-  const topBlocked = aggregated.filter((a) => a.blocked > 0).slice(0, 10);
-  const topAllowed = aggregated.filter((a) => a.allowed > 0).slice(0, 10);
-  const toggleExpanded = reactExports.useCallback(() => setExpanded((p) => !p), []);
-  if (aggregated.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No top actions yet." }) });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Top actions" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-1", children: ["7d", "30d", "90d", "all"].map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          onClick: () => setPeriod(p),
-          className: `rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${period === p ? "bg-brand-blue text-white" : "text-slate-500 hover:bg-slate-100"}`,
-          children: p === "7d" ? "7 days" : p === "30d" ? "30 days" : p === "90d" ? "90 days" : "All time"
-        },
-        p
-      )) })
-    ] }),
-    !expanded ? /* @__PURE__ */ jsxRuntimeExports.jsx(TopActionsList, { actions: topTotal, onFilterAction }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TopActionsSection, { title: "Most frequent", actions: topTotal, onFilterAction }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TopActionsSection, { title: "Most blocked", actions: topBlocked, onFilterAction }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TopActionsSection, { title: "Most allowed", actions: topAllowed, onFilterAction })
-    ] }),
+function DetailRow({ label, value, mono }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-0.5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-medium uppercase tracking-wide text-slate-400", children: label }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
+      "span",
       {
-        onClick: toggleExpanded,
-        className: "flex items-center gap-1 text-xs font-medium text-brand-blue transition-colors hover:text-brand-dark",
-        children: expanded ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-          "Show less"
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-          "Show top blocked and allowed"
-        ] })
+        className: `text-sm text-brand-dark break-all ${mono ? "font-mono text-xs" : ""}`,
+        children: value
       }
     )
   ] });
 }
-function TopActionsSection({
-  title,
-  actions,
-  onFilterAction
+function EvidenceActionDetail({
+  receipt,
+  onClose
 }) {
-  if (actions.length === 0) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1.5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-slate-500", children: title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(TopActionsList, { actions, onFilterAction })
-  ] });
-}
-function TopActionsList({
-  actions,
-  onFilterAction
-}) {
-  actions[0]?.total ?? 1;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-1", children: actions.map((action) => {
-    const allowPct = action.total > 0 ? action.allowed / action.total * 100 : 0;
-    const blockPct = action.total > 0 ? action.blocked / action.total * 100 : 0;
+  const [copied, setCopied] = reactExports.useState(false);
+  const handleCopyId = reactExports.useCallback(async () => {
+    if (!receipt) return;
+    try {
+      await navigator.clipboard.writeText(receipt.receipt_id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2e3);
+    } catch {
+    }
+  }, [receipt]);
+  if (!receipt) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
+      "div",
       {
-        onClick: () => onFilterAction?.(action.name),
-        className: "group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-slate-50",
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-xs font-medium text-brand-dark", children: action.name }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-[10px] text-slate-400", children: action.total })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 flex h-1.5 w-full overflow-hidden rounded-full bg-slate-100", children: [
+        className: "flex h-full items-center justify-center p-8 text-sm text-slate-400",
+        "aria-label": "No action selected",
+        children: "Select an action to see details."
+      }
+    );
+  }
+  const category = detectCategory(receipt);
+  const catInfo = getCategoryInfo(category);
+  const description = plainEnglishDescription(receipt);
+  const artifactLabel = humanFileName(receipt.artifact_name ?? receipt.artifact_id);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      role: "dialog",
+      "aria-label": "Evidence action detail",
+      className: "flex h-full flex-col overflow-hidden bg-white",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-2 border-b border-slate-100 px-5 py-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 min-w-0", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "div",
+              "span",
               {
-                className: "bg-emerald-400 transition-all",
-                style: { width: `${allowPct}%` }
+                className: `shrink-0 ${catInfo.color}`,
+                "aria-hidden": "true",
+                children: catInfo.icon
               }
             ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "div",
-              {
-                className: "bg-brand-attention transition-all",
-                style: { width: `${blockPct}%` }
-              }
-            )
-          ] })
-        ] })
-      },
-      action.name
-    );
-  }) });
-}
-function aggregateByAction(receipts) {
-  const map = /* @__PURE__ */ new Map();
-  for (const r of receipts) {
-    const name = r.artifact_name ?? r.artifact_id;
-    const existing = map.get(name);
-    if (existing) {
-      existing.total += 1;
-      if (r.policy_decision === "allow") existing.allowed += 1;
-      if (r.policy_decision === "block") existing.blocked += 1;
-      if (r.timestamp > existing.lastSeen) existing.lastSeen = r.timestamp;
-    } else {
-      map.set(name, {
-        name,
-        total: 1,
-        allowed: r.policy_decision === "allow" ? 1 : 0,
-        blocked: r.policy_decision === "block" ? 1 : 0,
-        lastSeen: r.timestamp
-      });
-    }
-  }
-  return Array.from(map.values()).sort((a, b) => b.total - a.total);
-}
-function DecisionPieChart({ receipts }) {
-  const { allow, block, total } = reactExports.useMemo(() => {
-    const allow2 = receipts.filter((r) => r.policy_decision === "allow").length;
-    const block2 = receipts.filter((r) => r.policy_decision === "block").length;
-    return { allow: allow2, block: block2, total: receipts.length };
-  }, [receipts]);
-  if (total === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-40 items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "No decisions to chart" }) });
-  }
-  const allowPct = Math.round(allow / total * 100);
-  const blockPct = Math.round(block / total * 100);
-  const radius = 40;
-  const circumference = 2 * Math.PI * radius;
-  const allowDash = allow / total * circumference;
-  const blockDash = block / total * circumference;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", "aria-label": `Decision breakdown: ${allowPct}% allowed, ${blockPct}% blocked`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-semibold text-brand-dark", children: "Decisions" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: "0 0 100 100", className: "h-20 w-20 -rotate-90", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "50", cy: "50", r: radius, fill: "none", stroke: "#e2e8f0", strokeWidth: "12" }),
-        allow > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "circle",
-          {
-            cx: "50",
-            cy: "50",
-            r: radius,
-            fill: "none",
-            stroke: "#10b981",
-            strokeWidth: "12",
-            strokeDasharray: `${allowDash} ${circumference - allowDash}`,
-            strokeLinecap: "round"
-          }
-        ),
-        block > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "circle",
-          {
-            cx: "50",
-            cy: "50",
-            r: radius,
-            fill: "none",
-            stroke: "#f59e0b",
-            strokeWidth: "12",
-            strokeDasharray: `${blockDash} ${circumference - blockDash}`,
-            strokeDashoffset: -allowDash,
-            strokeLinecap: "round"
-          }
-        )
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 text-xs", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-emerald-500" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-500", children: "Allowed" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "ml-auto font-medium text-brand-dark", children: [
-            allowPct,
-            "%"
-          ] })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-brand-dark truncate text-sm", children: artifactLabel })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: onClose,
+              "aria-label": "Close detail panel",
+              className: "shrink-0 flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" })
+            }
+          )
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5 text-xs", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-full bg-amber-500" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-500", children: "Blocked" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "ml-auto font-medium text-brand-dark", children: [
-            blockPct,
-            "%"
-          ] })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto px-5 py-4 space-y-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionBadge, { decision: receipt.policy_decision }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: harnessDisplayName(receipt.harness) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "·" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-500", children: formatRelativeTime(receipt.timestamp) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark leading-relaxed", children: description }),
+          receipt.capabilities_summary && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500 italic leading-relaxed", children: receipt.capabilities_summary }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalSection, { receipt }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: handleCopyId,
+              "aria-label": "Copy receipt ID to clipboard",
+              className: "inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+                copied ? "Copied!" : "Copy receipt ID"
+              ]
+            }
+          )
         ] })
-      ] })
-    ] })
-  ] });
-}
-function ActivityBarChart({ receipts }) {
-  const days = reactExports.useMemo(() => {
-    const map = /* @__PURE__ */ new Map();
-    const now2 = /* @__PURE__ */ new Date();
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(now2);
-      d.setDate(d.getDate() - i);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      map.set(key, { allow: 0, block: 0 });
-    }
-    for (const r of receipts) {
-      const d = new Date(r.timestamp);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      if (map.has(key)) {
-        const existing = map.get(key);
-        if (r.policy_decision === "allow") existing.allow += 1;
-        if (r.policy_decision === "block") existing.block += 1;
-      }
-    }
-    return Array.from(map.entries()).map(([date, counts]) => ({ date, ...counts }));
-  }, [receipts]);
-  const maxTotal = Math.max(1, ...days.map((d) => d.allow + d.block));
-  if (days.every((d) => d.allow === 0 && d.block === 0)) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-40 items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "No activity to chart" }) });
-  }
-  const formatDayLabel = (date) => {
-    const d = new Date(date);
-    return `${d.getMonth() + 1}/${d.getDate()}`;
-  };
-  const showEvery = days.length > 14 ? Math.ceil(days.length / 14) : 1;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", "aria-label": "Activity bar chart showing allowed and blocked decisions over time", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-semibold text-brand-dark", children: "Activity (last 30 days)" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-32 items-end gap-0.5", children: days.map((day, idx) => {
-      const total = day.allow + day.block;
-      const heightPct = total > 0 ? total / maxTotal * 100 : 0;
-      const allowPctOfTotal = total > 0 ? day.allow / total * 100 : 0;
-      const label = formatDayLabel(day.date);
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "group relative flex flex-1 flex-col justify-end", title: `${label}: ${total} actions`, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex w-full flex-col-reverse overflow-hidden rounded-t-sm", style: { height: `${heightPct}%` }, children: [
-          day.allow > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-emerald-400 transition-all", style: { height: `${allowPctOfTotal}%`, minHeight: day.allow > 0 ? 1 : 0 } }),
-          day.block > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-amber-400 transition-all", style: { height: `${100 - allowPctOfTotal}%`, minHeight: day.block > 0 ? 1 : 0 } })
-        ] }),
-        idx % showEvery === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 text-center text-[8px] text-slate-400", children: label })
-      ] }, day.date);
-    }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 text-[10px] text-slate-400", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2 w-2 rounded-sm bg-emerald-400" }),
-        "Allowed"
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2 w-2 rounded-sm bg-amber-400" }),
-        "Blocked"
-      ] })
-    ] })
-  ] });
-}
-function AppActivityBars({ receipts }) {
-  const [showAll, setShowAll] = reactExports.useState(false);
-  const apps = reactExports.useMemo(() => {
-    const map = /* @__PURE__ */ new Map();
-    for (const r of receipts) {
-      map.set(r.harness, (map.get(r.harness) ?? 0) + 1);
-    }
-    return Array.from(map.entries()).map(([harness, count]) => ({ harness, count })).sort((a, b) => b.count - a.count);
-  }, [receipts]);
-  const visibleApps = showAll ? apps : apps.slice(0, 5);
-  const maxCount = Math.max(1, ...apps.map((a) => a.count));
-  if (apps.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-40 items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "No app activity to chart" }) });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", "aria-label": "Top apps by activity count", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-semibold text-brand-dark", children: "Top apps" }),
-      apps.length > 5 && /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          onClick: () => setShowAll((v) => !v),
-          className: "text-[10px] font-medium text-brand-blue hover:text-brand-dark transition-colors",
-          children: showAll ? "Show less" : `Show all (${apps.length})`
-        }
-      )
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-2", children: visibleApps.map((app) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between text-xs", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-600", children: harnessDisplayName(app.harness) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-dark", children: app.count })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-1.5 w-full overflow-hidden rounded-full bg-slate-100", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "div",
-        {
-          className: "h-full rounded-full bg-brand-blue transition-all",
-          style: { width: `${app.count / maxCount * 100}%` }
-        }
-      ) })
-    ] }, app.harness)) })
-  ] });
-}
-function DecisionTrendLine({ receipts }) {
-  const days = reactExports.useMemo(() => {
-    const map = /* @__PURE__ */ new Map();
-    const now2 = /* @__PURE__ */ new Date();
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(now2);
-      d.setDate(d.getDate() - i);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      map.set(key, { allow: 0, block: 0 });
-    }
-    for (const r of receipts) {
-      const d = new Date(r.timestamp);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      if (map.has(key)) {
-        const existing = map.get(key);
-        if (r.policy_decision === "allow") existing.allow += 1;
-        if (r.policy_decision === "block") existing.block += 1;
-      }
-    }
-    return Array.from(map.entries()).map(([date, counts]) => ({ date, ...counts }));
-  }, [receipts]);
-  const hasData = days.some((d) => d.allow > 0 || d.block > 0);
-  if (!hasData) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-40 items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "No trend data to chart" }) });
-  }
-  const width = 300;
-  const height = 80;
-  const padding = { top: 4, right: 4, bottom: 16, left: 20 };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
-  const totalMax = Math.max(1, ...days.map((d) => d.allow + d.block));
-  const allowPoints = days.map((day, i) => {
-    const x = padding.left + i / (days.length - 1) * chartWidth;
-    const y = padding.top + chartHeight - day.allow / totalMax * chartHeight;
-    return `${x},${y}`;
-  }).join(" ");
-  const blockPoints = days.map((day, i) => {
-    const x = padding.left + i / (days.length - 1) * chartWidth;
-    const y = padding.top + chartHeight - day.block / totalMax * chartHeight;
-    return `${x},${y}`;
-  }).join(" ");
-  const yTicks = [0, Math.round(totalMax / 2), totalMax];
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", "aria-label": "Decision trend line chart showing allowed and blocked over 30 days", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-semibold text-brand-dark", children: "Decision trend (30 days)" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { viewBox: `0 0 ${width} ${height}`, className: "w-full", preserveAspectRatio: "none", children: [
-      yTicks.map((tick, i) => {
-        const y = padding.top + chartHeight - tick / totalMax * chartHeight;
-        return /* @__PURE__ */ jsxRuntimeExports.jsxs("g", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("line", { x1: padding.left, y1: y, x2: width - padding.right, y2: y, stroke: "#e2e8f0", strokeWidth: "0.5" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("text", { x: padding.left - 2, y: y + 3, textAnchor: "end", fontSize: "8", fill: "#94a3b8", children: tick })
-        ] }, i);
-      }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "polyline",
-        {
-          fill: "none",
-          stroke: "#10b981",
-          strokeWidth: "2",
-          points: allowPoints,
-          strokeLinecap: "round",
-          strokeLinejoin: "round"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "polyline",
-        {
-          fill: "none",
-          stroke: "#f59e0b",
-          strokeWidth: "2",
-          points: blockPoints,
-          strokeLinecap: "round",
-          strokeLinejoin: "round"
-        }
-      )
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 text-[10px] text-slate-400", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-1 w-4 rounded-full bg-emerald-400" }),
-        "Allowed"
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-1 w-4 rounded-full bg-amber-400" }),
-        "Blocked"
-      ] })
-    ] })
-  ] });
-}
-function BlockReasonBreakdown({ receipts }) {
-  const reasons = reactExports.useMemo(() => {
-    const blocked = receipts.filter((r) => r.policy_decision === "block");
-    const counts = /* @__PURE__ */ new Map();
-    for (const r of blocked) {
-      const cat = detectCategory(r);
-      const label = cat === "secret" ? "Secret access" : cat === "network" ? "Network/Exfiltration" : cat === "destructive" ? "Destructive" : cat === "hidden" ? "Encoded payload" : cat === "file-write" ? "File write" : cat === "tool-call" ? "Tool call" : "Other";
-      counts.set(label, (counts.get(label) ?? 0) + 1);
-    }
-    return Array.from(counts.entries()).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
-  }, [receipts]);
-  if (reasons.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-40 items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "No blocked decisions to analyze" }) });
-  }
-  const maxCount = Math.max(1, ...reasons.map((r) => r.count));
-  const colors = ["bg-amber-500", "bg-amber-400", "bg-amber-300", "bg-amber-200", "bg-slate-300"];
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", "aria-label": "Breakdown of why Guard blocked actions", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-semibold text-brand-dark", children: "Why Guard stopped" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-2", children: reasons.map((reason, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between text-xs", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-slate-600", children: reason.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-dark", children: reason.count })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-1.5 w-full overflow-hidden rounded-full bg-slate-100", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "div",
-        {
-          className: `h-full rounded-full ${colors[i % colors.length]} transition-all`,
-          style: { width: `${reason.count / maxCount * 100}%` }
-        }
-      ) })
-    ] }, reason.label)) })
-  ] });
-}
-function TimeOfDayHeatmap({ receipts }) {
-  const hours = reactExports.useMemo(() => {
-    const counts = Array.from({ length: 24 }, () => 0);
-    for (const r of receipts) {
-      const h = new Date(r.timestamp).getHours();
-      counts[h] += 1;
-    }
-    return counts;
-  }, [receipts]);
-  const maxCount = Math.max(1, ...hours);
-  const hasData = hours.some((c) => c > 0);
-  if (!hasData) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-40 items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: "No time-of-day data to chart" }) });
-  }
-  const intensity = (count) => {
-    const ratio = count / maxCount;
-    if (ratio === 0) return "bg-white";
-    if (ratio < 0.33) return "bg-blue-100";
-    if (ratio < 0.66) return "bg-blue-300";
-    return "bg-blue-500";
-  };
-  const formatHour = (h) => {
-    if (h === 0) return "12am";
-    if (h < 12) return `${h}am`;
-    if (h === 12) return "12pm";
-    return `${h - 12}pm`;
-  };
-  const topRow = hours.slice(0, 12);
-  const bottomRow = hours.slice(12, 24);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", "aria-label": "Heatmap showing when Guard is most active by hour of day", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-semibold text-brand-dark", children: "When Guard is most active" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-12 gap-0.5", children: topRow.map((count, h) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "div",
-        {
-          className: `aspect-[2/1] rounded-sm ${intensity(count)}`,
-          title: `${formatHour(h)}: ${count} actions`
-        },
-        h
-      )) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-12 gap-0.5", children: bottomRow.map((count, h) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "div",
-        {
-          className: `aspect-[2/1] rounded-sm ${intensity(count)}`,
-          title: `${formatHour(h + 12)}: ${count} actions`
-        },
-        h + 12
-      )) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-12 gap-0.5 text-[8px] text-slate-400", children: hours.map((_, h) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-center", children: h % 3 === 0 ? formatHour(h) : "" }, h)) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 text-[10px] text-slate-400", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "No activity" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-sm bg-blue-100" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Light" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-sm bg-blue-300" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Medium" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-2.5 w-2.5 rounded-sm bg-blue-500" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Heavy" })
-    ] })
-  ] });
-}
-function HistoryCharts({ receipts }) {
-  const hasData = receipts.length > 0;
-  if (!hasData) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-8 text-center", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No data to visualize." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-400", children: "Charts will appear after more activity." })
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 lg:grid-cols-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionPieChart, { receipts }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActivityBarChart, { receipts }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AppActivityBars, { receipts }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DecisionTrendLine, { receipts }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(BlockReasonBreakdown, { receipts }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white p-4 shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TimeOfDayHeatmap, { receipts }) })
-  ] });
-}
-function getPeriodDates(period) {
-  const end = /* @__PURE__ */ new Date();
-  const start = new Date(end);
-  switch (period) {
-    case "7d":
-      start.setDate(start.getDate() - 7);
-      return { start, end, label: "Last 7 days" };
-    case "30d":
-      start.setDate(start.getDate() - 30);
-      return { start, end, label: "Last 30 days" };
-    case "90d":
-      start.setDate(start.getDate() - 90);
-      return { start, end, label: "Last 90 days" };
-  }
-}
-function filterByPeriod(receipts, period) {
-  const { start, end } = getPeriodDates(period);
-  return receipts.filter((r) => {
-    const d = new Date(r.timestamp);
-    return d >= start && d <= end;
-  });
-}
-function computeMetrics(receipts) {
-  const allowed = receipts.filter((r) => r.policy_decision === "allow").length;
-  const blocked = receipts.filter((r) => r.policy_decision === "block").length;
-  const appsActive = new Set(receipts.map((r) => r.harness)).size;
-  return {
-    total: receipts.length,
-    allowed,
-    blocked,
-    blockRate: receipts.length > 0 ? Math.round(blocked / receipts.length * 100) : 0,
-    appsActive
-  };
-}
-function CompareTimePeriods({ receipts }) {
-  const [periodA, setPeriodA] = reactExports.useState("30d");
-  const [periodB, setPeriodB] = reactExports.useState("7d");
-  const metricsA = reactExports.useMemo(() => computeMetrics(filterByPeriod(receipts, periodA)), [receipts, periodA]);
-  const metricsB = reactExports.useMemo(() => computeMetrics(filterByPeriod(receipts, periodB)), [receipts, periodB]);
-  if (receipts.length < 10) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-8 text-center", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Not enough data to compare periods." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-400", children: "Compare appears after 10+ decisions." })
-    ] });
-  }
-  const rows = [
-    { label: "Total actions", a: metricsA.total, b: metricsB.total },
-    { label: "Allowed", a: metricsA.allowed, b: metricsB.allowed },
-    { label: "Blocked", a: metricsA.blocked, b: metricsB.blocked },
-    { label: "Block rate", a: `${metricsA.blockRate}%`, b: `${metricsB.blockRate}%` },
-    { label: "Apps active", a: metricsA.appsActive, b: metricsB.appsActive }
-  ];
-  const samePeriod = periodA === periodB;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "Compare periods" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(PeriodSelector, { value: periodA, onChange: (p) => {
-          setPeriodA(p);
-          if (p === periodB) setPeriodB(periodA);
-        } }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "vs" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(PeriodSelector, { value: periodB, onChange: (p) => {
-          setPeriodB(p);
-          if (p === periodA) setPeriodA(periodB);
-        } })
-      ] })
-    ] }),
-    samePeriod && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-brand-attention/15 bg-brand-attention/[0.04] px-3 py-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-attention", children: "Select two different periods to compare." }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "w-full text-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-b border-slate-100 bg-slate-50/50", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-4 py-2.5 text-left text-xs font-medium text-slate-500", children: "Metric" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-4 py-2.5 text-right text-xs font-medium text-slate-500", children: getPeriodDates(periodA).label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-4 py-2.5 text-right text-xs font-medium text-slate-500", children: getPeriodDates(periodB).label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-4 py-2.5 text-right text-xs font-medium text-slate-500", children: "Change" })
-      ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: rows.map((row, i) => {
-        const aNum = typeof row.a === "number" ? row.a : parseInt(row.a);
-        const bNum = typeof row.b === "number" ? row.b : parseInt(row.b);
-        const change = bNum - aNum;
-        const changePct = aNum !== 0 ? Math.round(change / aNum * 100) : 0;
-        const isPositive = change > 0;
-        const isNeutral = change === 0;
-        const ChangeIcon = isNeutral ? HiOutlineMinus : isPositive ? HiOutlineArrowTrendingUp : HiOutlineArrowTrendingDown;
-        const changeColor = isNeutral ? "text-slate-400" : row.label === "Allowed" || row.label === "Apps active" ? isPositive ? "text-emerald-600" : "text-slate-500" : isPositive ? "text-amber-600" : "text-emerald-600";
-        return /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: i < rows.length - 1 ? "border-b border-slate-50" : "", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5 font-medium text-brand-dark", children: row.label }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5 text-right tabular-nums text-slate-600", children: row.a }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5 text-right tabular-nums text-slate-600", children: row.b }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2.5 text-right", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `inline-flex items-center gap-1 text-xs font-medium ${changeColor}`, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(ChangeIcon, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-            isNeutral ? "—" : `${change > 0 ? "+" : ""}${change} (${change > 0 ? "+" : ""}${changePct}%)`
-          ] }) })
-        ] }, row.label);
-      }) })
-    ] }) })
-  ] });
-}
-function PeriodSelector({ value, onChange }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "select",
-    {
-      value,
-      onChange: (e) => onChange(e.target.value),
-      className: "rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "7d", children: "Last 7 days" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "30d", children: "Last 30 days" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "90d", children: "Last 90 days" })
       ]
     }
   );
+}
+function StatTile({ label, value, tone }) {
+  const colorMap = {
+    blue: "text-brand-blue",
+    green: "text-brand-green",
+    attention: "text-brand-attention",
+    neutral: "text-brand-dark"
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-0.5 px-4 py-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-xl font-bold tabular-nums ${colorMap[tone]}`, children: value }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-medium text-slate-500", children: label })
+  ] });
+}
+function EvidenceInsightStrip({ metrics }) {
+  const lastAction = metrics.lastActivityAt ? new Date(metrics.lastActivityAt).toLocaleDateString(void 0, {
+    month: "short",
+    day: "numeric"
+  }) : "—";
+  const appCount = metrics.byHarness.size;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "flex flex-wrap divide-x divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white/80 shadow-sm",
+      "aria-label": "Evidence summary",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(StatTile, { label: "Total", value: String(metrics.total), tone: "neutral" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(StatTile, { label: "Stopped", value: String(metrics.blocked), tone: "attention" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(StatTile, { label: "Apps seen", value: String(appCount), tone: "blue" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(StatTile, { label: "Last action", value: lastAction, tone: "neutral" })
+      ]
+    }
+  );
+}
+function TrendBar({ bucket, maxTotal }) {
+  const total = bucket.allowed + bucket.blocked + bucket.reviewed;
+  const heightPct = maxTotal > 0 ? Math.max(4, total / maxTotal * 100) : 4;
+  const blockedPct = total > 0 ? bucket.blocked / total * 100 : 0;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-1 flex-1", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "w-full rounded-sm overflow-hidden flex flex-col-reverse bg-slate-100",
+        style: { height: 48 },
+        "aria-label": `${bucket.label}: ${total} actions`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "div",
+            {
+              className: "w-full bg-green-300 transition-all",
+              style: { height: `${heightPct * (1 - blockedPct / 100)}%` },
+              "aria-hidden": "true"
+            }
+          ),
+          bucket.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "div",
+            {
+              className: "w-full bg-amber-400 transition-all",
+              style: { height: `${heightPct * (blockedPct / 100)}%` },
+              "aria-hidden": "true"
+            }
+          )
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[10px] text-slate-400 truncate w-full text-center", children: bucket.label })
+  ] });
+}
+function AppBreakdownRow({
+  harness,
+  total,
+  blocked,
+  maxTotal,
+  onFilter
+}) {
+  const pct = maxTotal > 0 ? total / maxTotal * 100 : 0;
+  const handleClick = reactExports.useCallback(() => {
+    onFilter(harness);
+  }, [harness, onFilter]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick: handleClick,
+      "aria-label": `Filter by app ${harnessDisplayName(harness)}`,
+      className: "w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors text-left",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark w-28 shrink-0 truncate", children: harnessDisplayName(harness) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 bg-slate-100 rounded-full h-2 overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            className: "bg-brand-blue h-2 rounded-full transition-all",
+            style: { width: `${pct}%` },
+            "aria-hidden": "true"
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs tabular-nums text-slate-500 shrink-0", children: total }),
+        blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] font-medium text-brand-attention shrink-0", children: [
+          blocked,
+          " blocked"
+        ] })
+      ]
+    }
+  );
+}
+function CategoryBreakdownRow({
+  categoryKey,
+  total,
+  blocked,
+  maxTotal,
+  onFilter
+}) {
+  const pct = maxTotal > 0 ? total / maxTotal * 100 : 0;
+  const catInfo = getCategoryInfo(categoryKey);
+  const handleClick = reactExports.useCallback(() => {
+    onFilter(categoryKey);
+  }, [categoryKey, onFilter]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick: handleClick,
+      "aria-label": `Filter by category ${catInfo.label}`,
+      className: "w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors text-left",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `shrink-0 ${catInfo.color}`, "aria-hidden": "true", children: catInfo.icon }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-brand-dark w-24 shrink-0 truncate", children: catInfo.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 bg-slate-100 rounded-full h-2 overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            className: "bg-brand-purple h-2 rounded-full transition-all",
+            style: { width: `${pct}%` },
+            "aria-hidden": "true"
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs tabular-nums text-slate-500 shrink-0", children: total }),
+        blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] font-medium text-brand-attention shrink-0", children: [
+          blocked,
+          " blocked"
+        ] })
+      ]
+    }
+  );
+}
+function SectionHeading({ children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xs font-semibold uppercase tracking-wide text-slate-400 px-3", children });
+}
+function EvidenceAnalyticsPanel({
+  metrics,
+  onFilterHarness,
+  onFilterCategory
+}) {
+  const maxBucketTotal = Math.max(
+    ...metrics.trendBuckets.map(
+      (b) => b.allowed + b.blocked + b.reviewed
+    ),
+    1
+  );
+  const sortedHarnesses = Array.from(metrics.byHarness.entries()).sort(
+    (a, b) => b[1].total - a[1].total
+  );
+  const maxHarnessTotal = sortedHarnesses[0]?.[1].total ?? 1;
+  const sortedCategories = Array.from(metrics.byCategory.entries()).sort(
+    (a, b) => b[1].total - a[1].total
+  );
+  const maxCatTotal = sortedCategories[0]?.[1].total ?? 1;
+  if (metrics.total === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center py-16 text-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "No data yet" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: "Insights will appear once actions are recorded." })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-4 space-y-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { children: "7-day trend" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-end gap-1.5 px-3 pt-2", children: metrics.trendBuckets.map((bucket) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        TrendBar,
+        {
+          bucket,
+          maxTotal: maxBucketTotal
+        },
+        bucket.dateKey
+      )) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 px-3 text-[11px] text-slate-400", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2 w-2 rounded-sm bg-green-300", "aria-hidden": "true" }),
+          "Allowed"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-block h-2 w-2 rounded-sm bg-amber-400", "aria-hidden": "true" }),
+          "Stopped"
+        ] })
+      ] })
+    ] }),
+    sortedHarnesses.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-4 space-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { children: "By app" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-0.5", children: sortedHarnesses.map(([harness, counts]) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        AppBreakdownRow,
+        {
+          harness,
+          total: counts.total,
+          blocked: counts.blocked,
+          maxTotal: maxHarnessTotal,
+          onFilter: onFilterHarness
+        },
+        harness
+      )) })
+    ] }),
+    sortedCategories.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-4 space-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { children: "By category" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-0.5", children: sortedCategories.map(([cat, counts]) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CategoryBreakdownRow,
+        {
+          categoryKey: cat,
+          total: counts.total,
+          blocked: counts.blocked,
+          maxTotal: maxCatTotal,
+          onFilter: onFilterCategory
+        },
+        cat
+      )) })
+    ] }),
+    metrics.topRecurring.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-200 bg-white p-4 space-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionHeading, { children: "Top recurring actions" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "divide-y divide-slate-100", children: metrics.topRecurring.slice(0, 5).map((action) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: "flex items-center justify-between px-3 py-2",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark truncate", children: action.name }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 shrink-0", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs tabular-nums text-slate-500", children: [
+                action.total,
+                "×"
+              ] }),
+              action.blocked > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] font-medium text-brand-attention", children: [
+                action.blocked,
+                " blocked"
+              ] })
+            ] })
+          ]
+        },
+        action.name
+      )) })
+    ] })
+  ] });
 }
 function exportReceiptsAsCsv(receipts, filters) {
   const headers = [
@@ -16068,501 +15942,650 @@ function escapeCsvCell(value) {
 function formatDateIso(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-const SUB_TABS = [
-  { key: "overview", label: "Overview", icon: HiMiniChartBar },
-  { key: "calendar", label: "Calendar", icon: HiMiniCalendarDays },
-  { key: "compare", label: "Compare", icon: HiMiniArrowPathRoundedSquare },
-  { key: "export", label: "Export", icon: HiOutlineArrowDownTray }
+function buildFileSuffix(filters) {
+  if (!filters) return "";
+  const parts = [];
+  if (filters.decision && filters.decision !== "all")
+    parts.push(filters.decision);
+  if (filters.harness && filters.harness !== "all")
+    parts.push(filters.harness);
+  if (filters.time && filters.time !== "all") parts.push(filters.time);
+  return parts.length > 0 ? `-${parts.join("-")}` : "";
+}
+function exportEvidenceCsv(receipts, filters) {
+  const result = exportReceiptsAsCsv(receipts);
+  const suffix = buildFileSuffix(filters);
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const filename = `hol-guard-evidence${suffix}-${today}.csv`;
+  return { blob: result.blob, filename };
+}
+function exportEvidenceJson(receipts, filters) {
+  const result = exportReceiptsAsJson(receipts, {
+    decision: filters?.decision,
+    harness: filters?.harness,
+    time: filters?.time,
+    search: filters?.search
+  });
+  const suffix = buildFileSuffix(filters);
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const filename = `hol-guard-evidence${suffix}-${today}.json`;
+  return { blob: result.blob, filename };
+}
+function downloadEvidence(format, receipts, filters) {
+  const result = format === "csv" ? exportEvidenceCsv(receipts, filters) : exportEvidenceJson(receipts, filters);
+  downloadBlob(result.blob, result.filename);
+}
+function EvidenceExportDrawer({
+  receipts,
+  filters,
+  isOpen,
+  onClose
+}) {
+  const [status, setStatus] = reactExports.useState("idle");
+  const handleCsvExport = reactExports.useCallback(() => {
+    try {
+      downloadEvidence("csv", receipts, filters);
+      setStatus("success");
+      setTimeout(() => setStatus("idle"), 3e3);
+    } catch {
+      setStatus("error");
+    }
+  }, [receipts, filters]);
+  const handleJsonExport = reactExports.useCallback(() => {
+    try {
+      downloadEvidence("json", receipts, filters);
+      setStatus("success");
+      setTimeout(() => setStatus("idle"), 3e3);
+    } catch {
+      setStatus("error");
+    }
+  }, [receipts, filters]);
+  const handleDiagnosticsExport = reactExports.useCallback(async () => {
+    try {
+      const blob = await exportDiagnostics();
+      const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+      downloadBlob(blob, `hol-guard-diagnostics-${today}.json`);
+      setStatus("success");
+      setTimeout(() => setStatus("idle"), 3e3);
+    } catch {
+      setStatus("error");
+    }
+  }, []);
+  if (!isOpen) return null;
+  const isEmpty = receipts.length === 0;
+  const dateRange = receipts.length > 0 ? (() => {
+    const timestamps = receipts.map((r) => r.timestamp).sort();
+    const from = new Date(timestamps[0]).toLocaleDateString(void 0, {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
+    const to = new Date(
+      timestamps[timestamps.length - 1]
+    ).toLocaleDateString(void 0, {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
+    return from === to ? from : `${from} – ${to}`;
+  })() : null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      role: "dialog",
+      "aria-label": "Export evidence",
+      "aria-modal": "true",
+      className: "fixed inset-0 z-50 flex items-end sm:items-center justify-center",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            className: "absolute inset-0 bg-black/30 backdrop-blur-sm",
+            onClick: onClose,
+            "aria-hidden": "true"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative w-full max-w-md rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between border-b border-slate-100 px-6 py-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: "Export evidence" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: onClose,
+                "aria-label": "Close export drawer",
+                className: "flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-5 w-5", "aria-hidden": "true" })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-6 py-5 space-y-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg bg-slate-50 px-4 py-3 text-sm space-y-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: isEmpty ? "No records to export" : `${receipts.length} record${receipts.length !== 1 ? "s" : ""}` }),
+              dateRange && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
+                "Date range: ",
+                dateRange
+              ] }),
+              (filters.decision !== "all" || filters.harness !== "all" || filters.search) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Active filters applied" })
+            ] }),
+            status === "success" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-green-700 bg-green-50 rounded-lg px-4 py-2.5", children: "Export downloaded successfully." }),
+            status === "error" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-attention bg-amber-50 rounded-lg px-4 py-2.5", children: "Export failed. Please try again." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  type: "button",
+                  onClick: handleCsvExport,
+                  disabled: isEmpty,
+                  "aria-label": "Export as CSV",
+                  className: "flex items-center justify-center gap-2 rounded-xl bg-brand-blue px-4 py-3 text-sm font-semibold text-white hover:bg-brand-blue/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "h-4 w-4", "aria-hidden": "true" }),
+                    "Download CSV"
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  type: "button",
+                  onClick: handleJsonExport,
+                  disabled: isEmpty,
+                  "aria-label": "Export as JSON",
+                  className: "flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-brand-dark hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "h-4 w-4", "aria-hidden": "true" }),
+                    "Download JSON"
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  type: "button",
+                  onClick: handleDiagnosticsExport,
+                  "aria-label": "Export full diagnostics",
+                  className: "flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "h-4 w-4", "aria-hidden": "true" }),
+                    "Download diagnostics"
+                  ]
+                }
+              )
+            ] })
+          ] })
+        ] })
+      ]
+    }
+  );
+}
+function EvidenceClearModal({
+  count,
+  isOpen,
+  onClose,
+  onCleared
+}) {
+  const [loading, setLoading] = reactExports.useState(false);
+  const handleConfirm = reactExports.useCallback(async () => {
+    setLoading(true);
+    try {
+      await clearEvidence();
+      onCleared?.();
+      onClose();
+    } finally {
+      setLoading(false);
+    }
+  }, [onCleared, onClose]);
+  if (!isOpen) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-label": "Confirm delete evidence",
+      className: "fixed inset-0 z-50 flex items-center justify-center",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            className: "absolute inset-0 bg-black/30 backdrop-blur-sm",
+            onClick: onClose,
+            "aria-hidden": "true"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden mx-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 px-6 pt-6 pb-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "span",
+              {
+                className: "shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-amber-50",
+                "aria-hidden": "true",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-5 w-5 text-brand-attention" })
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: "Delete evidence records" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-slate-500", children: [
+                "This will permanently delete",
+                " ",
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { className: "text-brand-dark", children: [
+                  count,
+                  " record",
+                  count !== 1 ? "s" : ""
+                ] }),
+                " ",
+                "from this device. This action cannot be undone."
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: onClose,
+                "aria-label": "Close",
+                className: "shrink-0 flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 transition-colors",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4", "aria-hidden": "true" })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2 border-t border-slate-100 px-6 py-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: onClose,
+                disabled: loading,
+                className: "flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-brand-dark hover:bg-slate-50 disabled:opacity-40 transition-colors",
+                children: "Cancel"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                onClick: handleConfirm,
+                disabled: loading,
+                "aria-label": `Delete ${count} evidence records`,
+                className: "flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand-attention px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-attention/90 disabled:opacity-40 transition-colors",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-4 w-4", "aria-hidden": "true" }),
+                  loading ? "Deleting…" : `Delete ${count}`
+                ]
+              }
+            )
+          ] })
+        ] })
+      ]
+    }
+  );
+}
+const PAGE_SIZE = 50;
+const VIEW_TABS = [
+  { key: "actions", label: "All actions", icon: HiMiniListBullet },
+  { key: "insights", label: "Insights", icon: HiMiniChartBar },
+  { key: "apps", label: "Apps", icon: HiMiniComputerDesktop },
+  { key: "export", label: "Export", icon: HiMiniArrowDownTray }
 ];
-function ExploreTabRaw({ receipts, filteredReceipts, filters, onFilterDay, onFilterHarness, onFilterAction }) {
-  const [activeSubTab, setActiveSubTab] = reactExports.useState("overview");
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2", role: "tablist", "aria-label": "Analytics views", children: SUB_TABS.map((t) => {
-      const Icon = t.icon;
-      const isActive = activeSubTab === t.key;
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          role: "tab",
-          "aria-selected": isActive,
-          "aria-controls": `subtabpanel-${t.key}`,
-          id: `subtab-${t.key}`,
-          onClick: () => setActiveSubTab(t.key),
-          className: `inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${isActive ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4", "aria-hidden": "true" }),
-            t.label
-          ]
-        },
-        t.key
-      );
-    }) }),
-    activeSubTab === "overview" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "subtabpanel-overview", role: "tabpanel", "aria-labelledby": "subtab-overview", className: "space-y-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        HistoryInsights,
-        {
-          receipts,
-          onFilterHarness,
-          onFilterDay
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HistoryCharts, { receipts: filteredReceipts }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TopActions, { receipts: filteredReceipts, onFilterAction })
-    ] }),
-    activeSubTab === "calendar" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "subtabpanel-calendar", role: "tabpanel", "aria-labelledby": "subtab-calendar", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActivityCalendar, { receipts: filteredReceipts, onSelectDay: onFilterDay }) }),
-    activeSubTab === "compare" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "subtabpanel-compare", role: "tabpanel", "aria-labelledby": "subtab-compare", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CompareTimePeriods, { receipts }) }),
-    activeSubTab === "export" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "subtabpanel-export", role: "tabpanel", "aria-labelledby": "subtab-export", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ExportPanel, { receipts: filteredReceipts, filters }) })
+function EvidenceLoadingState() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", "aria-busy": "true", "aria-label": "Loading evidence", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-64" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-32 w-full" })
   ] });
 }
-function ExportPanel({
-  receipts,
-  filters
+function EvidenceErrorState({ message }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: message }) });
+}
+function EvidenceHeader({
+  totalCount,
+  lastActivityAt,
+  onExport,
+  onClear
 }) {
-  const handleExportCsv = () => {
-    const { blob, filename } = exportReceiptsAsCsv(receipts);
-    downloadBlob(blob, filename);
-  };
-  const handleExportJson = () => {
-    const { blob, filename } = exportReceiptsAsJson(receipts, filters);
-    downloadBlob(blob, filename);
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-slate-100 bg-white p-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Export" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm text-slate-500", children: [
-      "Download ",
-      receipts.length,
-      " decision",
-      receipts.length !== 1 ? "s" : "",
-      " as CSV or JSON."
+  const lastActivityLabel = lastActivityAt ? new Date(lastActivityAt).toLocaleDateString(void 0, {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  }) : null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1 min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-xl font-bold text-brand-dark", children: "Evidence" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "See every action HOL Guard reviewed on this machine." }),
+      lastActivityLabel && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex items-center gap-1 text-xs text-slate-400", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClock, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
+        "Last activity: ",
+        lastActivityLabel
+      ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 shrink-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "button",
         {
-          onClick: handleExportCsv,
-          className: "inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
+          type: "button",
+          onClick: onExport,
+          "aria-label": "Export evidence",
+          className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors",
           children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineArrowDownTray, { className: "h-4 w-4", "aria-hidden": "true" }),
-            "Download CSV"
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "h-4 w-4", "aria-hidden": "true" }),
+            "Export"
           ]
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      onClear && totalCount > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
-          onClick: handleExportJson,
-          className: "inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiOutlineArrowDownTray, { className: "h-4 w-4", "aria-hidden": "true" }),
-            "Download JSON"
-          ]
+          type: "button",
+          onClick: onClear,
+          "aria-label": "Clear all evidence",
+          className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-brand-attention transition-colors",
+          children: "Clear"
         }
       )
     ] })
   ] });
 }
-const ExploreTab = reactExports.memo(ExploreTabRaw);
-function useMountedTabs(activeTab) {
-  const [mounted, setMounted] = reactExports.useState(/* @__PURE__ */ new Set([activeTab]));
-  reactExports.useEffect(() => {
-    setMounted((prev) => {
-      if (prev.has(activeTab)) return prev;
-      const next = new Set(prev);
-      next.add(activeTab);
-      return next;
-    });
-  }, [activeTab]);
-  return mounted;
-}
-const TIME_FILTER_VALUES = ["all", "today", "yesterday", "week", "last7d", "last30d"];
-const DECISION_FILTER_VALUES = ["all", "allow", "block"];
-const TAB_CONFIG = [
-  { key: "story", label: "Story", icon: HiMiniBookOpen },
-  { key: "category", label: "Category", icon: HiMiniTag },
-  { key: "app", label: "App", icon: HiMiniComputerDesktop },
-  { key: "explore", label: "Explore", icon: HiMiniChartBar }
-];
-const CATEGORY_CONFIG = [
-  { key: "all", label: "All", value: "" },
-  { key: "secret", label: "Secrets", value: "secret" },
-  { key: "network", label: "Network", value: "network" },
-  { key: "destructive", label: "Destructive", value: "destructive" },
-  { key: "hidden", label: "Hidden", value: "hidden" },
-  { key: "other", label: "Other", value: "other" }
-];
-function ReceiptsWorkspace(props) {
-  if (props.receipts.kind === "loading") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-64" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-32 w-full" })
-    ] });
-  }
-  if (props.receipts.kind === "error") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: props.receipts.message }) });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(ReadyReceiptsWorkspace, { receiptItems: props.receipts.items });
-}
-function readUrlParams() {
-  const params = new URLSearchParams(window.location.search);
-  const time = params.get("time");
-  const decision = params.get("decision");
-  const tab = params.get("tab");
-  return {
-    search: params.get("search") ?? "",
-    time: TIME_FILTER_VALUES.includes(time) ? time : "all",
-    decision: DECISION_FILTER_VALUES.includes(decision) ? decision : "all",
-    harness: params.get("harness") ?? "all",
-    tab: TAB_CONFIG.some((t) => t.key === tab) ? tab : "story",
-    day: params.get("day") ?? ""
-  };
-}
-function writeUrlParams(params) {
-  const url = new URL(window.location.href);
-  url.search = "";
-  if (params.search) url.searchParams.set("search", params.search);
-  if (params.time !== "all") url.searchParams.set("time", params.time);
-  if (params.decision !== "all") url.searchParams.set("decision", params.decision);
-  if (params.harness !== "all") url.searchParams.set("harness", params.harness);
-  if (params.tab !== "story") url.searchParams.set("tab", params.tab);
-  if (params.day) url.searchParams.set("day", params.day);
-  window.history.replaceState({}, "", url.toString());
-}
-function timeFilterLabel(filter) {
-  switch (filter) {
-    case "today":
-      return "Today";
-    case "yesterday":
-      return "Yesterday";
-    case "week":
-      return "Since Sunday";
-    case "last7d":
-      return "Last 7 days";
-    case "last30d":
-      return "Last 30 days";
-    default:
-      return "All time";
-  }
-}
-function decisionFilterLabel(filter) {
-  switch (filter) {
-    case "allow":
-      return "Allowed";
-    case "block":
-      return "Stopped";
-    default:
-      return "All decisions";
-  }
-}
-function useDebounce(value, delay) {
-  const [debouncedValue, setDebouncedValue] = reactExports.useState(value);
-  reactExports.useEffect(() => {
-    const timer = setTimeout(() => setDebouncedValue(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-  return debouncedValue;
-}
-function ReadyReceiptsWorkspace(props) {
-  const initial = reactExports.useMemo(() => readUrlParams(), []);
-  const [search, setSearch] = reactExports.useState(initial.search);
-  const [categoryFilter, setCategoryFilter] = reactExports.useState("");
-  const [timeFilter, setTimeFilter] = reactExports.useState(initial.time);
-  const [decisionFilter, setDecisionFilter] = reactExports.useState(initial.decision);
-  const [activeTab, setActiveTab] = reactExports.useState(initial.tab);
-  const [dayFilter, setDayFilter] = reactExports.useState(initial.day);
-  const [harnessFilter, setHarnessFilter] = reactExports.useState(initial.harness);
-  const [isFiltering, setIsFiltering] = reactExports.useState(false);
-  const debouncedSearch = useDebounce(search, 300);
-  const harnesses = reactExports.useMemo(
-    () => Array.from(new Set(props.receiptItems.map((r) => r.harness))).sort(),
-    [props.receiptItems]
-  );
-  const urlSyncTimerRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
-    if (urlSyncTimerRef.current) {
-      clearTimeout(urlSyncTimerRef.current);
+function ViewTabBar({ view, onViewChange }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      className: "flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm",
+      role: "tablist",
+      "aria-label": "Evidence views",
+      children: VIEW_TABS.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = view === tab.key;
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ViewTabButton,
+          {
+            tabKey: tab.key,
+            label: tab.label,
+            icon: Icon,
+            isActive,
+            onSelect: onViewChange
+          },
+          tab.key
+        );
+      })
     }
+  );
+}
+function ViewTabButton({
+  tabKey,
+  label,
+  icon: Icon,
+  isActive,
+  onSelect
+}) {
+  const handleClick = reactExports.useCallback(() => {
+    onSelect(tabKey);
+  }, [tabKey, onSelect]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      role: "tab",
+      "aria-selected": isActive,
+      "aria-controls": `tabpanel-${tabKey}`,
+      id: `tab-${tabKey}`,
+      onClick: handleClick,
+      className: `flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${isActive ? "bg-brand-blue text-white shadow-sm" : "text-brand-dark hover:bg-slate-50"}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: label })
+      ]
+    },
+    tabKey
+  );
+}
+function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
+  const initial = reactExports.useMemo(() => readEvidenceUrlState(), []);
+  const [filters, setFilters] = reactExports.useState(initial);
+  const [debouncedSearch, setDebouncedSearch] = reactExports.useState(initial.search);
+  const [page, setPage] = reactExports.useState(0);
+  const [exportOpen, setExportOpen] = reactExports.useState(false);
+  const [clearOpen, setClearOpen] = reactExports.useState(false);
+  const urlSyncTimerRef = reactExports.useRef(null);
+  const harnesses = reactExports.useMemo(
+    () => Array.from(new Set(receiptItems.map((r) => r.harness))).sort(),
+    [receiptItems]
+  );
+  const searchTimerRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(filters.search);
+    }, 300);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [filters.search]);
+  reactExports.useEffect(() => {
+    if (urlSyncTimerRef.current) clearTimeout(urlSyncTimerRef.current);
     urlSyncTimerRef.current = setTimeout(() => {
-      writeUrlParams({
-        search: debouncedSearch,
-        time: timeFilter,
-        decision: decisionFilter,
-        harness: harnessFilter,
-        tab: activeTab,
-        day: dayFilter
-      });
+      writeEvidenceUrlState({ ...filters, search: debouncedSearch });
     }, 100);
     return () => {
-      if (urlSyncTimerRef.current) {
-        clearTimeout(urlSyncTimerRef.current);
-      }
+      if (urlSyncTimerRef.current) clearTimeout(urlSyncTimerRef.current);
     };
-  }, [debouncedSearch, timeFilter, decisionFilter, harnessFilter, activeTab, dayFilter]);
+  }, [filters, debouncedSearch]);
   reactExports.useEffect(() => {
-    if (harnessFilter !== "all" && !harnesses.includes(harnessFilter)) {
-      setHarnessFilter("all");
+    if (filters.harness !== "all" && !harnesses.includes(filters.harness)) {
+      setFilters((prev) => ({ ...prev, harness: "all" }));
     }
-  }, [harnesses, harnessFilter]);
-  const filtered = reactExports.useMemo(() => {
-    setIsFiltering(true);
-    let items = props.receiptItems;
-    if (decisionFilter !== "all") {
-      items = items.filter((r) => r.policy_decision === decisionFilter);
-    }
-    if (harnessFilter !== "all") {
-      items = items.filter((r) => r.harness === harnessFilter);
-    }
-    if (timeFilter !== "all") {
-      const now2 = /* @__PURE__ */ new Date();
-      const startOfToday = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate());
-      const startOfYesterday = new Date(startOfToday);
-      startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-      const startOfWeek = new Date(startOfToday);
-      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-      const startOfLast7d = new Date(startOfToday);
-      startOfLast7d.setDate(startOfLast7d.getDate() - 7);
-      const startOfLast30d = new Date(startOfToday);
-      startOfLast30d.setDate(startOfLast30d.getDate() - 30);
-      items = items.filter((r) => {
-        const d = new Date(r.timestamp);
-        if (timeFilter === "today") return d >= startOfToday;
-        if (timeFilter === "yesterday") return d >= startOfYesterday && d < startOfToday;
-        if (timeFilter === "week") return d >= startOfWeek;
-        if (timeFilter === "last7d") return d >= startOfLast7d;
-        if (timeFilter === "last30d") return d >= startOfLast30d;
-        return true;
-      });
-    }
-    if (dayFilter) {
-      const dayStart = new Date(dayFilter);
-      const dayEnd = new Date(dayStart);
-      dayEnd.setDate(dayEnd.getDate() + 1);
-      items = items.filter((r) => {
-        const d = new Date(r.timestamp);
-        return d >= dayStart && d < dayEnd;
-      });
-    }
-    if (categoryFilter) {
-      items = items.filter((r) => detectCategory(r) === categoryFilter);
-    }
-    if (debouncedSearch.trim()) {
-      const q = debouncedSearch.toLowerCase();
-      items = items.filter(
-        (r) => (r.artifact_name ?? r.artifact_id).toLowerCase().includes(q) || r.harness.toLowerCase().includes(q)
-      );
-    }
-    const result = items.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
-    setTimeout(() => setIsFiltering(false), 0);
-    return result;
-  }, [props.receiptItems, decisionFilter, harnessFilter, timeFilter, debouncedSearch, dayFilter, categoryFilter]);
-  const handleFilterDay = reactExports.useCallback((day) => {
-    setDayFilter(day);
-    setTimeFilter("all");
+  }, [harnesses, filters.harness]);
+  reactExports.useEffect(() => {
+    setPage(0);
+  }, [filters, debouncedSearch]);
+  const effectiveFilters = reactExports.useMemo(
+    () => ({ ...filters, search: debouncedSearch }),
+    [filters, debouncedSearch]
+  );
+  const filtered = reactExports.useMemo(
+    () => filterEvidence(receiptItems, effectiveFilters),
+    [receiptItems, effectiveFilters]
+  );
+  const sorted = reactExports.useMemo(
+    () => sortEvidence(filtered, filters.sort),
+    [filtered, filters.sort]
+  );
+  const metrics = reactExports.useMemo(
+    () => computeMetrics(filtered),
+    [filtered]
+  );
+  const selectedReceipt = reactExports.useMemo(() => {
+    if (!filters.selectedId) return null;
+    const found = filtered.find((r) => r.receipt_id === filters.selectedId);
+    return found ?? null;
+  }, [filtered, filters.selectedId]);
+  const handleFilterChange = reactExports.useCallback((patch) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
   }, []);
-  const handleTabChange = reactExports.useCallback((tab) => {
-    setActiveTab(tab);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  const handleSelectId = reactExports.useCallback((id) => {
+    setFilters((prev) => ({
+      ...prev,
+      selectedId: prev.selectedId === id ? "" : id
+    }));
   }, []);
-  const totalCount = props.receiptItems.length;
-  const categoryCounts = reactExports.useMemo(() => {
-    const counts = /* @__PURE__ */ new Map();
-    for (const r of props.receiptItems) {
-      const cat = detectCategory(r);
-      counts.set(cat, (counts.get(cat) ?? 0) + 1);
-    }
-    return counts;
-  }, [props.receiptItems]);
-  const tabCounts = reactExports.useMemo(() => {
-    const counts = { story: 0, category: 0, app: 0, explore: 0 };
-    counts.story = filtered.length;
-    counts.explore = filtered.length;
-    const cats = new Set(filtered.map((r) => detectCategory(r)));
-    counts.category = cats.size;
-    const apps = new Set(filtered.map((r) => r.harness));
-    counts.app = apps.size;
-    return counts;
-  }, [filtered]);
-  if (totalCount === 0) {
+  const handleCloseDetail = reactExports.useCallback(() => {
+    setFilters((prev) => ({ ...prev, selectedId: "" }));
+  }, []);
+  const handleFilterHarness = reactExports.useCallback((harness) => {
+    setFilters((prev) => ({ ...prev, harness }));
+  }, []);
+  const handleFilterCategory = reactExports.useCallback((category) => {
+    setFilters((prev) => ({ ...prev, category }));
+  }, []);
+  const handleLoadMore = reactExports.useCallback(() => {
+    setPage((prev) => prev + 1);
+  }, []);
+  const handleViewChange = reactExports.useCallback((view) => {
+    setFilters((prev) => ({ ...prev, view }));
+  }, []);
+  const handleOpenExport = reactExports.useCallback(() => {
+    setExportOpen(true);
+  }, []);
+  const handleCloseExport = reactExports.useCallback(() => {
+    setExportOpen(false);
+  }, []);
+  const handleOpenClear = reactExports.useCallback(() => {
+    setClearOpen(true);
+  }, []);
+  const handleCloseClear = reactExports.useCallback(() => {
+    setClearOpen(false);
+  }, []);
+  const handleConfirmClear = reactExports.useCallback(() => {
+    setFilters(DEFAULT_FILTER_STATE);
+    if (onClearEvidence) onClearEvidence();
+  }, [onClearEvidence]);
+  if (receiptItems.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
-        title: "No history yet",
+        title: "No evidence yet",
         body: "Saved choices appear here after HOL Guard reviews or blocks an action.",
         tone: "teach"
       }
     );
   }
-  const hasActiveFilters = debouncedSearch || categoryFilter || harnessFilter !== "all" || timeFilter !== "all" || decisionFilter !== "all" || dayFilter;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
-      GuardHero,
+      EvidenceHeader,
       {
-        status: "clear",
-        headline: "History",
-        subheadline: "What Guard decided.",
-        cta: /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "info", children: [
-          totalCount,
-          " saved"
-        ] })
+        totalCount: receiptItems.length,
+        lastActivityAt: metrics.lastActivityAt,
+        onExport: handleOpenExport,
+        onClear: handleOpenClear
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative block flex-1 min-w-[200px]", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search history" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightStrip, { metrics }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EvidenceFilterBar,
+      {
+        filters: effectiveFilters,
+        onChange: handleFilterChange,
+        totalCount: receiptItems.length,
+        filteredCount: filtered.length,
+        harnesses
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ViewTabBar, { view: filters.view, onViewChange: handleViewChange }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-[300px]", children: [
+      filters.view === "actions" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          id: "tabpanel-actions",
+          role: "tabpanel",
+          "aria-labelledby": "tab-actions",
+          className: selectedReceipt ? "grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]" : "",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              EvidenceActionList,
+              {
+                receipts: sorted,
+                selectedId: filters.selectedId,
+                onSelectId: handleSelectId,
+                onFilterHarness: handleFilterHarness,
+                onFilterCategory: handleFilterCategory,
+                sort: filters.sort,
+                onSortChange: (sort) => handleFilterChange({ sort }),
+                page,
+                pageSize: PAGE_SIZE,
+                onLoadMore: handleLoadMore
+              }
+            ),
+            selectedReceipt && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-200 bg-white overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              EvidenceActionDetail,
+              {
+                receipt: selectedReceipt,
+                onClose: handleCloseDetail
+              }
+            ) })
+          ]
+        }
+      ),
+      filters.view === "insights" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "div",
+        {
+          id: "tabpanel-insights",
+          role: "tabpanel",
+          "aria-labelledby": "tab-insights",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            EvidenceAnalyticsPanel,
             {
-              type: "search",
-              value: search,
-              onChange: (e) => setSearch(e.target.value),
-              placeholder: "Search command, file, app...",
-              className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              metrics,
+              onFilterHarness: handleFilterHarness,
+              onFilterCategory: handleFilterCategory
             }
           )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "select",
-          {
-            value: timeFilter,
-            onChange: (e) => setTimeFilter(e.target.value),
-            className: "min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
-            children: TIME_FILTER_VALUES.map((t) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: t, children: timeFilterLabel(t) }, t))
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "select",
-          {
-            value: decisionFilter,
-            onChange: (e) => setDecisionFilter(e.target.value),
-            className: "min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
-            children: DECISION_FILTER_VALUES.map((d) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: d, children: decisionFilterLabel(d) }, d))
-          }
-        )
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-1.5", children: [
-        CATEGORY_CONFIG.map((c) => {
-          const count = c.value ? categoryCounts.get(c.value) ?? 0 : totalCount;
-          const isActive = categoryFilter === c.value;
-          if (c.value && count === 0) return null;
-          return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              "aria-pressed": isActive,
-              className: `rounded-full px-3 py-1.5 text-xs font-medium transition-all ${isActive ? "bg-brand-blue text-white shadow-sm" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
-              onClick: () => setCategoryFilter(isActive ? "" : c.value),
-              children: [
-                c.label,
-                " ",
-                count > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "opacity-70", children: [
-                  "(",
-                  count,
-                  ")"
-                ] })
-              ]
-            },
-            c.key
-          );
-        }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 h-4 w-px bg-slate-200" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "select",
-          {
-            value: harnessFilter,
-            onChange: (e) => setHarnessFilter(e.target.value),
-            className: "h-8 rounded-md border-0 bg-transparent px-2 py-1 text-xs font-medium text-brand-dark hover:bg-slate-100 focus:bg-slate-100 focus:outline-none",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All apps" }),
-              harnesses.map((h) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: h, children: harnessDisplayName(h) }, h))
-            ]
-          }
-        ),
-        hasActiveFilters && /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: () => {
-              setSearch("");
-              setCategoryFilter("");
-              setHarnessFilter("all");
-              setTimeFilter("all");
-              setDecisionFilter("all");
-              setDayFilter("");
-            },
-            className: "ml-auto text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
-            children: "Clear filters"
-          }
-        )
-      ] }),
-      isFiltering ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-4 w-48" }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-        "Showing ",
-        filtered.length,
-        " of ",
-        totalCount,
-        " decisions",
-        filtered.length !== totalCount && hasActiveFilters ? " (filtered)" : ""
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm", role: "tablist", "aria-label": "History views", children: TAB_CONFIG.map((t) => {
-      const Icon = t.icon;
-      const isActive = activeTab === t.key;
-      const count = tabCounts[t.key];
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
+        }
+      ),
+      filters.view === "apps" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "div",
         {
-          role: "tab",
-          "aria-selected": isActive,
-          "aria-controls": `tabpanel-${t.key}`,
-          id: `tab-${t.key}`,
-          onClick: () => handleTabChange(t.key),
-          className: `flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${isActive ? "bg-brand-blue text-white shadow-sm" : "text-brand-dark hover:bg-slate-50"}`,
+          id: "tabpanel-apps",
+          role: "tabpanel",
+          "aria-labelledby": "tab-apps",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            EvidenceAnalyticsPanel,
+            {
+              metrics,
+              onFilterHarness: handleFilterHarness,
+              onFilterCategory: handleFilterCategory
+            }
+          )
+        }
+      ),
+      filters.view === "export" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          id: "tabpanel-export",
+          role: "tabpanel",
+          "aria-labelledby": "tab-export",
+          className: "rounded-xl border border-slate-200 bg-white p-6",
           children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4", "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: t.label }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-[10px] opacity-70", children: [
-              "(",
-              count,
-              ")"
-            ] })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500 mb-4", children: "Download your evidence records as CSV or JSON." }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                onClick: handleOpenExport,
+                className: "inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-blue/90 transition-colors",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "h-4 w-4", "aria-hidden": "true" }),
+                  "Open export options"
+                ]
+              }
+            )
           ]
-        },
-        t.key
-      );
-    }) }),
+        }
+      )
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
-      TabPanels,
+      EvidenceExportDrawer,
       {
-        activeTab,
-        filtered,
-        receiptItems: props.receiptItems,
-        dayFilter,
-        handleFilterDay,
-        harnessFilter,
-        setHarnessFilter,
-        setSearch,
-        search,
-        timeFilter,
-        decisionFilter
+        receipts: sorted,
+        filters: effectiveFilters,
+        isOpen: exportOpen,
+        onClose: handleCloseExport
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EvidenceClearModal,
+      {
+        count: receiptItems.length,
+        isOpen: clearOpen,
+        onClose: handleCloseClear,
+        onCleared: handleConfirmClear
       }
     )
   ] });
 }
-function TabPanels(props) {
-  const mounted = useMountedTabs(props.activeTab);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-h-[300px]", children: [
-    mounted.has("story") && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "tabpanel-story", role: "tabpanel", "aria-labelledby": "tab-story", hidden: props.activeTab !== "story", children: /* @__PURE__ */ jsxRuntimeExports.jsx(StoryTab, { receipts: props.filtered, selectedDay: props.dayFilter, onSelectDay: props.handleFilterDay }) }),
-    mounted.has("category") && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "tabpanel-category", role: "tabpanel", "aria-labelledby": "tab-category", hidden: props.activeTab !== "category", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CategoryTab, { receipts: props.filtered }) }),
-    mounted.has("app") && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "tabpanel-app", role: "tabpanel", "aria-labelledby": "tab-app", hidden: props.activeTab !== "app", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AppTab, { receipts: props.filtered }) }),
-    mounted.has("explore") && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "tabpanel-explore", role: "tabpanel", "aria-labelledby": "tab-explore", hidden: props.activeTab !== "explore", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ExploreTab,
-      {
-        receipts: props.receiptItems,
-        filteredReceipts: props.filtered,
-        filters: { search: props.search, time: props.timeFilter, decision: props.decisionFilter, harness: props.harnessFilter },
-        onFilterDay: props.handleFilterDay,
-        onFilterHarness: (harness) => props.setHarnessFilter(harness),
-        onFilterAction: (name) => props.setSearch(name)
-      }
-    ) })
-  ] });
+function ReceiptsWorkspace(props) {
+  if (props.receipts.kind === "loading") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceLoadingState, {});
+  }
+  if (props.receipts.kind === "error") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceErrorState, { message: props.receipts.message });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceWorkbench, { receiptItems: props.receipts.items });
 }
 function ScannerEvidenceBadge(props) {
   const isScannerCategory = props.signal.category === "skill" || props.signal.category === "mcp";
