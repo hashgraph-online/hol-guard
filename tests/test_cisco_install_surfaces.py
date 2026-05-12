@@ -81,7 +81,7 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert "cisco-ai-mcp-scanner==" in docker_requirements
     assert "litellm==1.83.0" in docker_requirements
     assert "python-dotenv==1.2.2" in docker_requirements
-    assert "python-multipart==0.0.26" in docker_requirements
+    assert "python-multipart==0.0.28" in docker_requirements
     assert "--hash=sha256:" in docker_requirements
     assert "uv sync --extra dev --extra cisco" in contributing
 
