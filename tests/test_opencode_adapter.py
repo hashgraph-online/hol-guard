@@ -99,14 +99,14 @@ class TestOpenCodeDetectEmptyConfig:
         _write_config(config, {"model": "gpt-4"})
         result = OpenCodeHarnessAdapter().detect(ctx)
         assert result.installed is True
-        assert not any(a.artifact_type == "mcp-server" for a in result.artifacts)
+        assert not any(a.artifact_type == "mcp_server" for a in result.artifacts)
 
     def test_config_with_empty_mcp_yields_no_mcp_artifacts(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
         _write_config(config, {"mcp": {}})
         result = OpenCodeHarnessAdapter().detect(ctx)
-        assert not any(a.artifact_type == "mcp-server" for a in result.artifacts)
+        assert not any(a.artifact_type == "mcp_server" for a in result.artifacts)
 
 
 class TestOpenCodeDetectWithMcpServers:
@@ -368,6 +368,12 @@ class TestOpenCodePermissionRules:
         result = OpenCodeHarnessAdapter._coerce_permission_payload(["allow"])
         assert result == {}
 
+    def test_coerce_permission_payload_drops_non_string_keys(self) -> None:
+        payload = {"valid": "allow", 1: "deny", None: "ask"}
+        result = OpenCodeHarnessAdapter._coerce_permission_payload(payload)
+        assert result == {"valid": "allow"}
+        assert 1 not in result
+
     def test_proxy_permission_rules_adds_ask_rule_for_managed_server(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         config = ctx.home_dir / ".config" / "opencode" / "opencode.json"
@@ -575,8 +581,16 @@ class TestOpenCodeScopeDetection:
         scope = OpenCodeHarnessAdapter._scope_for(ctx, home_file)
         assert scope == "global"
 
+    def test_scope_for_returns_global_when_workspace_dir_is_none(self, tmp_path: Path) -> None:
+        ctx = _ctx(tmp_path, workspace=False)
+        assert ctx.workspace_dir is None
+        some_file = ctx.home_dir / ".config" / "opencode" / "opencode.json"
+        some_file.parent.mkdir(parents=True, exist_ok=True)
+        some_file.touch()
+        scope = OpenCodeHarnessAdapter._scope_for(ctx, some_file)
+        assert scope == "global"
 
-class TestOpenCodeSetupContract:
+
     def test_install_and_uninstall_are_inverse_for_new_config(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
         target = OpenCodeHarnessAdapter._target_config_path(ctx)
@@ -608,3 +622,17 @@ class TestOpenCodeSetupContract:
 
         adapter = get_adapter("opencode")
         assert adapter.harness == "opencode"
+
+    def test_target_config_path_uses_opencode_config_env_var(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        ctx = _ctx(tmp_path, workspace=False)
+        custom_config = tmp_path / "my-opencode.json"
+        custom_config.parent.mkdir(parents=True, exist_ok=True)
+        custom_config.touch()
+        monkeypatch.setenv("OPENCODE_CONFIG", str(custom_config))
+        target = OpenCodeHarnessAdapter._target_config_path(ctx)
+        assert target == custom_config
+
+
+
