@@ -5767,17 +5767,14 @@ def _git_diff_external_helpers_are_disabled_or_unconfigured(args: list[str], *, 
 def _git_repo_diff_helpers_are_unconfigured(cwd: Path | None) -> bool:
     if cwd is None:
         return False
+    if os.environ.get("GIT_EXTERNAL_DIFF") or os.environ.get("GIT_CONFIG_COUNT"):
+        return False
     config_paths = _git_repo_config_paths(cwd)
     if not config_paths:
         return True
+    seen_paths: set[Path] = set()
     for config_path in config_paths:
-        if not config_path.is_file():
-            continue
-        try:
-            config_text = config_path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            return False
-        if _git_config_enables_diff_helper(config_text):
+        if not _git_config_tree_disables_diff_helpers(config_path, seen_paths=seen_paths):
             return False
     return True
 
@@ -5789,17 +5786,39 @@ def _git_repo_config_paths(cwd: Path) -> tuple[Path, ...]:
     for candidate in (current, *current.parents):
         git_path = candidate / ".git"
         if git_path.is_dir():
-            return (git_path / "config", git_path / "config.worktree")
+            return (*_git_global_config_paths(), git_path / "config", git_path / "config.worktree")
         if git_path.is_file():
             git_dir = _git_dir_from_file(git_path)
             if git_dir is None:
                 return ()
             common_dir = _git_common_dir(git_dir)
-            paths = [git_dir / "config", git_dir / "config.worktree"]
+            paths = [*_git_global_config_paths(), git_dir / "config", git_dir / "config.worktree"]
             if common_dir != git_dir:
                 paths.extend([common_dir / "config", common_dir / "config.worktree"])
             return tuple(paths)
-    return ()
+    return _git_global_config_paths()
+
+
+def _git_global_config_paths() -> tuple[Path, ...]:
+    paths: list[Path] = []
+    system_config = os.environ.get("GIT_CONFIG_SYSTEM")
+    if system_config:
+        if system_config != os.devnull:
+            paths.append(Path(system_config).expanduser())
+    elif not os.environ.get("GIT_CONFIG_NOSYSTEM"):
+        paths.append(Path("/etc/gitconfig"))
+    global_config = os.environ.get("GIT_CONFIG_GLOBAL")
+    if global_config:
+        if global_config != os.devnull:
+            paths.append(Path(global_config).expanduser())
+    else:
+        home = os.environ.get("HOME")
+        if home:
+            home_path = Path(home).expanduser()
+            paths.append(home_path / ".gitconfig")
+            xdg_config_home = Path(os.environ.get("XDG_CONFIG_HOME", str(home_path / ".config"))).expanduser()
+            paths.append(xdg_config_home / "git" / "config")
+    return tuple(paths)
 
 
 def _git_dir_from_file(git_file: Path) -> Path | None:
@@ -5829,6 +5848,48 @@ def _git_common_dir(git_dir: Path) -> Path:
     if not common_dir.is_absolute():
         common_dir = (git_dir / common_dir).resolve()
     return common_dir
+
+
+def _git_config_tree_disables_diff_helpers(config_path: Path, *, seen_paths: set[Path]) -> bool:
+    normalized_path = config_path.expanduser().resolve()
+    if normalized_path in seen_paths:
+        return True
+    seen_paths.add(normalized_path)
+    if not normalized_path.is_file():
+        return True
+    try:
+        config_text = normalized_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    if _git_config_enables_diff_helper(config_text):
+        return False
+    for included_path in _git_config_include_paths(config_text, base_dir=normalized_path.parent):
+        if not _git_config_tree_disables_diff_helpers(included_path, seen_paths=seen_paths):
+            return False
+    return True
+
+
+def _git_config_include_paths(config_text: str, *, base_dir: Path) -> tuple[Path, ...]:
+    paths: list[Path] = []
+    section = ""
+    for raw_line in config_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        section_match = re.fullmatch(r"\[([^\]]+)\]", line)
+        if section_match:
+            section = section_match.group(1).strip().lower()
+            continue
+        if not section.startswith("include"):
+            continue
+        key_match = re.match(r"(?i)^path\s*=\s*(.+)$", line)
+        if key_match is None:
+            continue
+        include_path = Path(key_match.group(1).strip().strip("'\"")).expanduser()
+        if not include_path.is_absolute():
+            include_path = (base_dir / include_path).resolve()
+        paths.append(include_path)
+    return tuple(paths)
 
 
 def _git_config_enables_diff_helper(config_text: str) -> bool:

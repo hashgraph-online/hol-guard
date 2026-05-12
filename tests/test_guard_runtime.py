@@ -6,6 +6,7 @@ import argparse
 import builtins
 import io
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -50,6 +51,13 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _isolate_git_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", os.devnull)
+    monkeypatch.delenv("GIT_CONFIG_COUNT", raising=False)
+    monkeypatch.delenv("GIT_EXTERNAL_DIFF", raising=False)
 
 
 def _build_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:
@@ -13382,7 +13390,11 @@ def test_codex_read_only_source_inspection_preserves_pipelines_in_safe_chains(tm
     )
 
 
-def test_codex_read_only_source_inspection_allows_git_diff_with_bounded_sed(tmp_path: Path) -> None:
+def test_codex_read_only_source_inspection_allows_git_diff_with_bounded_sed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
     workspace_dir = tmp_path / "workspace"
     source_paths = [
         workspace_dir / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "server.py",
@@ -13423,7 +13435,11 @@ def test_codex_read_only_source_inspection_allows_git_diff_with_bounded_sed(tmp_
     assert artifact is None
 
 
-def test_codex_read_only_source_inspection_rejects_git_diff_secret_path(tmp_path: Path) -> None:
+def test_codex_read_only_source_inspection_rejects_git_diff_secret_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
     workspace_dir = tmp_path / "workspace"
     _write_text(workspace_dir / ".env", "TOKEN_LABEL=value\n")
 
@@ -13433,7 +13449,11 @@ def test_codex_read_only_source_inspection_rejects_git_diff_secret_path(tmp_path
     )
 
 
-def test_codex_read_only_source_inspection_rejects_git_diff_external_config(tmp_path: Path) -> None:
+def test_codex_read_only_source_inspection_rejects_git_diff_external_config(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
     workspace_dir = tmp_path / "workspace"
     source_file = workspace_dir / "src" / "safe.ts"
     _write_text(source_file, "export const safe = true;\n")
@@ -13451,7 +13471,11 @@ def test_codex_read_only_source_inspection_rejects_git_diff_external_config(tmp_
     )
 
 
-def test_codex_read_only_source_inspection_rejects_git_diff_textconv_config(tmp_path: Path) -> None:
+def test_codex_read_only_source_inspection_rejects_git_diff_textconv_config(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
     workspace_dir = tmp_path / "workspace"
     source_file = workspace_dir / "src" / "safe.ts"
     _write_text(source_file, "export const safe = true;\n")
@@ -13469,7 +13493,51 @@ def test_codex_read_only_source_inspection_rejects_git_diff_textconv_config(tmp_
     )
 
 
-def test_codex_read_only_source_inspection_allows_git_diff_with_external_helpers_disabled(tmp_path: Path) -> None:
+def test_codex_read_only_source_inspection_rejects_git_external_diff_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF", "/tmp/guard-helper")
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
+def test_codex_read_only_source_inspection_rejects_git_diff_global_textconv_config(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
+    global_config = tmp_path / "global-gitconfig"
+    _write_text(
+        global_config,
+        """
+[diff "guard"]
+    textconv = /tmp/guard-textconv
+""".strip(),
+    )
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+    workspace_dir = tmp_path / "workspace"
+    source_file = workspace_dir / "src" / "safe.ts"
+    _write_text(source_file, "export const safe = true;\n")
+
+    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+        "git diff -- src/safe.ts | sed -n '1,40p'",
+        cwd=workspace_dir,
+    )
+
+
+def test_codex_read_only_source_inspection_allows_git_diff_with_external_helpers_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
     workspace_dir = tmp_path / "workspace"
     source_file = workspace_dir / "src" / "safe.ts"
     _write_text(source_file, "export const safe = true;\n")
@@ -13487,7 +13555,11 @@ def test_codex_read_only_source_inspection_allows_git_diff_with_external_helpers
     )
 
 
-def test_codex_read_only_source_inspection_rejects_git_config_injection(tmp_path: Path) -> None:
+def test_codex_read_only_source_inspection_rejects_git_config_injection(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
     workspace_dir = tmp_path / "workspace"
     source_file = workspace_dir / "src" / "safe.ts"
     _write_text(source_file, "export const safe = true;\n")
@@ -13498,7 +13570,11 @@ def test_codex_read_only_source_inspection_rejects_git_config_injection(tmp_path
     )
 
 
-def test_codex_read_only_source_inspection_rejects_unknown_git_diff_option(tmp_path: Path) -> None:
+def test_codex_read_only_source_inspection_rejects_unknown_git_diff_option(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
     workspace_dir = tmp_path / "workspace"
     source_file = workspace_dir / "src" / "safe.ts"
     _write_text(source_file, "export const safe = true;\n")
@@ -13509,7 +13585,11 @@ def test_codex_read_only_source_inspection_rejects_unknown_git_diff_option(tmp_p
     )
 
 
-def test_codex_read_only_source_inspection_rejects_unbounded_sed_filter(tmp_path: Path) -> None:
+def test_codex_read_only_source_inspection_rejects_unbounded_sed_filter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_git_config(monkeypatch)
     workspace_dir = tmp_path / "workspace"
     source_file = workspace_dir / "src" / "safe.ts"
     _write_text(source_file, "export const safe = true;\n")
