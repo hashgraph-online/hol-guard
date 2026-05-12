@@ -748,3 +748,28 @@ assert(
   resolveQueueCategory(initServiceItem).label === "Process control",
   "T-QS-75: init service-manager commands still classify as process control"
 );
+
+const generatedInventoryReadItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-generated-inventory-read",
+  action_envelope_json: {
+    ...fileReadEnvelope,
+    target_paths: ["docs/guard-cloud-route-inventory.generated.md"],
+  },
+};
+
+assert(
+  resolveQueueCategory(generatedInventoryReadItem).label === "File read",
+  "T-QS-76: generated inventory reads stay file reads, not generated inventory edits"
+);
+
+const gitRestoreStagedItem: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-git-restore-staged",
+  action_envelope_json: { ...shellEnvelope, command: "git restore --staged dashboard/src/queue-state.ts" },
+};
+
+assert(
+  resolveQueueCategory(gitRestoreStagedItem).label === "Git workspace operation",
+  "T-QS-77: git restore --staged classifies as git operation, not file delete"
+);

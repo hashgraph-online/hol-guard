@@ -16671,11 +16671,11 @@ function encodedCommand(text) {
 }
 function generatedInventoryEdit(command, text) {
   const haystack = `${command} ${text}`.toLowerCase();
-  return /docs\/.*(?:api|route|cloud).*inventory\.generated\.(?:md|json|txt)/.test(haystack);
+  return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /docs\/.*(?:api|route|cloud).*inventory\.generated\.(?:md|json|txt)/.test(haystack);
 }
 function fileDeleteOrCleanupCommand(command, text) {
   const normalized = command.toLowerCase();
-  return /\b(?:rm|unlink|rmdir|shred)\b/.test(normalized) || /\btruncate\s+-s\s+0\b/.test(normalized) || /\bgit\s+(?:clean|reset\s+--hard|checkout\s+--|restore\s+--staged)\b/.test(normalized) || textIncludesAny(text, ["force-clean", "delete files", "wipe files"]);
+  return /\b(?:rm|unlink|rmdir|shred)\b/.test(normalized) || /\btruncate\s+-s\s+0\b/.test(normalized) || /\bgit\s+(?:clean|reset\s+--hard|checkout\s+--)\b/.test(normalized) || textIncludesAny(text, ["force-clean", "delete files", "wipe files"]);
 }
 function gitOperationCommand(command) {
   const normalized = command.toLowerCase();
