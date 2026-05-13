@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.parse
 from pathlib import Path
@@ -144,6 +145,15 @@ def test_latest_version_lookup_uses_practical_timeout(monkeypatch: pytest.Monkey
 
     assert update_commands._latest_version_from_pypi() == "2.0.1"
     assert timeouts == [3.0]
+
+
+def test_latest_version_lookup_handles_truncated_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_urlopen(request: object, timeout: float) -> object:
+        raise http.client.IncompleteRead(partial=b'{"info":')
+
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", fake_urlopen)
+
+    assert update_commands._latest_version_from_pypi() is None
 
 
 def test_install_setup_listing_detects_safe_config_without_mutating_it(tmp_path: Path) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import importlib
 import importlib.metadata
 import json
@@ -247,7 +248,14 @@ def _latest_version_from_pypi() -> str | None:
     try:
         with urllib.request.urlopen(request, timeout=_PYPI_TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (OSError, TimeoutError, urllib.error.URLError, json.JSONDecodeError, UnicodeDecodeError):
+    except (
+        OSError,
+        TimeoutError,
+        urllib.error.URLError,
+        http.client.IncompleteRead,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+    ):
         return None
     if not isinstance(payload, dict):
         return None
