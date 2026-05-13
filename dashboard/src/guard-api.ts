@@ -814,6 +814,11 @@ export async function clearPolicy(input: {
   harness?: string;
   all?: boolean;
   source?: string;
+  scope?: DecisionScope;
+  artifact_id?: string;
+  artifact_hash?: string;
+  workspace?: string;
+  publisher?: string;
 }): Promise<{ cleared: number; harness: string | null; source: string | null }> {
   if (isGuardDemoMode()) {
     return { cleared: 0, harness: input.harness ?? null, source: input.source ?? null };
@@ -827,7 +832,12 @@ export async function clearPolicy(input: {
     body: JSON.stringify({
       harness: input.harness,
       all: input.all ?? false,
-      source: input.source
+      source: input.source,
+      scope: input.scope,
+      artifact_id: input.artifact_id,
+      artifact_hash: input.artifact_hash,
+      workspace: input.workspace,
+      publisher: input.publisher
     })
   });
 }

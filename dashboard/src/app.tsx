@@ -15,6 +15,7 @@ import {
   resolveRequestWithQueueResult,
 } from "./guard-api";
 import { ApprovalCenterLayout } from "./approval-center-layout";
+import { buildClearPayload } from "./clear-policy-payload";
 import { normalizeHarnessSlug } from "./approval-center-utils";
 import { ErrorBoundary } from "./error-boundary";
 import { selectNextAfterResolution } from "./queue-state";
@@ -424,6 +425,23 @@ export function App() {
     }
   }, [setRuntime, setRequests, setPolicies]);
 
+  const handleClearPolicy = useCallback(async (policy: GuardPolicyDecision) => {
+    await clearPolicy(buildClearPayload(policy));
+    const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
+    if (snapshotResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
+      setRequests({ kind: "ready", items: snapshotResult.value.items });
+    }
+    if (policiesResult.status === "fulfilled") {
+      setPolicies({ kind: "ready", items: policiesResult.value });
+    } else {
+      setPolicies({
+        kind: "error",
+        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load saved approvals.",
+      });
+    }
+  }, [setRuntime, setRequests, setPolicies]);
+
   const handleClearEvidence = useCallback(() => {
     setReceipts({ kind: "ready", items: [] });
   }, [setReceipts]);
@@ -538,10 +556,11 @@ export function App() {
         onGoHome={handleGoHome}
         onOpenRequest={handleOpenRequest}
         onClearAppPolicies={handleClearAppPolicies}
+        onClearPolicy={handleClearPolicy}
         onManagedInstallChanged={refreshStateAfterAction}
       />
     );
-  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, refreshStateAfterAction]);
+  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateAfterAction]);
 
   return (
     <>

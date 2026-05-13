@@ -13323,7 +13323,12 @@ async function clearPolicy(input) {
     body: JSON.stringify({
       harness: input.harness,
       all: input.all ?? false,
-      source: input.source
+      source: input.source,
+      scope: input.scope,
+      artifact_id: input.artifact_id,
+      artifact_hash: input.artifact_hash,
+      workspace: input.workspace,
+      publisher: input.publisher
     })
   });
 }
@@ -13735,6 +13740,8 @@ function HiMiniAdjustmentsHorizontal(props) {
 }
 const EMPTY_QUEUE_TITLE = "No blocked actions";
 const STALE_REQUEST_COPY = "This request was already decided.";
+const QUEUE_CONNECTION_ERROR_HEADLINE = "Guard daemon not reachable: approval links work when Guard is running on this device.";
+const QUEUE_CONNECTION_ERROR_INSTRUCTION = "Start Guard on this machine, then reload to continue approving or blocking.";
 function deriveDataFlowEvidence(item) {
   const signals = item.decision_v2_json?.signals ?? [];
   const dataFlowSignals = signals.filter(
@@ -13910,7 +13917,7 @@ function shortConfigPath(path) {
   const marker = "/.codex/";
   const index = sanitizedPath.lastIndexOf(marker);
   if (index >= 0) {
-    return `…${sanitizedPath.slice(index)}`;
+    return `...${sanitizedPath.slice(index)}`;
   }
   return sanitizedPath;
 }
@@ -14065,6 +14072,8 @@ function ShellHeader(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-w-0 flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           "select",
           {
+            id: "guard-mobile-navigation",
+            name: "guard-mobile-navigation",
             "aria-label": "Navigate Guard sections",
             className: "h-11 w-full rounded-full border border-white/25 bg-white/95 px-4 text-sm font-medium text-brand-dark shadow-none transition-colors duration-150 focus:border-white focus:outline-none focus:ring-2 focus:ring-white/40",
             onChange: handleMobileNavigationChange,
@@ -16923,6 +16932,33 @@ function ScannerEvidenceSection(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: scannerSignals.map((signal) => /* @__PURE__ */ jsxRuntimeExports.jsx(ScannerSignalRow, { signal }, signal.signal_id)) })
   ] });
 }
+const DEFAULT_SCOPE_CHOICES = [
+  {
+    value: "artifact",
+    label: "Approve once",
+    description: "Allow only this exact action. Guard will ask again for anything different."
+  },
+  {
+    value: "workspace",
+    label: "Remember for project",
+    description: "Allow this action in the current workspace only."
+  },
+  {
+    value: "publisher",
+    label: "This source",
+    description: "Allow actions from the same source or publisher."
+  },
+  {
+    value: "harness",
+    label: "This app",
+    description: "Allow similar actions from this AI app everywhere."
+  },
+  {
+    value: "global",
+    label: "Everywhere",
+    description: "Allow this action across all your projects. Use with care."
+  }
+];
 function requestSupportsScope(item, scope) {
   if (scope === "workspace") {
     return typeof item.workspace === "string" && item.workspace.trim().length > 0;
@@ -16934,6 +16970,17 @@ function requestSupportsScope(item, scope) {
 }
 function filterScopeChoicesForRequest(item, choices) {
   return choices.filter((choice) => requestSupportsScope(item, choice.value));
+}
+const ADVANCED_SCOPE_VALUES = /* @__PURE__ */ new Set(["global"]);
+function advancedScopeChoicesForRequest(item) {
+  return filterScopeChoicesForRequest(item, DEFAULT_SCOPE_CHOICES).filter(
+    (choice) => ADVANCED_SCOPE_VALUES.has(choice.value)
+  );
+}
+function standardScopeChoicesForRequest(item) {
+  return filterScopeChoicesForRequest(item, DEFAULT_SCOPE_CHOICES).filter(
+    (choice) => !ADVANCED_SCOPE_VALUES.has(choice.value)
+  );
 }
 function normalizeDecisionScope(item, scope) {
   if (requestSupportsScope(item, scope)) {
@@ -17128,6 +17175,15 @@ function bulkApproveActionCount(groups) {
 }
 function bulkApprovePrimaryIds(groups) {
   return groups.map((g) => g.primary.request_id);
+}
+function isDuplicateGroup(group) {
+  return group.duplicateCount > 0;
+}
+function bulkBlockEligibleGroups(groups) {
+  return groups.filter(isDuplicateGroup);
+}
+function bulkBlockPrimaryIds(groups) {
+  return bulkBlockEligibleGroups(groups).map((g) => g.primary.request_id);
 }
 function buildProgressCopy(activeIndex, total) {
   if (total === 0) {
@@ -17624,6 +17680,7 @@ const scopeChoices = [
   }
 ];
 const QUEUE_PAGE_SIZE = 10;
+const commonScopeValues$1 = /* @__PURE__ */ new Set(["artifact", "workspace"]);
 function ReviewWorkspace(props) {
   const { requests, activeRequestId, detail } = props;
   const queueRef = reactExports.useRef(null);
@@ -17857,6 +17914,8 @@ const ReviewQueueList = reactExports.forwardRef(({
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "input",
           {
+            id: "guard-review-queue-search",
+            name: "guard-review-queue-search",
             type: "search",
             value: searchTerm,
             onChange: handleSearchChange,
@@ -18100,7 +18159,19 @@ function ReviewDecisionCard(props) {
   const timerRef = reactExports.useRef(null);
   const allowButtonRef = reactExports.useRef(null);
   const availableScopeChoices = reactExports.useMemo(
-    () => item ? filterScopeChoicesForRequest(item, scopeChoices) : scopeChoices,
+    () => item ? standardScopeChoicesForRequest(item) : scopeChoices.filter((choice) => choice.value !== "global"),
+    [item]
+  );
+  const commonScopeOptions = reactExports.useMemo(
+    () => availableScopeChoices.filter((choice) => commonScopeValues$1.has(choice.value)),
+    [availableScopeChoices]
+  );
+  const broaderScopeOptions = reactExports.useMemo(
+    () => availableScopeChoices.filter((choice) => !commonScopeValues$1.has(choice.value)),
+    [availableScopeChoices]
+  );
+  const advancedScopeOptions = reactExports.useMemo(
+    () => item ? advancedScopeChoicesForRequest(item) : scopeChoices.filter((choice) => choice.value === "global"),
     [item]
   );
   reactExports.useEffect(() => {
@@ -18168,6 +18239,12 @@ function ReviewDecisionCard(props) {
     },
     [handleResolve]
   );
+  const handleAllow = reactExports.useCallback(() => {
+    handleRequestResolve("allow");
+  }, [handleRequestResolve]);
+  const handleBlock = reactExports.useCallback(() => {
+    handleRequestResolve("block");
+  }, [handleRequestResolve]);
   if (!detail || !item) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
@@ -18198,7 +18275,7 @@ function ReviewDecisionCard(props) {
               "aria-hidden": "true"
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`, children: resolved === "allow" ? "Approved — action can proceed" : "Blocked — action stopped" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`, children: resolved === "allow" ? "Approved: action can proceed" : "Blocked: action stopped" })
         ]
       }
     ),
@@ -18252,20 +18329,41 @@ function ReviewDecisionCard(props) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "How long should this choice last?" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Scope selection", children: availableScopeChoices.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "button",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Scope selection", children: commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ScopeChoiceButton,
           {
-            onClick: () => setScope(choice.value),
-            role: "radio",
-            "aria-checked": scope === choice.value,
-            className: `rounded-xl border px-4 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-brand-blue/20 ${scope === choice.value ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200/70 bg-white hover:bg-slate-50"}`,
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: choice.label }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-muted-foreground", children: choice.description })
-            ]
+            choice,
+            checked: scope === choice.value,
+            onScopeChange: setScope
           },
           choice.value
-        )) })
+        )) }),
+        broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue", children: "Additional approval scopes" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "These apply across more future sessions. Use them only when a project-level decision is too narrow." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2 md:grid-cols-2", children: broaderScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ScopeChoiceButton,
+            {
+              choice,
+              checked: scope === choice.value,
+              onScopeChange: setScope
+            },
+            choice.value
+          )) })
+        ] }),
+        advancedScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-attention", children: "Advanced: applies everywhere" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/70", children: "This affects every project on this machine. Prefer narrower scopes unless you are sure." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 grid grid-cols-1 gap-2", children: advancedScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ScopeChoiceButton,
+            {
+              choice,
+              checked: scope === choice.value,
+              onScopeChange: setScope
+            },
+            choice.value
+          )) })
+        ] })
       ] }),
       errorMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-fade-in mt-4 rounded-xl border border-brand-purple/25 bg-brand-purple/[0.05] p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-purple", "aria-hidden": "true" }),
@@ -18290,14 +18388,14 @@ function ReviewDecisionCard(props) {
           {
             ref: allowButtonRef,
             variant: "success",
-            onClick: () => handleRequestResolve("allow"),
+            onClick: handleAllow,
             disabled: submitting !== null,
             children: submitting === "allow" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
-              "Approving…"
+              "Approving..."
             ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4", "aria-hidden": "true" }),
-              "Allow"
+              allowButtonLabel(scope)
             ] })
           }
         ),
@@ -18305,14 +18403,14 @@ function ReviewDecisionCard(props) {
           ActionButton,
           {
             variant: "outline",
-            onClick: () => handleRequestResolve("block"),
+            onClick: handleBlock,
             disabled: submitting !== null,
             children: submitting === "block" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
-              "Blocking…"
+              "Blocking..."
             ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-4 w-4", "aria-hidden": "true" }),
-              "Block"
+              "Keep blocked"
             ] })
           }
         )
@@ -18359,6 +18457,34 @@ function ReviewDecisionCard(props) {
       ] })
     ] })
   ] });
+}
+function ScopeChoiceButton(props) {
+  const handleClick = reactExports.useCallback(() => {
+    props.onScopeChange(props.choice.value);
+  }, [props.onScopeChange, props.choice.value]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick: handleClick,
+      role: "radio",
+      "aria-checked": props.checked,
+      className: `rounded-xl border px-4 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-brand-blue/20 ${props.checked ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200/70 bg-white hover:bg-slate-50"}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: props.choice.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-muted-foreground", children: props.choice.description })
+      ]
+    }
+  );
+}
+function allowButtonLabel(scope) {
+  if (scope === "artifact") {
+    return "Approve once";
+  }
+  if (scope === "workspace") {
+    return "Remember for project";
+  }
+  return "Approve and remember";
 }
 function ReviewEmptyState({ runtime, resolutionMessage }) {
   const appsCount = runtime?.managed_installs?.filter((i) => i.active).length ?? 0;
@@ -18421,7 +18547,7 @@ function ActionContentCard({ item }) {
     try {
       const serialized = JSON.stringify(inputs);
       if (serialized.length <= 2) return null;
-      return serialized.length > 140 ? `${serialized.slice(0, 140)}…` : serialized;
+      return serialized.length > 140 ? `${serialized.slice(0, 140)}...` : serialized;
     } catch {
       return null;
     }
@@ -18558,19 +18684,20 @@ function BlockConsequence() {
 const scopeOptions = [
   {
     value: "artifact",
-    label: "This retry only",
+    label: "Approve once",
     description: "Remember this exact prompt, command, tool, path, or host fingerprint."
   },
   {
     value: "workspace",
-    label: "Same action in this project",
+    label: "Remember for project",
     description: "Skip the next prompt for this same action here; different sensitive actions still ask."
   },
   { value: "publisher", label: "This source", description: "Trust future actions from the same source in this app." },
   { value: "harness", label: "This app", description: "Trust matching actions from this app." },
-  { value: "global", label: "Every project", description: "Use this choice across this machine." }
+  { value: "global", label: "Every project", description: "Use this choice across every project on this machine. Cannot easily be undone." }
 ];
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
+const advancedScopeValues = /* @__PURE__ */ new Set(["global"]);
 const queuePageSize = 8;
 function ApprovalCenterLayout(props) {
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
@@ -18614,7 +18741,8 @@ function ApprovalCenterLayout(props) {
         activeRequestId: props.activeRequestId,
         onClose: handleCloseMobileQueue,
         onOpenRequest: props.onOpenRequest,
-        onBulkApprove: props.onBulkApprove
+        onBulkApprove: props.onBulkApprove,
+        onBulkBlock: props.onBulkBlock
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `flex flex-col transition-all duration-200 ${sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"}`, children: /* @__PURE__ */ jsxRuntimeExports.jsx("main", { id: "main-content", className: "flex-1 p-4 sm:p-6 lg:p-8", tabIndex: -1, children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: props.view === "inbox" ? "mx-auto max-w-none" : "mx-auto max-w-6xl", children: props.view === "home" ? props.homeContent : props.view === "evidence" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ReceiptsWorkspace, { receipts: props.receipts, onClearEvidence: props.onClearEvidence }) : props.view === "fleet" ? props.fleetContent : props.view === "app-detail" ? props.appDetailContent : props.view === "settings" ? props.settingsContent : props.view === "inbox" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -18646,6 +18774,7 @@ function ApprovalCenterLayout(props) {
         onGoHome: props.onGoHome,
         onResolve: props.onResolve,
         onBulkApprove: props.onBulkApprove,
+        onBulkBlock: props.onBulkBlock,
         onRetry: props.onRetry,
         onRepair: props.onRepair
       }
@@ -18686,7 +18815,8 @@ function MobileQueueDrawer(props) {
               activeRequestId: props.activeRequestId,
               items: props.requests,
               onOpenRequest: props.onOpenRequest,
-              onBulkApprove: props.onBulkApprove
+              onBulkApprove: props.onBulkApprove,
+              onBulkBlock: props.onBulkBlock
             }
           ) })
         ] })
@@ -18721,11 +18851,12 @@ function QueueWorkspace(props) {
       }
     };
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Surface, { tone: "danger", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", children: "Guard daemon not responding — click to reconnect." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-purple", children: QUEUE_CONNECTION_ERROR_HEADLINE }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-purple/80", children: props.requests.message }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple/70", children: QUEUE_CONNECTION_ERROR_INSTRUCTION }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleOpenDaemon, children: "Repair" }),
-        props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, variant: "outline", children: repairing ? "Repairing…" : "Reconnect" }),
+        props.onRepair !== void 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepair, disabled: repairing, variant: "outline", children: repairing ? "Repairing..." : "Reconnect" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "inline-flex min-h-10 items-center rounded-lg border border-brand-purple/30 bg-slate-50 px-3 py-2 font-mono text-sm text-brand-purple select-all", children: "hol-guard start" }),
         props.onRetry && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onRetry, children: "Retry" }),
         approvalUrl && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: approvalUrl, variant: "outline", onClick: () => window.location.reload(), children: "Open dashboard" })
@@ -18772,7 +18903,8 @@ function QueueWorkspace(props) {
           activeRequestId: props.activeRequestId,
           items: props.requests.items,
           onOpenRequest: props.onOpenRequest,
-          onBulkApprove: props.onBulkApprove
+          onBulkApprove: props.onBulkApprove,
+          onBulkBlock: props.onBulkBlock
         }
       ) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -18866,11 +18998,18 @@ function QueueBrowser(props) {
     () => bulkApproveActionCount(bulkEligibleGroups),
     [bulkEligibleGroups]
   );
-  const showBulkApprove = props.onBulkApprove !== void 0 && bulkEligibleGroups.length > 0 && bulkEligibleGroups.length === groups.length;
+  const showBulkApprove = props.onBulkApprove !== void 0 && bulkEligibleGroups.length > 0;
   const handleBulkApprove = reactExports.useCallback(() => {
     const ids = bulkApprovePrimaryIds(bulkEligibleGroups);
     props.onBulkApprove?.(ids);
   }, [props.onBulkApprove, bulkEligibleGroups]);
+  const blockEligibleGroups = reactExports.useMemo(() => bulkBlockEligibleGroups(groups), [groups]);
+  const blockEligibleActionCount = reactExports.useMemo(() => bulkApproveActionCount(blockEligibleGroups), [blockEligibleGroups]);
+  const showBulkBlock = props.onBulkBlock !== void 0 && blockEligibleGroups.length > 0;
+  const handleBulkBlockConfirm = reactExports.useCallback((reason) => {
+    const ids = bulkBlockPrimaryIds(blockEligibleGroups);
+    props.onBulkBlock?.(ids, reason);
+  }, [props.onBulkBlock, blockEligibleGroups]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
     showBulkApprove && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
@@ -18885,6 +19024,13 @@ function QueueBrowser(props) {
         ]
       }
     ) }),
+    showBulkBlock && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      QueueBulkBlockForm,
+      {
+        count: blockEligibleActionCount,
+        onBlock: handleBulkBlockConfirm
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 space-y-2", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search waiting actions" }),
@@ -18894,7 +19040,7 @@ function QueueBrowser(props) {
             type: "search",
             value: searchTerm,
             onChange: handleSearchChange,
-            placeholder: "Command, file, MCP, host…",
+            placeholder: "Command, file, MCP, host...",
             className: "min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 transition-colors duration-150 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           }
         )
@@ -19021,6 +19167,80 @@ function QueueCard(props) {
     }
   );
 }
+function QueueBulkBlockForm(props) {
+  const [expanded, setExpanded] = reactExports.useState(false);
+  const [reason, setReason] = reactExports.useState("");
+  const handleExpand = reactExports.useCallback(() => setExpanded(true), []);
+  const handleCollapse = reactExports.useCallback(() => {
+    setExpanded(false);
+    setReason("");
+  }, []);
+  const handleReasonChange = reactExports.useCallback((event) => {
+    setReason(event.target.value);
+  }, []);
+  const handleConfirm = reactExports.useCallback(() => {
+    props.onBlock(reason.trim().length > 0 ? reason.trim() : "blocked as part of duplicate group");
+    setExpanded(false);
+    setReason("");
+  }, [props.onBlock, reason]);
+  if (!expanded) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        onClick: handleExpand,
+        className: "rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50",
+        children: [
+          "Keep blocked: all duplicates (",
+          props.count,
+          ")"
+        ]
+      }
+    ) });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
+      "Block ",
+      props.count,
+      " duplicate ",
+      props.count === 1 ? "action" : "actions"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: "This saves a block decision for each duplicate group. Add an optional note." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-3 block", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Optional reason for blocking duplicates" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "text",
+          value: reason,
+          onChange: handleReasonChange,
+          placeholder: "Why are you blocking these? (optional)",
+          className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: handleConfirm,
+          className: "rounded-full border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium text-brand-dark shadow-sm transition-colors hover:bg-slate-50",
+          children: "Keep blocked"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: handleCollapse,
+          className: "rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-brand-dark",
+          children: "Cancel"
+        }
+      )
+    ] })
+  ] });
+}
 function queueCardStatusDotClass(active, blocked) {
   if (active) {
     return "bg-brand-blue";
@@ -19126,7 +19346,7 @@ function DecisionWorkspace(props) {
           "aria-live": "polite",
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-brand-green", "aria-hidden": "true" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: "Decided — loading next…" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-green-text", children: "Decided: loading next..." })
           ]
         }
       ),
@@ -19159,10 +19379,11 @@ function DecisionWorkspace(props) {
   const { item, diff, receipt, policy } = props.detail;
   const availableScopeOptions = filterScopeChoicesForRequest(item, scopeOptions);
   const commonScopeOpts = availableScopeOptions.filter((option) => commonScopeValues.has(option.value));
-  const broadScopeOpts = availableScopeOptions.filter((option) => !commonScopeValues.has(option.value));
+  const broaderScopeOpts = availableScopeOptions.filter((option) => !commonScopeValues.has(option.value) && !advancedScopeValues.has(option.value));
+  const advancedScopeOpts = availableScopeOptions.filter((option) => advancedScopeValues.has(option.value));
   const isAlreadyDecided = item.resolution_action !== null;
-  const decidedLabel = item.resolution_action === "allow" ? "allow" : item.resolution_action === "block" ? "block" : item.resolution_action ?? "decided";
-  const allowLabel = scope === "artifact" ? "Approve once" : "Approve and remember";
+  const decidedLabel = resolveDecisionLabel(item.resolution_action);
+  const allowLabel = resolveAllowScopeLabel(scope);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-surface-in space-y-4", children: [
     resolvedBanner !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
@@ -19185,7 +19406,7 @@ function DecisionWorkspace(props) {
     isAlreadyDecided && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3 rounded-2xl border border-slate-200/60 bg-slate-50 px-4 py-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-muted-foreground", children: [
-        "This action was already decided — ",
+        "This action was already decided: ",
         decidedLabel,
         ". No further action needed."
       ] })
@@ -19199,7 +19420,8 @@ function DecisionWorkspace(props) {
         submitting,
         errorMessage,
         commonScopeOptions: commonScopeOpts,
-        broadScopeOptions: broadScopeOpts,
+        broaderScopeOptions: broaderScopeOpts,
+        advancedScopeOptions: advancedScopeOpts,
         onScopeChange: setScope,
         onReasonChange: setReason,
         onResolve: handleRequestResolve
@@ -19243,6 +19465,24 @@ function buildDecisionTitle(item) {
     return "HOL Guard kept this action blocked.";
   }
   return `${harnessDisplayName(item.harness)} wants to run this action.`;
+}
+function resolveDecisionLabel(action) {
+  if (action === "allow") {
+    return "allow";
+  }
+  if (action === "block") {
+    return "block";
+  }
+  return action ?? "decided";
+}
+function resolveAllowScopeLabel(scope) {
+  if (scope === "artifact") {
+    return "Approve once";
+  }
+  if (scope === "workspace") {
+    return "Remember for project";
+  }
+  return "Approve and remember";
 }
 function WhyGuardCares(props) {
   const { item } = props;
@@ -19301,7 +19541,7 @@ function WhatChanged(props) {
 }
 function RuleBuilder(props) {
   const previewText = getRulePreviewText(props.item, props.scope);
-  const allowLabel = props.scope === "artifact" ? "Approve once" : "Approve and remember";
+  const allowLabel = resolveAllowScopeLabel(props.scope);
   const retryInstruction = props.item.decision_v2_json?.retry_instruction ?? null;
   const handleAllow = reactExports.useCallback(() => props.onResolve("allow"), [props.onResolve]);
   const handleBlock = reactExports.useCallback(() => props.onResolve("block"), [props.onResolve]);
@@ -19353,11 +19593,26 @@ function RuleBuilder(props) {
             },
             option.value
           )) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-brand-dark/70 [&::-webkit-details-marker]:hidden", children: "› Broader approval scopes" }),
+          props.broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-brand-dark/70 [&::-webkit-details-marker]:hidden", children: "› Additional approval scopes" }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 px-1 text-[11px] font-medium text-brand-blue", children: "Broader scopes apply across more sessions. Use only when the narrower options are not enough." }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 sm:grid-cols-3 xl:grid-cols-1", children: props.broadScopeOptions.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 px-1 text-[11px] font-medium text-brand-blue", children: "These scopes apply across more sessions. Use only when the narrower options are not enough." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 sm:grid-cols-3 xl:grid-cols-1", children: props.broaderScopeOptions.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ScopeOptionRow,
+                {
+                  option,
+                  checked: props.scope === option.value,
+                  onScopeChange: props.onScopeChange
+                },
+                option.value
+              )) })
+            ] })
+          ] }),
+          props.advancedScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-attention/80 transition-colors hover:text-brand-attention [&::-webkit-details-marker]:hidden", children: "Advanced: applies everywhere" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 rounded-xl border border-brand-attention/25 bg-brand-attention/[0.04] p-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mb-2 px-1 text-[11px] font-medium text-brand-attention", children: "This scope applies across every project on this machine. It cannot easily be undone. Only use when no narrower scope is appropriate." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-2 xl:grid-cols-1", children: props.advancedScopeOptions.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx(
                 ScopeOptionRow,
                 {
                   option,
@@ -19407,21 +19662,30 @@ function DecisionActionPanel(props) {
 }
 function resolveAllowButtonText(submitting, blocked, allowLabel) {
   if (submitting === "allow") {
-    return "Saving…";
+    return "Saving...";
   }
   if (blocked) {
-    return "Allow — override block";
+    return "Allow: override block";
   }
   return allowLabel;
 }
 function resolveBlockButtonText(submitting, blocked) {
   if (submitting === "block") {
-    return "Saving…";
+    return "Saving...";
   }
   if (blocked) {
     return "Keep blocked";
   }
   return "Block this action";
+}
+function copyApprovalUrlLabel(shareState) {
+  if (shareState === "copied") {
+    return "Copied";
+  }
+  if (shareState === "failed") {
+    return "Copy failed";
+  }
+  return "Copy link";
 }
 function CopyCommandButton(props) {
   const [copied, setCopied] = reactExports.useState(false);
@@ -19452,7 +19716,7 @@ function resolveMcpInputSummary(payload) {
   try {
     const serialized = JSON.stringify(inputs);
     if (serialized.length <= 2) return null;
-    return serialized.length > 140 ? `${serialized.slice(0, 140)}…` : serialized;
+    return serialized.length > 140 ? `${serialized.slice(0, 140)}...` : serialized;
   } catch {
     return null;
   }
@@ -19497,7 +19761,7 @@ function BlockedActionCard(props) {
             "aria-label": "Copy local review link",
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "h-3 w-3", "aria-hidden": "true" }),
-              shareState === "copied" ? "Copied" : shareState === "failed" ? "Copy failed" : "Copy link"
+              copyApprovalUrlLabel(shareState)
             ]
           }
         ),
@@ -19646,6 +19910,43 @@ function simplifyRiskHeadline(headline, harness) {
     return `${harnessDisplayName(harness)} wants to access something sensitive.`;
   }
   return headline;
+}
+function buildClearPayload(input) {
+  switch (input.scope) {
+    case "artifact":
+      return {
+        scope: "artifact",
+        artifact_id: input.artifact_id ?? void 0,
+        artifact_hash: input.artifact_hash ?? void 0
+      };
+    case "workspace":
+      return { scope: "workspace", workspace: input.workspace ?? void 0 };
+    case "publisher":
+      return { scope: "publisher", publisher: input.publisher ?? void 0 };
+    case "harness":
+      return {
+        scope: "harness",
+        harness: input.harness,
+        artifact_id: input.artifact_id ?? void 0,
+        artifact_hash: input.artifact_hash ?? void 0
+      };
+    case "global":
+      return { scope: "global", all: true };
+  }
+}
+function clearLabelForScope(scope) {
+  switch (scope) {
+    case "artifact":
+      return "Clear exact decision";
+    case "workspace":
+      return "Clear project decision";
+    case "publisher":
+      return "Clear publisher decision";
+    case "harness":
+      return "Clear app decision";
+    case "global":
+      return "Clear global decision";
+  }
 }
 class ErrorBoundary extends reactExports.Component {
   constructor(props) {
@@ -20014,6 +20315,22 @@ function App() {
       });
     }
   }, [setRuntime, setRequests, setPolicies]);
+  const handleClearPolicy = reactExports.useCallback(async (policy) => {
+    await clearPolicy(buildClearPayload(policy));
+    const [snapshotResult, policiesResult] = await Promise.allSettled([fetchRuntimeSnapshot(), fetchPolicies()]);
+    if (snapshotResult.status === "fulfilled") {
+      setRuntime({ kind: "ready", snapshot: snapshotResult.value });
+      setRequests({ kind: "ready", items: snapshotResult.value.items });
+    }
+    if (policiesResult.status === "fulfilled") {
+      setPolicies({ kind: "ready", items: policiesResult.value });
+    } else {
+      setPolicies({
+        kind: "error",
+        message: policiesResult.reason instanceof Error ? policiesResult.reason.message : "Unable to load saved approvals."
+      });
+    }
+  }, [setRuntime, setRequests, setPolicies]);
   const handleClearEvidence = reactExports.useCallback(() => {
     setReceipts({ kind: "ready", items: [] });
   }, [setReceipts]);
@@ -20106,10 +20423,11 @@ function App() {
         onGoHome: handleGoHome,
         onOpenRequest: handleOpenRequest,
         onClearAppPolicies: handleClearAppPolicies,
+        onClearPolicy: handleClearPolicy,
         onManagedInstallChanged: refreshStateAfterAction
       }
     );
-  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, refreshStateAfterAction]);
+  }, [view, appDetailHarness, runtime, receipts, policies, inventory, requests, handleGoHome, handleOpenRequest, handleClearAppPolicies, handleClearPolicy, refreshStateAfterAction]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "a",
@@ -20183,7 +20501,7 @@ clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  formatHarnessCommand as $,
+  clearLabelForScope as $,
   ActionButton as A,
   Badge as B,
   clearEvidence as C,
@@ -20212,8 +20530,9 @@ export {
   HiMiniArrowPath as Z,
   HiMiniTrash as _,
   HiMiniFire as a,
-  HiMiniCommandLine as a0,
-  HiMiniQuestionMarkCircle as a1,
+  formatHarnessCommand as a0,
+  HiMiniCommandLine as a1,
+  HiMiniQuestionMarkCircle as a2,
   HiMiniCalendarDays as b,
   HiMiniShieldCheck as c,
   formatRelativeTime as d,

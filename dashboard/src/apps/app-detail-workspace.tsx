@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { RefObject } from "react";
 import {
   HiMiniArrowLeft,
   HiMiniHome,
@@ -35,6 +36,7 @@ import {
   runHarnessAction,
 } from "../guard-api";
 import { harnessDisplayName, formatRelativeTime } from "../approval-center-utils";
+import { buildClearPayload, clearLabelForScope } from "../clear-policy-payload";
 import { useFocusTrap } from "../use-focus-trap";
 import { detectCategory, CATEGORIES } from "../evidence/categories";
 import type {
@@ -63,6 +65,7 @@ type AppDetailWorkspaceProps = {
   onGoHome: () => void;
   onOpenRequest: (requestId: string) => void;
   onClearAppPolicies?: (harness: string) => Promise<void>;
+  onClearPolicy?: (policy: GuardPolicyDecision) => Promise<void>;
   onManagedInstallChanged?: () => Promise<void>;
 };
 
@@ -352,6 +355,7 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
                 install={install}
                 harnessPolicies={harnessPolicies}
                 onClearAppPolicies={props.onClearAppPolicies}
+                onClearPolicy={props.onClearPolicy}
                 onManagedInstallChanged={props.onManagedInstallChanged}
                 policyError={policyError}
                 onRetry={loadTabData}
@@ -1017,28 +1021,146 @@ function ExpandableReceiptRow({ receipt, selected, onToggle }: { receipt: GuardR
   );
 }
 
+function policyDecisionTitle(policy: GuardPolicyDecision): string {
+  if (policy.scope === "global") {
+    return "Every project";
+  }
+  if (policy.scope === "harness") {
+    return "This app";
+  }
+  if (policy.scope === "artifact" && policy.artifact_id) {
+    return policy.artifact_id;
+  }
+  return policy.scope;
+}
+
+function policyDecisionTone(action: string): "blue" | "green" | "attention" {
+  if (action === "allow") {
+    return "green";
+  }
+  if (action === "block") {
+    return "attention";
+  }
+  return "blue";
+}
+
+function PolicyDecisionRow(props: {
+  policy: GuardPolicyDecision;
+  rowKey: string;
+  isConfirming: boolean;
+  inFlight: boolean;
+  showClearButton: boolean;
+  onRequestClear: (key: string) => void;
+  onConfirmClear: () => void;
+  onCancelClear: () => void;
+  rowConfirmRef?: RefObject<HTMLDivElement>;
+}) {
+  const { policy, rowKey, isConfirming, inFlight, showClearButton } = props;
+  const label = clearLabelForScope(policy.scope);
+  const handleRequest = useCallback(() => props.onRequestClear(rowKey), [props.onRequestClear, rowKey]);
+  const clearButtonLabel = inFlight ? "Clearing..." : label;
+
+  return (
+    <div className="rounded-lg border border-slate-200/70 transition-all duration-200 hover:border-brand-blue/30 hover:shadow-sm">
+      <div className="flex items-center justify-between px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-brand-dark">{policyDecisionTitle(policy)}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {policy.action} · {policy.reason || "No reason given"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Tag tone={policyDecisionTone(policy.action)}>{policy.action}</Tag>
+          {showClearButton && !isConfirming && (
+            <button
+              onClick={handleRequest}
+              className="text-xs font-medium text-muted-foreground hover:text-brand-attention transition-colors"
+            >
+              {label}
+            </button>
+          )}
+        </div>
+      </div>
+      {isConfirming && (
+        <div
+          ref={props.rowConfirmRef}
+          className="guard-fade-in border-t border-slate-200/70 bg-slate-50/60 px-4 py-3"
+        >
+          <p className="text-xs text-muted-foreground">
+            Guard will ask again the next time this action runs.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={props.onConfirmClear}
+              disabled={inFlight}
+              className="inline-flex min-h-8 items-center rounded-lg bg-brand-attention px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-50"
+            >
+              {clearButtonLabel}
+            </button>
+            <button
+              onClick={props.onCancelClear}
+              disabled={inFlight}
+              className="inline-flex min-h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50"
+            >
+              Keep decision
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AppSettingsTab(props: {
   harness: string;
   status: "active" | "needs_setup" | "observed" | "unknown";
   install: GuardManagedInstall | undefined;
   harnessPolicies: GuardPolicyDecision[];
   onClearAppPolicies?: (harness: string) => Promise<void>;
+  onClearPolicy?: (policy: GuardPolicyDecision) => Promise<void>;
   onManagedInstallChanged?: () => Promise<void>;
   policyError: string | null;
   onRetry: () => void;
 }) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [clearingRowKey, setClearingRowKey] = useState<string | null>(null);
+  const [clearingRowInFlight, setClearingRowInFlight] = useState(false);
   const confirmRef = useRef<HTMLDivElement>(null);
+  const rowConfirmRef = useRef<HTMLDivElement>(null);
   useFocusTrap(showClearConfirm, confirmRef);
+  useFocusTrap(clearingRowKey !== null, rowConfirmRef);
 
   const handleClear = useCallback(async () => {
     if (!props.onClearAppPolicies) return;
     setClearing(true);
     await props.onClearAppPolicies(props.harness);
+    await props.onRetry();
     setClearing(false);
     setShowClearConfirm(false);
-  }, [props.onClearAppPolicies, props.harness]);
+  }, [props.onClearAppPolicies, props.harness, props.onRetry]);
+
+  const handleClearCancel = useCallback(() => {
+    setShowClearConfirm(false);
+  }, []);
+
+  const handleClearRowConfirm = useCallback(async () => {
+    if (!props.onClearPolicy || clearingRowKey === null) return;
+    const policy = props.harnessPolicies.find(
+      (p) => `${p.scope}-${p.artifact_id ?? p.workspace ?? "global"}` === clearingRowKey
+    );
+    if (!policy) return;
+    setClearingRowInFlight(true);
+    await props.onClearPolicy(policy);
+    await props.onRetry();
+    setClearingRowInFlight(false);
+    setClearingRowKey(null);
+  }, [props.onClearPolicy, props.harnessPolicies, props.onRetry, clearingRowKey]);
+
+  const handleClearRowCancel = useCallback(() => {
+    setClearingRowKey(null);
+  }, []);
+  const clearAllButtonLabel = clearing ? "Clearing..." : "Clear decisions";
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
@@ -1092,30 +1214,24 @@ function AppSettingsTab(props: {
             </div>
           ) : (
             <div className={`mt-4 space-y-2 ${clearing ? "guard-fade-out" : ""}`}>
-              {props.harnessPolicies.map((policy) => (
-                <div
-                  key={`${policy.scope}-${policy.artifact_id ?? policy.workspace ?? "global"}`}
-                  className="flex items-center justify-between rounded-lg border border-slate-200/70 px-4 py-3 transition-all duration-200 hover:border-brand-blue/30 hover:shadow-sm"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-brand-dark">
-                      {policy.scope === "global"
-                        ? "Every project"
-                        : policy.scope === "harness"
-                        ? "This app"
-                        : policy.scope === "artifact" && policy.artifact_id
-                        ? policy.artifact_id
-                        : policy.scope}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {policy.action} · {policy.reason || "No reason given"}
-                    </p>
-                  </div>
-                  <Tag tone={policy.action === "allow" ? "green" : policy.action === "block" ? "attention" : "blue"}>
-                    {policy.action}
-                  </Tag>
-                </div>
-              ))}
+              {props.harnessPolicies.map((policy) => {
+                const rowKey = `${policy.scope}-${policy.artifact_id ?? policy.workspace ?? "global"}`;
+                const isConfirmingThis = clearingRowKey === rowKey;
+                return (
+                  <PolicyDecisionRow
+                    key={rowKey}
+                    policy={policy}
+                    rowKey={rowKey}
+                    isConfirming={isConfirmingThis}
+                    inFlight={isConfirmingThis && clearingRowInFlight}
+                    showClearButton={!!props.onClearPolicy}
+                    onRequestClear={setClearingRowKey}
+                    onConfirmClear={handleClearRowConfirm}
+                    onCancelClear={handleClearRowCancel}
+                    rowConfirmRef={isConfirmingThis ? rowConfirmRef : undefined}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
@@ -1138,10 +1254,10 @@ function AppSettingsTab(props: {
                     disabled={clearing}
                     className="inline-flex min-h-9 items-center rounded-lg bg-brand-attention px-3 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-50"
                   >
-                    {clearing ? "Clearing…" : "Clear decisions"}
+                    {clearAllButtonLabel}
                   </button>
                   <button
-                    onClick={() => setShowClearConfirm(false)}
+                    onClick={handleClearCancel}
                     className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50"
                   >
                     Keep decisions

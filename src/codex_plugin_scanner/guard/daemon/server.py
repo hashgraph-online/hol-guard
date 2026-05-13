@@ -531,10 +531,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_policy_clear(self, payload: dict[str, object]) -> None:
         harness = self._optional_string(payload.get("harness"))
         source = self._optional_string(payload.get("source"))
+        scope = self._optional_string(payload.get("scope"))
+        artifact_id = self._optional_string(payload.get("artifact_id"))
+        artifact_hash = self._optional_string(payload.get("artifact_hash"))
+        workspace = self._optional_string(payload.get("workspace"))
+        publisher = self._optional_string(payload.get("publisher"))
         try:
             clear_all = self._optional_bool(payload.get("all"), default=False)
         except ValueError:
             self._write_json({"error": "invalid_all", "cleared": 0}, status=400)
+            return
+        if scope is not None and scope not in {"artifact", "workspace", "publisher", "harness", "global"}:
+            self._write_json({"error": "invalid_scope", "cleared": 0, "scope": scope}, status=400)
             return
         if clear_all and harness is not None:
             self._write_json(
@@ -553,12 +561,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         cleared = self.server.store.clear_policy_decisions(  # type: ignore[attr-defined]
             None if clear_all else harness,
             source,
+            scope=scope,
+            artifact_id=artifact_id,
+            artifact_hash=artifact_hash,
+            workspace=workspace,
+            publisher=publisher,
         )
         self._write_json(
             {
                 "cleared": cleared,
                 "harness": None if clear_all else harness,
                 "source": source,
+                "scope": scope,
+                "artifact_id": artifact_id,
+                "artifact_hash": artifact_hash,
+                "workspace": workspace,
+                "publisher": publisher,
             }
         )
 

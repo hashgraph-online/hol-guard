@@ -1,4 +1,4 @@
-import { r as reactExports, K as fetchApprovalPage, L as fetchPolicy, h as harnessDisplayName, j as jsxRuntimeExports, M as HiMiniArrowLeft, k as HiMiniChevronRight, G as GuardHero, A as ActionButton, P as ProofStrip, N as HiMiniHome, o as HiMiniBolt, O as HiMiniAdjustmentsHorizontal, S as SectionLabel, d as formatRelativeTime, n as HiMiniExclamationTriangle, T as Tag, Q as detectCategory, R as CATEGORIES, B as Badge, E as EmptyState, U as HiMiniCloud, V as HiMiniChartBar, W as runHarnessAction, X as GuardHarnessActionError, Y as HiMiniRocketLaunch, c as HiMiniShieldCheck, Z as HiMiniArrowPath, H as HiMiniCheckCircle, _ as HiMiniTrash, m as HiMiniChevronDown, $ as formatHarnessCommand } from "../guard-dashboard.js";
+import { r as reactExports, K as fetchApprovalPage, L as fetchPolicy, h as harnessDisplayName, j as jsxRuntimeExports, M as HiMiniArrowLeft, k as HiMiniChevronRight, G as GuardHero, A as ActionButton, P as ProofStrip, N as HiMiniHome, o as HiMiniBolt, O as HiMiniAdjustmentsHorizontal, S as SectionLabel, d as formatRelativeTime, n as HiMiniExclamationTriangle, T as Tag, Q as detectCategory, R as CATEGORIES, B as Badge, E as EmptyState, U as HiMiniCloud, V as HiMiniChartBar, W as runHarnessAction, X as GuardHarnessActionError, Y as HiMiniRocketLaunch, c as HiMiniShieldCheck, Z as HiMiniArrowPath, H as HiMiniCheckCircle, _ as HiMiniTrash, $ as clearLabelForScope, m as HiMiniChevronDown, a0 as formatHarnessCommand } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
 const tabOrder = ["overview", "activity", "settings"];
 function readTabFromUrl() {
@@ -238,6 +238,7 @@ function AppDetailWorkspace(props) {
                 install,
                 harnessPolicies,
                 onClearAppPolicies: props.onClearAppPolicies,
+                onClearPolicy: props.onClearPolicy,
                 onManagedInstallChanged: props.onManagedInstallChanged,
                 policyError,
                 onRetry: loadTabData
@@ -766,18 +767,122 @@ function ExpandableReceiptRow({ receipt, selected, onToggle }) {
     ] }) })
   ] });
 }
+function policyDecisionTitle(policy) {
+  if (policy.scope === "global") {
+    return "Every project";
+  }
+  if (policy.scope === "harness") {
+    return "This app";
+  }
+  if (policy.scope === "artifact" && policy.artifact_id) {
+    return policy.artifact_id;
+  }
+  return policy.scope;
+}
+function policyDecisionTone(action) {
+  if (action === "allow") {
+    return "green";
+  }
+  if (action === "block") {
+    return "attention";
+  }
+  return "blue";
+}
+function PolicyDecisionRow(props) {
+  const { policy, rowKey, isConfirming, inFlight, showClearButton } = props;
+  const label = clearLabelForScope(policy.scope);
+  const handleRequest = reactExports.useCallback(() => props.onRequestClear(rowKey), [props.onRequestClear, rowKey]);
+  const clearButtonLabel = inFlight ? "Clearing..." : label;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-lg border border-slate-200/70 transition-all duration-200 hover:border-brand-blue/30 hover:shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between px-4 py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: policyDecisionTitle(policy) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-xs text-muted-foreground", children: [
+          policy.action,
+          " · ",
+          policy.reason || "No reason given"
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 shrink-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: policyDecisionTone(policy.action), children: policy.action }),
+        showClearButton && !isConfirming && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: handleRequest,
+            className: "text-xs font-medium text-muted-foreground hover:text-brand-attention transition-colors",
+            children: label
+          }
+        )
+      ] })
+    ] }),
+    isConfirming && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        ref: props.rowConfirmRef,
+        className: "guard-fade-in border-t border-slate-200/70 bg-slate-50/60 px-4 py-3",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground", children: "Guard will ask again the next time this action runs." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-wrap gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: props.onConfirmClear,
+                disabled: inFlight,
+                className: "inline-flex min-h-8 items-center rounded-lg bg-brand-attention px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-50",
+                children: clearButtonLabel
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: props.onCancelClear,
+                disabled: inFlight,
+                className: "inline-flex min-h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-brand-dark transition-colors hover:bg-slate-50 disabled:opacity-50",
+                children: "Keep decision"
+              }
+            )
+          ] })
+        ]
+      }
+    )
+  ] });
+}
 function AppSettingsTab(props) {
   const [showClearConfirm, setShowClearConfirm] = reactExports.useState(false);
   const [clearing, setClearing] = reactExports.useState(false);
+  const [clearingRowKey, setClearingRowKey] = reactExports.useState(null);
+  const [clearingRowInFlight, setClearingRowInFlight] = reactExports.useState(false);
   const confirmRef = reactExports.useRef(null);
+  const rowConfirmRef = reactExports.useRef(null);
   useFocusTrap(showClearConfirm, confirmRef);
+  useFocusTrap(clearingRowKey !== null, rowConfirmRef);
   const handleClear = reactExports.useCallback(async () => {
     if (!props.onClearAppPolicies) return;
     setClearing(true);
     await props.onClearAppPolicies(props.harness);
+    await props.onRetry();
     setClearing(false);
     setShowClearConfirm(false);
-  }, [props.onClearAppPolicies, props.harness]);
+  }, [props.onClearAppPolicies, props.harness, props.onRetry]);
+  const handleClearCancel = reactExports.useCallback(() => {
+    setShowClearConfirm(false);
+  }, []);
+  const handleClearRowConfirm = reactExports.useCallback(async () => {
+    if (!props.onClearPolicy || clearingRowKey === null) return;
+    const policy = props.harnessPolicies.find(
+      (p) => `${p.scope}-${p.artifact_id ?? p.workspace ?? "global"}` === clearingRowKey
+    );
+    if (!policy) return;
+    setClearingRowInFlight(true);
+    await props.onClearPolicy(policy);
+    await props.onRetry();
+    setClearingRowInFlight(false);
+    setClearingRowKey(null);
+  }, [props.onClearPolicy, props.harnessPolicies, props.onRetry, clearingRowKey]);
+  const handleClearRowCancel = reactExports.useCallback(() => {
+    setClearingRowKey(null);
+  }, []);
+  const clearAllButtonLabel = clearing ? "Clearing..." : "Clear decisions";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -828,24 +933,25 @@ function AppSettingsTab(props) {
             body: "Guard will remember choices here after you allow or block actions for this app.",
             tone: "teach"
           }
-        ) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `mt-4 space-y-2 ${clearing ? "guard-fade-out" : ""}`, children: props.harnessPolicies.map((policy) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "div",
-          {
-            className: "flex items-center justify-between rounded-lg border border-slate-200/70 px-4 py-3 transition-all duration-200 hover:border-brand-blue/30 hover:shadow-sm",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: policy.scope === "global" ? "Every project" : policy.scope === "harness" ? "This app" : policy.scope === "artifact" && policy.artifact_id ? policy.artifact_id : policy.scope }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-xs text-muted-foreground", children: [
-                  policy.action,
-                  " · ",
-                  policy.reason || "No reason given"
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: policy.action === "allow" ? "green" : policy.action === "block" ? "attention" : "blue", children: policy.action })
-            ]
-          },
-          `${policy.scope}-${policy.artifact_id ?? policy.workspace ?? "global"}`
-        )) })
+        ) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `mt-4 space-y-2 ${clearing ? "guard-fade-out" : ""}`, children: props.harnessPolicies.map((policy) => {
+          const rowKey = `${policy.scope}-${policy.artifact_id ?? policy.workspace ?? "global"}`;
+          const isConfirmingThis = clearingRowKey === rowKey;
+          return /* @__PURE__ */ jsxRuntimeExports.jsx(
+            PolicyDecisionRow,
+            {
+              policy,
+              rowKey,
+              isConfirming: isConfirmingThis,
+              inFlight: isConfirmingThis && clearingRowInFlight,
+              showClearButton: !!props.onClearPolicy,
+              onRequestClear: setClearingRowKey,
+              onConfirmClear: handleClearRowConfirm,
+              onCancelClear: handleClearRowCancel,
+              rowConfirmRef: isConfirmingThis ? rowConfirmRef : void 0
+            },
+            rowKey
+          );
+        }) })
       ] }),
       showClearConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: confirmRef, className: "guard-fade-in rounded-xl border border-brand-attention/10 bg-brand-attention/[0.03] p-4 sm:p-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
@@ -869,13 +975,13 @@ function AppSettingsTab(props) {
                 onClick: handleClear,
                 disabled: clearing,
                 className: "inline-flex min-h-9 items-center rounded-lg bg-brand-attention px-3 text-sm font-semibold text-white transition-colors hover:bg-brand-attention/90 disabled:opacity-50",
-                children: clearing ? "Clearing…" : "Clear decisions"
+                children: clearAllButtonLabel
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
               {
-                onClick: () => setShowClearConfirm(false),
+                onClick: handleClearCancel,
                 className: "inline-flex min-h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-50",
                 children: "Keep decisions"
               }
