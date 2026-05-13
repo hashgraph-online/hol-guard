@@ -25,13 +25,14 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-ai-mcp-scanner~=4.6" in cisco_extra
     assert "python_version >= '3.11'" in cisco_extra
     assert "cisco-ai-skill-scanner~=2.0.9" in dependency_entries
-    assert "click==8.3.1" in override_entries
+    assert "click==8.3.3" in override_entries
     assert "cisco-ai-skill-scanner==2.0.9" in override_entries
-    assert "jsonschema==4.23.0" in override_entries
+    assert "jsonschema==4.26.0" in override_entries
     assert "litellm==1.83.0" in override_entries
-    assert "openai==2.15.0" in override_entries
-    assert "python-dotenv==1.2.1" in override_entries
-    assert "python-multipart==0.0.22" in override_entries
+    assert "openai==2.36.0" in override_entries
+    assert "python-dotenv==1.2.2" in override_entries
+    assert "python-multipart==0.0.28" in override_entries
+    assert "urllib3==2.7.0" in override_entries
     assert "cisco-ai-a2a-scanner" not in dependencies
     assert "cisco-ai-a2a-scanner" not in cisco_extra
     assert "cisco-aibom" not in dependencies
@@ -57,6 +58,7 @@ def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
     assert 'pip install "hol-guard[cisco]"' in readme
     assert 'pip install "plugin-scanner[cisco]"' in readme
     assert "Python 3.11+" in readme
+    assert "verified safe release after the PyPI compromise" in readme
     assert "deferred" in readme
     assert "cisco-ai-a2a-scanner" in readme
     assert "cisco-aibom" in readme
@@ -81,9 +83,10 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert requirements_copy_index < source_copy_index
     assert "cisco-ai-mcp-scanner==" in docker_requirements
     assert "litellm==1.83.0" in docker_requirements
-    assert "python-dotenv==1.2.1" in docker_requirements
-    assert "python-multipart==0.0.22" in docker_requirements
+    assert "python-dotenv==1.2.2" in docker_requirements
+    assert "python-multipart==0.0.28" in docker_requirements
     assert "--hash=sha256:" in docker_requirements
+    assert "uv sync --extra dev" in contributing
     assert "uv sync --extra dev --extra cisco" in contributing
 
 
