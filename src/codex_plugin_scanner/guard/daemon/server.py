@@ -215,6 +215,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                             "code": "request_unknown",
                             "title": "This request is no longer waiting.",
                             "body": "The request was either already resolved or expired. You can close this tab.",
+                            "queue_url": self._local_queue_url(),
                         },
                     },
                     status=404,
@@ -460,6 +461,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         "code": "request_unknown",
                         "title": "This request is no longer waiting.",
                         "body": "The request was either already resolved or expired. You can close this tab.",
+                        "queue_url": self._local_queue_url(),
                     },
                 },
                 status=404,
@@ -477,6 +479,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                             "If the action is blocked and you believe it should be allowed, "
                             "you can re-submit from your AI assistant."
                         ),
+                        "queue_url": self._local_queue_url(),
                     },
                 },
                 status=409,
@@ -494,11 +497,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             _now(),
         )
         harness = str(updated.get("harness", ""))
-        updated["copy"] = _build_resolution_copy(action, harness_str or harness)
+        copy = _build_resolution_copy(action, harness_str or harness)
+        updated["copy"] = copy
+        updated["retry_hint"] = copy["body"]
         self._write_json(updated)
 
     def log_message(self, fmt: str, *args: Any) -> None:
         return
+
+    def _local_queue_url(self) -> str:
+        host = self.server.server_address[0]  # type: ignore[attr-defined]
+        port = self.server.server_address[1]  # type: ignore[attr-defined]
+        return _build_local_url(host, port, "/#/inbox")
 
     def _load_request_body(self) -> tuple[dict[str, object], str | None]:
         length = int(self.headers.get("Content-Length", "0"))

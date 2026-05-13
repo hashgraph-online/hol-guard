@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +82,13 @@ _REDACTION_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
 )
 
 _SENSITIVE_TEXT_PATTERN = re.compile(r"(?i)(sk-[a-z0-9_-]+|(?:token|secret|api[_-]?key)(?:\s*[:=]\s*|\s+)[^\s,;]+)")
+_POSIX_USER_PATH_PATTERN = re.compile(
+    r"(?P<prefix>^|[\s\"'=({\[])(?P<root>/(?:Users|home)/[^/\s\"'`,;:)}\]]+)(?P<rest>(?:/[^\s\"'`,;:)}\]]*)?)"
+)
+_WINDOWS_USER_PATH_PATTERN = re.compile(
+    r"(?P<prefix>^|[\s\"'=({\[])(?P<root>[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s\"'`,;:)}\]]+)"
+    r"(?P<rest>(?:[\\/][^\s\"'`,;:)}\]]*)?)"
+)
 
 
 def redact_text(value: str) -> RedactedText:
@@ -105,3 +113,38 @@ def redact_text(value: str) -> RedactedText:
 
 def redact_sensitive_text(value: str) -> str:
     return _SENSITIVE_TEXT_PATTERN.sub("[redacted]", value)
+
+
+def redact_local_path(value: str, *, home_dir: Path | None = None) -> str:
+    redacted_value = value
+    if home_dir is not None:
+        redacted_value = _replace_home_prefix(redacted_value, str(home_dir))
+    current_home = _current_home_path()
+    if current_home is not None:
+        redacted_value = _replace_home_prefix(redacted_value, str(current_home))
+    redacted_value = _POSIX_USER_PATH_PATTERN.sub(_replace_user_path, redacted_value)
+    return _WINDOWS_USER_PATH_PATTERN.sub(_replace_user_path, redacted_value)
+
+
+def _current_home_path() -> Path | None:
+    try:
+        return Path.home()
+    except RuntimeError:
+        return None
+
+
+def _replace_home_prefix(value: str, home_value: str) -> str:
+    home_prefix = home_value.rstrip("/\\")
+    if not home_prefix or home_prefix in {"/", "\\"}:
+        return value
+    if value == home_prefix:
+        return "~"
+    separators = ("/", "\\")
+    if value.startswith(home_prefix) and len(value) > len(home_prefix) and value[len(home_prefix)] in separators:
+        return f"~{value[len(home_prefix) :]}"
+    return value
+
+
+def _replace_user_path(match: re.Match[str]) -> str:
+    rest = match.group("rest")
+    return f"{match.group('prefix')}~{rest}"

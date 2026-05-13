@@ -11,7 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ..redaction import redact_text
+from ..redaction import redact_local_path, redact_text
 
 try:
     from rich import box
@@ -92,7 +92,7 @@ def _redact_payload(value: object, *, key: str | None = None) -> object:
         redacted = value
         for pattern, replacement in _SENSITIVE_STRING_PATTERNS:
             redacted = pattern.sub(replacement, redacted)
-        return redacted
+        return redact_local_path(redacted)
     return value
 
 
