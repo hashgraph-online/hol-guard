@@ -139,6 +139,19 @@ def _removed_capabilities_summary(previous: dict[str, object]) -> str:
     return " • ".join(parts) if parts else "removed artifact"
 
 
+def _build_diff_summary(diff: dict[str, object]) -> str | None:
+    """Build a prose diff summary from a diff result dict."""
+    if not diff.get("changed"):
+        return None
+    changed_fields = diff.get("changed_fields")
+    if not isinstance(changed_fields, list) or not changed_fields:
+        return "artifact changed"
+    count = len(changed_fields)
+    sample = ", ".join(str(f) for f in changed_fields[:3])
+    suffix = " ..." if count > 3 else ""
+    return f"{count} change(s): {sample}{suffix}"
+
+
 def build_history_context(
     store: GuardStore,
     harness: str,
@@ -447,6 +460,8 @@ def evaluate_detection(
             ),
             artifact_name=artifact.name,
             source_scope=artifact.source_scope,
+            diff_summary=_build_diff_summary(diff),
+            approval_source="policy",
         )
         if persist:
             store.record_inventory_artifact(
@@ -580,6 +595,8 @@ def evaluate_detection(
             provenance_summary=_build_removed_provenance(previous),
             artifact_name=str(artifact_name) if isinstance(artifact_name, str) else artifact_id,
             source_scope=str(source_scope) if isinstance(source_scope, str) else None,
+            diff_summary="artifact removed",
+            approval_source="policy",
         )
         if persist:
             store.mark_inventory_removed(
