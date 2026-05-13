@@ -23,6 +23,7 @@ import {
 } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime, formatNumber, isDisplayableHarness } from "./approval-center-utils";
 import { useFocusTrap } from "./use-focus-trap";
+import { DeviceProofCard } from "./runtime-overview";
 import type {
   GuardApprovalRequest,
   GuardManagedInstall,
@@ -238,6 +239,8 @@ export function HomeWorkspace(props: {
         </section>
 
         <section className="space-y-6">
+          <DeviceProofCard device={snapshot.device} proofStatus={snapshot.proof_status} />
+
           {snapshot.latest_receipts.length > 0 && (
             <RecentProtectionSection receipts={snapshot.latest_receipts} />
           )}

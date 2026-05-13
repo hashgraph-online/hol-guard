@@ -38,9 +38,9 @@ def run_guard_connect_command(
     opener,
     wait_timeout_seconds: int,
 ) -> dict[str, object]:
+    normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
     ensure_guard_daemon(guard_home)
     daemon_client = _load_connect_daemon_client(guard_home)
-    normalized_connect_url, allowed_origin = resolve_connect_url(connect_url)
     connect_request = daemon_client.create_connect_request(
         sync_url=sync_url,
         allowed_origin=allowed_origin,
@@ -109,29 +109,31 @@ def run_guard_connect_command(
         plan_msg = str(plan_error).strip() or "Cloud sync requires a paid Guard plan."
         pending_sync_payload = dict(runtime_sync_summary)
         pending_sync_payload["synced_at"] = None
-        pending_state = _record_connect_result(
+        return _build_sync_not_available_payload(
             daemon_client=daemon_client,
             store=store,
             request_id=str(connect_request["request_id"]),
-            status="retry_required",
-            milestone="first_sync_failed",
             reason=plan_msg,
             sync=pending_sync_payload,
-        )
-        return build_connect_payload(
-            state=pending_state,
             browser_opened=browser_opened,
             connect_url=browser_url,
             sync_url=sync_url,
-            connected=False,
-            sync=pending_sync_payload,
-            sync_available=False,
-            sync_message=plan_msg,
         )
     except (RuntimeError, OSError, urllib.error.URLError, json.JSONDecodeError) as error:
         sync_message = str(error)
         pending_sync_payload = dict(runtime_sync_summary)
         pending_sync_payload["synced_at"] = None
+        if _is_paid_plan_sync_error(sync_message):
+            return _build_sync_not_available_payload(
+                daemon_client=daemon_client,
+                store=store,
+                request_id=str(connect_request["request_id"]),
+                reason=sync_message,
+                sync=pending_sync_payload,
+                browser_opened=browser_opened,
+                connect_url=browser_url,
+                sync_url=sync_url,
+            )
         pending_state = _record_connect_result(
             daemon_client=daemon_client,
             store=store,
@@ -314,7 +316,46 @@ def build_connect_payload(
         payload["sync"] = sync
     if sync_message is not None and sync_message.strip():
         payload["sync_message"] = sync_message
+    if not browser_opened:
+        payload["next_action"] = {
+            "label": "Copy pairing URL",
+            "reason": "Browser did not open automatically.",
+            "target": connect_url,
+        }
     return payload
+
+
+def _build_sync_not_available_payload(
+    *,
+    daemon_client: GuardSurfaceDaemonClient,
+    store: GuardStore,
+    request_id: str,
+    reason: str,
+    sync: dict[str, object],
+    browser_opened: bool,
+    connect_url: str,
+    sync_url: str,
+) -> dict[str, object]:
+    message = "Local Guard is connected. Shared cloud sync needs a paid Guard plan."
+    pending_state = _record_connect_result(
+        daemon_client=daemon_client,
+        store=store,
+        request_id=request_id,
+        status="connected",
+        milestone="sync_not_available",
+        reason=message,
+        sync={**sync, "sync_not_available_reason": reason},
+    )
+    return build_connect_payload(
+        state=pending_state,
+        browser_opened=browser_opened,
+        connect_url=connect_url,
+        sync_url=sync_url,
+        connected=True,
+        sync={**sync, "sync_not_available_reason": reason},
+        sync_available=False,
+        sync_message=message,
+    )
 
 
 def _record_connect_result(
