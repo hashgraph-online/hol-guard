@@ -211,10 +211,54 @@ export type GuardCloudSyncHealth = {
   next_retry_after: string | null;
 };
 
+export type GuardRuntimeDevice = {
+  installation_id: string;
+  device_label: string;
+  local_registered: boolean;
+};
+
+export type GuardConnectProof = {
+  pairing_completed_at: string | null;
+  first_synced_at: string | null;
+  receipts_stored: number;
+  inventory_items: number;
+  runtime_session_id: string | null;
+  runtime_session_synced_at: string | null;
+};
+
+export type GuardLatestConnectState = {
+  request_id: string | null;
+  status: string | null;
+  milestone: string | null;
+  reason: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  expires_at: string | null;
+  completed_at: string | null;
+  proof: GuardConnectProof;
+};
+
+export type GuardProofStatus = GuardConnectProof & {
+  state:
+    | "not_connected"
+    | "waiting"
+    | "pending"
+    | "synced"
+    | "failed"
+    | "expired"
+    | "sync_unavailable";
+  label: string;
+  detail: string;
+  request_id: string | null;
+};
+
 export type GuardRuntimeSnapshot = {
   generated_at: string;
   approval_center_url: string | null;
   runtime_state: GuardRuntimeState | null;
+  device?: GuardRuntimeDevice;
+  latest_connect_state?: GuardLatestConnectState | null;
+  proof_status?: GuardProofStatus;
   pending_count: number;
   receipt_count: number;
   headline_state: GuardHeadlineState;
