@@ -139,8 +139,10 @@ from .bootstrap import DEFAULT_ALIAS_NAME, build_guard_bootstrap_payload
 from .connect_flow import (
     DEFAULT_GUARD_CONNECT_URL,
     DEFAULT_GUARD_SYNC_URL,
+    build_connect_status_payload,
     run_guard_connect_command,
 )
+from .docs import build_install_connect_docs_payload
 from .install_commands import (
     apply_managed_install,
     build_harness_setup_plan,
@@ -581,6 +583,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         "connect",
         help="Open the browser, pair this runtime to HOL Guard, and send the first sync",
     )
+    connect_parser.add_argument("connect_command", nargs="?", choices=("status", "repair", "re-pair"))
     _add_guard_common_args(connect_parser)
     connect_parser.add_argument("--sync-url", default=DEFAULT_GUARD_SYNC_URL, type=_guard_http_url)
     connect_parser.add_argument("--connect-url", default=DEFAULT_GUARD_CONNECT_URL, type=_guard_http_url)
@@ -1368,7 +1371,10 @@ def run_guard_command(
         return int(payload.get("exit_code", 0))
 
     if args.guard_command == "explain":
-        payload = _build_explain_payload_with_mode(store, args.target, cisco_mode=args.cisco_mode)
+        if str(args.target).strip().lower() == "install-connect":
+            payload = build_install_connect_docs_payload()
+        else:
+            payload = _build_explain_payload_with_mode(store, args.target, cisco_mode=args.cisco_mode)
         _emit("explain", payload, getattr(args, "json", False))
         return 0
 
@@ -1450,6 +1456,16 @@ def run_guard_command(
         return 0 if bool(payload.get("connected")) else 1
 
     if args.guard_command == "connect":
+        connect_subcommand = getattr(args, "connect_command", None)
+        if connect_subcommand in {"status", "repair", "re-pair"}:
+            payload = build_connect_status_payload(
+                store=store,
+                sync_url=args.sync_url,
+                connect_url=args.connect_url,
+                action=str(connect_subcommand),
+            )
+            _emit("connect", payload, getattr(args, "json", False))
+            return 0
         try:
             payload = _run_guard_connect_flow(
                 guard_home=guard_home,

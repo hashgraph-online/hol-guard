@@ -14,6 +14,7 @@ from ..daemon import load_guard_daemon_url
 from ..models import HarnessDetection
 from ..redaction import redact_local_path
 from ..store import GuardStore
+from .connect_flow import CONNECT_COMMAND, CONNECT_REPAIR_COMMAND, CONNECT_STATUS_COMMAND, connect_recovery_command
 
 HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "hermes", "cursor", "antigravity", "gemini", "opencode")
 GUARD_COMMAND = "hol-guard"
@@ -229,6 +230,7 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
     team_policy_pack = _coerce_payload_dict(store.get_sync_payload("team_policy_pack"))
     sync_summary = _coerce_payload_dict(store.get_sync_payload("sync_summary"))
     last_sync_at = _optional_string(sync_summary.get("synced_at"))
+    latest_connect_state = store.get_latest_guard_connect_state(now=_now())
     remote_payload_active = bool(advisories or alert_preferences or remote_policy or team_policy_pack)
     cloud_state = _resolve_cloud_state(
         sync_configured=credentials is not None,
@@ -244,7 +246,11 @@ def _build_cloud_context(store: GuardStore) -> dict[str, object]:
         "inbox_url": inbox_url,
         "fleet_url": fleet_url,
         "connect_url": connect_url,
-        "connect_command": f"{GUARD_COMMAND} connect",
+        "connect_command": CONNECT_COMMAND,
+        "connect_status_command": CONNECT_STATUS_COMMAND,
+        "connect_repair_command": CONNECT_REPAIR_COMMAND,
+        "connect_recovery_command": connect_recovery_command(latest_connect_state),
+        "latest_connect_state": latest_connect_state,
         "sync_command": f"{GUARD_COMMAND} sync",
         "last_sync_at": last_sync_at,
         "advisory_count": len(advisories),

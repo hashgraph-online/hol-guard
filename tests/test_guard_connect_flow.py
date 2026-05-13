@@ -9,6 +9,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli.connect_flow import (
     _start_guard_runtime_session,
     run_guard_connect_command,
@@ -167,6 +168,135 @@ def test_guard_connect_preserves_pairing_when_first_sync_fails(
     assert "guardPairSecret=" in str(payload["connect_url"])
     assert payload["sync"]["synced_at"] is None
     assert payload["proof"]["first_synced_at"] is None
+
+
+def test_guard_connect_status_reports_retry_recovery_command(tmp_path, capsys) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    sync_url = "https://guard.example.test/sync"
+    request = store.create_guard_connect_request(
+        sync_url=sync_url,
+        allowed_origin="https://hol.org",
+        now="2026-04-15T00:00:00+00:00",
+    )
+    store.complete_guard_connect_request(
+        request_id=str(request["request_id"]),
+        pairing_secret=str(request["pairing_secret"]),
+        token="session-token-123",
+        now="2026-04-15T00:00:01+00:00",
+    )
+    store.record_guard_connect_result(
+        request_id=str(request["request_id"]),
+        status="retry_required",
+        milestone="first_sync_failed",
+        now="2026-04-15T00:00:02+00:00",
+        reason="sync_unreachable",
+        sync_payload={"synced_at": None},
+    )
+
+    rc = main(["guard", "connect", "status", "--guard-home", str(guard_home), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["status"] == "retry_required"
+    assert output["milestone"] == "first_sync_failed"
+    assert output["reason"] == "sync_unreachable"
+    assert output["sync_url"] == sync_url
+    assert output["recovery_command"] == "hol-guard connect"
+    assert output["connect_status_command"] == "hol-guard connect status"
+
+
+def test_guard_connect_repair_prints_repair_guidance(tmp_path, capsys) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    request = store.create_guard_connect_request(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-04-15T00:00:00+00:00",
+    )
+    store.record_guard_connect_result(
+        request_id=str(request["request_id"]),
+        status="retry_required",
+        milestone="first_sync_failed",
+        now="2026-04-15T00:00:02+00:00",
+        reason="sync_unreachable",
+        sync_payload={"synced_at": None},
+    )
+
+    rc = main(["guard", "connect", "repair", "--guard-home", str(guard_home), "--json"])
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["repair_action"] == "rerun_connect"
+    assert output["repair_message"] == "Run hol-guard connect to create a fresh pairing request and first sync."
+    assert output["recovery_command"] == "hol-guard connect"
+
+
+def test_guard_connect_repair_human_output_includes_recovery_command(tmp_path, capsys) -> None:
+    guard_home = tmp_path / "guard-home"
+    store = GuardStore(guard_home)
+    request = store.create_guard_connect_request(
+        sync_url="https://guard.example.test/sync",
+        allowed_origin="https://hol.org",
+        now="2026-04-15T00:00:00+00:00",
+    )
+    store.record_guard_connect_result(
+        request_id=str(request["request_id"]),
+        status="retry_required",
+        milestone="first_sync_failed",
+        now="2026-04-15T00:00:02+00:00",
+        reason="sync_unreachable",
+        sync_payload={"synced_at": None},
+    )
+
+    rc = main(["guard", "connect", "repair", "--guard-home", str(guard_home)])
+    output = capsys.readouterr().out
+
+    assert rc == 0
+    assert "Recovery command" in output
+    assert "hol-guard connect" in output
+    assert "Repair note" in output
+
+
+def test_guard_status_surfaces_latest_connect_retry_state(tmp_path, capsys) -> None:
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    guard_home = tmp_path / "guard-home"
+    _build_guard_fixture(home_dir, workspace_dir)
+    store = GuardStore(guard_home)
+    request = store.create_guard_connect_request(
+        sync_url="https://hol.org/api/guard/receipts/sync",
+        allowed_origin="https://hol.org",
+        now="2026-04-15T00:00:00+00:00",
+    )
+    store.record_guard_connect_result(
+        request_id=str(request["request_id"]),
+        status="retry_required",
+        milestone="first_sync_failed",
+        now="2026-04-15T00:00:02+00:00",
+        reason="sync_unreachable",
+        sync_payload={"synced_at": None},
+    )
+
+    rc = main(
+        [
+            "guard",
+            "status",
+            "--home",
+            str(home_dir),
+            "--guard-home",
+            str(guard_home),
+            "--workspace",
+            str(workspace_dir),
+            "--json",
+        ]
+    )
+    output = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert output["latest_connect_state"]["status"] == "retry_required"
+    assert output["latest_connect_state"]["milestone"] == "first_sync_failed"
+    assert output["connect_recovery_command"] == "hol-guard connect"
 
 
 def test_guard_connect_preserves_local_protection_when_cloud_token_creation_fails(
