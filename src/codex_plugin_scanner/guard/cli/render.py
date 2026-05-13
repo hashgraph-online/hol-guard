@@ -11,7 +11,47 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ..redaction import redact_local_path, redact_text
+from ..redaction import redact_text
+
+try:
+    from ..redaction import redact_local_path
+except ImportError:
+
+    def redact_local_path(value: str, *, home_dir: Path | None = None) -> str:
+        """Fallback for mixed installs where render.py is newer than redaction.py."""
+
+        redacted_value = value
+        if home_dir is not None:
+            redacted_value = _replace_home_prefix_fallback(redacted_value, str(home_dir))
+        try:
+            current_home = Path.home()
+        except RuntimeError:
+            current_home = None
+        if current_home is not None:
+            redacted_value = _replace_home_prefix_fallback(redacted_value, str(current_home))
+        redacted_value = re.sub(
+            r"(?P<prefix>^|[\s\"'=({\[])(?P<root>/(?:Users|home)/[^/\s\"'`,;:)}\]]+)"
+            r"(?P<rest>(?:/[^\s\"'`,;:)}\]]*)?)",
+            lambda match: f"{match.group('prefix')}~{match.group('rest')}",
+            redacted_value,
+        )
+        return re.sub(
+            r"(?P<prefix>^|[\s\"'=({\[])(?P<root>[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s\"'`,;:)}\]]+)"
+            r"(?P<rest>(?:[\\/][^\s\"'`,;:)}\]]*)?)",
+            lambda match: f"{match.group('prefix')}~{match.group('rest')}",
+            redacted_value,
+        )
+
+
+def _replace_home_prefix_fallback(value: str, home_value: str) -> str:
+    home_prefix = home_value.rstrip("/\\")
+    if not home_prefix or home_prefix in {"/", "\\"}:
+        return value
+    if value == home_prefix:
+        return "~"
+    if value.startswith(home_prefix) and len(value) > len(home_prefix) and value[len(home_prefix)] in {"/", "\\"}:
+        return f"~{value[len(home_prefix) :]}"
+    return value
 
 try:
     from rich import box
