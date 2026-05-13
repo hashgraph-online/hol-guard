@@ -552,6 +552,10 @@
     left: calc(var(--spacing) * .5);
   }
 
+  .left-2 {
+    left: calc(var(--spacing) * 2);
+  }
+
   .left-3 {
     left: calc(var(--spacing) * 3);
   }
@@ -3517,6 +3521,10 @@
       }
     }
 
+    .hover\:border-slate-200:hover {
+      border-color: var(--color-slate-200);
+    }
+
     .hover\:border-slate-300:hover {
       border-color: var(--color-slate-300);
     }
@@ -3623,6 +3631,16 @@
 
     .hover\:bg-slate-50:hover {
       background-color: var(--color-slate-50);
+    }
+
+    .hover\:bg-slate-50\/50:hover {
+      background-color: #f8fafc80;
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-slate-50\/50:hover {
+        background-color: color-mix(in oklab, var(--color-slate-50) 50%, transparent);
+      }
     }
 
     .hover\:bg-slate-50\/60:hover {
