@@ -289,15 +289,20 @@ def build_runtime_snapshot(
     next_request_id = active_request_id if active_is_pending else first_request_id
     latest_receipts = store.list_receipts(limit=receipt_limit)
     cloud_context = _build_runtime_cloud_context(store)
+    snapshot_now = now or _now()
+    latest_connect_state = _build_latest_connect_state(store, snapshot_now)
     headline_state = _resolve_runtime_headline_state(
         pending_count=store.count_approval_requests(),
         runtime_state=store.get_runtime_state(),
         cloud_state=str(cloud_context["cloud_state"]),
     )
     return {
-        "generated_at": now or _now(),
+        "generated_at": snapshot_now,
         "approval_center_url": approval_center_url,
         "runtime_state": store.get_runtime_state(),
+        "device": _build_runtime_device_context(store),
+        "latest_connect_state": latest_connect_state,
+        "proof_status": _build_runtime_proof_status(latest_connect_state),
         "pending_count": store.count_approval_requests(),
         "queue_summary": {
             "active_request_id": active_request_id if active_is_pending else None,
@@ -509,6 +514,133 @@ def _build_runtime_cloud_context(store: GuardStore) -> dict[str, object]:
     }
 
 
+def _build_runtime_device_context(store: GuardStore) -> dict[str, object]:
+    metadata = store.get_device_metadata()
+    return {
+        "installation_id": metadata["installation_id"],
+        "device_label": metadata["device_label"],
+        "local_registered": True,
+    }
+
+
+def _build_latest_connect_state(store: GuardStore, now: str) -> dict[str, object] | None:
+    state = store.get_latest_guard_connect_state(now=now)
+    if state is None:
+        return None
+    return {
+        "request_id": _optional_string(state.get("request_id")),
+        "status": _optional_string(state.get("status")),
+        "milestone": _optional_string(state.get("milestone")),
+        "reason": _optional_string(state.get("reason")),
+        "created_at": _optional_string(state.get("created_at")),
+        "updated_at": _optional_string(state.get("updated_at")),
+        "expires_at": _optional_string(state.get("expires_at")),
+        "completed_at": _optional_string(state.get("completed_at")),
+        "proof": _connect_state_proof(state.get("proof")),
+    }
+
+
+def _connect_state_proof(value: object) -> dict[str, object]:
+    source = value if isinstance(value, Mapping) else {}
+    return {
+        "pairing_completed_at": _optional_string(source.get("pairing_completed_at")),
+        "first_synced_at": _optional_string(source.get("first_synced_at")),
+        "receipts_stored": _non_negative_int(source.get("receipts_stored")),
+        "inventory_items": _non_negative_int(source.get("inventory_items")),
+        "runtime_session_id": _optional_string(source.get("runtime_session_id")),
+        "runtime_session_synced_at": _optional_string(source.get("runtime_session_synced_at")),
+    }
+
+
+def _build_runtime_proof_status(latest_state: dict[str, object] | None) -> dict[str, object]:
+    proof = _connect_state_proof(latest_state.get("proof") if latest_state is not None else None)
+    if latest_state is None:
+        status = "not_connected"
+        return _runtime_proof_status_payload(
+            state=status,
+            label=_runtime_proof_status_label(status),
+            detail=_runtime_proof_status_detail(status),
+            request_id=None,
+            proof=proof,
+        )
+    status = _runtime_proof_status_name(
+        status=_optional_string(latest_state.get("status")),
+        milestone=_optional_string(latest_state.get("milestone")),
+        proof=proof,
+    )
+    return _runtime_proof_status_payload(
+        state=status,
+        label=_runtime_proof_status_label(status),
+        detail=_runtime_proof_status_detail(status),
+        request_id=_optional_string(latest_state.get("request_id")),
+        proof=proof,
+    )
+
+
+def _runtime_proof_status_payload(
+    *,
+    state: str,
+    label: str,
+    detail: str,
+    request_id: str | None,
+    proof: Mapping[str, object],
+) -> dict[str, object]:
+    return {
+        "state": state,
+        "label": label,
+        "detail": detail,
+        "request_id": request_id,
+        **proof,
+    }
+
+
+def _runtime_proof_status_name(
+    *,
+    status: str | None,
+    milestone: str | None,
+    proof: Mapping[str, object],
+) -> str:
+    if milestone == "first_sync_succeeded" or proof.get("first_synced_at"):
+        return "synced"
+    if milestone == "sync_not_available":
+        return "sync_unavailable"
+    if status == "retry_required" or milestone == "first_sync_failed":
+        return "failed"
+    if milestone == "first_sync_pending":
+        return "pending"
+    if milestone == "expired" or status == "expired":
+        return "expired"
+    if milestone == "waiting_for_browser" or status == "waiting":
+        return "waiting"
+    return "not_connected"
+
+
+def _runtime_proof_status_label(state: str) -> str:
+    labels = {
+        "synced": "First proof synced",
+        "sync_unavailable": "Local connected, cloud sync gated",
+        "failed": "First proof needs retry",
+        "pending": "First proof pending",
+        "expired": "Pairing expired",
+        "waiting": "Waiting for browser pairing",
+        "not_connected": "Cloud proof not started",
+    }
+    return labels.get(state, "Cloud proof not started")
+
+
+def _runtime_proof_status_detail(state: str) -> str:
+    details = {
+        "synced": "This device completed its first Guard Cloud proof sync.",
+        "sync_unavailable": "Local Guard is connected. Shared cloud sync needs a paid Guard plan.",
+        "failed": "Run hol-guard connect again to finish first proof sync.",
+        "pending": "Browser pairing finished. First proof sync has not completed yet.",
+        "expired": "The pairing link expired. Run hol-guard connect again.",
+        "waiting": "Open the pairing link to register this local Guard device.",
+        "not_connected": "Connect Guard Cloud to sync this device proof.",
+    }
+    return details.get(state, "Connect Guard Cloud to sync this device proof.")
+
+
 def _build_cloud_sync_health(store: GuardStore, sync_configured: bool, cloud_state: str) -> dict[str, object]:
     pending_events = store.count_guard_events_v1(uploaded=False)
     event_summary = store.get_sync_payload("guard_events_v1_summary") or {}
@@ -689,6 +821,23 @@ def _runtime_headline_detail(headline_state: str) -> str:
         "connected": "This machine is connected to Guard Cloud and waiting for the first shared proof to appear.",
     }
     return details.get(headline_state, "This machine is protected locally.")
+
+
+def _optional_string(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _non_negative_int(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, str) and value.strip():
+        try:
+            return max(0, int(value.strip()))
+        except ValueError:
+            return 0
+    return 0
 
 
 def _queue_risk_summary(queued: list[dict[str, object]]) -> str:
