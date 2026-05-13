@@ -26,6 +26,7 @@ import { EvidenceInsightStrip } from "./evidence/evidence-insight-strip";
 import { EvidenceAnalyticsPanel } from "./evidence/evidence-analytics-panel";
 import { EvidenceExportDrawer } from "./evidence/evidence-export-drawer";
 import { EvidenceClearModal } from "./evidence/evidence-clear-modal";
+import { AppTab } from "./evidence/app-tab";
 
 export type ReceiptsState =
   | { kind: "loading" }
@@ -126,7 +127,7 @@ interface ViewTabBarProps {
 function ViewTabBar({ view, onViewChange }: ViewTabBarProps) {
   return (
     <div
-      className="flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm"
+      className="flex gap-0.5 border-b border-slate-200/70"
       role="tablist"
       aria-label="Evidence views"
     >
@@ -175,14 +176,17 @@ function ViewTabButton({
       aria-controls={`tabpanel-${tabKey}`}
       id={`tab-${tabKey}`}
       onClick={handleClick}
-      className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
+      className={`relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
         isActive
-          ? "bg-brand-blue text-white shadow-sm"
-          : "text-brand-dark hover:bg-slate-50"
+          ? "text-brand-dark"
+          : "text-slate-500 hover:text-brand-dark"
       }`}
     >
       <Icon className="h-4 w-4" aria-hidden="true" />
       <span className="hidden sm:inline">{label}</span>
+      {isActive && (
+        <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-brand-blue" />
+      )}
     </button>
   );
 }
@@ -331,7 +335,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <EvidenceHeader
         totalCount={receiptItems.length}
         lastActivityAt={metrics.lastActivityAt}
@@ -339,7 +343,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
         onClear={handleOpenClear}
       />
 
-      <EvidenceInsightStrip metrics={metrics} />
+      {metrics.total > 0 && <EvidenceInsightStrip metrics={metrics} />}
 
       <EvidenceFilterBar
         filters={filters}
@@ -402,11 +406,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }: EvidenceWorkbenchP
             role="tabpanel"
             aria-labelledby="tab-apps"
           >
-            <EvidenceAnalyticsPanel
-              metrics={metrics}
-              onFilterHarness={handleFilterHarness}
-              onFilterCategory={handleFilterCategory}
-            />
+            <AppTab receipts={receiptItems} />
           </div>
         )}
 

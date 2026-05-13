@@ -129,6 +129,8 @@ const scopeChoices = [
   },
 ];
 
+const QUEUE_PAGE_SIZE = 10;
+
 export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const { requests, activeRequestId, detail } = props;
   const queueRef = useRef<HTMLDivElement>(null);
@@ -137,6 +139,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const [sortDirection, setSortDirection] = useState<QueueSortDirection>("newest");
   const [semanticFilter, setSemanticFilter] = useState<SemanticGroupId>("all");
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
+  const [page, setPage] = useState(1);
 
   const handleOpenRequest = useCallback((id: string) => {
     props.onOpenRequest(id);
@@ -161,6 +164,16 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     return sortQueue(searched, sortDirection);
   }, [categoryFilter, requests, searchTerm, sortDirection, semanticFilter]);
 
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, categoryFilter, sortDirection, semanticFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / QUEUE_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * QUEUE_PAGE_SIZE;
+  const pagedRequests = filteredRequests.slice(pageStart, pageStart + QUEUE_PAGE_SIZE);
+
   const categoryOptions = useMemo(() => queueCategoriesForItems(requests), [requests]);
 
   const activeRequest =
@@ -168,25 +181,25 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       ? requests.find((r) => r.request_id === activeRequestId) ?? null
       : null;
 
-  // Keyboard navigation for queue
+  // Keyboard navigation for queue (scoped to visible page)
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (filteredRequests.length === 0) return;
-      const activeIdx = filteredRequests.findIndex((r) => r.request_id === activeRequestId);
+      if (pagedRequests.length === 0) return;
+      const activeIdx = pagedRequests.findIndex((r) => r.request_id === activeRequestId);
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        const nextIdx = Math.min(activeIdx + 1, filteredRequests.length - 1);
-        if (nextIdx !== activeIdx) props.onOpenRequest(filteredRequests[nextIdx].request_id);
+        const nextIdx = Math.min(activeIdx + 1, pagedRequests.length - 1);
+        if (nextIdx !== activeIdx) props.onOpenRequest(pagedRequests[nextIdx].request_id);
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
         const prevIdx = Math.max(activeIdx - 1, 0);
-        if (prevIdx !== activeIdx) props.onOpenRequest(filteredRequests[prevIdx].request_id);
+        if (prevIdx !== activeIdx) props.onOpenRequest(pagedRequests[prevIdx].request_id);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [filteredRequests, activeRequestId, props.onOpenRequest]);
+  }, [pagedRequests, activeRequestId, props.onOpenRequest]);
 
   useEffect(() => {
     if (filteredRequests.length === 0) {
@@ -232,18 +245,22 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       <div className="grid gap-4 md:grid-cols-[260px_minmax(0,1fr)] lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)] items-start">
         <div className={`${mobileQueueOpen ? "block" : "hidden"} md:block`}>
           <ReviewQueueList
-            requests={filteredRequests}
+            requests={pagedRequests}
             totalCount={requests.length}
+            filteredCount={filteredRequests.length}
             activeRequestId={activeItem.request_id}
             categoryOptions={categoryOptions}
             categoryFilter={categoryFilter}
             searchTerm={searchTerm}
             sortDirection={sortDirection}
             semanticFilter={semanticFilter}
+            page={currentPage}
+            totalPages={totalPages}
             onCategoryFilterChange={setCategoryFilter}
             onSearchTermChange={setSearchTerm}
             onSortDirectionChange={setSortDirection}
             onSemanticFilterChange={setSemanticFilter}
+            onPageChange={setPage}
             onOpenRequest={handleOpenRequest}
             ref={queueRef}
           />
@@ -306,30 +323,38 @@ function resolveSemanticGroup(categoryId: QueueCategoryId): SemanticGroupId {
 const ReviewQueueList = forwardRef<HTMLDivElement, {
   requests: GuardApprovalRequest[];
   totalCount: number;
+  filteredCount: number;
   activeRequestId: string | null;
   categoryOptions: QueueCategory[];
   categoryFilter: QueueCategoryId | "all";
   searchTerm: string;
   sortDirection: QueueSortDirection;
   semanticFilter: SemanticGroupId;
+  page: number;
+  totalPages: number;
   onCategoryFilterChange: (category: QueueCategoryId | "all") => void;
   onSearchTermChange: (term: string) => void;
   onSortDirectionChange: (direction: QueueSortDirection) => void;
   onSemanticFilterChange: (group: SemanticGroupId) => void;
+  onPageChange: (page: number) => void;
   onOpenRequest: (requestId: string) => void;
 }>(({
   requests,
   totalCount,
+  filteredCount,
   activeRequestId,
   categoryOptions,
   categoryFilter,
   searchTerm,
   sortDirection,
   semanticFilter,
+  page,
+  totalPages,
   onCategoryFilterChange,
   onSearchTermChange,
   onSortDirectionChange,
   onSemanticFilterChange,
+  onPageChange,
   onOpenRequest,
 }, ref) => {
   const [showFilters, setShowFilters] = useState(false);
@@ -343,6 +368,12 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   const handleSortChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     onSortDirectionChange(event.target.value as QueueSortDirection);
   }, [onSortDirectionChange]);
+  const handlePreviousPage = useCallback(() => {
+    onPageChange(Math.max(1, page - 1));
+  }, [page, onPageChange]);
+  const handleNextPage = useCallback(() => {
+    onPageChange(Math.min(totalPages, page + 1));
+  }, [page, totalPages, onPageChange]);
 
   const activeSemanticGroup = semanticFilter;
 
@@ -356,13 +387,14 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
   }, [requests]);
 
   const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest";
+  const showPagination = filteredCount > QUEUE_PAGE_SIZE;
 
   return (
     <aside className="space-y-3" ref={ref}>
       <div className="flex items-center justify-between gap-3">
         <SectionLabel>Queue</SectionLabel>
         <span className="font-mono text-[11px] font-semibold text-muted-foreground">
-          {requests.length}/{totalCount}
+          {filteredCount}/{totalCount}
         </span>
       </div>
       <div className="space-y-2 rounded-xl border border-slate-100 bg-white p-3">
@@ -444,6 +476,34 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
           </div>
         )}
       </div>
+      {showPagination && (
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>
+            {((page - 1) * QUEUE_PAGE_SIZE) + 1}-{Math.min(filteredCount, page * QUEUE_PAGE_SIZE)} of {filteredCount}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePreviousPage}
+              disabled={page <= 1}
+              className="min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="font-mono text-[11px] text-slate-400">
+              {page}/{totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={handleNextPage}
+              disabled={page >= totalPages}
+              className="min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </aside>
   );
 });
