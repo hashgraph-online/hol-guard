@@ -130,6 +130,8 @@ def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]
         path_status = "not_on_path"
     elif installer == "pipx":
         path_status = "pipx_shim_detected"
+    elif installer == "uv":
+        path_status = "uv_tool_shim_detected"
     elif expected_script_dir is not None and _script_dir(resolved_binary) == expected_script_dir:
         path_status = "matches_installer"
     else:
@@ -214,14 +216,19 @@ def _current_version() -> str:
 
 def _installer_kind() -> str:
     prefix_path = Path(sys.prefix).resolve()
+    normalized_prefix = prefix_path.as_posix().lower()
+    if "/uv/tools/" in normalized_prefix:
+        return "uv"
     if (prefix_path / "pipx_metadata.json").exists():
         return "pipx"
-    if "/pipx/venvs/" in prefix_path.as_posix().lower():
+    if "/pipx/venvs/" in normalized_prefix:
         return "pipx"
     return "pip"
 
 
 def _update_command(installer: str) -> list[str]:
+    if installer == "uv":
+        return ["uv", "tool", "upgrade", "hol-guard"]
     if installer == "pipx":
         return ["pipx", "upgrade", "hol-guard"]
     return [sys.executable, "-m", "pip", "install", "--upgrade", "hol-guard"]
