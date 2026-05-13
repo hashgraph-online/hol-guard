@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
+from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
 from codex_plugin_scanner.guard.models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from codex_plugin_scanner.guard.product_model import (
     ACTION_CATEGORY_VALUES,
@@ -175,8 +176,10 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     apis = {api.path: api for api in LOCAL_API_OWNERSHIP}
 
     assert routes["/"].auth_required is False
-    assert routes["/review"].writes_state is True
+    assert routes["/inbox"].writes_state is True
     assert routes["/evidence"].writes_state is False
+    for route in routes:
+        assert _GuardDaemonHandler._is_dashboard_route(route)
     assert apis["/v1/requests/{id}/approve"].writes_state is True
     assert apis["/v1/evidence/export"].auth_required is True
     assert apis["/v1/settings"].category == "config"

@@ -236,7 +236,7 @@
       "writes_state": false
     },
     {
-      "route": "/review",
+      "route": "/inbox",
       "persona": [
         "vibe_coder",
         "solo_engineer"
