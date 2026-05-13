@@ -1,4 +1,4 @@
-import { i as isDisplayableHarness, j as jsxRuntimeExports, G as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, h as harnessDisplayName, k as HiMiniChevronRight, E as EmptyState, H as HiMiniCheckCircle, q as HiMiniExclamationCircle, s as HiMiniWrenchScrewdriver, t as HiMiniXCircle, r as reactExports, u as HiMiniClipboardDocumentCheck, v as HiMiniClipboard } from "../guard-dashboard.js";
+import { i as isDisplayableHarness, j as jsxRuntimeExports, G as GuardHero, A as ActionButton, P as ProofStrip, S as SectionLabel, h as harnessDisplayName, o as HiMiniChevronRight, E as EmptyState, H as HiMiniCheckCircle, q as HiMiniExclamationCircle, s as HiMiniWrenchScrewdriver, t as HiMiniXCircle, r as reactExports, u as HiMiniClipboardDocumentCheck, v as HiMiniClipboard } from "../guard-dashboard.js";
 const SUPPORTED_APPS_COPY = "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.";
 function resolveFleetHeroCopy(cloudState, activeInstallCount, urls) {
   const hasApps = activeInstallCount > 0;
