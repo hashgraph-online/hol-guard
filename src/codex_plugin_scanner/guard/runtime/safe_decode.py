@@ -86,11 +86,11 @@ _POWERSHELL_ENCODED = re.compile(
     re.IGNORECASE,
 )
 _PYTHON_C = re.compile(
-    r"\bpython(?:3)?\b[^\r\n;&|]*\s-c\s+(?P<quote>['\"])(?P<code>(?:\\.|(?!(?P=quote)).)*)(?P=quote)",
+    r"\bpython(?:3)?\b[^\r\n;&|]*\s-c\s*(?P<quote>['\"])(?P<code>(?:\\.|(?!(?P=quote)).)*)(?P=quote)",
     re.IGNORECASE | re.DOTALL,
 )
 _NODE_E = re.compile(
-    r"\bnode\b[^\r\n;&|]*\s-e\s+(?P<quote>['\"])(?P<code>(?:\\.|(?!(?P=quote)).)*)(?P=quote)",
+    r"\bnode\b[^\r\n;&|]*\s-e\s*(?P<quote>['\"])(?P<code>(?:\\.|(?!(?P=quote)).)*)(?P=quote)",
     re.IGNORECASE | re.DOTALL,
 )
 _HEREDOC = re.compile(r"<<-?\s*'?(\w+)'?\s*\n(.*?)\n\1\b", re.DOTALL)
@@ -255,20 +255,6 @@ def _unescape_command_argument(value: str) -> str:
     return value.replace('\\"', '"').replace("\\'", "'").replace("\\\\", "\\")
 
 
-def _extract_python_c(text: str) -> str | None:
-    m = _PYTHON_C.search(text)
-    if not m:
-        return None
-    return _unescape_command_argument(m.group("code"))
-
-
-def _extract_node_e(text: str) -> str | None:
-    m = _NODE_E.search(text)
-    if not m:
-        return None
-    return _unescape_command_argument(m.group("code"))
-
-
 def _extract_heredoc(text: str) -> str | None:
     m = _HEREDOC.search(text)
     if not m:
@@ -424,10 +410,8 @@ def _decode_layers_uncached(
             decoded = _try_unicode_escape(candidate_data)
         elif encoding_type == "powershell-encoded":
             decoded = _try_base64_utf16le(candidate_data) or _try_base64(candidate_data)
-        elif encoding_type == "python-c":
-            decoded = _extract_python_c(current)
-        elif encoding_type == "node-e":
-            decoded = _extract_node_e(current)
+        elif encoding_type in {"python-c", "node-e"}:
+            decoded = _unescape_command_argument(candidate_data)
         elif encoding_type == "shell-heredoc":
             decoded = candidate_data
         elif encoding_type == "js-atob":
