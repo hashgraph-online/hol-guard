@@ -618,6 +618,41 @@ export function buildDemoRuntimeSnapshot(): GuardRuntimeSnapshot {
       last_heartbeat_at: now,
       approval_center_url: "http://127.0.0.1:4455"
     },
+    device: {
+      installation_id: "demo-device-7f4a9c2d",
+      device_label: "Demo MacBook Pro",
+      local_registered: true
+    },
+    latest_connect_state: {
+      request_id: "demo-connect-request",
+      status: "connected",
+      milestone: "first_sync_pending",
+      reason: "waiting_for_first_sync",
+      created_at: now,
+      updated_at: now,
+      expires_at: now,
+      completed_at: now,
+      proof: {
+        pairing_completed_at: now,
+        first_synced_at: null,
+        receipts_stored: 0,
+        inventory_items: 0,
+        runtime_session_id: "demo-runtime",
+        runtime_session_synced_at: null
+      }
+    },
+    proof_status: {
+      state: "pending",
+      label: "First proof pending",
+      detail: "Browser pairing finished. First proof sync has not completed yet.",
+      request_id: "demo-connect-request",
+      pairing_completed_at: now,
+      first_synced_at: null,
+      receipts_stored: 0,
+      inventory_items: 0,
+      runtime_session_id: "demo-runtime",
+      runtime_session_synced_at: null
+    },
     pending_count: demoRequests.length,
     receipt_count: demoReceipts.length,
     headline_state: demoRequests.length > 0 ? "blocked" : "connected",

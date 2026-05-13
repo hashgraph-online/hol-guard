@@ -1,6 +1,6 @@
 import { ActionButton, Badge, KeyValueGrid, SectionLabel, Surface, Tag, ProofStrip } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime } from "./approval-center-utils";
-import type { GuardCloudSyncHealth, GuardInventoryItem, GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import type { GuardCloudSyncHealth, GuardInventoryItem, GuardProofStatus, GuardReceipt, GuardRuntimeDevice, GuardRuntimeSnapshot } from "./guard-types";
 
 const WATCHED_HARNESSES = ["codex", "claude-code", "opencode", "copilot", "gemini", "cursor", "hermes", "openclaw"] as const;
 
@@ -111,6 +111,36 @@ export function resolveCloudIntelCopy(state: "local_only" | "paired_waiting" | "
   return { label: "Synced, pro", detail: "Guard Cloud is active and syncing choices across your devices." };
 }
 
+export type ProofStatusCopy = {
+  label: string;
+  detail: string;
+  tone: "green" | "blue" | "slate" | "attention";
+};
+
+export function resolveProofStatusCopy(proofStatus: GuardProofStatus): ProofStatusCopy {
+  if (proofStatus.state === "synced") {
+    return { label: proofStatus.label, detail: proofStatus.detail, tone: "green" };
+  }
+  if (proofStatus.state === "pending" || proofStatus.state === "waiting") {
+    return { label: proofStatus.label, detail: proofStatus.detail, tone: "blue" };
+  }
+  if (proofStatus.state === "sync_unavailable") {
+    return {
+      label: "Cloud proof not available",
+      detail: "Connect to Guard Cloud to unlock cross-device proof and shared history.",
+      tone: "slate",
+    };
+  }
+  if (proofStatus.state === "failed" || proofStatus.state === "expired") {
+    return { label: proofStatus.label, detail: proofStatus.detail, tone: "attention" };
+  }
+  return {
+    label: "Local only",
+    detail: "Local protection is active. Cloud proof is optional.",
+    tone: "slate",
+  };
+}
+
 function cloudSyncHealthTone(state: GuardCloudSyncHealth["state"]): "blue" | "slate" {
   if (state === "disabled" || state === "failed" || state === "stale") {
     return "slate";
@@ -187,6 +217,37 @@ function WatchedAppsList(props: { inventory: GuardInventoryItem[] | undefined })
   );
 }
 
+type DeviceProofCardProps = {
+  device: GuardRuntimeDevice;
+  proofStatus: GuardProofStatus;
+};
+
+export function DeviceProofCard(props: DeviceProofCardProps) {
+  const copy = resolveProofStatusCopy(props.proofStatus);
+  const shortId = props.device.installation_id.slice(0, 8);
+  const timeValue = props.proofStatus.first_synced_at ?? props.proofStatus.runtime_session_synced_at;
+  return (
+    <div className="rounded-xl border border-border bg-white px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-blue">
+          Device &amp; proof
+        </p>
+        <Tag tone={copy.tone}>{copy.label}</Tag>
+      </div>
+      <div className="mt-2 min-w-0 space-y-0.5">
+        <p className="truncate text-sm font-medium text-brand-dark" title={props.device.device_label}>
+          {props.device.device_label}
+        </p>
+        <p className="font-mono text-xs text-slate-400">{shortId}…</p>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{copy.detail}</p>
+      {timeValue !== null ? (
+        <p className="mt-1 text-xs text-slate-400">{formatRelativeTime(timeValue)}</p>
+      ) : null}
+    </div>
+  );
+}
+
 
 
 export function RuntimeOverview(props: RuntimeOverviewProps) {
@@ -243,9 +304,10 @@ export function RuntimeOverview(props: RuntimeOverviewProps) {
           ]}
         />
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <CloudSyncHealthCard health={snapshot.cloud_sync_health} />
           <ApprovalCenterHealthCard snapshot={snapshot} />
+          <DeviceProofCard device={snapshot.device} proofStatus={snapshot.proof_status} />
         </div>
 
         <div className="rounded-xl border border-border bg-white px-5 py-4">
