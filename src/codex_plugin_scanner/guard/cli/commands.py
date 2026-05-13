@@ -1796,11 +1796,12 @@ def run_guard_command(
                 managed_install=managed_install,
             )
             if _should_emit_copilot_hook_response(args):
+                review_context = _native_approval_center_context(response_payload, harness=args.harness)
                 _emit_copilot_permission_request_response(
                     behavior="deny",
-                    message=(
-                        f"HOL Guard blocked {artifact_name}. {decision.summary} "
-                        f"Approve the exact call in Guard, then retry."
+                    message=_copilot_hook_reason(
+                        f"HOL Guard blocked {artifact_name}. {decision.summary}",
+                        review_context,
                     ),
                     interrupt=True,
                     output_stream=output_stream,

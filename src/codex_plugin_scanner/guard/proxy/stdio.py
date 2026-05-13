@@ -291,8 +291,9 @@ class StdioGuardProxy:
                         )
                         event["approval_center_url"] = self.approval_center_url
                         event["approval_delivery"] = approval_delivery_payload(approval_flow)
+                        review_url = _first_approval_url(event["approval_requests"]) or self.approval_center_url
                         event["review_hint"] = (
-                            f"{approval_flow['summary']} Open {self.approval_center_url} to review the blocked request."
+                            f"{approval_flow['summary']} Open {review_url} to review the blocked request."
                         )
                         blocked_message = f"{blocked_message} {event['review_hint']}"
                         response_data = {
@@ -300,6 +301,7 @@ class StdioGuardProxy:
                             "approvalRequests": event["approval_requests"],
                             "approvalDelivery": event["approval_delivery"],
                             "reviewHint": event["review_hint"],
+                            "reviewUrl": review_url,
                         }
                     response = _blocked_tool_response(
                         message.get("id"),
@@ -361,3 +363,11 @@ def _is_request(message: dict[str, Any]) -> bool:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _first_approval_url(queued: list[dict[str, object]]) -> str | None:
+    for item in queued:
+        approval_url = item.get("approval_url")
+        if isinstance(approval_url, str) and approval_url.strip():
+            return approval_url.strip()
+    return None
