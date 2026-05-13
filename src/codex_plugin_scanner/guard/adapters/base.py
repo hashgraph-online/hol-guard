@@ -235,7 +235,8 @@ class HarnessAdapter:
         runtime_probe: dict[str, object] | None,
     ) -> list[str]:
         warnings = list(detection.warnings)
-        if detection.config_paths and not _detection_has_guard_management(detection):
+        guard_managed = _detection_has_guard_management(detection)
+        if detection.config_paths and not guard_managed:
             warnings.append(
                 f"{self.harness} config was found, but Guard is not installed for this harness. "
                 f"Run `hol-guard install {self.harness}` to enable protection."
@@ -243,6 +244,11 @@ class HarnessAdapter:
         if detection.config_paths and not detection.command_available:
             warnings.append(
                 f"{self.harness} config was found, but the {self.executable} command is not available on PATH."
+            )
+        elif guard_managed and not detection.command_available:
+            warnings.append(
+                f"Guard launcher for {self.harness} is installed, but the {self.executable} command is not available "
+                "on PATH."
             )
         if runtime_probe is not None and runtime_probe.get("timed_out") is True:
             warnings.append(f"{self.executable} diagnostics timed out before Guard could confirm runtime state.")

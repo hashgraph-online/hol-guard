@@ -283,6 +283,31 @@ def test_doctor_treats_guard_launcher_shim_as_active_install(
     assert not any("Guard is not installed" in warning for warning in payload["warnings"])
 
 
+def test_doctor_marks_guard_launcher_shim_without_harness_command_broken(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    apply_managed_install(
+        "install",
+        "cursor",
+        False,
+        context,
+        store,
+        str(context.workspace_dir),
+        "2026-05-13T00:00:00Z",
+    )
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: False)
+
+    from codex_plugin_scanner.guard.adapters import get_adapter
+
+    payload = get_adapter("cursor").diagnostics(context)
+
+    assert payload["setup_status"] == "broken"
+    assert any("command is not available" in warning for warning in payload["warnings"])
+
+
 def test_doctor_ignores_non_utf8_guard_launcher_shim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -319,7 +344,7 @@ def test_doctor_recognizes_legacy_guard_launcher_shim(
     from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 
-    monkeypatch.setattr(ClaudeCodeHarnessAdapter, "resolved_executable", lambda self, context: None)
+    monkeypatch.setattr(ClaudeCodeHarnessAdapter, "resolved_executable", lambda self, context: "/usr/bin/claude")
 
     payload = get_adapter("claude-code").diagnostics(context)
 
@@ -363,7 +388,7 @@ def test_doctor_keeps_active_setup_status_for_runtime_probe_timeout(
         str(context.workspace_dir),
         "2026-05-13T00:00:00Z",
     )
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: False)
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: True)
 
     from codex_plugin_scanner.guard.adapters import get_adapter
     from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
