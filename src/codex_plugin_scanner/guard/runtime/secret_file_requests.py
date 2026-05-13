@@ -163,7 +163,7 @@ _BROAD_CREDENTIAL_EXFILTRATION_SKIP_COMMANDS = frozenset({"cat", "curl", "echo",
 _SHELL_ASSIGNMENT_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*")
 _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
-_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|]*)"
+_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|<>]*)"
 _SINGLE_INTERPRETER_HEREDOC_PATTERN = re.compile(
     rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>perl|python|python3|ruby)\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
     re.IGNORECASE | re.DOTALL,
@@ -2917,12 +2917,13 @@ def _first_js_call_argument(script_text: str, index: int) -> str | None:
 
 def _node_string_assignments(script_text: str) -> dict[str, str]:
     assignments: dict[str, str] = {}
-    pattern = re.compile(r"\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(['\"`])((?:\\.|(?!\2).)*)\2")
     for _ in range(3):
         changed = False
-        for match in pattern.finditer(script_text):
-            name = match.group(1)
-            raw_value = match.group(3)
+        for line in script_text.splitlines():
+            assignment = _node_string_assignment_from_line(line)
+            if assignment is None:
+                continue
+            name, raw_value = assignment
             expanded_value = _node_expand_template_value(raw_value, assignments)
             if assignments.get(name) != expanded_value:
                 assignments[name] = expanded_value
@@ -2930,6 +2931,56 @@ def _node_string_assignments(script_text: str) -> dict[str, str]:
         if not changed:
             break
     return assignments
+
+
+def _node_string_assignment_from_line(line: str) -> tuple[str, str] | None:
+    stripped_line = line.strip().rstrip(";")
+    for prefix in ("const ", "let ", "var "):
+        if not stripped_line.startswith(prefix):
+            continue
+        rest = stripped_line[len(prefix) :].lstrip()
+        name_end = 0
+        while name_end < len(rest) and (rest[name_end].isalnum() or rest[name_end] in {"_", "$"}):
+            name_end += 1
+        if name_end == 0:
+            return None
+        name = rest[:name_end]
+        remainder = rest[name_end:].lstrip()
+        if not remainder.startswith("="):
+            return None
+        value = remainder[1:].lstrip()
+        if not value:
+            return None
+        quote = value[0]
+        if quote not in {"'", '"', "`"}:
+            return None
+        literal = _read_js_quoted_literal(value, quote)
+        if literal is None:
+            return None
+        return name, literal
+    return None
+
+
+def _read_js_quoted_literal(value: str, quote: str) -> str | None:
+    result: list[str] = []
+    index = 1
+    escape_next = False
+    while index < len(value):
+        character = value[index]
+        if escape_next:
+            result.append(character)
+            escape_next = False
+            index += 1
+            continue
+        if character == "\\":
+            escape_next = True
+            index += 1
+            continue
+        if character == quote:
+            return "".join(result)
+        result.append(character)
+        index += 1
+    return None
 
 
 def _node_expand_template_value(value: str, assignments: dict[str, str]) -> str:
@@ -2967,20 +3018,73 @@ def _node_generated_path_has_safe_root(path_text: str) -> bool:
 
 
 def _node_generated_path_contains_shell_expansion(path_text: str) -> bool:
-    return (
-        "$(" in path_text
-        or "`" in path_text
-        or "$'" in path_text
-        or '$"' in path_text
-        or re.search(r"\$[A-Za-z_][A-Za-z0-9_]*", path_text) is not None
-        or re.search(r"[*?\[\]]", path_text) is not None
-    )
+    if "$(" in path_text or "`" in path_text or "$'" in path_text or '$"' in path_text:
+        return True
+    if not _node_template_placeholders_are_safe_filename_fragments(path_text):
+        return True
+    redacted_path = _node_path_without_template_placeholders(path_text)
+    if any(character in redacted_path for character in "*?[]"):
+        return True
+    index = 0
+    while index < len(redacted_path):
+        if redacted_path[index] == "$" and index + 1 < len(redacted_path):
+            next_character = redacted_path[index + 1]
+            if next_character.isalnum() or next_character == "_":
+                return True
+        index += 1
+    return False
 
 
 def _node_generated_path_has_safe_extension(path_text: str) -> bool:
-    without_templates = re.sub(r"\$\{[^}]*\}", "x", path_text)
+    without_templates = _node_path_without_template_placeholders(path_text)
     extension = os.path.splitext(without_templates)[1].lower()
     return extension in _SAFE_NODE_GENERATED_FILE_EXTENSIONS
+
+
+def _node_template_placeholders_are_safe_filename_fragments(path_text: str) -> bool:
+    index = 0
+    while index < len(path_text):
+        start = path_text.find("${", index)
+        if start == -1:
+            return True
+        end = path_text.find("}", start + 2)
+        if end == -1:
+            return False
+        placeholder = path_text[start + 2 : end].strip()
+        if not _node_template_placeholder_is_safe_filename_fragment(placeholder):
+            return False
+        index = end + 1
+    return True
+
+
+def _node_template_placeholder_is_safe_filename_fragment(placeholder: str) -> bool:
+    if not placeholder.startswith("String(") or ".padStart(" not in placeholder:
+        return False
+    lowered = placeholder.lower()
+    if any(token in lowered for token in ("process", "require", "env", "import", "fs", "path", "child")):
+        return False
+    numeric_prefix, _separator, padding_suffix = placeholder.partition(".padStart(")
+    if any(character in numeric_prefix for character in ("'", '"', "\\", "`", "[", "]")):
+        return False
+    return not any(character in padding_suffix for character in ("/", "\\", "`", "[", "]"))
+
+
+def _node_path_without_template_placeholders(path_text: str) -> str:
+    result: list[str] = []
+    index = 0
+    while index < len(path_text):
+        start = path_text.find("${", index)
+        if start == -1:
+            result.append(path_text[index:])
+            break
+        result.append(path_text[index:start])
+        end = path_text.find("}", start + 2)
+        if end == -1:
+            result.append(path_text[start:])
+            break
+        result.append("x")
+        index = end + 1
+    return "".join(result)
 
 
 def _is_combined_node_inline_eval_flag(token: str) -> bool:
