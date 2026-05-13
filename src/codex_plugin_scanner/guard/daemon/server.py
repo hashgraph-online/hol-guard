@@ -538,8 +538,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         publisher = self._optional_string(payload.get("publisher"))
         try:
             clear_all = self._optional_bool(payload.get("all"), default=False)
+            artifact_id_is_null = self._optional_bool(payload.get("artifact_id_is_null"), default=False)
+            artifact_hash_is_null = self._optional_bool(payload.get("artifact_hash_is_null"), default=False)
         except ValueError:
-            self._write_json({"error": "invalid_all", "cleared": 0}, status=400)
+            self._write_json({"error": "invalid_clear_payload", "cleared": 0}, status=400)
             return
         if scope is not None and scope not in {"artifact", "workspace", "publisher", "harness", "global"}:
             self._write_json({"error": "invalid_scope", "cleared": 0, "scope": scope}, status=400)
@@ -564,6 +566,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             scope=scope,
             artifact_id=artifact_id,
             artifact_hash=artifact_hash,
+            artifact_id_is_null=artifact_id_is_null,
+            artifact_hash_is_null=artifact_hash_is_null,
             workspace=workspace,
             publisher=publisher,
         )
@@ -575,6 +579,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "scope": scope,
                 "artifact_id": artifact_id,
                 "artifact_hash": artifact_hash,
+                "artifact_id_is_null": artifact_id_is_null,
+                "artifact_hash_is_null": artifact_hash_is_null,
                 "workspace": workspace,
                 "publisher": publisher,
             }

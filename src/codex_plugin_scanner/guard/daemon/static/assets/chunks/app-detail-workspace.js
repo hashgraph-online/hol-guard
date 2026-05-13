@@ -874,10 +874,13 @@ function AppSettingsTab(props) {
     );
     if (!policy) return;
     setClearingRowInFlight(true);
-    await props.onClearPolicy(policy);
-    await props.onRetry();
-    setClearingRowInFlight(false);
-    setClearingRowKey(null);
+    try {
+      await props.onClearPolicy(policy);
+      await props.onRetry();
+      setClearingRowKey(null);
+    } finally {
+      setClearingRowInFlight(false);
+    }
   }, [props.onClearPolicy, props.harnessPolicies, props.onRetry, clearingRowKey]);
   const handleClearRowCancel = reactExports.useCallback(() => {
     setClearingRowKey(null);

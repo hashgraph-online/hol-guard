@@ -6,6 +6,8 @@ export type ClearPolicyPayload = {
   scope?: DecisionScope;
   artifact_id?: string;
   artifact_hash?: string;
+  artifact_id_is_null?: boolean;
+  artifact_hash_is_null?: boolean;
   workspace?: string;
   publisher?: string;
 };
@@ -24,6 +26,10 @@ export type ClearPolicyKeyInput = ClearPolicyInput & {
   reason?: string | null;
   updated_at?: string | null;
 };
+
+function fieldIsNull(value: string | null | undefined): boolean {
+  return value === null || value === undefined || value === "";
+}
 
 /**
  * Builds an exact `clearPolicy` payload for the given remembered-decision scope.
@@ -59,6 +65,8 @@ export function buildClearPayload(input: ClearPolicyInput): ClearPolicyPayload {
         harness: input.harness,
         artifact_id: input.artifact_id ?? undefined,
         artifact_hash: input.artifact_hash ?? undefined,
+        artifact_id_is_null: fieldIsNull(input.artifact_id) ? true : undefined,
+        artifact_hash_is_null: fieldIsNull(input.artifact_hash) ? true : undefined,
       };
     case "global":
       return { scope: "global", all: true };

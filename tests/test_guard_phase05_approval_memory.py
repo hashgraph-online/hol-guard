@@ -491,6 +491,42 @@ def test_gr119_workspace_clear_matches_legacy_plaintext_workspace_policy(tmp_pat
     assert store.list_policy_decisions("codex") == []
 
 
+def test_gr119_harness_clear_can_target_null_artifact_identity(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="harness",
+            action="allow",
+            reason="legacy harness row",
+        ),
+        "2026-05-13T00:00:00+00:00",
+    )
+    store.upsert_policy(
+        PolicyDecision(
+            harness="codex",
+            scope="harness",
+            action="allow",
+            artifact_id="codex:project:file-read:.npmrc",
+            artifact_hash="sha256-npmrc",
+            reason="family harness row",
+        ),
+        "2026-05-13T00:00:00+00:00",
+    )
+
+    cleared = store.clear_policy_decisions(
+        "codex",
+        scope="harness",
+        artifact_id_is_null=True,
+        artifact_hash_is_null=True,
+    )
+
+    assert cleared == 1
+    remaining = store.list_policy_decisions("codex")
+    assert len(remaining) == 1
+    assert remaining[0]["artifact_id"] == "family:file-read"
+
+
 def test_gr119_publisher_scope_does_not_store_blank_publisher_identity(tmp_path: Path) -> None:
     store = _store(tmp_path)
     request = _request("req-no-publisher", publisher="")

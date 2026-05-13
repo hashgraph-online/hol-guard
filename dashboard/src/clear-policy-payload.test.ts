@@ -120,7 +120,15 @@ assert(
 );
 assert(
   harnessPayload.artifact_id === undefined,
-  "T-CP-GR119-12: harness scope payload must not include artifact_id"
+  "T-CP-GR119-12: null harness artifact_id must be omitted from string payload"
+);
+assert(
+  harnessPayload.artifact_id_is_null === true,
+  "T-CP-GR119-12a: null harness artifact_id must match null identity"
+);
+assert(
+  harnessPayload.artifact_hash_is_null === true,
+  "T-CP-GR119-12b: null harness artifact_hash must match null identity"
 );
 
 const globalPayload = buildClearPayload(globalInput);

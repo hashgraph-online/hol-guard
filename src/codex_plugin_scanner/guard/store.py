@@ -2120,6 +2120,8 @@ class GuardStore:
         scope: str | None = None,
         artifact_id: str | None = None,
         artifact_hash: str | None = None,
+        artifact_id_is_null: bool = False,
+        artifact_hash_is_null: bool = False,
         workspace: str | None = None,
         publisher: str | None = None,
     ) -> int:
@@ -2140,9 +2142,13 @@ class GuardStore:
         if artifact_id is not None:
             conditions.append("artifact_id = ?")
             params.append(artifact_id)
+        elif artifact_id_is_null:
+            conditions.append("artifact_id is null")
         if artifact_hash is not None:
             conditions.append("artifact_hash = ?")
             params.append(artifact_hash)
+        elif artifact_hash_is_null:
+            conditions.append("artifact_hash is null")
         if workspace is not None:
             conditions.append("(workspace = ? or workspace = ?)")
             params.extend((_stored_workspace_policy_key(workspace), _normalized_workspace_path(workspace)))

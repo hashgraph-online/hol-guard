@@ -13327,6 +13327,8 @@ async function clearPolicy(input) {
       scope: input.scope,
       artifact_id: input.artifact_id,
       artifact_hash: input.artifact_hash,
+      artifact_id_is_null: input.artifact_id_is_null,
+      artifact_hash_is_null: input.artifact_hash_is_null,
       workspace: input.workspace,
       publisher: input.publisher
     })
@@ -19911,6 +19913,9 @@ function simplifyRiskHeadline(headline, harness) {
   }
   return headline;
 }
+function fieldIsNull(value) {
+  return value === null || value === void 0 || value === "";
+}
 function buildClearPayload(input) {
   switch (input.scope) {
     case "artifact":
@@ -19939,7 +19944,9 @@ function buildClearPayload(input) {
         scope: "harness",
         harness: input.harness,
         artifact_id: input.artifact_id ?? void 0,
-        artifact_hash: input.artifact_hash ?? void 0
+        artifact_hash: input.artifact_hash ?? void 0,
+        artifact_id_is_null: fieldIsNull(input.artifact_id) ? true : void 0,
+        artifact_hash_is_null: fieldIsNull(input.artifact_hash) ? true : void 0
       };
     case "global":
       return { scope: "global", all: true };
@@ -20397,6 +20404,19 @@ function App() {
     navigate("/inbox");
     await refreshStateAfterAction();
   }, [refreshStateAfterAction, setResolutionMessage]);
+  const handleBulkBlock = reactExports.useCallback(async (ids, reason) => {
+    const results = await Promise.allSettled(
+      ids.map(
+        (id) => resolveRequestWithQueueResult({ requestId: id, action: "block", scope: "artifact", reason })
+      )
+    );
+    const succeeded = results.filter((result) => result.status === "fulfilled").length;
+    const failed = results.length - succeeded;
+    const label = failed === 0 ? `${succeeded} item${succeeded !== 1 ? "s" : ""} blocked.` : `${succeeded} blocked, ${failed} failed. Retry the failed items manually.`;
+    setResolutionMessage(label);
+    navigate("/inbox");
+    await refreshStateAfterAction();
+  }, [refreshStateAfterAction, setResolutionMessage]);
   const handleRetry = reactExports.useCallback(() => {
     setRuntime({ kind: "loading" });
     setRequests({ kind: "loading" });
@@ -20503,6 +20523,7 @@ function App() {
         onOpenRequest: handleOpenRequest,
         onResolve: handleResolve,
         onBulkApprove: handleBulkApprove,
+        onBulkBlock: handleBulkBlock,
         onRetry: handleRetry,
         onRepair: handleRepair,
         onClearEvidence: handleClearEvidence,

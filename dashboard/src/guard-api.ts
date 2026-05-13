@@ -817,6 +817,8 @@ export async function clearPolicy(input: {
   scope?: DecisionScope;
   artifact_id?: string;
   artifact_hash?: string;
+  artifact_id_is_null?: boolean;
+  artifact_hash_is_null?: boolean;
   workspace?: string;
   publisher?: string;
 }): Promise<{ cleared: number; harness: string | null; source: string | null }> {
@@ -836,6 +838,8 @@ export async function clearPolicy(input: {
       scope: input.scope,
       artifact_id: input.artifact_id,
       artifact_hash: input.artifact_hash,
+      artifact_id_is_null: input.artifact_id_is_null,
+      artifact_hash_is_null: input.artifact_hash_is_null,
       workspace: input.workspace,
       publisher: input.publisher
     })
