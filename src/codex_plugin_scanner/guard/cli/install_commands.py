@@ -12,6 +12,12 @@ from ..consumer import detect_all
 from ..runtime.skill_protection import build_skill_identity, detect_skill_content_risk
 from ..store import GuardStore
 
+_HARNESS_OBSERVED_COPY = {
+    "protected": "Active Guard protection is installed.",
+    "found": "Observed locally, not protected by Guard yet.",
+    "not_found": "Not installed on this machine.",
+}
+
 
 def apply_managed_install(
     command: str,
@@ -74,10 +80,12 @@ def list_harness_setup_items(context: HarnessContext, store: GuardStore | None =
             status = "found"
         else:
             status = "not_found"
+        observed_copy = _HARNESS_OBSERVED_COPY[status]
         items.append(
             {
                 "harness": adapter.harness,
                 "status": status,
+                "observed_copy": observed_copy,
                 "installed": detection["installed"],
                 "command_available": detection["command_available"],
                 "config_paths": detection["config_paths"],

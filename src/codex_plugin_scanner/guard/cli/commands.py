@@ -157,6 +157,18 @@ _GUARD_CLIENT_VERSION = "2.0.0"
 _SERVICE_RUNTIME_PROFILE_STATE_KEY = "service_runtime_profile"
 _SERVICE_RUNTIME_CHOICES = ("hermes", "openclaw", "custom")
 _SERVICE_RUNTIME_SURFACE = "agent-sdk"
+_HOOK_DAEMON_FAILURE_STATUSES = frozenset({"unreachable", "error", "failed", "404"})
+_HOOK_DAEMON_FAIL_MODES = frozenset({"strict", "permissive"})
+_HOOK_DAEMON_UNREACHABLE_REASON_MARKER = "daemon was unreachable"
+_HOOK_DAEMON_STRICT_REASON = (
+    "HOL Guard fail safe: the local Guard daemon was unreachable, so this hook blocked the action."
+)
+_HOOK_DAEMON_PERMISSIVE_REASON = (
+    "HOL Guard daemon was unreachable; permissive mode allowed this action and recorded the degraded state."
+)
+_HOOK_DAEMON_PRESERVED_DENY_REASON = (
+    "HOL Guard daemon was unreachable; preserving the existing deny decision for this action."
+)
 _GUARD_HELP_GROUPS = (
     "Everyday protection:\n"
     "  start        First-run setup and the Guard operating loop\n"
@@ -2333,6 +2345,25 @@ def run_guard_command(
             policy_action = SAFE_CHANGED_HASH_ACTION
         if policy_action not in VALID_GUARD_ACTIONS:
             policy_action = SAFE_CHANGED_HASH_ACTION
+        daemon_status = _optional_string(payload.get("daemon_status"))
+        fail_mode = _optional_string(payload.get("fail_mode"))
+        daemon_failure_reason: str | None = None
+        if daemon_status in _HOOK_DAEMON_FAILURE_STATUSES and fail_mode in _HOOK_DAEMON_FAIL_MODES:
+            if fail_mode == "strict":
+                policy_action = "block"
+                daemon_failure_reason = _HOOK_DAEMON_STRICT_REASON
+                payload["permission_decision_reason"] = daemon_failure_reason
+            else:
+                if policy_action in {"block", "sandbox-required", "require-reapproval"}:
+                    daemon_failure_reason = _coalesce_string(
+                        payload.get("permission_decision_reason"),
+                        _HOOK_DAEMON_PRESERVED_DENY_REASON,
+                    )
+                    payload["permission_decision_reason"] = daemon_failure_reason
+                else:
+                    policy_action = "allow"
+                    daemon_failure_reason = _HOOK_DAEMON_PERMISSIVE_REASON
+                    payload["permission_decision_reason"] = daemon_failure_reason
         hook_event_name = _hook_event_name(payload) or "PreToolUse"
         changed_capabilities = _string_list(payload.get("changed_capabilities"))
         if not changed_capabilities and isinstance(payload.get("event"), str):
@@ -2370,7 +2401,11 @@ def run_guard_command(
                 output_stream=output_stream,
             )
             return 0
-        incoming_reason = _decision_v2_harness_message(payload) or payload.get("permission_decision_reason")
+        incoming_reason = (
+            daemon_failure_reason
+            or _decision_v2_harness_message(payload)
+            or payload.get("permission_decision_reason")
+        )
         if _should_emit_native_hook_exit_block(args, event_name=hook_event_name, policy_action=policy_action):
             _emit_native_hook_block_stderr(_native_hook_reason_for_harness(args.harness, incoming_reason))
             return 2
@@ -3372,6 +3407,8 @@ def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str
         return reason
     if "approve it in hol guard, then retry." in reason.lower():
         return reason
+    if _HOOK_DAEMON_UNREACHABLE_REASON_MARKER in reason.lower():
+        return f"{reason} Restart HOL Guard, then retry."
     return f"{reason} Approve it in HOL Guard, then retry."
 
 
@@ -4119,7 +4156,7 @@ def _emit_native_hook_response(
     hook_specific_output: dict[str, object] = {"hookEventName": event_name}
     if permission_decision is not None:
         hook_specific_output["permissionDecision"] = permission_decision
-        if permission_decision != "allow":
+        if permission_decision != "allow" or _HOOK_DAEMON_UNREACHABLE_REASON_MARKER in reason.lower():
             hook_specific_output["permissionDecisionReason"] = reason
     payload["hookSpecificOutput"] = hook_specific_output
     _write_json_line(payload, output_stream=output_stream)
