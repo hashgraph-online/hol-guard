@@ -246,6 +246,7 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
     harness = "claude-code"
     executable = "claude"
     aliases = ("claude",)
+    launcher_name = "claude"
     approval_tier = "native-or-center"
     approval_summary = (
         "Guard uses Claude hooks first and falls back to the local approval center when the shell cannot prompt."

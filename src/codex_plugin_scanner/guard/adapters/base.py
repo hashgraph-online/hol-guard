@@ -93,6 +93,7 @@ class HarnessAdapter:
     harness = ""
     aliases: tuple[str, ...] = ()
     executable = ""
+    launcher_name = ""
     approval_tier = "approval-center"
     approval_summary = "Guard pauses the launch and routes approval through the local approval center."
     fallback_hint = "Use `hol-guard approvals` if you want to resolve it from the terminal."
@@ -148,6 +149,11 @@ class HarnessAdapter:
 
     def resolved_executable(self, context: HarnessContext) -> str | None:
         return _resolve_command(self.executable, self.executable_candidates(context))
+
+    def guard_launcher_paths(self, context: HarnessContext) -> tuple[Path, ...]:
+        shim_name = self.launcher_name or self.harness
+        shim_dir = context.guard_home / "bin"
+        return (shim_dir / f"guard-{shim_name}", shim_dir / f"guard-{shim_name}.cmd")
 
     def launch_command(self, context: HarnessContext, passthrough_args: list[str]) -> list[str]:
         command = [self.resolved_executable(context) or self.executable]
@@ -251,7 +257,7 @@ class HarnessAdapter:
         }
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
-        detection = self.detect(context)
+        detection = self._detection_with_guard_launcher(context, self.detect(context))
         runtime_probe = self.runtime_probe(context)
         warnings = self.diagnostic_warnings(detection, runtime_probe)
         return {
@@ -264,6 +270,33 @@ class HarnessAdapter:
             "runtime_probe": runtime_probe,
             "warnings": warnings,
         }
+
+    def _detection_with_guard_launcher(
+        self,
+        context: HarnessContext,
+        detection: HarnessDetection,
+    ) -> HarnessDetection:
+        shim_path = next((path for path in self.guard_launcher_paths(context) if _is_guard_launcher_shim(path)), None)
+        if shim_path is None:
+            return detection
+        artifact = GuardArtifact(
+            artifact_id=f"{self.harness}:guard-launcher-shim",
+            name=shim_path.name,
+            harness=self.harness,
+            artifact_type="guard_launcher_shim",
+            source_scope="guard",
+            config_path=str(shim_path),
+            command=str(shim_path),
+            metadata={"shim_dir": str(shim_path.parent)},
+        )
+        return HarnessDetection(
+            harness=detection.harness,
+            installed=True,
+            command_available=detection.command_available,
+            config_paths=detection.config_paths,
+            artifacts=(*detection.artifacts, artifact),
+            warnings=detection.warnings,
+        )
 
 
 def _diagnostic_setup_status(detection: HarnessDetection, warnings: list[str]) -> str:
@@ -288,6 +321,8 @@ def _guard_managed_path(path: str) -> bool:
 
 
 def _artifact_uses_guard(artifact: GuardArtifact) -> bool:
+    if artifact.artifact_type == "guard_launcher_shim":
+        return True
     values = [artifact.command or "", *artifact.args]
     return any(_value_mentions_guard(value) for value in values)
 
@@ -295,6 +330,16 @@ def _artifact_uses_guard(artifact: GuardArtifact) -> bool:
 def _value_mentions_guard(value: str) -> bool:
     normalized = value.lower()
     return "codex_plugin_scanner.cli" in normalized or "hol-guard" in normalized
+
+
+def _is_guard_launcher_shim(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        contents = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return "codex_plugin_scanner.cli" in contents and "guard" in contents and "run" in contents
 
 
 __all__ = [

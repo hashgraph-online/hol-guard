@@ -196,6 +196,34 @@ def test_codex_doctor_marks_partial_native_hook_install_as_broken(tmp_path: Path
     assert any("managed Codex hooks are missing" in warning for warning in payload["warnings"])
 
 
+def test_doctor_treats_guard_launcher_shim_as_active_install(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor._command_available", lambda command: False)
+
+    install_payload = apply_managed_install(
+        "install",
+        "cursor",
+        False,
+        context,
+        store,
+        str(context.workspace_dir),
+        "2026-05-13T00:00:00Z",
+    )
+
+    from codex_plugin_scanner.guard.adapters import get_adapter
+
+    payload = get_adapter("cursor").diagnostics(context)
+
+    assert Path(str(install_payload["managed_install"]["shim_path"])).is_file()
+    assert payload["setup_status"] == "active"
+    assert any(artifact["artifact_type"] == "guard_launcher_shim" for artifact in payload["artifacts"])
+    assert not any("Guard is not installed" in warning for warning in payload["warnings"])
+
+
 def test_install_native_contract_output_prefers_native_hooks_for_supported_harnesses(tmp_path: Path) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
