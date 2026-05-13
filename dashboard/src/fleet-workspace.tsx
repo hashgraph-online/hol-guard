@@ -33,6 +33,70 @@ type FleetWorkspaceProps = {
   onOpenAppDetail?: (harness: string) => void;
 };
 
+type FleetHeroUrls = {
+  fleet_url: string;
+  dashboard_url: string;
+  connect_url: string;
+};
+
+export type FleetHeroCopy = {
+  status: "clear" | "setup_gap";
+  headline: string;
+  subheadline: string;
+  primaryCtaLabel: string;
+  primaryCtaHref: string;
+  secondaryCtaLabel: string;
+  secondaryCtaHref: string;
+};
+
+const SUPPORTED_APPS_COPY =
+  "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.";
+
+export function resolveFleetHeroCopy(
+  cloudState: "local_only" | "paired_waiting" | "paired_active",
+  activeInstallCount: number,
+  urls: FleetHeroUrls
+): FleetHeroCopy {
+  const hasApps = activeInstallCount > 0;
+  if (cloudState === "local_only") {
+    return {
+      status: hasApps ? "clear" : "setup_gap",
+      headline: hasApps ? "Your apps are covered" : "Connect an app to start",
+      subheadline: hasApps
+        ? "Guard is protecting your local AI apps."
+        : SUPPORTED_APPS_COPY,
+      primaryCtaLabel: "Connect this machine",
+      primaryCtaHref: urls.connect_url,
+      secondaryCtaLabel: "Open Home",
+      secondaryCtaHref: urls.dashboard_url,
+    };
+  }
+  if (cloudState === "paired_waiting") {
+    return {
+      status: hasApps ? "clear" : "setup_gap",
+      headline: hasApps ? "Apps covered, first proof pending" : "Connect an app to start",
+      subheadline: hasApps
+        ? "Guard is running. First cloud proof is on its way."
+        : SUPPORTED_APPS_COPY,
+      primaryCtaLabel: "Open Cloud Devices",
+      primaryCtaHref: urls.fleet_url,
+      secondaryCtaLabel: "Open Home",
+      secondaryCtaHref: urls.dashboard_url,
+    };
+  }
+  return {
+    status: hasApps ? "clear" : "setup_gap",
+    headline: hasApps ? "Your apps are covered" : "Connect an app to start",
+    subheadline: hasApps
+      ? "Confirm that Guard is running and protecting your local AI apps."
+      : SUPPORTED_APPS_COPY,
+    primaryCtaLabel: "Open Cloud Devices",
+    primaryCtaHref: urls.fleet_url,
+    secondaryCtaLabel: "Open Home",
+    secondaryCtaHref: urls.dashboard_url,
+  };
+}
+
 function collectHarnesses(snapshot: GuardRuntimeSnapshot): string[] {
   const harnesses = new Set<string>();
   for (const item of snapshot.items) {
@@ -93,20 +157,26 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
   const runtimeState = props.runtime.runtime_state;
   const receiptHarnesses = new Set(props.runtime.latest_receipts.map((r) => r.harness).filter(isDisplayableHarness));
 
+  const heroCopy = resolveFleetHeroCopy(
+    props.runtime.cloud_state,
+    activeInstalls.length,
+    {
+      fleet_url: props.runtime.fleet_url,
+      dashboard_url: props.runtime.dashboard_url,
+      connect_url: props.runtime.connect_url,
+    }
+  );
+
   return (
     <div className="space-y-8">
       <GuardHero
-        status={activeInstalls.length > 0 ? "clear" : "setup_gap"}
-        headline={activeInstalls.length > 0 ? "Your apps are covered" : "Connect an app to start"}
-        subheadline={
-          activeInstalls.length > 0
-            ? "Confirm that Guard is running and protecting your local AI apps."
-            : "Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more."
-        }
-        cta={<ActionButton href={props.runtime.fleet_url}>Open Cloud Devices</ActionButton>}
+        status={heroCopy.status}
+        headline={heroCopy.headline}
+        subheadline={heroCopy.subheadline}
+        cta={<ActionButton href={heroCopy.primaryCtaHref}>{heroCopy.primaryCtaLabel}</ActionButton>}
         secondaryCta={
-          <ActionButton href={props.runtime.dashboard_url} variant="outline">
-            Open Home
+          <ActionButton href={heroCopy.secondaryCtaHref} variant="outline">
+            {heroCopy.secondaryCtaLabel}
           </ActionButton>
         }
       />
