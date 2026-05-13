@@ -210,6 +210,7 @@ LOCAL_ROUTE_OWNERSHIP = (
         writes_state=True,
     ),
     RouteOwnership(route="/fleet", persona=("solo_engineer", "manager"), auth_required=True, writes_state=True),
+    RouteOwnership(route="/apps/{slug}", persona=("solo_engineer", "manager"), auth_required=True, writes_state=True),
     RouteOwnership(
         route="/evidence",
         persona=("solo_engineer", "security_lead"),
@@ -221,7 +222,9 @@ LOCAL_ROUTE_OWNERSHIP = (
 LOCAL_API_OWNERSHIP = (
     ApiOwnership(path="/v1/initialize", method="POST", category="config", auth_required=False, writes_state=True),
     ApiOwnership(path="/v1/connect/state", method="GET", category="config", auth_required=False, writes_state=False),
+    ApiOwnership(path="/v1/connect/requests", method="POST", category="config", auth_required=True, writes_state=True),
     ApiOwnership(path="/v1/connect/complete", method="POST", category="config", auth_required=False, writes_state=True),
+    ApiOwnership(path="/v1/connect/result", method="POST", category="config", auth_required=True, writes_state=True),
     ApiOwnership(path="/v1/runtime", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/harnesses", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(

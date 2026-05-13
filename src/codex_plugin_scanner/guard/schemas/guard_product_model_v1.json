@@ -310,6 +310,15 @@
       "writes_state": true
     },
     {
+      "route": "/apps/{slug}",
+      "persona": [
+        "solo_engineer",
+        "manager"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
       "route": "/evidence",
       "persona": [
         "solo_engineer",
@@ -343,10 +352,24 @@
       "writes_state": false
     },
     {
+      "path": "/v1/connect/requests",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
       "path": "/v1/connect/complete",
       "method": "POST",
       "category": "config",
       "auth_required": false,
+      "writes_state": true
+    },
+    {
+      "path": "/v1/connect/result",
+      "method": "POST",
+      "category": "config",
+      "auth_required": true,
       "writes_state": true
     },
     {

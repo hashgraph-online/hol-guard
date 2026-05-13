@@ -188,13 +188,16 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     assert routes["/approvals"].writes_state is True
     assert routes["/approvals/{id}"].writes_state is True
     assert routes["/fleet"].writes_state is True
+    assert routes["/apps/{slug}"].writes_state is True
     assert routes["/evidence"].writes_state is True
     for route in routes:
         assert _GuardDaemonHandler._is_dashboard_route(route)
     apis_by_method = {(api.method, api.path): api for api in LOCAL_API_OWNERSHIP}
     assert apis_by_method[("POST", "/v1/initialize")].auth_required is False
     assert apis_by_method[("GET", "/v1/connect/state")].writes_state is False
+    assert apis_by_method[("POST", "/v1/connect/requests")].auth_required is True
     assert apis_by_method[("POST", "/v1/connect/complete")].auth_required is False
+    assert apis_by_method[("POST", "/v1/connect/result")].writes_state is True
     assert apis_by_method[("GET", "/v1/runtime")].writes_state is False
     assert apis_by_method[("GET", "/v1/harnesses")].writes_state is False
     assert apis_by_method[("POST", "/v1/harnesses/{harness}/{action}")].writes_state is True
