@@ -33,6 +33,9 @@ from .store_approvals import (
     add_approval_request as persist_approval_request,
 )
 from .store_approvals import (
+    bulk_resolve_approval_requests as persist_bulk_resolution,
+)
+from .store_approvals import (
     count_approval_requests as count_pending_approval_requests,
 )
 from .store_approvals import (
@@ -114,6 +117,11 @@ _SYNC_TOKEN_HASH_KEY = "token_sha256"
 _DEVICE_ROW_KEY = "local-device"
 _MAX_RESOLVED_SCOPE_IDS = 200
 _SQLITE_ID_BATCH_SIZE = 500
+_WORKSPACE_POLICY_KEY_PREFIX = "workspace:"
+_SCOPED_HARNESS_FAMILIES = frozenset(
+    {"file-read", "mcp-tool", "prompt", "prompt-env-read", "prompt-file", "tool-action"}
+)
+_POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 
 
 def _token_sha256(value: str) -> str:
@@ -1379,6 +1387,8 @@ class GuardStore:
         now: str | None = None,
     ) -> dict[str, str | None] | None:
         current_time = now or _now()
+        workspace_key = _workspace_policy_key(workspace)
+        action_family_key = _artifact_family_key(artifact_id)
         with self._connect() as connection:
             rows = connection.execute(
                 """
@@ -1391,7 +1401,7 @@ class GuardStore:
                     )
                   )
                   or (
-                    scope = 'workspace' and workspace = ? and (
+                    scope = 'workspace' and (workspace = ? or workspace = ?) and (
                       artifact_id is null or (
                         artifact_id = ? and (
                           artifact_hash is null or (? is not null and artifact_hash = ?)
@@ -1400,7 +1410,11 @@ class GuardStore:
                     )
                   )
                   or (scope = 'publisher' and publisher = ?)
-                  or scope = 'harness'
+                  or (
+                    scope = 'harness' and (
+                      artifact_id is null or artifact_id = ?
+                    )
+                  )
                   or scope = 'global'
                 )
                 and (expires_at is null or expires_at > ?)
@@ -1414,11 +1428,13 @@ class GuardStore:
                     artifact_id,
                     artifact_hash,
                     artifact_hash,
+                    workspace_key,
                     workspace,
                     artifact_id,
                     artifact_hash,
                     artifact_hash,
                     publisher,
+                    action_family_key,
                     current_time,
                 ),
             ).fetchall()
@@ -1438,9 +1454,12 @@ class GuardStore:
 
     @staticmethod
     def _normalized_policy_keys(decision: PolicyDecision) -> tuple[str | None, str | None, str | None, str | None]:
-        artifact_id = decision.artifact_id if decision.scope in {"artifact", "workspace"} else None
+        if decision.scope == "harness":
+            artifact_id = _artifact_family_key(decision.artifact_id)
+        else:
+            artifact_id = decision.artifact_id if decision.scope in {"artifact", "workspace"} else None
         artifact_hash = decision.artifact_hash if decision.scope in {"artifact", "workspace"} else None
-        workspace = decision.workspace if decision.scope == "workspace" else None
+        workspace = _workspace_policy_key(decision.workspace) if decision.scope == "workspace" else None
         publisher = decision.publisher if decision.scope == "publisher" else None
         return artifact_id, artifact_hash, workspace, publisher
 
@@ -1918,7 +1937,10 @@ class GuardStore:
         if scope == "harness":
             if harness is None:
                 return None, ()
-            return ["harness = ?"], (harness,)
+            family_key = _artifact_family_key(artifact_id)
+            if family_key is None:
+                return ["harness = ?"], (harness,)
+            return ["harness = ?", "artifact_id like ?"], (harness, f"%:{_family_key_value(family_key)}:%")
         if scope == "artifact":
             if harness is None or artifact_id is None:
                 return None, ()
@@ -1998,6 +2020,25 @@ class GuardStore:
             return _path_within_workspace(config_path, workspace)
         return False
 
+    def bulk_resolve_approval_requests(
+        self,
+        request_ids: list[str],
+        *,
+        resolution_action: str,
+        resolution_scope: str,
+        reason: str | None,
+        resolved_at: str,
+    ) -> None:
+        with self._connect() as connection:
+            persist_bulk_resolution(
+                connection,
+                request_ids,
+                resolution_action=resolution_action,
+                resolution_scope=resolution_scope,
+                reason=reason,
+                resolved_at=resolved_at,
+            )
+
     def count_approval_requests(
         self,
         *,
@@ -2025,6 +2066,21 @@ class GuardStore:
             query += " where " + " and ".join(conditions)
         with self._connect() as connection:
             cursor = connection.execute(query, tuple(params))
+            return int(cursor.rowcount if cursor.rowcount is not None else 0)
+
+    def expire_pending_approval_requests(self, *, older_than: str, now: str) -> int:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                update approval_requests
+                set status = 'expired',
+                    reason = 'Expired after waiting for review.',
+                    resolved_at = ?
+                where status = 'pending'
+                  and created_at < ?
+                """,
+                (now, older_than),
+            )
             return int(cursor.rowcount if cursor.rowcount is not None else 0)
 
     def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
@@ -2058,7 +2114,19 @@ class GuardStore:
             for row in rows
         ]
 
-    def clear_policy_decisions(self, harness: str | None = None, source: str | None = None) -> int:
+    def clear_policy_decisions(
+        self,
+        harness: str | None = None,
+        source: str | None = None,
+        *,
+        scope: str | None = None,
+        artifact_id: str | None = None,
+        artifact_hash: str | None = None,
+        artifact_id_is_null: bool = False,
+        artifact_hash_is_null: bool = False,
+        workspace: str | None = None,
+        publisher: str | None = None,
+    ) -> int:
         conditions: list[str] = []
         params: list[object] = []
         if harness is not None:
@@ -2067,6 +2135,28 @@ class GuardStore:
         if source is not None:
             conditions.append("source = ?")
             params.append(source)
+        if scope is not None:
+            if scope not in _POLICY_SCOPES:
+                msg = f"Invalid policy scope: {scope}"
+                raise ValueError(msg)
+            conditions.append("scope = ?")
+            params.append(scope)
+        if artifact_id is not None:
+            conditions.append("artifact_id = ?")
+            params.append(artifact_id)
+        elif artifact_id_is_null:
+            conditions.append("artifact_id is null")
+        if artifact_hash is not None:
+            conditions.append("artifact_hash = ?")
+            params.append(artifact_hash)
+        elif artifact_hash_is_null:
+            conditions.append("artifact_hash is null")
+        if workspace is not None:
+            conditions.append("(workspace = ? or workspace = ?)")
+            params.extend((_stored_workspace_policy_key(workspace), _normalized_workspace_path(workspace)))
+        if publisher is not None:
+            conditions.append("publisher = ?")
+            params.append(publisher)
         query = "delete from policy_decisions"
         if conditions:
             query += " where " + " and ".join(conditions)
@@ -3222,6 +3312,42 @@ def _normalized_workspace_path(value: str) -> str:
     if len(normalized) >= 2 and normalized[1] == ":":
         normalized = normalized.lower()
     return normalized
+
+
+def _workspace_policy_key(workspace: str | None) -> str | None:
+    if workspace is None or not workspace.strip():
+        return None
+    normalized = _normalized_workspace_path(workspace)
+    digest = sha256(normalized.encode("utf-8")).hexdigest()
+    return f"{_WORKSPACE_POLICY_KEY_PREFIX}{digest}"
+
+
+def _stored_workspace_policy_key(workspace: str) -> str:
+    if workspace.startswith(_WORKSPACE_POLICY_KEY_PREFIX):
+        return workspace
+    policy_key = _workspace_policy_key(workspace)
+    if policy_key is None:
+        msg = "Workspace policy key cannot be empty"
+        raise ValueError(msg)
+    return policy_key
+
+
+def _artifact_family_key(artifact_id: str | None) -> str | None:
+    if artifact_id is None or not artifact_id.strip():
+        return None
+    parts = artifact_id.split(":")
+    if len(parts) < 3:
+        return None
+    family = parts[2].strip().lower()
+    if family not in _SCOPED_HARNESS_FAMILIES:
+        return None
+    return f"family:{family}"
+
+
+def _family_key_value(family_key: str) -> str:
+    if family_key.startswith("family:"):
+        return family_key.removeprefix("family:")
+    return family_key
 
 
 def _chunks(values: list[str], size: int) -> Iterator[list[str]]:

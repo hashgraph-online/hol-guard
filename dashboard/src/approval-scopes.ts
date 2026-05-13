@@ -9,12 +9,12 @@ export type ApprovalScopeChoice = {
 export const DEFAULT_SCOPE_CHOICES: ApprovalScopeChoice[] = [
   {
     value: "artifact",
-    label: "Just this time",
+    label: "Approve once",
     description: "Allow only this exact action. Guard will ask again for anything different.",
   },
   {
     value: "workspace",
-    label: "This project",
+    label: "Remember for project",
     description: "Allow this action in the current workspace only.",
   },
   {
@@ -53,6 +53,24 @@ export function filterScopeChoicesForRequest<T extends { value: DecisionScope }>
 
 export function scopeChoicesForRequest(item: GuardApprovalRequest): ApprovalScopeChoice[] {
   return filterScopeChoicesForRequest(item, DEFAULT_SCOPE_CHOICES);
+}
+
+export const ADVANCED_SCOPE_VALUES = new Set<DecisionScope>(["global"]);
+
+export function isAdvancedScope(scope: DecisionScope): boolean {
+  return ADVANCED_SCOPE_VALUES.has(scope);
+}
+
+export function advancedScopeChoicesForRequest(item: GuardApprovalRequest): ApprovalScopeChoice[] {
+  return filterScopeChoicesForRequest(item, DEFAULT_SCOPE_CHOICES).filter((choice) =>
+    ADVANCED_SCOPE_VALUES.has(choice.value)
+  );
+}
+
+export function standardScopeChoicesForRequest(item: GuardApprovalRequest): ApprovalScopeChoice[] {
+  return filterScopeChoicesForRequest(item, DEFAULT_SCOPE_CHOICES).filter((choice) =>
+    !ADVANCED_SCOPE_VALUES.has(choice.value)
+  );
 }
 
 export function normalizeDecisionScope(item: GuardApprovalRequest, scope: DecisionScope): DecisionScope {

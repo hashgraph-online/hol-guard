@@ -15,6 +15,7 @@ _SOURCE_SEARCH_TOOLS = frozenset(
         "fgrep",
         "fd",
         "find",
+        "ls",
     }
 )
 
