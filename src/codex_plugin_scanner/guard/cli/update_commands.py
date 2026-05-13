@@ -11,6 +11,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 
 from ..adapters.base import HarnessContext
@@ -144,11 +145,21 @@ def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]
 def _expected_script_dir(installer_binary: str, installer: str) -> Path | None:
     if installer != "pip" or not installer_binary:
         return None
+    scripts_dir = sysconfig.get_path("scripts")
+    if scripts_dir:
+        return _directory_path(scripts_dir)
     return _script_dir(installer_binary)
 
 
 def _script_dir(path: str) -> Path:
-    return Path(path).expanduser().parent
+    return _directory_path(Path(path).expanduser().parent)
+
+
+def _directory_path(path: str | Path) -> Path:
+    directory = Path(path).expanduser()
+    if not directory.is_absolute():
+        directory = Path.cwd() / directory
+    return directory.resolve(strict=False)
 
 
 def _output_lines(value: str) -> list[str]:

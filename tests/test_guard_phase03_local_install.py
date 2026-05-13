@@ -34,6 +34,7 @@ def test_update_failure_redacts_output_and_returns_retry_command(monkeypatch: py
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pip")
     monkeypatch.setattr(update_commands.sys, "executable", "/opt/guard/bin/python")
+    monkeypatch.setattr(update_commands.sysconfig, "get_path", lambda name: "/opt/guard/bin")
     monkeypatch.setattr(
         update_commands.shutil,
         "which",
@@ -61,6 +62,7 @@ def test_update_binary_diagnostics_accepts_same_environment_script(monkeypatch: 
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pip")
     monkeypatch.setattr(update_commands.sys, "executable", "/opt/guard/bin/python")
+    monkeypatch.setattr(update_commands.sysconfig, "get_path", lambda name: "/opt/guard/bin")
     monkeypatch.setattr(
         update_commands.shutil,
         "which",
@@ -81,6 +83,7 @@ def test_update_binary_diagnostics_keeps_venv_script_dir_without_resolving_pytho
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pip")
     monkeypatch.setattr(update_commands.sys, "executable", "/workspace/.venv/bin/python")
+    monkeypatch.setattr(update_commands.sysconfig, "get_path", lambda name: "/workspace/.venv/bin")
     monkeypatch.setattr(
         update_commands.shutil,
         "which",
@@ -92,6 +95,25 @@ def test_update_binary_diagnostics_keeps_venv_script_dir_without_resolving_pytho
     assert exit_code == 0
     assert payload["binary_diagnostics"]["path_status"] == "matches_installer"
     assert payload["binary_diagnostics"]["expected_script_dir"] == "/workspace/.venv/bin"
+
+
+def test_update_binary_diagnostics_uses_python_scripts_dir(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.0")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pip")
+    monkeypatch.setattr(update_commands.sys, "executable", "/opt/python/bin/python")
+    monkeypatch.setattr(update_commands.sysconfig, "get_path", lambda name: "/opt/python/scripts")
+    monkeypatch.setattr(
+        update_commands.shutil,
+        "which",
+        lambda name: "/opt/python/scripts/hol-guard" if name == "hol-guard" else None,
+    )
+
+    payload, exit_code = update_commands.run_guard_update(dry_run=True)
+
+    assert exit_code == 0
+    assert payload["binary_diagnostics"]["path_status"] == "matches_installer"
+    assert payload["binary_diagnostics"]["expected_script_dir"] == "/opt/python/scripts"
 
 
 def test_update_binary_diagnostics_treats_pipx_shim_as_healthy(monkeypatch: pytest.MonkeyPatch) -> None:
