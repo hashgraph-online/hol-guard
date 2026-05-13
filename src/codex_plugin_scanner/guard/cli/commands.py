@@ -2340,11 +2340,7 @@ def run_guard_command(
                 artifact_name=artifact_name,
                 source_scope=_coalesce_string(payload.get("source_scope"), "project"),
                 user_override=_optional_string(payload.get("user_override")),
-                approval_source=(
-                    "inline"
-                    if _optional_string(payload.get("user_override")) is not None
-                    else "policy"
-                ),
+                approval_source=("inline" if _optional_string(payload.get("user_override")) is not None else "policy"),
             )
             store.add_receipt(receipt)
         if _should_emit_copilot_hook_response(args):
@@ -6134,8 +6130,7 @@ def _git_config_value_without_inline_comment(raw_value: str) -> str:
 
 def _git_config_enables_diff_helper(config_text: str) -> bool:
     return any(
-        re.match(r"(?i)^\s*(?:command|external|textconv)\s*=", line)
-        for line in _git_config_logical_lines(config_text)
+        re.match(r"(?i)^\s*(?:command|external|textconv)\s*=", line) for line in _git_config_logical_lines(config_text)
     )
 
 
