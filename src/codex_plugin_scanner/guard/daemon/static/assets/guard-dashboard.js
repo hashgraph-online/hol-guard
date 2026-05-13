@@ -15141,7 +15141,7 @@ function EvidenceFilterBar({
           value: filters.time,
           onChange: handleTimeChange,
           "aria-label": "Time period",
-          className: "min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          className: "min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
           children: Object.entries(EVIDENCE_TIME_LABELS).map(
             ([val, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: val, children: label }, val)
           )
@@ -15153,19 +15153,35 @@ function EvidenceFilterBar({
           value: filters.decision,
           onChange: handleDecisionChange,
           "aria-label": "Decision filter",
-          className: "min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          className: "min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
           children: Object.entries(EVIDENCE_DECISION_LABELS).map(
             ([val, label]) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: val, children: label }, val)
           )
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: handleToggleMore,
+          "aria-expanded": showMore,
+          "aria-label": "Toggle more filters",
+          className: "inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiFunnel, { className: "h-4 w-4", "aria-hidden": "true" }),
+            showMore ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+          ]
+        }
+      )
+    ] }),
+    showMore && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/80 p-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
         "select",
         {
           value: filters.harness,
           onChange: handleHarnessChange,
           "aria-label": "App filter",
-          className: "min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          className: "min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "all", children: "All apps" }),
             harnesses.map((h) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: h, children: harnessDisplayName(h) }, h))
@@ -15178,27 +15194,10 @@ function EvidenceFilterBar({
           value: filters.category,
           onChange: handleCategoryChange,
           "aria-label": "Category filter",
-          className: "min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          className: "min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
           children: CATEGORY_OPTIONS.map((opt) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: opt.value, children: opt.label }, opt.value))
         }
       ),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          type: "button",
-          onClick: handleToggleMore,
-          "aria-expanded": showMore,
-          "aria-label": "Toggle more filters",
-          className: "inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiFunnel, { className: "h-4 w-4", "aria-hidden": "true" }),
-            "More",
-            showMore ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
-          ]
-        }
-      )
-    ] }),
-    showMore && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/80 p-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-sm text-brand-dark", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-xs font-medium text-slate-500", children: "Source scope:" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -16307,6 +16306,216 @@ function EvidenceClearModal({
     }
   );
 }
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+const HUE_PALETTE = [210, 160, 45, 280, 340, 120, 190, 25, 260, 80];
+function harnessColor(harness) {
+  const hash = hashString(harness);
+  const hue = HUE_PALETTE[hash % HUE_PALETTE.length];
+  return `hsl(${hue} 70% 45%)`;
+}
+function AppTabRaw({ receipts }) {
+  const [selectedApp, setSelectedApp] = reactExports.useState(null);
+  const [searchTerm, setSearchTerm] = reactExports.useState("");
+  const appReceipts = reactExports.useMemo(() => receipts.filter((receipt) => isDisplayableHarness(receipt.harness)), [receipts]);
+  const apps = reactExports.useMemo(() => {
+    const map = /* @__PURE__ */ new Map();
+    for (const receipt of appReceipts) {
+      if (!map.has(receipt.harness)) map.set(receipt.harness, []);
+      map.get(receipt.harness).push(receipt);
+    }
+    for (const [, items] of map) {
+      items.sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp));
+    }
+    return Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length);
+  }, [appReceipts]);
+  const filteredApps = reactExports.useMemo(() => {
+    if (!searchTerm.trim()) return apps;
+    const q = searchTerm.toLowerCase();
+    return apps.filter(([harness]) => harnessDisplayName(harness).toLowerCase().includes(q));
+  }, [apps, searchTerm]);
+  const handleSearchChange = reactExports.useCallback((e) => {
+    setSearchTerm(e.target.value);
+  }, []);
+  if (appReceipts.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white/60 p-6 text-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No activity yet." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-400", children: "App activity will appear here after Guard makes decisions." })
+    ] });
+  }
+  if (selectedApp) {
+    const items = apps.find(([h]) => h === selectedApp)?.[1] ?? [];
+    const allowed = items.filter((r) => r.policy_decision === "allow").length;
+    const blocked = items.filter((r) => r.policy_decision === "block").length;
+    const color = harnessColor(selectedApp);
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => setSelectedApp(null),
+            className: "inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100",
+            children: "← Back to apps"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "a",
+          {
+            href: guardAwareHref(`/apps/${encodeURIComponent(selectedApp)}`),
+            className: "ml-auto text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
+            target: "_blank",
+            rel: "noopener noreferrer",
+            children: "Open app detail →"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white/60 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "span",
+          {
+            className: "inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white",
+            style: { backgroundColor: color },
+            children: selectedApp[0]?.toUpperCase()
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: harnessDisplayName(selectedApp) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-slate-500", children: [
+            items.length,
+            " action",
+            items.length !== 1 ? "s" : "",
+            " · ",
+            allowed,
+            " allowed · ",
+            blocked,
+            " stopped"
+          ] })
+        ] })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AppSparkline, { items }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-2", children: items.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "div",
+        {
+          className: "rounded-xl border border-slate-100 bg-white p-3",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: plainEnglishDescription(receipt) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-slate-400", children: formatRelativeTime(receipt.timestamp) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `shrink-0 text-xs font-medium ${receipt.policy_decision === "allow" ? "text-brand-green" : "text-brand-attention"}`, children: receipt.policy_decision === "allow" ? "Allowed" : "Stopped" })
+          ] })
+        },
+        receipt.receipt_id
+      )) })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search apps" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "search",
+          value: searchTerm,
+          onChange: handleSearchChange,
+          placeholder: "Search apps...",
+          className: "min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        }
+      )
+    ] }),
+    filteredApps.map(([harness, items]) => {
+      const allowed = items.filter((r) => r.policy_decision === "allow").length;
+      const blocked = items.filter((r) => r.policy_decision === "block").length;
+      const lastActive = items[0]?.timestamp;
+      const color = harnessColor(harness);
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          onClick: () => {
+            setSelectedApp(harness);
+          },
+          className: "flex w-full items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white p-3 text-left transition-all hover:border-slate-200 hover:bg-slate-50/50",
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  className: "inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white",
+                  style: { backgroundColor: color },
+                  children: harness[0]?.toUpperCase()
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: harnessDisplayName(harness) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
+                  items.length,
+                  " actions · ",
+                  allowed,
+                  " allowed · ",
+                  blocked,
+                  " stopped"
+                ] }),
+                lastActive && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-400", children: [
+                  "Last active ",
+                  formatRelativeTime(lastActive)
+                ] })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" })
+          ]
+        },
+        harness
+      );
+    }),
+    filteredApps.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-xl border border-slate-100 bg-white/60 p-6 text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "No apps match your search." }) })
+  ] });
+}
+function AppSparkline({ items }) {
+  const buckets = reactExports.useMemo(() => {
+    const days = 7;
+    const now2 = /* @__PURE__ */ new Date();
+    const counts = new Array(days).fill(0);
+    for (const item of items) {
+      const d = new Date(item.timestamp);
+      const diff = Math.floor((now2.getTime() - d.getTime()) / (1e3 * 60 * 60 * 24));
+      if (diff >= 0 && diff < days) {
+        counts[days - 1 - diff] += 1;
+      }
+    }
+    return counts;
+  }, [items]);
+  const max = Math.max(...buckets, 1);
+  const width = 200;
+  const height = 40;
+  const barWidth = width / buckets.length;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 bg-white p-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-slate-500", children: "Last 7 days" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: `0 0 ${width} ${height}`, className: "mt-2 h-10 w-full", preserveAspectRatio: "none", children: buckets.map((count, i) => {
+      const barHeight = count / max * height;
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "rect",
+        {
+          x: i * barWidth + 1,
+          y: height - barHeight,
+          width: barWidth - 2,
+          height: barHeight,
+          rx: 2,
+          fill: "currentColor",
+          className: "text-brand-blue/30"
+        },
+        i
+      );
+    }) })
+  ] });
+}
+const AppTab = reactExports.memo(AppTabRaw);
 const PAGE_SIZE = 50;
 const VIEW_TABS = [
   { key: "actions", label: "All actions", icon: HiMiniListBullet },
@@ -16375,7 +16584,7 @@ function ViewTabBar({ view, onViewChange }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
     {
-      className: "flex gap-1 rounded-xl border border-slate-200/70 bg-white/80 p-1 shadow-sm",
+      className: "flex gap-0.5 border-b border-slate-200/70",
       role: "tablist",
       "aria-label": "Evidence views",
       children: VIEW_TABS.map((tab) => {
@@ -16414,10 +16623,11 @@ function ViewTabButton({
       "aria-controls": `tabpanel-${tabKey}`,
       id: `tab-${tabKey}`,
       onClick: handleClick,
-      className: `flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${isActive ? "bg-brand-blue text-white shadow-sm" : "text-brand-dark hover:bg-slate-50"}`,
+      className: `relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${isActive ? "text-brand-dark" : "text-slate-500 hover:text-brand-dark"}`,
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-4 w-4", "aria-hidden": "true" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: label })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: label }),
+        isActive && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-brand-blue" })
       ]
     },
     tabKey
@@ -16535,7 +16745,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
       }
     );
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       EvidenceHeader,
       {
@@ -16545,7 +16755,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
         onClear: handleOpenClear
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightStrip, { metrics }),
+    metrics.total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceInsightStrip, { metrics }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       EvidenceFilterBar,
       {
@@ -16613,14 +16823,7 @@ function EvidenceWorkbench({ receiptItems, onClearEvidence }) {
           id: "tabpanel-apps",
           role: "tabpanel",
           "aria-labelledby": "tab-apps",
-          children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            EvidenceAnalyticsPanel,
-            {
-              metrics,
-              onFilterHarness: handleFilterHarness,
-              onFilterCategory: handleFilterCategory
-            }
-          )
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(AppTab, { receipts: filtered })
         }
       ),
       filters.view === "export" && /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -17407,6 +17610,7 @@ const scopeChoices = [
     description: "Allow this action across all your projects. Use with care."
   }
 ];
+const QUEUE_PAGE_SIZE = 10;
 function ReviewWorkspace(props) {
   const { requests, activeRequestId, detail } = props;
   const queueRef = reactExports.useRef(null);
@@ -17415,6 +17619,7 @@ function ReviewWorkspace(props) {
   const [sortDirection, setSortDirection] = reactExports.useState("newest");
   const [semanticFilter, setSemanticFilter] = reactExports.useState("all");
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
+  const [page, setPage] = reactExports.useState(1);
   const handleOpenRequest = reactExports.useCallback((id) => {
     props.onOpenRequest(id);
     setMobileQueueOpen(false);
@@ -17435,26 +17640,33 @@ function ReviewWorkspace(props) {
     const searched = searchQueue(items, searchTerm);
     return sortQueue(searched, sortDirection);
   }, [categoryFilter, requests, searchTerm, sortDirection, semanticFilter]);
+  reactExports.useEffect(() => {
+    setPage(1);
+  }, [searchTerm, categoryFilter, sortDirection, semanticFilter]);
+  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / QUEUE_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * QUEUE_PAGE_SIZE;
+  const pagedRequests = filteredRequests.slice(pageStart, pageStart + QUEUE_PAGE_SIZE);
   const categoryOptions = reactExports.useMemo(() => queueCategoriesForItems(requests), [requests]);
   const activeRequest = activeRequestId !== null ? requests.find((r) => r.request_id === activeRequestId) ?? null : null;
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
-      if (filteredRequests.length === 0) return;
-      const activeIdx = filteredRequests.findIndex((r) => r.request_id === activeRequestId);
+      if (pagedRequests.length === 0) return;
+      const activeIdx = pagedRequests.findIndex((r) => r.request_id === activeRequestId);
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        const nextIdx = Math.min(activeIdx + 1, filteredRequests.length - 1);
-        if (nextIdx !== activeIdx) props.onOpenRequest(filteredRequests[nextIdx].request_id);
+        const nextIdx = Math.min(activeIdx + 1, pagedRequests.length - 1);
+        if (nextIdx !== activeIdx) props.onOpenRequest(pagedRequests[nextIdx].request_id);
       }
       if (event.key === "ArrowUp") {
         event.preventDefault();
         const prevIdx = Math.max(activeIdx - 1, 0);
-        if (prevIdx !== activeIdx) props.onOpenRequest(filteredRequests[prevIdx].request_id);
+        if (prevIdx !== activeIdx) props.onOpenRequest(pagedRequests[prevIdx].request_id);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [filteredRequests, activeRequestId, props.onOpenRequest]);
+  }, [pagedRequests, activeRequestId, props.onOpenRequest]);
   reactExports.useEffect(() => {
     if (filteredRequests.length === 0) {
       return;
@@ -17463,6 +17675,13 @@ function ReviewWorkspace(props) {
       props.onOpenRequest(filteredRequests[0].request_id);
     }
   }, [activeRequestId, filteredRequests, props.onOpenRequest]);
+  reactExports.useEffect(() => {
+    if (pagedRequests.length === 0) return;
+    const activeOnPage = pagedRequests.some((item) => item.request_id === activeRequestId);
+    if (!activeOnPage) {
+      props.onOpenRequest(pagedRequests[0].request_id);
+    }
+  }, [currentPage, pagedRequests, activeRequestId, props.onOpenRequest]);
   if (requests.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewEmptyState, { runtime: props.runtime, resolutionMessage: props.resolutionMessage });
   }
@@ -17498,18 +17717,23 @@ function ReviewWorkspace(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `${mobileQueueOpen ? "block" : "hidden"} md:block`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         ReviewQueueList,
         {
-          requests: filteredRequests,
+          requests: pagedRequests,
+          allFilteredRequests: filteredRequests,
           totalCount: requests.length,
+          filteredCount: filteredRequests.length,
           activeRequestId: activeItem.request_id,
           categoryOptions,
           categoryFilter,
           searchTerm,
           sortDirection,
           semanticFilter,
+          page: currentPage,
+          totalPages,
           onCategoryFilterChange: setCategoryFilter,
           onSearchTermChange: setSearchTerm,
           onSortDirectionChange: setSortDirection,
           onSemanticFilterChange: setSemanticFilter,
+          onPageChange: setPage,
           onOpenRequest: handleOpenRequest,
           ref: queueRef
         }
@@ -17561,17 +17785,22 @@ function resolveSemanticGroup(categoryId) {
 }
 const ReviewQueueList = reactExports.forwardRef(({
   requests,
+  allFilteredRequests,
   totalCount,
+  filteredCount,
   activeRequestId,
   categoryOptions,
   categoryFilter,
   searchTerm,
   sortDirection,
   semanticFilter,
+  page,
+  totalPages,
   onCategoryFilterChange,
   onSearchTermChange,
   onSortDirectionChange,
   onSemanticFilterChange,
+  onPageChange,
   onOpenRequest
 }, ref) => {
   const [showFilters, setShowFilters] = reactExports.useState(false);
@@ -17584,20 +17813,27 @@ const ReviewQueueList = reactExports.forwardRef(({
   const handleSortChange = reactExports.useCallback((event) => {
     onSortDirectionChange(event.target.value);
   }, [onSortDirectionChange]);
+  const handlePreviousPage = reactExports.useCallback(() => {
+    onPageChange(Math.max(1, page - 1));
+  }, [page, onPageChange]);
+  const handleNextPage = reactExports.useCallback(() => {
+    onPageChange(Math.min(totalPages, page + 1));
+  }, [page, totalPages, onPageChange]);
   const activeSemanticGroup = semanticFilter;
   const visibleGroups = reactExports.useMemo(() => {
     const available = /* @__PURE__ */ new Set();
-    for (const item of requests) {
+    for (const item of allFilteredRequests) {
       available.add(resolveSemanticGroup(resolveQueueCategory(item).id));
     }
     return SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
-  }, [requests]);
+  }, [allFilteredRequests]);
   const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest";
+  const showPagination = filteredCount > QUEUE_PAGE_SIZE;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-3", ref, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Queue" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] font-semibold text-muted-foreground", children: [
-        requests.length,
+        filteredCount,
         "/",
         totalCount
       ] })
@@ -17685,7 +17921,43 @@ const ReviewQueueList = reactExports.forwardRef(({
           item.request_id
         )) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-3 py-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: "No matching actions", body: "Try a different search or filter.", tone: "teach" }) })
       }
-    )
+    ),
+    showPagination && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between gap-2 text-xs text-muted-foreground", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        (page - 1) * QUEUE_PAGE_SIZE + 1,
+        "-",
+        Math.min(filteredCount, page * QUEUE_PAGE_SIZE),
+        " of ",
+        filteredCount
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handlePreviousPage,
+            disabled: page <= 1,
+            className: "min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
+            children: "Previous"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-[11px] text-slate-400", children: [
+          page,
+          "/",
+          totalPages
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handleNextPage,
+            disabled: page >= totalPages,
+            className: "min-h-9 rounded-lg border border-slate-200 bg-white px-3 font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-blue/30 disabled:pointer-events-none disabled:opacity-40",
+            children: "Next"
+          }
+        )
+      ] })
+    ] })
   ] });
 });
 ReviewQueueList.displayName = "ReviewQueueList";
