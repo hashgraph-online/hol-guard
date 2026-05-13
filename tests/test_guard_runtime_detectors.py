@@ -790,6 +790,241 @@ def test_safe_decode_detector_inspects_shell_command_payloads(tmp_path: Path) ->
     assert any("safe-decode.v2" in (s.technical_detail or "") for s in signals)
 
 
+def test_safe_decode_detector_flags_opaque_payload_near_secret_context(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-opaque-secret",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="shell_command",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name="bash",
+        command=f"SECRET=$(cat .env); openssl enc -d -base64 <<< '{opaque}'",
+        prompt_excerpt=None,
+        prompt_text=None,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+
+    assert any(s.signal_id == "encoded.opaque-sensitive" for s in signals)
+
+
+def test_safe_decode_detector_runs_with_encoded_category_filter(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-opaque-filtered",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="shell_command",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name="bash",
+        command=f"ssh-add ~/.ssh/id_ecdsa; openssl enc -d -base64 <<< '{opaque}'",
+        prompt_excerpt=None,
+        prompt_text=None,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    result = DetectorRegistry((SafeDecodeDetector(),), clock=StepClock([0.0, 0.001])).run(
+        action,
+        _context(tmp_path),
+        enabled_categories=("encoded",),
+    )
+
+    assert any(s.signal_id == "encoded.opaque-sensitive" for s in result.signals)
+
+
+def test_safe_decode_detector_ignores_benign_binary_payload(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-benign-binary",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="prompt",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name=None,
+        command=None,
+        prompt_excerpt="Decode sample fixture",
+        prompt_text=f"Use this image fixture: {opaque}",
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+
+    assert signals == ()
+
+
+def test_safe_decode_detector_does_not_match_sensitive_word_fragments(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-sensitive-fragment",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="prompt",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name=None,
+        command=None,
+        prompt_excerpt="Decode fixture prose",
+        prompt_text=f"Use tokenized secretary-note fixture bytes: {opaque}",
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+
+    assert signals == ()
+
+
+def test_safe_decode_detector_does_not_match_benign_aws_tooling(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-aws-sdk-fixture",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="prompt",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name=None,
+        command=None,
+        prompt_excerpt="Decode fixture prose",
+        prompt_text=f"Use this aws-sdk and aws-cli binary fixture: {opaque}",
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+
+    assert signals == ()
+
+
+def test_safe_decode_detector_does_not_match_benign_secret_like_identifiers(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-benign-secret-like-identifiers",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="prompt",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name=None,
+        command=None,
+        prompt_excerpt="Decode fixture prose",
+        prompt_text=f"Document .envoy .keycloak and api-keyboard binary fixture bytes: {opaque}",
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+
+    assert signals == ()
+
+
+def test_safe_decode_detector_does_not_match_ssh_public_key_paths(tmp_path: Path) -> None:
+    import base64
+
+    from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
+
+    opaque = base64.b64encode(bytes(range(32)) * 4).decode()
+    action = GuardActionEnvelope(
+        schema_version=1,
+        action_id="test-safe-decode-ssh-public-key",
+        harness="codex",
+        event_name="PreToolUse",
+        action_type="shell_command",
+        workspace="~/workspace",
+        workspace_hash="workspace-hash",
+        tool_name="bash",
+        command=f"ssh-copy-id -i ~/.ssh/id_ed25519.pub user@example.com; printf '{opaque}'",
+        prompt_excerpt=None,
+        prompt_text=None,
+        target_paths=(),
+        network_hosts=(),
+        mcp_server=None,
+        mcp_tool=None,
+        package_manager=None,
+        package_name=None,
+        script_name=None,
+        raw_payload_redacted={},
+    )
+
+    signals = SafeDecodeDetector().detect(action, _context(tmp_path))
+
+    assert signals == ()
+
+
 def test_safe_decode_detector_returns_empty_for_plain_text(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.runtime.detectors import SafeDecodeDetector
 
