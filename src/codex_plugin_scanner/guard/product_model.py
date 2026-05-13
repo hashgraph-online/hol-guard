@@ -188,6 +188,20 @@ HERMES_OPENCLAW_RUNTIME_MODELS = {
 LOCAL_ROUTE_OWNERSHIP = (
     RouteOwnership(route="/", persona=("vibe_coder", "solo_engineer"), auth_required=False, writes_state=False),
     RouteOwnership(route="/inbox", persona=("vibe_coder", "solo_engineer"), auth_required=True, writes_state=True),
+    RouteOwnership(route="/requests", persona=("vibe_coder", "solo_engineer"), auth_required=True, writes_state=True),
+    RouteOwnership(
+        route="/requests/{id}",
+        persona=("vibe_coder", "solo_engineer"),
+        auth_required=True,
+        writes_state=True,
+    ),
+    RouteOwnership(route="/approvals", persona=("vibe_coder", "solo_engineer"), auth_required=True, writes_state=True),
+    RouteOwnership(
+        route="/approvals/{id}",
+        persona=("vibe_coder", "solo_engineer"),
+        auth_required=True,
+        writes_state=True,
+    ),
     RouteOwnership(route="/fleet", persona=("solo_engineer", "manager"), auth_required=True, writes_state=False),
     RouteOwnership(
         route="/evidence",

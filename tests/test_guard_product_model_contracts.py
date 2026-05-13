@@ -179,6 +179,10 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
 
     assert routes["/"].auth_required is False
     assert routes["/inbox"].writes_state is True
+    assert routes["/requests"].writes_state is True
+    assert routes["/requests/{id}"].writes_state is True
+    assert routes["/approvals"].writes_state is True
+    assert routes["/approvals/{id}"].writes_state is True
     assert routes["/fleet"].writes_state is False
     assert routes["/evidence"].writes_state is False
     for route in routes:

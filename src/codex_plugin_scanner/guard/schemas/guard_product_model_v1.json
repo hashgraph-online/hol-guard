@@ -245,6 +245,42 @@
       "writes_state": true
     },
     {
+      "route": "/requests",
+      "persona": [
+        "vibe_coder",
+        "solo_engineer"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/requests/{id}",
+      "persona": [
+        "vibe_coder",
+        "solo_engineer"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/approvals",
+      "persona": [
+        "vibe_coder",
+        "solo_engineer"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
+      "route": "/approvals/{id}",
+      "persona": [
+        "vibe_coder",
+        "solo_engineer"
+      ],
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
       "route": "/fleet",
       "persona": [
         "solo_engineer",
