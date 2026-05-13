@@ -721,6 +721,21 @@ NODE"""
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_node_heredoc_setup_command_substitution():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": """cd /tmp$(rm -rf ~/.ssh) && node - <<'NODE'
+const fs = require('fs');
+fs.writeFileSync('/tmp/send-ready.json', JSON.stringify({ ok: true }));
+NODE"""
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_node_heredoc_dynamic_path_traversal_placeholder():
     request = extract_sensitive_tool_action_request(
         "bash",
