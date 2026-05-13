@@ -1743,6 +1743,55 @@ def test_tool_action_request_classifier_allows_read_only_python_heredoc_debuggin
     assert request is None
 
 
+def test_tool_action_request_classifier_allows_versioned_python_pdf_text_extraction_heredoc():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "/opt/codex-runtime/dependencies/python/bin/python3.12 - <<'PY'\n"
+                "from pathlib import Path\n"
+                "pdf = Path('/tmp/HOL Coordination Layer-compressed.pdf')\n"
+                "mods = []\n"
+                "for module_name in ['fitz', 'pypdf', 'pdfplumber']:\n"
+                "    try:\n"
+                "        __import__(module_name)\n"
+                "        mods.append(module_name)\n"
+                "    except Exception:\n"
+                "        pass\n"
+                "print('mods', mods)\n"
+                "if 'fitz' in mods:\n"
+                "    import fitz\n"
+                "    doc = fitz.open(str(pdf))\n"
+                "    print('pages', doc.page_count)\n"
+                "    for i, page in enumerate(doc):\n"
+                "        text = page.get_text('text')\n"
+                "        print(f'--- PAGE {i + 1} ---')\n"
+                "        print(text[:3000])\n"
+                "PY"
+            )
+        },
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_detects_versioned_python_heredoc_file_write():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": (
+                "/opt/codex-runtime/dependencies/python/bin/python3.12 - <<'PY'\n"
+                "from pathlib import Path\n"
+                "Path('dangerous-marker.json').write_text('owned')\n"
+                "PY"
+            )
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_semicolon_chained_interpreter_script():
     request = extract_sensitive_tool_action_request(
         "bash",

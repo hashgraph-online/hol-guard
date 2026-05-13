@@ -83,8 +83,6 @@ _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
         "unlink",
     }
 )
-_SCRIPT_INTERPRETER_COMMANDS = frozenset({"perl", "python", "python3", "ruby"})
-_READ_ONLY_OBSERVER_INTERPRETER_COMMANDS = frozenset({"python", "python3"})
 _UNMODELED_INLINE_INTERPRETER_COMMANDS = frozenset({"perl", "ruby"})
 _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
     {
@@ -165,7 +163,7 @@ _SHELL_NEWLINE_SEPARATOR = ";"
 _HEREDOC_PATTERN = re.compile(r"<<-?\s*(['\"]?)([^\s'\";|&<>]+)\1")
 _SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN = r"(?:cd\b[^\n;&|<>$`]*)"
 _SINGLE_INTERPRETER_HEREDOC_PATTERN = re.compile(
-    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>perl|python|python3|ruby)\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
+    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>[^\s;&|<>$`]*(?:perl|python(?:\d+(?:\.\d+)?)?|ruby))\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
     re.IGNORECASE | re.DOTALL,
 )
 _SINGLE_NODE_HEREDOC_PATTERN = re.compile(
@@ -2657,6 +2655,8 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
         return False
     if _looks_like_read_only_interpreter_command(normalized, parts, parsed_command_names):
         return False
+    if _single_interpreter_heredoc_script(normalized) is not None:
+        return True
     if _contains_unmodeled_inline_interpreter_eval(normalized, parts, parsed_command_names):
         return True
     if _contains_destructive_node_inline_eval(parts):
@@ -3890,7 +3890,7 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
             expect_command = False
             index += 1
             continue
-        if current_command in _SCRIPT_INTERPRETER_COMMANDS:
+        if current_command is not None and _is_script_interpreter_command(current_command):
             flag_payload = _interpreter_flag_payload(parts, index)
             if flag_payload is not None:
                 scripts.append(flag_payload.script_text)
@@ -3903,7 +3903,7 @@ def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
 def _looks_like_benign_interpreter_wait(command_text: str, parts: list[str], command_names: list[str]) -> bool:
     if "$(" in command_text or "`" in command_text or "<(" in command_text or ">(" in command_text:
         return False
-    if not command_names or not all(command_name in _SCRIPT_INTERPRETER_COMMANDS for command_name in command_names):
+    if not command_names or not all(_is_script_interpreter_command(command_name) for command_name in command_names):
         return False
     scripts = _script_interpreter_texts(parts)
     if not scripts or len(scripts) != len(command_names):
@@ -3917,7 +3917,7 @@ def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str
     heredoc_script = _single_interpreter_heredoc_script(command_text)
     if heredoc_script is not None:
         heredoc_interpreter = _single_interpreter_heredoc_interpreter(command_text)
-        if heredoc_interpreter not in _READ_ONLY_OBSERVER_INTERPRETER_COMMANDS:
+        if heredoc_interpreter is None or not _is_read_only_observer_interpreter_command(heredoc_interpreter):
             return False
         heredoc_args = _single_interpreter_heredoc_args(command_text)
         if heredoc_args not in {"", "-"}:
@@ -3928,7 +3928,7 @@ def _looks_like_read_only_interpreter_command(command_text: str, parts: list[str
             return all(_script_is_read_only_observer(script_text) for script_text in scripts)
         return _script_is_read_only_observer(heredoc_script)
     if not command_names or not all(
-        command_name in _READ_ONLY_OBSERVER_INTERPRETER_COMMANDS for command_name in command_names
+        _is_read_only_observer_interpreter_command(command_name) for command_name in command_names
     ):
         return False
     scripts = list(_script_interpreter_texts(parts))
@@ -3945,12 +3945,28 @@ def _contains_unmodeled_inline_interpreter_eval(
 ) -> bool:
     heredoc_interpreter = _single_interpreter_heredoc_interpreter(command_text)
     if heredoc_interpreter is not None:
-        return heredoc_interpreter in _UNMODELED_INLINE_INTERPRETER_COMMANDS
-    if not command_names or not all(command_name in _SCRIPT_INTERPRETER_COMMANDS for command_name in command_names):
+        return _is_unmodeled_inline_interpreter_command(heredoc_interpreter)
+    if not command_names or not all(_is_script_interpreter_command(command_name) for command_name in command_names):
         return False
-    if not any(command_name in _UNMODELED_INLINE_INTERPRETER_COMMANDS for command_name in command_names):
+    if not any(_is_unmodeled_inline_interpreter_command(command_name) for command_name in command_names):
         return False
     return bool(_script_interpreter_texts(parts) or _shell_heredoc_payloads(command_text))
+
+
+def _is_script_interpreter_command(command_name: str) -> bool:
+    return _is_python_interpreter_command(command_name) or command_name in _UNMODELED_INLINE_INTERPRETER_COMMANDS
+
+
+def _is_read_only_observer_interpreter_command(command_name: str) -> bool:
+    return _is_python_interpreter_command(command_name)
+
+
+def _is_unmodeled_inline_interpreter_command(command_name: str) -> bool:
+    return command_name in _UNMODELED_INLINE_INTERPRETER_COMMANDS
+
+
+def _is_python_interpreter_command(command_name: str) -> bool:
+    return re.fullmatch(r"python(?:\d+(?:\.\d+)?)?", command_name) is not None
 
 
 def _script_is_benign_wait(script_text: str) -> bool:
@@ -4011,7 +4027,7 @@ def _single_interpreter_heredoc_interpreter(command_text: str) -> str | None:
     match = _SINGLE_INTERPRETER_HEREDOC_PATTERN.fullmatch(command_text.strip())
     if match is None:
         return None
-    interpreter = match.group("interpreter").strip().lower()
+    interpreter = _normalized_shell_command_name(match.group("interpreter").strip())
     return interpreter or None
 
 
