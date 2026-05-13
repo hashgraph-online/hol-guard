@@ -13,6 +13,9 @@ import {
   filterQueueByCategory,
   queueCategoriesForItems,
   resolveQueueCategory,
+  isDuplicateGroup,
+  bulkBlockEligibleGroups,
+  bulkBlockPrimaryIds,
 } from "./queue-state";
 
 function assert(condition: boolean, message: string): void {
@@ -1015,4 +1018,102 @@ const scpPreserveUploadItem: GuardApprovalRequest = {
 assert(
   resolveQueueCategory(scpPreserveUploadItem).label === "File upload or copy-out",
   "T-QS-97: scp -p preserve-mode flag does not consume the local upload operand"
+);
+
+const DUP_PRIMARY: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-dup-primary",
+  artifact_id: "codex:project:bash",
+  queue_group_id: "grp-bash-001",
+};
+
+const DUP_SECONDARY: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-dup-secondary",
+  artifact_id: "codex:project:bash",
+  queue_group_id: "grp-bash-001",
+};
+
+const UNIQUE_REQUEST: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-unique",
+  artifact_id: "codex:project:curl",
+  queue_group_id: null,
+};
+
+const dupGroup = groupDuplicates([DUP_PRIMARY, DUP_SECONDARY])[0];
+const uniqueGroup = groupDuplicates([UNIQUE_REQUEST])[0];
+
+assert(
+  isDuplicateGroup(dupGroup),
+  "T-QS-GR112-01: isDuplicateGroup returns true for a group with duplicates"
+);
+
+assert(
+  !isDuplicateGroup(uniqueGroup),
+  "T-QS-GR112-02: isDuplicateGroup returns false for a group with no duplicates"
+);
+
+const grMixedGroups = groupDuplicates([DUP_PRIMARY, DUP_SECONDARY, UNIQUE_REQUEST]);
+
+assert(
+  bulkBlockEligibleGroups(grMixedGroups).length === 1,
+  "T-QS-GR115-01: bulkBlockEligibleGroups returns only groups with duplicates"
+);
+
+assert(
+  bulkBlockEligibleGroups(grMixedGroups)[0].primary.request_id === "req-dup-primary",
+  "T-QS-GR115-02: bulkBlockEligibleGroups returns the correct primary group"
+);
+
+assert(
+  bulkBlockPrimaryIds(grMixedGroups).length === 1,
+  "T-QS-GR115-03: bulkBlockPrimaryIds returns one id for one eligible group"
+);
+
+assert(
+  bulkBlockPrimaryIds(grMixedGroups)[0] === "req-dup-primary",
+  "T-QS-GR115-04: bulkBlockPrimaryIds returns the correct primary request id"
+);
+
+assert(
+  bulkBlockPrimaryIds([uniqueGroup]).length === 0,
+  "T-QS-GR115-05: bulkBlockPrimaryIds returns empty array when no groups have duplicates"
+);
+
+assert(
+  resolveStaleRequestRecovery("req-1", [BASE_REQUEST]) === "req-1",
+  "T-QS-GR112-03: resolveStaleRequestRecovery keeps active id when still in queue"
+);
+
+const SECOND_REQUEST_GR112: GuardApprovalRequest = {
+  ...BASE_REQUEST,
+  request_id: "req-2",
+};
+
+assert(
+  resolveStaleRequestRecovery("req-gone", [BASE_REQUEST, SECOND_REQUEST_GR112]) === "req-1",
+  "T-QS-GR112-04: resolveStaleRequestRecovery returns first item when active id is no longer in queue"
+);
+
+assert(
+  resolveStaleRequestRecovery(null, [BASE_REQUEST]) === null,
+  "T-QS-GR112-05: resolveStaleRequestRecovery returns null when active id is null"
+);
+
+assert(
+  resolveStaleRequestRecovery("req-gone", []) === null,
+  "T-QS-GR112-06: resolveStaleRequestRecovery returns null when queue is empty after stale removal"
+);
+
+const allUnique = groupDuplicates([BASE_REQUEST, SECOND_REQUEST_GR112]);
+
+assert(
+  bulkBlockEligibleGroups(allUnique).length === 0,
+  "T-QS-GR114-01: showBulkBlock set is empty when no groups have duplicates"
+);
+
+assert(
+  bulkApprovePrimaryIds(allUnique).length === 2,
+  "T-QS-GR114-02: bulkApprovePrimaryIds includes all groups regardless of duplicate status"
 );

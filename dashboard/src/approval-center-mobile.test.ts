@@ -150,7 +150,7 @@ assert(
 );
 
 const allowLabel = (scope: string): string =>
-  scope === "artifact" ? "Approve once" : "Approve and remember";
+  scope === "artifact" ? "Approve once" : scope === "workspace" ? "Remember for project" : "Approve and remember";
 const blockLabel = (isBlocked: boolean): string =>
   isBlocked ? "Keep blocked" : "Block this action";
 
@@ -160,8 +160,8 @@ assert(
 );
 
 assert(
-  allowLabel("workspace") === "Approve and remember",
-  "L114: Approve button label is 'Approve and remember' for workspace scope"
+  allowLabel("workspace") === "Remember for project",
+  "L114: Approve button label is 'Remember for project' for workspace scope (GR125)"
 );
 
 assert(
@@ -177,4 +177,14 @@ assert(
 assert(
   BASE_REQUEST.recommended_scope === "artifact",
   "L114: Default scope is artifact — sticky button bar uses correct initial label on mobile"
+);
+
+assert(
+  allowLabel("harness") === "Approve and remember",
+  "L115: Approve button label is 'Approve and remember' for broader scopes like harness (GR125)"
+);
+
+assert(
+  allowLabel("global") === "Approve and remember",
+  "L115: Approve button label is 'Approve and remember' for global scope (GR125)"
 );

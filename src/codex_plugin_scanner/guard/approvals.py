@@ -138,17 +138,22 @@ def apply_approval_resolution(
         raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
     if scope == "workspace" and not workspace:
         raise ValueError(f"Approval request {request_id} requires --workspace for workspace scope.")
-    if scope == "publisher" and not isinstance(request.get("publisher"), str):
+    if scope == "publisher" and _string_or_none(request.get("publisher")) is None:
         raise ValueError(f"Approval request {request_id} has no publisher scope to approve.")
     workspace_artifact_id, workspace_artifact_hash = _workspace_policy_artifact_keys(request, scope)
+    request_artifact_id = _string_or_none(request.get("artifact_id"))
+    request_artifact_hash = _string_or_none(request.get("artifact_hash"))
+    request_publisher = _string_or_none(request.get("publisher"))
+    harness_artifact_id = request_artifact_id if scope == "harness" else None
+    scoped_artifact_id = request_artifact_id if scope == "artifact" else workspace_artifact_id or harness_artifact_id
     decision = PolicyDecision(
         harness="*" if scope == "global" else str(request["harness"]),
         scope=scope,
         action="allow" if action == "allow" else "block",
-        artifact_id=str(request["artifact_id"]) if scope == "artifact" else workspace_artifact_id,
-        artifact_hash=str(request["artifact_hash"]) if scope == "artifact" else workspace_artifact_hash,
+        artifact_id=scoped_artifact_id,
+        artifact_hash=request_artifact_hash if scope == "artifact" else workspace_artifact_hash,
         workspace=workspace if scope == "workspace" else None,
-        publisher=str(request["publisher"]) if scope == "publisher" else None,
+        publisher=request_publisher if scope == "publisher" else None,
         reason=reason,
     )
     store.upsert_policy(decision, now or _now())
@@ -172,7 +177,7 @@ def apply_approval_resolution(
             resolved_scope_ids = store.resolve_matching_approval_requests(
                 harness=resolution_harness,
                 scope=scope,
-                artifact_id=str(request["artifact_id"]) if scope == "artifact" else workspace_artifact_id,
+                artifact_id=scoped_artifact_id,
                 workspace=workspace if scope == "workspace" else None,
                 publisher=(
                     str(request["publisher"])
@@ -186,13 +191,14 @@ def apply_approval_resolution(
             )
             if resolved_scope_ids:
                 _refresh_queue_result(store, result, resolved_scope_ids)
+        _record_resolution_event(store, request_id, action, scope, resolved_at)
         return result
     resolved_ids: list[str] = []
     if resolve_scope_matches:
         resolved_ids = store.resolve_matching_approval_requests(
             harness=resolution_harness,
             scope=scope,
-            artifact_id=str(request["artifact_id"]) if scope == "artifact" else workspace_artifact_id,
+            artifact_id=scoped_artifact_id,
             workspace=workspace if scope == "workspace" else None,
             publisher=(
                 str(request["publisher"])
@@ -215,6 +221,7 @@ def apply_approval_resolution(
     updated = store.get_approval_request(request_id)
     if updated is None:
         raise ValueError(f"Approval request disappeared: {request_id}")
+    _record_resolution_event(store, request_id, action, scope, resolved_at)
     return updated
 
 
@@ -228,6 +235,20 @@ def _workspace_policy_artifact_keys(request: Mapping[str, object], scope: str) -
     if not isinstance(artifact_hash, str) or not artifact_hash:
         return artifact_id, None
     return artifact_id, artifact_hash
+
+
+def _string_or_none(value: object) -> str | None:
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _record_resolution_event(store: GuardStore, request_id: str, action: str, scope: str, resolved_at: str) -> None:
+    store.add_event(
+        "approval.resolved",
+        {"request_id": request_id, "action": action, "scope": scope},
+        resolved_at,
+    )
 
 
 def _refresh_queue_result(

@@ -2953,6 +2953,11 @@
     letter-spacing: .15em;
   }
 
+  .tracking-\[0\.16em\] {
+    --tw-tracking: .16em;
+    letter-spacing: .16em;
+  }
+
   .tracking-\[0\.18em\] {
     --tw-tracking: .18em;
     letter-spacing: .18em;
@@ -3019,8 +3024,14 @@
     color: var(--color-blue-700);
   }
 
-  .text-brand-attention {
+  .text-brand-attention, .text-brand-attention\/80 {
     color: var(--brand-attention);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-brand-attention\/80 {
+      color: color-mix(in oklab, var(--brand-attention) 80%, transparent);
+    }
   }
 
   .text-brand-blue, .text-brand-blue\/30 {

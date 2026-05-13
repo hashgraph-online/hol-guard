@@ -236,6 +236,18 @@ export function bulkApprovePrimaryIds(groups: QueueGroup[]): string[] {
   return groups.map((g) => g.primary.request_id);
 }
 
+export function isDuplicateGroup(group: QueueGroup): boolean {
+  return group.duplicateCount > 0;
+}
+
+export function bulkBlockEligibleGroups(groups: QueueGroup[]): QueueGroup[] {
+  return groups.filter(isDuplicateGroup);
+}
+
+export function bulkBlockPrimaryIds(groups: QueueGroup[]): string[] {
+  return bulkBlockEligibleGroups(groups).map((g) => g.primary.request_id);
+}
+
 export function buildProgressCopy(activeIndex: number, total: number): string {
   if (total === 0) {
     return "";

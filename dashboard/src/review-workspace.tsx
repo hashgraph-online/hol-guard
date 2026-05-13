@@ -53,9 +53,10 @@ import {
 import { DataFlowEvidenceCard } from "./data-flow-evidence-card";
 import { ScannerEvidenceSection } from "./scanner-evidence-badge";
 import {
+  advancedScopeChoicesForRequest,
   buildDecisionPayload,
-  filterScopeChoicesForRequest,
   normalizeDecisionScope,
+  standardScopeChoicesForRequest,
 } from "./approval-scopes";
 import type {
   GuardApprovalRequest,
@@ -130,6 +131,7 @@ const scopeChoices = [
 ];
 
 const QUEUE_PAGE_SIZE = 10;
+const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 
 export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const { requests, activeRequestId, detail } = props;
@@ -413,6 +415,8 @@ const ReviewQueueList = forwardRef<HTMLDivElement, {
         <label className="block">
           <span className="sr-only">Search review queue</span>
           <input
+            id="guard-review-queue-search"
+            name="guard-review-queue-search"
             type="search"
             value={searchTerm}
             onChange={handleSearchChange}
@@ -663,7 +667,19 @@ function ReviewDecisionCard(props: {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allowButtonRef = useRef<HTMLButtonElement>(null);
   const availableScopeChoices = useMemo(
-    () => (item ? filterScopeChoicesForRequest(item, scopeChoices) : scopeChoices),
+    () => (item ? standardScopeChoicesForRequest(item) : scopeChoices.filter((choice) => choice.value !== "global")),
+    [item]
+  );
+  const commonScopeOptions = useMemo(
+    () => availableScopeChoices.filter((choice) => commonScopeValues.has(choice.value)),
+    [availableScopeChoices]
+  );
+  const broaderScopeOptions = useMemo(
+    () => availableScopeChoices.filter((choice) => !commonScopeValues.has(choice.value)),
+    [availableScopeChoices]
+  );
+  const advancedScopeOptions = useMemo(
+    () => (item ? advancedScopeChoicesForRequest(item) : scopeChoices.filter((choice) => choice.value === "global")),
     [item]
   );
 
@@ -738,6 +754,12 @@ function ReviewDecisionCard(props: {
     },
     [handleResolve]
   );
+  const handleAllow = useCallback(() => {
+    handleRequestResolve("allow");
+  }, [handleRequestResolve]);
+  const handleBlock = useCallback(() => {
+    handleRequestResolve("block");
+  }, [handleRequestResolve]);
 
   if (!detail || !item) {
     return (
@@ -757,7 +779,6 @@ function ReviewDecisionCard(props: {
 
   return (
     <div className="space-y-5">
-      {/* Success banner */}
       {resolved && (
         <div
           className={`guard-fade-in flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
@@ -773,12 +794,11 @@ function ReviewDecisionCard(props: {
             aria-hidden="true"
           />
           <p className={`text-sm font-medium ${resolved === "allow" ? "text-brand-green-text" : "text-brand-attention"}`}>
-            {resolved === "allow" ? "Approved — action can proceed" : "Blocked — action stopped"}
+            {resolved === "allow" ? "Approved: action can proceed" : "Blocked: action stopped"}
           </p>
         </div>
       )}
 
-      {/* Main decision card */}
       <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -793,12 +813,10 @@ function ReviewDecisionCard(props: {
           </Badge>
         </div>
 
-        {/* Why Guard paused */}
         <div className="mt-4 rounded-xl border border-brand-blue/10 bg-brand-blue/[0.04] p-4">
           <p className="text-sm text-brand-dark">{pauseReason}</p>
         </div>
 
-        {/* Risk summary */}
         {item.risk_summary && (
           <div className="mt-4 rounded-xl border border-brand-attention/15 bg-brand-attention/[0.04] p-4">
             <div className="flex items-start gap-2.5">
@@ -808,7 +826,6 @@ function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {/* Technical details — hidden by default */}
         <div className="mt-4">
           <button
             onClick={() => setShowTechnical(!showTechnical)}
@@ -825,7 +842,6 @@ function ReviewDecisionCard(props: {
           {showTechnical && <ActionContentCard item={item} />}
         </div>
 
-        {/* What would happen */}
         {whatWouldHappen && (
           <div className="mt-5">
             <button
@@ -849,30 +865,60 @@ function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {/* Scope selection */}
         <div className="mt-6 space-y-2">
           <SectionLabel>How long should this choice last?</SectionLabel>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Scope selection">
-            {availableScopeChoices.map((choice) => (
-              <button
+            {commonScopeOptions.map((choice) => (
+              <ScopeChoiceButton
                 key={choice.value}
-                onClick={() => setScope(choice.value)}
-                role="radio"
-                aria-checked={scope === choice.value}
-                className={`rounded-xl border px-4 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-brand-blue/20 ${
-                  scope === choice.value
-                    ? "border-brand-blue bg-brand-blue/[0.06]"
-                    : "border-slate-200/70 bg-white hover:bg-slate-50"
-                }`}
-              >
-                <p className="text-sm font-medium text-brand-dark">{choice.label}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{choice.description}</p>
-              </button>
+                choice={choice}
+                checked={scope === choice.value}
+                onScopeChange={setScope}
+              />
             ))}
           </div>
+          {broaderScopeOptions.length > 0 && (
+            <details className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3">
+              <summary className="cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-blue">
+                Additional approval scopes
+              </summary>
+              <p className="mt-2 text-xs text-brand-dark/70">
+                These apply across more future sessions. Use them only when a project-level decision is too narrow.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                {broaderScopeOptions.map((choice) => (
+                  <ScopeChoiceButton
+                    key={choice.value}
+                    choice={choice}
+                    checked={scope === choice.value}
+                    onScopeChange={setScope}
+                  />
+                ))}
+              </div>
+            </details>
+          )}
+          {advancedScopeOptions.length > 0 && (
+            <details className="rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-3">
+              <summary className="cursor-pointer select-none text-xs font-semibold uppercase tracking-[0.16em] text-brand-attention">
+                Advanced: applies everywhere
+              </summary>
+              <p className="mt-2 text-xs text-brand-dark/70">
+                This affects every project on this machine. Prefer narrower scopes unless you are sure.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-2">
+                {advancedScopeOptions.map((choice) => (
+                  <ScopeChoiceButton
+                    key={choice.value}
+                    choice={choice}
+                    checked={scope === choice.value}
+                    onScopeChange={setScope}
+                  />
+                ))}
+              </div>
+            </details>
+          )}
         </div>
 
-        {/* Error state */}
         {errorMessage && (
           <div className="guard-fade-in mt-4 rounded-xl border border-brand-purple/25 bg-brand-purple/[0.05] p-4">
             <div className="flex items-start gap-3">
@@ -893,40 +939,39 @@ function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {/* Action buttons */}
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <ActionButton
             ref={allowButtonRef}
             variant="success"
-            onClick={() => handleRequestResolve("allow")}
+            onClick={handleAllow}
             disabled={submitting !== null}
           >
             {submitting === "allow" ? (
               <span className="flex items-center gap-2">
                 <HiMiniArrowPath className="h-4 w-4 animate-spin" aria-hidden="true" />
-                Approving…
+                Approving...
               </span>
             ) : (
               <span className="flex items-center gap-2">
                 <HiMiniCheckCircle className="h-4 w-4" aria-hidden="true" />
-                Allow
+                {allowButtonLabel(scope)}
               </span>
             )}
           </ActionButton>
           <ActionButton
             variant="outline"
-            onClick={() => handleRequestResolve("block")}
+            onClick={handleBlock}
             disabled={submitting !== null}
           >
             {submitting === "block" ? (
               <span className="flex items-center gap-2">
                 <HiMiniArrowPath className="h-4 w-4 animate-spin" aria-hidden="true" />
-                Blocking…
+                Blocking...
               </span>
             ) : (
               <span className="flex items-center gap-2">
                 <HiMiniNoSymbol className="h-4 w-4" aria-hidden="true" />
-                Block
+                Keep blocked
               </span>
             )}
           </ActionButton>
@@ -934,7 +979,6 @@ function ReviewDecisionCard(props: {
 
       </div>
 
-      {/* Evidence section */}
       {hasEvidence && (
         <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <button
@@ -991,6 +1035,41 @@ function ReviewDecisionCard(props: {
       )}
     </div>
   );
+}
+
+function ScopeChoiceButton(props: {
+  choice: (typeof scopeChoices)[number];
+  checked: boolean;
+  onScopeChange: (scope: DecisionScope) => void;
+}) {
+  const handleClick = useCallback(() => {
+    props.onScopeChange(props.choice.value);
+  }, [props.onScopeChange, props.choice.value]);
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      role="radio"
+      aria-checked={props.checked}
+      className={`rounded-xl border px-4 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-brand-blue/20 ${
+        props.checked ? "border-brand-blue bg-brand-blue/[0.06]" : "border-slate-200/70 bg-white hover:bg-slate-50"
+      }`}
+    >
+      <p className="text-sm font-medium text-brand-dark">{props.choice.label}</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{props.choice.description}</p>
+    </button>
+  );
+}
+
+function allowButtonLabel(scope: DecisionScope): string {
+  if (scope === "artifact") {
+    return "Approve once";
+  }
+  if (scope === "workspace") {
+    return "Remember for project";
+  }
+  return "Approve and remember";
 }
 
 function ReviewEmptyState({ runtime, resolutionMessage }: { runtime: GuardRuntimeSnapshot | null; resolutionMessage: string | null }) {
@@ -1070,7 +1149,7 @@ function ActionContentCard({ item }: { item: GuardApprovalRequest }) {
           try {
             const serialized = JSON.stringify(inputs);
             if (serialized.length <= 2) return null;
-            return serialized.length > 140 ? `${serialized.slice(0, 140)}…` : serialized;
+            return serialized.length > 140 ? `${serialized.slice(0, 140)}...` : serialized;
           } catch {
             return null;
           }

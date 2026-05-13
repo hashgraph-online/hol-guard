@@ -311,10 +311,12 @@ export type GuardPolicyDecision = {
   harness: string;
   scope: DecisionScope;
   artifact_id: string | null;
+  artifact_hash?: string | null;
   workspace: string | null;
   publisher: string | null;
   action: string;
   reason: string | null;
+  source: string;
   updated_at: string;
 };
 

@@ -456,6 +456,11 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     policies_parser.add_argument("policies_command", nargs="?", choices=("clear",))
     policies_parser.add_argument("--harness")
     policies_parser.add_argument("--source")
+    policies_parser.add_argument("--scope", choices=("artifact", "workspace", "publisher", "harness", "global"))
+    policies_parser.add_argument("--artifact-id")
+    policies_parser.add_argument("--artifact-hash")
+    policies_parser.add_argument("--policy-workspace", dest="policy_workspace")
+    policies_parser.add_argument("--publisher")
     policies_parser.add_argument(
         "--all",
         action="store_true",
@@ -1272,9 +1277,19 @@ def run_guard_command(
                     getattr(args, "json", False),
                 )
                 return 2
+            scope = getattr(args, "scope", None)
+            artifact_id = getattr(args, "artifact_id", None)
+            policy_artifact_hash = getattr(args, "artifact_hash", None)
+            workspace = getattr(args, "policy_workspace", None)
+            publisher = getattr(args, "publisher", None)
             cleared = store.clear_policy_decisions(
                 None if clear_all else harness,
                 getattr(args, "source", None),
+                scope=scope,
+                artifact_id=artifact_id,
+                artifact_hash=policy_artifact_hash,
+                workspace=workspace,
+                publisher=publisher,
             )
             _emit(
                 "policies",
@@ -1283,6 +1298,11 @@ def run_guard_command(
                     "cleared": cleared,
                     "harness": None if clear_all else harness,
                     "source": getattr(args, "source", None),
+                    "scope": scope,
+                    "artifact_id": artifact_id,
+                    "artifact_hash": policy_artifact_hash,
+                    "workspace": workspace,
+                    "publisher": publisher,
                 },
                 getattr(args, "json", False),
             )
