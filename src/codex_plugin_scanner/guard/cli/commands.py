@@ -5948,6 +5948,8 @@ def _git_include_section_is_active(section: str, *, base_dir: Path, repo_dir: Pa
         )
     if condition_lower.startswith("onbranch:"):
         return _git_onbranch_condition_matches(condition[len("onbranch:") :], repo_dir=repo_dir)
+    if condition_lower.startswith("hasconfig:"):
+        return _git_hasconfig_condition_matches(condition[len("hasconfig:") :], repo_dir=repo_dir)
     return False
 
 
@@ -6008,7 +6010,45 @@ def _git_onbranch_condition_matches(pattern: str, *, repo_dir: Path) -> bool:
     prefix = "ref: refs/heads/"
     if not head.startswith(prefix):
         return False
-    return fnmatch.fnmatchcase(head.removeprefix(prefix), pattern)
+    normalized_pattern = f"{pattern}**" if pattern.endswith("/") else pattern
+    return fnmatch.fnmatchcase(head.removeprefix(prefix), normalized_pattern)
+
+
+def _git_hasconfig_condition_matches(condition: str, *, repo_dir: Path) -> bool:
+    key_pattern, _, value_pattern = condition.partition(":")
+    if not key_pattern or not value_pattern:
+        return False
+    if key_pattern.lower() != "remote.*.url":
+        return False
+    for config_path in _git_repo_config_paths(repo_dir):
+        if not config_path.is_file():
+            continue
+        try:
+            config_text = config_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return False
+        if any(fnmatch.fnmatchcase(value, value_pattern) for value in _git_remote_urls_from_config(config_text)):
+            return True
+    return False
+
+
+def _git_remote_urls_from_config(config_text: str) -> tuple[str, ...]:
+    urls: list[str] = []
+    in_remote_section = False
+    for raw_line in config_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        section_match = re.fullmatch(r"\[([^\]]+)\](?:\s*[#;].*)?", line)
+        if section_match:
+            in_remote_section = section_match.group(1).strip().lower().startswith("remote ")
+            continue
+        if not in_remote_section:
+            continue
+        key_match = re.match(r"(?i)^url\s*=\s*(.+)$", line)
+        if key_match is not None:
+            urls.append(_git_config_value_without_inline_comment(key_match.group(1)))
+    return tuple(urls)
 
 
 def _git_config_value_without_inline_comment(raw_value: str) -> str:
