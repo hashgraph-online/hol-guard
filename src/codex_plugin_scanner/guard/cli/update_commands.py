@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
+import http.client
 import importlib
 import importlib.metadata
 import json
+import os
+import shlex
+import shutil
 import sqlite3
 import subprocess
 import sys
+import sysconfig
+import urllib.error
+import urllib.request
 from pathlib import Path
+
+from packaging.version import InvalidVersion, Version
 
 from ..adapters.base import HarnessContext
 from ..adapters.codex import CodexHarnessAdapter, codex_native_hook_state
+from ..redaction import redact_sensitive_text
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 
@@ -19,6 +29,8 @@ _ALREADY_CURRENT_HINTS = (
     "already at latest version",
     "already up-to-date",
 )
+_PYPI_JSON_URL = "https://pypi.org/pypi/hol-guard/json"
+_PYPI_TIMEOUT_SECONDS = 3.0
 
 
 def run_guard_update(
@@ -36,6 +48,8 @@ def run_guard_update(
         "current_version": current_version,
         "installer": installer,
         "command": command,
+        "retry_command": _shell_command(command),
+        "binary_diagnostics": _binary_diagnostics(command, installer),
         "dry_run": dry_run,
     }
     direct_url = _direct_url_payload()
@@ -51,6 +65,7 @@ def run_guard_update(
             )
             return payload, 0
     if dry_run:
+        payload["version_check"] = _version_check_payload(current_version)
         payload["status"] = "planned"
         payload["changed"] = False
         payload["message"] = "Review the planned installer command before updating."
@@ -65,7 +80,8 @@ def run_guard_update(
     except OSError as error:
         payload["status"] = "failed"
         payload["changed"] = False
-        payload["error"] = str(error)
+        payload["error"] = redact_sensitive_text(str(error))
+        payload["message"] = "HOL Guard update failed before the installer started."
         return payload, 1
     payload["stdout"] = _normalize_output_text(result.stdout)
     payload["stderr"] = _normalize_output_text(result.stderr)
@@ -104,7 +120,56 @@ def run_guard_update(
 
 
 def _normalize_output_text(value: str) -> str:
-    return value.strip()
+    return redact_sensitive_text(value.strip())
+
+
+def _shell_command(command: list[str]) -> str:
+    if os.name == "nt":
+        return subprocess.list2cmdline(command)
+    return shlex.join(command)
+
+
+def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]:
+    resolved_binary = shutil.which("hol-guard")
+    installer_binary = command[0] if command else ""
+    expected_script_dir = _expected_script_dir(installer_binary, installer)
+    path_status = "unknown"
+    if resolved_binary is None:
+        path_status = "not_on_path"
+    elif installer == "pipx":
+        path_status = "pipx_shim_detected"
+    elif installer == "uv":
+        path_status = "uv_tool_shim_detected"
+    elif expected_script_dir is not None and _script_dir(resolved_binary) == expected_script_dir:
+        path_status = "matches_installer"
+    else:
+        path_status = "path_mismatch"
+    return {
+        "resolved_hol_guard": resolved_binary,
+        "installer_binary": installer_binary,
+        "expected_script_dir": str(expected_script_dir) if expected_script_dir is not None else None,
+        "path_status": path_status,
+    }
+
+
+def _expected_script_dir(installer_binary: str, installer: str) -> Path | None:
+    if installer != "pip" or not installer_binary:
+        return None
+    scripts_dir = sysconfig.get_path("scripts")
+    if scripts_dir:
+        return _directory_path(scripts_dir)
+    return _script_dir(installer_binary)
+
+
+def _script_dir(path: str) -> Path:
+    return _directory_path(Path(path).expanduser().parent)
+
+
+def _directory_path(path: str | Path) -> Path:
+    directory = Path(path).expanduser()
+    if not directory.is_absolute():
+        directory = Path.cwd() / directory
+    return directory.resolve(strict=False)
 
 
 def _output_lines(value: str) -> list[str]:
@@ -150,6 +215,66 @@ def _success_notes(payload: dict[str, object]) -> list[str]:
     return _output_lines(str(payload.get("stderr") or ""))
 
 
+def _version_check_payload(current_version: str) -> dict[str, object]:
+    latest_version = _latest_version_from_pypi()
+    if latest_version is None:
+        return {
+            "source": "pypi",
+            "status": "unavailable",
+            "current_version": current_version,
+            "latest_version": None,
+            "update_available": None,
+        }
+    update_available = _is_newer_version(latest_version, current_version)
+    if update_available is None:
+        return {
+            "source": "pypi",
+            "status": "unavailable",
+            "current_version": current_version,
+            "latest_version": latest_version,
+            "update_available": None,
+        }
+    return {
+        "source": "pypi",
+        "status": "stale" if update_available else "current",
+        "current_version": current_version,
+        "latest_version": latest_version,
+        "update_available": update_available,
+    }
+
+
+def _latest_version_from_pypi() -> str | None:
+    request = urllib.request.Request(_PYPI_JSON_URL, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=_PYPI_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (
+        OSError,
+        TimeoutError,
+        urllib.error.URLError,
+        http.client.IncompleteRead,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+    ):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    info = payload.get("info")
+    if not isinstance(info, dict):
+        return None
+    version = info.get("version")
+    return version if isinstance(version, str) and version.strip() else None
+
+
+def _is_newer_version(latest_version: str, current_version: str) -> bool | None:
+    try:
+        latest = Version(latest_version)
+        current = Version(current_version)
+    except InvalidVersion:
+        return None
+    return latest > current
+
+
 def _current_version() -> str:
     try:
         return importlib.metadata.version("hol-guard")
@@ -159,14 +284,19 @@ def _current_version() -> str:
 
 def _installer_kind() -> str:
     prefix_path = Path(sys.prefix).resolve()
+    normalized_prefix = prefix_path.as_posix().lower()
+    if "/uv/tools/" in normalized_prefix:
+        return "uv"
     if (prefix_path / "pipx_metadata.json").exists():
         return "pipx"
-    if "/pipx/venvs/" in prefix_path.as_posix().lower():
+    if "/pipx/venvs/" in normalized_prefix:
         return "pipx"
     return "pip"
 
 
 def _update_command(installer: str) -> list[str]:
+    if installer == "uv":
+        return ["uv", "tool", "upgrade", "hol-guard"]
     if installer == "pipx":
         return ["pipx", "upgrade", "hol-guard"]
     return [sys.executable, "-m", "pip", "install", "--upgrade", "hol-guard"]

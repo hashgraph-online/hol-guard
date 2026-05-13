@@ -20,7 +20,7 @@ from ..codex_config import read_toml_payload, write_toml_payload
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _command_available
+from .base import HarnessAdapter, HarnessContext, _command_available, _warnings_include_setup_failure
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
@@ -543,6 +543,8 @@ class CodexHarnessAdapter(HarnessAdapter):
                 "`hol-guard install codex` or `hol-guard update` to repair protection."
             )
         payload["warnings"] = warnings
+        if payload.get("setup_status") == "active" and _warnings_include_setup_failure(warnings):
+            payload["setup_status"] = "broken"
         payload["native_hook_state"] = hook_state
         return payload
 

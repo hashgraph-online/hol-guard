@@ -44,6 +44,9 @@ assert(snapshot.cloud_pairing_state.inbox_url === snapshot.inbox_url, "demo inbo
 assert(snapshot.cloud_pairing_state.fleet_url === snapshot.fleet_url, "demo fleet URL is preserved");
 assert(snapshot.cloud_pairing_state.connect_url === snapshot.connect_url, "demo connect URL is preserved");
 assert(snapshot.cloud_sync_health.state === "pending", "demo snapshot exposes pending Cloud sync health");
+assert(snapshot.device.local_registered === true, "demo snapshot exposes local device registration");
+assert(snapshot.latest_connect_state?.milestone === "first_sync_pending", "demo snapshot exposes latest connect state");
+assert(snapshot.proof_status.state === "pending", "demo snapshot exposes proof status");
 
 const expectedSyncHealthLabels = {
   healthy: "Cloud sync healthy",
