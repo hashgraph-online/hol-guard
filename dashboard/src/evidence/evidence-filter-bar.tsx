@@ -68,27 +68,27 @@ function SearchInput({ value, onChange }: SearchInputProps) {
   }, [onChange]);
 
   return (
-    <label className="relative flex flex-1 min-w-[180px] items-center">
+    <label className="relative flex flex-1 min-w-[160px] items-center">
       <span className="sr-only">Search evidence</span>
       <HiMiniMagnifyingGlass
-        className="absolute left-3 h-4 w-4 text-slate-400 pointer-events-none"
+        className="absolute left-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none"
         aria-hidden="true"
       />
       <input
         type="search"
         value={value}
         onChange={handleChange}
-        placeholder="Search artifact, app, capability..."
-        className="min-h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-8 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        placeholder="Search..."
+        className="min-h-8 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-7 text-xs text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
       />
       {value && (
         <button
           type="button"
           onClick={handleClear}
           aria-label="Clear search"
-          className="absolute right-2 flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+          className="absolute right-2 flex h-4 w-4 items-center justify-center rounded-full text-slate-400 hover:text-slate-600 transition-colors"
         >
-          <HiMiniXMark className="h-4 w-4" aria-hidden="true" />
+          <HiMiniXMark className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       )}
     </label>
@@ -198,15 +198,15 @@ export function EvidenceFilterBar({
   const isFiltered = filteredCount !== totalCount;
 
   return (
-    <div className="space-y-2" aria-label="Evidence filters">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-1.5" aria-label="Evidence filters">
+      <div className="flex flex-wrap items-center gap-1.5">
         <SearchInput value={filters.search} onChange={handleSearchChange} />
 
         <select
           value={filters.time}
           onChange={handleTimeChange}
           aria-label="Time period"
-          className="min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          className="min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         >
           {(Object.entries(EVIDENCE_TIME_LABELS) as [EvidenceTimeFilter, string][]).map(
             ([val, label]) => (
@@ -221,7 +221,7 @@ export function EvidenceFilterBar({
           value={filters.decision}
           onChange={handleDecisionChange}
           aria-label="Decision filter"
-          className="min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          className="min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         >
           {(Object.entries(EVIDENCE_DECISION_LABELS) as [EvidenceDecision, string][]).map(
             ([val, label]) => (
@@ -237,24 +237,24 @@ export function EvidenceFilterBar({
           onClick={handleToggleMore}
           aria-expanded={showMore}
           aria-label="Toggle more filters"
-          className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark hover:bg-slate-50 transition-colors"
+          className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark hover:bg-slate-50 transition-colors"
         >
-          <HiFunnel className="h-4 w-4" aria-hidden="true" />
+          <HiFunnel className="h-3.5 w-3.5" aria-hidden="true" />
           {showMore ? (
-            <HiMiniChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
+            <HiMiniChevronUp className="h-3 w-3" aria-hidden="true" />
           ) : (
-            <HiMiniChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+            <HiMiniChevronDown className="h-3 w-3" aria-hidden="true" />
           )}
         </button>
       </div>
 
       {showMore && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-100 bg-slate-50/80 p-3">
+        <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50/60 p-2">
           <select
             value={filters.harness}
             onChange={handleHarnessChange}
             aria-label="App filter"
-            className="min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            className="min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           >
             <option value="all">All apps</option>
             {harnesses.map((h) => (
@@ -268,7 +268,7 @@ export function EvidenceFilterBar({
             value={filters.category}
             onChange={handleCategoryChange}
             aria-label="Category filter"
-            className="min-h-9 rounded-lg border border-slate-200 bg-white px-2.5 text-sm font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            className="min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
           >
             {CATEGORY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -277,28 +277,28 @@ export function EvidenceFilterBar({
             ))}
           </select>
 
-          <label className="flex items-center gap-2 text-sm text-brand-dark">
+          <label className="flex items-center gap-1.5 text-xs text-brand-dark">
             <span className="shrink-0 text-xs font-medium text-slate-500">
-              Source scope:
+              Scope:
             </span>
             <input
               type="text"
               value={filters.sourceScope}
               onChange={handleSourceScopeChange}
               placeholder="e.g. workspace, global"
-              className="min-h-9 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+              className="min-h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
             />
           </label>
           {filters.day && (
             <span className="text-xs text-slate-500">
-              Filtered by day: <strong>{filters.day}</strong>
+              Day: <strong>{filters.day}</strong>
             </span>
           )}
         </div>
       )}
 
       {hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1">
           {filters.search && (
             <ActiveChip label={`"${filters.search}"`} onRemove={handleRemoveSearch} />
           )}
@@ -348,10 +348,10 @@ export function EvidenceFilterBar({
         </div>
       )}
 
-      <p className="text-xs text-slate-500">
+      <p className="text-[11px] text-slate-400">
         {isFiltered
-          ? `Showing ${filteredCount} of ${totalCount} actions (filtered)`
-          : `Showing all ${totalCount} actions`}
+          ? `${filteredCount} of ${totalCount} shown`
+          : `${totalCount} total`}
       </p>
     </div>
   );

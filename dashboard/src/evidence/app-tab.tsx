@@ -61,7 +61,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
 
   if (appReceipts.length === 0) {
     return (
-      <div className="rounded-xl border border-slate-100 bg-white/60 p-6 text-center">
+      <div className="py-12 text-center">
         <p className="text-sm text-slate-500">No activity yet.</p>
         <p className="mt-1 text-xs text-slate-400">App activity will appear here after Guard makes decisions.</p>
       </div>
@@ -75,13 +75,13 @@ function AppTabRaw({ receipts }: AppTabProps) {
     const color = harnessColor(selectedApp);
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-5">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setSelectedApp(null)}
-            className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100"
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100"
           >
-            ← Back to apps
+            ← Back
           </button>
           <a
             href={guardAwareHref(`/apps/${encodeURIComponent(selectedApp)}`)}
@@ -93,40 +93,36 @@ function AppTabRaw({ receipts }: AppTabProps) {
           </a>
         </div>
 
-        <div className="rounded-xl border border-slate-100 bg-white/60 p-4">
-          <div className="flex items-center gap-3">
-            <span
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
-              style={{ backgroundColor: color }}
-            >
-              {selectedApp[0]?.toUpperCase()}
-            </span>
-            <div>
-              <h2 className="text-lg font-semibold text-brand-dark">{harnessDisplayName(selectedApp)}</h2>
-              <p className="text-sm text-slate-500">
-                {items.length} action{items.length !== 1 ? "s" : ""} · {allowed} allowed · {blocked} stopped
-              </p>
-            </div>
+        <div className="flex items-center gap-3">
+          <span
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
+            style={{ backgroundColor: color }}
+          >
+            {selectedApp[0]?.toUpperCase()}
+          </span>
+          <div>
+            <h2 className="text-base font-semibold text-brand-dark">{harnessDisplayName(selectedApp)}</h2>
+            <p className="text-xs text-slate-500">
+              {items.length} action{items.length !== 1 ? "s" : ""} · {allowed} allowed · {blocked} stopped
+            </p>
           </div>
         </div>
 
         <AppSparkline items={items} />
 
-        <div className="space-y-2">
+        <div className="space-y-0 divide-y divide-slate-100/60">
           {items.map((receipt) => (
             <div
               key={receipt.receipt_id}
-              className="rounded-xl border border-slate-100 bg-white p-3"
+              className="flex items-start justify-between gap-3 py-2"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-brand-dark">{plainEnglishDescription(receipt)}</p>
-                  <p className="mt-0.5 text-xs text-slate-400">{formatRelativeTime(receipt.timestamp)}</p>
-                </div>
-                <span className={`shrink-0 text-xs font-medium ${receipt.policy_decision === "allow" ? "text-brand-green" : "text-brand-attention"}`}>
-                  {receipt.policy_decision === "allow" ? "Allowed" : "Stopped"}
-                </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-brand-dark">{plainEnglishDescription(receipt)}</p>
+                <p className="mt-0.5 text-xs text-slate-400">{formatRelativeTime(receipt.timestamp)}</p>
               </div>
+              <span className={`shrink-0 text-xs font-medium ${receipt.policy_decision === "allow" ? "text-emerald-500" : "text-brand-attention"}`}>
+                {receipt.policy_decision === "allow" ? "Allowed" : "Stopped"}
+              </span>
             </div>
           ))}
         </div>
@@ -135,7 +131,7 @@ function AppTabRaw({ receipts }: AppTabProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <label className="block">
         <span className="sr-only">Search apps</span>
         <input
@@ -143,48 +139,50 @@ function AppTabRaw({ receipts }: AppTabProps) {
           value={searchTerm}
           onChange={handleSearchChange}
           placeholder="Search apps..."
-          className="min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          className="min-h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-brand-dark placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         />
       </label>
 
-      {filteredApps.map(([harness, items]) => {
-        const allowed = items.filter((r) => r.policy_decision === "allow").length;
-        const blocked = items.filter((r) => r.policy_decision === "block").length;
-        const lastActive = items[0]?.timestamp;
-        const color = harnessColor(harness);
+      <div className="space-y-0 divide-y divide-slate-100/60">
+        {filteredApps.map(([harness, items]) => {
+          const allowed = items.filter((r) => r.policy_decision === "allow").length;
+          const blocked = items.filter((r) => r.policy_decision === "block").length;
+          const lastActive = items[0]?.timestamp;
+          const color = harnessColor(harness);
 
-        return (
-          <button
-            key={harness}
-            onClick={() => {
-              setSelectedApp(harness);
-            }}
-            className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white p-3 text-left transition-all hover:border-slate-200 hover:bg-slate-50/50"
-          >
-            <div className="flex items-center gap-3">
-              <span
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
-                style={{ backgroundColor: color }}
-              >
-                {harness[0]?.toUpperCase()}
-              </span>
-              <div>
-                <p className="text-sm font-medium text-brand-dark">{harnessDisplayName(harness)}</p>
-                <p className="text-xs text-slate-500">
-                  {items.length} actions · {allowed} allowed · {blocked} stopped
-                </p>
-                {lastActive && (
-                  <p className="text-xs text-slate-400">Last active {formatRelativeTime(lastActive)}</p>
-                )}
+          return (
+            <button
+              key={harness}
+              onClick={() => {
+                setSelectedApp(harness);
+              }}
+              className="flex w-full items-center justify-between gap-3 py-2.5 text-left transition-colors hover:bg-slate-50/50 rounded-lg px-2 -mx-2"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white shrink-0"
+                  style={{ backgroundColor: color }}
+                >
+                  {harness[0]?.toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-brand-dark truncate">{harnessDisplayName(harness)}</p>
+                  <p className="text-xs text-slate-500">
+                    {items.length} actions · {allowed} allowed · {blocked} stopped
+                  </p>
+                  {lastActive && (
+                    <p className="text-xs text-slate-400">Last active {formatRelativeTime(lastActive)}</p>
+                  )}
+                </div>
               </div>
-            </div>
-            <HiMiniChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />
-          </button>
-        );
-      })}
+              <HiMiniChevronRight className="h-4 w-4 text-slate-300 shrink-0" aria-hidden="true" />
+            </button>
+          );
+        })}
+      </div>
 
       {filteredApps.length === 0 && (
-        <div className="rounded-xl border border-slate-100 bg-white/60 p-6 text-center">
+        <div className="py-8 text-center">
           <p className="text-sm text-slate-500">No apps match your search.</p>
         </div>
       )}
@@ -209,13 +207,13 @@ function AppSparkline({ items }: { items: GuardReceipt[] }) {
 
   const max = Math.max(...buckets, 1);
   const width = 200;
-  const height = 40;
+  const height = 32;
   const barWidth = width / buckets.length;
 
   return (
-    <div className="rounded-xl border border-slate-100 bg-white p-3">
-      <p className="text-xs font-medium text-slate-500">Last 7 days</p>
-      <svg viewBox={`0 0 ${width} ${height}`} className="mt-2 h-10 w-full" preserveAspectRatio="none">
+    <div className="py-1">
+      <p className="text-[11px] font-medium text-slate-400">Last 7 days</p>
+      <svg viewBox={`0 0 ${width} ${height}`} className="mt-1 h-8 w-full" preserveAspectRatio="none">
         {buckets.map((count, i) => {
           const barHeight = (count / max) * height;
           return (

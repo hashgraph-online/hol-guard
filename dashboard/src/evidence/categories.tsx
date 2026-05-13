@@ -1,3 +1,4 @@
+import React from "react";
 import type { GuardReceipt } from "../guard-types";
 import {
   HiMiniLockClosed,

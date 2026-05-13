@@ -22,14 +22,14 @@ function TrendBar({ bucket, maxTotal }: TrendBarProps) {
   const allowedPct = total > 0 ? (bucket.allowed / total) * 100 : 0;
 
   return (
-    <div className="flex flex-col items-center gap-1 flex-1">
+    <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
       <div
         className="w-full rounded-sm overflow-hidden flex flex-col-reverse bg-slate-100"
         style={{ height: 48 }}
         aria-label={`${bucket.label}: ${total} actions`}
       >
         <div
-          className="w-full bg-green-300 transition-all"
+          className="w-full bg-emerald-300 transition-all"
           style={{ height: `${heightPct * (allowedPct / 100)}%` }}
           aria-hidden="true"
         />
@@ -74,19 +74,19 @@ function AppBreakdownRow({
       type="button"
       onClick={handleClick}
       aria-label={`Filter by app ${harnessDisplayName(harness)}`}
-      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors text-left"
+      className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-slate-50 transition-colors text-left"
     >
       <span className="text-sm font-medium text-brand-dark w-28 shrink-0 truncate">
         {harnessDisplayName(harness)}
       </span>
-      <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+      <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
         <div
-          className="bg-brand-blue h-2 rounded-full transition-all"
+          className="bg-brand-blue h-1.5 rounded-full transition-all"
           style={{ width: `${pct}%` }}
           aria-hidden="true"
         />
       </div>
-      <span className="text-xs tabular-nums text-slate-500 shrink-0">{total}</span>
+      <span className="text-xs tabular-nums text-slate-500 shrink-0 w-6 text-right">{total}</span>
       {blocked > 0 && (
         <span className="text-[10px] font-medium text-brand-attention shrink-0">
           {blocked} blocked
@@ -123,7 +123,7 @@ function CategoryBreakdownRow({
       type="button"
       onClick={handleClick}
       aria-label={`Filter by category ${catInfo.label}`}
-      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors text-left"
+      className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-slate-50 transition-colors text-left"
     >
       <span className={`shrink-0 ${catInfo.color}`} aria-hidden="true">
         {catInfo.icon}
@@ -131,14 +131,14 @@ function CategoryBreakdownRow({
       <span className="text-sm font-medium text-brand-dark w-24 shrink-0 truncate">
         {catInfo.label}
       </span>
-      <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+      <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
         <div
-          className="bg-brand-purple h-2 rounded-full transition-all"
+          className="bg-brand-purple h-1.5 rounded-full transition-all"
           style={{ width: `${pct}%` }}
           aria-hidden="true"
         />
       </div>
-      <span className="text-xs tabular-nums text-slate-500 shrink-0">{total}</span>
+      <span className="text-xs tabular-nums text-slate-500 shrink-0 w-6 text-right">{total}</span>
       {blocked > 0 && (
         <span className="text-[10px] font-medium text-brand-attention shrink-0">
           {blocked} blocked
@@ -154,7 +154,7 @@ interface SectionHeadingProps {
 
 function SectionHeading({ children }: SectionHeadingProps) {
   return (
-    <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 px-3">
+    <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 px-2">
       {children}
     </h3>
   );
@@ -193,9 +193,10 @@ export function EvidenceAnalyticsPanel({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+      {/* 7-day trend - minimal card */}
+      <div className="space-y-2">
         <SectionHeading>7-day trend</SectionHeading>
-        <div className="flex items-end gap-1.5 px-3 pt-2">
+        <div className="flex items-end gap-1.5 px-2 pt-1">
           {metrics.trendBuckets.map((bucket) => (
             <TrendBar
               key={bucket.dateKey}
@@ -204,9 +205,9 @@ export function EvidenceAnalyticsPanel({
             />
           ))}
         </div>
-        <div className="flex items-center gap-3 px-3 text-[11px] text-slate-400">
+        <div className="flex items-center gap-3 px-2 text-[11px] text-slate-400">
           <span className="flex items-center gap-1">
-            <span className="inline-block h-2 w-2 rounded-sm bg-green-300" aria-hidden="true" />
+            <span className="inline-block h-2 w-2 rounded-sm bg-emerald-300" aria-hidden="true" />
             Allowed
           </span>
           <span className="flex items-center gap-1">
@@ -216,8 +217,9 @@ export function EvidenceAnalyticsPanel({
         </div>
       </div>
 
+      {/* By app - flat list */}
       {sortedHarnesses.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
+        <div className="space-y-1">
           <SectionHeading>By app</SectionHeading>
           <div className="space-y-0.5">
             {sortedHarnesses.map(([harness, counts]) => (
@@ -234,8 +236,9 @@ export function EvidenceAnalyticsPanel({
         </div>
       )}
 
+      {/* By category - flat list */}
       {sortedCategories.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
+        <div className="space-y-1">
           <SectionHeading>By category</SectionHeading>
           <div className="space-y-0.5">
             {sortedCategories.map(([cat, counts]) => (
@@ -252,14 +255,15 @@ export function EvidenceAnalyticsPanel({
         </div>
       )}
 
+      {/* Top recurring - flat list */}
       {metrics.topRecurring.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
+        <div className="space-y-1">
           <SectionHeading>Top recurring actions</SectionHeading>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100/60">
             {metrics.topRecurring.slice(0, 5).map((action) => (
               <div
                 key={action.name}
-                className="flex items-center justify-between px-3 py-2"
+                className="flex items-center justify-between px-2 py-1.5"
               >
                 <span className="text-sm text-brand-dark truncate">{action.name}</span>
                 <div className="flex items-center gap-2 shrink-0">
