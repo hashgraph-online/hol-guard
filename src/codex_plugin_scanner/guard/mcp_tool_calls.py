@@ -536,7 +536,7 @@ def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
     return f"{signals[0].capitalize()}, and it also {', and it also '.join(signals[1:])}."
 
 
-_INLINE_SOURCES = frozenset({"inline-approved", "inline-denied"})
+_INLINE_SOURCES = frozenset({"inline-approved", "inline-denied", "native-approved", "claude-native-approved"})
 _POLICY_SOURCES = frozenset(
     {
         "heuristic",

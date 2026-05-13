@@ -1935,7 +1935,7 @@ def run_guard_command(
                         artifact_name=artifact_name,
                         source_scope=runtime_artifact.source_scope,
                         user_override="claude-native-approve",
-                        approval_source="approval_center",
+                        approval_source="inline",
                     )
                     store.add_receipt(receipt)
                 return 0

@@ -214,6 +214,8 @@ class TestMapApprovalSource:
     @pytest.mark.parametrize("decision_source,expected", [
         ("inline-approved", "inline"),
         ("inline-denied", "inline"),
+        ("native-approved", "inline"),
+        ("claude-native-approved", "inline"),
         ("policy-allow", "policy"),
         ("policy-block", "policy"),
         ("policy_allow", "policy"),
