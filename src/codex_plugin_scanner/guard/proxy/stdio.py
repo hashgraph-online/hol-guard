@@ -1,7 +1,5 @@
 """Local stdio MCP proxy helpers."""
 
-# ruff: noqa: E501
-
 from __future__ import annotations
 
 import json
@@ -234,7 +232,6 @@ class StdioGuardProxy:
                 event["path_summary"] = sensitive_request.path_match.normalized_path
                 event["risk_summary"] = runtime_artifact.metadata.get("runtime_request_summary")
                 if self.guard_store is not None:
-                    # fmt: off
                     self.guard_store.add_receipt(
                         build_receipt(
                             harness=self.harness,
@@ -246,10 +243,13 @@ class StdioGuardProxy:
                             provenance_summary=f"runtime MCP tool request evaluated from {self._policy_path()}",
                             artifact_name=runtime_artifact.name,
                             source_scope=runtime_artifact.source_scope,
-                            approval_source="approval_center" if policy_action == "require-reapproval" and self.approval_center_url is not None else "policy",
+                            approval_source=(
+                                "approval_center"
+                                if policy_action == "require-reapproval" and self.approval_center_url is not None
+                                else "policy"
+                            ),
                         )
                     )
-                    # fmt: on
                 if policy_action in {"block", "sandbox-required", "require-reapproval"}:
                     event["decision"] = "block"
                     blocked_message = (
