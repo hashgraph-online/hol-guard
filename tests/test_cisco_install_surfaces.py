@@ -25,13 +25,16 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "cisco-ai-mcp-scanner~=4.6" in cisco_extra
     assert "python_version >= '3.11'" in cisco_extra
     assert "cisco-ai-skill-scanner~=2.0.9" in dependency_entries
+    assert "aiohttp==3.13.5" in override_entries
     assert "click==8.3.3" in override_entries
     assert "cisco-ai-skill-scanner==2.0.9" in override_entries
+    assert "importlib-metadata==9.0.0" in override_entries
     assert "jsonschema==4.26.0" in override_entries
     assert "litellm==1.83.0" in override_entries
     assert "openai==2.36.0" in override_entries
     assert "python-dotenv==1.2.2" in override_entries
     assert "python-multipart==0.0.28" in override_entries
+    assert "tokenizers==0.23.1" in override_entries
     assert "urllib3==2.7.0" in override_entries
     assert "cisco-ai-a2a-scanner" not in dependencies
     assert "cisco-ai-a2a-scanner" not in cisco_extra
@@ -81,10 +84,13 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     requirements_copy_index = dockerfile.index("COPY docker-requirements.txt LICENSE README.md /app/")
     source_copy_index = dockerfile.index("COPY src /app/src")
     assert requirements_copy_index < source_copy_index
+    assert "aiohttp==3.13.5" in docker_requirements
     assert "cisco-ai-mcp-scanner==" in docker_requirements
+    assert "importlib-metadata==9.0.0" in docker_requirements
     assert "litellm==1.83.0" in docker_requirements
     assert "python-dotenv==1.2.2" in docker_requirements
     assert "python-multipart==0.0.28" in docker_requirements
+    assert "tokenizers==0.23.1" in docker_requirements
     assert "--hash=sha256:" in docker_requirements
     assert "uv sync --extra dev" in contributing
     assert "uv sync --extra dev --extra cisco" in contributing
