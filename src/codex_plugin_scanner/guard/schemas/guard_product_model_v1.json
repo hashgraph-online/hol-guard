@@ -287,7 +287,7 @@
         "manager"
       ],
       "auth_required": true,
-      "writes_state": false
+      "writes_state": true
     },
     {
       "route": "/evidence",
@@ -309,7 +309,28 @@
   ],
   "local_apis": [
     {
+      "path": "/v1/harnesses",
+      "method": "GET",
+      "category": "config",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/harnesses/{harness}/{action}",
+      "method": "POST",
+      "category": "supply_chain",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
       "path": "/v1/requests",
+      "method": "GET",
+      "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/requests/{id}",
       "method": "GET",
       "category": "unknown",
       "auth_required": true,
@@ -337,9 +358,23 @@
       "writes_state": false
     },
     {
+      "path": "/v1/evidence",
+      "method": "DELETE",
+      "category": "destructive",
+      "auth_required": true,
+      "writes_state": true
+    },
+    {
       "path": "/v1/evidence/export",
       "method": "GET",
       "category": "unknown",
+      "auth_required": true,
+      "writes_state": false
+    },
+    {
+      "path": "/v1/settings",
+      "method": "GET",
+      "category": "config",
       "auth_required": true,
       "writes_state": false
     },

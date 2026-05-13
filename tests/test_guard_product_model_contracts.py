@@ -175,7 +175,6 @@ def test_copy_lint_and_brand_contracts_are_explicit() -> None:
 
 def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     routes = {route.route: route for route in LOCAL_ROUTE_OWNERSHIP}
-    apis = {api.path: api for api in LOCAL_API_OWNERSHIP}
 
     assert routes["/"].auth_required is False
     assert routes["/inbox"].writes_state is True
@@ -183,13 +182,19 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     assert routes["/requests/{id}"].writes_state is True
     assert routes["/approvals"].writes_state is True
     assert routes["/approvals/{id}"].writes_state is True
-    assert routes["/fleet"].writes_state is False
+    assert routes["/fleet"].writes_state is True
     assert routes["/evidence"].writes_state is False
     for route in routes:
         assert _GuardDaemonHandler._is_dashboard_route(route)
-    assert apis["/v1/requests/{id}/approve"].writes_state is True
-    assert apis["/v1/evidence/export"].auth_required is True
-    assert apis["/v1/settings"].category == "config"
+    apis_by_method = {(api.method, api.path): api for api in LOCAL_API_OWNERSHIP}
+    assert apis_by_method[("GET", "/v1/harnesses")].writes_state is False
+    assert apis_by_method[("POST", "/v1/harnesses/{harness}/{action}")].writes_state is True
+    assert apis_by_method[("GET", "/v1/requests/{id}")].writes_state is False
+    assert apis_by_method[("POST", "/v1/requests/{id}/approve")].writes_state is True
+    assert apis_by_method[("DELETE", "/v1/evidence")].category == "destructive"
+    assert apis_by_method[("GET", "/v1/evidence/export")].auth_required is True
+    assert apis_by_method[("GET", "/v1/settings")].writes_state is False
+    assert apis_by_method[("POST", "/v1/settings")].category == "config"
 
 
 def test_exported_json_fixture_matches_runtime_contract() -> None:

@@ -202,7 +202,7 @@ LOCAL_ROUTE_OWNERSHIP = (
         auth_required=True,
         writes_state=True,
     ),
-    RouteOwnership(route="/fleet", persona=("solo_engineer", "manager"), auth_required=True, writes_state=False),
+    RouteOwnership(route="/fleet", persona=("solo_engineer", "manager"), auth_required=True, writes_state=True),
     RouteOwnership(
         route="/evidence",
         persona=("solo_engineer", "security_lead"),
@@ -212,7 +212,16 @@ LOCAL_ROUTE_OWNERSHIP = (
     RouteOwnership(route="/settings", persona=("solo_engineer",), auth_required=True, writes_state=True),
 )
 LOCAL_API_OWNERSHIP = (
+    ApiOwnership(path="/v1/harnesses", method="GET", category="config", auth_required=True, writes_state=False),
+    ApiOwnership(
+        path="/v1/harnesses/{harness}/{action}",
+        method="POST",
+        category="supply_chain",
+        auth_required=True,
+        writes_state=True,
+    ),
     ApiOwnership(path="/v1/requests", method="GET", category="unknown", auth_required=True, writes_state=False),
+    ApiOwnership(path="/v1/requests/{id}", method="GET", category="unknown", auth_required=True, writes_state=False),
     ApiOwnership(
         path="/v1/requests/{id}/approve",
         method="POST",
@@ -228,7 +237,9 @@ LOCAL_API_OWNERSHIP = (
         writes_state=True,
     ),
     ApiOwnership(path="/v1/evidence", method="GET", category="unknown", auth_required=True, writes_state=False),
+    ApiOwnership(path="/v1/evidence", method="DELETE", category="destructive", auth_required=True, writes_state=True),
     ApiOwnership(path="/v1/evidence/export", method="GET", category="unknown", auth_required=True, writes_state=False),
+    ApiOwnership(path="/v1/settings", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/settings", method="POST", category="config", auth_required=True, writes_state=True),
 )
 
