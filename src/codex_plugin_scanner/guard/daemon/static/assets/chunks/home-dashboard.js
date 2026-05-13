@@ -1,6 +1,62 @@
-import { r as reactExports, i as isDisplayableHarness, j as jsxRuntimeExports, E as EmptyState, A as ActionButton, H as HiMiniCheckCircle, G as GuardHero, P as ProofStrip, f as formatNumber, a as HiMiniFire, b as HiMiniCalendarDays, c as HiMiniShieldCheck, S as SectionLabel, h as harnessDisplayName, d as formatRelativeTime, e as HiMiniSparkles, g as HiMiniXMark, B as Badge, k as HiMiniChevronRight, l as HiMiniChevronUp, m as HiMiniChevronDown, n as HiMiniExclamationTriangle, o as HiMiniBolt, p as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { r as reactExports, h as harnessDisplayName, i as isDisplayableHarness, j as jsxRuntimeExports, E as EmptyState, A as ActionButton, H as HiMiniCheckCircle, G as GuardHero, P as ProofStrip, f as formatNumber, a as HiMiniShieldCheck, S as SectionLabel, b as formatRelativeTime, c as HiMiniSparkles, d as HiMiniXMark, e as HiMiniChevronUp, g as HiMiniChevronDown, k as HiMiniCloud, l as HiMiniQuestionMarkCircle, m as HiMiniExclamationTriangle, n as HiMiniBolt, B as Badge, o as HiMiniChevronRight, p as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { u as useFocusTrap } from "./use-focus-trap.js";
-import { D as DeviceProofCard } from "./runtime-overview.js";
+import { D as DeviceProofCard, r as resolveCloudIntelCopy } from "./runtime-overview.js";
+const safeLocalStorage = {
+  getItem(key) {
+    try {
+      return typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+    } catch {
+      return null;
+    }
+  },
+  setItem(key, value) {
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(key, value);
+      }
+    } catch {
+      return;
+    }
+  }
+};
+const STREAK_MILESTONE_MESSAGES = {
+  7: "One week of Guard activity on this machine.",
+  14: "Two weeks of consistent Guard coverage.",
+  30: "A full month of daily Guard coverage."
+};
+function resolveCloudUpsellVisible(pendingCount, cloudState) {
+  if (pendingCount > 0) return false;
+  return cloudState === "local_only";
+}
+function buildEmptyStateCopy() {
+  return {
+    title: "No apps connected",
+    body: "Connect an AI app so Guard can start protecting it. Guard works with Codex, Claude Code, Cursor, Hermes, and more.",
+    installHint: "hol-guard install"
+  };
+}
+function buildDaemonErrorCopy() {
+  return {
+    title: "Guard is not responding",
+    body: "The local Guard service is not reachable. Go to Settings to repair the connection and restore protection.",
+    primaryCta: "Go to Settings",
+    secondaryCta: "Open review queue"
+  };
+}
+function redactHomeArtifactLabel(value) {
+  if (value === null || value.trim().length === 0) {
+    return "a local action";
+  }
+  const trimmed = value.trim();
+  if (trimmed.includes("/") || trimmed.includes("\\") || trimmed.includes("~") || trimmed.includes(":") || trimmed.length > 48) {
+    return "a local action";
+  }
+  return trimmed;
+}
+function buildRecentProtectionCopy(receipt) {
+  const decisionLabel = receipt.policy_decision === "block" ? "blocked" : "allowed";
+  return `${harnessDisplayName(receipt.harness)} ${decisionLabel} ${redactHomeArtifactLabel(receipt.artifact_name)}`;
+}
 function HomeWorkspace(props) {
   const [toastMessage, setToastMessage] = reactExports.useState(null);
   const toastTimerRef = reactExports.useRef(null);
@@ -17,6 +73,15 @@ function HomeWorkspace(props) {
   const handleClearPolicies = reactExports.useCallback((scope) => {
     props.onClearPolicies(scope);
   }, [props.onClearPolicies]);
+  const handleConfirmClearWithToast = reactExports.useCallback(async () => {
+    const confirm = props.clearConfirm;
+    await props.onConfirmClear();
+    if (confirm?.harness) {
+      showToast(`Cleared for ${harnessDisplayName(confirm.harness)}`);
+    } else if (confirm?.all) {
+      showToast("Cleared all decisions");
+    }
+  }, [props.clearConfirm, props.onConfirmClear, showToast]);
   const snapshot = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
   const queuedCount = props.requests.kind === "ready" ? props.requests.items.length : 0;
   const policyItems = props.policies.kind === "ready" ? props.policies.items : [];
@@ -40,9 +105,15 @@ function HomeWorkspace(props) {
     }),
     [activeInstalls.length, observedHarnesses.length, queuedCount, watchedAppsCount]
   );
-  const dailyStory = reactExports.useMemo(() => snapshot ? buildDailyStory(snapshot.latest_receipts, queuedCount) : null, [snapshot, queuedCount]);
+  const dailyStory = reactExports.useMemo(
+    () => snapshot ? buildDailyStory(snapshot.latest_receipts, queuedCount) : null,
+    [snapshot, queuedCount]
+  );
   const streak = reactExports.useMemo(() => snapshot ? computeStreak(snapshot.latest_receipts) : 0, [snapshot]);
-  const weeklySummary = reactExports.useMemo(() => snapshot ? buildWeeklySummary(snapshot.latest_receipts) : null, [snapshot]);
+  const cloudUpsellVisible = reactExports.useMemo(
+    () => snapshot ? resolveCloudUpsellVisible(queuedCount, snapshot.cloud_state) : false,
+    [snapshot, queuedCount]
+  );
   const ctaAction = state.ctaTarget === "inbox" ? props.onOpenInbox : state.ctaTarget === "fleet" ? props.onOpenFleet : props.onOpenEvidence;
   if (props.runtime.kind === "loading" || props.requests.kind === "loading") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
@@ -51,12 +122,16 @@ function HomeWorkspace(props) {
     ] });
   }
   if (props.runtime.kind === "error") {
+    const errorCopy = buildDaemonErrorCopy();
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
-        title: "Guard is not connected",
-        body: props.runtime.message,
-        action: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onOpenInbox, children: "Open review queue" }),
+        title: errorCopy.title,
+        body: errorCopy.body,
+        action: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onOpenSettings, children: errorCopy.primaryCta }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onOpenInbox, children: errorCopy.secondaryCta })
+        ] }),
         tone: "teach"
       }
     );
@@ -82,7 +157,6 @@ function HomeWorkspace(props) {
         items: [
           { label: "Pending", value: formatNumber(queuedCount), tone: queuedCount > 0 ? "blue" : "slate" },
           { label: "Apps", value: formatNumber(watchedAppsCount), tone: watchedAppsCount > 0 ? "green" : "slate" },
-          { label: "Streak", value: formatNumber(streak), tone: streak > 1 ? "purple" : "slate", icon: streak > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniFire, { className: "h-3.5 w-3.5 text-brand-purple", "aria-hidden": "true" }) : null, hint: streak > 0 ? "Consecutive days with Guard activity. Resets after 48h of inactivity." : "Guard activity streak" },
           { label: "History", value: formatNumber(snapshot?.receipt_count ?? 0), tone: "purple" }
         ]
       }
@@ -107,30 +181,6 @@ function HomeWorkspace(props) {
             observedHarnesses,
             queuedItems: props.requests.kind === "ready" ? props.requests.items : [],
             onOpenAppDetail: props.onOpenAppDetail
-          }
-        ),
-        weeklySummary && /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          CollapsibleCard,
-          {
-            id: "weekly-summary",
-            icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCalendarDays, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-purple", "aria-hidden": "true" }),
-            label: "This week",
-            defaultOpen: true,
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: weeklySummary.body }),
-              weeklySummary.stats && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap gap-2", children: weeklySummary.stats.map((s) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "span",
-                {
-                  className: "rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-brand-dark",
-                  children: [
-                    s.value,
-                    " ",
-                    s.label
-                  ]
-                },
-                s.label
-              )) })
-            ]
           }
         ),
         dailyStory && /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -160,6 +210,15 @@ function HomeWorkspace(props) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-6", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(DeviceProofCard, { device: snapshot.device, proofStatus: snapshot.proof_status }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          CloudStatusCard,
+          {
+            snapshot,
+            showUpsell: cloudUpsellVisible,
+            onOpenSettings: props.onOpenSettings
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(KeyboardHelpCard, { onOpenHelp: props.onOpenHelp }),
         snapshot.latest_receipts.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(RecentProtectionSection, { receipts: snapshot.latest_receipts }),
         policyItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Reset remembered decisions" }),
@@ -180,15 +239,7 @@ function HomeWorkspace(props) {
       {
         clearConfirm: props.clearConfirm,
         onCancelClear: props.onCancelClear,
-        onConfirmClear: async () => {
-          const confirm = props.clearConfirm;
-          await props.onConfirmClear();
-          if (confirm?.harness) {
-            showToast(`Cleared for ${harnessDisplayName(confirm.harness)}`);
-          } else if (confirm?.all) {
-            showToast("Cleared all decisions");
-          }
-        }
+        onConfirmClear: handleConfirmClearWithToast
       }
     )
   ] });
@@ -274,9 +325,11 @@ function buildDailyStory(receipts, queuedCount) {
   const allowedToday = todayReceipts.filter((r) => r.policy_decision === "allow").length;
   const blockedToday = todayReceipts.filter((r) => r.policy_decision === "block").length;
   if (queuedCount > 0) {
+    const actionText = queuedCount === 1 ? "1 action is" : `${queuedCount} actions are`;
+    const pronoun = queuedCount === 1 ? "it" : "them";
     return {
       title: "Needs your attention",
-      body: `${queuedCount} action${queuedCount === 1 ? " is" : "s are"} waiting for review. Guard paused them to keep you safe.`,
+      body: `${actionText} waiting for review. Guard paused ${pronoun} to keep you safe.`,
       stats: [{ label: "pending review", value: queuedCount }]
     };
   }
@@ -324,25 +377,6 @@ function computeStreak(receipts) {
   }
   return streak;
 }
-function buildWeeklySummary(receipts) {
-  const now = /* @__PURE__ */ new Date();
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - now.getDay());
-  startOfWeek.setHours(0, 0, 0, 0);
-  const weekReceipts = receipts.filter((r) => new Date(r.timestamp) >= startOfWeek);
-  if (weekReceipts.length === 0) return null;
-  const allowed = weekReceipts.filter((r) => r.policy_decision === "allow").length;
-  const blocked = weekReceipts.filter((r) => r.policy_decision === "block").length;
-  const uniqueApps = new Set(weekReceipts.map((r) => r.harness).filter(isDisplayableHarness)).size;
-  return {
-    body: `Guard reviewed ${weekReceipts.length} actions across ${uniqueApps} app${uniqueApps !== 1 ? "s" : ""} this week.`,
-    stats: [
-      { label: "allowed", value: allowed },
-      { label: "blocked", value: blocked },
-      { label: "apps", value: uniqueApps }
-    ]
-  };
-}
 function AppsAtAGlance(props) {
   const pendingByHarness = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
@@ -368,35 +402,13 @@ function AppsAtAGlance(props) {
       return bScore - aScore;
     });
   }, [props.managedInstalls, props.observedHarnesses, pendingByHarness]);
-  const [focusedIndex, setFocusedIndex] = reactExports.useState(-1);
-  const listRef = reactExports.useRef(null);
-  const handleKeyDown = reactExports.useCallback(
-    (e, index) => {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        const next = Math.min(index + 1, sortedHarnesses.length - 1);
-        setFocusedIndex(next);
-        const nextBtn = listRef.current?.querySelectorAll("button[data-app-item]")[next];
-        nextBtn?.focus();
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        const prev = Math.max(index - 1, 0);
-        setFocusedIndex(prev);
-        const prevBtn = listRef.current?.querySelectorAll("button[data-app-item]")[prev];
-        prevBtn?.focus();
-      } else if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        props.onOpenAppDetail(sortedHarnesses[index]);
-      }
-    },
-    [sortedHarnesses, props.onOpenAppDetail]
-  );
   if (sortedHarnesses.length === 0) {
+    const emptyCopy = buildEmptyStateCopy();
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
       EmptyState,
       {
-        title: "No apps connected yet",
-        body: "Connect an AI app so Guard can start protecting it. Guard works with Codex, Claude Code, Cursor, Hermes, OpenClaw, and more.",
+        title: emptyCopy.title,
+        body: emptyCopy.body,
         tone: "teach"
       }
     );
@@ -406,39 +418,51 @@ function AppsAtAGlance(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Apps at a glance" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Guard is watching these apps on this machine." })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { ref: listRef, className: "divide-y divide-slate-100 border-t border-slate-100", role: "list", "aria-label": "Apps at a glance", children: sortedHarnesses.map((harness, index) => {
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "divide-y divide-slate-100 border-t border-slate-100", role: "list", "aria-label": "Apps at a glance", children: sortedHarnesses.map((harness, index) => {
       const install = props.managedInstalls.find((i) => i.harness === harness);
       const isObserved = props.observedHarnesses.includes(harness);
       const pending = pendingByHarness.get(harness) ?? 0;
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
+      return /* @__PURE__ */ jsxRuntimeExports.jsx(
+        AppGlanceRow,
         {
-          "data-app-item": true,
-          onClick: () => props.onOpenAppDetail(harness),
-          onKeyDown: (e) => handleKeyDown(e, index),
-          onFocus: () => setFocusedIndex(index),
-          onBlur: () => setFocusedIndex(-1),
-          className: `flex w-full items-center justify-between gap-3 py-2.5 text-left transition-colors hover:bg-slate-50/60 ${focusedIndex === index ? "bg-brand-blue/[0.04]" : ""}`,
-          role: "listitem",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2.5", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(AppStatusIcon, { install, isObserved }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: harnessDisplayName(harness) })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-              pending > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "info", children: [
-                pending,
-                " pending"
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(AppStatusBadge, { install, isObserved }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 shrink-0 text-slate-300", "aria-hidden": "true" })
-            ] })
-          ]
+          harness,
+          install,
+          isObserved,
+          pending,
+          onOpenAppDetail: props.onOpenAppDetail
         },
         harness
       );
     }) })
   ] });
+}
+function AppGlanceRow(props) {
+  const handleOpen = reactExports.useCallback(() => {
+    props.onOpenAppDetail(props.harness);
+  }, [props.onOpenAppDetail, props.harness]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "listitem", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      "data-app-item": true,
+      onClick: handleOpen,
+      className: "flex w-full items-center justify-between gap-3 py-2.5 text-left transition-colors hover:bg-slate-50/60 focus:bg-brand-blue/[0.04] focus:outline-none focus:ring-2 focus:ring-brand-blue/30",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2.5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(AppStatusIcon, { install: props.install, isObserved: props.isObserved }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: harnessDisplayName(props.harness) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          props.pending > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(Badge, { tone: "info", children: [
+            props.pending,
+            " pending"
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(AppStatusBadge, { install: props.install, isObserved: props.isObserved }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 shrink-0 text-slate-300", "aria-hidden": "true" })
+        ] })
+      ]
+    }
+  ) });
 }
 function AppStatusIcon(props) {
   if (props.install?.active === true) {
@@ -460,9 +484,9 @@ function AppStatusBadge(props) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Needs setup" });
   }
   if (props.isObserved) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Observed" });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Needs setup" });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "default", children: "Unknown" });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "attention", children: "Needs setup" });
 }
 function ClearHarnessButton(props) {
   const handleClick = reactExports.useCallback(() => {
@@ -473,18 +497,36 @@ function ClearHarnessButton(props) {
     props.harness
   ] });
 }
+function CloudStatusCard(props) {
+  const copy = resolveCloudIntelCopy(props.snapshot.cloud_state);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "rounded-2xl border border-brand-blue/15 bg-brand-blue/[0.04] p-5 shadow-sm sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/80 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "h-5 w-5", "aria-hidden": "true" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Cloud backup" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm font-medium text-brand-dark", children: copy.label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-muted-foreground", children: copy.detail }),
+      props.showUpsell && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onOpenSettings, children: "Open sync settings" }) })
+    ] })
+  ] }) });
+}
+function KeyboardHelpCard(props) {
+  if (!props.onOpenHelp) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "rounded-2xl border border-slate-200/70 bg-white/80 p-5 shadow-sm sm:p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-brand-dark", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniQuestionMarkCircle, { className: "h-5 w-5", "aria-hidden": "true" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Shortcuts" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "Press ? for help or / to jump to pending review. Every Home action also works with Tab and Enter." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: props.onOpenHelp, children: "Show shortcuts" }) })
+    ] })
+  ] }) });
+}
 function RecentReceiptRow(props) {
   const { receipt } = props;
-  const decisionLabel = receipt.policy_decision === "allow" ? "allowed" : "blocked";
-  const name = receipt.artifact_name ?? receipt.artifact_id;
+  const copy = buildRecentProtectionCopy(receipt);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3 border-b border-slate-200/70 px-4 py-3 last:border-b-0", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-w-0", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: harnessDisplayName(receipt.harness) }),
-      " ",
-      decisionLabel,
-      " ",
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-xs", children: name })
-    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-w-0", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: copy }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-[11px] text-muted-foreground", children: formatRelativeTime(receipt.timestamp) })
   ] });
 }
@@ -501,19 +543,15 @@ function StreakMilestoneBanner({ streak }) {
   const milestone = MILESTONE_STREAKS.includes(streak) ? streak : null;
   const storageKey = milestone ? `guard-streak-milestone-dismissed-${milestone}` : "";
   const [dismissed, setDismissed] = reactExports.useState(() => {
-    if (typeof window === "undefined" || !storageKey) return true;
-    return localStorage.getItem(storageKey) === "1";
+    if (!storageKey) return true;
+    return safeLocalStorage.getItem(storageKey) === "1";
   });
   const handleDismiss = reactExports.useCallback(() => {
     setDismissed(true);
-    if (storageKey) localStorage.setItem(storageKey, "1");
+    if (storageKey) safeLocalStorage.setItem(storageKey, "1");
   }, [storageKey]);
   if (!milestone || dismissed) return null;
-  const messages = {
-    7: "One week of consistent protection! Guard is watching out for you every day.",
-    14: "Two weeks strong! Your security routine is paying off.",
-    30: "A full month of daily protection! You are building a great security habit."
-  };
+  const messages = STREAK_MILESTONE_MESSAGES;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-fade-in relative overflow-hidden rounded-2xl border border-brand-purple/20 bg-brand-purple/[0.04] p-5 shadow-sm sm:p-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute -right-6 -top-6 h-24 w-24 rounded-full bg-brand-purple/10" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative flex items-start gap-3", children: [
@@ -521,7 +559,7 @@ function StreakMilestoneBanner({ streak }) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(SectionLabel, { children: [
           streak,
-          " day streak!"
+          " day coverage"
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: messages[milestone] })
       ] }),
@@ -555,54 +593,57 @@ function resolveNewAppDiscoveries(managedInstalls, observedHarnesses) {
 function NewAppBanner(props) {
   const storageKey = `guard-new-app-dismissed-${props.harness}`;
   const [dismissed, setDismissed] = reactExports.useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem(storageKey) === "1";
+    return safeLocalStorage.getItem(storageKey) === "1";
   });
   const handleDismiss = reactExports.useCallback((e) => {
     e.stopPropagation();
     setDismissed(true);
-    localStorage.setItem(storageKey, "1");
+    safeLocalStorage.setItem(storageKey, "1");
   }, [storageKey]);
+  const handleOpen = reactExports.useCallback(() => {
+    props.onOpenAppDetail(props.harness);
+  }, [props.onOpenAppDetail, props.harness]);
   if (dismissed) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      onClick: () => props.onOpenAppDetail(props.harness),
-      className: "guard-fade-in flex w-full items-center gap-3 rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-left transition-colors hover:bg-brand-blue/[0.08]",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBolt, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
-            "Guard discovered ",
-            harnessDisplayName(props.harness)
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard saw this app but it is not set up yet. Open to connect it." })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "span",
-          {
-            onClick: handleDismiss,
-            className: "shrink-0 rounded-full p-1.5 text-slate-400 transition-colors hover:bg-white/70 hover:text-brand-dark",
-            "aria-label": `Dismiss ${harnessDisplayName(props.harness)} discovery`,
-            role: "button",
-            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4", "aria-hidden": "true" })
-          }
-        )
-      ]
-    }
-  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-fade-in flex w-full items-center gap-3 rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] px-4 py-3 text-left transition-colors hover:bg-brand-blue/[0.08]", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue/10", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniBolt, { className: "h-4 w-4 text-brand-blue", "aria-hidden": "true" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
+        "Guard discovered ",
+        harnessDisplayName(props.harness)
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Guard saw this app but it is not set up yet. Open to connect it." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: handleOpen,
+        className: "inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-semibold text-brand-blue transition-colors hover:bg-white/70",
+        children: "Open"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: handleDismiss,
+        className: "shrink-0 rounded-full p-1.5 text-slate-400 transition-colors hover:bg-white/70 hover:text-brand-dark",
+        "aria-label": `Dismiss ${harnessDisplayName(props.harness)} discovery`,
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4", "aria-hidden": "true" })
+      }
+    )
+  ] });
 }
 function CollapsibleCard(props) {
   const storageKey = `guard-collapsed-${props.id}`;
   const [isOpen, setIsOpen] = reactExports.useState(() => {
-    if (typeof window === "undefined") return props.defaultOpen ?? true;
-    const saved = localStorage.getItem(storageKey);
+    const saved = safeLocalStorage.getItem(storageKey);
     return saved === null ? props.defaultOpen ?? true : saved === "1";
   });
   const toggle = reactExports.useCallback(() => {
     setIsOpen((prev) => {
       const next = !prev;
-      localStorage.setItem(storageKey, next ? "1" : "0");
+      safeLocalStorage.setItem(storageKey, next ? "1" : "0");
       return next;
     });
   }, [storageKey]);
@@ -627,5 +668,15 @@ function CollapsibleCard(props) {
 }
 export {
   HomeWorkspace,
-  resolveNewAppDiscoveries
+  STREAK_MILESTONE_MESSAGES,
+  buildDaemonErrorCopy,
+  buildDailyStory,
+  buildEmptyStateCopy,
+  buildRecentProtectionCopy,
+  computeStreak,
+  deriveHomeState,
+  redactHomeArtifactLabel,
+  resolveCloudUpsellVisible,
+  resolveNewAppDiscoveries,
+  safeLocalStorage
 };
