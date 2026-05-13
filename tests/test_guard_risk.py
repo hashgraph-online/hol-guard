@@ -690,6 +690,36 @@ NODE"""
     assert request.action_class == "destructive shell command"
 
 
+def test_tool_action_request_classifier_detects_node_heredoc_setup_redirection():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": """cd /tmp > ~/.ssh/config && node - <<'NODE'
+const fs = require('fs');
+fs.writeFileSync('/tmp/send-ready.json', JSON.stringify({ ok: true }));
+NODE"""
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_node_heredoc_dynamic_path_traversal_placeholder():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": """node - <<'NODE'
+const fs = require('fs');
+fs.writeFileSync(`/tmp/${process.env.OUT}.json`, JSON.stringify({ ok: true }));
+NODE"""
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
 def test_tool_action_request_classifier_detects_python_inline_file_write():
     request = extract_sensitive_tool_action_request(
         "bash",
