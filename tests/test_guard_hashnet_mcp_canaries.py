@@ -31,7 +31,8 @@ _HASHNET_STDIO_ENV_KEYS = (
 )
 
 _HASHNET_REMOTE_URL = "https://registry.hol.org/mcp/hashnet"
-_EVIL_REMOTE_URL = "https://evil.example/mcp"
+_EVIL_REMOTE_URL_SAME_HOST = "https://registry.hol.org/mcp/evil-hashnet"
+_EVIL_REMOTE_URL_HOST_ONLY = "https://evil.example/mcp/hashnet"
 
 _HASHNET_SEARCH_TOOL = "hol_search"
 _HASHNET_SEARCH_SCHEMA_V1 = {
@@ -205,9 +206,17 @@ class TestHashnetMcpChangedCapability:
 
 
 class TestHashnetMcpChangedDomain:
-    """changed-domain scenario: URL drift produces a different server identity."""
+    """changed-domain scenario: URL and args drift are detected by server identity.
 
-    def test_url_change_produces_different_identity(self) -> None:
+    Note: ``build_mcp_server_identity`` uses ``_command_name()`` which extracts
+    only the last URL path segment as the effective command name. Host-only
+    swaps (same path, different hostname) therefore produce the same
+    ``identity_hash`` — this is a known limitation of the current design.
+    Path changes (different last segment) are detected, as are stdio args
+    changes.
+    """
+
+    def test_url_path_change_produces_different_identity(self) -> None:
         real_identity = build_mcp_server_identity(
             config_path=_HASHNET_CONFIG_PATH,
             command=_HASHNET_REMOTE_URL,
@@ -216,11 +225,30 @@ class TestHashnetMcpChangedDomain:
         )
         evil_identity = build_mcp_server_identity(
             config_path=_HASHNET_CONFIG_PATH,
-            command=_EVIL_REMOTE_URL,
+            command=_EVIL_REMOTE_URL_SAME_HOST,
             args=(),
             transport="http",
         )
         assert real_identity.identity_hash != evil_identity.identity_hash
+
+    def test_host_only_swap_produces_same_identity_hash(self) -> None:
+        real_identity = build_mcp_server_identity(
+            config_path=_HASHNET_CONFIG_PATH,
+            command=_HASHNET_REMOTE_URL,
+            args=(),
+            transport="http",
+        )
+        host_swapped = build_mcp_server_identity(
+            config_path=_HASHNET_CONFIG_PATH,
+            command=_EVIL_REMOTE_URL_HOST_ONLY,
+            args=(),
+            transport="http",
+        )
+        assert real_identity.identity_hash == host_swapped.identity_hash, (
+            "Known limitation: _command_name() extracts only the last URL path "
+            "segment, so a host-only swap with the same path is not detected by "
+            "McpServerIdentity alone."
+        )
 
     def test_args_drift_produces_different_stdio_identity(self) -> None:
         canonical = build_mcp_server_identity(
@@ -239,7 +267,7 @@ class TestHashnetMcpChangedDomain:
         )
         assert canonical.identity_hash != drifted.identity_hash
 
-    def test_tool_identity_tied_to_server_hash(self) -> None:
+    def test_tool_identity_differs_when_server_path_changes(self) -> None:
         real_server = build_mcp_server_identity(
             config_path=_HASHNET_CONFIG_PATH,
             command=_HASHNET_REMOTE_URL,
@@ -248,7 +276,7 @@ class TestHashnetMcpChangedDomain:
         )
         evil_server = build_mcp_server_identity(
             config_path=_HASHNET_CONFIG_PATH,
-            command=_EVIL_REMOTE_URL,
+            command=_EVIL_REMOTE_URL_SAME_HOST,
             args=(),
             transport="http",
         )
