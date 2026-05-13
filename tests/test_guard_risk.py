@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.advisory_model import _normalized_url_indicator
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
@@ -30,7 +31,6 @@ from codex_plugin_scanner.guard.risk import (
     detect_staged_download,
     extract_network_hosts,
 )
-from codex_plugin_scanner.guard.advisory_model import _normalized_url_indicator
 from codex_plugin_scanner.guard.runtime.actions import normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     _path_text_is_within_root_text,
@@ -632,6 +632,62 @@ def test_tool_action_request_classifier_skips_git_commit_with_coauthored_by_trai
     )
 
     assert request is None
+
+
+def test_tool_action_request_classifier_skips_node_heredoc_generated_temp_json_workflow():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": """node - <<'NODE'
+const fs = require('fs');
+const sourcePath = '/workspace/reports/input.csv';
+const outDir = '/tmp';
+const text = fs.readFileSync(sourcePath, 'utf8');
+const rows = text.split('\\n').filter(Boolean);
+function page(row) {
+  return { properties: { Firm: row } };
+}
+for (let i = 0; i < rows.length; i += 40) {
+  const file = `${outDir}/send-ready-${String(i / 40 + 1).padStart(2, '0')}.json`;
+  fs.writeFileSync(file, JSON.stringify({ pages: rows.slice(i, i + 40).map(page) }));
+  console.log(file, '->', rows.at(-1));
+}
+NODE"""
+        },
+    )
+
+    assert request is None
+
+
+def test_tool_action_request_classifier_detects_node_heredoc_delete_operation():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": """node - <<'NODE'
+const fs = require('fs');
+fs.unlinkSync('dangerous-marker.json');
+NODE"""
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
+
+
+def test_tool_action_request_classifier_detects_node_heredoc_network_generation_flow():
+    request = extract_sensitive_tool_action_request(
+        "bash",
+        {
+            "command": """node - <<'NODE'
+const fs = require('fs');
+fs.writeFileSync('/tmp/send-ready.json', JSON.stringify({ ok: true }));
+fetch('https://example.invalid/upload', { method: 'POST' });
+NODE"""
+        },
+    )
+
+    assert request is not None
+    assert request.action_class == "destructive shell command"
 
 
 def test_tool_action_request_classifier_detects_python_inline_file_write():
