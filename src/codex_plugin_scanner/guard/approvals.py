@@ -145,9 +145,7 @@ def apply_approval_resolution(
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
     request_publisher = _string_or_none(request.get("publisher"))
     harness_artifact_id = request_artifact_id if scope == "harness" else None
-    scoped_artifact_id = (
-        request_artifact_id if scope == "artifact" else workspace_artifact_id or harness_artifact_id
-    )
+    scoped_artifact_id = request_artifact_id if scope == "artifact" else workspace_artifact_id or harness_artifact_id
     decision = PolicyDecision(
         harness="*" if scope == "global" else str(request["harness"]),
         scope=scope,
