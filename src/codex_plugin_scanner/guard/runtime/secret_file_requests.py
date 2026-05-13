@@ -168,6 +168,10 @@ _SINGLE_INTERPRETER_HEREDOC_PATTERN = re.compile(
     rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*(?P<interpreter>perl|python|python3|ruby)\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
     re.IGNORECASE | re.DOTALL,
 )
+_SINGLE_NODE_HEREDOC_PATTERN = re.compile(
+    rf"^\s*(?:(?:{_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN})\s*&&\s*)*node\b(?P<args>[^\n;&|]*)<<-?\s*(?P<quote>['\"]?)(?P<tag>[^\s'\";|&<>]+)(?P=quote)\s*\n(?P<body>.*)\n(?P=tag)\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
 _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
     {
         "appendFile",
@@ -192,6 +196,8 @@ _DESTRUCTIVE_NODE_INLINE_CALLS = frozenset(
         "writeFileSync",
     }
 )
+_SAFE_NODE_GENERATED_FILE_EXTENSIONS = frozenset({".csv", ".json", ".jsonl", ".md", ".txt"})
+_SAFE_NODE_GENERATED_FILE_ROOTS = ("/tmp/", "/private/tmp/", "/var/tmp/", "/private/var/tmp/")
 _DESTRUCTIVE_GIT_SUBCOMMANDS = frozenset({"clean", "reset", "restore", "rm"})
 _READ_ONLY_INTERPRETER_MUTATION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bwrite_(?:text|bytes)\s*\(", re.IGNORECASE),
@@ -2628,6 +2634,11 @@ def _looks_destructive_shell_command(command_text: str) -> bool:
     normalized = command_text.strip()
     if not normalized:
         return False
+    node_heredoc_script = _single_node_heredoc_script(normalized)
+    if node_heredoc_script is not None:
+        if _looks_like_safe_node_generated_file_heredoc(normalized, node_heredoc_script):
+            return False
+        return _node_script_contains_sensitive_runtime_behavior(node_heredoc_script)
     if _looks_like_safe_graphql_query_file_workflow(normalized):
         return False
     parts = _split_shell_parts(normalized)
@@ -2811,6 +2822,165 @@ def _contains_destructive_node_inline_script(script: str) -> bool:
             if re.search(rf"{base_pattern}\s*(?:\?\s*)?\.\s*apply\s*\(", member_scan_script):
                 return True
     return False
+
+
+def _single_node_heredoc_script(command_text: str) -> str | None:
+    match = _SINGLE_NODE_HEREDOC_PATTERN.fullmatch(command_text.strip())
+    if match is None:
+        return None
+    args = match.group("args").strip()
+    if args not in {"", "-"}:
+        return None
+    script_text = match.group("body").strip()
+    return script_text or None
+
+
+def _looks_like_safe_node_generated_file_heredoc(command_text: str, script_text: str) -> bool:
+    if _single_node_heredoc_script(command_text) is None:
+        return False
+    if _node_script_contains_non_file_generation_risk(script_text):
+        return False
+    write_targets = _node_write_file_targets(script_text)
+    if not write_targets:
+        return False
+    assignments = _node_string_assignments(script_text)
+    return all(_node_write_target_is_safe_generated_file(target, assignments) for target in write_targets)
+
+
+def _node_script_contains_sensitive_runtime_behavior(script_text: str) -> bool:
+    return _contains_destructive_node_inline_script(script_text) or _node_script_contains_non_file_generation_risk(
+        script_text
+    )
+
+
+def _node_script_contains_non_file_generation_risk(script_text: str) -> bool:
+    lowered = script_text.lower()
+    if _path_text_looks_sensitive(script_text):
+        return True
+    return bool(
+        re.search(r"\b(?:fetch|xmlhttprequest)\s*\(", lowered)
+        or re.search(r"\b(?:http|https|net|tls|dgram)\s*\.", lowered)
+        or re.search(r"\brequire\s*\(\s*['\"](?:child_process|http|https|net|tls|dgram)['\"]\s*\)", lowered)
+        or re.search(r"\b(?:exec|execfile|execfilesync|execsync|spawn|spawnsync|fork)\s*\(", lowered)
+        or re.search(r"\b(?:eval|function)\s*\(", lowered)
+    )
+
+
+def _node_write_file_targets(script_text: str) -> tuple[str, ...]:
+    targets: list[str] = []
+    for match in re.finditer(r"(?:^|[^A-Za-z0-9_$])(?:fs\s*\.\s*)?writeFile(?:Sync)?\s*\(", script_text):
+        target = _first_js_call_argument(script_text, match.end())
+        if target is not None:
+            targets.append(target)
+    return tuple(targets)
+
+
+def _first_js_call_argument(script_text: str, index: int) -> str | None:
+    argument_start = index
+    depth = 0
+    quote: str | None = None
+    escape_next = False
+    while index < len(script_text):
+        character = script_text[index]
+        if escape_next:
+            escape_next = False
+            index += 1
+            continue
+        if character == "\\":
+            escape_next = True
+            index += 1
+            continue
+        if quote is not None:
+            if character == quote:
+                quote = None
+            index += 1
+            continue
+        if character in {"'", '"', "`"}:
+            quote = character
+            index += 1
+            continue
+        if character in "([{":
+            depth += 1
+            index += 1
+            continue
+        if character in ")]}":
+            if depth == 0:
+                return script_text[argument_start:index].strip() or None
+            depth -= 1
+            index += 1
+            continue
+        if character == "," and depth == 0:
+            return script_text[argument_start:index].strip() or None
+        index += 1
+    return None
+
+
+def _node_string_assignments(script_text: str) -> dict[str, str]:
+    assignments: dict[str, str] = {}
+    pattern = re.compile(r"\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(['\"`])((?:\\.|(?!\2).)*)\2")
+    for _ in range(3):
+        changed = False
+        for match in pattern.finditer(script_text):
+            name = match.group(1)
+            raw_value = match.group(3)
+            expanded_value = _node_expand_template_value(raw_value, assignments)
+            if assignments.get(name) != expanded_value:
+                assignments[name] = expanded_value
+                changed = True
+        if not changed:
+            break
+    return assignments
+
+
+def _node_expand_template_value(value: str, assignments: dict[str, str]) -> str:
+    expanded = value
+    for name, assigned_value in assignments.items():
+        expanded = expanded.replace("${" + name + "}", assigned_value)
+    return expanded
+
+
+def _node_write_target_is_safe_generated_file(target: str, assignments: dict[str, str]) -> bool:
+    normalized = target.strip()
+    if normalized in assignments:
+        normalized = assignments[normalized]
+    elif _js_string_literal_text(normalized) is not None:
+        normalized = _js_string_literal_text(normalized) or ""
+        normalized = _node_expand_template_value(normalized, assignments)
+    else:
+        return False
+    if _node_generated_path_contains_shell_expansion(normalized) or _path_text_looks_sensitive(normalized):
+        return False
+    if "../" in normalized or normalized.startswith("../"):
+        return False
+    return _node_generated_path_has_safe_root(normalized) and _node_generated_path_has_safe_extension(normalized)
+
+
+def _js_string_literal_text(value: str) -> str | None:
+    if len(value) < 2 or value[0] != value[-1] or value[0] not in {"'", '"', "`"}:
+        return None
+    return value[1:-1]
+
+
+def _node_generated_path_has_safe_root(path_text: str) -> bool:
+    lowered = path_text.lower()
+    return lowered.startswith(_SAFE_NODE_GENERATED_FILE_ROOTS)
+
+
+def _node_generated_path_contains_shell_expansion(path_text: str) -> bool:
+    return (
+        "$(" in path_text
+        or "`" in path_text
+        or "$'" in path_text
+        or '$"' in path_text
+        or re.search(r"\$[A-Za-z_][A-Za-z0-9_]*", path_text) is not None
+        or re.search(r"[*?\[\]]", path_text) is not None
+    )
+
+
+def _node_generated_path_has_safe_extension(path_text: str) -> bool:
+    without_templates = re.sub(r"\$\{[^}]*\}", "x", path_text)
+    extension = os.path.splitext(without_templates)[1].lower()
+    return extension in _SAFE_NODE_GENERATED_FILE_EXTENSIONS
 
 
 def _is_combined_node_inline_eval_flag(token: str) -> bool:
